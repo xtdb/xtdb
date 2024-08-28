@@ -5,19 +5,16 @@
             [xtdb.information-schema :as info-schema])
   (:import [clojure.lang MapEntry]))
 
-(def search-path
-  ["pg_catalog" "public"])
-
 (defn symbol-table-names
   "returns possible symbol table names based on search path for unqualified names"
   [table]
   (let [parts (str/split table #"\.")]
     (if (= 1 (count parts))
-      (mapv #(symbol % (first parts)) search-path)
+      (mapv #(symbol % (first parts)) expr/search-path)
       [(symbol (str/join "." (butlast parts)) (last parts))])))
 
 (defn string-table-name [table]
-  (if (contains? (set search-path) (namespace table))
+  (if (contains? (set expr/search-path) (namespace table))
     (name table)
     (str (namespace table) "." (name table))))
 
