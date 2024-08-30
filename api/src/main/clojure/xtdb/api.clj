@@ -97,6 +97,7 @@
   - opts:
     - `:basis`: see 'Transaction Basis'
     - `:args`: arguments to pass to the query.
+    - `:default-tz`: overrides the default time zone for the query
 
   For example:
 
