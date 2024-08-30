@@ -235,6 +235,14 @@
               :typnamespace -2125819141,
               :typbasetype 0}
              {:typtypmod -1,
+              :oid 3802,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "jsonb",
+              :typnamespace -2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
               :oid 701,
               :typtype "b",
               :typowner 1376455703,

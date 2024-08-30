@@ -17,12 +17,6 @@ describe("connects to XT", function() {
           from: [23, 20], // int4, int8
           parse: parseInt
         },
-        json: {
-          to: 114,
-          from: [114],
-          serialize: JSON.stringify,
-          parse: JSON.parse
-        }
       }
     })
 
@@ -53,7 +47,7 @@ describe("connects to XT", function() {
 
   it("should round-trip JSON", async () => {
     const conn = await sql.reserve()
-    await conn`INSERT INTO foo (_id, json) VALUES (${sql.typed.int(2)}, ${sql.typed.json({a: 1})})`
+    await conn`INSERT INTO foo (_id, json) VALUES (${sql.typed.int(2)}, ${sql.json({a: 1})})`
 
     assert.deepStrictEqual([...await conn`SELECT _id, json FROM foo WHERE _id = 2`],
                            [{_id: 2, json: {a: 1}}])

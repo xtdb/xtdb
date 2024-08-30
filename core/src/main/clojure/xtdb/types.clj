@@ -987,11 +987,17 @@
              :read-text (fn [_env ba] (Boolean/parseBoolean (read-utf8 ba)))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (utf8 (if (.getBoolean rdr idx) "t" "f")))}
+
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
           :oid 114
           :read-text (fn [_env ba]
-                       (JsonSerde/decode (ByteArrayInputStream. ba)))}})
+                       (JsonSerde/decode (ByteArrayInputStream. ba)))}
+
+   :jsonb {:typname "jsonb"
+           :oid 3802
+           :read-text (fn [_env ba]
+                        (JsonSerde/decode (ByteArrayInputStream. ba)))}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
