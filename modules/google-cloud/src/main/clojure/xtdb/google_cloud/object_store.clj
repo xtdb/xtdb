@@ -1,19 +1,14 @@
 (ns xtdb.google-cloud.object-store
-  (:require [clojure.tools.logging :as log]
-            [xtdb.file-list :as file-list]
+  (:require [clojure.string :as string]
+            [clojure.tools.logging :as log]
             [xtdb.object-store :as os]
-            [xtdb.util :as util]
-            [clojure.string :as string])
-  (:import (com.google.cloud.storage Blob$BlobSourceOption BlobId BlobInfo Storage Storage$BlobSourceOption Storage$BlobWriteOption StorageException)
-           (java.io Closeable)
-           (java.lang AutoCloseable)
+            [xtdb.util :as util])
+  (:import (com.google.cloud.storage Blob Blob$BlobSourceOption BlobId BlobInfo Storage Storage$BlobListOption Storage$BlobSourceOption Storage$BlobWriteOption StorageException)
            (java.nio ByteBuffer)
            (java.nio.file Path)
-           (java.util NavigableSet)
            (java.util.concurrent CompletableFuture)
            (java.util.function Supplier)
            xtdb.api.storage.ObjectStore))
-
 (def blob-source-opts (into-array Blob$BlobSourceOption []))
 
 (defn get-blob [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name]
@@ -82,7 +77,7 @@
         blob-id (BlobId/of bucket-name (str prefixed-key))]
     (.delete storage-service blob-id)))
 
-(defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+(defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix]
   ObjectStore
   (getObject [this k]
     (CompletableFuture/completedFuture
@@ -102,22 +97,19 @@
      (get-blob-range this k start len)))
 
   (putObject [this k buf]
-    (-> (CompletableFuture/completedFuture (put-blob this k buf))
-        (.thenApply (fn [_] (.add file-name-cache k)))))
+    (CompletableFuture/completedFuture (put-blob this k buf)))
 
   (listAllObjects [_this]
-    (into [] file-name-cache))
-
-  (listObjects [_this dir]
-    (file-list/list-files-under-prefix file-name-cache dir))
+    (let [list-blob-opts (into-array Storage$BlobListOption
+                                     (if prefix
+                                       [(Storage$BlobListOption/prefix (str prefix))]
+                                       []))]
+      (->> (.list storage-service bucket-name list-blob-opts)
+           (.iterateAll)
+           (mapv (fn [^Blob blob]
+                   (cond->> (util/->path (.getName blob))
+                     prefix (.relativize prefix)))))))
 
   (deleteObject [this k]
     (CompletableFuture/completedFuture 
-     (do
-       (delete-blob this k)
-       (.remove file-name-cache k))))
-
-  Closeable
-  (close [_]
-    (.close file-list-watcher)
-    (.clear file-name-cache)))
+     (delete-blob this k))))

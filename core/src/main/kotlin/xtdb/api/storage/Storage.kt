@@ -9,6 +9,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.IBufferPool
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.Xtdb
+import xtdb.api.log.Log
 import xtdb.util.requiringResolve
 import java.nio.file.Path
 
@@ -20,7 +21,7 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
-        fun openStorage(allocator: BufferAllocator): IBufferPool
+        fun openStorage(allocator: BufferAllocator, log: Log): IBufferPool
     }
 
     /**
@@ -31,7 +32,7 @@ object Storage {
     @SerialName("!InMemory")
     data object InMemoryStorageFactory : Factory {
 
-        override fun openStorage(allocator: BufferAllocator) =
+        override fun openStorage(allocator: BufferAllocator, log: Log) =
             requiringResolve("xtdb.buffer-pool/open-in-memory-storage").invoke(allocator) as IBufferPool
     }
 
@@ -65,7 +66,7 @@ object Storage {
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun openStorage(allocator: BufferAllocator) =
+        override fun openStorage(allocator: BufferAllocator, log: Log) =
             requiringResolve("xtdb.buffer-pool/open-local-storage").invoke(allocator, this) as IBufferPool
     }
 
@@ -120,8 +121,8 @@ object Storage {
         fun maxDiskCachePercentage(maxDiskCachePercentage: Long) = apply { this.maxDiskCachePercentage = maxDiskCachePercentage }
         fun maxDiskCacheBytes(maxDiskCacheBytes: Long) = apply { this.maxDiskCacheBytes = maxDiskCacheBytes }
 
-        override fun openStorage(allocator: BufferAllocator) =
-            requiringResolve("xtdb.buffer-pool/open-remote-storage").invoke(allocator, this) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator, log: Log) =
+            requiringResolve("xtdb.buffer-pool/open-remote-storage").invoke(allocator, this, log) as IBufferPool
     }
 
     @JvmStatic

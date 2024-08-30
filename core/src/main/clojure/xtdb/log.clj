@@ -5,11 +5,11 @@
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             xtdb.protocols
+            [xtdb.sql.plan :as plan]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.sql.plan :as plan])
+            [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -20,7 +20,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api.log Log Log$Factory Log$Record Log$Subscriber)
+           (xtdb.api.log Log Log$Factory TxLog$Record TxLog$Subscriber)
            (xtdb.api.tx TxOp$Abort TxOp$Call TxOp$DeleteDocs TxOp$EraseDocs TxOp$PutDocs TxOp$Sql TxOp$SqlByteArgs TxOp$XtqlAndArgs TxOp$XtqlOp TxOptions)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
@@ -30,17 +30,17 @@
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (util/->prefix-thread-factory "xtdb-tx-subscription"))
 
-(defn- tx-handler [^Log$Subscriber subscriber]
-  (fn [_last-tx-id ^Log$Record record]
+(defn- tx-handler [^TxLog$Subscriber subscriber]
+  (fn [_last-tx-id ^TxLog$Record record]
     (when (Thread/interrupted)
       (throw (InterruptedException.)))
 
-    (.acceptRecord subscriber record)
+    (.accept subscriber record)
 
     (.getTxId (.getTxKey record))))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^Log$Subscriber subscriber]
+(defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^TxLog$Subscriber subscriber]
   (doto (.newThread subscription-thread-factory
                     (fn []
                       (let [thread (Thread/currentThread)]
@@ -54,7 +54,7 @@
                           (let [last-tx-id (reduce (tx-handler subscriber)
                                                    after-tx-id
                                                    (try
-                                                     (.readRecords log after-tx-id 100)
+                                                     (.readTxs log after-tx-id 100)
                                                      (catch ClosedChannelException e (throw e))
                                                      (catch InterruptedException e (throw e))
                                                      (catch Exception e
@@ -71,7 +71,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
   (notifyTx [^xtdb.api.TransactionKey tx])
-  (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.Log$Subscriber subscriber]))
+  (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.TxLog$Subscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]
   INotifyingSubscriberHandler
@@ -100,16 +100,16 @@
                                                                 (or (nil? after-tx-id)
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
-                                                         (->> (.readRecords log after-tx-id 100)
-                                                              (take-while #(<= ^long (.getTxId (.getTxKey ^Log$Record %))
+                                                         (->> (.readTxs log after-tx-id 100)
+                                                              (take-while #(<= ^long (.getTxId (.getTxKey ^TxLog$Record %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live
                                                          (let [permits (do
                                                                          (.acquire semaphore)
                                                                          (inc (.drainPermits semaphore)))]
-                                                           (.readRecords log after-tx-id
-                                                                         (if (> permits 100)
+                                                           (.readTxs log after-tx-id
+                                                                     (if (> permits 100)
                                                                            (do
                                                                              (.release semaphore (- permits 100))
                                                                              100)
@@ -143,7 +143,7 @@
 
   Can be useful to protect against data loss potential when a retention period is used for the log, so messages do not remain in the log forever.
 
-  Record layout:
+  TxRecord layout:
 
   - header (byte=2)
 
@@ -417,6 +417,6 @@
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops ^TxOptions opts]
 
   (let [system-time (some-> opts .getSystemTime)]
-    (.appendRecord log (serialize-tx-ops allocator tx-ops
-                                         {:default-tz (or (some-> opts .getDefaultTz) default-tz)
+    (.appendTx log (serialize-tx-ops allocator tx-ops
+                                     {:default-tz (or (some-> opts .getDefaultTz) default-tz)
                                           :system-time system-time}))))

@@ -14,8 +14,7 @@ We offer a number of separate implementations of the transaction log, currently:
 * Single-node log implementations, within `xtdb-core`:
 ** <<In memory>>: transient in-memory log.
 ** <<Local disk>>: log using the local filesystem.
-* Log implementations within their own modules: 
-** link:tx-log/kafka[Kafka]
+* <<Remote>>: multi-node log implementations using a remote service.
 
 == In memory
 
@@ -33,7 +32,7 @@ If configured as an in-process node, you can also specify an https://docs.oracle
 image:{icon}/clojure.svg[Clojure,link={clojure}#in-memory-log]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-in-memory-log-factory/index.html]
 
-For examples on how to enable/configure the in-memory transaction log as part of your node, see the individual client library documentation:
+For examples on how to enable/configure the in-memory log as part of your node, see the individual client library documentation:
 
 == Local disk
 
@@ -63,4 +62,14 @@ If configured as an in-process node, you can also specify an https://docs.oracle
 image:{icon}/clojure.svg[Clojure,link={clojure}#local-log]
 image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-local-log-factory/index.html]
 
-For examples on how to enable/configure the local-disk transaction log as part of your node, see the individual client library documentation:
+For examples on how to enable/configure the local-disk log as part of your node, see the individual client library documentation:
+
+== Remote
+
+A multi-node persistent transaction log implementation that uses a remote service to store both the transaction log itself, and other shared information between the nodes such as file change notifications from the link:storage[storage module].
+
+We currently offer the following remote transaction log implementations, available in their own modules:
+
+* link:tx-log/kafka[Kafka]: a log implementation that uses Apache Kafka topics to store the transaction log and file change notifications.
+
+

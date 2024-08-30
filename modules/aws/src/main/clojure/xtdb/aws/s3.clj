@@ -1,24 +1,21 @@
 (ns xtdb.aws.s3
   (:require [xtdb.buffer-pool :as bp]
-            [xtdb.file-list :as file-list]
             [xtdb.object-store :as os]
-            [xtdb.aws.s3.file-list :as s3-file-watch]
             [xtdb.util :as util])
   (:import [java.io Closeable]
-           [java.lang AutoCloseable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
-           [java.util ArrayList List NavigableSet]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           [java.util ArrayList List]
+           [java.util.concurrent CompletableFuture]
            [java.util.function Function]
            [software.amazon.awssdk.core ResponseBytes]
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
-           [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
+           [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedMultipartUpload CompletedPart CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object UploadPartRequest UploadPartResponse]
            xtdb.api.storage.ObjectStore
-           [xtdb.multipart SupportsMultipart IMultipartUpload]
+           [xtdb.aws S3 S3$Factory]
            [xtdb.aws.s3 S3Configurator]
-           [xtdb.aws S3 S3$Factory]))
+           [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket ^Path prefix]} ^Path k]
@@ -40,6 +37,24 @@
         (->> (.configureGet configurator))
         ^GetObjectRequest (.build))))
 
+(defn list-objects [{:keys [^S3AsyncClient client bucket ^Path prefix] :as s3-opts} continuation-token]
+  (vec
+   (let [^ListObjectsV2Request
+         req (-> (ListObjectsV2Request/builder)
+                 (.bucket bucket)
+                 (.prefix (some-> prefix str))
+                 (cond-> continuation-token (.continuationToken continuation-token))
+                 (.build))
+
+         ^ListObjectsV2Response
+         resp (.get (.listObjectsV2 ^S3AsyncClient client req))]
+
+     (concat (for [^S3Object object (.contents resp)]
+               (cond->> (util/->path (.key object))
+                 prefix (.relativize prefix)))
+             (when (.isTruncated resp)
+               (list-objects s3-opts (.nextContinuationToken resp)))))))
+
 (defn- with-exception-handler [^CompletableFuture fut ^Path k]
   (.exceptionally fut (reify Function
                         (apply [_ e]
@@ -59,7 +74,7 @@
                     ^PutObjectRequest (.build))
                 (AsyncRequestBody/fromByteBuffer buf))))
 
-(defrecord MultipartUpload [^S3AsyncClient client bucket ^Path prefix ^Path k upload-id on-complete !part-number ^List !completed-parts]
+(defrecord MultipartUpload [^S3AsyncClient client bucket ^Path prefix ^Path k upload-id !part-number ^List !completed-parts]
   IMultipartUpload 
   (uploadPart [_  buf]
     (let [prefixed-key (util/prefix-key prefix k)
@@ -83,16 +98,15 @@
   (complete [_]
     (let [prefixed-key (util/prefix-key prefix k)
           ^List !sorted-parts (sort-by (fn [^CompletedPart part] (.partNumber part)) !completed-parts)]
-      (-> (.completeMultipartUpload client
-                                    (-> (CompleteMultipartUploadRequest/builder)
-                                        (.bucket bucket)
-                                        (.key (str prefixed-key))
-                                        (.uploadId upload-id)
-                                        (.multipartUpload (-> (CompletedMultipartUpload/builder)
-                                                              (.parts !sorted-parts)
-                                                              ^CompletedMultipartUpload (.build)))
-                                        ^CompleteMultipartUploadRequest (.build)))
-          (.thenRun (fn [] (on-complete k))))))
+      (.completeMultipartUpload client
+                                (-> (CompleteMultipartUploadRequest/builder)
+                                    (.bucket bucket)
+                                    (.key (str prefixed-key))
+                                    (.uploadId upload-id)
+                                    (.multipartUpload (-> (CompletedMultipartUpload/builder)
+                                                          (.parts !sorted-parts)
+                                                          ^CompletedMultipartUpload (.build)))
+                                    ^CompleteMultipartUploadRequest (.build)))))
   
   (abort [_]
     (let [prefixed-key (util/prefix-key prefix k)]
@@ -103,7 +117,7 @@
                                  (.uploadId upload-id)
                                  ^AbortMultipartUploadRequest (.build))))))
 
-(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket ^Path prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket ^Path prefix multipart-minimum-part-size]
   ObjectStore
   (getObject [this k]
     (-> (.getObject client (get-obj-req this k) (AsyncResponseTransformer/toBytes))
@@ -147,21 +161,13 @@
           (.thenCompose (fn [exists?]
                           (if exists?
                             (CompletableFuture/completedFuture nil)
-                            (single-object-upload this k buf))))
-          (.thenApply (fn [_]
-                        ;; Add file name to the local cache as the last thing we do (ie - if PUT
-                        ;; fails, shouldnt add filename to the cache)
-                        (.add file-name-cache k))))))
+                            (single-object-upload this k buf)))))))
 
-  (listAllObjects [_this]
-    (into [] file-name-cache))
-
-  (listObjects [_this dir]
-    (file-list/list-files-under-prefix file-name-cache dir))
+  (listAllObjects [this]
+    (list-objects this nil))
 
   (deleteObject [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]
-      (.remove file-name-cache k)
       (.deleteObject client
                      (-> (DeleteObjectRequest/builder)
                          (.bucket bucket)
@@ -182,20 +188,15 @@
                                            prefix
                                            k
                                            (.uploadId initiate-response)
-                                           (fn [k]
-                                             ;; On complete - add filename to cache
-                                             (.add file-name-cache k))
                                            (atom 0)
                                            (ArrayList.)))))))
 
   Closeable
   (close [_]
-    (.close file-list-watcher)
-    (.clear file-name-cache)
     (.close client)))
 
-(defmethod bp/->object-store-factory ::object-store [_ {:keys [bucket sns-topic-arn ^S3Configurator configurator prefix]}]
-  (cond-> (S3/s3 bucket sns-topic-arn)
+(defmethod bp/->object-store-factory ::object-store [_ {:keys [bucket ^S3Configurator configurator prefix]}]
+  (cond-> (S3/s3 bucket)
     configurator (.s3Configurator configurator)
     prefix (.prefix (util/->path prefix))))
 
@@ -203,23 +204,13 @@
 
 (defn open-object-store ^ObjectStore [^S3$Factory factory]
   (let [bucket (.getBucket factory)
-        sns-topic-arn (.getSnsTopicArn factory)
         configurator (.getS3Configurator factory)
         s3-client (.makeClient configurator)
         prefix (.getPrefix factory)
-        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
-        file-name-cache (ConcurrentSkipListSet.)
-        ;; Watch s3 bucket for changes
-        file-list-watcher (s3-file-watch/open-file-list-watcher {:bucket bucket
-                                                                 :sns-topic-arn sns-topic-arn
-                                                                 :prefix prefix-with-version
-                                                                 :s3-client s3-client}
-                                                                file-name-cache)]
+        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)]
   
     (->S3ObjectStore configurator
                      s3-client
                      bucket
                      prefix-with-version
-                     minimum-part-size
-                     file-name-cache
-                     file-list-watcher)))
+                     minimum-part-size)))

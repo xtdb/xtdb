@@ -91,10 +91,8 @@ The sample Terraform directory contains several modules, each responsible for di
 If using the default configuration, the following will be created:
 
 * At the top level: an XTDB resource group, user assigned managed identity, and an environment for link:https://learn.microsoft.com/en-us/azure/container-apps/overview[Azure Container Apps].
-* **Remote Storage** infrastructure - contains the Azure infrastructure XTDB needs for using Azure Storage Blobs as Remote Storage. This sets up:
-** A storage account, containing the blob storage container XTDB will use.
-** An EventGrid system topic, subscribed to changes on the blob storage container.
-** A service bus namespace with a service bus topic subscribed to the EventGrid topic. XTDB uses the service bus topic to track file changes in the storage container.
+* **Remote Storage** infrastructure - contains the Azure infrastructure XTDB needs for using Azure Storage Blobs as Remote Storage.
+  This sets up a storage account containing the blob storage container XTDB will use.
 * **Kafka** infrastructure - a basic Kafka deployment on Azure Container Apps. This sets up:
 ** An Azure Storage Share on the previously created storage account, used to persist Kafka Data.
 ** A simple, unauthenticated Docker image of Kafka, running on Azure Container Apps with the persistent storage mounted.
@@ -111,7 +109,7 @@ See the XTDB link:https://docs.xtdb.com/config/tx-log/kafka.html#_setup[Kafka Se
 
 Before creating the Terraform resources, review and update the `terraform.tfvars` file to ensure the parameters are correctly set for your environment:
 
-* You are **required** to set a unique and valid `storage_account_name` and `service_bus_namespace` for your environment. 
+* You are **required** to set a unique and valid `storage_account_name` for your environment.
 * You may also wish to change resource tiers, the location of the resource group, or the maximum sizes of storage shares.
 
 To get a full list of the resources that will be deployed by the templates, run:

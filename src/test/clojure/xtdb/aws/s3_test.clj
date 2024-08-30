@@ -1,21 +1,19 @@
 (ns xtdb.aws.s3-test
-  (:require [clojure.test :as t]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [clojure.test :as t] 
             [xtdb.api :as xt]
-            [xtdb.datasets.tpch :as tpch]
+            [xtdb.aws.s3 :as s3]
+            [xtdb.buffer-pool-test :as bp-test]
             [xtdb.node :as xtn]
             [xtdb.object-store-test :as os-test]
-            [xtdb.aws.s3 :as s3]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.io Closeable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
-           [java.time Duration]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
            [xtdb.api.storage ObjectStore]
-           [xtdb.aws S3 S3$Factory]
+           [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
@@ -26,12 +24,8 @@
   (or (System/getProperty "xtdb.aws.s3-test.bucket")
       "xtdb-object-store-iam-test"))
 
-(def sns-topic-arn
-  (or (System/getProperty "xtdb.aws.s3-test.sns-topic-arn")
-      "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-iam-test-bucket-events"))
-
 (defn object-store ^Closeable [prefix]
-  (let [factory (-> (S3/s3 bucket sns-topic-arn)
+  (let [factory (-> (S3/s3 bucket)
                     (.prefix (util/->path (str prefix))))]
     (s3/open-object-store factory)))
 
@@ -43,42 +37,57 @@
   (with-open [os (object-store (random-uuid))]
     (os-test/test-range os)))
 
+(defn start-kafka-node [local-disk-cache prefix] 
+  (xtn/start-node
+   {:storage [:remote
+              {:object-store [:s3 {:bucket bucket
+                                   :prefix (util/->path (str "xtdb.s3-test." prefix))}]
+               :local-disk-cache local-disk-cache}]
+    :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
+                  :files-topic (str "xtdb.kafka-test.files-" prefix)
+                  :bootstrap-servers "localhost:9092"}]}))
+
 (t/deftest ^:s3 list-test
-  (with-open [os (object-store (random-uuid))]
-    (os-test/test-list-objects os)))
+  (util/with-tmp-dirs #{local-disk-cache}
+    (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
+      (let [buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        (bp-test/test-list-objects buffer-pool)))))
 
 (t/deftest ^:s3 list-test-with-prior-objects
-  (let [prefix (random-uuid)]
-    (with-open [os (object-store prefix)]
-      (os-test/put-edn os (util/->path "alice") :alice)
-      (os-test/put-edn os (util/->path "alan") :alan)
-      (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listAllObjects ^ObjectStore os))))
+  (util/with-tmp-dirs #{local-disk-cache}
+    (let [prefix (random-uuid)]
+      (util/with-open [node (start-kafka-node local-disk-cache prefix)]
+        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+          (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
+          (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
+          (Thread/sleep 1000)
+          (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool)))))
 
-    (with-open [os (object-store prefix)]
-      (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= (mapv util/->path ["alan" "alice"])
-                 (.listAllObjects ^ObjectStore os))))
+      (util/with-open [node (start-kafka-node local-disk-cache prefix)]
+        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+          (t/testing "prior objects will still be there, should be available on a list request"
+            (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool))))
 
-      (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os (util/->path "alice"))
-        (t/is (= (mapv util/->path ["alan"])
-                 (.listAllObjects ^ObjectStore os)))))))
+          (t/testing "should be able to add new objects and have that reflected in list objects output"
+            (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
+            (Thread/sleep 1000)
+            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listAllObjects buffer-pool)))))))))
 
-(t/deftest ^:s3 multiple-object-store-list-test
-  (let [prefix (random-uuid)
-        wait-time-ms 20000]
-    (with-open [os-1 (object-store prefix)
-                os-2 (object-store prefix)]
-      (os-test/put-edn os-1 (util/->path "alice") :alice)
-      (os-test/put-edn os-2 (util/->path "alan") :alan)
-      (Thread/sleep wait-time-ms)
+(t/deftest ^:s3 multiple-node-list-test
+  (util/with-tmp-dirs #{local-disk-cache}
+    (let [prefix (random-uuid)]
+      (util/with-open [node-1 (start-kafka-node local-disk-cache prefix)
+                       node-2 (start-kafka-node local-disk-cache prefix)]
+        (let [^RemoteBufferPool buffer-pool-1 (bp-test/fetch-buffer-pool-from-node node-1)
+              ^RemoteBufferPool buffer-pool-2 (bp-test/fetch-buffer-pool-from-node node-2)]
+          (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
+          (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
+          (Thread/sleep 1000)
+          (t/is (= (mapv util/->path ["alan" "alice"])
+                   (.listAllObjects buffer-pool-1)))
 
-      (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listAllObjects ^ObjectStore os-1)))
-
-      (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listAllObjects ^ObjectStore os-2))))))
+          (t/is (= (mapv util/->path ["alan" "alice"])
+                   (.listAllObjects buffer-pool-2))))))))
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
@@ -138,31 +147,23 @@
 
 (t/deftest ^:s3 node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
-    (util/with-open [node (xtn/start-node
-                           {:storage [:remote
-                                      {:object-store [:s3 {:bucket bucket
-                                                           :prefix (util/->path (str (random-uuid)))
-                                                           :sns-topic-arn sns-topic-arn}]
-                                       :local-disk-cache local-disk-cache}]})]
-
-      ;; Submit some documents to the node
-      (t/is (= true
-               (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                                 [:put-docs :bar {:xt/id "bar2"}]
-                                                 [:put-docs :bar {:xt/id "bar3"}]]))))
-
-      ;; Ensure finish-chunk! works
-      (t/is (nil? (tu/finish-chunk! node)))
-
-      ;; Ensure can query back out results
-      (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
-               (xt/q node '(from :bar [{:xt/id e}])))) 
-      
-      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
-        (t/is (instance? RemoteBufferPool buffer-pool))
-        (t/is (instance? ObjectStore object-store))
-        ;; Ensure some files are written
-        (t/is (seq (.listAllObjects object-store)))))))
+    (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
+      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        ;; Submit some documents to the node
+        (t/is (= true
+                 (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                                   [:put-docs :bar {:xt/id "bar2"}]
+                                                   [:put-docs :bar {:xt/id "bar3"}]]))))
+  
+        ;; Ensure finish-chunk! works
+        (t/is (nil? (tu/finish-chunk! node)))
+  
+        ;; Ensure can query back out results
+        (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+                 (xt/q node '(from :bar [{:xt/id e}]))))
+  
+        ;; Ensure some files written to buffer-pool
+        (t/is (seq (.listAllObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 #_(t/deftest ^:s3 tpch-test-node
@@ -170,8 +171,7 @@
     (util/with-open [node (xtn/start-node
                            {:storage [:remote
                                       {:object-store [:s3 {:bucket bucket
-                                                           :prefix (util/->path (str (random-uuid)))
-                                                           :sns-topic-arn sns-topic-arn}]
+                                                           :prefix (util/->path (str (random-uuid)))}]
                                        :local-disk-cache local-disk-cache}]})]
       ;; Submit tpch docs
       (-> (tpch/submit-docs! node 0.05)

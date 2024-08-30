@@ -8,12 +8,6 @@ title: Azure Blob Storage
 Azure Blob Storage can be used as a shared object-store for XTDB's remote storage module.
 
 [NOTE]
-====
-The Azure Blob Storage module uses an Event Grid topic and Service Bus Topic to maintain a local copy of the file listings on Azure, saving on expensive/lengthy operations to list objects on Azure Blob Storage.
-
-If not using the link:#resource-manager[Resource Manager template], ensure that you have a similar setup to track file changes on whichever storage account/container you are using, and that XTDB has relevant permissions to use all of the services. 
-====
-
 == Setup
 
 First, ensure the `com.xtdb/xtdb-azure` Maven dependency is added to your XTDB node.
@@ -29,35 +23,19 @@ We provide a https://github.com/xtdb/xtdb/blob/main/modules/azure/azure-resource
 
 To use Azure Blob Storage as the object store, the following infrastructure is required:
 
-. An **Azure Storage Account**.
-.. A **Storage Account Container** within the storage account.
-. An **EventGrid System Topic**, subscribed to blob creation/deletion events on the container.
-. A `standard` tier **Service Bus Namespace**
-.. A **Service Bus Topic** within the namespace (this should have a low time to live for messages).
-. A Custom Role Definition, granting XTDB permission to:
-.. Use the created storage container (Get, Put, Delete and List)
-.. Read messages sent to **EventGrid**
-.. Create Subscriptions on the **Service Bus Topic**
+. An **Azure Storage Account**, containing a **Storage Account Container**.
 [source,json]
 ----
 {
   "permissions": [
     {
       "actions": [
-        "Microsoft.ServiceBus/*",
         "Microsoft.Storage/storageAccounts/blobServices/containers/write",
         "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
         "Microsoft.Storage/storageAccounts/blobServices/containers/read",
-        "Microsoft.EventGrid/systemTopics/read",
-        "Microsoft.EventGrid/systemTopics/eventSubscriptions/read",
-        "Microsoft.EventGrid/systemTopics/eventSubscriptions/write",
-        "Microsoft.EventGrid/systemTopics/eventSubscriptions/delete",
-        "Microsoft.EventGrid/systemTopics/eventSubscriptions/getFullUrl/action",
-        "Microsoft.EventGrid/systemTopics/eventSubscriptions/getDeliveryAttributes/action"
       ],
       "notActions": [],
       "dataActions": [
-        "Microsoft.ServiceBus/*",
         "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
         "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
         "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete",
@@ -97,20 +75,6 @@ storage: !Remote
     # The name of the blob storage container to be used as the object store
     # (Can be set as an !Env value)
     container: xtdb-container
-
-    # --- At least one of serviceBusNamespace or serviceBusNamespaceFQDN is required
-
-    # The name of the service bus namespace which contains the serviceBusTopicName
-    # (Can be set as an !Env value)
-    serviceBusNamespace: xtdb-service-bus
-
-    # The fully qualified domain name of the service bus namespace which contains the serviceBusTopicName
-    # (Can be set as an !Env value)
-    # serviceBusNamespaceFQDN: xtdb-service-bus.privatelink.servicebus.windows.net
-
-    # The name of the service bus topic which is collecting notifications from the container
-    # (Can be set as an !Env value)
-    serviceBusTopicName: xtdb-service-bus-topic
 
     # -- optional
     # A file path to prefix all of your files with

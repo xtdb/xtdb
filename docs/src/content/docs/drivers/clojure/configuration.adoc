@@ -135,7 +135,6 @@ Main article: link:/config/storage/s3[S3]
            {:object-store [:s3
                            {;; -- required
                             :bucket "my-bucket"
-                            :sns-topic-arn "arn:aws:sns:region:account-id:my-sns-topic"
 
                             ;; -- optional
 
@@ -159,10 +158,6 @@ Main article: link:/config/storage/azure[Azure Blob Storage]
                             :storage-account "storage-account"
                             ;; :storage-account-endpoint "https://storage-account.privatelink.blob.core.windows.net"
                             :container "xtdb-container"
-                            ;; --- At least one of service-bus-namespace or service-bus-namespace-fqdn is required
-                            :servicebus-namespace "xtdb-service-bus"
-                            ;; :servicebus-namespace-fqdn "xtdb-service-bus.servicebus.windows.net"
-                            :servicebus-topic-name "xtdb-service-bus-topic"
 
                             ;; -- optional
 
@@ -184,7 +179,6 @@ Main article: link:/config/storage/google-cloud[Google Cloud Storage]
                            {;; -- required
                             :project-id "xtdb-project"
                             :bucket "xtdb-bucket"
-                            :pubsub-topic "xtdb-bucket-topic"
 
                             ;; -- optional
 

@@ -18,6 +18,7 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.api IndexerConfig)
            xtdb.api.storage.Storage$InMemoryStorageFactory
+           xtdb.api.log.Logs
            (xtdb.arrow Relation VectorPosition)
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
@@ -26,6 +27,7 @@
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index (IndexerConfig.)
+                           :xtdb/log (Logs/inMemoryLog)
                            :xtdb/buffer-pool Storage$InMemoryStorageFactory/INSTANCE
                            ::meta/metadata-manager {}
                            :xtdb.compactor/no-op {}}))

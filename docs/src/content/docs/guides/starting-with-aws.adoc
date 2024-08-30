@@ -40,7 +40,7 @@ NOTE: If you wish to group all of the resources created from all the templates u
 
 === Setting up the S3 resources
 
-The `xtdb-s3` template sets up infrastructure & permissions necessary to use S3 as an XTDB Object Store (this will utilize S3, SNS, and SQS).
+The `xtdb-s3` template sets up infrastructure & permissions necessary to use S3 as an XTDB Object Store.
 
 It doesn't depend on `xtdb-vpc`, so you can upload both simultaneously. It requires the following **input parameter**:
 
@@ -49,8 +49,7 @@ It doesn't depend on `xtdb-vpc`, so you can upload both simultaneously. It requi
 It will **output** the following:
 
 * `BucketName`: Created S3 bucket name (identical to `S3BucketName`)
-* `SNSTopicArn`: ARN of the SNS topic used for S3 notifications from the bucket.
-* `S3AccessPolicyArn`: ARN of the managed policy granting all of the relevant S3, SNS and SQS permissions
+* `S3AccessPolicyArn`: ARN of the managed policy granting all of the relevant S3 permissions
 
 === Setting up the MSK cluster
 
@@ -118,7 +117,6 @@ It splits it's inputs into two distinct sections - parameters/resources from oth
 ** `TargetGroupArn`: ARN of the target group created for the nodes (from `xtdb-alb`)
 ** `LoadBalancerArn`: ARN of the Application Load Balancer created for the nodes (from `xtdb-alb`)
 ** `S3BucketName`: Name of the S3 bucket to use as the XTDB object store (from `xtdb-s3`)
-** `SNSTopicArn`: The ARN of the SNS topic which the S3 sends notifications to (from `xtdb-s3`)
 ** `S3AccessPolicyArn`: ARN of the managed policy offering access to all the S3 permissions necessary for the object store (from `xtdb-s3`)
 ** `MSKBootstrapServers`: Comma separated list containing all Kafka bootstrap server URLs from MSK (needs to be grabbed manually from the MSK cluster info, see "<<Fetching the bootstrap servers>>")
 ** `MSKAccessPolicyArn`: ARN of the managed policy offering access to all the MSK permissions (from `xtdb-msk`)

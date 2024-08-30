@@ -11,7 +11,7 @@
            (java.util.concurrent Semaphore)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           (xtdb.api.log Log Log$Record)
+           (xtdb.api.log Log TxLog$Record)
            xtdb.IBufferPool
            (xtdb.indexer IIndexer)))
 
@@ -57,7 +57,7 @@
 (t/use-fixtures :each each-fixture)
 
 (defn log-seq [^Log log ^BufferAllocator allocator]
-  (letfn [(clj-record [^Log$Record record]
+  (letfn [(clj-record [^TxLog$Record record]
             (condp = (Byte/toUnsignedInt (.get (.getRecord record) 0))
               xt-log/hb-flush-chunk
               {:header-byte xt-log/hb-flush-chunk
@@ -75,10 +75,10 @@
               (throw (Exception. "Unrecognized record header"))))]
     ((fn ! [offset]
        (lazy-seq
-         (when-some [records (seq (.readRecords log (long offset) 100))]
+         (when-some [records (seq (.readTxs log (long offset) 100))]
            (concat
              (map clj-record records)
-             (! (.getTxId (.getTxKey ^Log$Record (last records))))))))
+             (! (.getTxId (.getTxKey ^TxLog$Record (last records))))))))
      -1)))
 
 (defn node-log [node]

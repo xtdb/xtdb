@@ -273,9 +273,8 @@
 (defn get-s3 [stack-name] (cfn-describe stack-name))
 
 (defn s3-module-partial-config [s3-stack]
-  (let [{:strs [BucketName SNSTopicArn]} (stack-output-map s3-stack)]
-    {:bucket BucketName,
-     :sns-topic-arn SNSTopicArn}))
+  (let [{:strs [BucketName]} (stack-output-map s3-stack)]
+    {:bucket BucketName,}))
 
 (defn s3-module-config [s3-stack prefix]
   (merge (s3-module-partial-config s3-stack)

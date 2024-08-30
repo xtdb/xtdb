@@ -12,7 +12,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.ipc.ArrowStreamReader
            org.apache.arrow.vector.TimeStampMicroTZVector
-           [xtdb.api.log Log Log$Subscriber]
+           [xtdb.api.log Log TxLog$Subscriber]
            xtdb.indexer.IIndexer))
 
 (defmethod ig/prep-key :xtdb.log/watcher [_ opts]
@@ -28,40 +28,36 @@
 
 (defn- watch-log! [{:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
   (let [!cancel-hook (promise)]
-    (.subscribe log
-                (some-> (.latestCompletedTx indexer) (.getTxId))
-                (reify Log$Subscriber
-                  (onSubscribe [_ cancel-hook]
-                    (deliver !cancel-hook cancel-hook))
+    (.subscribeTxs log
+                   (some-> (.latestCompletedTx indexer) (.getTxId))
+                   (reify TxLog$Subscriber
+                     (onSubscribe [_ cancel-hook]
+                       (deliver !cancel-hook cancel-hook))
 
-                  (acceptRecord [_ record]
-                    (if (Thread/interrupted)
-                      (throw (InterruptedException.))
+                     (accept [_ record]
+                       (if (Thread/interrupted)
+                         (throw (InterruptedException.))
 
-                      (condp = (Byte/toUnsignedInt (.get (.getRecord record) 0))
-                        xt-log/hb-user-arrow-transaction
-                        (with-open [tx-ops-ch (util/->seekable-byte-channel (.getRecord record))
-                                    sr (ArrowStreamReader. tx-ops-ch allocator)
-                                    tx-root (.getVectorSchemaRoot sr)]
-                          (try
-                            (.loadNextBatch sr)
-                            (catch Throwable t
-                              (prn (.getSchema tx-root))
-                              (throw t)))
+                         (condp = (Byte/toUnsignedInt (.get (.getRecord record) 0))
+                           xt-log/hb-user-arrow-transaction
+                           (with-open [tx-ops-ch (util/->seekable-byte-channel (.getRecord record))
+                                       sr (ArrowStreamReader. tx-ops-ch allocator)
+                                       tx-root (.getVectorSchemaRoot sr)]
+                             (.loadNextBatch sr)
 
-                          (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
-                                record-tx (.getTxKey record)
-                                tx-key (cond-> record-tx (not (.isNull system-time-vec 0))
-                                         (assoc :system-time (-> (.get system-time-vec 0) (time/micros->instant))))]
+                             (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
+                                   record-tx (.getTxKey record)
+                                   tx-key (cond-> record-tx (not (.isNull system-time-vec 0))
+                                                  (assoc :system-time (-> (.get system-time-vec 0) (time/micros->instant))))]
 
-                            (.indexTx indexer tx-key tx-root)))
+                               (.indexTx indexer tx-key tx-root)))
 
-                        xt-log/hb-flush-chunk
-                        (let [expected-chunk-tx-id (get-bb-long (.getRecord record) 1 -1)]
-                          (log/debugf "received flush-chunk signal: %d" expected-chunk-tx-id)
-                          (.forceFlush indexer (.getTxKey record) expected-chunk-tx-id))
+                           xt-log/hb-flush-chunk
+                           (let [expected-chunk-tx-id (get-bb-long (.getRecord record) 1 -1)]
+                             (log/debugf "received flush-chunk signal: %d" expected-chunk-tx-id)
+                             (.forceFlush indexer (.getTxKey record) expected-chunk-tx-id))
 
-                        (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get (.getRecord record) 0))))))))))
+                           (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get (.getRecord record) 0))))))))))
     !cancel-hook))
 
 (defmethod ig/init-key :xtdb.log/watcher [_ {:keys [allocator] :as deps}]

@@ -21,10 +21,6 @@ Parameters:
     Description: Name of the S3 bucket to use as the XTDB object store
     Type: String
   
-  SNSTopicArn:
-    Description: The ARN of the SNS Topic which the S3 sends notifications to
-    Type: String
-    
   S3AccessPolicyArn:
     Description: ARN of the managed policy offering access to all the S3 permissions necessary for the object store
     Type: String
@@ -68,7 +64,6 @@ Metadata:
           - TargetGroupArn
           - LoadBalancerArn
           - S3BucketName
-          - SNSTopicArn
           - S3AccessPolicyArn
           - MSKBootstrapServers
           - MSKAccessPolicyArn
@@ -174,12 +169,12 @@ Resources:
           Environment:
             - Name: KAFKA_BOOTSTRAP_SERVERS
               Value: !Ref MSKBootstrapServers
-            - Name: XTDB_TOPIC_NAME
-              Value: xtdb-log
+            - Name: XTDB_TX_TOPIC
+              Value: xtdb-tx-log
+            - Name: XTDB_FILES_TOPIC
+              Value: xtdb-file-notifs
             - Name: XTDB_S3_BUCKET
               Value: !Ref S3BucketName
-            - Name: XTDB_SNS_TOPIC
-              Value: !Ref SNSTopicArn
       Volumes:
         - Name: xtdb-volume
           Host:
@@ -262,4 +257,4 @@ Resources:
           ContainerPort: '3000'
           TargetGroupArn: !Ref TargetGroupArn
       PlacementConstraints:
-        - Type: distinctInstance 
+        - Type: distinctInstance

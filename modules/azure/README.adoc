@@ -31,26 +31,16 @@ See the custom role definition in the link:azure-resource-manager/azure-stack.js
 
 == Azure Blob Storage Object Store
 
-We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we can add the `:azure` object store and it's configuration map, within the remote storage module config for our node:
+We can swap out the implementation of the object store with one based on Azure Blob Storage.
+To do so, we can add the `:azure` object store and it's configuration map, within the remote storage module config for our node:
+
 ```clojure
 {:storage [:remote {:object-store [:azure {:storage-account "xtdbstorageaccount"
-                                           :container "xtdb-object-store"
-                                           :servicebus-namespace "xtdb-storage-account-eventbus"
-                                           :servicebus-topic-name "xtdb-storage-bus-topic"}]
+                                           :container "xtdb-object-store"}]
                     :local-disk-cache "local-disk-cache"}]}
 ```
 
-Alongside the storage account container, we require an eventgrid topic and service bus topic to pass around file changes to the container, such that we can keep a local copy of files on Azure, saving on expensive/lengthy operations to list objects. Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary extra infrastructure. Even if this isn't used, we will require a similar setup to track file changes on whichever storage account/container you are using, and relevant permissions to use all of the services. 
-
-=== Cleaning up between node restarts
-
-One known issue to be aware of is that of nodes occasionally hanging when restarted within the same process. In particular, the following happens if you restart a node too quickly:
-
-* The first node is closed, and cleans up it's servicebus subscriptions.
-* The second node is created and, as part of the Azure API calls, attempts to re-use the previous AQMP connection.
-* As the previous subscription has been cleared up - the node hangs.
-
-This issue _only_ occurs on restarts **in the same JVM process**, and also only occurs if a node is restarted _too quickly_. Unused AQMP connections are cleared up eventually - in practise we've found waiting around ten seconds after a restart avoids this issue.     
+Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary infrastructure.
 
 === Parameters
 
@@ -68,15 +58,6 @@ These are the following parameters that can be passed within the config for our 
 | The name of the https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[container] to use an an object store
 | Yes
 
-| `servicebus-namespace`
-| String
-| The name of the https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces[Service Bus namespace] which contains the topic collecting notifications from the container 
-| Yes
-
-| `servicebus-topic-name`
-| String
-| The name of the https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions[Service Bus topic] which contains is collecting notifications from the container
-| Yes
 
 |`prefix`
 | String/File/Path 
@@ -97,10 +78,6 @@ The paramaterized stack expects the following to be provided:
 * The name of the storage account to create -- Defaults to `xtdbstorageaccount`
 * The pricing tier/type of storage account to use -- Defaults to `Standard_LRS`
 * The name of the storage container to use as the XTDB object store (and used by associated resources) -- Defaults to `xtdb-object-store`
-* The name of the EventGrid system topic we use for container events -- Defaults to `xtdb-storage-account-system-topic`
-* The name to use for the Service Bus namespace -- Defaults to `xtdb-storage-account-eventbus`
-* The name to use for the Service Bus topic created in the namespace above -- Defaults to `xtdb-storage-bus-topic`
-* The (ISO 8601) duration of time to retain messages in the Service Bus topic -- Defaults to `PT5M` (5 minutes)
 * The name of the custom XTDB role to create with permissions for the created resources -- Defaults to `xtdb-role`
 
 ==== Created Resources
@@ -109,12 +86,4 @@ The Azure Resource Manager stack will create the following resources within the 
 
 * An https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview[Azure Storage Account]
 * A https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[Storage Account Container] within said storage account to use as the object store.
-* An https://learn.microsoft.com/en-us/azure/event-grid/system-topics[EventGrid System Topic], subscribed to blob creation/deletion events on the container.
-* A `standard` tier https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces[Service Bus Namespace]:
-** A https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions[Service Bus Topic] for the Service Bus namespace.
-* An https://learn.microsoft.com/en-us/azure/event-grid/concepts#event-subscriptions[Event Subscription] on the EventGrid System Topic for the Service Bus Topic.
-* A https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles[custom role definition] for all of the necessary permissions for XTDB to use the above:
-** Using the created storage container (Get, Put, Delete and List).
-** Reading messages sent to EventGrid.
-** Creating subscriptions on the Service Bus topic.
-
+* A https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles[custom role definition] for all of the necessary permissions for XTDB to use created storage container (Get, Put, Delete and List).

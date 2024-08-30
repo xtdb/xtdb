@@ -12,12 +12,13 @@
   (:import (com.github.benmanes.caffeine.cache AsyncCache)
            (java.io File)
            (java.nio ByteBuffer)
+           [java.nio.charset StandardCharsets]
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
            (java.util.concurrent CompletableFuture)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
+           xtdb.api.log.FileListCache
            (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
            xtdb.arrow.Relation
            xtdb.buffer_pool.RemoteBufferPool
@@ -106,12 +107,12 @@
         (util/with-open [buf (.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
 
-(defrecord SimulatedObjectStore [calls buffers]
+(defrecord SimulatedObjectStore [!calls !buffers]
   ObjectStore
-  (getObject [_ k] (CompletableFuture/completedFuture (get @buffers k)))
+  (getObject [_ k] (CompletableFuture/completedFuture (get @!buffers k)))
 
   (getObject [_ k path]
-    (if-some [^ByteBuffer nio-buf (get @buffers k)]
+    (if-some [^ByteBuffer nio-buf (get @!buffers k)]
       (let [barr (byte-array (.remaining nio-buf))]
         (.get (.duplicate nio-buf) barr)
         (io/copy barr (.toFile path))
@@ -119,9 +120,12 @@
       (CompletableFuture/failedFuture (os/obj-missing-exception k))))
 
   (putObject [_ k buf]
-    (swap! buffers assoc k buf)
-    (swap! calls conj :put)
+    (swap! !buffers assoc k buf)
+    (swap! !calls conj :put)
     (CompletableFuture/completedFuture nil))
+
+  (listAllObjects [_]
+    (vec (keys @!buffers)))
 
   SupportsMultipart
   (startMultipart [_ k]
@@ -129,17 +133,17 @@
       (CompletableFuture/completedFuture
         (reify IMultipartUpload
           (uploadPart [_ buf]
-            (swap! calls conj :upload)
+            (swap! !calls conj :upload)
             (swap! parts conj (copy-byte-buffer buf))
             (CompletableFuture/completedFuture nil))
 
           (complete [_]
-            (swap! calls conj :complete)
-            (swap! buffers assoc k (concat-byte-buffers @parts))
+            (swap! !calls conj :complete)
+            (swap! !buffers assoc k (concat-byte-buffers @parts))
             (CompletableFuture/completedFuture nil))
 
           (abort [_]
-            (swap! calls conj :abort)
+            (swap! !calls conj :abort)
             (CompletableFuture/completedFuture nil)))))))
 
 (def simulated-obj-store-factory
@@ -149,10 +153,11 @@
 
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
-                          (Storage/remoteStorage simulated-obj-store-factory (create-tmp-dir))))
+                          (Storage/remoteStorage simulated-obj-store-factory (create-tmp-dir))
+                          FileListCache/SOLO))
 
 (defn get-remote-calls [test-bp]
-  @(:calls (:object-store test-bp)))
+  @(:!calls (:object-store test-bp)))
 
 (t/deftest below-min-size-put-test
   (with-open [bp (remote-test-buffer-pool)]
@@ -202,7 +207,8 @@
                     tu/*allocator*
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
-                        (.maxCacheBytes 12)))]
+                        (.maxCacheBytes 12))
+                    FileListCache/SOLO)]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
@@ -228,7 +234,8 @@
                     tu/*allocator*
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
-                        (.maxCacheBytes 12)))]
+                        (.maxCacheBytes 12))
+                    FileListCache/SOLO)]
       (insert-utf8-to-local-cache bp (util/->path "a") 4)
       (insert-utf8-to-local-cache bp (util/->path "b") 4)
       (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
@@ -238,7 +245,8 @@
                     tu/*allocator*
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
-                        (.maxCacheBytes 12)))]
+                        (.maxCacheBytes 12))
+                    FileListCache/SOLO)]
       (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "a"))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf)))))
 
@@ -259,3 +267,38 @@
                   rel (Relation. tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
         (t/is (= [] (.listAllObjects bp)))))))
+
+(defn fetch-buffer-pool-from-node
+  [node]
+  (val (first (ig/find-derived (:system node) :xtdb/buffer-pool))))
+
+(defn put-edn [^IBufferPool buffer-pool ^Path k obj]
+  (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
+    (.putObject buffer-pool k buf)))
+
+(defn test-list-objects
+  [^RemoteBufferPool buffer-pool]
+  (put-edn buffer-pool (util/->path "bar/alice") :alice)
+  (put-edn buffer-pool (util/->path "foo/alan") :alan)
+  (put-edn buffer-pool (util/->path "bar/bob") :bob)
+  (put-edn buffer-pool (util/->path "bar/baz/dan") :dan)
+  (put-edn buffer-pool (util/->path "bar/baza/james") :james)
+  (Thread/sleep 1000)
+
+  (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
+           (.listAllObjects buffer-pool)))
+
+  (t/is (= (mapv util/->path ["foo/alan"])
+           (.listObjects buffer-pool (util/->path "foo"))))
+
+  (t/testing "call listObjects with a prefix ended with a slash - should work the same"
+    (t/is (= (mapv util/->path ["foo/alan"])
+             (.listObjects buffer-pool (util/->path "foo/")))))
+
+  (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
+    (t/is (= (mapv util/->path ["bar/alice" "bar/baz" "bar/baza" "bar/bob"])
+             (.listObjects buffer-pool (util/->path "bar")))))
+
+  (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
+    (t/is (= (mapv util/->path ["bar/baz/dan"])
+             (.listObjects buffer-pool (util/->path "bar/baz"))))))

@@ -19,7 +19,7 @@ import java.nio.file.Path
 /**
  * Used to set configuration options for an S3 Object Store, which can be used as implementation of objectStore within a [xtdb.api.storage.Storage.RemoteStorageFactory].
  *
- * Requires at least [bucket][S3.Factory.bucket] and an [snsTopicArn][S3.Factory.snsTopicArn] to be provided - these will need to be accessible to whichever authentication credentials you use.
+ * Requires at least a [bucket][S3.Factory.bucket] - this will need to be accessible to whichever authentication credentials you use.
  * Authentication is handled via the Default AWS Credential Provider Chain.
  * See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default) on the various methods which you can handle authentication to be able to make use of the operations inside the modules.
  *
@@ -29,7 +29,7 @@ import java.nio.file.Path
  * ```kotlin
  * Xtdb.openNode {
  *    remoteStorage(
- *       objectStore = s3(bucket = "xtdb-bucket", snsTopicArn = "example-arn") {
+ *       objectStore = s3(bucket = "xtdb-bucket") {
  *           prefix = Path.of("my/custom/prefix")
  *       },
  *       localDiskCache = Paths.get("test-path")
@@ -40,12 +40,12 @@ import java.nio.file.Path
  */
 object S3 {
     @JvmStatic
-    fun s3(bucket: String, snsTopicArn: String) = Factory(bucket, snsTopicArn)
+    fun s3(bucket: String) = Factory(bucket)
 
     /**
      * Used to set configuration options for an S3 Object Store, which can be used as implementation of objectStore within a [xtdb.api.storage.Storage.RemoteStorageFactory].
      *
-     * Requires at least [bucket] and an [snsTopicArn] to be provided - these will need to be accessible to whichever authentication credentials you use.
+     * Requires at least a [bucket] - this will need to be accessible to whichever authentication credentials you use.
      * Authentication is handled via the Default AWS Credential Provider Chain.
      * See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default) on the various methods which you can handle authentication to be able to make use of the operations inside the modules.
      *
@@ -55,7 +55,7 @@ object S3 {
      * ```kotlin
      * Xtdb.openNode {
      *    remoteStorage(
-     *       objectStore = s3(bucket = "xtdb-bucket", snsTopicArn = "example-arn") {
+     *       objectStore = s3(bucket = "xtdb-bucket") {
      *           prefix = Path.of("my/custom/prefix")
      *       },
      *       localDiskCache = Paths.get("test-path")
@@ -64,17 +64,15 @@ object S3 {
      * }
      * ```
      * @param bucket The name of the [S3 Bucket](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html) to be used as an object store
-     * @param snsTopicArn The [ARN](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html) of the [SNS topic](https://aws.amazon.com/sns/) which is collecting notifications from the S3 bucket you are using.
      */
     @JvmSynthetic
-    fun s3(bucket: String, snsTopicArn: String, configure: Factory.() -> Unit = {}) =
-        s3(bucket, snsTopicArn).also(configure)
+    fun s3(bucket: String, configure: Factory.() -> Unit = {}) =
+        s3(bucket).also(configure)
 
     @Serializable
     @SerialName("!S3")
     data class Factory(
         @Serializable(StringWithEnvVarSerde::class) val bucket: String,
-        @Serializable(StringWithEnvVarSerde::class) val snsTopicArn: String,
         @Serializable(PathWithEnvVarSerde::class) var prefix: Path? = null,
         @Transient var s3Configurator: S3Configurator = DefaultS3Configurator,
     ) : ObjectStoreFactory {

@@ -1,11 +1,11 @@
 txLog: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-  topicName: !Env XTDB_TOPIC_NAME
+  txTopic: !Env XTDB_TX_TOPIC
+  filesTopic: !Env XTDB_FILES_TOPIC
 
 storage: !Remote
   objectStore: !S3
     bucket: !Env XTDB_S3_BUCKET
-    snsTopicArn: !Env XTDB_SNS_TOPIC
     prefix: "xtdb-object-store"
   localDiskCache: /var/lib/xtdb/buffers
 

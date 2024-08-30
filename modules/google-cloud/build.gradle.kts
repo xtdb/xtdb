@@ -32,10 +32,7 @@ dependencies {
     api("com.google.cloud", "google-cloud-storage", "2.38.0") {
         exclude("com.google.guava","listenablefuture")
     }
-    api("com.google.cloud", "google-cloud-pubsub", "1.129.4") {
-        exclude("com.google.guava","listenablefuture")
-    }
-    
+
     api("com.google.guava","guava","32.1.1-jre")
 
     api(kotlin("stdlib-jdk8"))

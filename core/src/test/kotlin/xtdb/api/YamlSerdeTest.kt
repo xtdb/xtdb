@@ -79,11 +79,13 @@ class YamlSerdeTest {
         val kafkaConfig = """
         txLog: !Kafka
             bootstrapServers: localhost:9092
-            topicName: xtdb_topic
+            txTopic: xtdb_tx_topic
+            filesTopic: xdtd_files_topic
+            
         """.trimIndent()
 
         assertEquals(
-            Kafka.Factory(bootstrapServers = "localhost:9092", topicName = "xtdb_topic"),
+            Kafka.Factory(bootstrapServers = "localhost:9092", txTopic = "xtdb_tx_topic", filesTopic = "xdtd_files_topic"),
             nodeConfig(kafkaConfig).txLog
         )
     }
@@ -111,13 +113,12 @@ class YamlSerdeTest {
         storage: !Remote
             objectStore: !S3
               bucket: xtdb-bucket
-              snsTopicArn: example-arn
             localDiskCache: test-path
         """.trimIndent()
 
         assertEquals(
             RemoteStorageFactory(
-                objectStore = s3(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
+                objectStore = s3(bucket = "xtdb-bucket"),
                 localDiskCache = Paths.get("test-path")
             ),
             nodeConfig(s3Config).storage
@@ -128,8 +129,6 @@ class YamlSerdeTest {
             objectStore: !Azure
               storageAccount: storage-account
               container: xtdb-container
-              serviceBusNamespace: xtdb-service-bus
-              serviceBusTopicName: xtdb-service-bus-topic
             localDiskCache: test-path
         """.trimIndent()
 
@@ -137,9 +136,7 @@ class YamlSerdeTest {
             RemoteStorageFactory(
                 objectStore = azureBlobStorage(
                     storageAccount = "storage-account",
-                    container = "xtdb-container",
-                    serviceBusNamespace = "xtdb-service-bus",
-                    serviceBusTopicName = "xtdb-service-bus-topic"
+                    container = "xtdb-container"
                 ),
                 localDiskCache = Paths.get("test-path")
             ),
@@ -151,7 +148,6 @@ class YamlSerdeTest {
           objectStore: !GoogleCloud
             projectId: xtdb-project
             bucket: xtdb-bucket
-            pubSubTopic: xtdb-bucket-topic
           localDiskCache: test-path
         """.trimIndent()
 
@@ -159,8 +155,7 @@ class YamlSerdeTest {
             RemoteStorageFactory(
                 objectStore = GoogleCloudStorage.Factory(
                     projectId = "xtdb-project",
-                    bucket ="xtdb-bucket",
-                    pubSubTopic = "xtdb-bucket-topic"
+                    bucket ="xtdb-bucket"
                 ),
                 localDiskCache = Paths.get("test-path")
             ),
@@ -226,20 +221,18 @@ class YamlSerdeTest {
     fun testEnvVarsMultipleSetVariables() {
         mockkObject(EnvironmentVariableProvider)
         every { EnvironmentVariableProvider.getEnvVariable("BUCKET") } returns "xtdb-bucket"
-        every { EnvironmentVariableProvider.getEnvVariable("SNS_TOPIC_ARN") } returns "example-arn"
         every { EnvironmentVariableProvider.getEnvVariable("DISK_CACHE_PATH") } returns "test-path"
 
         val inputWithEnv = """
         storage: !Remote
             objectStore: !S3
               bucket: !Env BUCKET 
-              snsTopicArn: !Env SNS_TOPIC_ARN
-            localDiskCache: !Env DISK_CACHE_PATH 
+            localDiskCache: !Env DISK_CACHE_PATH
         """.trimIndent()
 
         assertEquals(
             RemoteStorageFactory(
-                objectStore = s3(bucket = "xtdb-bucket", snsTopicArn = "example-arn"),
+                objectStore = s3(bucket = "xtdb-bucket"),
                 localDiskCache = Paths.get("test-path")
             ),
 
@@ -260,7 +253,8 @@ class YamlSerdeTest {
         val inputWithEnv = """
         txLog: !Kafka
             bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-            topicName: xtdb_topic
+            txTopic: xtdb_tx_topic
+            filesTopic: xdtd_files_topic
             propertiesMap:
                 security.protocol: SASL_SSL
                 sasl.mechanism: PLAIN
@@ -270,7 +264,8 @@ class YamlSerdeTest {
         assertEquals(
             Kafka.Factory(
                 bootstrapServers = "localhost:9092",
-                topicName = "xtdb_topic",
+                txTopic = "xtdb_tx_topic",
+                filesTopic = "xdtd_files_topic",
                 propertiesMap = mapOf(
                     "security.protocol" to "SASL_SSL",
                     "sasl.mechanism" to "PLAIN",
