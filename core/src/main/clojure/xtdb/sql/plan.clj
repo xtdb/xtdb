@@ -499,7 +499,7 @@
   PlanError
   (error-string [_] (format "Missing grouping columns: %s" missing-grouping-cols)))
 
-(defrecord GroupInvariantColsTracker [env scope, ^Set !implied-gicrs]
+(defrecord GroupInvariantColsTracker [env scope, ^Set !implied-gicrs ^Set !unresolved-cr]
   SqlVisitor
   (visitSelectClause [this ctx] (.accept (.getParent ctx) this))
 
@@ -509,7 +509,9 @@
                                  (.accept grp-el
                                           (reify SqlVisitor
                                             (visitOrdinaryGroupingSet [_ ctx]
-                                              (.accept (.columnReference ctx) (->ExprPlanVisitor env scope)))))))]
+                                              (.accept (.columnReference ctx)
+                                                       (map->ExprPlanVisitor {:env env :scope scope
+                                                                              :!unresolved-cr !unresolved-cr})))))))]
 
         (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs) (set grouping-cols)))]
           (add-err! env (->MissingGroupingColumns missing-grouping-cols))
@@ -1031,14 +1033,14 @@
       "true" true
       "false" false
       "unknown" nil))
-  
+
   (visitUUIDLiteral [this ctx] (parse-uuid-literal (.accept (.characterString ctx) this) env))
 
   (visitNullLiteral [_ _ctx] nil)
 
   (visitColumnExpr [this ctx] (-> (.columnReference ctx) (.accept this)))
 
-  (visitColumnReference [{:keys [^Set !ob-col-refs]} ctx]
+  (visitColumnReference [{{:keys [!id-count]} :env :keys [^Set !ob-col-refs ^Set !unresolved-cr]} ctx]
     (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
       (case (first chain)
         _valid_time
@@ -1053,9 +1055,13 @@
 
         (let [matches (find-decls scope chain)]
           (when-let [sym (case (count matches)
-                           0 (add-warning! env (->ColumnNotFound chain))
+                           0 (do (add-warning! env (->ColumnNotFound chain))
+                                 (when !unresolved-cr
+                                   (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
+                                     (.add !unresolved-cr sym)
+                                     sym)))
                            1 (first matches)
-                           (add-err! env (->AmbiguousColumnReference chain)))]
+                           (add-err! env (->AmbiguousColumnReference chain))) ]
             (some-> !ob-col-refs (.add sym))
             sym)))))
 
@@ -2159,7 +2165,8 @@
                          {:predicate (.accept (.expr where-clause) (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs}))
                           :subqs (not-empty (into {} !subqs))}))
 
-          group-invar-col-tracker (->GroupInvariantColsTracker env qs-scope (HashSet.))
+          !unresolved-cr (HashSet.)
+          group-invar-col-tracker (->GroupInvariantColsTracker env qs-scope (HashSet.) !unresolved-cr)
 
           having-plan (when-let [having-clause (.havingClause ctx)]
                         (let [!subqs (HashMap.)
@@ -2184,12 +2191,18 @@
           _ (when (> (count windows) 1)
               (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
           window-functions? (boolean windows)
+          unresolved-cr (not-empty (into #{} !unresolved-cr))
 
           ob-specs (some-> order-by-ctx
                            (plan-order-by env qs-scope (mapv :col-sym projected-cols)))
 
           ;; plan-table-ref reads the state written by all the find-decls
           plan (as-> (plan-table-ref qs-scope) plan
+                 (if unresolved-cr
+                   [:map (mapv #(hash-map % nil) unresolved-cr)
+                    plan]
+                   plan)
+
                  (if-let [{:keys [predicate subqs]} where-plan]
                    (-> plan
                        (apply-sqs subqs)

@@ -1,0 +1,5 @@
+[:project
+ [{s docs.1/_id}]
+ [:rename
+  docs.1
+  [:select (> nil 1) [:scan {:table public/docs} [_id]]]]]

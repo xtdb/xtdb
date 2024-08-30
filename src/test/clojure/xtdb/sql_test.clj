@@ -926,6 +926,33 @@
              (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) AS rn FROM docs"))
           "no existing columns")))
 
+(deftest test-operators-with-unresolved-column-references-3640
+  (t/is (=plan-file
+         "test-group-by-with-unresolved-column-reference"
+         (plan-sql "SELECT SUM(_id + 1) FROM docs GROUP BY x"
+                   {:table-info {"public/docs" #{"_id"}}})))
+
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
+  (t/is (= [{:s 1}]
+           (xt/q tu/*node* "SELECT SUM(_id) AS s FROM docs GROUP BY x")))
+
+  (t/is (=plan-file
+         "test-having-with-unresolved-column-reference"
+         (plan-sql "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1"
+                   {:table-info {"public/docs" #{"_id"}}})))
+
+  (t/is (= []
+           (xt/q tu/*node* "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1")))
+
+  (t/is (=plan-file
+         "test-where-with-unresolved-column-reference"
+         (plan-sql "SELECT _id AS s FROM docs WHERE x > 1"
+                   {:table-info {"public/docs" #{"_id"}}})))
+
+  (t/is (= []
+           (xt/q tu/*node* "SELECT _id AS s FROM docs WHERE x > 1"))))
+
 (deftest test-array-subqueries
   (t/are [file q]
     (=plan-file file (plan-sql q {:table-info {"public/a" #{"a" "b"}, "public/b" #{"b1" "b2"}}}))
