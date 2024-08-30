@@ -5,7 +5,7 @@ describe("connects to XT", function() {
 
   let sql;
 
-  before (() => {
+  before (async () => {
     sql = postgres({
       host: "localhost",
       port: process.env.PG_PORT,
@@ -25,6 +25,8 @@ describe("connects to XT", function() {
         }
       }
     })
+
+    await sql`SELECT 1` // HACK https://github.com/porsager/postgres/issues/751
   })
 
   after(async () => {
@@ -32,10 +34,14 @@ describe("connects to XT", function() {
   })
 
   it("should return the inserted row", async () => {
-    await sql`INSERT INTO foo (_id, msg) VALUES (${sql.typed.int(1)}, 'Hello world!')`
+    const conn = await sql.reserve()
 
-    assert.deepStrictEqual([...await sql`SELECT _id, msg FROM foo`],
+    await conn`INSERT INTO foo (_id, msg) VALUES (${sql.typed.int(1)}, 'Hello world!')`
+
+    assert.deepStrictEqual([...await conn`SELECT _id, msg FROM foo`],
                            [{_id: 1, msg: 'Hello world!'}])
+
+    await conn.release()
   })
 
   /*it("JSON-like types can be roundtripped", async () => {
@@ -46,12 +52,14 @@ describe("connects to XT", function() {
   })*/
 
   it("should round-trip JSON", async () => {
-    await sql`INSERT INTO foo (_id, json) VALUES (${sql.typed.int(2)}, ${sql.typed.json({a: 1})})`
+    const conn = await sql.reserve()
+    await conn`INSERT INTO foo (_id, json) VALUES (${sql.typed.int(2)}, ${sql.typed.json({a: 1})})`
 
-    assert.deepStrictEqual([...await sql`SELECT _id, json FROM foo WHERE _id = 2`],
+    assert.deepStrictEqual([...await conn`SELECT _id, json FROM foo WHERE _id = 2`],
                            [{_id: 2, json: {a: 1}}])
 
-    assert.deepStrictEqual([...await sql`SELECT _id, (json).a FROM foo WHERE _id = 2`],
+    assert.deepStrictEqual([...await conn`SELECT _id, (json).a FROM foo WHERE _id = 2`],
                            [{_id: 2, a: 1}])
+    await conn.release()
   })
 })

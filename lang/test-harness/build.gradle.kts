@@ -19,6 +19,8 @@ dependencies {
     testImplementation("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
     // hato uses cheshire for application/json encoding
     testImplementation("cheshire", "cheshire", "5.12.0")
+    devImplementation("integrant", "integrant", "0.8.0")
+    devImplementation("integrant", "repl", "0.3.2")
 }
 
 val defaultJvmArgs = listOf(
