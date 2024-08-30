@@ -313,7 +313,7 @@
       (.start upload-thread)
 
       ;; Give it some time to start uploading
-      (Thread/sleep 3000)
+      (Thread/sleep 500)
 
       (.interrupt upload-thread)
 
