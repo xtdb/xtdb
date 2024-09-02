@@ -24,7 +24,7 @@ Before starting, ensure you have the following installed:
 
 * The **Azure CLI** - See the link:https://learn.microsoft.com/en-us/cli/azure/[Installation Instructions].
 * **Terraform** - See the link:https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli[Installation Instructions].
-* Download the contents of the folder containing the Terraform templates, from the https://github.com/xtdb/xtdb/tree/main/azure-setup-guide/terraform[**XTDB repository**].
+* Download the contents of the folder containing the Terraform templates, from the https://github.com/xtdb/xtdb/tree/main/modules/azure/docs/azure-setup-guide/terraform[**XTDB repository**].
 
 === Authenticating the Azure CLI
 
