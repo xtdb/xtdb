@@ -742,12 +742,11 @@
       (catch Throwable _))
     (is (= [] (q conn ["SELECT * WHERE FALSE"])))))
 
-(deftest transactions-are-read-only-by-default-test
+(deftest transactions-infer-access-mode-by-default-test
   (with-open [conn (jdbc-conn)]
-    (is (thrown-with-msg?
-          PSQLException #"ERROR\: DML is not allowed in a READ ONLY transaction"
-          (jdbc/with-transaction [db conn] (q db ["insert into foo(_id) values (42)"]))))
-    (is (= [] (q conn ["SELECT * WHERE FALSE"])))))
+    (jdbc/with-transaction [db conn]
+      (q db ["insert into foo(_id) values (42)"]))
+    (is (= [{:_id 42}] (q conn ["SELECT * FROM foo"])))))
 
 (defn- session-variables [server-conn ks]
   (-> server-conn :conn-state deref :session (select-keys ks)))
@@ -791,7 +790,7 @@
   (with-open [conn (jdbc-conn)]
     (testing "mixing a read causes rollback"
       (q conn ["SET TRANSACTION READ WRITE"])
-      (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE transaction"
+      (is (thrown-with-msg? PSQLException #"Queries are unsupported in a DML transaction"
                             (jdbc/with-transaction [tx conn]
                               (q tx ["INSERT INTO foo(_id, a) values(42, 42)"])
                               (q conn ["SELECT a FROM foo"])))))
@@ -972,14 +971,37 @@
   (with-open [conn (jdbc-conn "autocommit" "false")]
     (let [sql #(q conn [%])]
 
-      (sql "START TRANSACTION")
-      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) VALUES (42)")))
+      (sql "START TRANSACTION READ ONLY")
+      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction"
+                            (sql "INSERT INTO foo (_id) VALUES (42)")))
       (sql "ROLLBACK")
 
-      (sql "START TRANSACTION READ WRITE")
-      (sql "INSERT INTO foo (_id) VALUES (42)")
-      (sql "COMMIT")
-      (is (= [{:_id 42}] (q conn ["SELECT _id from foo"])))
+      (t/testing "we can now infer the transaction access-mode #3624"
+        (sql "START TRANSACTION")
+        (sql "INSERT INTO foo (_id) VALUES (42)")
+        (sql "COMMIT")
+        (is (= [{:_id 42}] (q conn ["SELECT _id from foo"]))))
+
+      (t/testing "we can't mix modes"
+        (t/testing "w -> r"
+          (sql "START TRANSACTION")
+          (sql "INSERT INTO foo (_id) VALUES (42)")
+          (is (thrown-with-msg? PSQLException #"Queries are unsupported in a DML transaction"
+                                (sql "SELECT * FROM foo")))
+          (sql "ROLLBACK"))
+
+        (t/testing "r -> w"
+          (sql "START TRANSACTION")
+          (is (= [{:_id 42}] (q conn ["SELECT _id from foo"])))
+          (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction"
+                                (sql "INSERT INTO foo (_id) VALUES (42)")))
+          (sql "ROLLBACK")))
+
+      (t/testing "explicit READ WRITE"
+        (sql "START TRANSACTION READ WRITE")
+        (sql "INSERT INTO foo (_id) VALUES (43)")
+        (sql "COMMIT")
+        (is (= #{{:_id 42} {:_id 43}} (set (q conn ["SELECT _id from foo"])))))
 
       (testing "access mode overrides SET TRANSACTION"
         (sql "SET TRANSACTION READ WRITE")
@@ -987,10 +1009,18 @@
         (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) VALUES (42)")))
         (sql "ROLLBACK"))
 
-      (testing "set transaction cleared"
-        (sql "START TRANSACTION")
-        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) VALUES (42)")))
-        (sql "ROLLBACK")))))
+      (testing "set transaction overrides inference"
+        (testing "set transaction cleared"
+          (sql "SET TRANSACTION READ ONLY")
+          (sql "START TRANSACTION")
+          (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) VALUES (42)")))
+          (sql "ROLLBACK"))
+
+        (testing "set transaction cleared"
+          (sql "START TRANSACTION")
+          (is (sql "INSERT INTO foo (_id) VALUES (44)"))
+          (sql "COMMIT")
+          (is (= #{{:_id 42} {:_id 43} {:_id 44}} (set (q conn ["SELECT _id from foo"])))))))))
 
 (deftest set-session-characteristics-test
   (with-open [conn (jdbc-conn "autocommit" "false")]

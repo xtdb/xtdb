@@ -1275,19 +1275,7 @@
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
   [{:keys [conn-state]} {:keys [statement-type]}]
   (let [{:keys [transaction]} @conn-state
-
-        ;; session access mode is ignored for now (wait for implicit transactions)
-        access-mode (:access-mode transaction :read-only)
-
-        access-mode-error
-        (fn [msg wanted]
-          (-> (with-out-str
-                (println msg)
-                (when (= :read-write wanted)
-                  (println "READ WRITE transaction required for INSERT, UPDATE, and DELETE statements")
-                  (when transaction (println "  - rollback the transaction: ROLLBACK"))
-                  (println "  - start a transaction: START TRANSACTION READ WRITE")))
-              err-protocol-violation))]
+        {:keys [access-mode]} transaction]
     (cond
       (and (= :set-transaction statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
@@ -1295,17 +1283,11 @@
       (and (= :begin statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
 
-      ;; we currently only simulate partially direct sql opening transactions (spec behaviour)
-      ;; that somewhat works as it should for reads, writes however are more difficult and its not clear
-      ;; if we should follow spec (i.e autocommit blocking writes)
-      ;; so we will to refuse DML unless we are in an explicit transaction
-      (= :dml statement-type)
-      (when (and transaction (= :read-only access-mode))
-        (access-mode-error "DML is not allowed in a READ ONLY transaction" :read-write))
+      (and (= :dml statement-type) (= :read-only access-mode))
+      (err-protocol-violation "DML is not allowed in a READ ONLY transaction")
 
-      (= :query statement-type)
-      (when (and transaction (= :read-write access-mode))
-        (access-mode-error "queries are unsupported in a READ WRITE transaction" :read-only)))))
+      (and (= :query statement-type) (= :read-write access-mode))
+      (err-protocol-violation "Queries are unsupported in a DML transaction"))))
 
 (defn cmd-sync
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
@@ -1363,6 +1345,7 @@
 
     (if err
       (cmd-send-error conn err)
+
       (-> (if (= :query statement-type)
             (try
               (let [param-col-types (mapv :col-type param-types)]
@@ -1406,15 +1389,24 @@
              ;; If a client subsequently binds a different number of params we will send an error msg
              :prep-outcome :success})
 
-          (assoc :stmt-name stmt-name)))))
+          (assoc :stmt-name stmt-name
+                 :statement-type statement-type)))))
 
 (defn cmd-parse
   "Responds to a msg-parse message that creates a prepared-statement."
   [{:keys [conn-state] :as conn} msg-data]
   (swap! conn-state assoc :protocol :extended)
-  (let [{:keys [prepared-stmt prep-outcome stmt-name]} (parse conn msg-data)]
+  (let [{:keys [prepared-stmt statement-type prep-outcome stmt-name]} (parse conn msg-data)]
     (when (= :success prep-outcome)
-      (swap! conn-state assoc-in [:prepared-statements stmt-name] prepared-stmt)
+      (swap! conn-state (fn [{:keys [transaction] :as conn-state}]
+                          (let [access-mode (when transaction
+                                              (case statement-type
+                                                :query :read-only
+                                                :dml :read-write
+                                                nil))]
+                            (-> conn-state
+                                (assoc-in [:prepared-statements stmt-name] prepared-stmt)
+                                (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode))))))
       (cmd-write-msg conn msg-parse-complete))))
 
 (defn cmd-bind [{:keys [conn-state] :as conn}
