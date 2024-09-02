@@ -54,7 +54,7 @@ INTERVAL '1-2' YEAR TO MONTH -- A Year-Month Interval specified with an interval
 INTERVAL 'P1Y2M' -- The Same Interval specified in a ISO8601 format.
 INTERVAL '1 2:30:10.111111' DAY TO SECOND(6) -- A Day-Time Interval specified with an interval qualifier.
 INTERVAL 'P1DT2H30M10.111111S' -- The Same Interval specified in a ISO8601 format.
-DURATION 'P20H3M11.1S' -- A Duration specified in ISO8601 format.
+DURATION 'PT20H3M11.1S' -- A Duration specified in ISO8601 format.
 PERIOD(DATE '1998-01-05', DATE '1998-01-12') -- A Period specified with two dates.
 ----
 
