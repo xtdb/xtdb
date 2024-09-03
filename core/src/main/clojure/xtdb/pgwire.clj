@@ -768,7 +768,7 @@
                   :column-oid io-uint32
                   :typlen  io-uint16
                   :type-modifier io-uint32
-                  :format-code io-format-code)
+                  :result-format io-format-code)
                 (io-list io-uint16)))
 
 ;;; server commands
@@ -986,7 +986,7 @@
   (json-bytes (.getObject rdr idx)))
 
 (defn cmd-send-query-result [{:keys [!closing?, conn-state] :as conn}
-                             {:keys [query, ^IResultCursor result-cursor fields result-format]}]
+                             {:keys [query, ^IResultCursor result-cursor fields]}]
   (let [;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
@@ -1014,11 +1014,11 @@
            :else
            (try
              (dotimes [idx (.rowCount ^RelationReader rel)]
-               (let [row (map-indexed
-                          (fn [field-idx {:keys [field-name write-binary write-text]}]
+               (let [row (map
+                          (fn [{:keys [field-name write-binary write-text result-format]}]
                             (let [rdr (.readerForName ^RelationReader rel field-name)]
                               (when-not (.isNull rdr idx)
-                                (if (or (= result-format [:binary]) (= (nth result-format field-idx nil) :binary))
+                                (if (= :binary result-format)
                                   (write-binary session rdr idx)
                                   (if write-text
                                     (write-text session rdr idx)
@@ -1155,7 +1155,7 @@
                   :column-oid oid-json
                   :typlen -1
                   :type-modifier -1
-                  :format-code :text}
+                  :result-format :text}
         apply-defaults
         (fn [col]
           (if (map? col)
@@ -1172,9 +1172,6 @@
     (cmd-send-row-description conn cols)))
 
 (defn cmd-describe-portal [conn {:keys [fields]}]
-  ;;TODO here we should grab the format-codes off the portal and return them
-  ;;better instead to perhaps assoc the format code onto the fields at bind time
-  ;;lets us deal with the optionality (if 1 element it describes all cols) at a single point in time
   (cmd-send-row-description conn fields))
 
 (defn cmd-send-parameter-description [conn {:keys [param-fields]}]
@@ -1409,8 +1406,28 @@
                                 (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode))))))
       (cmd-write-msg conn msg-parse-complete))))
 
+
+(defn resolve-result-format [result-format field-count]
+  (cond (empty? result-format)
+        (repeat field-count :text)
+
+        (= 1 (count result-format))
+        (repeat field-count (first result-format))
+
+        (= (count result-format) field-count)
+        result-format
+
+        :else
+        :invalid-result-format))
+
+(defn update-result-format [resolved-result-format fields]
+  (->> fields
+       (map-indexed
+        (fn [idx field]
+          (assoc field :result-format (nth resolved-result-format idx))))))
+
 (defn cmd-bind [{:keys [conn-state] :as conn}
-                {:keys [portal-name stmt-name params] :as bind-msg}]
+                {:keys [portal-name stmt-name params result-format] :as bind-msg}]
   (let [{:keys [statement-type] :as stmt} (get-in @conn-state [:prepared-statements stmt-name])]
     (if stmt
       (let [{:keys [prepared-stmt] :as stmt-with-bind-msg}
@@ -1431,10 +1448,21 @@
                                 :args xt-params}]
 
                 (try
-                  (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
 
-                    {:portal (assoc stmt-with-bind-msg :bound-query bound-query :fields (map types/field->pg-type (.columnFields bound-query)))
-                     :bind-outcome :success})
+                  (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)
+                        fields (map types/field->pg-type (.columnFields bound-query))
+                        resolved-result-format (resolve-result-format result-format (count fields))]
+
+                    (if (= :invalid-result-format resolved-result-format)
+
+                      (cmd-send-error conn (err-protocol-violation "invalid result format"))
+
+                      {:portal (assoc
+                                stmt-with-bind-msg
+                                :bound-query bound-query
+                                :fields (update-result-format resolved-result-format fields))
+                       :bind-outcome :success}))
+
                   (catch InterruptedException e
                     (log/trace e "Interrupt thrown binding prepared statement")
                     (throw e))

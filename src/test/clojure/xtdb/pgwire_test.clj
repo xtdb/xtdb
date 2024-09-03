@@ -1777,3 +1777,25 @@
   (with-open [conn (pg-conn {})]
     (t/is (= [{:v "101"}]
              (pg/execute conn "SELECT 101::text v")))))
+
+(deftest test-resolve-result-format
+  (let [field-count 2]
+    (t/is (= [:text :text]
+             (pgwire/resolve-result-format [] field-count))
+          "no formats provided, all fields text")
+
+    (t/is (= [:text :text]
+             (pgwire/resolve-result-format [:text] field-count))
+          "single format provided (text), applies to all fields")
+
+    (t/is (= [:binary :binary]
+             (pgwire/resolve-result-format [:binary] field-count))
+          "single format provided (binary), applies to all fields")
+
+    (t/is (= [:text :binary]
+             (pgwire/resolve-result-format [:text :binary] field-count))
+          "format provided for each field, applies to each by index"))
+
+  (t/is (= :invalid-result-format
+           (pgwire/resolve-result-format [:text :binary] 3))
+        "if more than 1 format is provided and it doesn't match the field count this is invalid"))
