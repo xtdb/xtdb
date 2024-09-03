@@ -352,20 +352,20 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 (deftest test-insert-from-other-table-with-as-of-now
   (xt/submit-tx *node*
                 [[:sql
-                   "INSERT INTO posts (_id, user_id, text, _valid_from)
+                   "INSERT INTO posts (_id, user_id, body, _valid_from)
                     VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')"]])
 
-  (t/is (= [{:text "Happy 2050!"}]
-           (xt/q *node* "SELECT posts.text FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
+  (t/is (= [{:body "Happy 2050!"}]
+           (xt/q *node* "SELECT posts.body FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
 
   (t/is (= []
-           (xt/q *node* "SELECT posts.text FROM posts")))
+           (xt/q *node* "SELECT posts.body FROM posts")))
 
   (xt/submit-tx *node*
-                [[:sql "INSERT INTO t1 SELECT posts._id, posts.text FROM posts"]])
+                [[:sql "INSERT INTO t1 SELECT posts._id, posts.body FROM posts"]])
 
   (t/is (= []
-           (xt/q *node* "SELECT t1.text FROM t1 FOR ALL VALID_TIME"))))
+           (xt/q *node* "SELECT t1.body FROM t1 FOR ALL VALID_TIME"))))
 
 (deftest test-submit-tx-system-time-opt
   (t/is (thrown-with-msg? IllegalArgumentException

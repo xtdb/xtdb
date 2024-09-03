@@ -32,17 +32,17 @@
 
           (q [table]
             (->> (xt/q tu/*node* (format "
-SELECT p._id, p.text,
+SELECT p._id, p.body,
        p._valid_from, p._valid_to,
        p._system_from, p._system_to
 FROM %s FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS p"
                                          table))
                  (into {} (map (juxt (juxt :xt/valid-from :xt/valid-to
                                            :xt/system-from :xt/system-to)
-                                     :text)))))]
+                                     :body)))))]
 
     (xt/submit-tx tu/*node* [[:sql "
-INSERT INTO posts (_id, text, _valid_from)
+INSERT INTO posts (_id, body, _valid_from)
 VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
        (1, 'Happy 2025!', DATE '2025-01-01'),
        (1, 'Happy 2026!', DATE '2026-01-01')"]])
@@ -50,9 +50,9 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
     (t/is (= (expected (time/->zdt #inst "2020-01-01"))
              (q "posts")))
 
-    (xt/submit-tx tu/*node* [[:sql "INSERT INTO posts2 (_id, text, _valid_from) VALUES (1, 'Happy 2024!', DATE '2024-01-01')"]
-                             [:sql "INSERT INTO posts2 (_id, text, _valid_from) VALUES (1, 'Happy 2025!', DATE '2025-01-01')"]
-                             [:sql "INSERT INTO posts2 (_id, text, _valid_from) VALUES (1, 'Happy 2026!', DATE '2026-01-01')"]])
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2024!', DATE '2024-01-01')"]
+                             [:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2025!', DATE '2025-01-01')"]
+                             [:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2026!', DATE '2026-01-01')"]])
 
     (t/is (= (expected (time/->zdt #inst "2020-01-02"))
              (q "posts2")))))
