@@ -140,11 +140,6 @@
                           [::tu/blocks {a [:union #{:null :i64}]}
                            []]])))
 
-  (t/is (= [{:n 1}]
-           (tu/query-ra '[:group-by [{n (rowCount)}]
-                          [::tu/blocks {a [:union #{:null :i64}]}
-                           [[{:a nil}]]]])))
-
   (t/is (= [{:n 2}]
            (tu/query-ra '[:group-by [{n (row_count)}]
                           [::tu/blocks {a [:union #{:null :i64}]}

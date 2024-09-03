@@ -53,82 +53,82 @@
 (deftest test-basic-queries
   (t/is (=plan-file
           "basic-query-1"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate = 1960"
                     {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
                                   "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-1"
-          (plan-sql "FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960 SELECT si.movieTitle"
+          (plan-sql "FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate = 1960 SELECT si.movie_title"
                     {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
                                   "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-2"
-          (plan-sql "FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950 SELECT si.movieTitle"
+          (plan-sql "FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950 SELECT si.movie_title"
                     {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
                                   "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-3"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'"
                     {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
                                   "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-4"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si, (SELECT ms.name FROM movie_star AS ms WHERE ms.birthdate = 1960) AS m WHERE si.star_name = m.name"
                     {:table-info {"stars_in" #{"movie_title" "star_name" "year"}
                                   "movie_star" #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
           "basic-query-5"
-          (plan-sql "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.`year` = m.movieYear"
+          (plan-sql "SELECT si.movie_title FROM movie AS m JOIN stars_in AS si ON m.title = si.movie_title AND si.`year` = m.movie_year"
                     {:table-info {"movie" #{"title" "movie_year"}
                                   "stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-6"
-          (plan-sql "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.`year` = m.movieYear"
+          (plan-sql "SELECT si.movie_title FROM movie AS m LEFT JOIN stars_in AS si ON m.title = si.movie_title AND si.`year` = m.movie_year"
                     {:table-info {"movie" #{"title" "movie_year"}
                                   "stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-9"
-          (plan-sql "SELECT me.name, SUM(m.`length`) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.`year`) < 1930"
+          (plan-sql "SELECT me.name, SUM(m.`length`) FROM movie_exec AS me, movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.`year`) < 1930"
                     {:table-info {"movie_exec" #{"name" "cert"}
                                   "movie" #{"producer" "year" "length"}}})))
 
   (t/is (=plan-file
           "basic-query-10"
-          (plan-sql "SELECT SUM(m.`length`) FROM Movie AS m"
+          (plan-sql "SELECT SUM(m.`length`) FROM movie AS m"
                     {:table-info {"movie" #{"length"}}})))
 
   (t/is (=plan-file
           "basic-query-11"
-          (plan-sql "SELECT * FROM StarsIn AS si(name)"
+          (plan-sql "SELECT * FROM stars_in AS si(name)"
                     {:table-info {"stars_in" #{"name" "title"}}})))
 
   (t/is (=plan-file
           "basic-query-11"
-          (plan-sql "FROM StarsIn AS si(name)"
+          (plan-sql "FROM stars_in AS si(name)"
                     {:table-info {"stars_in" #{"name" "title"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-12"
-          (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"
+          (plan-sql "SELECT * FROM (SELECT si.name FROM stars_in AS si) AS foo(bar)"
                     {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
           "basic-query-12"
-          (plan-sql "FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"
+          (plan-sql "FROM (SELECT si.name FROM stars_in AS si) AS foo(bar)"
                     {:table-info {"stars_in" #{"name"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-13"
-         (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname"
+         (plan-sql "SELECT si.* FROM stars_in AS si WHERE si.name = si.lastname"
                    {:table-info {"stars_in" #{"name" "lastname"}}}))))
 
 (t/deftest test-values
@@ -179,140 +179,140 @@
 (t/deftest test-basic-set-operators
   (t/is (=plan-file
          "basic-query-14"
-         (plan-sql "SELECT DISTINCT si.movieTitle FROM StarsIn AS si"
+         (plan-sql "SELECT DISTINCT si.movie_title FROM stars_in AS si"
                    {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-15"
-         (plan-sql "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si"
+         (plan-sql "SELECT si.name FROM stars_in AS si EXCEPT SELECT si.name FROM stars_in AS si"
                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
          "basic-query-16"
-         (plan-sql "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si"
+         (plan-sql "SELECT si.name FROM stars_in AS si UNION ALL SELECT si.name FROM stars_in AS si"
                    {:table-info {"stars_in" #{"name"}}})))
 
   (t/is (=plan-file
          "basic-query-17"
-         (plan-sql "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si"
+         (plan-sql "SELECT si.name FROM stars_in AS si INTERSECT SELECT si.name FROM stars_in AS si"
                    {:table-info {"stars_in" #{"name"}}})))
 
   #_ ; TODO should rename the RHS col
   (t/is (=plan-file
          "basic-query-18"
-         (plan-sql "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si"
+         (plan-sql "SELECT si.movie_title FROM stars_in AS si UNION SELECT si.name FROM stars_in AS si"
                    {:table-info {"stars_in" #{"movie_title" "name"}}})))
 
   #_ ; TODO order-by over union shouldn't create eobrs
   (t/is (=plan-file
          "basic-query-19"
-         (plan-sql "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name"
+         (plan-sql "SELECT si.name FROM stars_in AS si UNION SELECT si.name FROM stars_in AS si ORDER BY name"
                    {:table-info {"stars_in" #{"name"}}}))))
 
 (t/deftest test-order-by-limit-offset
   (t/is (=plan-file
           "basic-query-20"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si FETCH FIRST 10 ROWS ONLY"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-20"
-          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle FETCH FIRST 10 ROWS ONLY"
+          (plan-sql "FROM stars_in AS si SELECT si.movie_title FETCH FIRST 10 ROWS ONLY"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-21"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si OFFSET 5 ROWS"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-21"
-          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle OFFSET 5 ROWS"
+          (plan-sql "FROM stars_in AS si SELECT si.movie_title OFFSET 5 ROWS"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-22"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 LIMIT 10"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si OFFSET 5 LIMIT 10"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-22"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si LIMIT 10 OFFSET 5"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si LIMIT 10 OFFSET 5"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-22"
-          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle OFFSET 5 LIMIT 10"
+          (plan-sql "FROM stars_in AS si SELECT si.movie_title OFFSET 5 LIMIT 10"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-22"
-          (plan-sql "FROM StarsIn AS si SELECT si.movieTitle LIMIT 10 OFFSET 5"
+          (plan-sql "FROM stars_in AS si SELECT si.movie_title LIMIT 10 OFFSET 5"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-23"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si ORDER BY si.movie_title"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-24"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si ORDER BY si.movie_title OFFSET 100 ROWS"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   (t/is (=plan-file
           "basic-query-25"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si ORDER BY movie_title DESC"
                     {:table-info {"stars_in" #{"movie_title"}}})))
 
   #_ ; TODO this is an error
   (t/is (=plan-file
           "basic-query-26"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.\"year\" = 'foo' DESC, movieTitle"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si ORDER BY si.\"year\" = 'foo' DESC, movie_title"
                     {:table-info {"stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-27"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.`year`"
+          (plan-sql "SELECT si.movie_title FROM stars_in AS si ORDER BY si.`year`"
                     {:table-info {"stars_in" #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
           "basic-query-28"
-           (plan-sql "SELECT si.`year` = 'foo' FROM StarsIn AS si ORDER BY si.`year` = 'foo'"
+           (plan-sql "SELECT si.`year` = 'foo' FROM stars_in AS si ORDER BY si.`year` = 'foo'"
                      {:table-info {"stars_in" #{"year"}}}))))
 
 (t/deftest test-unnest
   (t/is (=plan-file
           "basic-query-29"
-          (plan-sql "SELECT film FROM StarsIn AS si, UNNEST(si.films) AS film(film)"
+          (plan-sql "SELECT film FROM stars_in AS si, UNNEST(si.films) AS film(film)"
                     {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
+          (plan-sql "SELECT * FROM stars_in AS si, UNNEST(si.films) AS film"
                     {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-30"
-          (plan-sql "FROM StarsIn si, UNNEST(films) AS film"
+          (plan-sql "FROM stars_in si, UNNEST(films) AS film"
                     {:table-info {"stars_in" #{"films"}}}))
 
         "implicit SELECT *")
 
   (t/is (=plan-file
           "basic-query-31"
-          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
+          (plan-sql "SELECT * FROM stars_in AS si, UNNEST(si.films) WITH ORDINALITY AS film"
                     {:table-info {"stars_in" #{"films"}}})))
 
   (t/is (=plan-file
           "basic-query-31"
-          (plan-sql "FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
+          (plan-sql "FROM stars_in AS si, UNNEST(si.films) WITH ORDINALITY AS film"
                     {:table-info {"stars_in" #{"films"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
           "unnest-query-1"
-          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film(film, film_ord)"
+          (plan-sql "SELECT * FROM stars_in AS si, UNNEST(si.films) WITH ORDINALITY AS film(film, film_ord)"
                     {:table-info {"stars_in" #{"films"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :actors
@@ -349,26 +349,26 @@
 (deftest test-named-columns-join
   (t/is (=plan-file
          "basic-query-7"
-         (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)"
+         (plan-sql "SELECT si.title FROM movie AS m JOIN stars_in AS si USING (title)"
                    {:table-info {"movie" #{"title"}
                                  "stars_in" #{"title"}}})))
 
   (t/is (=plan-file
          "basic-query-8"
-         (plan-sql "SELECT si.title FROM Movie AS m LEFT OUTER JOIN StarsIn AS si USING (title)"
+         (plan-sql "SELECT si.title FROM movie AS m LEFT OUTER JOIN stars_in AS si USING (title)"
                    {:table-info {"movie" #{"title"}
                                  "stars_in" #{"title"}}}))))
 
 (deftest test-natural-join
   (t/is (=plan-file
          "natural-join-1"
-         (plan-sql "SELECT si.title, m.`length`, si.films FROM Movie AS m NATURAL JOIN StarsIn AS si"
+         (plan-sql "SELECT si.title, m.`length`, si.films FROM movie AS m NATURAL JOIN stars_in AS si"
                    {:table-info {"movie" #{"title" "length"}
                                  "stars_in" #{"title" "films"}}})))
 
   (t/is (=plan-file
          "natural-join-2"
-         (plan-sql "SELECT si.title, m.`length`, si.films FROM Movie AS m NATURAL RIGHT OUTER JOIN StarsIn AS si"
+         (plan-sql "SELECT si.title, m.`length`, si.films FROM movie AS m NATURAL RIGHT OUTER JOIN stars_in AS si"
                    {:table-info {"movie" #{"title" "length"}
                                  "stars_in" #{"title" "films"}}}))))
 

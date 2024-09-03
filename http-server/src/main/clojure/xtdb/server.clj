@@ -33,8 +33,8 @@
            (xtdb JsonSerde)
            (xtdb.api HttpServer$Factory IXtdb TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.api.query Basis IKeyFn Query QueryRequest SqlQuery XtqlQuery)
-           (xtdb.api.tx TxOp TxOptions TxRequest)))
+           (xtdb.api.query Basis IKeyFn Query QueryRequest)
+           (xtdb.api.tx TxOptions TxRequest)))
 
 (defn decoder [_options]
   (reify
@@ -269,7 +269,7 @@
                                                                                              (dissoc query-opts :query))))
 
                                 (seq? query) (xtp/open-xtql-query node query
-                                                                  (xt/->QueryOptions (into {:key-fn :camel-case-string}
+                                                                  (xt/->QueryOptions (into {:key-fn :snake-case-string}
                                                                                            (dissoc query-opts :query))))
 
                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))}))

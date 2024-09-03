@@ -117,7 +117,7 @@
           (then-execute-prepared-query query-timer query-opts))))
 
   (open-xtql-query [this query query-opts]
-    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
       (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
           (then-execute-prepared-query query-timer query-opts))) )
 
@@ -137,7 +137,7 @@
 
   (^PreparedQuery prepareQuery [_ ^XtqlQuery query, query-opts]
    (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
      (.awaitTx indexer after-tx tx-timeout)
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
@@ -145,7 +145,7 @@
 
   (prepareRaQuery [_ plan query-opts]
     (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :camel-case-string)]
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
      (.awaitTx indexer after-tx tx-timeout)
 
      (.prepareRaQuery q-src plan wm-src query-opts)))

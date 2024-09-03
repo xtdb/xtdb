@@ -264,10 +264,7 @@
                (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :kebab-case-keyword)))
 
       (t/is (= [{:my_column {:short_name "forty-two", :long_name 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :snake-case-keyword)))
-
-      (t/is (= [{:myColumn {:shortName "forty-two", :longName 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :camel-case-keyword))))))
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :snake-case-keyword))))))
 
 (deftest multivec-underlying-monomorphic-vectors-get-leg-test ; see #3343
   (with-open [struct-int-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false

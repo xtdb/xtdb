@@ -247,14 +247,14 @@
                decode-json*))))
 
 (deftest testing-sql-query-with-args-3167
-  (t/is (= [{"_column1" 1, "_column2" 3}]
+  (t/is (= [{"_column_1" 1, "_column_2" 3}]
            (-> (http/request {:accept "application/jsonl"
                               :as :string
                               :request-method :post
                               :content-type :json
                               :form-params {:sql "SELECT LEAST(?,2), LEAST(3,4) FROM (VALUES (1)) x"
                                             :queryOpts {:args [1]
-                                                        :keyFn "CAMEL_CASE_STRING"}}
+                                                        :keyFn "SNAKE_CASE_STRING"}}
                               :url (http-url "query")})
                :body
                decode-json*))

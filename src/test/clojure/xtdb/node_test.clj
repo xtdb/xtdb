@@ -570,8 +570,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
 
 (t/deftest test-nested-field-normalisation
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(_id, data) VALUES(1, OBJECT (fieldName1: OBJECT(fieldName2: true),
-                                                                                fieldName3: OBJECT(baz: -4113466)))"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(_id, data) VALUES(1, OBJECT (field_name1: OBJECT(field_name2: true),
+                                                                                field_name3: OBJECT(baz: -4113466)))"]])
 
   (t/is (= [{:data {:field-name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
            (xt/q tu/*node* "SELECT t1.data FROM t1"))

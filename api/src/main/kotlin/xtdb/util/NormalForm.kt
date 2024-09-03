@@ -10,12 +10,8 @@ internal fun normalForm0(s: String): String = s
     .replace('-', '_')
     .replace(Regex("^_"), "xt\\$")
     .split('.', '/', '$')
-    .joinToString(separator = "$") {
-        // upper case letter preceded by a character that isn't upper-case nor an underscore
-        it
-            .replace(Regex("(?<=[^\\p{Lu}_])\\p{Lu}")) { ch -> "_${ch.value}" }
-            .lowercase()
-    }
+    .joinToString(separator = "$")
+    .lowercase()
 
 private val NORMAL_FORM_CACHE = Caffeine.newBuilder()
     .maximumSize(1 shl 15)
@@ -51,7 +47,7 @@ fun normalForm(k: Keyword): Keyword = Keyword.intern(normalForm(k.sym))
 /**
  * @suppress
  */
-fun String.kebabToCamelCase(): String {
+internal fun String.kebabToCamelCase(): String {
     val pattern = "-[a-z]".toRegex()
     return replace(pattern) { it.value.last().uppercase() }
 }

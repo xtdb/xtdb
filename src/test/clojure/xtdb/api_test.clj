@@ -592,16 +592,6 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :snake-case-string})))
 
-  (t/is (= [{:xt/id :petr, :firstName "Petr", :lastName "Petrov"}
-            {:xt/id :ivan, :firstName "Ivan", :lastName "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :camel-case-keyword})))
-
-  (t/is (= [{"_id" :petr, "firstName" "Petr", "lastName" "Petrov"}
-            {"_id" :ivan, "firstName" "Ivan", "lastName" "Ivanov"}]
-           (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
-                 {:key-fn :camel-case-string})))
-
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Illegal argument: "
                           (xt/q tu/*node* '(from :docs [first-name last-name])
@@ -675,7 +665,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
    [age xt$valid_to name xt$valid_from {xt$id (= xt$id ?_0)}]]]]
 "}]
            (xt/q tu/*node*
-                 "SELECT name, age, _validFrom, _valid_to FROM people WHERE _id = ?"
+                 "SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
                  {:explain? true}))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019

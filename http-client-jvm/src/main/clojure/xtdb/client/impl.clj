@@ -117,7 +117,7 @@
     (open-query client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
 
   (open-xtql-query [client query query-opts]
-    (open-query client query (into {:key-fn #xt/key-fn :camel-case-string} query-opts)))
+    (open-query client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)

@@ -24,8 +24,6 @@ private fun String.denormaliseToString() = replace(Regex("^xt\\$"), "_")
 
 private fun String.kebabCase() = replace(Regex("(?<!^)_"), "-")
 
-private fun String.camelCase() = replace(Regex("_.")) { match -> match.value.drop(1).uppercase() }
-
 @Serializable(IKeyFn.Serde::class)
 fun interface IKeyFn<out V> {
 
@@ -61,14 +59,6 @@ fun interface IKeyFn<out V> {
         SNAKE_CASE_KEYWORD {
            override fun denormalize(key: String) = key.denormaliseToKeyword()
         },
-
-        CAMEL_CASE_STRING {
-            override fun denormalize(key: String) = key.camelCase().denormaliseToString()
-        },
-
-        CAMEL_CASE_KEYWORD {
-            override fun denormalize(key: String) = key.denormaliseToKeyword(String::camelCase)
-        }
     }
 
     fun denormalize(key: String): V

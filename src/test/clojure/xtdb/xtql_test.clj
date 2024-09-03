@@ -2018,7 +2018,7 @@
                   :where [($ :x {:xt/* x} {:for-valid-time [:at #xt.time/instant "2023-01-17T00:00:00Z"]})]})))))
 
 (t/deftest test-normalisation
-  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/helloWorld 2}]])
+  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id "doc" :fOo/bAr 1 :bar.fOO/hello_World 2}]])
 
   (t/is (= [{:foo/bar 1, :bar.foo/hello-world 2}]
            (xt/q tu/*node* '(from :xt-docs [Foo/Bar Bar.Foo/hello-world]))))

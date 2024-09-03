@@ -25,7 +25,7 @@ This is _very_ early days as yet. Particularly, it's currently missing tests and
    ```javascript
    const res = await node.query([
      q.from('myTable'),
-     q.aggregate({rc: ex.call("rowCount")})
+     q.aggregate({rc: ex.call("row-count")})
    ])
    ```
 

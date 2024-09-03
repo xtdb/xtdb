@@ -56,7 +56,7 @@ internal class XtdbTest {
 
         assertEquals(
             listOf(mapOf("my-foo" to "bar")),
-            node.openQuery("SELECT foo AS myFoo FROM docs2",
+            node.openQuery("SELECT foo AS my_foo FROM docs2",
                 QueryOptions(keyFn = KEBAB_CASE_STRING)
             ).doall(),
 
@@ -77,7 +77,7 @@ internal class XtdbTest {
             listOf(mapOf("current_time" to LocalDate.parse("2020-01-01"))),
 
             node.openQuery(
-                "SELECT CURRENT_DATE AS currentTime",
+                "SELECT CURRENT_DATE AS `current_time`",
                 QueryOptions(basis = Basis(currentTime = Instant.parse("2020-01-01T12:34:56.000Z")))
             ).doall(),
 
