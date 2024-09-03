@@ -320,7 +320,7 @@
                             [:put-docs :xt_docs {:xt/id "bar"}]])
 
         ;; aborted tx shows up in log
-        (xt/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+        (xt/submit-tx node [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
         (-> (xt/submit-tx node [[:delete-docs {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
                                 [:put-docs {:into :xt_docs, :valid-from #inst "2020-04-01", :valid-to #inst "2020-05-01"}
@@ -551,7 +551,7 @@
                                  (log* logger level throwable message))))]
       (with-open [node (xtn/start-node {})]
         (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
-                                (-> (xt/submit-tx node [[:sql "INSERT INTO foo(xt$id) VALUES (1)"]])
+                                (-> (xt/submit-tx node [[:sql "INSERT INTO foo(_id) VALUES (1)"]])
                                     (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
@@ -566,7 +566,7 @@
 
           (let [last-tx-key (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]
             (t/is (= last-tx-key
-                     (xt/submit-tx node [[:sql "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
+                     (xt/submit-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                           [0, 2, "hello", 12]
                                           [1, 1, "world", 3.3]]])))
 
@@ -601,7 +601,7 @@ Errors planning SQL statement:
 (t/deftest hyphen-in-struct-key-halts-ingestion-3388
   (util/with-open [node (xtn/start-node)]
     (t/is (= :TODO
-             (-> (xt/execute-tx node [[:sql "INSERT INTO docs (xt$id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
+             (-> (xt/execute-tx node [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
                  (:error)
                  (ex-message))))))
 

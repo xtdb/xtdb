@@ -1256,11 +1256,11 @@
 
 (deftest test-postgres-types
   (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" false)]
-    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8 , var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    (q-seq conn ["INSERT INTO foo(_id, int8, int4, int2, float8 , var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?)"
                  #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2" Long/MIN_VALUE Integer/MAX_VALUE Short/MIN_VALUE Double/MAX_VALUE "aa" true]))
   ;; no float4 for text format due to a bug in pgjdbc where it sends it as a float8 causing a union type.
   (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" true)]
-    (q-seq conn ["INSERT INTO foo(xt$id, int8, int4, int2, float8, float4, var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    (q-seq conn ["INSERT INTO foo(_id, int8, int4, int2, float8, float4, var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                  #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6" Long/MAX_VALUE Integer/MIN_VALUE Short/MAX_VALUE Double/MIN_VALUE Float/MAX_VALUE "bb" false])
     ;;binary format is only requested for server side preparedStatements in pgjdbc
     ;;threshold one should mean we test the text and binary format for each type
@@ -1442,7 +1442,7 @@
 
 (deftest test-prepared-statments
   (with-open [conn (jdbc-conn "prepareThreshold" -1)]
-    (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a, b) VALUES (1, 'one', 2)"))
+    (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (1, 'one', 2)"))
     (with-open [stmt (.prepareStatement conn "SELECT foo.*, ? FROM foo")]
 
 
@@ -1477,7 +1477,7 @@
 
       (t/testing "relevant schema change reported to pgwire client"
 
-        (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a, b) VALUES (2, 1, 1)"))
+        (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (2, 1, 1)"))
 
         ;;TODO we just return our own custom error here, rather than 'cached plan must not change result type'
         ;;might be worth confirming if there is a specific error type/message that matters for pgjdbc as there
@@ -1490,8 +1490,8 @@
 
 (deftest test-nulls-in-monomorphic-types
   (with-open [conn (jdbc-conn "prepareThreshold" -1)]
-    (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a) VALUES (1, NULL), (2, 22.2)"))
-    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY xt$id")]
+    (.execute (.prepareStatement conn "INSERT INTO foo(_id, a) VALUES (1, NULL), (2, 22.2)"))
+    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY _id")]
 
       (with-open [rs (.executeQuery stmt)]
 
@@ -1504,8 +1504,8 @@
 
 (deftest test-nulls-in-polymorphic-types
   (with-open [conn (jdbc-conn "prepareThreshold" -1)]
-    (.execute (.prepareStatement conn "INSERT INTO foo(xt$id, a) VALUES (1, 'one'), (2, 1), (3, NULL)"))
-    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY xt$id")]
+    (.execute (.prepareStatement conn "INSERT INTO foo(_id, a) VALUES (1, 'one'), (2, 1), (3, NULL)"))
+    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY _id")]
 
       (with-open [rs (.executeQuery stmt)]
 
@@ -1668,14 +1668,14 @@
       ;;Therefore we choose to error in this case to avoid any surprising and unexecpted behaviour
       (t/is (thrown?
              PGError
-             (pg/execute conn "INSERT INTO foo(xt$id, v) VALUES (1, $1)" {:params ["1"]}))
+             (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]}))
             "dml with unspecified params error")
 
 
       (t/is (thrown-with-msg?
              PGErrorResponse
              #"Missing types for params - Client must specify types for all params in DML statements"
-             (pg/execute conn "INSERT INTO foo(xt$id, v) VALUES (1, $1)" {:params ["1"]
+             (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
                                                                           :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
              treated as unspecified and therefore also error"))))
@@ -1691,7 +1691,7 @@
     (t/testing "Users can execute dml with explicit param types"
 
       (pg/execute conn
-                  "INSERT INTO foo(xt$id, v) VALUES (1, $1)"
+                  "INSERT INTO foo(_id, v) VALUES (1, $1)"
                   {:params [1]
                    :oids [OID/INT8]})
 

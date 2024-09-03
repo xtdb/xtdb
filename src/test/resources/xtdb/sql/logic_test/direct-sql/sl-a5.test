@@ -3,7 +3,7 @@ hash-threshold 100
 # Time Travel
 
 statement ok
-INSERT INTO posts (xt$id, user_id, body, xt$valid_from)
+INSERT INTO posts (_id, user_id, body, _valid_from)
 	VALUES (9012, 5678, 'Happy 2025!', DATE '2025-01-01')
 
 query T nosort
@@ -19,11 +19,11 @@ SELECT posts.body FROM posts
 # Instant Schemaless Writes
 
 statement ok
-INSERT INTO posts_2 (xt$id, user_id, body)
+INSERT INTO posts_2 (_id, user_id, body)
 	VALUES (1234, 5678, 'Hello World!')
 
 query IT nosort
-SELECT posts_2.xt$id, posts_2.body FROM posts_2
+SELECT posts_2._id, posts_2.body FROM posts_2
 ----
 1234
 Hello World!
@@ -32,7 +32,7 @@ Hello World!
 # First-Class Arrays and Objects
 
 statement ok
-INSERT INTO people (xt$id, name, friends)
+INSERT INTO people (_id, name, friends)
 	VALUES (5678, 'Sarah',
 			[{user: 'Dan'},
 			 {user: 'Kath'}])
@@ -57,7 +57,7 @@ Kath
 # Erasing for Privacy
 
 statement ok
-ERASE FROM people WHERE people.xt$id=5678
+ERASE FROM people WHERE people._id=5678
 
 query T nosort
 SELECT people.friends FROM people
