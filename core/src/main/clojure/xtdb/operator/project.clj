@@ -32,7 +32,7 @@
                                        ;; the EE handles these through `:extend`
                                        :rename (s/map-of ::lp/column (s/and ::lp/column
                                                                             #(not (str/starts-with? (name %) "?"))
-                                                                            (complement '#{xtdb/postgres-server-version xtdb/end-of-time}))
+                                                                            (complement '#{xtdb/postgres-server-version xtdb/xtdb-server-version xtdb/end-of-time}))
                                                          :conform-keys true, :count 1)
                                        :extend ::lp/column-expression))
          :relation ::lp/ra-expression))

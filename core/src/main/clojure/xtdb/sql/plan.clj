@@ -1654,8 +1654,11 @@
       (.accept ps this)
       (parse-long (.getText ctx))))
 
-  (visitPostgresVersionFunction [_ _]
-    (-> 'xtdb/postgres-server-version
+  (visitPostgresVersionFunction [_ ctx]
+    (-> (or (when-let [schema-name (identifier-sym (.schemaName ctx))]
+              (when (= schema-name 'xt)
+                'xtdb/xtdb-server-version))
+            'xtdb/postgres-server-version)
         (vary-meta assoc :identifier 'version))))
 
 (defn- wrap-predicates [plan predicate]

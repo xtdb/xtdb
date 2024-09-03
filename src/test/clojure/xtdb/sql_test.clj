@@ -1,5 +1,6 @@
 (ns xtdb.sql-test
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
@@ -2009,3 +2010,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 (t/deftest valid-time-as-col-name-3661
   (t/is (= [{:xt/valid-time 1, :xt/system-time 2}]
            (xt/q tu/*node* "SELECT 1 AS _valid_time, 2 AS _system_time"))))
+
+(t/deftest test-xt-version
+  (t/is (str/starts-with? (:version (first (xt/q tu/*node* "SELECT xt.version()")))
+                          "XTDB @")))
