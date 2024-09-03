@@ -2,8 +2,8 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.sql.plan :as plan]
-            [xtdb.sql-test :as sql-test]
-            [xtdb.test-util :as tu])
+            [xtdb.test-util :as tu]
+            [xtdb.time :as time])
   (:import (java.time.zone ZoneRulesException)
            [java.util HashMap]))
 
@@ -978,6 +978,21 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
     '(contains? (period f/xt$valid_from f/xt$valid_to) f/xt$system_from)
     "foo._valid_time CONTAINS foo.xt$system_from"))
+
+(t/deftest test-lower-upper-period-fns-3660
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, version) VALUES (1, 0)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, version) VALUES (1, 1)"]])
+
+  (t/is (= [{:valid-from (time/->zdt #inst "2020-01-02"),
+             :lowerinf false,
+             :upperinf true}
+            {:valid-from (time/->zdt #inst "2020-01-01")
+             :valid-to (time/->zdt #inst "2020-01-02")
+             :lowerinf false,
+             :upperinf false}]
+           (xt/q tu/*node* "SELECT LOWER(_valid_time) AS valid_from, UPPER(_valid_time) AS valid_to,
+                                   LOWER_INF(_valid_time) AS lowerinf, UPPER_INF(_valid_time) AS upperinf
+                            FROM foo FOR ALL VALID_TIME"))))
 
 (t/deftest test-coalesce
   (t/testing "planning"

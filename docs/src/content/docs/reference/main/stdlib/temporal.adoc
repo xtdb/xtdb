@@ -233,6 +233,26 @@ a| Returns true iff `p1` starts after `p2` ends
 * `strictly-succeeds?`: `+p1-start > p2-end+`
 * `immediately-succeeds?`: `+p1-start = p2-end+`
 
+|===
+
+The below functions operate on periods:
+
+[cols="3,3,8"]
+|===
+| XTQL | SQL |
+
+| `(lower p)` | `LOWER(p)`
+| Returns the lower bound of the provided period, or null if it infinite.
+
+| `(lower-inf p)` | `LOWER_INF(p)`
+| Returns true iff the lower bound of the provided period is infinite.
+
+| `(upper p)` | `UPPER(p)`
+| Returns the upper bound of the provided period, or null if it is infinite.
+
+| `(upper-inf p)` | `UPPER_INF(p)`
+| Returns true iff the upper bound of the provided period is infinite.
+
 | `(* p1 p2)`
 | `p1 * p2`
 a| Returns the intersection of the two periods. e.g.:

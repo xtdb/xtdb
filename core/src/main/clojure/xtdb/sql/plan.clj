@@ -1451,7 +1451,10 @@
         (list 'substring cve sp))))
 
   (visitLowerFunction [this ctx] (list 'lower (-> (.expr ctx) (.accept this))))
+  (visitLowerInfFunction [this ctx] (list 'lower_inf (-> (.expr ctx) (.accept this))))
+
   (visitUpperFunction [this ctx] (list 'upper (-> (.expr ctx) (.accept this))))
+  (visitUpperInfFunction [this ctx] (list 'upper_inf (-> (.expr ctx) (.accept this))))
 
   (visitTrimFunction [this ctx]
     (let [trim-fn (case (some-> (.trimSpecification ctx) (.getText) (str/upper-case))

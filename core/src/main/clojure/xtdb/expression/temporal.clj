@@ -1614,6 +1614,30 @@
 (defn to ^long [^ListValueReader period]
   (.readLong ^ValueReader (.nth period 1)))
 
+(defmethod expr/codegen-call [:lower :tstz-range] [_]
+  {:return-type types/temporal-col-type
+   :->call-code (fn [[arg]]
+                  `(from ~arg))})
+
+(defmethod expr/codegen-call [:upper :tstz-range] [_]
+  {:return-type types/nullable-temporal-type
+   :continue-call (fn [f [arg]]
+                    (let [to-sym (gensym 'to)]
+                      `(let [~to-sym (to ~arg)]
+                         (if (= Long/MAX_VALUE ~to-sym)
+                           ~(f :null nil)
+                           ~(f types/temporal-col-type to-sym)))))})
+
+(defmethod expr/codegen-call [:lower_inf :tstz-range] [_]
+  {:return-type :bool
+   :->call-code (fn [[arg]]
+                  `(= Long/MIN_VALUE (from ~arg)))})
+
+(defmethod expr/codegen-call [:upper_inf :tstz-range] [_]
+  {:return-type :bool
+   :->call-code (fn [[arg]]
+                  `(= Long/MAX_VALUE (to ~arg)))})
+
 (defn temporal-contains-point? [p1 ^long ts]
   (and (<= (from p1) ts)
        (> (to p1) ts)))
