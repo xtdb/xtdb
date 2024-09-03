@@ -984,7 +984,23 @@
              :col-type :bool
              :typlen 1
              :oid 16
-             :read-text (fn [_env ba] (Boolean/parseBoolean (read-utf8 ba)))
+             :read-binary (fn [_env ba]
+                            (case (-> ba ByteBuffer/wrap .get)
+                              1 true
+                              0 false
+                              (throw (IllegalArgumentException. "Invalid binary boolean value"))))
+             :read-text (fn [_env ba]
+                          ;; https://www.postgresql.org/docs/current/datatype-boolean.html
+                          ;; TLDR: unique prefixes of any of the text values are valid
+                          (case (-> ba
+                                    (read-utf8)
+                                    (str/trim)
+                                    (str/lower-case))
+                            ("tr" "yes" "tru" "true" "on" "ye" "t" "y" "1") true
+                            ("f" "fa" "fal" "fals" "false" "no" "n" "off" "0") false
+                            (throw (IllegalArgumentException. "Invalid boolean value"))))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (byte-array [(if (.getBoolean rdr idx) 1 0)]))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (utf8 (if (.getBoolean rdr idx) "t" "f")))}
 

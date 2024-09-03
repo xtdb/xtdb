@@ -1799,3 +1799,36 @@
   (t/is (= :invalid-result-format
            (pgwire/resolve-result-format [:text :binary] 3))
         "if more than 1 format is provided and it doesn't match the field count this is invalid"))
+
+(deftest test-pg-boolean-param
+  (doseq [binary? [true false]
+          v [true false]]
+
+    (t/testing (format "binary?: %s, value?: %s" binary? v)
+
+      (with-open [conn (pg-conn {:binary-encode? binary? :binary-decode? binary?})]
+
+        (t/is (= [{:v v}]
+                 (pg/execute conn "SELECT ? v" {:oids [OID/BOOL]
+                                                :params [v]})))))))
+
+(deftest test-pgjdbc-boolean-param
+  (doseq [binary? [true false]
+          v [true false]]
+    ;;pgjdbc doesn't actually send or recieve boolean in binary format
+    ;;but it claims to and might someday
+    (t/testing (format "binary?: %s, value?: %s" binary? v)
+
+      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                  stmt (.prepareStatement conn "SELECT ? AS v")]
+
+        (.setBoolean stmt 1 v)
+
+        (with-open [rs (.executeQuery stmt)]
+
+          (t/is (= [{"v" "bool"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          (.next rs)
+          (t/is (= v (.getBoolean rs 1))))))))

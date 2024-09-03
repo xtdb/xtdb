@@ -38,12 +38,12 @@ describe("connects to XT", function() {
     await conn.release()
   })
 
-  /*it("JSON-like types can be roundtripped", async () => {
+  it("JSON-like types can be roundtripped", async () => {
     await sql`INSERT INTO foo2 (_id, bool) VALUES (1, ${sql.typed.bool(true)})`
 
     assert.deepStrictEqual([...await sql`SELECT * FROM foo2`],
-                           [{_id: '1', bool: true}])
-  })*/
+                           [{_id: 1, bool: true}])
+  })
 
   it("should round-trip JSON", async () => {
     const conn = await sql.reserve()
