@@ -2,7 +2,7 @@
  [{y x.1/y} {z y.4/z}]
  [:apply
   :cross-join
-  {x.1/y ?xt$sq_y_2}
+  {x.1/y ?_sq_y_2}
   [:rename
    x.1
    [:scan
@@ -20,4 +20,4 @@
        [:in
         #xt.time/date "3001-01-01"
         #xt.time/zoned-date-time "3002-01-01T00:00Z"]}
-      [{z (= z ?xt$sq_y_2)}]]]]]]]
+      [{z (= z ?_sq_y_2)}]]]]]]]

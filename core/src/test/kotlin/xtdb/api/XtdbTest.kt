@@ -33,12 +33,12 @@ internal class XtdbTest {
 
     @Test
     fun startsInMemoryNode() {
-        node.executeTx(sql("INSERT INTO foo (xt\$id) VALUES ('jms')"))
+        node.executeTx(sql("INSERT INTO foo (_id) VALUES ('jms')"))
 
         assertEquals(
             listOf(mapOf("foo_id" to "jms")),
 
-            node.openQuery("SELECT foo.xt\$id AS foo_id FROM foo").doall()
+            node.openQuery("SELECT foo._id AS foo_id FROM foo").doall()
         )
     }
 
@@ -46,7 +46,7 @@ internal class XtdbTest {
 
     @Test
     fun `test query opts`() {
-        node.executeTx(sql("INSERT INTO docs2 (xt\$id, foo) VALUES (1, 'bar')"))
+        node.executeTx(sql("INSERT INTO docs2 (_id, foo) VALUES (1, 'bar')"))
 
         assertEquals(
             listOf(mapOf("my_foo" to "bar")),
@@ -66,7 +66,7 @@ internal class XtdbTest {
         assertEquals(
             listOf(mapOf("foo" to "bar")),
             node.openQuery(
-                "SELECT foo FROM docs2 WHERE xt\$id = ?",
+                "SELECT foo FROM docs2 WHERE _id = ?",
                 queryOpts().args(listOf(1)).build()
             ).doall(),
 
@@ -100,7 +100,7 @@ internal class XtdbTest {
 
         val plan = "[:project\n [{foo docs.1/foo}]\n [:rename docs.1 [:scan {:table docs} [foo]]]]\n"
 
-        node.submitTx(sql("INSERT INTO docs (xt\$id, foo) VALUES (1, 'bar')"))
+        node.submitTx(sql("INSERT INTO docs (_id, foo) VALUES (1, 'bar')"))
 
         assertEquals(
             listOf(mapOf("plan" to plan)),

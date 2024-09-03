@@ -30,25 +30,25 @@
      :type (types/field->col-type col-field)}))
 
 (def info-tables
-  {'information_schema/tables {"table_catalog" (types/col-type->field "table_catalog" :utf8)
+  {'information_schema$tables {"table_catalog" (types/col-type->field "table_catalog" :utf8)
                                "table_schema" (types/col-type->field "table_schema" :utf8)
                                "table_name" (types/col-type->field "table_name" :utf8)
                                "table_type" (types/col-type->field "table_type" :utf8)}
-   'information_schema/columns {"table_catalog" (types/col-type->field "table_catalog" :utf8)
+   'information_schema$columns {"table_catalog" (types/col-type->field "table_catalog" :utf8)
                                 "table_schema" (types/col-type->field "table_schema" :utf8)
                                 "table_name" (types/col-type->field "table_name" :utf8)
                                 "column_name" (types/col-type->field "column_name" :utf8)
                                 "data_type" (types/col-type->field "data_type" :utf8)}
-   'information_schema/schemata {"catalog_name" (types/col-type->field "catalog_name" :utf8)
+   'information_schema$schemata {"catalog_name" (types/col-type->field "catalog_name" :utf8)
                                  "schema_name" (types/col-type->field "schema_name" :utf8)
                                  "schema_owner" (types/col-type->field "schema_owner" :utf8)}})
 
 (def pg-catalog-tables
-  {'pg_catalog/pg_tables {"schemaname" (types/col-type->field "schemaname" :utf8)
+  {'pg_catalog$pg_tables {"schemaname" (types/col-type->field "schemaname" :utf8)
                           "tablename" (types/col-type->field "tablename" :utf8)
                           "tableowner" (types/col-type->field "tableowner" :utf8)
                           "tablespace" (types/col-type->field "tablespace" :null)}
-   'pg_catalog/pg_type {"oid" (types/col-type->field "oid" :i32)
+   'pg_catalog$pg_type {"oid" (types/col-type->field "oid" :i32)
                         "typname" (types/col-type->field "typname" :utf8)
                         "typnamespace" (types/col-type->field "typnamespace" :i32)
                         "typowner" (types/col-type->field "typowner" :i32)
@@ -56,21 +56,21 @@
                         "typbasetype" (types/col-type->field "typbasetype" :i32)
                         "typnotnull" (types/col-type->field "typnotnull" :bool)
                         "typtypmod" (types/col-type->field "typtypmod" :i32)}
-   'pg_catalog/pg_class {"oid" (types/col-type->field "oid" :i32)
+   'pg_catalog$pg_class {"oid" (types/col-type->field "oid" :i32)
                          "relname" (types/col-type->field "relname" :utf8)
                          "relnamespace" (types/col-type->field "relnamespace" :i32)
                          "relkind" (types/col-type->field "relkind" :utf8)}
-   'pg_catalog/pg_description {"objoid" (types/col-type->field "objoid" :i32)
+   'pg_catalog$pg_description {"objoid" (types/col-type->field "objoid" :i32)
                                "classoid" (types/col-type->field "classoid" :i32)
                                "objsubid" (types/col-type->field "objsubid" :i16)
                                "description"(types/col-type->field "description" :utf8)}
-   'pg_catalog/pg_views {"schemaname" (types/col-type->field "schemaname" :utf8)
+   'pg_catalog$pg_views {"schemaname" (types/col-type->field "schemaname" :utf8)
                          "viewname" (types/col-type->field "viewname" :utf8)
                          "viewowner" (types/col-type->field "viewowner" :utf8)}
-   'pg_catalog/pg_matviews {"schemaname" (types/col-type->field "schemaname" :utf8)
+   'pg_catalog$pg_matviews {"schemaname" (types/col-type->field "schemaname" :utf8)
                             "matviewname" (types/col-type->field "matviewname" :utf8)
                             "matviewowner" (types/col-type->field "matviewowner" :utf8)}
-   'pg_catalog/pg_attribute {"attrelid" (types/col-type->field "attrelid" :i32)
+   'pg_catalog$pg_attribute {"attrelid" (types/col-type->field "attrelid" :i32)
                              "attname" (types/col-type->field "attname" :utf8)
                              "atttypid" (types/col-type->field "atttypid" :i32)
                              "attlen" (types/col-type->field "attlen" :i32)
@@ -80,7 +80,7 @@
                              "atttypmod" (types/col-type->field "atttypmod" :i32)
                              "attidentity" (types/col-type->field "attidentity" :utf8)
                              "attgenerated"(types/col-type->field "attgenerated" :utf8)}
-   'pg_catalog/pg_namespace {"oid" (types/col-type->field "oid" :i32)
+   'pg_catalog$pg_namespace {"oid" (types/col-type->field "oid" :i32)
                              "nspname" (types/col-type->field "nspname" :utf8)
                              "nspowner" (types/col-type->field "nspowner" :i32)
                              "nspacl" (types/col-type->field "nspacl" :null)}})
@@ -91,7 +91,7 @@
 (def unq-pg-catalog
   (-> pg-catalog-tables
       (update-vals (comp #(into #{} (map symbol) %) keys))
-      (update-keys (comp symbol name))))
+      (update-keys (comp symbol last #(str/split % #"\$") name))))
 
 (def schemas
   [{"catalog_name" "xtdb"
@@ -263,17 +263,17 @@
 
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (case table
-                                     information_schema/tables (tables out-rel-wtr schema-info)
-                                     information_schema/columns (columns out-rel-wtr (schema-info->col-rows schema-info))
-                                     information_schema/schemata (schemata out-rel-wtr)
-                                     pg_catalog/pg_tables (pg-tables out-rel-wtr schema-info)
-                                     pg_catalog/pg_type (pg-type out-rel-wtr)
-                                     pg_catalog/pg_class (pg-class out-rel-wtr schema-info)
-                                     pg_catalog/pg_description out-rel-wtr
-                                     pg_catalog/pg_views out-rel-wtr
-                                     pg_catalog/pg_matviews out-rel-wtr
-                                     pg_catalog/pg_attribute (pg-attribute out-rel-wtr (schema-info->col-rows schema-info))
-                                     pg_catalog/pg_namespace (pg-namespace out-rel-wtr)
+                                     information_schema$tables (tables out-rel-wtr schema-info)
+                                     information_schema$columns (columns out-rel-wtr (schema-info->col-rows schema-info))
+                                     information_schema$schemata (schemata out-rel-wtr)
+                                     pg_catalog$pg_tables (pg-tables out-rel-wtr schema-info)
+                                     pg_catalog$pg_type (pg-type out-rel-wtr)
+                                     pg_catalog$pg_class (pg-class out-rel-wtr schema-info)
+                                     pg_catalog$pg_description out-rel-wtr
+                                     pg_catalog$pg_views out-rel-wtr
+                                     pg_catalog$pg_matviews out-rel-wtr
+                                     pg_catalog$pg_attribute (pg-attribute out-rel-wtr (schema-info->col-rows schema-info))
+                                     pg_catalog$pg_namespace (pg-namespace out-rel-wtr)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor

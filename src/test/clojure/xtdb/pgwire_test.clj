@@ -1371,7 +1371,7 @@
                        "message" "Precondition failed: assert-exists"}}
               {:_id 1, :committed true, :error nil}
               {:_id 0, :committed true, :error nil}]
-             (q conn ["SELECT * EXCLUDE tx_time FROM xt.txs"])))))
+             (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
 
 (deftest test-untyped-null-type
   (with-open [conn (jdbc-conn "prepareThreshold" -1)

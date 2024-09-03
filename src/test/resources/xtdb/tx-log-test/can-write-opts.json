@@ -56,7 +56,7 @@
                   "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "nullable" : false,
                   "type" : {
                     "name" : "int",
@@ -68,7 +68,7 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -77,7 +77,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -148,7 +148,7 @@
                 "count" : 1,
                 "VALIDITY" : [1],
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : ["0"]
@@ -156,12 +156,12 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "count" : 1,
             "VALIDITY" : [0],
             "DATA" : [0]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "count" : 1,
             "VALIDITY" : [0],
             "DATA" : [0]

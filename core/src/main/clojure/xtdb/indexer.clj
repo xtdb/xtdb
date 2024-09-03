@@ -74,8 +74,8 @@
         iids-rdr (.structKeyReader put-leg "iids")
         iid-rdr (.listElementReader iids-rdr)
         docs-rdr (.structKeyReader put-leg "documents")
-        valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
-        valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
+        valid-from-rdr (.structKeyReader put-leg "_valid_from")
+        valid-to-rdr (.structKeyReader put-leg "_valid_to")
         system-time-µs (time/instant->micros system-time)
         tables (->> (.legs docs-rdr)
                     (into {} (map (fn [table-name]
@@ -86,7 +86,7 @@
                                                                                        (.valueCount doc-rdr))
                                           live-table (.liveTable live-idx-tx table-name)]
                                       (MapEntry/create table-name
-                                                       {:id-rdr (.structKeyReader doc-rdr "xt$id")
+                                                       {:id-rdr (.structKeyReader doc-rdr "_id")
 
                                                         :live-table live-table
 
@@ -130,8 +130,8 @@
         table-rdr (.structKeyReader delete-leg "table")
         iids-rdr (.structKeyReader delete-leg "iids")
         iid-rdr (.listElementReader iids-rdr)
-        valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
-        valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
+        valid-from-rdr (.structKeyReader delete-leg "_valid_from")
+        valid-to-rdr (.structKeyReader delete-leg "_valid_to")
         current-time-µs (time/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -172,7 +172,7 @@
         nil))))
 
 (defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx {:keys [basis default-tz] :as tx-opts} fn-iid]
-  (let [lp '[:scan {:table xt$tx_fns} [{xt$iid (= xt$iid ?iid)} xt$id fn]]
+  (let [lp '[:scan {:table xt$tx_fns} [{_iid (= _iid ?iid)} _id fn]]
         ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src tx-opts)]
     (with-open [bq (.bind pq
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
@@ -298,9 +298,9 @@
                                                               (remove (comp types/temporal-column? #(.getName ^IVectorReader %))))
                                                          (.rowCount in-rel))
               table (str table)
-              id-col (.readerForName in-rel "xt$id")
-              valid-from-rdr (.readerForName in-rel "xt$valid_from")
-              valid-to-rdr (.readerForName in-rel "xt$valid_to")
+              id-col (.readerForName in-rel "_id")
+              valid-from-rdr (.readerForName in-rel "_valid_from")
+              valid-to-rdr (.readerForName in-rel "_valid_to")
 
               live-idx-table (.liveTable live-idx-tx (str table))
               live-idx-table-copier (-> (.docWriter live-idx-table)
@@ -331,9 +331,9 @@
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.rowCount in-rel)
-            iid-rdr (.readerForName in-rel "xt$iid")
-            valid-from-rdr (.readerForName in-rel "xt$valid_from")
-            valid-to-rdr (.readerForName in-rel "xt$valid_to")]
+            iid-rdr (.readerForName in-rel "_iid")
+            valid-from-rdr (.readerForName in-rel "_valid_from")
+            valid-to-rdr (.readerForName in-rel "_valid_to")]
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)
                 valid-from (.getLong valid-from-rdr idx)
@@ -352,7 +352,7 @@
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.rowCount in-rel)
-            iid-rdr (.readerForName in-rel "xt$iid")]
+            iid-rdr (.readerForName in-rel "_iid")]
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)]
             (-> (.liveTable live-idx-tx (str table))
@@ -549,10 +549,10 @@
     (.logPut live-table (trie/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (.startStruct doc-writer)
-               (doto (.structKeyWriter doc-writer "xt$id" (FieldType/notNullable #xt.arrow/type :i64))
+               (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 
-               (doto (.structKeyWriter doc-writer "tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
+               (doto (.structKeyWriter doc-writer "system_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
                (doto (.structKeyWriter doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))

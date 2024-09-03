@@ -8,7 +8,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 
 internal fun normalForm0(s: String): String = s
     .replace('-', '_')
-    .replace(Regex("^_"), "xt\\$")
+    .replace(Regex("^xt/"), "_")
     .split('.', '/', '$')
     .joinToString(separator = "$")
     .lowercase()
@@ -26,17 +26,13 @@ fun normalForm(s: String): String = NORMAL_FORM_CACHE[s]
  * @suppress
  */
 fun normalForm(sym: Symbol): Symbol =
-    if (sym.namespace != null) {
-        Symbol.intern(
-            String.format(
-                "%s$%s",
-                normalForm(sym.namespace),
-                normalForm(sym.name)
-            )
-        )
-    } else {
-        Symbol.intern(normalForm(sym.name))
-    }
+    Symbol.intern(
+        when (sym.namespace) {
+            null -> normalForm(sym.name)
+            "xt" -> "_${normalForm(sym.name)}"
+            else -> "${normalForm(sym.namespace)}$${normalForm(sym.name)}"
+        }
+    )
 
 /**
  * @suppress

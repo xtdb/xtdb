@@ -1,5 +1,5 @@
 [:project
- [{xt$column_1 1}]
+ [{_column_1 1}]
  [:rename
   tmp.2
   [:project

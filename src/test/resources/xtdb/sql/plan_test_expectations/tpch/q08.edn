@@ -4,13 +4,13 @@
   [[all_nations.9/o_year
     {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [all_nations.9/o_year {mkt_share (/ xt$sum_out_10 xt$sum_out_12)}]
+   [all_nations.9/o_year {mkt_share (/ _sum_out_10 _sum_out_12)}]
    [:group-by
     [all_nations.9/o_year
-     {xt$sum_out_12 (sum all_nations.9/volume)}
-     {xt$sum_out_10 (sum xt$sum_in_11)}]
+     {_sum_out_10 (sum _sum_in_11)}
+     {_sum_out_12 (sum all_nations.9/volume)}]
     [:map
-     [{xt$sum_in_11
+     [{_sum_in_11
        (cond
         (= all_nations.9/nation "BRAZIL")
         all_nations.9/volume

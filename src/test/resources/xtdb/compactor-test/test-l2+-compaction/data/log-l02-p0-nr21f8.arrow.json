@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "nullable" : false,
       "type" : {
         "name" : "fixedsizebinary",
@@ -9,7 +9,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -18,7 +18,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -27,7 +27,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -50,7 +50,7 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "nullable" : false,
           "type" : {
             "name" : "int",
@@ -79,22 +79,22 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : ["02b8c2b7673c15a95dfd6913f32e8f09","03a293a1ae6a754078406140a65ff6be"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1583280000000000,1582156800000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1583280000000000,1582156800000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [9223372036854775807,9223372036854775807]
@@ -108,7 +108,7 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["383","305"]
@@ -124,22 +124,22 @@
   },{
     "count" : 4,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : ["043e7a2fbf427b598357f715a1a61344","053a6977d02b42bea31f3c4f7f3acc79","06cf894ddb2e40263ac798e97ca89abb","07e1672e79caad486aa14eb4f9b7cc49"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [1582416000000000,1583971200000000,1582329600000000,1582416000000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [1582416000000000,1583971200000000,1582329600000000,1582416000000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
@@ -153,7 +153,7 @@
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "DATA" : ["319","429","312","318"]
@@ -169,22 +169,22 @@
   },{
     "count" : 2,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : ["08d2b357054853321ffdb148ceb10caf","08e4e441a456cc34bae06349dd60d5fd"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1583798400000000,1583971200000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1583798400000000,1583971200000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [9223372036854775807,9223372036854775807]
@@ -198,7 +198,7 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["419","427"]
@@ -214,22 +214,22 @@
   },{
     "count" : 1,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : ["0f97f3f68271564778a57aa781be1f1e"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [1583798400000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [1583798400000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [9223372036854775807]
@@ -243,7 +243,7 @@
         "count" : 1,
         "VALIDITY" : [1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 1,
           "VALIDITY" : [1],
           "DATA" : ["417"]
@@ -259,22 +259,22 @@
   },{
     "count" : 2,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : ["167a8c48ebaa8493033bd6c49987be9a","17664b2d63ac35e2c26e7f7762a3bf52"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1583020800000000,1582848000000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1583020800000000,1582848000000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [9223372036854775807,9223372036854775807]
@@ -288,7 +288,7 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["365","353"]
@@ -304,22 +304,22 @@
   },{
     "count" : 4,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : ["186835a76246498a35c0b5dc51f34b14","1a9db013c23698996c24054e4689bd2a","1b1b79a35aeafbc06592176f573e0042","1bce0514332a7a1a9bec4d79a2786c1f"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [1582848000000000,1583884800000000,1583539200000000,1582934400000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [1582848000000000,1583884800000000,1583539200000000,1582934400000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
@@ -333,7 +333,7 @@
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "DATA" : ["348","424","400","357"]
@@ -349,22 +349,22 @@
   },{
     "count" : 3,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : ["1dd81fb449fc93bfe3313f5945bf14d8","1dda28be91aa26e1e5e90397516e57ac","1e1b4142f9fe433d893437424841088d"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [1582588800000000,1583971200000000,1582934400000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [1582588800000000,1583971200000000,1582934400000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
@@ -378,7 +378,7 @@
         "count" : 3,
         "VALIDITY" : [1,1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 3,
           "VALIDITY" : [1,1,1],
           "DATA" : ["334","430","354"]
@@ -394,22 +394,22 @@
   },{
     "count" : 5,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : ["2077439c0f82ecd2ceb7a6c39b768a38","24834573b46c64c14e8e12b64330ba30","2adafd3da744bcf5467845ab755d211f","2bad149c85071b2be11a2a67e2af1e58","2cc48a05198a7714e01b281084390a2d"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : [1582848000000000,1583193600000000,1583884800000000,1583366400000000,1582156800000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : [1582848000000000,1583193600000000,1583884800000000,1583366400000000,1582156800000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
@@ -423,7 +423,7 @@
         "count" : 5,
         "VALIDITY" : [1,1,1,1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 5,
           "VALIDITY" : [1,1,1,1,1],
           "DATA" : ["352","376","420","389","300"]
@@ -439,22 +439,22 @@
   },{
     "count" : 5,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : ["3022d624c0bc8ff8d7da774ccc7b9858","306b41bc873028f8e5b0642580fb4521","32981be2d8883ebc7c548aafe6b666f9","332e02ea44f791f2334e44bf431d6bd4","333a3ff42f59cf8a01cfa64dfc838671"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : [1583020800000000,1583452800000000,1583539200000000,1583280000000000,1582934400000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : [1583020800000000,1583452800000000,1583539200000000,1583280000000000,1582934400000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 5,
       "VALIDITY" : [1,1,1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
@@ -468,7 +468,7 @@
         "count" : 5,
         "VALIDITY" : [1,1,1,1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 5,
           "VALIDITY" : [1,1,1,1,1],
           "DATA" : ["362","395","398","379","356"]
@@ -484,22 +484,22 @@
   },{
     "count" : 2,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : ["3b8574e691a90541c7f16605c6ceeae1","3b8a91a71b4815da789b9f43a47b0da0"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1582675200000000,1582416000000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1582675200000000,1582416000000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [9223372036854775807,9223372036854775807]
@@ -513,7 +513,7 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["339","320"]
@@ -529,22 +529,22 @@
   },{
     "count" : 2,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : ["3d33c8839a8252d947e423b9a30f6a42","3ddce117a8c205f5fd859a607dcdb05a"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1582070400000000,1583625600000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1582070400000000,1583625600000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [9223372036854775807,9223372036854775807]
@@ -558,7 +558,7 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["298","405"]

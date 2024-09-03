@@ -20,21 +20,19 @@ class NormalFormTest {
         assertEquals("foo\$bar\$baz", normalForm0("foo.bAr/baz"))
         assertEquals("foo\$bar\$baz", normalForm0("foo.Bar/baz"))
 
-        assertEquals("xt\$id", normalForm0("XT\$ID"))
-        assertEquals("xt\$id", normalForm0("_id"))
-        assertEquals("xt\$valid_from", normalForm0("_valid_From"))
+        assertEquals("_id", normalForm0("_id"))
+        assertEquals("_id", normalForm0("_id"))
+        assertEquals("_valid_from", normalForm0("_valid_From"))
     }
 
     private val String.kw get() = Keyword.intern(this)
 
     @Test
     fun `test denormalise`() {
-        assertEquals("_id", SNAKE_CASE_STRING.denormalize("xt\$id"))
-        assertEquals("_valid_from", SNAKE_CASE_STRING.denormalize("xt\$valid_from"))
-        assertEquals("xt/id".kw, KEBAB_CASE_KEYWORD.denormalize("xt\$id"))
-        assertEquals("xt/valid-from".kw, KEBAB_CASE_KEYWORD.denormalize("xt\$valid_from"))
-        assertEquals("xt/valid_from".kw, SNAKE_CASE_KEYWORD.denormalize("xt\$valid_from"))
+        assertEquals("_id", SNAKE_CASE_STRING.denormalize("_id"))
+        assertEquals("_valid_from", SNAKE_CASE_STRING.denormalize("_valid_from"))
+        assertEquals("xt/id".kw, KEBAB_CASE_KEYWORD.denormalize("_id"))
+        assertEquals("xt/valid-from".kw, KEBAB_CASE_KEYWORD.denormalize("_valid_from"))
+        assertEquals("xt/valid_from".kw, SNAKE_CASE_KEYWORD.denormalize("_valid_from"))
     }
 }
-
-

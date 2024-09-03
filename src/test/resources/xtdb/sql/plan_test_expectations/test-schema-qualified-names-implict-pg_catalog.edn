@@ -2,4 +2,4 @@
  [{attname pg_attribute.1/attname}]
  [:rename
   pg_attribute.1
-  [:scan {:table pg_catalog/pg_attribute} [attname]]]]
+  [:scan {:table pg_catalog$pg_attribute} [attname]]]]

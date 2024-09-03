@@ -98,7 +98,7 @@
   (let [fields (live-rel->fields live-rel)
         wm-live-rel (open-wm-live-rel live-rel retain?)
         wm-live-trie (cond-> ^LiveHashTrie trie
-                       retain? (.withIidReader (.readerForName wm-live-rel "xt$iid")))]
+                       retain? (.withIidReader (.readerForName wm-live-rel "_iid")))]
     (reify ILiveTableWatermark
       (columnField [_ col-name]
         (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
@@ -211,12 +211,12 @@
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
    (util/with-close-on-catch [rel (trie/open-log-data-wtr allocator)]
-     (let [iid-wtr (.colWriter rel "xt$iid")
+     (let [iid-wtr (.colWriter rel "_iid")
            op-wtr (.colWriter rel "op")]
        (->LiveTable allocator buffer-pool row-counter table-name rel
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
-                    iid-wtr (.colWriter rel "xt$system_from")
-                    (.colWriter rel "xt$valid_from") (.colWriter rel "xt$valid_to")
+                    iid-wtr (.colWriter rel "_system_from")
+                    (.colWriter rel "_valid_from") (.colWriter rel "_valid_to")
                     (.legWriter op-wtr "put") (.legWriter op-wtr "delete") (.legWriter op-wtr "erase"))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]

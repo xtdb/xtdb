@@ -805,7 +805,7 @@
                (test-arithmetic '- #xt.time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt/interval-mdn ["P0D" "PT1H15M43.342S"])))
 
       (t/is (= #xt.time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"
-               (test-arithmetic '- #xt.time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"] ))
+               (test-arithmetic '- #xt.time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-mdn ["P2D" "PT1H"]))
             "clock change")
 
       (t/is (nil? (test-arithmetic '- nil #xt/interval-mdn ["P0D" "PT1H15M43.342S"]))))
@@ -815,7 +815,7 @@
 
       (t/is (= 3 (test-arithmetic '- #xt.time/date "2001-10-01" #xt.time/date "2001-09-28")))
 
-      (t/is (= 1 (test-arithmetic '- #xt.time/date "2001-03-01" #xt.time/date "2001-02-28" )))
+      (t/is (= 1 (test-arithmetic '- #xt.time/date "2001-03-01" #xt.time/date "2001-02-28")))
 
       (t/is (= 2 (test-arithmetic '- #xt.time/date "2000-03-01" #xt.time/date "2000-02-28"))))
 
@@ -1095,7 +1095,7 @@
       false '(>= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))))
 
   (t/testing "can't compare month-day-nano intervals if months > 0"
-    (let [test-doc {:xt$id :foo,
+    (let [test-doc {:_id :foo,
                     :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H"))}]
       (t/is (thrown-with-msg?
              RuntimeException
@@ -1180,7 +1180,7 @@
   (let [i #xt/interval-dt ["P0D" "PT-23H-59M-59.001S"]]
     (t/is (=  i
               (et/project1 '(+ a b) {:a i, :b (pd-zero i)}))))
-  (let [i #xt/interval-mdn ["P33M244D" "PT48H0.003444443S"] ]
+  (let [i #xt/interval-mdn ["P33M244D" "PT48H0.003444443S"]]
     (t/is (=  i
               (et/project1 '(+ a b) {:a i, :b (pd-zero i)})))))
 

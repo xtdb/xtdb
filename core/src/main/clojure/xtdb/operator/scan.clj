@@ -114,7 +114,7 @@
     (.schema wm)))
 
 (defn temporal-column? [col-name]
-  (contains? #{"xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to"}
+  (contains? #{"_system_from" "_system_to" "_valid_from" "_valid_to"}
              col-name))
 
 (defn rels->multi-vector-rel-factory ^xtdb.vector.IMultiVectorRelationFactory [leaf-rels, ^BufferAllocator allocator, col-names]
@@ -125,9 +125,9 @@
         vector-indirection (IntArrayList.)]
     (letfn [(->indirect-multi-vec [col-name reader-selection vector-selection]
               (let [readers (ArrayList.)]
-                (if (= col-name "xt$iid")
+                (if (= col-name "_iid")
                   (doseq [^RelationReader leaf-rel leaf-rels]
-                    (.add readers (.readerForName leaf-rel "xt$iid")))
+                    (.add readers (.readerForName leaf-rel "_iid")))
 
                   (doseq [[row-count ^IVectorReader put-rdr] put-rdrs]
                     (if-let [rdr (some-> (.structKeyReader put-rdr col-name)
@@ -152,10 +152,10 @@
             (when (contains? col-names col-name)
               (.colWriter out-rel col-name (FieldType. nullable? (types/->arrow-type types/temporal-col-type) nil))))]
 
-    (let [^IVectorWriter valid-from-wtr (writer-for "xt$valid_from" false)
-          ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to" true)
-          ^IVectorWriter sys-from-wtr (writer-for "xt$system_from" false)
-          ^IVectorWriter sys-to-wtr (writer-for "xt$system_to" true)]
+    (let [^IVectorWriter valid-from-wtr (writer-for "_valid_from" false)
+          ^IVectorWriter valid-to-wtr (writer-for "_valid_to" true)
+          ^IVectorWriter sys-from-wtr (writer-for "_system_from" false)
+          ^IVectorWriter sys-to-wtr (writer-for "_system_to" true)]
 
       (reify IRowConsumer
         (accept [_ _idx valid-from valid-to sys-from sys-to]
@@ -179,7 +179,7 @@
       (with-open [arrow-buf (util/->arrow-buf-view allocator iid-bb)]
         (let [iid-ptr (ArrowBufPointer. arrow-buf 0 (.capacity iid-bb))
               ptr (ArrowBufPointer.)
-              iid-rdr (.readerForName rel-rdr "xt$iid")
+              iid-rdr (.readerForName rel-rdr "_iid")
               value-count (.valueCount iid-rdr)]
           (if (pos-int? value-count)
             ;; lower-bound
@@ -242,7 +242,7 @@
               is-valid-ptr (ArrowBufPointer.)]
           (reset-vsr-cache vsr-cache)
           (with-open [out-rel (vw/->rel-writer allocator)]
-            (let [^SelectionSpec iid-pred (get col-preds "xt$iid")
+            (let [^SelectionSpec iid-pred (get col-preds "_iid")
                   merge-q (PriorityQueue. (Comparator/comparing #(.ev_ptr ^LeafPointer %) (EventRowPointer/comparator)))
                   calculate-polygon (bitemp/polygon-calculator temporal-bounds)
                   bitemp-consumer (->bitemporal-consumer out-rel col-names)
@@ -288,7 +288,7 @@
                     ^RelationReader rel (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
                                                   (.select rel (.select col-pred allocator rel schema params)))
                                                 rel
-                                                (vals (dissoc col-preds "xt$iid")))]
+                                                (vals (dissoc col-preds "_iid")))]
                 (when (pos? (.rowCount rel))
                   (.accept c rel)
                   (aset !advanced? 0 true)))))))
@@ -300,14 +300,14 @@
     (util/close out-rel)))
 
 (defn- eid-select->eid [eid-select]
-  (cond (= 'xt$id (second eid-select))
+  (cond (= '_id (second eid-select))
         (nth eid-select 2)
 
-        (= 'xt$id (nth eid-select 2))
+        (= '_id (nth eid-select 2))
         (second eid-select)))
 
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
-  (when-let [eid-select (get selects "xt$id")]
+  (when-let [eid-select (get selects "_id")]
     (when (= '= (first eid-select))
       (when-let [eid (eid-select->eid eid-select)]
         (cond
@@ -439,7 +439,7 @@
                        (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark)
                        (let [iid-bb (selects->iid-byte-buffer selects params)
                              col-preds (cond-> col-preds
-                                         iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
+                                         iid-bb (assoc "_iid" (iid-selector iid-bb)))
                              metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
                              scan-opts (-> scan-opts
                                            (update :for-valid-time

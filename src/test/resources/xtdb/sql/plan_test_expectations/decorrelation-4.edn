@@ -1,21 +1,21 @@
 [:project
  [{name s.1/name} {course e.2/course}]
  [:map
-  [{xt$sq_3 xt$min_out_6}]
+  [{_sq_3 _min_out_6}]
   [:select
-   (= e.2/grade xt$min_out_6)
+   (= e.2/grade _min_out_6)
    [:group-by
     [s.1/name
      s.1/id
      e.2/sid
      e.2/course
      e.2/grade
-     xt$row_number_0
-     {xt$min_out_6 (min e2.4/grade)}]
+     _row_number_0
+     {_min_out_6 (min e2.4/grade)}]
     [:left-outer-join
      [{s.1/id e2.4/sid}]
      [:map
-      [{xt$row_number_0 (row-number)}]
+      [{_row_number_0 (row-number)}]
       [:mega-join
        [{s.1/id e.2/sid}]
        [[:rename s.1 [:scan {:table students} [name id]]]

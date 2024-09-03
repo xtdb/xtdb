@@ -56,7 +56,7 @@
                   "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -190,7 +190,7 @@
                   },
                   "children" : [ ]
                 },{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -216,7 +216,7 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -225,7 +225,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -296,7 +296,7 @@
                 "count" : 2,
                 "VALIDITY" : [1,1],
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "count" : 2,
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,22,44],
@@ -396,7 +396,7 @@
                   "VALIDITY" : [1,1],
                   "DATA" : [24.81,4.93]
                 },{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "count" : 2,
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,18,36],
@@ -415,12 +415,12 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "count" : 4,
             "VALIDITY" : [0,0,0,0],
             "DATA" : [0,0,0,0]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "count" : 4,
             "VALIDITY" : [0,0,0,0],
             "DATA" : [0,0,0,0]

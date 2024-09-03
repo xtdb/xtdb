@@ -13,12 +13,12 @@
    [shipping.7/supp_nation
     shipping.7/cust_nation
     shipping.7/l_year
-    {revenue xt$sum_out_8}]
+    {revenue _sum_out_8}]
    [:group-by
     [shipping.7/supp_nation
      shipping.7/cust_nation
      shipping.7/l_year
-     {xt$sum_out_8 (sum shipping.7/volume)}]
+     {_sum_out_8 (sum shipping.7/volume)}]
     [:rename
      shipping.7
      [:project

@@ -31,16 +31,16 @@
 (def ^:dynamic *ignore-signal-block?* false)
 
 (defn- ->reader->copier [^Relation data-wtr]
-  (let [iid-wtr (.get data-wtr "xt$iid")
-        sf-wtr (.get data-wtr "xt$system_from")
-        vf-wtr (.get data-wtr "xt$valid_from")
-        vt-wtr (.get data-wtr "xt$valid_to")
+  (let [iid-wtr (.get data-wtr "_iid")
+        sf-wtr (.get data-wtr "_system_from")
+        vf-wtr (.get data-wtr "_valid_from")
+        vt-wtr (.get data-wtr "_valid_to")
         op-wtr (.get data-wtr "op")]
     (fn reader->copier [^RelationReader data-rdr]
-      (let [iid-copier (-> (.get data-rdr "xt$iid") (.rowCopier iid-wtr))
-            sf-copier (-> (.get data-rdr "xt$system_from") (.rowCopier sf-wtr))
-            vf-copier (-> (.get data-rdr "xt$valid_from") (.rowCopier vf-wtr))
-            vt-copier (-> (.get data-rdr "xt$valid_to") (.rowCopier vt-wtr))
+      (let [iid-copier (-> (.get data-rdr "_iid") (.rowCopier iid-wtr))
+            sf-copier (-> (.get data-rdr "_system_from") (.rowCopier sf-wtr))
+            vf-copier (-> (.get data-rdr "_valid_from") (.rowCopier vf-wtr))
+            vt-copier (-> (.get data-rdr "_valid_to") (.rowCopier vt-wtr))
             op-copier (-> (.get data-rdr "op") (.rowCopier op-wtr))]
         (reify RowCopier
           (copyRow [_ ev-idx]
@@ -112,7 +112,7 @@
 
 (defn open-recency-wtr ^xtdb.arrow.Vector [allocator]
   (Vector/fromField allocator
-                    (Field. "xt$recency"
+                    (Field. "_recency"
                             (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])
                             nil)))
 
@@ -193,9 +193,9 @@
              ^longs !compacted-rows-above (trie/path-array (inc level))]
         (if (zero? level)
           (when-let [job (l0->l1-compaction-job level-grouped-file-names opts)]
-            (.add !compaction-jobs job)
+            (.add !compaction-jobs job))
             ;; exit `loop`
-            )
+
 
           (let [!compacted-rows (trie/rows-covered-below !compacted-rows-above)
                 lvl-trie-keys (cond->> (get level-grouped-file-names level)

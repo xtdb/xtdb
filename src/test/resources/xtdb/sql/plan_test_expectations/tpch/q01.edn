@@ -15,31 +15,31 @@
   [:project
    [l.1/l_returnflag
     l.1/l_linestatus
-    {sum_qty xt$sum_out_2}
-    {sum_base_price xt$sum_out_3}
-    {sum_disc_price xt$sum_out_4}
-    {sum_charge xt$sum_out_6}
-    {avg_qty xt$avg_out_8}
-    {avg_price xt$avg_out_9}
-    {avg_disc xt$avg_out_10}
-    {count_order xt$row_count_11}]
+    {sum_qty _sum_out_2}
+    {sum_base_price _sum_out_3}
+    {sum_disc_price _sum_out_4}
+    {sum_charge _sum_out_6}
+    {avg_qty _avg_out_8}
+    {avg_price _avg_out_9}
+    {avg_disc _avg_out_10}
+    {count_order _row_count_11}]
    [:group-by
     [l.1/l_returnflag
      l.1/l_linestatus
-     {xt$sum_out_2 (sum l.1/l_quantity)}
-     {xt$avg_out_10 (avg l.1/l_discount)}
-     {xt$sum_out_4 (sum xt$sum_in_5)}
-     {xt$sum_out_3 (sum l.1/l_extendedprice)}
-     {xt$row_count_11 (row-count)}
-     {xt$avg_out_8 (avg l.1/l_quantity)}
-     {xt$avg_out_9 (avg l.1/l_extendedprice)}
-     {xt$sum_out_6 (sum xt$sum_in_7)}]
+     {_avg_out_10 (avg l.1/l_discount)}
+     {_avg_out_8 (avg l.1/l_quantity)}
+     {_row_count_11 (row-count)}
+     {_sum_out_6 (sum _sum_in_7)}
+     {_sum_out_4 (sum _sum_in_5)}
+     {_sum_out_2 (sum l.1/l_quantity)}
+     {_sum_out_3 (sum l.1/l_extendedprice)}
+     {_avg_out_9 (avg l.1/l_extendedprice)}]
     [:map
-     [{xt$sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}
-      {xt$sum_in_7
+     [{_sum_in_7
        (*
         (* l.1/l_extendedprice (- 1 l.1/l_discount))
-        (+ 1 l.1/l_tax))}]
+        (+ 1 l.1/l_tax))}
+      {_sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
      [:rename
       l.1
       [:scan

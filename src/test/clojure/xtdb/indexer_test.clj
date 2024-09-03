@@ -75,7 +75,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4621)
+  4605)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
@@ -129,11 +129,11 @@
                 (.load (VectorLoader. metadata-batch) record-batch)
                 (t/is (= 2 (.getRowCount metadata-batch)))
                 (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
-                                     (.rowIndex "xt$id" -1))]
-                  (t/is (= "xt$id" (-> (vr/vec->reader (.getVector metadata-batch "columns"))
-                                       (.listElementReader)
-                                       (.structKeyReader "col-name")
-                                       (.getObject id-col-idx))))
+                                     (.rowIndex "_id" -1))]
+                  (t/is (= "_id" (-> (vr/vec->reader (.getVector metadata-batch "columns"))
+                                     (.listElementReader)
+                                     (.structKeyReader "col-name")
+                                     (.getObject id-col-idx))))
                   (let [^StructVector cols-data-vec (-> ^ListVector (.getVector metadata-batch "columns")
                                                         (.getDataVector))
                         ^StructVector utf8-type-vec (-> cols-data-vec
@@ -172,9 +172,9 @@
                  :xt/valid-from (time/->zdt tt)
                  :xt/system-from (time/->zdt tt)}]
                (tu/query-ra '[:scan {:table xt_docs}
-                              [xt$id version
-                               xt$valid_from, xt$valid_to
-                               xt$system_from, xt$system_to]]
+                              [_id version
+                               _valid_from, _valid_to
+                               _system_from, _system_to]]
                             {:node node})))
 
       (let [tx1 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
@@ -193,18 +193,18 @@
                  (set (tu/query-ra '[:scan {:table xt_docs,
                                             :for-system-time :all-time,
                                             :for-valid-time :all-time}
-                                     [xt$id version
-                                      xt$valid_from, xt$valid_to
-                                      xt$system_from, xt$system_to]]
+                                     [_id version
+                                      _valid_from, _valid_to
+                                      _system_from, _system_to]]
                                    {:node node}))))
 
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (time/->zdt tt)
                    :xt/system-from (time/->zdt tt)}]
                  (tu/query-ra '[:scan {:table xt_docs}
-                                [xt$id version
-                                 xt$valid_from, xt$valid_to
-                                 xt$system_from, xt$system_to]]
+                                [_id version
+                                 _valid_from, _valid_to
+                                 _system_from, _system_to]]
                               {:node node, :basis {:at-tx tx}}))
               "re-using the original tx basis should see the same result")))))
 
@@ -259,11 +259,11 @@
                        (.resolve node-dir "objects"))
 
         (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
-          (t/is (= (types/->field "xt$id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
+          (t/is (= (types/->field "_id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
                                   (types/col-type->field :utf8)
                                   (types/col-type->field :keyword)
                                   (types/col-type->field :i64))
-                   (.columnField mm "xt_docs" "xt$id")))
+                   (.columnField mm "xt_docs" "_id")))
 
           (t/is (= (types/->field "list" #xt.arrow/type :list true
                                   (types/->field "$data$" #xt.arrow/type :union false
@@ -453,7 +453,7 @@
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))
 
                 (t/is (= :utf8
-                         (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
+                         (types/field->col-type (.columnField mm "device_readings" "_id"))))
 
                 (let [second-half-tx-key (reduce
                                           (fn [_ tx-ops]
@@ -476,7 +476,7 @@
                                 (:tx-id second-half-tx-key)))
 
                       (t/is (= :utf8
-                               (types/field->col-type (.columnField mm "device_info" "xt$id"))))
+                               (types/field->col-type (.columnField mm "device_info" "_id"))))
 
                       (t/is (= second-half-tx-key (-> second-half-tx-key (tu/then-await-tx node3 (Duration/ofSeconds 15)))))
                       (t/is (= second-half-tx-key (tu/latest-completed-tx node3)))
@@ -493,7 +493,7 @@
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00-.+.arrow" %) objs)))))
 
                       (t/is (= :utf8
-                               (types/field->col-type (.columnField mm "device_info" "xt$id")))))))))))))))
+                               (types/field->col-type (.columnField mm "device_info" "_id")))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")

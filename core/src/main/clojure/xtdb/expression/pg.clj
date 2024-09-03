@@ -20,7 +20,7 @@
 
 (defn find-matching-table-name [schema tn]
   (let [namespaced-schema (merge info-schema/table-info
-                                 {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
+                                 {'xt/txs #{"_id" "committed" "error" "system_time"}}
                                  (info-schema/namespace-public-tables schema))]
     (some #(when (contains? namespaced-schema %) %) (symbol-table-names tn))))
 
@@ -39,7 +39,7 @@
 
 (defn ->oid->table [schema]
   (->> (merge info-schema/table-info
-              {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
+              {'xt/txs #{"_id" "committed" "error" "system_time"}}
               (info-schema/namespace-public-tables schema))
        (keys)
        (map #(MapEntry. (table->oid %) %))

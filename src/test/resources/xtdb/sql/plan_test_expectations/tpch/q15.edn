@@ -13,7 +13,7 @@
     s.4/s_phone
     revenue.5/total_revenue]
    [:select
-    (= revenue.5/total_revenue xt$sq_6)
+    (= revenue.5/total_revenue _sq_6)
     [:single-join
      []
      [:mega-join
@@ -24,11 +24,11 @@
        [:rename
         revenue.5
         [:project
-         [{supplier_no l.1/l_suppkey} {total_revenue xt$sum_out_2}]
+         [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]
          [:group-by
-          [l.1/l_suppkey {xt$sum_out_2 (sum xt$sum_in_3)}]
+          [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]
           [:map
-           [{xt$sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
+           [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
            [:rename
             l.1
             [:scan
@@ -45,17 +45,17 @@
               l_suppkey
               l_extendedprice]]]]]]]]]
      [:project
-      [{xt$sq_6 xt$max_out_8}]
+      [{_sq_6 _max_out_8}]
       [:group-by
-       [{xt$max_out_8 (max revenue.7/total_revenue)}]
+       [{_max_out_8 (max revenue.7/total_revenue)}]
        [:rename
         revenue.7
         [:project
-         [{supplier_no l.1/l_suppkey} {total_revenue xt$sum_out_2}]
+         [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]
          [:group-by
-          [l.1/l_suppkey {xt$sum_out_2 (sum xt$sum_in_3)}]
+          [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]
           [:map
-           [{xt$sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
+           [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
            [:rename
             l.1
             [:scan

@@ -1,7 +1,7 @@
 [:project
  [{country customers.1/country} {custno customers.1/custno}]
  [:map
-  [{xt$sq_2 true}]
+  [{_sq_2 true}]
   [:semi-join
    [{customers.1/custno custno}]
    [:rename

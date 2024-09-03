@@ -26,7 +26,7 @@ class XtdbClientTest {
 
     @Test
     fun `test executeTx returning transaction result 3491`() {
-        val res = client.executeTx(sql("INSERT INTO foo (xt\$id) VALUES ('jms')"))
+        val res = client.executeTx(sql("INSERT INTO foo (_id) VALUES ('jms')"))
         assertInstanceOf(TransactionResult::class.java , res)
     }
 }

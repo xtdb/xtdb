@@ -103,7 +103,7 @@
 
   (execute-tx [this tx-ops opts]
     (let [{:keys [tx-id] :as tx-key} (xtp/submit-tx this tx-ops opts)]
-      (with-open [res (xtp/open-sql-query this "SELECT committed AS \"committed?\", error FROM xt.txs WHERE xt$id = ?"
+      (with-open [res (xtp/open-sql-query this "SELECT committed AS \"committed?\", error FROM xt.txs WHERE _id = ?"
                                           {:args [tx-id]
                                            :key-fn #xt/key-fn :kebab-case-keyword})]
         (let [{:keys [committed? error]} (-> (.findFirst res) (.orElse nil))]

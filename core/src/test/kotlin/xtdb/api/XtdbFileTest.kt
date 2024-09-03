@@ -35,13 +35,13 @@ internal class XtdbFileTest {
 
         // can use the created node
         assertDoesNotThrow {
-            node.submitTx(sql("INSERT INTO foo (xt\$id) VALUES ('jms')"))
+            node.submitTx(sql("INSERT INTO foo (_id) VALUES ('jms')"))
         }
 
         assertEquals(
             listOf(mapOf("id" to "jms")),
 
-            node.openQuery("SELECT xt\$id AS id FROM foo").toList()
+            node.openQuery("SELECT _id AS id FROM foo").toList()
         )
 
         File("/tmp/test-storage").deleteRecursively()

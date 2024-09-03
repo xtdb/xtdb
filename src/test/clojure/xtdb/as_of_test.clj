@@ -40,9 +40,9 @@
                                   :xt/valid-from (time/->zdt #inst "2021")
                                   :xt/system-from system-time}}
              (->> (tu/query-ra '[:scan {:table docs}
-                                 [xt$id
-                                  xt$valid_from xt$valid_to
-                                  xt$system_from xt$system_to]]
+                                 [_id
+                                  _valid_from _valid_to
+                                  _system_from _system_to]]
                                {:node tu/*node*})
                   (into {} (map (juxt :xt/id identity))))))))
 

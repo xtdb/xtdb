@@ -116,7 +116,7 @@ SELECT * FROM xt.txs;
 +
 [source,text]
 ----
- _id  | committed |            error              |            tx_time
+ _id  | committed |            error              |          system_time
 ------+-----------+-------------------------------+-------------------------------
     0 | t         | null                          | "2024-06-25T16:45:16.492255Z"
     1 | t         | null                          | "2024-06-25T16:45:26.985539Z"

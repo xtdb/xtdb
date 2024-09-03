@@ -130,12 +130,12 @@
                               (map (comp bucket->page-idx first)))
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          literal-selector (expr.meta/->metadata-selector '(and (< xt$id 11) (> xt$id 9)) '{xt$id :i64} vw/empty-params)
+          literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-params)
           meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
       (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
         (let [page-idx-pred (.build literal-selector table-metadata)]
 
-          (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}
+          (t/is (= #{"_iid" "_valid_to" "_valid_from" "_id" "_system_from"}
                    (.columnNames table-metadata)))
 
           (doseq [page-idx relevant-pages]
@@ -164,7 +164,7 @@
 
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
       (let [page-idx-pred (.build true-selector table-metadata)]
-        (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "xt$valid_from" "xt$valid_to" "boolean_or_int"}
+        (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "boolean_or_int"}
                  (.columnNames table-metadata)))
 
         (t/is (true? (.test page-idx-pred 0)))))))
@@ -186,5 +186,5 @@
 
                          (.resolve node-dir (str "objects/" bp/version "/tables/")))
 
-          (t/is (= #{"xt$iid" "xt$id" "xt$system_from" "xt$valid_from" "xt$valid_to" "colours" "$data$"}
+          (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "$data$"}
                    (.columnNames table-metadata))))))))

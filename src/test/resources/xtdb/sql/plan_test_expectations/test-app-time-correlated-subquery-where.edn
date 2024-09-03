@@ -6,14 +6,14 @@
    :single-join
    {x1 ?x8, x2 ?x9}
    [:rename
-    {xt$valid_from x1, xt$valid_to x2}
-    [:scan {:table bar} [xt$valid_from xt$valid_to]]]
+    {_valid_from x1, _valid_to x2}
+    [:scan {:table bar} [_valid_from _valid_to]]]
    [:project
     [x4]
     [:rename
-     {name x4, xt$valid_from x5, xt$valid_to x6}
+     {name x4, _valid_from x5, _valid_to x6}
      [:scan
       {:table foo}
       [name
-       {xt$valid_from (< xt$valid_from ?x9)}
-       {xt$valid_to (> xt$valid_to ?x8)}]]]]]]]
+       {_valid_from (< _valid_from ?x9)}
+       {_valid_to (> _valid_to ?x8)}]]]]]]]

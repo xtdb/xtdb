@@ -44,12 +44,12 @@
   (let [!cache (atom {})
         plan-stmt plan/plan-statement]
 
-    ;; we remove xt$id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
+    ;; we remove _id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
     (with-redefs [plan/plan-statement (fn self
                                         ([sql] (self sql {}))
                                         ([sql opts]
                                          (let [plan (plan-stmt sql (cond-> opts
-                                                                     (not direct-sql) (update :table-info update-vals #(disj % "xt$id"))))]
+                                                                     (not direct-sql) (update :table-info update-vals #(disj % "_id"))))]
                                            (swap! !cache assoc sql plan)
                                            plan)))]
       (let [res (xt/q node sql-statement

@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "nullable" : false,
       "type" : {
         "name" : "fixedsizebinary",
@@ -9,7 +9,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -18,7 +18,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -27,7 +27,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -59,7 +59,7 @@
           },
           "children" : [ ]
         },{
-          "name" : "xt$id",
+          "name" : "_id",
           "nullable" : false,
           "type" : {
             "name" : "UuidType"
@@ -93,22 +93,22 @@
   "batches" : [{
     "count" : 3,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [1578009600000000,1577923200000000,1577836800000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [-9223372036854775808,1672531200000000,1577836800000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [9223372036854775807,1704067200000000,9223372036854775807]
@@ -127,7 +127,7 @@
           "VALIDITY" : [1,1],
           "DATA" : ["3","2"]
         },{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]

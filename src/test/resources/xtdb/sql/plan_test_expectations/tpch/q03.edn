@@ -10,16 +10,16 @@
     [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]
    [:project
     [l.3/l_orderkey
-     {revenue xt$sum_out_4}
+     {revenue _sum_out_4}
      o.2/o_orderdate
      o.2/o_shippriority]
     [:group-by
      [l.3/l_orderkey
       o.2/o_orderdate
       o.2/o_shippriority
-      {xt$sum_out_4 (sum xt$sum_in_5)}]
+      {_sum_out_4 (sum _sum_in_5)}]
      [:map
-      [{xt$sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
+      [{_sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
       [:mega-join
        [{o.2/o_orderkey l.3/l_orderkey} {c.1/c_custkey o.2/o_custkey}]
        [[:rename

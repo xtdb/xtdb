@@ -336,14 +336,14 @@
                         (.listElementReader)
                         (.structKeyReader "bloom"))]
 
-      (when-let [bloom-vec-idx (.get page-idx-cache (PageIndexKey. "xt$iid" page-idx))]
+      (when-let [bloom-vec-idx (.get page-idx-cache (PageIndexKey. "_iid" page-idx))]
         (when (.getObject bloom-rdr bloom-vec-idx)
           (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
 
   (temporalBounds[_ page-idx]
-    (let [^long system-from-idx (.get page-idx-cache (PageIndexKey. "xt$system_from" page-idx))
-          ^long valid-from-idx (.get page-idx-cache (PageIndexKey. "xt$valid_from" page-idx))
-          ^long valid-to-idx (.get page-idx-cache (PageIndexKey. "xt$valid_to" page-idx))]
+    (let [^long system-from-idx (.get page-idx-cache (PageIndexKey. "_system_from" page-idx))
+          ^long valid-from-idx (.get page-idx-cache (PageIndexKey. "_valid_from" page-idx))
+          ^long valid-to-idx (.get page-idx-cache (PageIndexKey. "_valid_to" page-idx))]
       (TemporalBounds. (TemporalDimension. (.getLong min-rdr valid-from-idx) (.getLong max-rdr valid-to-idx))
                        (TemporalDimension. (.getLong min-rdr system-from-idx) Long/MAX_VALUE))))
 

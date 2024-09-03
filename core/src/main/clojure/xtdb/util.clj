@@ -572,9 +572,6 @@
 (defn str->normal-form-str ^String [^String s]
   (NormalForm/normalForm s))
 
-(defn underscore-form->xt-form ^String [^String s]
-  (str/replace s #"^_" "xt\\$"))
-
 (defn ->normal-form-str ^String [k]
   (-> k
       (cond-> (keyword? k) (-> symbol str)

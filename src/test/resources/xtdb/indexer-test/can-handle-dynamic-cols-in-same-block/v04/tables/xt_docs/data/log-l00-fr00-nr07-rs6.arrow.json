@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "nullable" : false,
       "type" : {
         "name" : "fixedsizebinary",
@@ -9,7 +9,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -18,7 +18,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -27,7 +27,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -96,7 +96,7 @@
             "children" : [ ]
           }]
         },{
-          "name" : "xt$id",
+          "name" : "_id",
           "nullable" : false,
           "type" : {
             "name" : "union",
@@ -202,22 +202,22 @@
   "batches" : [{
     "count" : 6,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : ["55bfc78e47207dc5125af00a5f52d66c","64b0cf833d08d23b08185c18bb7a0ef2","9e3f856e68998313827ff18dd4d88e78","bfc55eb61f526d86de90b2bb2e648a89","d9c7fae2a04e047164936265ba33cf80","fbfa9e45ee9bd2f827b8dde9e41d3814"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
@@ -264,7 +264,7 @@
             "DATA" : ["","","","","","c"]
           }]
         },{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 6,
           "TYPE_ID" : [1,1,0,2,0,2],
           "OFFSET" : [0,1,0,0,1,1],

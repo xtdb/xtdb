@@ -1,7 +1,7 @@
 [:project
- [{xt$column_1 xt$column_1}]
+ [{_column_1 _column_1}]
  [:order-by
-  [[xt$ob2 {:direction :asc, :null-ordering :nulls-last}]]
+  [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [{xt$column_1 (= si.1/year "foo")} {xt$ob2 (= si.1/year "foo")}]
+   [{_column_1 (= si.1/year "foo")} {_ob2 (= si.1/year "foo")}]
    [:rename si.1 [:scan {:table stars_in} [year]]]]]]

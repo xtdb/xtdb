@@ -26,7 +26,7 @@ import TabCssFix from '@components/tabcssfix.astro';
     <Fiddle magicContext="my-context">
       <Txs systemTime="2024-01-01"
 	   txs="INSERT INTO people (_id, name) VALUES (6, 'fred')" />
-      <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+      <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
     </Fiddle>
   </div>
   <Card slot="2">
@@ -110,7 +110,7 @@ SET info = {contact: [{loc: 'home',
                        tel: '456',
                        registered: DATE '2024-01-01'}]}
   WHERE people.name = 'fred'`}/>
-    <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+    <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
   </Fiddle>
   <Card slot="2">
 ```sql
@@ -160,7 +160,7 @@ SELECT * FROM information_schema.columns`} />
 user=> SELECT * FROM information_schema.columns;
  column_name |                                                                  data_type                                                                  | table_catalog | table_name | table_schema
 -------------+---------------------------------------------------------------------------------------------------------------------------------------------+---------------+------------+--------------
- tx_time     | [:timestamp-tz :micro "UTC"]                                                                                                                | xtdb          | txs        | xt
+ system_time | [:timestamp-tz :micro "UTC"]                                                                                                                | xtdb          | txs        | xt
  committed   | :bool                                                                                                                                       | xtdb          | txs        | xt
  _id         | :i64                                                                                                                                        | xtdb          | txs        | xt
  error       | [:union #{:null :transit}]                                                                                                                  | xtdb          | txs        | xt
@@ -184,17 +184,17 @@ A key distinction between interacting with Postgres and interacting with XTDB (e
 1. forces all writes to be fully serialized into a single, system-wide log of durably-recorded transactions and, consequently,
 2. precludes the use of 'interactive transactions' (i.e. clients can't run queries in the middle of multi-statement transactions)
 
-The complete transaction log history is permanently stored within the system-maintained `_txs` table:
+The complete transaction log history is permanently stored within the system-maintained `xt.txs` table:
 
 <TabbedExample>
   <Fiddle magicContext="my-context" slot="1">
     <Query q={`
-SELECT * FROM _txs ORDER BY _id DESC LIMIT 20 -- "recent transactions"`} />
+SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20 -- "recent transactions"`} />
   </Fiddle>
   <Card slot="2">
 ```sql
-user=> SELECT * FROM _txs ORDER BY _id DESC LIMIT 20;
- _id  | committed | error |            tx_time
+user=> SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20;
+ _id  | committed | error |         system_time
 ------+-----------+-------+-------------------------------
  2722 | t         |       | 2024-07-15T12:43:27.345281Z
  1341 | t         |       | 2024-07-15T12:38:12.750543Z
@@ -277,7 +277,7 @@ SELECT * FROM PEOPLE`} />
   <Card slot="2">
     <Aside type="caution">The timestamp shown here is for illustration only, you should refer to the output of your recent transactions query for a suitable timestamp.
 When querying against a real XTDB node (like you are), XTDB sets the `SYSTEM_TIME` of `INSERT`/`UPDATE`s to the current time.
-Therefore in the below query you must substitute the date for dates relative to what you see in the `_txs` table.</Aside>
+Therefore in the below query you must substitute the date for dates relative to what you see in the `xt.txs` table.</Aside>
 ```sql
 user=> SETTING DEFAULT SYSTEM_TIME TO AS OF TIMESTAMP '2024-07-15T12:37:00'
 SELECT * FROM PEOPLE;

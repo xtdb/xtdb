@@ -5,17 +5,17 @@
    [c_orders.5/c_count
     {:direction :desc, :null-ordering :nulls-first}]]
   [:project
-   [c_orders.5/c_count {custdist xt$row_count_6}]
+   [c_orders.5/c_count {custdist _row_count_6}]
    [:group-by
-    [c_orders.5/c_count {xt$row_count_6 (row-count)}]
+    [c_orders.5/c_count {_row_count_6 (row-count)}]
     [:rename
      c_orders.5
      [:rename
-      {c.1/c_custkey c_custkey, xt$column_2 c_count}
+      {c.1/c_custkey c_custkey, _column_2 c_count}
       [:project
-       [c.1/c_custkey {xt$column_2 xt$count_out_3}]
+       [c.1/c_custkey {_column_2 _count_out_3}]
        [:group-by
-        [c.1/c_custkey {xt$count_out_3 (count o.2/o_orderkey)}]
+        [c.1/c_custkey {_count_out_3 (count o.2/o_orderkey)}]
         [:left-outer-join
          [{c.1/c_custkey o.2/o_custkey}
           (not (like o.2/o_comment "%special%requests%"))]

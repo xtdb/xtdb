@@ -1,9 +1,9 @@
 [:project
- [{revenue xt$sum_out_15}]
+ [{revenue _sum_out_15}]
  [:group-by
-  [{xt$sum_out_15 (sum xt$sum_in_16)}]
+  [{_sum_out_15 (sum _sum_in_16)}]
   [:map
-   [{xt$sum_in_16 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
+   [{_sum_in_16 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
    [:select
     (or
      (or
@@ -12,46 +12,46 @@
         (and
          (and
           (and
-           (and (= p.2/p_brand "Brand#12") xt$sq_3)
+           (and (= p.2/p_brand "Brand#12") _sq_3)
            (>= l.1/l_quantity 1))
           (<= l.1/l_quantity (+ 1 10)))
          (between p.2/p_size 1 5))
-        xt$sq_5)
+        _sq_5)
        (= l.1/l_shipinstruct "DELIVER IN PERSON"))
       (and
        (and
         (and
          (and
           (and
-           (and (= p.2/p_brand "Brand#23") xt$sq_7)
+           (and (= p.2/p_brand "Brand#23") _sq_7)
            (>= l.1/l_quantity 10))
           (<= l.1/l_quantity (+ 10 10)))
          (between p.2/p_size 1 10))
-        xt$sq_9)
+        _sq_9)
        (= l.1/l_shipinstruct "DELIVER IN PERSON")))
      (and
       (and
        (and
         (and
          (and
-          (and (= p.2/p_brand "Brand#34") xt$sq_11)
+          (and (= p.2/p_brand "Brand#34") _sq_11)
           (>= l.1/l_quantity 20))
          (<= l.1/l_quantity (+ 20 10)))
         (between p.2/p_size 1 15))
-       xt$sq_13)
+       _sq_13)
       (= l.1/l_shipinstruct "DELIVER IN PERSON")))
     [:mark-join
-     {xt$sq_9 [{l.1/l_shipmode xt.values.10/xt$column_1}]}
+     {_sq_13 [{l.1/l_shipmode xt.values.14/_column_1}]}
      [:mark-join
-      {xt$sq_3 [{p.2/p_container xt.values.4/xt$column_1}]}
+      {_sq_11 [{p.2/p_container xt.values.12/_column_1}]}
       [:mark-join
-       {xt$sq_13 [{l.1/l_shipmode xt.values.14/xt$column_1}]}
+       {_sq_5 [{l.1/l_shipmode xt.values.6/_column_1}]}
        [:mark-join
-        {xt$sq_5 [{l.1/l_shipmode xt.values.6/xt$column_1}]}
+        {_sq_3 [{p.2/p_container xt.values.4/_column_1}]}
         [:mark-join
-         {xt$sq_11 [{p.2/p_container xt.values.12/xt$column_1}]}
+         {_sq_7 [{p.2/p_container xt.values.8/_column_1}]}
          [:mark-join
-          {xt$sq_7 [{p.2/p_container xt.values.8/xt$column_1}]}
+          {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}
           [:mega-join
            [{l.1/l_partkey p.2/p_partkey}]
            [[:rename
@@ -70,41 +70,41 @@
               {:table part}
               [p_partkey p_brand p_size p_container]]]]]
           [:rename
-           xt.values.8
+           xt.values.10
            [:table
-            [xt$column_1]
-            [{:xt$column_1 "MED BAG"}
-             {:xt$column_1 "MED BOX"}
-             {:xt$column_1 "MED PKG"}
-             {:xt$column_1 "MED PACK"}]]]]
+            [_column_1]
+            [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]]]]
          [:rename
-          xt.values.12
+          xt.values.8
           [:table
-           [xt$column_1]
-           [{:xt$column_1 "LG CASE"}
-            {:xt$column_1 "LG BOX"}
-            {:xt$column_1 "LG PACK"}
-            {:xt$column_1 "LG PKG"}]]]]
+           [_column_1]
+           [{:_column_1 "MED BAG"}
+            {:_column_1 "MED BOX"}
+            {:_column_1 "MED PKG"}
+            {:_column_1 "MED PACK"}]]]]
         [:rename
-         xt.values.6
+         xt.values.4
          [:table
-          [xt$column_1]
-          [{:xt$column_1 "AIR"} {:xt$column_1 "AIR REG"}]]]]
+          [_column_1]
+          [{:_column_1 "SM CASE"}
+           {:_column_1 "SM BOX"}
+           {:_column_1 "SM PACK"}
+           {:_column_1 "SM PKG"}]]]]
        [:rename
-        xt.values.14
+        xt.values.6
         [:table
-         [xt$column_1]
-         [{:xt$column_1 "AIR"} {:xt$column_1 "AIR REG"}]]]]
+         [_column_1]
+         [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]]]]
       [:rename
-       xt.values.4
+       xt.values.12
        [:table
-        [xt$column_1]
-        [{:xt$column_1 "SM CASE"}
-         {:xt$column_1 "SM BOX"}
-         {:xt$column_1 "SM PACK"}
-         {:xt$column_1 "SM PKG"}]]]]
+        [_column_1]
+        [{:_column_1 "LG CASE"}
+         {:_column_1 "LG BOX"}
+         {:_column_1 "LG PACK"}
+         {:_column_1 "LG PKG"}]]]]
      [:rename
-      xt.values.10
+      xt.values.14
       [:table
-       [xt$column_1]
-       [{:xt$column_1 "AIR"} {:xt$column_1 "AIR REG"}]]]]]]]]
+       [_column_1]
+       [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]]]]]]]]

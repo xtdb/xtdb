@@ -366,8 +366,8 @@
               "name" : "col-name",
               "count" : 11,
               "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1],
-              "OFFSET" : [0,14,27,38,44,45,46,47,53,58,64,68],
-              "DATA" : ["xt$system_from","xt$valid_from","xt$valid_to","xt$iid","a","b","c","struct","xt$id","$data$","list"]
+              "OFFSET" : [0,12,23,32,36,37,38,39,45,48,54,58],
+              "DATA" : ["_system_from","_valid_from","_valid_to","_iid","a","b","c","struct","_id","$data$","list"]
             },{
               "name" : "root-col?",
               "count" : 11,

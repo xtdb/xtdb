@@ -14,7 +14,7 @@
    [:project
     [c.1/c_custkey
      c.1/c_name
-     {revenue xt$sum_out_5}
+     {revenue _sum_out_5}
      c.1/c_acctbal
      n.4/n_name
      c.1/c_address
@@ -28,9 +28,9 @@
       c.1/c_phone
       c.1/c_name
       c.1/c_address
-      {xt$sum_out_5 (sum xt$sum_in_6)}]
+      {_sum_out_5 (sum _sum_in_6)}]
      [:map
-      [{xt$sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
+      [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
       [:mega-join
        [{c.1/c_nationkey n.4/n_nationkey}
         {o.2/o_orderkey l.3/l_orderkey}

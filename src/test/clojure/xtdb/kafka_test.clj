@@ -15,7 +15,7 @@
                (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))
 
       (t/is (= [{:xt/id :foo}]
-               (tu/query-ra '[:scan {:table xt_docs} [xt$id]]
+               (tu/query-ra '[:scan {:table xt_docs} [_id]]
                             {:node node}))))))
 
 (t/deftest ^:requires-docker ^:kafka test-kafka-setup-with-provided-opts

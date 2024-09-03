@@ -1,10 +1,10 @@
 [:project
- [{xt$column_1 xt$sq_2}]
+ [{_column_1 _sq_2}]
  [:single-join
   []
   [:rename t2.1 [:scan {:table t2} []]]
   [:project
-   [{xt$sq_2 4}]
+   [{_sq_2 4}]
    [:rename
     t1.3
     [:scan

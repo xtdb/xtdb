@@ -3,11 +3,11 @@
  [:order-by
   [[revenue {:direction :desc, :null-ordering :nulls-first}]]
   [:project
-   [n.5/n_name {revenue xt$sum_out_7}]
+   [n.5/n_name {revenue _sum_out_7}]
    [:group-by
-    [n.5/n_name {xt$sum_out_7 (sum xt$sum_in_8)}]
+    [n.5/n_name {_sum_out_7 (sum _sum_in_8)}]
     [:map
-     [{xt$sum_in_8 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
+     [{_sum_in_8 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
      [:mega-join
       [{n.5/n_regionkey r.6/r_regionkey}
        {s.4/s_nationkey n.5/n_nationkey}

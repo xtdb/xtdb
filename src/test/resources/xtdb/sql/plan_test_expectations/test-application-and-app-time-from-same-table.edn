@@ -3,7 +3,7 @@
  [:project
   [x1]
   [:rename
-   {name x1, xt$valid_from x2, xt$valid_to x3}
+   {name x1, _valid_from x2, _valid_to x3}
    [:select
-    (and (< xt$valid_from xt$valid_to) (> xt$valid_to xt$valid_from))
-    [:scan {:table foo} [name xt$valid_from xt$valid_to]]]]]]
+    (and (< _valid_from _valid_to) (> _valid_to _valid_from))
+    [:scan {:table foo} [name _valid_from _valid_to]]]]]]

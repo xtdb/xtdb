@@ -1501,8 +1501,8 @@
           (plan-sql "SELECT _id AS order_id, value,
                             NEST_ONE(SELECT c.name FROM customers c WHERE c._id = o.customer_id) AS customer
                      FROM orders o"
-                    {:table-info {"orders" #{"xt$id" "value" "customer_id"}
-                                  "customers" #{"xt$id" "name"}}})))
+                    {:table-info {"orders" #{"_id" "value" "customer_id"}
+                                  "customers" #{"_id" "name"}}})))
 
   (t/is (=plan-file "test-nest-many"
           (plan-sql "SELECT c._id AS customer_id, c.name,
@@ -1511,8 +1511,8 @@
                                       WHERE o.customer_id = c._id)
                               AS orders
                      FROM customers c"
-                    {:table-info {"orders" #{"xt$id" "value" "customer_id"}
-                                  "customers" #{"xt$id" "name"}}})))
+                    {:table-info {"orders" #{"_id" "value" "customer_id"}
+                                  "customers" #{"_id" "name"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :customers {:xt/id 0, :name "bob"}]
                            [:put-docs :customers {:xt/id 1, :name "alice"}]
@@ -1744,23 +1744,23 @@
             (throw (:error (xt/execute-tx tu/*node* [[:sql sql]]))))]
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE id column"
+                            #"Cannot UPDATE _id column"
                             (f "UPDATE table SET _id = DATE '2024-01-01' WHERE _id = 1")))
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE valid_from column"
+                            #"Cannot UPDATE _valid_from column"
                             (f "UPDATE table SET _valid_from = DATE '2024-01-01' WHERE _id = 1")))
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE valid_to column"
+                            #"Cannot UPDATE _valid_to column"
                             (f "UPDATE table SET _valid_to = DATE '2024-01-01' WHERE _id = 1")))
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE system_from column"
+                            #"Cannot UPDATE _system_from column"
                             (f "UPDATE table SET _system_from = DATE '2024-01-01' WHERE _id = 1")))
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE system_to column"
+                            #"Cannot UPDATE _system_to column"
                             (f "UPDATE table SET _system_to = DATE '2024-01-01' WHERE _id = 1")))))
 
 (deftest disallow-period-specs-on-ctes-3440
@@ -1892,15 +1892,15 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
     (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO baz (bar) SELECT bar FROM foo" nil))
           "excludes insert-from-subquery"))
 
-  (t/is (= [(TxOps/putDocs "foo" [{"xt$id" 1, "v" 2}])]
+  (t/is (= [(TxOps/putDocs "foo" [{"_id" 1, "v" 2}])]
            (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2)" nil)))
 
   (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2 + 3)" nil))
         "excludes expressions")
 
-  (t/is (= [(-> (TxOps/putDocs "foo" [{"xt$id" 1} {"xt$id" 2}])
+  (t/is (= [(-> (TxOps/putDocs "foo" [{"_id" 1} {"_id" 2}])
                 (.startingFrom #xt.time/instant "2020-07-31T23:00:00Z"))
-            (-> (TxOps/putDocs "foo" [{"xt$id" 3}])
+            (-> (TxOps/putDocs "foo" [{"_id" 3}])
                 (.startingFrom #xt.time/instant "2021-01-01T00:00:00Z"))]
 
            (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
@@ -1908,9 +1908,9 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
         "groups by valid-from")
 
   (t/testing "with args"
-    (t/is (= [(-> (TxOps/putDocs "foo" [{"xt$id" 1} {"xt$id" 3}])
+    (t/is (= [(-> (TxOps/putDocs "foo" [{"_id" 1} {"_id" 3}])
                   (.startingFrom #xt.time/instant "2020-01-01T00:00:00Z"))
-              (-> (TxOps/putDocs "foo" [{"xt$id" 2} {"xt$id" 4}])
+              (-> (TxOps/putDocs "foo" [{"_id" 2} {"_id" 4}])
                   (.startingFrom #xt.time/instant "2020-01-02T00:00:00Z"))]
 
              (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"

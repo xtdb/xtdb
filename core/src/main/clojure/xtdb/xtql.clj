@@ -1,17 +1,13 @@
 (ns xtdb.xtql
   (:require [clojure.set :as set]
+            [clojure.string :as str]
             [xtdb.error :as err]
+            [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
-            [xtdb.util :as util]
-            [xtdb.expression :as expr])
+            [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null
-                           Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs
-                           Queries XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset
-                           XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline
-                           XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without
-                           TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
+           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs Queries TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
            (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -125,7 +121,7 @@
   (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
 
   Expr$SetExpr
-  (plan-expr [this] (into #{} (map plan-expr (.elements this)) ))
+  (plan-expr [this] (into #{} (map plan-expr (.elements this))))
   (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
 
   Expr$MapExpr
@@ -328,17 +324,17 @@
         expr (.getExpr bind-spec)]
     {:l var :r (plan-expr-with-subqueries expr) :required-vars (required-vars expr)}))
 
-(def app-time-period-sym 'xt$valid_time)
-(def app-time-from-sym 'xt$valid_from)
-(def app-time-to-sym 'xt$valid_to)
+(def app-time-period-sym '_valid_time)
+(def app-time-from-sym '_valid_from)
+(def app-time-to-sym '_valid_to)
 (def app-temporal-cols {:period app-time-period-sym
                         :from app-time-from-sym
                         :to app-time-to-sym})
 
 
-(def system-time-period-sym 'xt$system_time)
-(def system-time-from-sym 'xt$system_from)
-(def system-time-to-sym 'xt$system_to)
+(def system-time-period-sym '_system_time)
+(def system-time-from-sym '_system_from)
+(def system-time-to-sym '_system_to)
 (def sys-temporal-cols {:period system-time-period-sym
                         :from system-time-from-sym
                         :to system-time-to-sym})
@@ -416,7 +412,7 @@
 (defn- plan-from [^XtqlQuery$From from]
   (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec (.bindings from))
                                      (.projectAllCols from)
-                                     (concat (->> (get *table-info* (util/str->normal-form-str (.table from)))
+                                     (concat (->> (get *table-info* (.table from))
                                                   (mapv symbol)
                                                   (mapv #(hash-map :l % :r %))))))
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
@@ -425,7 +421,7 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (util/symbol->normal-form-symbol (symbol (.table from)))
+    (-> [:scan {:table (symbol (-> (.table from) (str/replace #"[\./]" "\\$")))
                 :for-valid-time (plan-temporal-filter (.forValidTime from))
                 :for-system-time (plan-temporal-filter (.forSystemTime from))}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
@@ -911,24 +907,24 @@
       util/lru-memoize))
 
 (def ^:private extra-dml-bind-specs
-  [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))
-   (Binding. "xt$valid_from" (Exprs/lVar "xt$dml$valid_from"))
-   (Binding. "xt$valid_to" (Exprs/lVar "xt$dml$valid_to"))])
+  [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))
+   (Binding. "_valid_from" (Exprs/lVar "xt$dml$valid_from"))
+   (Binding. "_valid_to" (Exprs/lVar "xt$dml$valid_to"))])
 
 (defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time]
-  [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))
+  [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))
 
    (let [vf-var (Exprs/lVar "xt$dml$valid_from")
 
          default-vf-expr (Expr$Call. "current-timestamp" [])]
 
-     (Binding. "xt$valid_from"
+     (Binding. "_valid_from"
                (Expr$Call. "cast-tstz"
                           [(if-let [vf-expr (some-> for-valid-time .getFrom)]
                              (Expr$Call. "greatest" [vf-var (Expr$Call. "coalesce" [vf-expr default-vf-expr])])
                              default-vf-expr)])))
 
-   (Binding. "xt$valid_to"
+   (Binding. "_valid_to"
              (Expr$Call. "cast-tstz"
                          [(Expr$Call. "least"
                                       [(Exprs/lVar "xt$dml$valid_to")
@@ -943,7 +939,7 @@
       [:insert {:table (.table insert-query)}
        [:project (vec (for [col provided-vars]
                         (let [col-sym (util/symbol->normal-form-symbol col)]
-                          {col-sym (if (contains? '#{xt$valid_from xt$valid_to} col-sym)
+                          {col-sym (if (contains? '#{_valid_from _valid_to} col-sym)
                                      `(~'cast-tstz ~col)
                                      col)})))
         ra-plan]]))
@@ -968,11 +964,11 @@
     (let [table-name (.table erase-query)
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (doto (.setBindings (concat (.bindSpecs erase-query)
-                                                                                                     [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))])))
+                                                                                                     [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])))
                                                                          (.build))]
                                                                     (.unifyClauses erase-query)))
 
-                                            [(XtqlQuery$Return. [(Binding. "xt$iid" (Exprs/lVar "xt$dml$iid"))])])
+                                            [(XtqlQuery$Return. [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:erase {:table table-name}
@@ -986,13 +982,13 @@
           unspecified-columns (-> (set/difference known-columns
                                                   (set (for [^Binding set-spec set-specs]
                                                          (util/str->normal-form-str (.getBinding set-spec)))))
-                                  (disj "xt$id"))
+                                  (disj "_id"))
 
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (.forValidTime (.forValidTime update-query))
                                                                          (doto (.setBindings
                                                                                 (concat (.bindSpecs update-query)
-                                                                                        [(Binding. "xt$id" (Exprs/lVar "xt$dml$id"))]
+                                                                                        [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
                                                                                         (for [^String col unspecified-columns]
                                                                                           (Binding. col (Exprs/lVar (str "xt$update$" col))))
                                                                                         extra-dml-bind-specs)))
@@ -1000,7 +996,7 @@
                                                                     (.unifyClauses update-query)))
 
                                             [(XtqlQuery$Return. (concat (dml-colspecs (.forValidTime update-query))
-                                                                        [(Binding. "xt$id" (Exprs/lVar "xt$dml$id"))]
+                                                                        [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
                                                                         (for [^String col unspecified-columns]
                                                                           (Binding. col (Exprs/lVar (str "xt$update$" col))))
                                                                         set-specs))])

@@ -1,9 +1,9 @@
 [:project
- [{some_column (= 1 xt$sq_2)}]
+ [{some_column (= 1 _sq_2)}]
  [:apply
   :single-join
-  {x.1/z ?xt$sq_z_3}
+  {x.1/z ?_sq_z_3}
   [:rename x.1 [:scan {:table x} [{y (= y 1)} z]]]
   [:project
-   [{xt$sq_2 (= foo.3/bar ?xt$sq_z_3)}]
+   [{_sq_2 (= foo.3/bar ?_sq_z_3)}]
    [:rename foo.3 [:scan {:table foo} [bar]]]]]]

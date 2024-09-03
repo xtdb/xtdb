@@ -1,7 +1,7 @@
 [:insert
  {:table customer}
  [:project
-  [{xt$id xt.values.1/xt$id}
+  [{_id xt.values.1/_id}
    {c_custkey xt.values.1/c_custkey}
    {c_name xt.values.1/c_name}
    {c_address xt.values.1/c_address}
@@ -13,7 +13,7 @@
   [:rename
    xt.values.1
    [:table
-    [xt$id
+    [_id
      c_custkey
      c_name
      c_address
@@ -24,7 +24,7 @@
      c_comment]
     [{:c_comment ?_8,
       :c_mktsegment ?_7,
-      :xt$id ?_0,
+      :_id ?_0,
       :c_name ?_2,
       :c_phone ?_5,
       :c_acctbal ?_6,

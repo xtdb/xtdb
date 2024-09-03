@@ -260,8 +260,8 @@
               "name" : "col-name",
               "count" : 7,
               "VALIDITY" : [1,1,1,1,1,1,1],
-              "OFFSET" : [0,14,27,38,44,49,55,62],
-              "DATA" : ["xt$system_from","xt$valid_from","xt$valid_to","xt$iid","xt$id","$data$","colours"]
+              "OFFSET" : [0,12,23,32,36,39,45,52],
+              "DATA" : ["_system_from","_valid_from","_valid_to","_iid","_id","$data$","colours"]
             },{
               "name" : "root-col?",
               "count" : 7,

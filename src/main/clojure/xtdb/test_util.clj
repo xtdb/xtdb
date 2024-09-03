@@ -428,10 +428,10 @@
                        aw (ArrowFileWriter. data-vsr nil write-ch)]
         (.start aw)
         (let [!last-iid (atom nil)
-              iid-wtr (.colWriter data-wtr "xt$iid")
-              system-from-wtr (.colWriter data-wtr "xt$system_from")
-              valid-from-wtr (.colWriter data-wtr "xt$valid_from")
-              valid-to-wtr (.colWriter data-wtr "xt$valid_to")
+              iid-wtr (.colWriter data-wtr "_iid")
+              system-from-wtr (.colWriter data-wtr "_system_from")
+              valid-from-wtr (.colWriter data-wtr "_valid_from")
+              valid-to-wtr (.colWriter data-wtr "_valid_to")
               op-wtr (.colWriter data-wtr "op")
               put-wtr (.legWriter op-wtr "put")
               max-page-id (-> (keys page-idx->documents) sort last)]

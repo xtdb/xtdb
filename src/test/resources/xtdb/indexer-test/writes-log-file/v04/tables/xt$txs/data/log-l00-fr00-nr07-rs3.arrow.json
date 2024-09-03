@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "nullable" : false,
       "type" : {
         "name" : "fixedsizebinary",
@@ -9,7 +9,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -18,7 +18,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -27,7 +27,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -50,7 +50,7 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "nullable" : false,
           "type" : {
             "name" : "int",
@@ -59,7 +59,7 @@
           },
           "children" : [ ]
         },{
-          "name" : "tx_time",
+          "name" : "system_time",
           "nullable" : false,
           "type" : {
             "name" : "timestamp",
@@ -109,22 +109,22 @@
   "batches" : [{
     "count" : 3,
     "columns" : [{
-      "name" : "xt$iid",
+      "name" : "_iid",
       "count" : 3,
       "VALIDITY" : [1,1,1],
-      "DATA" : ["3b5fbc9600acbb1e775b48a5327cc041","a4e167a76a05add8a8654c169b07b044","d7f5c56a8fa03508e9f9aa962058bf22"]
+      "DATA" : ["a4e167a76a05add8a8654c169b07b044","d54ff578a2e208ad42331891764702e0","f0ab765667d924a06e35383ded9cfa2a"]
     },{
-      "name" : "xt$system_from",
+      "name" : "_system_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
-      "DATA" : [1577923200000000,1577836800000000,1578009600000000]
+      "DATA" : [1577836800000000,1577923200000000,1578009600000000]
     },{
-      "name" : "xt$valid_from",
+      "name" : "_valid_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
-      "DATA" : [1577923200000000,1577836800000000,1578009600000000]
+      "DATA" : [1577836800000000,1577923200000000,1578009600000000]
     },{
-      "name" : "xt$valid_to",
+      "name" : "_valid_to",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
@@ -138,26 +138,26 @@
         "count" : 3,
         "VALIDITY" : [1,1,1],
         "children" : [{
-          "name" : "xt$id",
+          "name" : "_id",
           "count" : 3,
           "VALIDITY" : [1,1,1],
-          "DATA" : ["1917","0","3770"]
+          "DATA" : ["0","1909","3746"]
         },{
-          "name" : "tx_time",
+          "name" : "system_time",
           "count" : 3,
           "VALIDITY" : [1,1,1],
-          "DATA" : [1577923200000000,1577836800000000,1578009600000000]
+          "DATA" : [1577836800000000,1577923200000000,1578009600000000]
         },{
           "name" : "committed",
           "count" : 3,
           "VALIDITY" : [1,1,1],
-          "DATA" : [0,1,1]
+          "DATA" : [1,0,1]
         },{
           "name" : "error",
           "count" : 3,
-          "VALIDITY" : [1,0,0],
-          "OFFSET" : [0,197,197,197],
-          "DATA" : ["92b27e23787464622f72756e74696d652d65727293da00227e3a787464622e696e64657865722f696e76616c69642d76616c69642d74696d6573da003152756e74696d65206572726f723a2027787464622e696e64657865722f696e76616c69642d76616c69642d74696d65732782ac7e3a76616c69642d66726f6d92ae7e2374696d652f696e7374616e74b4323032302d30312d30315430303a30303a30305aaa7e3a76616c69642d746f92a25e33b4323031392d30312d30315430303a30303a30305a","",""]
+          "VALIDITY" : [0,1,0],
+          "OFFSET" : [0,0,197,197],
+          "DATA" : ["","92b27e23787464622f72756e74696d652d65727293da00227e3a787464622e696e64657865722f696e76616c69642d76616c69642d74696d6573da003152756e74696d65206572726f723a2027787464622e696e64657865722f696e76616c69642d76616c69642d74696d65732782ac7e3a76616c69642d66726f6d92ae7e2374696d652f696e7374616e74b4323032302d30312d30315430303a30303a30305aaa7e3a76616c69642d746f92a25e33b4323031392d30312d30315430303a30303a30305a",""]
         }]
       },{
         "name" : "delete",

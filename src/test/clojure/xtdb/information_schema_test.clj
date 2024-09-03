@@ -20,7 +20,7 @@
              {:table-catalog "xtdb",
               :table-schema "xt",
               :table-name "txs",
-              :column-name "tx_time",
+              :column-name "system_time",
               :data-type "[:timestamp-tz :micro \"UTC\"]"}
              {:table-catalog "xtdb",
               :table-schema "xt",
@@ -58,7 +58,7 @@
               :column-name "committed",
               :data-type ":bool"}}
            (set (tu/query-ra '[:scan
-                               {:table information_schema/columns}
+                               {:table information_schema$columns}
                                [table_catalog table_schema table_name column_name data_type]]
                              {:node tu/*node*})))))
 
@@ -77,7 +77,7 @@
               :table-schema "public",
               :table-name "baseball",
               :table-type "BASE TABLE"}}
-           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]
+           (set (tu/query-ra '[:scan {:table information_schema$tables} [table_catalog table_schema table_name table_type]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-attribute
@@ -161,7 +161,7 @@
               :attlen 8,
               :atttypid 1184,
               :attnum 0,
-              :attname "tx_time",
+              :attname "system_time",
               :attisdropped false}
              {:atttypmod -1,
               :attrelid 598393539,
@@ -174,7 +174,7 @@
               :attname "committed",
               :attisdropped false}}
            (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_attribute}
+                               {:table pg_catalog$pg_attribute}
                                [attrelid attname atttypid attlen attnum attisdropped
                                 attnotnull atttypmod attidentity attgenerated]]
                              {:node tu/*node*})))))
@@ -192,7 +192,7 @@
               :tableowner "xtdb",
               :tablename "beanie"}}
            (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_tables}
+                               {:table pg_catalog$pg_tables}
                                [schemaname tablename tableowner tablespace]]
                              {:node tu/*node*})))))
 
@@ -212,7 +212,7 @@
               :oid 127091884,
               :relname "beanie"}}
            (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_class}
+                               {:table pg_catalog$pg_class}
                                [oid relname relnamespace relkind]]
                              {:node tu/*node*})))))
 
@@ -339,7 +339,7 @@
               :typnamespace -2125819141,
               :typbasetype 0}}
            (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_type}
+                               {:table pg_catalog$pg_type}
                                [oid
                                 typname
                                 typnamespace
@@ -352,21 +352,21 @@
 (deftest test-pg-description
   (t/is (= []
            (tu/query-ra '[:scan
-                          {:table pg_catalog/pg_desciption}
+                          {:table pg_catalog$pg_desciption}
                           [objoid classoid objsubid description]]
                         {:node tu/*node*}))))
 
 (deftest test-pg-views
   (t/is (= []
            (tu/query-ra '[:scan
-                          {:table pg_catalog/pg_views}
+                          {:table pg_catalog$pg_views}
                           [schemaname viewname viewowner]]
                         {:node tu/*node*}))))
 
 (deftest test-mat-views
   (t/is (= []
            (tu/query-ra '[:scan
-                          {:table pg_catalog/pg_matviews}
+                          {:table pg_catalog$pg_matviews}
                           [schemaname matviewname matviewowner]]
                         {:node tu/*node*}))))
 
@@ -377,13 +377,13 @@
 
   (t/is (= [{:column-name "_id"}]
            (xt/q tu/*node*
-                 "SELECT information_schema.columns.column_name FROM information_schema.columns LIMIT 1")))
+                 "SELECT column_name FROM information_schema.columns LIMIT 1")))
 
   (t/is (= #{{:attrelid 732573471, :attname "col2"}
              {:attrelid 732573471, :attname "_id"}}
            (set
             (xt/q tu/*node*
-                  "SELECT pg_attribute.attname, pg_attribute.attrelid FROM pg_attribute LIMIT 2"))))
+                  "SELECT attname, attrelid FROM pg_attribute LIMIT 2"))))
 
   (t/is (= [{:table-name "baseball",
              :data-type ":keyword",
@@ -402,19 +402,19 @@
          #{{:table-name "txs", :table-schema "xt"}
            {:table-name "beanie", :table-schema "public"}
            {:table-name "baseball", :table-schema "public"}}
-         (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name table_schema]]
+         (set (tu/query-ra '[:scan {:table information_schema$tables} [table_name table_schema]]
                            {:node tu/*node*})))
         "Only requested cols are projected")
 
   (t/is (=
          #{{:table-name "baseball", :table-schema "public"}}
-         (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name "baseball")}]]
+         (set (tu/query-ra '[:scan {:table information_schema$tables} [table_schema {table_name (= table_name "baseball")}]]
                            {:node tu/*node*})))
         "col-preds work")
 
   (t/is (=
          #{{:table-name "beanie", :table-schema "public"}}
-         (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name ?tn)}]]
+         (set (tu/query-ra '[:scan {:table information_schema$tables} [table_schema {table_name (= table_name ?tn)}]]
                            {:node tu/*node* :params {'?tn "beanie"}})))
         "col-preds with params work")
 
@@ -427,7 +427,7 @@
     #{{:table-name "baseball"}
       {:table-name "beanie"}
       {:table-name "txs"}}
-    (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name unknown_col]]
+    (set (tu/query-ra '[:scan {:table information_schema$tables} [table_name unknown_col]]
                       {:node tu/*node*})))
    "cols that don't exist don't error/projected as nulls/absents"))
 
@@ -442,7 +442,7 @@
            {:nspowner 1376455703,
             :oid 1106696632,
             :nspname "public"}}
-         (set (tu/query-ra '[:scan {:table pg_catalog/pg_namespace} [oid nspname nspowner nspacl]]
+         (set (tu/query-ra '[:scan {:table pg_catalog$pg_namespace} [oid nspname nspowner nspacl]]
                            {:node tu/*node*})))))
 (deftest test-schemata
   (t/is (= #{{:catalog-name "xtdb",
@@ -454,7 +454,7 @@
              {:catalog-name "xtdb",
               :schema-name "public",
               :schema-owner "xtdb"}}
-           (set (tu/query-ra '[:scan {:table information_schema/schemata} [catalog_name schema_name schema_owner]]
+           (set (tu/query-ra '[:scan {:table information_schema$schemata} [catalog_name schema_name schema_owner]]
                              {:node tu/*node*})))))
 
 (deftest test-composite-columns
@@ -462,6 +462,5 @@
 
   (t/is (= [{:data-type "[:set :utf8]"}]
            (xt/q tu/*node*
-                 "SELECT columns.data_type FROM information_schema.columns AS columns
-                  WHERE columns.column_name = 'set_column'"))))
-
+                 "SELECT data_type FROM information_schema.columns
+                  WHERE column_name = 'set_column'"))))

@@ -19,7 +19,7 @@ import java.nio.ByteBuffer
 import java.time.Instant
 
 private const val XT_TXS = "xt\$tx_fns"
-private const val XT_ID = "xt\$id"
+private const val XT_ID = "_id"
 private const val FN = "fn"
 
 sealed interface TxOp {
@@ -134,7 +134,7 @@ sealed interface TxOp {
 }
 
 object TxOps {
-    private val forbiddenSetColumns = setOf("xt\$id", "xt\$valid_from", "xt\$valid_to", "xt\$system_from", "xt\$system_to")
+    private val forbiddenSetColumns = setOf("_id", "_valid_from", "_valid_to", "_system_from", "_system_to")
 
     @JvmStatic
     fun putDocs(tableName: String, docs: List<Map<String, *>>) = TxOp.PutDocs(tableName, docs)

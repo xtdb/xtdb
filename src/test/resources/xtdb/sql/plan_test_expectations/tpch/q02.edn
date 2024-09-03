@@ -24,9 +24,9 @@
      s.2/s_phone
      s.2/s_comment]
     [:map
-     [{xt$sq_6 xt$min_out_12}]
+     [{_sq_6 _min_out_12}]
      [:select
-      (= ps.3/ps_supplycost xt$min_out_12)
+      (= ps.3/ps_supplycost _min_out_12)
       [:group-by
        [p.1/p_partkey
         p.1/p_type
@@ -47,12 +47,12 @@
         n.4/n_regionkey
         r.5/r_name
         r.5/r_regionkey
-        xt$row_number_0
-        {xt$min_out_12 (min ps.7/ps_supplycost)}]
+        _row_number_0
+        {_min_out_12 (min ps.7/ps_supplycost)}]
        [:left-outer-join
         [{p.1/p_partkey ps.7/ps_partkey}]
         [:map
-         [{xt$row_number_0 (row-number)}]
+         [{_row_number_0 (row-number)}]
          [:mega-join
           [{n.4/n_regionkey r.5/r_regionkey}
            {s.2/s_nationkey n.4/n_nationkey}

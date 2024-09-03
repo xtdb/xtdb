@@ -127,22 +127,22 @@
       (t/is (= #{:foo :baz} (q-at tx3))))
 
     (t/is (= #{{:tx-id 0,
-                :tx-time #xt.time/zoned-date-time "2012-01-01T00:00Z[UTC]",
+                :system-time #xt.time/zoned-date-time "2012-01-01T00:00Z[UTC]",
                 :committed? true,
                 :error [nil nil]}
                {:tx-id 1,
-                :tx-time #xt.time/zoned-date-time "2011-01-01T00:00Z[UTC]",
+                :system-time #xt.time/zoned-date-time "2011-01-01T00:00Z[UTC]",
                 :committed? false,
                 :error ["specified system-time older than current tx"
                         {::err/error-key :invalid-system-time
                          :tx-key #xt/tx-key {:tx-id 1, :system-time #xt.time/instant "2011-01-01T00:00:00Z"},
                          :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt.time/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
-                :tx-time #xt.time/zoned-date-time "2020-01-03T00:00Z[UTC]",
+                :system-time #xt.time/zoned-date-time "2020-01-03T00:00Z[UTC]",
                 :committed? true,
                 :error [nil nil]}}
              (->> (xt/q *node*
-                        '(from :xt/txs [{:xt/id tx-id, :committed committed?} tx-time error]))
+                        '(from :xt/txs [{:xt/id tx-id, :committed committed?} system-time error]))
                   (into #{} (map #(update % :error (juxt ex-message ex-data)))))))))
 
 (def ^:private devs
@@ -643,10 +643,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
   (t/is (= '[{:plan
               "[:project
- [name age xt$valid_from xt$valid_to]
+ [name age _valid_from _valid_to]
  [:scan
   {:table people, :for-valid-time nil, :for-system-time nil}
-  [{xt$id (= xt$id ?pid)} name age xt$valid_from xt$valid_to]]]
+  [{_id (= _id ?pid)} name age _valid_from _valid_to]]]
 "}]
            (xt/q tu/*node*
                  '(from :people [{:xt/id $pid} name age xt/valid-from xt/valid-to])
@@ -656,13 +656,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
               "[:project
  [{name people.1/name}
   {age people.1/age}
-  {xt$valid_from people.1/xt$valid_from}
-  {xt$valid_to people.1/xt$valid_to}]
+  {_valid_from people.1/_valid_from}
+  {_valid_to people.1/_valid_to}]
  [:rename
   people.1
   [:scan
    {:table people}
-   [age xt$valid_to name xt$valid_from {xt$id (= xt$id ?_0)}]]]]
+   [age name _valid_from _valid_to {_id (= _id ?_0)}]]]]
 "}]
            (xt/q tu/*node*
                  "SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
