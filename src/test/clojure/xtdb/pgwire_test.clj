@@ -1772,3 +1772,8 @@
        (read)
        (send "SELECT * FROM tbl1 WHERE _id = $1 \\bind 'a' \\g")
        (t/is (= [["_id" "foo"] ["a" "b"]] (read)))))))
+
+(deftest test-cast-text-data-type
+  (with-open [conn (pg-conn {})]
+    (t/is (= [{:v "101"}]
+             (pg/execute conn "SELECT 101::text v")))))

@@ -412,7 +412,8 @@
 
       "NULL::INT" '(cast nil :i32)
       "foo.a::INT" '(cast f/a :i32)
-      "'42.0'::FLOAT" '(cast "42.0" :f32)))
+      "'42.0'::FLOAT" '(cast "42.0" :f32)
+      "43.1::TEXT" '(cast 43.1 :utf8)))
   
   (t/testing "used within a query"
     (t/is (= [{:x 42}]
