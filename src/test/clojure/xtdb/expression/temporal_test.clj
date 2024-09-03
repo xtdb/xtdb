@@ -1358,20 +1358,51 @@
           (instance? IntervalMonthDayNano res)))))
 
 (deftest test-period-constructor
-  (let [from #xt.time/zoned-date-time "2020-01-01T00:00Z"
-        to #xt.time/zoned-date-time "2022-01-01T00:00Z"]
-    (t/is (= (tu/->tstz-range from to)
-             (et/project1 '(period x y)
-                          {:x from, :y to}))))
+  (letfn [(f [from to]
+            (et/project1 '(period x y)
+                         {:x from, :y to}))]
+    (let [from #xt.time/zoned-date-time "2020-01-01T00:00Z"
+          to #xt.time/zoned-date-time "2022-01-01T00:00Z"]
+      (t/is (= (tu/->tstz-range from to)
+               (f from to))))
 
-  (let [from #xt.time/zoned-date-time "2030-01-01T00:00Z"
-        to #xt.time/zoned-date-time "2020-01-01T00:00Z"]
-    (t/is
-      (thrown-with-msg?
+    (let [from #xt.time/zoned-date-time "2030-01-01T00:00Z"
+          to #xt.time/zoned-date-time "2020-01-01T00:00Z"]
+      (t/is
+       (thrown-with-msg?
         RuntimeException
         #"From cannot be greater than to when constructing a period"
-        (et/project1 '(period x y)
-                     {:x from, :y to})))))
+        (f from to))))
+
+    (t/testing "other date-time types"
+      (t/is (= #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z"
+                               #xt.time/zoned-date-time "2020-01-02T00:00Z"]
+               (f #xt.time/date "2020-01-01" #xt.time/date "2020-01-02"))
+            "date/date")
+
+      (t/is (= #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z" nil]
+               (f #xt.time/date "2020-01-01" nil))
+            "date/nil")
+
+      (t/is (thrown-with-msg? IllegalArgumentException #"period not applicable to types null and date"
+                              (f nil #xt.time/date "2020-01-01"))
+            "nil/date")
+
+      (t/is (= #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z"
+                               #xt.time/zoned-date-time "2020-01-02T01:23:45Z"]
+               (f #xt.time/date "2020-01-01" #xt.time/date-time "2020-01-02T01:23:45"))
+            "date/ts")
+
+      (t/is (= #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T01:23:45Z"
+                               #xt.time/zoned-date-time "2020-01-02T00:00Z"]
+               (f #xt.time/date-time "2020-01-01T01:23:45" #xt.time/date "2020-01-02"))
+            "ts/date")
+
+      (t/is (= #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T11:07:08Z"
+                               #xt.time/zoned-date-time "2020-01-02T01:23:45Z"]
+               (f #xt.time/zoned-date-time "2020-01-01T06:07:08-05:00[America/New_York]",
+                  #xt.time/date-time "2020-01-02T01:23:45"))
+            "tstz/ts"))))
 
 (deftest test-overlaps?-predicate
   (t/is

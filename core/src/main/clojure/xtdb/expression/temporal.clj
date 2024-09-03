@@ -1608,6 +1608,12 @@
                   `(->period ~(with-conversion from-code from-tsunit :micro)
                              Long/MAX_VALUE))})
 
+(defmethod expr/codegen-call [:period :date-time :date-time] [expr]
+  (recall-with-cast expr types/temporal-col-type types/temporal-col-type))
+
+(defmethod expr/codegen-call [:period :date-time :null] [expr]
+  (recall-with-cast expr types/temporal-col-type :null))
+
 (defn from ^long [^ListValueReader period]
   (.readLong ^ValueReader (.nth period 0)))
 
