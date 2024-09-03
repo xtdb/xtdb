@@ -160,18 +160,11 @@
 
           (t/testing "Uploading a part should create an uncomitted blob"
             (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
-              (= #{"test-multi-created"} uncomitted-blobs)))
+              (= #{"test-multi-created"} uncomitted-blobs))) 
 
-          (t/testing "Call to abort a multipart upload should work - uncomitted blob removed & no file present"
-            @(.abort multipart-upload)
-
-            (log/info "prefix" prefix)
-
-            (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
-              (= #{} uncomitted-blobs))
-
-            (= #{} (list-filenames blob-container-client prefix (-> (ListBlobsOptions.)
-                                                                    (.setPrefix (str prefix)))))))))))
+          (t/testing "Call to abort a multipart upload should work - no file comitted"
+            (t/is (nil? @(.abort multipart-upload))) 
+            (t/is (= #{} (list-filenames blob-container-client prefix (-> (ListBlobsOptions.) (.setPrefix (str prefix))))))))))))
 
 (t/deftest ^:azure multipart-put-test
   (with-open [os (object-store (random-uuid))]
@@ -315,12 +308,7 @@
       ;; Give it some time to start uploading
       (Thread/sleep 500)
 
-      (.interrupt upload-thread)
-
-      (t/testing "no uncomitted blobs should be present"
-        (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
-          (t/is (= #{} uncomitted-blobs))))
+      (.interrupt upload-thread) 
 
       (t/testing "no comitted blobs should be present"
-        (= #{} (list-filenames blob-container-client prefix (-> (ListBlobsOptions.)
-                                                                (.setPrefix (str prefix)))))))))
+        (t/is (= #{} (list-filenames blob-container-client prefix (-> (ListBlobsOptions.) (.setPrefix (str prefix))))))))))

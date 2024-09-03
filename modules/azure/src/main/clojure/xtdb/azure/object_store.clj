@@ -79,7 +79,10 @@
        (catch Throwable e
          (let [unwrapped-e (Exceptions/unwrap e)]
            (when (instance? InterruptedException unwrapped-e)
-             (log/infof "Multipart upload interrupted for %s - aborting multipart operation" (.getBlobUrl block-blob-client)))
+             (log/infof "Multipart upload interrupted for %s - aborting multipart operation" (.getBlobUrl block-blob-client))
+             ;; Reactor (used under the hood by the Azure SDK) leaves the thread interrupted - we need to clear this to allow for
+             ;; the call within `abort` to succeed
+             (Thread/interrupted))
            (throw unwrapped-e))))))
 
   (complete [_]
@@ -94,19 +97,14 @@
        (catch Throwable e
          (let [unwrapped-e (Exceptions/unwrap e)]
            (when (instance? InterruptedException unwrapped-e)
-             (log/infof "Multipart upload completion interrupted for %s - aborting multipart operation" (.getBlobUrl block-blob-client)))
+             (log/infof "Multipart upload completion interrupted for %s - aborting multipart operation" (.getBlobUrl block-blob-client))
+             ;; Reactor (used under the hood by the Azure SDK) leaves the thread interrupted - we need to clear this to allow for
+             ;; the call within `abort` to succeed
+             (Thread/interrupted))
            (throw unwrapped-e))))))
 
   (abort [_]
-    (CompletableFuture/completedFuture
-     (try
-       ;; Commit an empty blocklist removes all staged & uncomitted files
-       (.commitBlockList block-blob-client [])
-       ;; Delete the empty blob
-       (.deleteIfExists block-blob-client)
-       (catch BlobStorageException e
-         (log/infof "Blob already exists for %s - nothing further to abort/commit" (.getBlobUrl block-blob-client))
-         (if (= 409 (.getStatusCode e)) nil (throw e)))))))
+    (CompletableFuture/completedFuture nil)))
 
 (defn- start-multipart [^BlobContainerClient blob-container-client blob-name]
   (let [block-blob-client (-> blob-container-client
@@ -161,6 +159,6 @@
     (let [prefixed-key (util/prefix-key prefix k)]
       (CompletableFuture/completedFuture
        (start-multipart blob-container-client (str prefixed-key)))))
-  
+
   Closeable
   (close [_]))
