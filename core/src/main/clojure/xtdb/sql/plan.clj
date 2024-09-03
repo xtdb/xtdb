@@ -1006,14 +1006,25 @@
   (visitColumnExpr [this ctx] (-> (.columnReference ctx) (.accept this)))
 
   (visitColumnReference [{:keys [^Set !ob-col-refs]} ctx]
-    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))
-          matches (find-decls scope chain)]
-      (when-let [sym (case (count matches)
-                       0 (add-warning! env (->ColumnNotFound chain))
-                       1 (first matches)
-                       (add-err! env (->AmbiguousColumnReference chain)))]
-        (some-> !ob-col-refs (.add sym))
-        sym)))
+    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
+      (case (first chain)
+        xt$valid_time
+        (-> (xt/template (period ~(find-decl scope (into ['xt$valid_from] (rest chain)))
+                                 ~(find-decl scope (into ['xt$valid_to] (rest chain)))))
+            (vary-meta assoc :identifier 'xt$valid_time))
+
+        xt$system_time
+        (-> (xt/template (period ~(find-decl scope (into ['xt$system_from] (rest chain)))
+                                 ~(find-decl scope (into ['xt$system_to] (rest chain)))))
+            (vary-meta assoc :identifier 'xt$system_time))
+
+        (let [matches (find-decls scope chain)]
+          (when-let [sym (case (count matches)
+                           0 (add-warning! env (->ColumnNotFound chain))
+                           1 (first matches)
+                           (add-err! env (->AmbiguousColumnReference chain)))]
+            (some-> !ob-col-refs (.add sym))
+            sym)))))
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
@@ -1356,18 +1367,6 @@
                (= ~f1 (coalesce ~t2 xtdb/end-of-time)))))
           (xt/template (immediately-succeeds? ~p1 ~p2)))))
 
-  (visitValidTimeField [_ ctx]
-    (let [chain (rseq (mapv identifier-sym (some-> (.identifierChain ctx) (.identifier))))]
-      (-> (xt/template (period ~(find-decl scope (into ['xt$valid_from] chain))
-                               ~(find-decl scope (into ['xt$valid_to] chain))))
-          (vary-meta assoc :identifier 'xt$valid_time))))
-
-  (visitSystemTimeField [_ ctx]
-    (let [chain (rseq (mapv identifier-sym (some-> (.identifierChain ctx) (.identifier))))]
-      (-> (xt/template (period ~(find-decl scope (into ['xt$system_from] chain))
-                               ~(find-decl scope (into ['xt$system_to] chain))))
-          (vary-meta assoc :identifier 'xt$system_time))))
-  
   (visitTsTzRangeConstructor [this ctx]
     (xt/template
      (period ~(some-> (.expr ctx 0) (.accept this))

@@ -2005,3 +2005,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
            (xt/q tu/*node* "SELECT 'pg_class'::regclass v")
            (xt/q tu/*node* "SELECT 'pg_catalog.pg_class'::regclass v"))
         "matches pg_catalog.pg_class over public.pg_class as the former comes first in the search path"))
+
+(t/deftest valid-time-as-col-name-3661
+  (t/is (= [{:xt/valid-time 1, :xt/system-time 2}]
+           (xt/q tu/*node* "SELECT 1 AS _valid_time, 2 AS _system_time"))))

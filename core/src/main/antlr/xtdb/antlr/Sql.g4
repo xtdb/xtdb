@@ -332,8 +332,6 @@ exprPrimary
     | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
     | 'OVERLAPS' '(' expr ( ',' expr )+ ')' # OverlapsFunction
     | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
-    | (identifierChain '.')? '_VALID_TIME' # ValidTimeField
-    | (identifierChain '.')? '_SYSTEM_TIME' # SystemTimeField
     | 'UPPER_INF' '(' expr ')' # UpperInfFunction
     | 'LOWER_INF' '(' expr ')' # LowerInfFunction
 
