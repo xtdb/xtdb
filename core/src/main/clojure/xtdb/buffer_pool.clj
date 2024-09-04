@@ -35,7 +35,7 @@
 (def ^:private max-multipart-per-upload-concurrency 4)
 
 ;; bump this if the storage format changes in a backwards-incompatible way
-(def version (let [version 4] (str "v" (util/->lex-hex-string version))))
+(def version (let [version 5] (str "v" (util/->lex-hex-string version))))
 
 (def ^java.nio.file.Path storage-root (util/->path version))
 
