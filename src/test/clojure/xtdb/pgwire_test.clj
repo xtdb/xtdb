@@ -1249,7 +1249,10 @@
              (sql "SELECT col0, col1, _id FROM foo")))
 
       (is (= [[2 20 "b"] [1 10 "a"] [3 30 "c"]]
-             (sql "SELECT * FROM foo"))))))
+             (sql "SELECT * FROM foo")))
+
+      (t/is (= [[1 2 3 4 5 6 7 8 9]]
+               (sql "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9"))))))
 
 ;; https://github.com/pgjdbc/pgjdbc/blob/8afde800bce64e9b22a7da10ca6c515017cf7db1/pgjdbc/src/main/java/org/postgresql/jdbc/PgConnection.java#L403
 ;; List of types/oids that support binary format

@@ -58,5 +58,7 @@
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
-               {:res rows, :col-types (update-vals (into {} (.columnFields bq)) types/field->col-type)}
+               {:res rows, :col-types (-> (into {} (.columnFields bq))
+                                          (update-vals types/field->col-type)
+                                          (update-keys symbol))}
                rows))))))))

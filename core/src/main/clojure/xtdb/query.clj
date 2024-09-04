@@ -125,9 +125,7 @@
                           (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter)))))))
 
 (defn ->column-fields [ordered-outer-projection fields]
-  (if ordered-outer-projection
-    (mapv #(hash-map (str %) (get fields %)) ordered-outer-projection)
-    (mapv #(hash-map (key %) (val %)) fields)))
+  (mapv #(hash-map (str %) (get fields %)) ordered-outer-projection))
 
 (defn ->param-fields [params]
   (->> params
@@ -168,7 +166,7 @@
                    (.scanFields scan-emitter wm))))
 
           cache (ConcurrentHashMap.)
-          ordered-outer-projection (:named-projection (meta query))
+          ordered-outer-projection (lp/relation-columns query)
           param-fields (mapify-params (mapv (comp types/col-type->field types/col-type->nullable-col-type) param-types-with-defaults))
           default-tz (or default-tz (.getZone expr/*clock*))]
 
