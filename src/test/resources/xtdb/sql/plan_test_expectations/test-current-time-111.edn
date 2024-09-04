@@ -1,14 +1,14 @@
 [:project
  [{a u.1/a}
-  {xt$column_2 (current-time)}
-  {xt$column_3 (current-time 2)}
-  {xt$column_4 (current-date)}
-  {xt$column_5 (current-timestamp)}
-  {xt$column_6 (current-timestamp 4)}
-  {xt$column_7 (local-time)}
-  {xt$column_8 (local-time 6)}
-  {xt$column_9 (local-timestamp)}
-  {xt$column_10 (local-timestamp 9)}
-  {xt$column_11 xtdb/end-of-time}
-  {xt$column_12 xtdb/end-of-time}]
- [:rename u.1 [:scan {:table u} [a]]]]
+  {_column_2 (current-time)}
+  {_column_3 (current-time 2)}
+  {_column_4 (current-date)}
+  {_column_5 (current-timestamp)}
+  {_column_6 (current-timestamp 4)}
+  {_column_7 (local-time)}
+  {_column_8 (local-time 6)}
+  {_column_9 (local-timestamp)}
+  {_column_10 (local-timestamp 9)}
+  {_column_11 xtdb/end-of-time}
+  {_column_12 xtdb/end-of-time}]
+ [:rename u.1 [:scan {:table public/u} [a]]]]

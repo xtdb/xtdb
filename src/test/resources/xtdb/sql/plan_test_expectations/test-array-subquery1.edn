@@ -1,10 +1,10 @@
 [:project
- [{xt$column_1 xt$sq_2}]
+ [{_column_1 _sq_2}]
  [:single-join
   []
-  [:rename a.1 [:scan {:table a} [{a (= a 42)}]]]
+  [:rename a.1 [:scan {:table public/a} [{a (= a 42)}]]]
   [:group-by
-   [{xt$sq_2 (array_agg b1)}]
+   [{_sq_2 (array_agg b1)}]
    [:project
     [{b1 b.3/b1}]
-    [:rename b.3 [:scan {:table b} [{b2 (= b2 42)} b1]]]]]]]
+    [:rename b.3 [:scan {:table public/b} [{b2 (= b2 42)} b1]]]]]]]

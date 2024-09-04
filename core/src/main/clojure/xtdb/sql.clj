@@ -12,4 +12,4 @@
                (plan/->logical-plan)
                (vary-meta assoc :param-count (:param-count (meta plan)))
                #_ (doto clojure.pprint/pprint))))) ;; <<no-commit>>
-      util/lru-memoize)) ;; <<no-commit>>
+      #_util/lru-memoize)) ;; <<no-commit>>

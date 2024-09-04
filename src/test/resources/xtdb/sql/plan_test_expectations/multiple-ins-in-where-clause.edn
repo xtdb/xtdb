@@ -1,17 +1,17 @@
 [:project
  [{a f.1/a}]
  [:map
-  [{xt$sq_4 true}]
+  [{_sq_4 true}]
   [:map
-   [{xt$sq_2 true}]
+   [{_sq_2 true}]
    [:semi-join
-    [{f.1/b xt.values.5/xt$column_1}]
+    [{f.1/b xt.values.5/_column_1}]
     [:semi-join
-     [{f.1/a xt.values.3/xt$column_1}]
-     [:rename f.1 [:scan {:table foo} [b {a (= a 42)}]]]
+     [{f.1/a xt.values.3/_column_1}]
+     [:rename f.1 [:scan {:table public/foo} [b {a (= a 42)}]]]
      [:rename
       xt.values.3
-      [:table [xt$column_1] [{:xt$column_1 1} {:xt$column_1 2}]]]]
+      [:table [_column_1] [{:_column_1 1} {:_column_1 2}]]]]
     [:rename
      xt.values.5
-     [:table [xt$column_1] [{:xt$column_1 3} {:xt$column_1 4}]]]]]]]
+     [:table [_column_1] [{:_column_1 3} {:_column_1 4}]]]]]]]

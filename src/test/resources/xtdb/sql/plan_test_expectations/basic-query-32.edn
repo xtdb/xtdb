@@ -1,9 +1,9 @@
 [:project
- [{xt$column_1 xt.values.1/xt$column_1}
-  {xt$column_2 xt.values.1/xt$column_2}]
+ [{_column_1 xt.values.1/_column_1}
+  {_column_2 xt.values.1/_column_2}]
  [:rename
   xt.values.1
   [:table
-   [xt$column_1 xt$column_2]
-   [{:xt$column_1 1, :xt$column_2 2}
-    {:xt$column_1 3, :xt$column_2 4}]]]]
+   [_column_1 _column_2]
+   [{:_column_1 1, :_column_2 2}
+    {:_column_1 3, :_column_2 4}]]]]

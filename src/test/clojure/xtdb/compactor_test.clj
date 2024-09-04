@@ -308,7 +308,7 @@
           (t/is (= (range 500) (q)))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction")))
-                         (.resolve node-dir (tables-key "foo")) #"log-l01-(.+)\.arrow"))))))
+                         (.resolve node-dir (tables-key "public$foo")) #"log-l01-(.+)\.arrow"))))))
 
 (t/deftest test-l2+-compaction
   (let [node-dir (util/->path "target/compactor/test-l2+-compaction")]
@@ -348,7 +348,7 @@
           (t/is (= (set (range 2000)) (set (q))))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction")))
-                         (.resolve node-dir (tables-key "foo")) #"log-l(?!00|01)\d\d-(.+)\.arrow"))))))
+                         (.resolve node-dir (tables-key "public$foo")) #"log-l(?!00|01)\d\d-(.+)\.arrow"))))))
 
 (t/deftest test-no-empty-pages-3580
   (let [node-dir (util/->path "target/compactor/test-badly-distributed")]
@@ -433,7 +433,7 @@
         (t/is (= [{:foo-count 100}] (xt/q node "SELECT COUNT(*) foo_count FROM foo FOR ALL VALID_TIME")))))
 
     (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-more-than-a-page-of-versions")))
-                   (.resolve node-dir (tables-key "foo")) #"log-l01-(.+)\.arrow")))
+                   (.resolve node-dir (tables-key "public$foo")) #"log-l01-(.+)\.arrow")))
 
 (t/deftest losing-data-when-compacting-3459
   (binding [c/*page-size* 8
@@ -457,4 +457,4 @@
                              GROUP BY _id"))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/lose-data-on-compaction")))
-                       (.resolve node-dir (tables-key "docs")) #"log-(.+)\.arrow")))))
+                       (.resolve node-dir (tables-key "public$docs")) #"log-(.+)\.arrow")))))

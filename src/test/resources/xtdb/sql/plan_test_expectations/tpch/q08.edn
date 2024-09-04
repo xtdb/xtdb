@@ -4,13 +4,13 @@
   [[all_nations.9/o_year
     {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [all_nations.9/o_year {mkt_share (/ xt$sum_out_10 xt$sum_out_12)}]
+   [all_nations.9/o_year {mkt_share (/ _sum_out_10 _sum_out_12)}]
    [:group-by
     [all_nations.9/o_year
-     {xt$sum_out_12 (sum all_nations.9/volume)}
-     {xt$sum_out_10 (sum xt$sum_in_11)}]
+     {_sum_out_10 (sum _sum_in_11)}
+     {_sum_out_12 (sum all_nations.9/volume)}]
     [:map
-     [{xt$sum_in_11
+     [{_sum_in_11
        (cond
         (= all_nations.9/nation "BRAZIL")
         all_nations.9/volume
@@ -32,19 +32,21 @@
         [[:rename
           r.8
           [:scan
-           {:table region}
+           {:table public/region}
            [{r_name (= r_name "AMERICA")} r_regionkey]]]
-         [:rename n2.7 [:scan {:table nation} [n_nationkey n_name]]]
+         [:rename
+          n2.7
+          [:scan {:table public/nation} [n_nationkey n_name]]]
          [:rename
           n1.6
-          [:scan {:table nation} [n_nationkey n_regionkey]]]
+          [:scan {:table public/nation} [n_nationkey n_regionkey]]]
          [:rename
           c.5
-          [:scan {:table customer} [c_nationkey c_custkey]]]
+          [:scan {:table public/customer} [c_nationkey c_custkey]]]
          [:rename
           o.4
           [:scan
-           {:table orders}
+           {:table public/orders}
            [o_custkey
             {o_orderdate
              (between
@@ -55,7 +57,7 @@
          [:rename
           l.3
           [:scan
-           {:table lineitem}
+           {:table public/lineitem}
            [l_partkey
             l_discount
             l_suppkey
@@ -64,8 +66,10 @@
          [:rename
           p.1
           [:scan
-           {:table part}
+           {:table public/part}
            [p_partkey {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
          [:rename
           s.2
-          [:scan {:table supplier} [s_nationkey s_suppkey]]]]]]]]]]]]
+          [:scan
+           {:table public/supplier}
+           [s_nationkey s_suppkey]]]]]]]]]]]]

@@ -20,7 +20,7 @@
              {:table-catalog "xtdb",
               :table-schema "xt",
               :table-name "txs",
-              :column-name "tx_time",
+              :column-name "system_time",
               :data-type "[:timestamp-tz :micro \"UTC\"]"}
              {:table-catalog "xtdb",
               :table-schema "xt",
@@ -161,7 +161,7 @@
               :attlen 8,
               :atttypid 1184,
               :attnum 0,
-              :attname "tx_time",
+              :attname "system_time",
               :attisdropped false}
              {:atttypmod -1,
               :attrelid 598393539,
@@ -377,13 +377,13 @@
 
   (t/is (= [{:column-name "_id"}]
            (xt/q tu/*node*
-                 "SELECT information_schema.columns.column_name FROM information_schema.columns LIMIT 1")))
+                 "SELECT column_name FROM information_schema.columns LIMIT 1")))
 
   (t/is (= #{{:attrelid 732573471, :attname "col2"}
              {:attrelid 732573471, :attname "_id"}}
            (set
             (xt/q tu/*node*
-                  "SELECT pg_attribute.attname, pg_attribute.attrelid FROM pg_attribute LIMIT 2"))))
+                  "SELECT attname, attrelid FROM pg_attribute LIMIT 2"))))
 
   (t/is (= [{:table-name "baseball",
              :data-type ":keyword",
@@ -462,6 +462,5 @@
 
   (t/is (= [{:data-type "[:set :utf8]"}]
            (xt/q tu/*node*
-                 "SELECT columns.data_type FROM information_schema.columns AS columns
-                  WHERE columns.column_name = 'set_column'"))))
-
+                 "SELECT data_type FROM information_schema.columns
+                  WHERE column_name = 'set_column'"))))

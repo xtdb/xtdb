@@ -3,53 +3,55 @@
  [:order-by
   [[value {:direction :desc, :null-ordering :nulls-first}]]
   [:project
-   [ps.1/ps_partkey {value xt$sum_out_12}]
+   [ps.1/ps_partkey {value _sum_out_12}]
    [:select
-    (> xt$sum_out_4 xt$sq_6)
+    (> _sum_out_4 _sq_6)
     [:single-join
      []
      [:group-by
       [ps.1/ps_partkey
-       {xt$sum_out_12 (sum xt$sum_in_13)}
-       {xt$sum_out_4 (sum xt$sum_in_5)}]
+       {_sum_out_12 (sum _sum_in_13)}
+       {_sum_out_4 (sum _sum_in_5)}]
       [:map
-       [{xt$sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
-        {xt$sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]
+       [{_sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
+        {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]
        [:mega-join
         [{s.2/s_nationkey n.3/n_nationkey}
          {ps.1/ps_suppkey s.2/s_suppkey}]
         [[:rename
           n.3
           [:scan
-           {:table nation}
+           {:table public/nation}
            [n_nationkey {n_name (= n_name "GERMANY")}]]]
          [:rename
           ps.1
           [:scan
-           {:table partsupp}
+           {:table public/partsupp}
            [ps_partkey ps_availqty ps_suppkey ps_supplycost]]]
          [:rename
           s.2
-          [:scan {:table supplier} [s_nationkey s_suppkey]]]]]]]
+          [:scan {:table public/supplier} [s_nationkey s_suppkey]]]]]]]
      [:project
-      [{xt$sq_6 (* xt$sum_out_10 1.0E-4)}]
+      [{_sq_6 (* _sum_out_10 1.0E-4)}]
       [:group-by
-       [{xt$sum_out_10 (sum xt$sum_in_11)}]
+       [{_sum_out_10 (sum _sum_in_11)}]
        [:map
-        [{xt$sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]
+        [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]
         [:mega-join
          [{s.8/s_nationkey n.9/n_nationkey}
           {ps.7/ps_suppkey s.8/s_suppkey}]
          [[:rename
            n.9
            [:scan
-            {:table nation}
+            {:table public/nation}
             [n_nationkey {n_name (= n_name "GERMANY")}]]]
           [:rename
            ps.7
            [:scan
-            {:table partsupp}
+            {:table public/partsupp}
             [ps_availqty ps_suppkey ps_supplycost]]]
           [:rename
            s.8
-           [:scan {:table supplier} [s_nationkey s_suppkey]]]]]]]]]]]]]
+           [:scan
+            {:table public/supplier}
+            [s_nationkey s_suppkey]]]]]]]]]]]]]

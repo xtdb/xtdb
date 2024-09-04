@@ -18,7 +18,7 @@ internal fun UUID.toBytes(): ByteArray =
     }.array()
 
 internal fun <V> usingIidReader(allocator: BufferAllocator, iids: List<UUID>, f: (VectorReader) -> V): V =
-    FixedSizeBinaryVector(allocator, "xt\$iid", false, 16).use { vec ->
+    FixedSizeBinaryVector(allocator, "_iid", false, 16).use { vec ->
         iids.forEach { vec.writeBytes(ByteBuffer.wrap(it.toBytes())) }
 
         vec.valueCount = iids.size

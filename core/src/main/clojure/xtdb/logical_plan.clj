@@ -752,7 +752,7 @@
 (def ^:dynamic *gensym* gensym)
 
 (defn gen-row-number []
-  (symbol (str "xt$" (*gensym* "row_number"))))
+  (symbol (str "_" (*gensym* "row_number"))))
 
 (defn- decorrelate-group-by-apply [post-group-by-projection group-by-columns
                                    apply-mode columns independent-relation dependent-relation]
@@ -762,7 +762,7 @@
         columns (remove-unused-correlated-columns columns dependent-relation)
         post-group-by-projection (remove symbol? post-group-by-projection)
         count-star? (seq (filter #(= '(row-count) (val (first %))) group-by-columns))
-        dep-countable-sym (symbol (str "xt$" (*gensym* "dep_countable")))]
+        dep-countable-sym (symbol (str "_" (*gensym* "dep_countable")))]
     (cond->> [:group-by (vec
                          (concat
                           independent-projection

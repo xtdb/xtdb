@@ -19,12 +19,12 @@
     {:xt/id "foo5", :a-long 53, :a-double 10.0, :an-inst (time/->zdt #inst "2022")}]])
 
 (t/deftest test-csv-cursor
-  (t/is (= {:col-types {"xt$id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+  (t/is (= {:col-types {"_id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
             :res example-data}
            (tu/query-ra [:csv (-> (io/resource "xtdb/operator/csv-cursor-test.csv")
                                   .toURI
                                   util/->path)
-                         '{xt$id :utf8
+                         '{_id :utf8
                            a-long :i64
                            a-double :f64
                            an-inst :timestamp}
@@ -39,7 +39,7 @@
   (io/resource "xtdb/operator/arrow-cursor-test.arrow"))
 
 (t/deftest test-arrow-cursor
-  (let [expected {:col-types '{xt$id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
+  (let [expected {:col-types '{_id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
                   :res example-data}]
     (t/is (= expected (tu/query-ra [:arrow arrow-file-url]
                                    {:preserve-blocks? true, :with-col-types? true})))
@@ -51,12 +51,12 @@
                         .toURI
                         util/->path)]
     (with-open [al (RootAllocator.)
-                root (VectorSchemaRoot/create (Schema. [(types/col-type->field "xt$id" :utf8)
+                root (VectorSchemaRoot/create (Schema. [(types/col-type->field "_id" :utf8)
                                                         (types/col-type->field "a-long" :i64)
                                                         (types/col-type->field "a-double" :f64)
                                                         (types/col-type->field "an-inst" [:timestamp-tz :micro "UTC"])])
                                               al)]
-      (doto (util/build-arrow-ipc-byte-buffer root :stream
+      (doto (util/build-arrow-ipc-byte-buffer root :file
               (fn [write-batch!]
                 (doseq [block example-data]
                   (tu/populate-root root block)

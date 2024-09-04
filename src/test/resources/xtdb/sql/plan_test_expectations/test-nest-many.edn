@@ -1,19 +1,19 @@
 [:project
- [{customer_id c.1/xt$id} {name c.1/name} {orders xt$sq_2}]
+ [{customer_id c.1/_id} {name c.1/name} {orders _sq_2}]
  [:group-by
-  [c.1/name c.1/xt$id xt$row_number_0 {xt$sq_2 (array_agg xt$sq_2)}]
+  [c.1/name c.1/_id _row_number_0 {_sq_2 (array_agg _sq_2)}]
   [:apply
    :left-outer-join
-   {c.1/xt$id ?xt$sq_xt$id_3}
+   {c.1/_id ?_sq__id_3}
    [:map
-    [{xt$row_number_0 (row-number)}]
-    [:rename c.1 [:scan {:table customers} [name xt$id]]]]
+    [{_row_number_0 (row-number)}]
+    [:rename c.1 [:scan {:table public/customers} [name _id]]]]
    [:project
-    [{xt$sq_2 {:order_id order_id, :value value}}]
+    [{_sq_2 {:order_id order_id, :value value}}]
     [:project
-     [{order_id o.3/xt$id} {value o.3/value}]
+     [{order_id o.3/_id} {value o.3/value}]
      [:rename
       o.3
       [:scan
-       {:table orders}
-       [{customer_id (= customer_id ?xt$sq_xt$id_3)} xt$id value]]]]]]]]
+       {:table public/orders}
+       [{customer_id (= customer_id ?_sq__id_3)} _id value]]]]]]]]

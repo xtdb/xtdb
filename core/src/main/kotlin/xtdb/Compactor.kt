@@ -125,7 +125,7 @@ fun writeRelation(
 ) {
     val trieDataRel = trieWriter.dataRel
     val rowCopier = trieDataRel.rowCopier(relation)
-    val iidReader = relation["xt\$iid"]!!
+    val iidReader = relation["_iid"]!!
 
     val startPtr = ArrowBufPointer()
     val endPtr = ArrowBufPointer()

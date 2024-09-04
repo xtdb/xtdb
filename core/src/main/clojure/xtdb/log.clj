@@ -253,13 +253,13 @@
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
         doc-writer (.structKeyWriter put-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
-        valid-from-writer (.structKeyWriter put-writer "xt$valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.structKeyWriter put-writer "xt$valid_to" types/nullable-temporal-field-type)
+        valid-from-writer (.structKeyWriter put-writer "_valid_from" types/nullable-temporal-field-type)
+        valid-to-writer (.structKeyWriter put-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
     (fn write-put! [^TxOp$PutDocs op]
       (.startStruct put-writer)
       (let [^IVectorWriter table-doc-writer
-            (.computeIfAbsent table-doc-writers (.tableName op)
+            (.computeIfAbsent table-doc-writers (-> (.tableName op) (util/with-default-schema))
                               (fn [table]
                                 (doto (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :list))
                                   (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))
@@ -272,7 +272,7 @@
         (doseq [doc docs
                 :let [eid (val (or (->> doc
                                         (some (fn [e]
-                                                (when (.equals "xt$id" (util/->normal-form-str (key e)))
+                                                (when (.equals "_id" (util/->normal-form-str (key e)))
                                                   e))))
                                    (throw (err/illegal-arg :missing-id {:doc doc}))))]]
           (.writeBytes iid-writer (trie/->iid eid)))
@@ -289,13 +289,13 @@
         iids-writer (.structKeyWriter delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
-        valid-from-writer (.structKeyWriter delete-writer "xt$valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.structKeyWriter delete-writer "xt$valid_to" types/nullable-temporal-field-type)]
+        valid-from-writer (.structKeyWriter delete-writer "_valid_from" types/nullable-temporal-field-type)
+        valid-to-writer (.structKeyWriter delete-writer "_valid_to" types/nullable-temporal-field-type)]
     (fn write-delete! [^TxOp$DeleteDocs op]
       (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct delete-writer)
 
-        (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
+        (.writeObject table-writer (-> (.tableName op) (util/with-default-schema)))
 
         (.startList iids-writer)
         (doseq [doc-id doc-ids]
@@ -316,7 +316,7 @@
     (fn [^TxOp$EraseDocs op]
       (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct erase-writer)
-        (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
+        (.writeObject table-writer (-> (.tableName op) (util/with-default-schema)))
 
         (.startList iids-writer)
         (doseq [doc-id doc-ids]

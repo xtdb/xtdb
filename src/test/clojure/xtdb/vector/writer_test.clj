@@ -406,7 +406,7 @@
   (with-open [node (xtn/start-node)]
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"key-already-set"
-                            (xt/submit-tx node [[:put-docs :foo {:xt/id :foo, :xt$id :bar}]])))))
+                            (xt/submit-tx node [[:put-docs :foo {:xt/id :foo, :_id :bar}]])))))
 
 (deftest test-extension-types-in-struct-transfer-pairs-3305
   (let [field #xt.arrow/field ["toplevel" #xt.arrow/field-type [#xt.arrow/type :struct false]

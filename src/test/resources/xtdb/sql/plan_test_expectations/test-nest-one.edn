@@ -1,15 +1,15 @@
 [:project
- [{order_id o.1/xt$id} {value o.1/value} {customer xt$sq_2}]
+ [{order_id o.1/_id} {value o.1/value} {customer _sq_2}]
  [:apply
   :single-join
-  {o.1/customer_id ?xt$sq_customer_id_3}
-  [:rename o.1 [:scan {:table orders} [customer_id xt$id value]]]
+  {o.1/customer_id ?_sq_customer_id_3}
+  [:rename o.1 [:scan {:table public/orders} [customer_id _id value]]]
   [:project
-   [{xt$sq_2 {:name name}}]
+   [{_sq_2 {:name name}}]
    [:project
     [{name c.3/name}]
     [:rename
      c.3
      [:scan
-      {:table customers}
-      [name {xt$id (= xt$id ?xt$sq_customer_id_3)}]]]]]]]
+      {:table public/customers}
+      [name {_id (= _id ?_sq_customer_id_3)}]]]]]]]

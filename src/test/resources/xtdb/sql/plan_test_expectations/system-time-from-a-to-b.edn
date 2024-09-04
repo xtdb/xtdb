@@ -3,7 +3,7 @@
  [:rename
   foo.1
   [:scan
-   {:table foo,
+   {:table public/foo,
     :for-system-time
     [:in
      #xt.time/date "2999-01-01"

@@ -1,8 +1,8 @@
 [:project
  [{y x.1/y}]
  [:map
-  [{xt$sq_2 true}]
+  [{_sq_2 true}]
   [:semi-join
    [(<= x.1/z z)]
-   [:rename x.1 [:scan {:table x} [y z]]]
-   [:project [{z y.3/z}] [:rename y.3 [:scan {:table y} [z]]]]]]]
+   [:rename x.1 [:scan {:table public/x} [y z]]]
+   [:project [{z y.3/z}] [:rename y.3 [:scan {:table public/y} [z]]]]]]]

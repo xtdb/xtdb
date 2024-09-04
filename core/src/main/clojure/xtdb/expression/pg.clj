@@ -1,9 +1,9 @@
 (ns xtdb.expression.pg
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            [xtdb.information-schema :as info-schema])
-  (:import [clojure.lang MapEntry]))
+            [xtdb.information-schema :as info-schema]))
 
 (defn symbol-table-names
   "returns possible symbol table names based on search path for unqualified names"
@@ -20,8 +20,8 @@
 
 (defn find-matching-table-name [schema tn]
   (let [namespaced-schema (merge info-schema/table-info
-                                 {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
-                                 (info-schema/namespace-public-tables schema))]
+                                 {'xt/txs #{"_id" "committed" "error" "system_time"}}
+                                 (update-keys schema symbol))]
     (some #(when (contains? namespaced-schema %) %) (symbol-table-names tn))))
 
 (defn table->oid [tn]
@@ -38,12 +38,10 @@
                                   {::err/message (format "Relation %s does not exist" tn#)})))))})
 
 (defn ->oid->table [schema]
-  (->> (merge info-schema/table-info
-              {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
-              (info-schema/namespace-public-tables schema))
-       (keys)
-       (map #(MapEntry. (table->oid %) %))
-       (into {})))
+  (-> (set/union (set (keys info-schema/table-info))
+                 (into #{} (map symbol) (keys schema)))
+      (conj 'xt/txs)
+      (->> (into {} (map (juxt table->oid identity))))))
 
 (defmethod expr/codegen-cast [:regclass :utf8] [{:keys [target-type]}]
   {:return-type target-type

@@ -44,7 +44,7 @@
               "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "device_info",
+              "name" : "public/device_info",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -56,7 +56,7 @@
                   "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -93,7 +93,7 @@
                 }]
               }]
             },{
-              "name" : "device_readings",
+              "name" : "public/device_readings",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -190,7 +190,7 @@
                   },
                   "children" : [ ]
                 },{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -216,7 +216,7 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -225,7 +225,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -287,7 +287,7 @@
             "TYPE_ID" : [0,1,0,1],
             "OFFSET" : [0,0,1,1],
             "children" : [{
-              "name" : "device_info",
+              "name" : "public/device_info",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,1,2],
@@ -296,7 +296,7 @@
                 "count" : 2,
                 "VALIDITY" : [1,1],
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "count" : 2,
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,22,44],
@@ -328,7 +328,7 @@
                 }]
               }]
             },{
-              "name" : "device_readings",
+              "name" : "public/device_readings",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,1,2],
@@ -396,7 +396,7 @@
                   "VALIDITY" : [1,1],
                   "DATA" : [24.81,4.93]
                 },{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "count" : 2,
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,18,36],
@@ -415,12 +415,12 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "count" : 4,
             "VALIDITY" : [0,0,0,0],
             "DATA" : [0,0,0,0]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "count" : 4,
             "VALIDITY" : [0,0,0,0],
             "DATA" : [0,0,0,0]

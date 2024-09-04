@@ -2,5 +2,5 @@
  [{b1 b.2/b1} {a1 a.1/a1} {a2 a.1/a2}]
  [:mega-join
   []
-  [[:rename a.1 [:scan {:table a} [a2 a1]]]
-   [:rename b.2 [:scan {:table b} [b1]]]]]]
+  [[:rename a.1 [:scan {:table public/a} [a2 a1]]]
+   [:rename b.2 [:scan {:table public/b} [b1]]]]]]

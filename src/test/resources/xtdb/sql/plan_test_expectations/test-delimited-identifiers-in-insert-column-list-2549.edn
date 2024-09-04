@@ -1,7 +1,7 @@
 [:insert
- {:table posts}
+ {:table public/posts}
  [:project
-  [{xt$id xt.values.1/xt$id} {user-id xt.values.1/user-id}]
+  [{_id xt.values.1/_id} {user-id xt.values.1/user-id}]
   [:rename
    xt.values.1
-   [:table [xt$id user-id] [{:xt$id 1234, :user-id 5678}]]]]]
+   [:table [_id user-id] [{:_id 1234, :user-id 5678}]]]]]

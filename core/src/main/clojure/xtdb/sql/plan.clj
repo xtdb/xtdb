@@ -60,9 +60,10 @@
                      (visitCorrelationName [this ctx] (-> (.identifier ctx) (.accept this)))
 
                      (visitRegularIdentifier [_ ctx] (symbol (util/str->normal-form-str (.getText ctx))))
+
                      (visitDelimitedIdentifier [_ ctx]
                        (let [di-str (.getText ctx)]
-                         (symbol (util/underscore-form->xt-form (subs di-str 1 (dec (count di-str)))))))))))
+                         (symbol (subs di-str 1 (dec (count di-str))))))))))
 
 (defprotocol Scope
   (available-cols [scope chain])
@@ -111,7 +112,7 @@
       (.computeIfAbsent !sq-refs sym
                         (reify Function
                           (apply [_ sym]
-                            (-> (symbol (format "?xt$sq_%s_%d" (name sym) (dec (swap! !id-count inc))))
+                            (-> (symbol (format "?_sq_%s_%d" (name sym) (dec (swap! !id-count inc))))
                                 (vary-meta assoc :correlated-column? true))))))))
 
 (defrecord SubqueryScope [env, scope, ^Map !sq-refs]
@@ -127,7 +128,7 @@
   (if-not !subqs
     (add-err! env (->SubqueryDisallowed))
 
-    (let [sq-sym (-> (->col-sym (str "xt$sq_" (swap! !id-count inc)))
+    (let [sq-sym (-> (->col-sym (str "_sq_" (swap! !id-count inc)))
                      (vary-meta assoc :sq-out-sym? true))
           !sq-refs (HashMap.)
           query-plan (-> sq-ctx (.accept (->QueryPlanVisitor env (->SubqueryScope env scope !sq-refs))))]
@@ -172,7 +173,7 @@
                           (:plan query-plan)]
 
                  :quantified-comparison (let [{:keys [expr op]} sq
-                                              needle-param (vary-meta '?xt$needle assoc :correlated-column? true)]
+                                              needle-param (vary-meta '?_needle assoc :correlated-column? true)]
 
                                           (if (and (:column? (meta expr))
                                                    (not (get sq-refs expr)))
@@ -186,8 +187,8 @@
 
                                             [:apply
                                              {:mark-join {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
-                                             (assoc sq-refs (->col-sym 'xt$needle) needle-param)
-                                             [:map [{'xt$needle expr}]
+                                             (assoc sq-refs (->col-sym '_needle) needle-param)
+                                             [:map [{'_needle expr}]
                                               plan]
                                              (:plan query-plan)]))))
              plan
@@ -264,7 +265,7 @@
 
   (available-tables [_] [table-alias])
 
-  (find-decls [this [col-name table-name]]
+  (find-decls [this [col-name table-name schema-name]]
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (nil? schema-name) (= schema-name (:schema-name this)))
                (or (contains? cols col-name) (types/temporal-column? col-name)))
@@ -287,9 +288,10 @@
                          sys-time-default)]
 
           [:rename unique-table-alias
-           [:scan (cond-> {:table (if schema-name
-                                    (symbol (str schema-name) (str table-name))
-                                    table-name)}
+           [:scan (cond-> {:table (symbol (if schema-name
+                                            (str schema-name)
+                                            "public")
+                                          (str table-name))}
                     for-vt (assoc :for-valid-time for-vt)
                     for-st (assoc :for-system-time for-st))
             (vec (.keySet !reqd-cols))]])))))
@@ -550,19 +552,14 @@
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
-          (let [[sn table-cols] (or (when-let [table-cols (get table-info (if sn
-                                                                            (symbol (str sn) (str tn))
-                                                                            tn))]
+          (let [[sn table-cols] (or (when-let [table-cols (get table-info (symbol (or (some-> sn str) "public") (str tn)))]
                                       [sn table-cols])
 
                                     (when-not sn
                                       (when-let [table-cols (get info-schema/unq-pg-catalog tn)]
                                         ['pg_catalog table-cols]))
 
-                                    (add-warning! env (->BaseTableNotFound sn tn)))
-                [sn tn] (if (= sn 'xt)
-                          [nil (symbol (str "xt$" tn))]
-                          [sn tn])]
+                                    (add-warning! env (->BaseTableNotFound sn tn)))]
             (->BaseTable env ctx sn tn table-alias unique-table-alias
                          (->insertion-ordered-set (or cols table-cols))
                          (HashMap.))))))
@@ -626,12 +623,12 @@
       (->UnnestTable env table-alias
                      (symbol (str table-alias "." (swap! !id-count inc)))
                      (or (->col-sym (first table-projection))
-                         (-> (->col-sym (str "xt$unnest." (swap! !id-count inc)))
+                         (-> (->col-sym (str "_unnest." (swap! !id-count inc)))
                              (vary-meta assoc :unnamed-unnest-col? true)))
                      expr
                      (when with-ordinality?
                        (or (->col-sym (second table-projection))
-                           (-> (->col-sym (str "xt$ordinal." (swap! !id-count inc)))
+                           (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
                                (vary-meta assoc :unnamed-unnest-col? true)))))))
 
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
@@ -666,7 +663,7 @@
   (let [{:keys [column? sq-out-sym? agg-out-sym? unnamed-unnest-col? identifier]} (meta expr)]
     (if (and column? (not sq-out-sym?) (not agg-out-sym?) (not unnamed-unnest-col?))
       (->ProjectedCol expr expr)
-      (let [col-name (or identifier (->col-sym (str "xt$column_" (inc col-idx))))]
+      (let [col-name (or identifier (->col-sym (str "_column_" (inc col-idx))))]
         (->ProjectedCol {col-name expr} col-name)))))
 
 (defrecord SelectClauseProjectedCols [env scope]
@@ -1008,15 +1005,15 @@
   (visitColumnReference [{:keys [^Set !ob-col-refs]} ctx]
     (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
       (case (first chain)
-        xt$valid_time
-        (-> (xt/template (period ~(find-decl scope (into ['xt$valid_from] (rest chain)))
-                                 ~(find-decl scope (into ['xt$valid_to] (rest chain)))))
-            (vary-meta assoc :identifier 'xt$valid_time))
+        _valid_time
+        (-> (xt/template (period ~(find-decl scope (into ['_valid_from] (rest chain)))
+                                 ~(find-decl scope (into ['_valid_to] (rest chain)))))
+            (vary-meta assoc :identifier '_valid_time))
 
-        xt$system_time
-        (-> (xt/template (period ~(find-decl scope (into ['xt$system_from] (rest chain)))
-                                 ~(find-decl scope (into ['xt$system_to] (rest chain)))))
-            (vary-meta assoc :identifier 'xt$system_time))
+        _system_time
+        (-> (xt/template (period ~(find-decl scope (into ['_system_from] (rest chain)))
+                                 ~(find-decl scope (into ['_system_to] (rest chain)))))
+            (vary-meta assoc :identifier '_system_time))
 
         (let [matches (find-decls scope chain)]
           (when-let [sym (case (count matches)
@@ -1534,7 +1531,7 @@
       (-> (.aggregateFunction ctx) (.accept this))))
 
   (visitCountStarFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs]} ctx]
-    (let [agg-sym (-> (->col-sym (str "xt$row_count_" (swap! !id-count inc)))
+    (let [agg-sym (-> (->col-sym (str "_row_count_" (swap! !id-count inc)))
                       (vary-meta assoc :agg-out-sym? true))]
       (.put !aggs agg-sym {:agg-expr '(row-count)})
       agg-sym))
@@ -1543,14 +1540,14 @@
     (if (.sortSpecificationList ctx)
       (throw (UnsupportedOperationException. "array-agg sort-spec"))
 
-      (let [agg-sym (-> (->col-sym (str "xt$array_agg_out" (swap! !id-count inc)))
+      (let [agg-sym (-> (->col-sym (str "_array_agg_out" (swap! !id-count inc)))
                         (vary-meta assoc :agg-out-sym? true))
             expr (-> (.expr ctx)
                      (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))]
         (.put !aggs agg-sym
               (if (:column? (meta expr))
                 {:agg-expr (list 'array-agg expr)}
-                (let [in-sym (-> (->col-sym (str "xt$array_agg_in" (swap! !id-count inc)))
+                (let [in-sym (-> (->col-sym (str "_array_agg_in" (swap! !id-count inc)))
                                  (vary-meta assoc :agg-in-sym? true))]
                   {:agg-expr (list 'array-agg in-sym)
                    :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
@@ -1561,7 +1558,7 @@
     (let [set-fn (symbol (str/lower-case (cond-> (.getText (.setFunctionType ctx))
                                            (= "distinct" (some-> (.setQuantifier ctx) (.getText) (str/lower-case)))
                                            (str "_distinct"))))
-          agg-sym (-> (->col-sym (str "xt$" set-fn "_out_" (swap! !id-count inc)))
+          agg-sym (-> (->col-sym (str "_" set-fn "_out_" (swap! !id-count inc)))
                       (vary-meta assoc :agg-out-sym? true))
           expr (-> (.expr ctx)
                    (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))]
@@ -1569,7 +1566,7 @@
             (if (:column? (meta expr))
               {:agg-expr (list set-fn expr)}
 
-              (let [in-sym (-> (->col-sym (str "xt$" set-fn "_in_" (swap! !id-count inc)))
+              (let [in-sym (-> (->col-sym (str "_" set-fn "_in_" (swap! !id-count inc)))
                                (vary-meta assoc :agg-in-sym? true))]
                 {:agg-expr (list set-fn in-sym)
                  :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
@@ -1725,7 +1722,7 @@
 
                          (contains? available-cols expr) {:order-by-spec [expr ob-opts]}
 
-                         :else (let [in-sym (->col-sym (str "xt$ob" (swap! !id-count inc)))]
+                         :else (let [in-sym (->col-sym (str "_ob" (swap! !id-count inc)))]
                                  {:order-by-spec [in-sym ob-opts]
                                   :in-projection {in-sym expr}})))))))))
 
@@ -1802,12 +1799,12 @@
                            (.accept
                             (reify SqlVisitor
                               (visitSingleExprRowConstructor [_ _ctx]
-                                '[xt$column_1])
+                                '[_column_1])
 
                               (visitMultiExprRowConstructor [_ ctx]
                                 (->> (.expr ctx)
                                      (into [] (map-indexed (fn [idx _]
-                                                             (->col-sym (str "xt$column_" (inc idx))))))))))))
+                                                             (->col-sym (str "_column_" (inc idx))))))))))))
 
           col-keys (mapv keyword col-syms)
 
@@ -2107,8 +2104,8 @@
               for-valid-time (assoc :for-valid-time for-valid-time))
       (vec (.keySet !reqd-cols))]]))
 
-(def ^:private vf-col (->col-sym "xt$valid_from"))
-(def ^:private vt-col (->col-sym "xt$valid_to"))
+(def ^:private vf-col (->col-sym "_valid_from"))
+(def ^:private vt-col (->col-sym "_valid_to"))
 
 (defrecord DmlValidTimeExtentsVisitor [env scope]
   SqlVisitor
@@ -2162,11 +2159,11 @@
       (vec (.keySet !reqd-cols))]]))
 
 (def ^:private forbidden-update-cols
-  (into #{'xt$id} (map symbol) (keys types/temporal-col-types)))
+  (into #{'_id} (map symbol) (keys types/temporal-col-types)))
 
 (defrecord ForbiddenColumnUpdate [col]
   PlanError
-  (error-string [_] (format "Cannot UPDATE %s column" (subs (str col) 3))))
+  (error-string [_] (format "Cannot UPDATE %s column" col)))
 
 (defrecord InsertStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
@@ -2208,17 +2205,19 @@
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
                                                  (.accept (->QueryPlanVisitor env scope)))]
-      (when-not (contains? (set col-syms) 'xt$id)
+      (when-not (contains? (set col-syms) '_id)
         (add-err! env (->InsertWithoutXtId)))
 
-      (->InsertStmt (identifier-sym (.tableName ctx)) insert-plan)))
+      (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
+                    insert-plan)))
 
   (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
   (visitUpdateStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
-    (let [internal-cols (mapv ->col-sym '[xt$iid xt$valid_from xt$valid_to])
+    (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
+          table-name (util/with-default-schema table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
@@ -2259,7 +2258,7 @@
                                 :let [col-sym (->col-sym col)]]
                             {col-sym (find-decl dml-scope [col-sym])})
 
-          outer-projection (vec (concat '[xt$iid]
+          outer-projection (vec (concat '[_iid]
                                         (or vt-projection default-vt-extents-projection)
                                         set-clauses-cols
                                         (map ffirst col-projections)))]
@@ -2280,9 +2279,10 @@
   (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
 
   (visitDeleteStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
-    (let [internal-cols (mapv ->col-sym '[xt$iid xt$valid_from xt$valid_to])
+    (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
+          table-name (util/with-default-schema table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
@@ -2303,27 +2303,28 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))
 
-          projection (into '[xt$iid] (or vt-projection default-vt-extents-projection))]
-      (->DeleteStmt (symbol table-name)
+          projection (into '[_iid] (or vt-projection default-vt-extents-projection))]
+      (->DeleteStmt table-name
                     (->QueryExpr [:project projection
                                   (as-> (plan-table-ref dml-scope) plan
-                                    
+
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
                                           (apply-sqs subqs)
                                           (wrap-predicates predicate))
                                       plan)
-                                    
+
                                     [:project aliased-cols plan])]
                                  internal-cols))))
 
   (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
   (visitEraseStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
-    (let [internal-cols '[xt$iid]
+    (let [internal-cols '[_iid]
           table-name (identifier-sym (.tableName ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          table-name (util/with-default-schema table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
           table-cols (if-let [cols (get table-info table-name)]
@@ -2399,15 +2400,15 @@
 (defn- xform-table-info [table-info]
   (into {}
         (for [[tn cns] (merge info-schema/table-info
-                              {'xt/txs #{"xt$id" "committed" "error" "tx_time"}}
+                              {'xt/txs #{"_id" "committed" "error" "system_time"}}
                               table-info)]
           [(symbol tn) (->> cns
                             (map ->col-sym)
                             ^Collection
                             (sort-by identity (fn [s1 s2]
                                                 (cond
-                                                  (= 'xt$id s1) -1
-                                                  (= 'xt$id s2) 1
+                                                  (= '_id s1) -1
+                                                  (= '_id s2) 1
                                                   :else (compare s1 s2))))
                             ->insertion-ordered-set)])))
 
@@ -2477,8 +2478,8 @@
 (defn parse-statement ^SqlParser$DirectSqlStatementContext [sql]
   (let [parser (->parser sql)]
     (-> (.directSqlStatement parser)
-        #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
-        )))
+        #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint)))))) ; <<no-commit>>
+
 
 (defn plan-statement
   ([sql] (plan-statement sql {}))
@@ -2525,7 +2526,7 @@
   (visitShowVariableStatement [_ _])
 
   (visitInsertStatement [this ctx]
-    (let [table-name (str (identifier-sym (.tableName ctx)))]
+    (let [table (-> (identifier-sym (.tableName ctx)) (util/with-default-schema))]
       (when-let [rows (-> (.insertColumnsAndSource ctx) (.accept this))]
         (letfn [(->const [v arg-row]
                   (letfn [(->const* [obj]
@@ -2556,11 +2557,11 @@
                                    (into {} (map-indexed (fn [idx v]
                                                            (MapEntry/create (symbol (str "?_" idx)) v)))))))
 
-               (group-by (juxt (comp ->inst #(get % "xt$valid_from"))
-                               (comp ->inst #(get % "xt$valid_to"))))
+               (group-by (juxt (comp ->inst #(get % "_valid_from"))
+                               (comp ->inst #(get % "_valid_to"))))
 
                (into [] (map (fn [[[vf vt] rows]]
-                               (-> (TxOps/putDocs table-name ^List (mapv #(dissoc % "xt$valid_from" "xt$valid_to") rows))
+                               (-> (TxOps/putDocs (str table) ^List (mapv #(dissoc % "_valid_from" "_valid_to") rows))
                                    (.during vf vt))))))))))
 
   (visitInsertFromSubquery [_ _])

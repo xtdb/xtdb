@@ -1,7 +1,9 @@
 [:project
- [{bar foo.1/bar}]
+ [{_column_1 nil}]
  [:rename
   foo.1
   [:scan
-   {:table foo, :for-valid-time :all-time, :for-system-time :all-time}
-   [bar]]]]
+   {:table public/foo,
+    :for-valid-time :all-time,
+    :for-system-time :all-time}
+   []]]]

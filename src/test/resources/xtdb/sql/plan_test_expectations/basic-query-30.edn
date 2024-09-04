@@ -1,7 +1,7 @@
 [:project
- [{xt$column_1 film.3/xt$unnest.4} {films si.1/films}]
+ [{_column_1 film.3/_unnest.4} {films si.1/films}]
  [:unnest
-  {film.3/xt$unnest.4 unnest}
+  {film.3/_unnest.4 unnest}
   [:map
    [{unnest si.1/films}]
-   [:rename si.1 [:scan {:table stars_in} [films]]]]]]
+   [:rename si.1 [:scan {:table public/stars_in} [films]]]]]]

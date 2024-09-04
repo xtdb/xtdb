@@ -1,19 +1,19 @@
 [:project
- [{xt$column_1 xt$sq_2}]
+ [{_column_1 _sq_2}]
  [:map
-  [{xt$sq_2 xt$sum_out_6}]
+  [{_sq_2 _sum_out_6}]
   [:group-by
-   [tab0.1/z xt$row_number_0 {xt$sum_out_6 (sum x.5/y)}]
+   [tab0.1/z _row_number_0 {_sum_out_6 (sum x.5/y)}]
    [:apply
     :left-outer-join
-    {tab0.1/z ?xt$sq_z_3}
+    {tab0.1/z ?_sq_z_3}
     [:map
-     [{xt$row_number_0 (row-number)}]
-     [:rename tab0.1 [:scan {:table tab0} [z]]]]
+     [{_row_number_0 (row-number)}]
+     [:rename tab0.1 [:scan {:table public/tab0} [z]]]]
     [:rename
      x.5
      [:project
       [{y xt.values.3/y}]
       [:rename
        xt.values.3
-       [:table [y] [{:y 1} {:y 2} {:y 3} {:y ?xt$sq_z_3}]]]]]]]]]
+       [:table [y] [{:y 1} {:y 2} {:y 3} {:y ?_sq_z_3}]]]]]]]]]

@@ -140,6 +140,7 @@ identifier
         | 'TIMEZONE'
         | 'VERSION'
         | 'LATEST' | 'SUBMITTED'
+        | 'SYSTEM_TIME' | 'VALID_TIME'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier

@@ -1,6 +1,5 @@
 (ns xtdb.information-schema
-  (:require [clojure.string :as str]
-            xtdb.metadata
+  (:require xtdb.metadata
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -242,24 +241,15 @@
     (util/close vsr)
     (some-> out-rel .close)))
 
-(defn namespace-public-tables [tables]
-  (update-keys
-   tables
-   (fn [table]
-     (let [parts (str/split table #"\$")]
-       (if (= 1 (count parts))
-         (symbol "public" (first parts))
-         (symbol (str/join "." (butlast parts)) (last parts)))))))
-
 (defn ->cursor [allocator derived-table-schema table col-names col-preds schema params ^IMetadataManager metadata-mgr ^Watermark wm]
   (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (or (vals (select-keys derived-table-schema col-names)) [])) allocator)]
     ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
     ;;should be types/merge-fields as per scan-fields
     (let [schema-info (-> (merge-with merge
-                                      (.allColumnFields metadata-mgr)
-                                      (some-> (.liveIndex wm)
-                                              (.allColumnFields)))
-                          (namespace-public-tables))
+                                        (.allColumnFields metadata-mgr)
+                                        (some-> (.liveIndex wm)
+                                                (.allColumnFields)))
+                          (update-keys symbol))
 
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (case table

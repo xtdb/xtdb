@@ -102,7 +102,7 @@
 
   Usage: (project '(+ a b) [{:a 1, :b 2}, {:a 3, :b 4}]) ;; => [3, 7]"
   [expr docs]
-  (let [docs (map-indexed #(assoc %2 :xt$id %1) docs)
+  (let [docs (map-indexed #(assoc %2 :_id %1) docs)
         lp [:project [{'ret expr}] [:table docs]]]
     (mapv :ret (tu/query-ra lp {}))))
 
@@ -128,7 +128,7 @@
                      {:x false, :y false, :z true}]))))
 
 (t/deftest test-date-trunc-zoned-date-time
-  (let [test-doc {:xt$id :foo,
+  (let [test-doc {:_id :foo,
                   :date (time/->instant #inst "2021-10-21T12:34:56.111111Z")
                   :zdt (-> (time/->zdt #inst "2021-08-21T12:34:56Z")
                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
@@ -194,7 +194,7 @@
       (t/is (= (LocalDate/of 2022 3 28) (trunc "WEEK"))))))
 
 (t/deftest test-date-trunc-with-timezone-opt
-  (let [test-doc {:xt$id :foo,
+  (let [test-doc {:_id :foo,
                   :date (-> (time/->zdt #inst "2001-02-16T20:38:40Z")
                             (.withZoneSameInstant (ZoneId/of "America/New_York")))}]
 
@@ -202,7 +202,7 @@
              (project1 (list 'date-trunc "DAY" 'date "Australia/Sydney") test-doc)))))
 
 (t/deftest test-date-trunc-interval
-  (let [test-doc {:xt$id :foo,
+  (let [test-doc {:_id :foo,
                   :year-interval (PeriodDuration. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S")) 
                   :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
 
@@ -1135,7 +1135,7 @@
                    (tcg/return s)
                    string-gen
                    (tcg/return (inc i))
-                   (tcg/choose 0 (- (count s) i)))))) )
+                   (tcg/choose 0 (- (count s) i)))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec overlay-is-equiv-to-ss-concat-on-ascii-prop

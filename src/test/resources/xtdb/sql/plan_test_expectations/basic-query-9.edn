@@ -1,12 +1,14 @@
 [:project
- [{name me.1/name} {xt$column_2 xt$sum_out_4}]
+ [{name me.1/name} {_column_2 _sum_out_4}]
  [:select
-  (< xt$min_out_3 1930)
+  (< _min_out_3 1930)
   [:group-by
    [me.1/name
-    {xt$sum_out_4 (sum m.2/length)}
-    {xt$min_out_3 (min m.2/year)}]
+    {_sum_out_4 (sum m.2/length)}
+    {_min_out_3 (min m.2/year)}]
    [:mega-join
     [{me.1/cert m.2/producer}]
-    [[:rename me.1 [:scan {:table movie_exec} [name cert]]]
-     [:rename m.2 [:scan {:table movie} [producer length year]]]]]]]]
+    [[:rename me.1 [:scan {:table public/movie_exec} [name cert]]]
+     [:rename
+      m.2
+      [:scan {:table public/movie} [producer length year]]]]]]]]

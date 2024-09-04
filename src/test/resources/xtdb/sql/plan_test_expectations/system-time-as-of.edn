@@ -3,6 +3,6 @@
  [:rename
   foo.1
   [:scan
-   {:table foo,
+   {:table public/foo,
     :for-system-time [:at #xt.time/date-time "2999-01-01T00:00"]}
    [bar]]]]

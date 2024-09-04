@@ -1,3 +1,5 @@
 [:project
  [{bar foo.1/bar}]
- [:rename foo.1 [:scan {:table foo, :for-system-time :all-time} [bar]]]]
+ [:rename
+  foo.1
+  [:scan {:table public/foo, :for-system-time :all-time} [bar]]]]

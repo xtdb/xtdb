@@ -62,7 +62,7 @@
               {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
               {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0} ]}]
+              {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
              (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
                                                (assoc :seg :t1))
                                            (-> (trie/->Segment (->arrow-hash-trie log-rel))
@@ -169,7 +169,7 @@
 (defn ->mock-merge-plan-page
   ([page] (->mock-merge-plan-page page true))
   ([page metadata-matches?] (->MockMergePlanPage page metadata-matches? (TemporalBounds.)))
-  ([page min-valid-from max-valid-to] (->mock-merge-plan-page page true min-valid-from max-valid-to ))
+  ([page min-valid-from max-valid-to] (->mock-merge-plan-page page true min-valid-from max-valid-to))
   ([page metadata-matches? min-valid-from max-valid-to]
    (->MockMergePlanPage page metadata-matches? (tu/->min-max-page-bounds min-valid-from max-valid-to))))
 
@@ -194,7 +194,7 @@
         (mapv inst->micros [#inst "2018-01-01" #inst "2019-01-01" #inst "2020-01-01"
                             #inst "2021-01-01" #inst "2022-01-01" #inst "2023-01-01"])]
 
-    (letfn [(query-bounds+temporal-page-metadata->pages [temporal-page-metadata query-bounds ]
+    (letfn [(query-bounds+temporal-page-metadata->pages [temporal-page-metadata query-bounds]
               (->> (trie/->merge-task
                     (for [[page min-vf max-vt] temporal-page-metadata]
                       (->mock-merge-plan-page page min-vf max-vt))
@@ -336,7 +336,7 @@
           (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
                     {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 8}]}
                     {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
-                    {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3} ]}]
+                    {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
                    (->merge-tasks [(-> (trie/->Segment (->arrow-hash-trie t1-root))
                                        (assoc :seg :t1
                                               :page-bounds-fn (tu/->page-bounds-fn t1-page-bounds)))
@@ -349,7 +349,7 @@
           (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
                     {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 8}]}
                     {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
-                    {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3} ]}]
+                    {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
                    (->merge-tasks [(-> (trie/->Segment (->arrow-hash-trie t1-root))
                                        (assoc :seg :t1
                                               :page-bounds-fn (tu/->page-bounds-fn t1-page-bounds)))
@@ -578,14 +578,14 @@
                   leaves [(->mock-arrow-merge-plan-page t1-data-file 0)
                           (->mock-arrow-merge-plan-page t1-data-file 2)
                           (->mock-arrow-merge-plan-page t2-data-file 0)]
-                  merge-tasks [{:leaves leaves :path (byte-array [0 0])} ]]
+                  merge-tasks [{:leaves leaves :path (byte-array [0 0])}]]
               (util/with-close-on-catch [out-rel (RelationWriter. al (for [^Field field
-                                                                           [(types/->field "xt$id" (types/->arrow-type :uuid) false)
+                                                                           [(types/->field "_id" (types/->arrow-type :uuid) false)
                                                                             (types/->field "foo" (types/->arrow-type :utf8) false)]]
                                                                        (vw/->writer (.createVector field al))))]
 
                 (let [^ICursor trie-cursor (scan/->TrieCursor al (.iterator ^Iterable merge-tasks) out-rel
-                                                              ["xt$id" "foo"] {}
+                                                              ["_id" "foo"] {}
                                                               (TemporalBounds.)
                                                               {} nil
                                                               (scan/->vsr-cache buffer-pool al)

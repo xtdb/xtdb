@@ -1,10 +1,10 @@
 [:project
- [{some_column (= 1 xt$sq_2)}]
+ [{some_column (= 1 _sq_2)}]
  [:single-join
   []
-  [:rename x.1 [:scan {:table x} [{y (= y 1)}]]]
+  [:rename x.1 [:scan {:table public/x} [{y (= y 1)}]]]
   [:project
-   [{xt$sq_2 xt$max_out_4}]
+   [{_sq_2 _max_out_4}]
    [:group-by
-    [{xt$max_out_4 (max foo.3/bar)}]
-    [:rename foo.3 [:scan {:table foo} [bar]]]]]]]
+    [{_max_out_4 (max foo.3/bar)}]
+    [:rename foo.3 [:scan {:table public/foo} [bar]]]]]]]

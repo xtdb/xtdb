@@ -60,7 +60,7 @@
 
         (let [live-table (.liveTable live-index "my-table")
               live-rel (li/live-rel live-table)
-              iid-vec (.getVector (.colWriter live-rel "xt$iid"))
+              iid-vec (.getVector (.colWriter live-rel "_iid"))
 
               ^LiveHashTrie trie (li/live-trie live-table)]
 
@@ -77,7 +77,7 @@
                        trie-loader (Relation/loader allocator (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))))
                        trie-rel (Relation. allocator (.getSchema trie-loader))
                        leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
-        (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
+        (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "_iid")]
           (.loadBatch trie-loader 0 trie-rel)
           (t/is (= iid-bytes
                    (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
@@ -132,11 +132,11 @@
 
           (tu/finish-chunk! node)
 
-          (t/is (= (mapv util/->path ["tables/foo/data/log-l00-fr00-nr110-rs5.arrow"])
-                   (.listObjects bp (util/->path "tables/foo/data"))))
+          (t/is (= (mapv util/->path ["tables/public$foo/data/log-l00-fr00-nr110-rs5.arrow"])
+                   (.listObjects bp (util/->path "tables/public$foo/data"))))
 
-          (t/is (= (mapv util/->path ["tables/foo/meta/log-l00-fr00-nr110-rs5.arrow"])
-                   (.listObjects bp (util/->path "tables/foo/meta")))))
+          (t/is (= (mapv util/->path ["tables/public$foo/meta/log-l00-fr00-nr110-rs5.arrow"])
+                   (.listObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                        (.resolve node-dir "objects"))))))

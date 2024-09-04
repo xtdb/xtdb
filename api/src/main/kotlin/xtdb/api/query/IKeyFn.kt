@@ -8,7 +8,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 private fun String.denormaliseToKeyword(transform: String.() -> String = { this }): Keyword {
-    val split = split('$')
+    val split = replace(Regex("^_"), "xt\\$").split('$')
 
     return if (split.size > 1) {
         Keyword.intern(
@@ -19,8 +19,6 @@ private fun String.denormaliseToKeyword(transform: String.() -> String = { this 
         Keyword.intern(transform())
     }
 }
-
-private fun String.denormaliseToString() = replace(Regex("^xt\\$"), "_")
 
 private fun String.kebabCase() = replace(Regex("(?<!^)_"), "-")
 
@@ -45,7 +43,7 @@ fun interface IKeyFn<out V> {
     @Serializable
     enum class KeyFn : IKeyFn<Any> {
         KEBAB_CASE_STRING {
-            override fun denormalize(key: String) = key.kebabCase().denormaliseToString()
+            override fun denormalize(key: String) = key.kebabCase()
         },
 
         KEBAB_CASE_KEYWORD {
@@ -53,7 +51,7 @@ fun interface IKeyFn<out V> {
         },
 
         SNAKE_CASE_STRING {
-            override fun denormalize(key: String) = key.denormaliseToString()
+            override fun denormalize(key: String) = key
         },
 
         SNAKE_CASE_KEYWORD {

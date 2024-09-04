@@ -1,9 +1,9 @@
 [:project
- [{xt$column_1 1}]
+ [{_column_1 1}]
  [:rename
   tmp.2
   [:project
    [{bar foo.1/bar}]
    [:rename
     foo.1
-    [:scan {:table foo, :for-valid-time [:at :now]} [bar]]]]]]
+    [:scan {:table public/foo, :for-valid-time [:at :now]} [bar]]]]]]

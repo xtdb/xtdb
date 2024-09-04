@@ -85,10 +85,10 @@
                                                                    'columns meta/metadata-col-type}]))]))
 
 (defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
-  (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
-            (types/col-type->field "xt$system_from" types/temporal-col-type)
-            (types/col-type->field "xt$valid_from" types/temporal-col-type)
-            (types/col-type->field "xt$valid_to" types/temporal-col-type)
+  (Schema. [(types/col-type->field "_iid" [:fixed-size-binary 16])
+            (types/col-type->field "_system_from" types/temporal-col-type)
+            (types/col-type->field "_valid_from" types/temporal-col-type)
+            (types/col-type->field "_valid_to" types/temporal-col-type)
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "put" put-doc-col-type)
                            (types/col-type->field "delete" :null)
@@ -133,10 +133,10 @@
 
                 meta-pos (.getValueCount node-wtr)]
 
-            (.writeMetadata page-meta-wtr (into [(.get data-rel "xt$system_from")
-                                                 (.get data-rel "xt$valid_from")
-                                                 (.get data-rel "xt$valid_to")
-                                                 (.get data-rel "xt$iid")]
+            (.writeMetadata page-meta-wtr (into [(.get data-rel "_system_from")
+                                                 (.get data-rel "_valid_from")
+                                                 (.get data-rel "_valid_to")
+                                                 (.get data-rel "_iid")]
                                                 (map #(.keyReader put-rdr %))
                                                 (.getKeys put-rdr)))
 

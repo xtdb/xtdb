@@ -1,14 +1,14 @@
 [:update
- {:table foo}
+ {:table public/foo}
  [:project
-  ({xt$iid foo.1/xt$iid}
-   {xt$valid_from foo.1/xt$valid_from}
-   {xt$valid_to foo.1/xt$valid_to}
+  ({_iid foo.1/_iid}
+   {_valid_from foo.1/_valid_from}
+   {_valid_to foo.1/_valid_to}
    {bar foo.1/baz}
    {baz foo.1/baz}
    {quux foo.1/quux})
   [:rename
    foo.1
    [:scan
-    {:table foo, :for-valid-time :all-time}
-    [xt$valid_from xt$iid xt$valid_to baz quux]]]]]
+    {:table public/foo, :for-valid-time :all-time}
+    [_valid_to baz quux _valid_from _iid]]]]]

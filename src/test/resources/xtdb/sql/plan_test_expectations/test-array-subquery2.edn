@@ -1,13 +1,15 @@
 [:project
- [{xt$column_1 xt$sq_2}]
+ [{_column_1 _sq_2}]
  [:group-by
-  [a.1/b a.1/a xt$row_number_0 {xt$sq_2 (array_agg b1)}]
+  [a.1/b a.1/a _row_number_0 {_sq_2 (array_agg b1)}]
   [:apply
    :left-outer-join
-   {a.1/b ?xt$sq_b_3}
+   {a.1/b ?_sq_b_3}
    [:map
-    [{xt$row_number_0 (row-number)}]
-    [:rename a.1 [:scan {:table a} [b {a (= a 42)}]]]]
+    [{_row_number_0 (row-number)}]
+    [:rename a.1 [:scan {:table public/a} [b {a (= a 42)}]]]]
    [:project
     [{b1 b.3/b1}]
-    [:rename b.3 [:scan {:table b} [{b2 (= b2 ?xt$sq_b_3)} b1]]]]]]]
+    [:rename
+     b.3
+     [:scan {:table public/b} [{b2 (= b2 ?_sq_b_3)} b1]]]]]]]

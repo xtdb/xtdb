@@ -19,11 +19,11 @@ interface EventRowPointer {
     fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean
 
     class XtArrow(val relReader: RelationReader, path: ByteArray): EventRowPointer {
-        private val iidReader: VectorReader = relReader["xt\$iid"]!!
+        private val iidReader: VectorReader = relReader["_iid"]!!
 
-        private val sysFromReader: VectorReader = relReader["xt\$system_from"]!!
-        private val validFromReader: VectorReader = relReader["xt\$valid_from"]!!
-        private val validToReader: VectorReader = relReader["xt\$valid_to"]!!
+        private val sysFromReader: VectorReader = relReader["_system_from"]!!
+        private val validFromReader: VectorReader = relReader["_valid_from"]!!
+        private val validToReader: VectorReader = relReader["_valid_to"]!!
 
         private val opReader: VectorReader = relReader["op"]!!
 
@@ -55,11 +55,11 @@ interface EventRowPointer {
     }
 
     class Arrow(val relReader: OldRelationReader, path: ByteArray): EventRowPointer {
-        private val iidReader: IVectorReader = relReader.readerForName("xt\$iid")
+        private val iidReader: IVectorReader = relReader.readerForName("_iid")
 
-        private val sysFromReader: IVectorReader = relReader.readerForName("xt\$system_from")
-        private val validFromReader: IVectorReader = relReader.readerForName("xt\$valid_from")
-        private val validToReader: IVectorReader = relReader.readerForName("xt\$valid_to")
+        private val sysFromReader: IVectorReader = relReader.readerForName("_system_from")
+        private val validFromReader: IVectorReader = relReader.readerForName("_valid_from")
+        private val validToReader: IVectorReader = relReader.readerForName("_valid_to")
 
         private val opReader: IVectorReader = relReader.readerForName("op")
 

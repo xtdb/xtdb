@@ -14,7 +14,7 @@ Let's imagine that we operate a simple portfolio risk system which only tracks v
             VALUES
             (1, 'my-product-1', 340),
             (2, 'my-product-2', 10)" />
-  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
 </Fiddle>
 
 The system has only ever been required to hold a basic set of data for risk reporting because the trade execution platform kept its own rules for when to buy and sell stocks, and the extra integration work always seemed unnecessary.
@@ -47,7 +47,7 @@ Not to worry, with a bit of manual effort and research we can add a table of whi
             (2, 'my-product-2', 'Standard Dollar'),
             (3, 'my-product-3', 'XY Bank'),
             (4, 'my-product-4', 'Royal Red')" />
-  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
 </Fiddle>
 
 Now, what do we have to sell?
@@ -84,7 +84,7 @@ Let's add that in:
             (3, 'my-product-3', 'XY Bank', DATE '2024-01-01', null),
             -- Product 4's history
             (4, 'my-product-4', 'Royal Red', DATE '2020-01-01', null)" />
-  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
 </Fiddle>
 
 Just to double-check that's not changed our current view of the exposure:

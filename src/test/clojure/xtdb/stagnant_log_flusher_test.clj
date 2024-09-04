@@ -15,14 +15,6 @@
            xtdb.IBufferPool
            (xtdb.indexer IIndexer)))
 
-(defonce log-level :error)
-
-(comment
-  (def log-level :debug)
-  (def log-level :info)
-  (def log-level :error)
-  )
-
 (defmacro spin-until
   [ms expr]
   `(loop [ret# ~expr
@@ -47,12 +39,8 @@
 (defmacro spin [expr] `(spin-until *spin-ms* ~expr))
 
 (defn each-fixture [f]
-  (tu/with-log-levels
-    {'xtdb.stagnant-log-flusher log-level
-     'xtdb.indexer log-level
-     'xtdb.log.watcher log-level}
-    (binding [*spin-ms* *spin-ms*]
-      (f))))
+  (binding [*spin-ms* *spin-ms*]
+    (f)))
 
 (t/use-fixtures :each each-fixture)
 
@@ -163,7 +151,7 @@
 
 (defn chunk-path-seq [node]
   (let [pool (tu/component node :xtdb/buffer-pool)]
-    (filter #(re-matches #"tables/foo/meta/log-(.*)" (str %)) (.listAllObjects ^IBufferPool pool))))
+    (filter #(re-matches #"tables/public\$foo/meta/log-(.*)" (str %)) (.listAllObjects ^IBufferPool pool))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #xt.time/duration "PT0.001S")]

@@ -44,7 +44,7 @@
               "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "xt$tx_fns",
+              "name" : "xt/tx_fns",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -56,7 +56,7 @@
                   "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "nullable" : false,
                   "type" : {
                     "name" : "KeywordType"
@@ -87,7 +87,7 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -96,7 +96,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -158,7 +158,7 @@
             "TYPE_ID" : [0,0],
             "OFFSET" : [0,1],
             "children" : [{
-              "name" : "xt$tx_fns",
+              "name" : "xt/tx_fns",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,1,2],
@@ -167,7 +167,7 @@
                 "count" : 2,
                 "VALIDITY" : [1,1],
                 "children" : [{
-                  "name" : "xt$id",
+                  "name" : "_id",
                   "count" : 2,
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,3,6],
@@ -182,12 +182,12 @@
               }]
             }]
           },{
-            "name" : "xt$valid_from",
+            "name" : "_valid_from",
             "count" : 2,
             "VALIDITY" : [0,1],
             "DATA" : [0,1577836800000000]
           },{
-            "name" : "xt$valid_to",
+            "name" : "_valid_to",
             "count" : 2,
             "VALIDITY" : [0,0],
             "DATA" : [0,0]

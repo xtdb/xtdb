@@ -4,11 +4,11 @@
   [[profit.7/nation {:direction :asc, :null-ordering :nulls-last}]
    [profit.7/o_year {:direction :desc, :null-ordering :nulls-first}]]
   [:project
-   [profit.7/nation profit.7/o_year {sum_profit xt$sum_out_8}]
+   [profit.7/nation profit.7/o_year {sum_profit _sum_out_8}]
    [:group-by
     [profit.7/nation
      profit.7/o_year
-     {xt$sum_out_8 (sum profit.7/amount)}]
+     {_sum_out_8 (sum profit.7/amount)}]
     [:rename
      profit.7
      [:project
@@ -25,17 +25,21 @@
         {l.3/l_partkey ps.4/ps_partkey}
         {s.2/s_suppkey l.3/l_suppkey}
         {p.1/p_partkey l.3/l_partkey}]
-       [[:rename n.6 [:scan {:table nation} [n_nationkey n_name]]]
-        [:rename o.5 [:scan {:table orders} [o_orderdate o_orderkey]]]
+       [[:rename
+         n.6
+         [:scan {:table public/nation} [n_nationkey n_name]]]
+        [:rename
+         o.5
+         [:scan {:table public/orders} [o_orderdate o_orderkey]]]
         [:rename
          ps.4
          [:scan
-          {:table partsupp}
+          {:table public/partsupp}
           [ps_partkey ps_suppkey ps_supplycost]]]
         [:rename
          l.3
          [:scan
-          {:table lineitem}
+          {:table public/lineitem}
           [l_partkey
            l_quantity
            l_discount
@@ -45,8 +49,10 @@
         [:rename
          p.1
          [:scan
-          {:table part}
+          {:table public/part}
           [p_partkey {p_name (like p_name "%green%")}]]]
         [:rename
          s.2
-         [:scan {:table supplier} [s_nationkey s_suppkey]]]]]]]]]]]
+         [:scan
+          {:table public/supplier}
+          [s_nationkey s_suppkey]]]]]]]]]]]

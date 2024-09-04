@@ -4,4 +4,4 @@
   si.1
   [:select
    (= name lastname)
-   [:scan {:table stars_in} [lastname name]]]]]
+   [:scan {:table public/stars_in} [lastname name]]]]]

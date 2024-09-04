@@ -19,7 +19,7 @@ Let's pretend the day today is `2024-01-01`, and we insert a product:
        txs="INSERT INTO product (_id, name, price)
             VALUES
             (1, 'Pendleton Electric Bicycle', 340)" />
-  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
 </Fiddle>
 
 Let's query the day after this insert:
@@ -49,7 +49,7 @@ We achieve this in XT by setting the `_valid_from` and `_valid_to` column
        txs="INSERT INTO product (_id, name, price, _valid_from, _valid_to)
             VALUES
             (1, 'Pendleton Electric Bicycle', 300, DATE '2022-01-01', DATE '2024-01-01')" />
-  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY tx_time DESC LIMIT 1" />
+  <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
 </Fiddle>
 
 Now if we query in **2024**, we still get the **2024** value

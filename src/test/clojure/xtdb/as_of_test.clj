@@ -12,7 +12,7 @@
     (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (tu/query-ra '[:scan {:table docs, :for-valid-time :all-time} [last_updated]]
+             (set (tu/query-ra '[:scan {:table public/docs, :for-valid-time :all-time} [last_updated]]
                                {:node tu/*node*}))))
 
     (t/is (= #{{:last-updated "tx2"}}
@@ -20,7 +20,7 @@
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
-               (set (tu/query-ra '[:scan {:table docs} [last_updated]]
+               (set (tu/query-ra '[:scan {:table public/docs} [last_updated]]
                                  {:node tu/*node*, :basis {:at-tx tx1}}))))
 
       (t/is (= #{{:last-updated "tx1"}}
@@ -39,10 +39,10 @@
               :doc-with-app-time {:xt/id :doc-with-app-time,
                                   :xt/valid-from (time/->zdt #inst "2021")
                                   :xt/system-from system-time}}
-             (->> (tu/query-ra '[:scan {:table docs}
-                                 [xt$id
-                                  xt$valid_from xt$valid_to
-                                  xt$system_from xt$system_to]]
+             (->> (tu/query-ra '[:scan {:table public/docs}
+                                 [_id
+                                  _valid_from _valid_to
+                                  _system_from _system_to]]
                                {:node tu/*node*})
                   (into {} (map (juxt :xt/id identity))))))))
 

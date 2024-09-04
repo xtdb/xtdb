@@ -5,7 +5,7 @@
   [:project
    [s.1/s_name s.1/s_address]
    [:map
-    [{xt$sq_3 true}]
+    [{_sq_3 true}]
     [:mega-join
      [{s.1/s_nationkey n.2/n_nationkey}]
      [[:semi-join
@@ -13,38 +13,38 @@
        [:rename
         s.1
         [:scan
-         {:table supplier}
+         {:table public/supplier}
          [s_name s_address s_nationkey s_suppkey]]]
        [:project
         [{ps_suppkey ps.4/ps_suppkey}]
         [:map
-         [{xt$sq_5 true}]
+         [{_sq_5 true}]
          [:semi-join
           [{ps.4/ps_partkey p_partkey}]
           [:select
-           (> ps.4/ps_availqty xt$sq_7)
+           (> ps.4/ps_availqty _sq_7)
            [:map
-            [{xt$sq_7 (* 0.5 xt$sum_out_11)}]
+            [{_sq_7 (* 0.5 _sum_out_11)}]
             [:group-by
              [ps.4/ps_partkey
               ps.4/ps_availqty
               ps.4/ps_suppkey
-              xt$row_number_0
-              {xt$sum_out_11 (sum l.8/l_quantity)}]
+              _row_number_0
+              {_sum_out_11 (sum l.8/l_quantity)}]
              [:left-outer-join
               [{ps.4/ps_partkey l.8/l_partkey}
                {ps.4/ps_suppkey l.8/l_suppkey}]
               [:map
-               [{xt$row_number_0 (row-number)}]
+               [{_row_number_0 (row-number)}]
                [:rename
                 ps.4
                 [:scan
-                 {:table partsupp}
+                 {:table public/partsupp}
                  [ps_partkey ps_availqty ps_suppkey]]]]
               [:rename
                l.8
                [:scan
-                {:table lineitem}
+                {:table public/lineitem}
                 [l_partkey
                  {l_shipdate
                   (and
@@ -61,10 +61,10 @@
            [:rename
             p.6
             [:scan
-             {:table part}
+             {:table public/part}
              [p_partkey {p_name (like p_name "forest%")}]]]]]]]]
       [:rename
        n.2
        [:scan
-        {:table nation}
+        {:table public/nation}
         [n_nationkey {n_name (= n_name "CANADA")}]]]]]]]]]

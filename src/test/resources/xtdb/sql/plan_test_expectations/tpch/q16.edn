@@ -12,37 +12,37 @@
    [p.2/p_brand
     p.2/p_type
     p.2/p_size
-    {supplier_cnt xt$count_distinct_out_7}]
+    {supplier_cnt _count_distinct_out_7}]
    [:group-by
     [p.2/p_brand
      p.2/p_type
      p.2/p_size
-     {xt$count_distinct_out_7 (count_distinct ps.1/ps_suppkey)}]
+     {_count_distinct_out_7 (count_distinct ps.1/ps_suppkey)}]
     [:map
-     [{xt$sq_3 true}]
+     [{_sq_5 true}]
      [:map
-      [{xt$sq_5 true}]
+      [{_sq_3 true}]
       [:mega-join
        [{ps.1/ps_partkey p.2/p_partkey}]
        [[:anti-join
          [{ps.1/ps_suppkey s_suppkey}]
          [:rename
           ps.1
-          [:scan {:table partsupp} [ps_partkey ps_suppkey]]]
+          [:scan {:table public/partsupp} [ps_partkey ps_suppkey]]]
          [:project
           [{s_suppkey s.6/s_suppkey}]
           [:rename
            s.6
            [:scan
-            {:table supplier}
+            {:table public/supplier}
             [{s_comment (like s_comment "%Customer%Complaints%")}
              s_suppkey]]]]]
         [:semi-join
-         [{p.2/p_size xt.values.4/xt$column_1}]
+         [{p.2/p_size xt.values.4/_column_1}]
          [:rename
           p.2
           [:scan
-           {:table part}
+           {:table public/part}
            [p_partkey
             {p_type (not (like p_type "MEDIUM POLISHED%"))}
             {p_brand (<> p_brand "Brand#45")}
@@ -50,12 +50,12 @@
          [:rename
           xt.values.4
           [:table
-           [xt$column_1]
-           [{:xt$column_1 49}
-            {:xt$column_1 14}
-            {:xt$column_1 23}
-            {:xt$column_1 45}
-            {:xt$column_1 19}
-            {:xt$column_1 3}
-            {:xt$column_1 36}
-            {:xt$column_1 9}]]]]]]]]]]]]
+           [_column_1]
+           [{:_column_1 49}
+            {:_column_1 14}
+            {:_column_1 23}
+            {:_column_1 45}
+            {:_column_1 19}
+            {:_column_1 3}
+            {:_column_1 36}
+            {:_column_1 9}]]]]]]]]]]]]

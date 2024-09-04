@@ -373,12 +373,12 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                            (throw (Exception. "boom")))]
                                        [:call :tx-fn-fail]])))
 
-    (t/is (= #{{:tx-id 0, :tx-time (time/->zdt #inst "2020-01-01"), :committed? true}
-               {:tx-id 1, :tx-time (time/->zdt #inst "2020-01-02"), :committed? false}
-               {:tx-id 2, :tx-time (time/->zdt #inst "2020-01-03"), :committed? true}
-               {:tx-id 3, :tx-time (time/->zdt #inst "2020-01-04"), :committed? false}}
+    (t/is (= #{{:tx-id 0, :system-time (time/->zdt #inst "2020-01-01"), :committed? true}
+               {:tx-id 1, :system-time (time/->zdt #inst "2020-01-02"), :committed? false}
+               {:tx-id 2, :system-time (time/->zdt #inst "2020-01-03"), :committed? true}
+               {:tx-id 3, :system-time (time/->zdt #inst "2020-01-04"), :committed? false}}
              (set (xt/q tu/*node*
-                        '(from :xt/txs [{:xt/id tx-id, :tx-time tx-time, :committed committed?}])))))
+                        '(from :xt/txs [{:xt/id tx-id, :system-time system-time, :committed committed?}])))))
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
@@ -440,12 +440,12 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   ;; Thrown due to duplicate column projection in the query on `_id`
   (t/is (thrown-with-msg? 
          IllegalArgumentException
-         #"Duplicate column projection: xt\$id" 
+         #"Duplicate column projection: _id"
          (xt/q tu/*node* "FROM foo, bar")))
   
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"Duplicate column projection: xt\$id"
+         #"Duplicate column projection: _id"
          (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
 
   (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
@@ -525,12 +525,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-explain-plan-sql
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users (_id, foo, a, b) VALUES (1, 2, 3, 4)"]])
+
   (t/is (= [{:plan (str/trim "
 [:project
- [{xt$id u.1/xt$id} {foo u.1/foo}]
+ [{_id u.1/_id} {foo u.1/foo}]
  [:rename
   u.1
-  [:select (= (+ a b) 12) [:scan {:table users} [b foo a xt$id]]]]]
+  [:select (= (+ a b) 12) [:scan {:table public/users} [b foo a _id]]]]]
 ")}]
            (-> (xt/q tu/*node*
                      "SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12"
@@ -730,7 +731,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (tu/then-await-tx tx tu/*node*))
 
   (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
-        column-fields [{'xt$id
+        column-fields [{'_id
                         #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}
                        {'a
                         #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}
@@ -740,7 +741,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (=
            (concat
             column-fields
-            [{'xt$column_2 #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :i64 true]]}])
+            [{'_column_2 #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :i64 true]]}])
            (.columnFields pq))
           "param type is assumed to be nullable")
 
@@ -750,7 +751,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
        (t/is (=
               (concat
                column-fields
-               [{'xt$column_2 #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}])
+               [{'_column_2 #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}])
               (.columnFields bq))
              "now param value has been supplied we know its type is non-null")
 
@@ -764,7 +765,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
          (t/is (=
                 (concat
                  column-fields
-                 [{'xt$column_2 #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}])
+                 [{'_column_2 #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}])
                 (.columnFields bq))
                "now param value has been supplied we know its type is non-null")
 
@@ -806,7 +807,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                    (.openCursor bq))))))))
 
 (deftest test-prepared-statements-default-tz
-
   (t/testing "default-tz supplied at prepare"
     (let [ptz #xt.time/zone "America/New_York"
           pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
@@ -888,7 +888,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:col 904292726}]
            (tu/query-ra
-            '[:scan {:table bar}
+            '[:scan {:table public/bar}
               [{col (= col (cast "bar" :regclass))}]]
             {:node tu/*node*}))
         "scan pred"))

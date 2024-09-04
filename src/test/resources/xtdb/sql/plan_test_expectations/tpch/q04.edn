@@ -3,17 +3,17 @@
  [:order-by
   [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [o.1/o_orderpriority {order_count xt$row_count_5}]
+   [o.1/o_orderpriority {order_count _row_count_5}]
    [:group-by
-    [o.1/o_orderpriority {xt$row_count_5 (row-count)}]
+    [o.1/o_orderpriority {_row_count_5 (row-count)}]
     [:map
-     [{xt$sq_2 true}]
+     [{_sq_2 true}]
      [:semi-join
       [{o.1/o_orderkey l_orderkey}]
       [:rename
        o.1
        [:scan
-        {:table orders}
+        {:table public/orders}
         [{o_orderdate
           (and
            (<
@@ -46,7 +46,7 @@
         [:select
          (< l_commitdate l_receiptdate)
          [:scan
-          {:table lineitem}
+          {:table public/lineitem}
           [l_partkey
            l_shipinstruct
            l_discount

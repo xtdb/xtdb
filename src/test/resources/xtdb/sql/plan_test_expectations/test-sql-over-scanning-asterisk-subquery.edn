@@ -1,11 +1,11 @@
 [:project
- [{lastname foo.1/lastname} {name foo.1/name} {xt$column_2 xt$sq_3}]
+ [{lastname foo.1/lastname} {name foo.1/name} {_column_2 _sq_3}]
  [:single-join
   []
   [:mega-join
    []
-   [[:rename foo.1 [:scan {:table foo} [name lastname]]]
-    [:rename bar.2 [:scan {:table bar} []]]]]
+   [[:rename foo.1 [:scan {:table public/foo} [name lastname]]]
+    [:rename bar.2 [:scan {:table public/bar} []]]]]
   [:project
-   [{xt$sq_3 baz.4/frame}]
-   [:rename baz.4 [:scan {:table baz} [frame]]]]]]
+   [{_sq_3 baz.4/frame}]
+   [:rename baz.4 [:scan {:table public/baz} [frame]]]]]]
