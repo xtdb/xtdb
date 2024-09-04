@@ -23,12 +23,12 @@
           (tu/then-await-tx node))
 
       (t/is (= {:row-count 3}
-               (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table foo}, :columns [[:column id]]}
+               (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table public/foo}, :columns [[:column id]]}
                                      {:scan-fields {['foo 'id] (types/col-type->field :utf8)},
                                       :scan-emitter scan-emitter}))))
 
       (t/is (= {:row-count 2}
-               (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table bar}, :columns [[:column id]]}
+               (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table public/bar}, :columns [[:column id]]}
                                      {:scan-fields {['bar 'id] (types/col-type->field :utf8)},
                                       :scan-emitter scan-emitter})))))))
 

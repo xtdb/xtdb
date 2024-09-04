@@ -44,7 +44,7 @@
               "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "foo",
+              "name" : "public/foo",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -106,7 +106,7 @@
                 }]
               }]
             },{
-              "name" : "bar",
+              "name" : "public/bar",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -210,7 +210,7 @@
             "TYPE_ID" : [0,0,1],
             "OFFSET" : [0,1,0],
             "children" : [{
-              "name" : "foo",
+              "name" : "public/foo",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,1,2],
@@ -249,7 +249,7 @@
                 }]
               }]
             },{
-              "name" : "bar",
+              "name" : "public/bar",
               "count" : 1,
               "VALIDITY" : [1],
               "OFFSET" : [0,1],

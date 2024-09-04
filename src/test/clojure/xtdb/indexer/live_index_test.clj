@@ -132,11 +132,11 @@
 
           (tu/finish-chunk! node)
 
-          (t/is (= (mapv util/->path ["tables/foo/data/log-l00-fr00-nr110-rs5.arrow"])
-                   (.listObjects bp (util/->path "tables/foo/data"))))
+          (t/is (= (mapv util/->path ["tables/public$foo/data/log-l00-fr00-nr110-rs5.arrow"])
+                   (.listObjects bp (util/->path "tables/public$foo/data"))))
 
-          (t/is (= (mapv util/->path ["tables/foo/meta/log-l00-fr00-nr110-rs5.arrow"])
-                   (.listObjects bp (util/->path "tables/foo/meta")))))
+          (t/is (= (mapv util/->path ["tables/public$foo/meta/log-l00-fr00-nr110-rs5.arrow"])
+                   (.listObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                        (.resolve node-dir "objects"))))))

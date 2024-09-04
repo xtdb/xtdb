@@ -37,11 +37,11 @@
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [_id {name (> name "Ivan")}]]
+                           (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name "Ivan")}]]
                                              {:node node, :basis {:at-tx tx}}))))
 
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [_id {name (> name ?name)}]]
+                           (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
                                              {:node node, :basis {:at-tx tx}, :params {'?name "Ivan"}})))))]
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
@@ -50,12 +50,12 @@
             (t/testing "only needs to scan chunk 1, page 1"
               (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-params)
                     param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
-                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (false? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (false? (.test (.build param-sel table-metadata) 0)))))
 
-                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 2 8 4))
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 2 8 4))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0))))))))
@@ -92,22 +92,22 @@
         (util/with-open [params (tu/open-params {'?name "Ivan"})]
           (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-params)
                 param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
-            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 4 3))
+            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 4 3))
               (fn [^ITableMetadata table-metadata]
                 (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                 (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 4 7 2))
+            (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 4 7 2))
               (fn [^ITableMetadata table-metadata]
                 (t/is (false? (.test (.build lit-sel table-metadata) 0)))
                 (t/is (false? (.test (.build param-sel table-metadata) 0))))))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name "Ivan")}]]
+               (set (tu/query-ra '[:scan {:table public/xt_docs} [{name (= name "Ivan")}]]
                                  {:node node}))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name ?name)}]]
+               (set (tu/query-ra '[:scan {:table public/xt_docs} [{name (= name ?name)}]]
                                  {:node node, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
@@ -117,7 +117,7 @@
           tx2 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
           tt2 (.getSystemTime tx2)]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
+                (->> (tu/query-ra [:scan '{:table public/xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
                                    (into '[last_updated] temporal-constraints)]
                                   {:node node, :params {'?system-time1 tt1, '?system-time2 tt2}})
                      (into #{} (map :last-updated))))]

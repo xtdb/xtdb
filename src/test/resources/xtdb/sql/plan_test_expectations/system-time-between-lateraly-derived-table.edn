@@ -6,7 +6,8 @@
   [:rename
    x.1
    [:scan
-    {:table x, :for-system-time [:at #xt.time/date "3001-01-01"]}
+    {:table public/x,
+     :for-system-time [:at #xt.time/date "3001-01-01"]}
     [y]]]
   [:rename
    y.4
@@ -15,7 +16,7 @@
     [:rename
      z.2
      [:scan
-      {:table z,
+      {:table public/z,
        :for-system-time
        [:in
         #xt.time/date "3001-01-01"

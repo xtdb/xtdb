@@ -6,12 +6,17 @@
   (tx-ops/unparse-tx-op (tx-ops/parse-tx-op dml)))
 
 (t/deftest test-parse-insert
-  (t/is (= '[:insert-into :users (from :old-users [xt/id {:first-name given-name} {:last-name surname}])]
+  (t/is (= '[:insert-into :public/users (from :old-users [xt/id {:first-name given-name} {:last-name surname}])]
 
-           (roundtrip-tx-op '[:insert-into :users (from :old-users [xt/id {:first-name given-name, :last-name surname}])]))))
+           (roundtrip-tx-op '[:insert-into :users (from :old-users [xt/id {:first-name given-name, :last-name surname}])])))
+
+  (t/is (= '[:insert-into :foo/users (from :old-users [xt/id {:first-name given-name} {:last-name surname}])]
+
+           (roundtrip-tx-op '[:insert-into :foo/users (from :old-users [xt/id {:first-name given-name, :last-name surname}])]))
+        "with schema"))
 
 (t/deftest test-parse-update
-  (t/is (= '[:update {:table :foo
+  (t/is (= '[:update {:table :public/foo
                       :for-valid-time (in #inst "2020" nil)
                       :bind [{:xt/id $uid} {:version v}]
                       :set {:version (inc v)}}]
@@ -21,7 +26,7 @@
                                        :bind [{:xt/id $uid, :version v}]
                                        :set {:version (inc v)}}])))
 
-  (t/is (= '[:update {:table :foo
+  (t/is (= '[:update {:table :public/foo
                       :bind [{:xt/id foo} {:version v}]
                       :unify [(from :bar [{:xt/id $bar-id}, foo])]
                       :set {:version (inc v)}}]
@@ -38,7 +43,7 @@
                                      :set {:version (inc v)}}]))))
 
 (t/deftest test-parse-delete
-  (t/is (= '[:delete {:from :foo
+  (t/is (= '[:delete {:from :public/foo
                       :for-valid-time (in #inst "2020" nil),
                       :bind [{:xt/id $uid} {:version v}]}]
 
@@ -46,7 +51,7 @@
                                        :for-valid-time (in #inst "2020" nil),
                                        :bind [{:xt/id $uid} {:version v}]}])))
 
-  (t/is (= '[:delete {:from :foo
+  (t/is (= '[:delete {:from :public/foo
                       :bind [{:xt/id foo} {:version v}]
                       :unify [(from :bar [{:xt/id $bar-id}, foo])]}]
 
@@ -55,11 +60,11 @@
                                        :unify [(from :bar [{:xt/id $bar-id}, foo])]}]))))
 
 (t/deftest test-parse-erase
-  (t/is (= '[:erase {:from :foo, :bind [{:xt/id $uid} {:version v}]}]
+  (t/is (= '[:erase {:from :public/foo, :bind [{:xt/id $uid} {:version v}]}]
 
            (roundtrip-tx-op '[:erase {:from :foo, :bind [{:xt/id $uid, :version v}]}])))
 
-  (t/is (= '[:erase {:from :foo
+  (t/is (= '[:erase {:from :public/foo
                      :bind [{:xt/id foo} {:version v}]
                      :unify [(from :bar [{:xt/id $bar-id}, foo])]}]
 

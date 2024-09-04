@@ -2,9 +2,11 @@
  [{movie_title si.1/movie_title}]
  [:mega-join
   [{si.1/star_name ms.2/name}]
-  [[:rename si.1 [:scan {:table stars_in} [star_name movie_title]]]
+  [[:rename
+    si.1
+    [:scan {:table public/stars_in} [star_name movie_title]]]
    [:rename
     ms.2
     [:scan
-     {:table movie_star}
+     {:table public/movie_star}
      [name {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]

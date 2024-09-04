@@ -265,7 +265,7 @@
 
   (available-tables [_] [table-alias])
 
-  (find-decls [this [col-name table-name]]
+  (find-decls [this [col-name table-name schema-name]]
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (nil? schema-name) (= schema-name (:schema-name this)))
                (or (contains? cols col-name) (types/temporal-column? col-name)))
@@ -288,9 +288,10 @@
                          sys-time-default)]
 
           [:rename unique-table-alias
-           [:scan (cond-> {:table (if schema-name
-                                    (symbol (str schema-name "$" table-name))
-                                    table-name)}
+           [:scan (cond-> {:table (symbol (if schema-name
+                                            (str schema-name)
+                                            "public")
+                                          (str table-name))}
                     for-vt (assoc :for-valid-time for-vt)
                     for-st (assoc :for-system-time for-st))
             (vec (.keySet !reqd-cols))]])))))
@@ -551,9 +552,7 @@
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
-          (let [[sn table-cols] (or (when-let [table-cols (get table-info (if sn
-                                                                            (symbol (str sn "$" tn))
-                                                                            tn))]
+          (let [[sn table-cols] (or (when-let [table-cols (get table-info (symbol (or (some-> sn str) "public") (str tn)))]
                                       [sn table-cols])
 
                                     (when-not sn
@@ -2209,14 +2208,16 @@
       (when-not (contains? (set col-syms) '_id)
         (add-err! env (->InsertWithoutXtId)))
 
-      (->InsertStmt (identifier-sym (.tableName ctx)) insert-plan)))
+      (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
+                    insert-plan)))
 
   (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
   (visitUpdateStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
+          table-name (util/with-default-schema table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
@@ -2280,7 +2281,8 @@
   (visitDeleteStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
+          table-name (util/with-default-schema table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
@@ -2302,16 +2304,16 @@
                                :subqs (not-empty (into {} !subqs))}))
 
           projection (into '[_iid] (or vt-projection default-vt-extents-projection))]
-      (->DeleteStmt (symbol table-name)
+      (->DeleteStmt table-name
                     (->QueryExpr [:project projection
                                   (as-> (plan-table-ref dml-scope) plan
-                                    
+
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
                                           (apply-sqs subqs)
                                           (wrap-predicates predicate))
                                       plan)
-                                    
+
                                     [:project aliased-cols plan])]
                                  internal-cols))))
 
@@ -2320,8 +2322,9 @@
   (visitEraseStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols '[_iid]
           table-name (identifier-sym (.tableName ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) table-name)
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          table-name (util/with-default-schema table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
           table-cols (if-let [cols (get table-info table-name)]
@@ -2523,7 +2526,7 @@
   (visitShowVariableStatement [_ _])
 
   (visitInsertStatement [this ctx]
-    (let [table-name (str (identifier-sym (.tableName ctx)))]
+    (let [table (-> (identifier-sym (.tableName ctx)) (util/with-default-schema))]
       (when-let [rows (-> (.insertColumnsAndSource ctx) (.accept this))]
         (letfn [(->const [v arg-row]
                   (letfn [(->const* [obj]
@@ -2558,7 +2561,7 @@
                                (comp ->inst #(get % "_valid_to"))))
 
                (into [] (map (fn [[[vf vt] rows]]
-                               (-> (TxOps/putDocs table-name ^List (mapv #(dissoc % "_valid_from" "_valid_to") rows))
+                               (-> (TxOps/putDocs (str table) ^List (mapv #(dissoc % "_valid_from" "_valid_to") rows))
                                    (.during vf vt))))))))))
 
   (visitInsertFromSubquery [_ _])

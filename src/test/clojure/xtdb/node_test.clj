@@ -525,12 +525,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-explain-plan-sql
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users (_id, foo, a, b) VALUES (1, 2, 3, 4)"]])
+
   (t/is (= [{:plan (str/trim "
 [:project
  [{_id u.1/_id} {foo u.1/foo}]
  [:rename
   u.1
-  [:select (= (+ a b) 12) [:scan {:table users} [b foo a _id]]]]]
+  [:select (= (+ a b) 12) [:scan {:table public/users} [b foo a _id]]]]]
 ")}]
            (-> (xt/q tu/*node*
                      "SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12"
@@ -887,7 +888,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:col 904292726}]
            (tu/query-ra
-            '[:scan {:table bar}
+            '[:scan {:table public/bar}
               [{col (= col (cast "bar" :regclass))}]]
             {:node tu/*node*}))
         "scan pred"))

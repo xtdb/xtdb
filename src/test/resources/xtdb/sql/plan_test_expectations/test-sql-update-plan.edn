@@ -1,5 +1,5 @@
 [:update
- {:table users}
+ {:table public/users}
  [:project
   [_iid
    {_valid_from
@@ -25,6 +25,6 @@
    [:rename
     u.1
     [:scan
-     {:table users,
+     {:table public/users,
       :for-valid-time [:in #xt.time/date "2021-07-01" nil]}
      [_valid_to last_name {id (= id ?_0)} _valid_from _iid]]]]]]

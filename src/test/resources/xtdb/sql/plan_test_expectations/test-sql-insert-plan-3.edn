@@ -1,13 +1,11 @@
 [:insert
- {:table users}
+ {:table public/users}
  [:project
   [{_id _id}
    {name name}
    {_valid_from (cast _valid_from [:timestamp-tz :micro "UTC"])}]
   [:rename
-   {bar.2/_id _id,
-    bar.2/name name,
-    bar.2/_valid_from _valid_from}
+   {bar.2/_id _id, bar.2/name name, bar.2/_valid_from _valid_from}
    [:rename
     bar.2
     [:project

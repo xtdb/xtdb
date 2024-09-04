@@ -98,7 +98,7 @@ internal class XtdbTest {
             "default-tz"
         )
 
-        val plan = "[:project\n [{foo docs.1/foo}]\n [:rename docs.1 [:scan {:table docs} [foo]]]]\n"
+        val plan = "[:project\n [{foo docs.1/foo}]\n [:rename docs.1 [:scan {:table public/docs} [foo]]]]\n"
 
         node.submitTx(sql("INSERT INTO docs (_id, foo) VALUES (1, 'bar')"))
 

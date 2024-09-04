@@ -1,5 +1,5 @@
 [:insert
- {:table prop_owner}
+ {:table public/prop_owner}
  [:project
   [{_id _id}
    {customer_number customer_number}
@@ -27,5 +27,5 @@
        [:rename
         prop_owner.1
         [:scan
-         {:table prop_owner, :for-system-time :all-time}
+         {:table public/prop_owner, :for-system-time :all-time}
          [_system_from {id (= id 1)}]]]]]]]]]]

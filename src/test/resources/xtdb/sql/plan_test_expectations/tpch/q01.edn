@@ -43,7 +43,7 @@
      [:rename
       l.1
       [:scan
-       {:table lineitem}
+       {:table public/lineitem}
        [{l_shipdate
          (<=
           l_shipdate

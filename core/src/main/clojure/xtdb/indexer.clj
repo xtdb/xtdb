@@ -10,9 +10,9 @@
             [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
             [xtdb.operator.scan :as scan]
+            [xtdb.protocols :as xtp]
             [xtdb.query :as q]
-            [xtdb.rewrite :refer [zmatch]]
-            [xtdb.rewrite :as r]
+            [xtdb.rewrite :as r :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
@@ -22,8 +22,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql]
-            [xtdb.protocols :as xtp])
+            [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)
@@ -33,7 +32,6 @@
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
            (java.util.function Consumer IntPredicate)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
@@ -172,7 +170,7 @@
         nil))))
 
 (defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx {:keys [basis default-tz] :as tx-opts} fn-iid]
-  (let [lp '[:scan {:table xt$tx_fns} [{_iid (= _iid ?iid)} _id fn]]
+  (let [lp '[:scan {:table xt/tx_fns} [{_iid (= _iid ?iid)} _id fn]]
         ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src tx-opts)]
     (with-open [bq (.bind pq
                           {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
@@ -537,7 +535,7 @@
         nil))))
 
 (def ^:private ^:const ^String txs-table
-  "xt$txs")
+  "xt/txs")
 
 (defn- add-tx-row! [^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.getTxId tx-key)

@@ -18,9 +18,11 @@ import xtdb.util.normalForm
 import java.nio.ByteBuffer
 import java.time.Instant
 
-private const val XT_TXS = "xt\$tx_fns"
+private const val XT_TXS = "xt/tx_fns"
 private const val XT_ID = "_id"
 private const val FN = "fn"
+
+private fun String.withDefaultSchema() = if (this.indexOf('/') < 0) "public/$this" else this
 
 sealed interface TxOp {
     data class PutDocs(
@@ -137,7 +139,7 @@ object TxOps {
     private val forbiddenSetColumns = setOf("_id", "_valid_from", "_valid_to", "_system_from", "_system_to")
 
     @JvmStatic
-    fun putDocs(tableName: String, docs: List<Map<String, *>>) = TxOp.PutDocs(tableName, docs)
+    fun putDocs(tableName: String, docs: List<Map<String, *>>) = TxOp.PutDocs(tableName.withDefaultSchema(), docs)
 
     @JvmStatic
     @SafeVarargs
@@ -147,16 +149,16 @@ object TxOps {
     fun putFn(fnId: Any, fnForm: Any) = putDocs(XT_TXS, listOf(mapOf(XT_ID to fnId, FN to ClojureForm(fnForm))))
 
     @JvmStatic
-    fun deleteDocs(tableName: String, docIds: List<*>) = TxOp.DeleteDocs(tableName, docIds)
+    fun deleteDocs(tableName: String, docIds: List<*>) = TxOp.DeleteDocs(tableName.withDefaultSchema(), docIds)
 
     @JvmStatic
-    fun deleteDocs(tableName: String, vararg entityIds: Any) = TxOp.DeleteDocs(tableName, entityIds.toList())
+    fun deleteDocs(tableName: String, vararg entityIds: Any) = TxOp.DeleteDocs(tableName.withDefaultSchema(), entityIds.toList())
 
     @JvmStatic
-    fun eraseDocs(tableName: String, entityIds: List<*>) = TxOp.EraseDocs(tableName, entityIds)
+    fun eraseDocs(tableName: String, entityIds: List<*>) = TxOp.EraseDocs(tableName.withDefaultSchema(), entityIds)
 
     @JvmStatic
-    fun eraseDocs(tableName: String, vararg entityIds: Any) = TxOp.EraseDocs(tableName, entityIds.toList())
+    fun eraseDocs(tableName: String, vararg entityIds: Any) = TxOp.EraseDocs(tableName.withDefaultSchema(), entityIds.toList())
 
     @JvmStatic
     fun sql(sql: String) = TxOp.Sql(sql)
@@ -165,22 +167,22 @@ object TxOps {
     fun sql(sql: String, argBytes: ByteBuffer) = TxOp.SqlByteArgs(sql, argBytes)
 
     @JvmStatic
-    fun insert(table: String, query: XtqlQuery) = TxOp.Insert(table, query)
+    fun insert(table: String, query: XtqlQuery) = TxOp.Insert(table.withDefaultSchema(), query)
 
     @JvmStatic
     fun update(table: String, setSpecs: List<Binding>): TxOp.Update {
         if (forbiddenSetColumns.intersect(setSpecs.map { normalForm(it.binding) }.toSet()).isNotEmpty()) {
             throw IllegalArgumentException.createNoKey("Invalid set column for update", mapOf(Keyword.intern("set") to setSpecs))
         } else {
-            return TxOp.Update(table, setSpecs = setSpecs)
+            return TxOp.Update(table.withDefaultSchema(), setSpecs = setSpecs)
         }
     }
 
     @JvmStatic
-    fun delete(table: String) = TxOp.Delete(table)
+    fun delete(table: String) = TxOp.Delete(table.withDefaultSchema())
 
     @JvmStatic
-    fun erase(table: String) = TxOp.Erase(table)
+    fun erase(table: String) = TxOp.Erase(table.withDefaultSchema())
 
     @JvmStatic
     fun assertExists(query: XtqlQuery) = TxOp.AssertExists(query)

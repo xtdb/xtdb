@@ -13,7 +13,7 @@
       [:rename
        o.1
        [:scan
-        {:table orders}
+        {:table public/orders}
         [{o_orderdate
           (and
            (<
@@ -46,7 +46,7 @@
         [:select
          (< l_commitdate l_receiptdate)
          [:scan
-          {:table lineitem}
+          {:table public/lineitem}
           [l_partkey
            l_shipinstruct
            l_discount

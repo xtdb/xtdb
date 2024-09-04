@@ -19,9 +19,9 @@
         [:left-outer-join
          [{c.1/c_custkey o.2/o_custkey}
           (not (like o.2/o_comment "%special%requests%"))]
-         [:rename c.1 [:scan {:table customer} [c_custkey]]]
+         [:rename c.1 [:scan {:table public/customer} [c_custkey]]]
          [:rename
           o.2
           [:scan
-           {:table orders}
+           {:table public/orders}
            [o_custkey o_orderkey o_comment]]]]]]]]]]]]

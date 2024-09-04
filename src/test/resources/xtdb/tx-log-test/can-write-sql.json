@@ -44,7 +44,7 @@
               "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "foo",
+              "name" : "public/foo",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -193,7 +193,7 @@
             "TYPE_ID" : [0,0],
             "OFFSET" : [0,1],
             "children" : [{
-              "name" : "foo",
+              "name" : "public/foo",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,1,3],

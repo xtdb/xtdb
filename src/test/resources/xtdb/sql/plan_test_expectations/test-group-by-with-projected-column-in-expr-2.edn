@@ -4,4 +4,4 @@
   [{_sum_out_2 (sum _sum_in_3)}]
   [:map
    [{_sum_in_3 (- foo.1/a 4)}]
-   [:rename foo.1 [:scan {:table foo} [a]]]]]]
+   [:rename foo.1 [:scan {:table public/foo} [a]]]]]]

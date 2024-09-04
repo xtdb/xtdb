@@ -6,5 +6,5 @@
    [(> _needle z)]
    [:map
     [{_needle (= x.1/z 1)}]
-    [:rename x.1 [:scan {:table x} [y z]]]]
-   [:project [{z y.3/z}] [:rename y.3 [:scan {:table y} [z]]]]]]]
+    [:rename x.1 [:scan {:table public/x} [y z]]]]
+   [:project [{z y.3/z}] [:rename y.3 [:scan {:table public/y} [z]]]]]]]

@@ -3,7 +3,7 @@
  [:apply
   :single-join
   {tab0.1/z ?_sq_z_3}
-  [:rename tab0.1 [:scan {:table tab0} [z]]]
+  [:rename tab0.1 [:scan {:table public/tab0} [z]]]
   [:project
    [{_sq_2 _array_agg_out6}]
    [:group-by

@@ -3,7 +3,7 @@
  [:rename
   f.1
   [:scan
-   {:table foo,
+   {:table public/foo,
     :for-valid-time [:at :now],
     :for-system-time [:at :now]}
    [bar]]]]

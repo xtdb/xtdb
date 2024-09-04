@@ -49,21 +49,7 @@
         "type" : {
           "name" : "struct"
         },
-        "children" : [{
-          "name" : "_id",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "month",
-          "nullable" : true,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        }]
+        "children" : [ ]
       },{
         "name" : "delete",
         "nullable" : true,
@@ -82,49 +68,36 @@
     }]
   },
   "batches" : [{
-    "count" : 4,
+    "count" : 1,
     "columns" : [{
       "name" : "_iid",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : ["9e3f856e68998313827ff18dd4d88e78","9e3f856e68998313827ff18dd4d88e78","d9c7fae2a04e047164936265ba33cf80","d9c7fae2a04e047164936265ba33cf80"]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["d9c7fae2a04e047164936265ba33cf80"]
     },{
       "name" : "_system_from",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : [1578009600000000,1577836800000000,1578009600000000,1577836800000000]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1578009600000000]
     },{
       "name" : "_valid_from",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : [1585699200000000,1577836800000000,1585699200000000,1577836800000000]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1585699200000000]
     },{
       "name" : "_valid_to",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : [1588291200000000,9223372036854775807,9223372036854775807,9223372036854775807]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [9223372036854775807]
     },{
       "name" : "op",
-      "count" : 4,
-      "TYPE_ID" : [0,0,1,0],
-      "OFFSET" : [0,1,0,2],
+      "count" : 1,
+      "TYPE_ID" : [1],
+      "OFFSET" : [0],
       "children" : [{
         "name" : "put",
-        "count" : 3,
-        "VALIDITY" : [1,1,1],
-        "children" : [{
-          "name" : "_id",
-          "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "OFFSET" : [0,3,6,9],
-          "DATA" : ["bar","bar","foo"]
-        },{
-          "name" : "month",
-          "count" : 3,
-          "VALIDITY" : [1,0,0],
-          "OFFSET" : [0,5,5,5],
-          "DATA" : ["april","",""]
-        }]
+        "count" : 0,
+        "VALIDITY" : [ ]
       },{
         "name" : "delete",
         "count" : 1

@@ -259,7 +259,7 @@
     (fn write-put! [^TxOp$PutDocs op]
       (.startStruct put-writer)
       (let [^IVectorWriter table-doc-writer
-            (.computeIfAbsent table-doc-writers (.tableName op)
+            (.computeIfAbsent table-doc-writers (-> (.tableName op) (util/with-default-schema))
                               (fn [table]
                                 (doto (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :list))
                                   (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))
@@ -295,7 +295,7 @@
       (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct delete-writer)
 
-        (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
+        (.writeObject table-writer (-> (.tableName op) (util/with-default-schema)))
 
         (.startList iids-writer)
         (doseq [doc-id doc-ids]
@@ -316,7 +316,7 @@
     (fn [^TxOp$EraseDocs op]
       (when-let [doc-ids (not-empty (.docIds op))]
         (.startStruct erase-writer)
-        (.writeObject table-writer (util/str->normal-form-str (.tableName op)))
+        (.writeObject table-writer (-> (.tableName op) (util/with-default-schema)))
 
         (.startList iids-writer)
         (doseq [doc-id doc-ids]

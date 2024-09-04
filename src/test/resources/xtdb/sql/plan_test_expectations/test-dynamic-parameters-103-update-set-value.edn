@@ -1,5 +1,5 @@
 [:update
- {:table t1}
+ {:table public/t1}
  [:project
   [_iid
    {_valid_from
@@ -13,4 +13,6 @@
     {_valid_from t1.1/_valid_from}
     {_valid_to t1.1/_valid_to}
     {col1 ?_0})
-   [:rename t1.1 [:scan {:table t1} [_valid_to _valid_from _iid]]]]]]
+   [:rename
+    t1.1
+    [:scan {:table public/t1} [_valid_to _valid_from _iid]]]]]]

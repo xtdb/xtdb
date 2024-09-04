@@ -4,9 +4,9 @@
   (= x.1/y _sq_2)
   [:single-join
    []
-   [:rename x.1 [:scan {:table x} [y]]]
+   [:rename x.1 [:scan {:table public/x} [y]]]
    [:project
     [{_sq_2 _max_out_4}]
     [:group-by
      [{_max_out_4 (max foo.3/bar)}]
-     [:rename foo.3 [:scan {:table foo} [bar]]]]]]]]
+     [:rename foo.3 [:scan {:table public/foo} [bar]]]]]]]]

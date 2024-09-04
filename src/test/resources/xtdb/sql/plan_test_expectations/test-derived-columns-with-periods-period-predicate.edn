@@ -5,4 +5,6 @@
     (> (coalesce f.1/_valid_to xtdb/end-of-time) f.1/_system_from))}]
  [:rename
   f.1
-  [:scan {:table foo} [_valid_from _system_from _valid_to _system_to]]]]
+  [:scan
+   {:table public/foo}
+   [_valid_from _system_from _valid_to _system_to]]]]

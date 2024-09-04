@@ -1,5 +1,5 @@
 [:insert
- {:table users}
+ {:table public/users}
  [:project
   [{_id _id}
    {name name}

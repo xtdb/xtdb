@@ -7,4 +7,4 @@
   {:ordinality-column film.3/_ordinal.5}
   [:map
    [{unnest si.1/films}]
-   [:rename si.1 [:scan {:table stars_in} [films]]]]]]
+   [:rename si.1 [:scan {:table public/stars_in} [films]]]]]]

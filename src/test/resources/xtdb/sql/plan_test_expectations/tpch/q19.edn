@@ -57,7 +57,7 @@
            [[:rename
              l.1
              [:scan
-              {:table lineitem}
+              {:table public/lineitem}
               [l_partkey
                l_discount
                l_shipinstruct
@@ -67,7 +67,7 @@
             [:rename
              p.2
              [:scan
-              {:table part}
+              {:table public/part}
               [p_partkey p_brand p_size p_container]]]]]
           [:rename
            xt.values.10

@@ -43,22 +43,22 @@
     (tu/finish-chunk! tu/*node*)
 
     (t/is (= [{:num 1} {:num 1.0}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num 1)}]]
                           {:node tu/*node* :basis {:at-tx tx}})))
 
     (t/is (= [{:num 2.0}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num 2)}]]
                           {:node tu/*node* :basis {:at-tx tx}})))
 
     (t/is (= [{:num 4}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num ?x)}]]
                           {:node tu/*node* :basis {:at-tx tx} :params {'?x (byte 4)}})))
 
     (t/is (= [{:num 3}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num ?x)}]]
                           {:node tu/*node* :basis {:at-tx tx} :params {'?x (float 3)}})))))
 
@@ -75,14 +75,14 @@
     (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
               {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
               {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp #xt.time/zoned-date-time "2010-01-01T00:00:00Z")}]]
                           {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))
 
     (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
               {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
               {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp ?x)}]]
                           {:node tu/*node* :basis {:at-tx tx}
                            :default-tz  #xt.time/zone "Z" :params {'?x #xt.time/date "2010-01-01"}})))
@@ -90,7 +90,7 @@
     (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
               {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
               {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp #xt.time/date-time "2010-01-01T00:00:00")}]]
                           {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
 
@@ -103,7 +103,7 @@
     (tu/finish-chunk! tu/*node*)
 
     (t/is (= [{:time #xt.time/time "04:05:06"}]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table public/xt_docs}
                             [{time (= time #xt.time/time "04:05:06")}]]
                           {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
 
@@ -131,7 +131,7 @@
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-params)
-          meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
+          meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
       (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
         (let [page-idx-pred (.build literal-selector table-metadata)]
 
@@ -147,7 +147,7 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+        meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt.time/instant "2020-01-01T00:00:00.000000Z")
             temporal-dimension (TemporalDimension. sys-time-micros Long/MAX_VALUE)
@@ -160,7 +160,7 @@
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-params)
-        meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+        meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
 
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
       (let [page-idx-pred (.build true-selector table-metadata)]
@@ -179,7 +179,7 @@
       (tu/finish-chunk! node)
 
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-            meta-file-path (trie/->table-meta-file-path (util/->path "tables/xt_docs/") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+            meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs/") (trie/->log-l0-l1-trie-key 0 0 2 1))]
 
         (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))

@@ -31,7 +31,7 @@
        [{o.1/o_orderkey l.2/l_orderkey}]
        [[:rename
          o.1
-         [:scan {:table orders} [o_orderkey o_orderpriority]]]
+         [:scan {:table public/orders} [o_orderkey o_orderpriority]]]
         [:semi-join
          [{l.2/l_shipmode xt.values.4/_column_1}]
          [:rename
@@ -41,7 +41,7 @@
             (< l_commitdate l_receiptdate)
             (< l_shipdate l_commitdate))
            [:scan
-            {:table lineitem}
+            {:table public/lineitem}
             [l_shipdate
              {l_receiptdate
               (and

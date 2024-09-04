@@ -7,7 +7,9 @@
    {a.1/b ?_sq_b_3}
    [:map
     [{_row_number_0 (row-number)}]
-    [:rename a.1 [:scan {:table a} [b {a (= a 42)}]]]]
+    [:rename a.1 [:scan {:table public/a} [b {a (= a 42)}]]]]
    [:project
     [{b1 b.3/b1}]
-    [:rename b.3 [:scan {:table b} [{b2 (= b2 ?_sq_b_3)} b1]]]]]]]
+    [:rename
+     b.3
+     [:scan {:table public/b} [{b2 (= b2 ?_sq_b_3)} b1]]]]]]]

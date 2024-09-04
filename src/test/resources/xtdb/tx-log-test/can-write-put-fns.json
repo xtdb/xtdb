@@ -44,7 +44,7 @@
               "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "xt$tx_fns",
+              "name" : "xt/tx_fns",
               "nullable" : false,
               "type" : {
                 "name" : "list"
@@ -158,7 +158,7 @@
             "TYPE_ID" : [0,0],
             "OFFSET" : [0,1],
             "children" : [{
-              "name" : "xt$tx_fns",
+              "name" : "xt/tx_fns",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,1,2],

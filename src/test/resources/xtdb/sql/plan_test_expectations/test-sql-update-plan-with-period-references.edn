@@ -1,5 +1,5 @@
 [:update
- {:table foo}
+ {:table public/foo}
  [:project
   ({_iid foo.1/_iid}
    {_valid_from foo.1/_valid_from}
@@ -14,5 +14,5 @@
   [:rename
    foo.1
    [:scan
-    {:table foo, :for-valid-time :all-time}
+    {:table public/foo, :for-valid-time :all-time}
     [_system_from _valid_to baz _valid_from _system_to _iid]]]]]

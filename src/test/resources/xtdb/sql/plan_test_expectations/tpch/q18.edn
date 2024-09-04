@@ -28,14 +28,18 @@
       [{_sq_4 true}]
       [:mega-join
        [{o.2/o_orderkey l.3/l_orderkey} {c.1/c_custkey o.2/o_custkey}]
-       [[:rename l.3 [:scan {:table lineitem} [l_quantity l_orderkey]]]
-        [:rename c.1 [:scan {:table customer} [c_name c_custkey]]]
+       [[:rename
+         l.3
+         [:scan {:table public/lineitem} [l_quantity l_orderkey]]]
+        [:rename
+         c.1
+         [:scan {:table public/customer} [c_name c_custkey]]]
         [:semi-join
          [{o.2/o_orderkey l_orderkey}]
          [:rename
           o.2
           [:scan
-           {:table orders}
+           {:table public/orders}
            [o_custkey o_orderdate o_orderkey o_totalprice]]]
          [:project
           [{l_orderkey l.5/l_orderkey}]
@@ -46,5 +50,5 @@
             [:rename
              l.5
              [:scan
-              {:table lineitem}
+              {:table public/lineitem}
               [l_quantity l_orderkey]]]]]]]]]]]]]]]

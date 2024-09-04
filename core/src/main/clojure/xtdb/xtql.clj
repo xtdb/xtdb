@@ -1,6 +1,5 @@
 (ns xtdb.xtql
   (:require [clojure.set :as set]
-            [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
@@ -8,7 +7,8 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs Queries TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
-           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update)))
+           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update)
+           (xtdb.util NormalForm)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -412,7 +412,7 @@
 (defn- plan-from [^XtqlQuery$From from]
   (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec (.bindings from))
                                      (.projectAllCols from)
-                                     (concat (->> (get *table-info* (.table from))
+                                     (concat (->> (get *table-info* (-> (.table from) (util/with-default-schema)))
                                                   (mapv symbol)
                                                   (mapv #(hash-map :l % :r %))))))
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
@@ -421,7 +421,7 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (symbol (-> (.table from) (str/replace #"[\./]" "\\$")))
+    (-> [:scan {:table (NormalForm/normalTableName (keyword (.table from)))
                 :for-valid-time (plan-temporal-filter (.forValidTime from))
                 :for-system-time (plan-temporal-filter (.forSystemTime from))}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
@@ -946,7 +946,7 @@
 
   TxOp$Delete
   (plan-dml [delete-query tx-opts]
-    (let [table-name (.table delete-query)
+    (let [table-name (-> (.table delete-query) (util/with-default-schema))
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (doto (.setBindings (concat (.bindSpecs delete-query)
                                                                                                      extra-dml-bind-specs)))
@@ -961,7 +961,7 @@
 
   TxOp$Erase
   (plan-dml [erase-query _tx-opts]
-    (let [table-name (.table erase-query)
+    (let [table-name (-> (.table erase-query) (util/with-default-schema))
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
                                                                          (doto (.setBindings (concat (.bindSpecs erase-query)
                                                                                                      [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])))
@@ -976,9 +976,9 @@
 
   TxOp$Update
   (plan-dml [update-query tx-opts]
-    (let [table-name (.table update-query)
+    (let [table-name (-> (.table update-query) (util/with-default-schema))
           set-specs (.setSpecs update-query)
-          known-columns (set (get-in tx-opts [:table-info (util/str->normal-form-str table-name)]))
+          known-columns (set (get-in tx-opts [:table-info table-name]))
           unspecified-columns (-> (set/difference known-columns
                                                   (set (for [^Binding set-spec set-specs]
                                                          (util/str->normal-form-str (.getBinding set-spec)))))

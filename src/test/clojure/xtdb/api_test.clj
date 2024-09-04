@@ -645,7 +645,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
               "[:project
  [name age _valid_from _valid_to]
  [:scan
-  {:table people, :for-valid-time nil, :for-system-time nil}
+  {:table public/people, :for-valid-time nil, :for-system-time nil}
   [{_id (= _id ?pid)} name age _valid_from _valid_to]]]
 "}]
            (xt/q tu/*node*
@@ -661,7 +661,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
  [:rename
   people.1
   [:scan
-   {:table people}
+   {:table public/people}
    [age name _valid_from _valid_to {_id (= _id ?_0)}]]]]
 "}]
            (xt/q tu/*node*

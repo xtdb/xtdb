@@ -4,7 +4,7 @@
   :single-join
   {bar.1/_valid_from ?_sq__valid_from_3,
    bar.1/_valid_to ?_sq__valid_to_4}
-  [:rename bar.1 [:scan {:table bar} [_valid_from _valid_to]]]
+  [:rename bar.1 [:scan {:table public/bar} [_valid_from _valid_to]]]
   [:project
    [{_sq_2
      (and
@@ -14,4 +14,6 @@
       (>
        (coalesce foo.3/_valid_to xtdb/end-of-time)
        ?_sq__valid_from_3))}]
-   [:rename foo.3 [:scan {:table foo} [_valid_from _valid_to]]]]]]
+   [:rename
+    foo.3
+    [:scan {:table public/foo} [_valid_from _valid_to]]]]]]

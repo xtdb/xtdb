@@ -32,7 +32,9 @@
              [{c.1/c_custkey o_custkey}]
              [:rename
               c.1
-              [:scan {:table customer} [c_phone c_custkey c_acctbal]]]
+              [:scan
+               {:table public/customer}
+               [c_phone c_custkey c_acctbal]]]
              [:project
               [{o_clerk o.10/o_clerk}
                {o_comment o.10/o_comment}
@@ -46,7 +48,7 @@
               [:rename
                o.10
                [:scan
-                {:table orders}
+                {:table public/orders}
                 [o_custkey
                  o_shippriority
                  o_orderdate
@@ -80,7 +82,7 @@
              [:rename
               c.5
               [:scan
-               {:table customer}
+               {:table public/customer}
                [c_phone {c_acctbal (> c_acctbal 0.0)}]]]]
             [:rename
              xt.values.7

@@ -1,12 +1,11 @@
 (ns xtdb.tx-fn-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
-            [xtdb.serde :as serde]))
+            [xtdb.time :as time]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 

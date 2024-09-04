@@ -304,7 +304,7 @@
 (def ^java.nio.file.Path tables-dir (->path "tables"))
 
 (defn table-name->table-path [^String table-name]
-  (.resolve tables-dir table-name))
+  (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
 
 (def ^Thread$UncaughtExceptionHandler uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
@@ -577,6 +577,15 @@
       (cond-> (keyword? k) (-> symbol str)
               (symbol? k) str)
       str->normal-form-str))
+
+(defn with-default-schema [table]
+  (let [str? (string? table)
+        table (cond-> table
+                str? symbol)]
+    (cond-> (if (namespace table)
+              table
+              (symbol "public" (name table)))
+      str? str)))
 
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))

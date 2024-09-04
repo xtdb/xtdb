@@ -11,4 +11,4 @@
   {_column_10 (local-timestamp 9)}
   {_column_11 xtdb/end-of-time}
   {_column_12 xtdb/end-of-time}]
- [:rename u.1 [:scan {:table u} [a]]]]
+ [:rename u.1 [:scan {:table public/u} [a]]]]

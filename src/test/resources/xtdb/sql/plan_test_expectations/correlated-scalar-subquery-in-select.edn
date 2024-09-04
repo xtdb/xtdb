@@ -3,7 +3,7 @@
  [:apply
   :single-join
   {x.1/z ?_sq_z_3}
-  [:rename x.1 [:scan {:table x} [{y (= y 1)} z]]]
+  [:rename x.1 [:scan {:table public/x} [{y (= y 1)} z]]]
   [:project
    [{_sq_2 (= foo.3/bar ?_sq_z_3)}]
-   [:rename foo.3 [:scan {:table foo} [bar]]]]]]
+   [:rename foo.3 [:scan {:table public/foo} [bar]]]]]]

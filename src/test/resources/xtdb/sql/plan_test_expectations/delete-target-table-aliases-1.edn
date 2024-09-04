@@ -1,5 +1,5 @@
 [:delete
- {:table t1}
+ {:table public/t1}
  [:project
   [_iid
    {_valid_from
@@ -14,5 +14,5 @@
    [:rename
     u.1
     [:scan
-     {:table t1}
+     {:table public/t1}
      [{col1 (= col1 30)} _valid_to _valid_from _iid]]]]]]

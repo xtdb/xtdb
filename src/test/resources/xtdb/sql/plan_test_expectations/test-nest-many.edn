@@ -7,7 +7,7 @@
    {c.1/_id ?_sq__id_3}
    [:map
     [{_row_number_0 (row-number)}]
-    [:rename c.1 [:scan {:table customers} [name _id]]]]
+    [:rename c.1 [:scan {:table public/customers} [name _id]]]]
    [:project
     [{_sq_2 {:order_id order_id, :value value}}]
     [:project
@@ -15,5 +15,5 @@
      [:rename
       o.3
       [:scan
-       {:table orders}
+       {:table public/orders}
        [{customer_id (= customer_id ?_sq__id_3)} _id value]]]]]]]]

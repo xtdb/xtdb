@@ -2,5 +2,5 @@
  [{_column_1 _sq_2}]
  [:mark-join
   {_sq_2 [(> x.1/z z)]}
-  [:rename x.1 [:scan {:table x} [z]]]
-  [:project [{z y.3/z}] [:rename y.3 [:scan {:table y} [z]]]]]]
+  [:rename x.1 [:scan {:table public/x} [z]]]
+  [:project [{z y.3/z}] [:rename y.3 [:scan {:table public/y} [z]]]]]]

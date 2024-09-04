@@ -3,7 +3,7 @@
  [:apply
   :single-join
   {o.1/customer_id ?_sq_customer_id_3}
-  [:rename o.1 [:scan {:table orders} [customer_id _id value]]]
+  [:rename o.1 [:scan {:table public/orders} [customer_id _id value]]]
   [:project
    [{_sq_2 {:name name}}]
    [:project
@@ -11,5 +11,5 @@
     [:rename
      c.3
      [:scan
-      {:table customers}
+      {:table public/customers}
       [name {_id (= _id ?_sq_customer_id_3)}]]]]]]]

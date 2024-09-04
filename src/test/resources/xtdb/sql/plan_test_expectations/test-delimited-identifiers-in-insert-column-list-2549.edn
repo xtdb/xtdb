@@ -1,5 +1,5 @@
 [:insert
- {:table posts}
+ {:table public/posts}
  [:project
   [{_id xt.values.1/_id} {user-id xt.values.1/user-id}]
   [:rename

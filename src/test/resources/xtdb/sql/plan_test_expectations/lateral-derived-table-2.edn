@@ -4,4 +4,4 @@
   y.2
   [:project
    [{z z.1/z}]
-   [:rename z.1 [:scan {:table z} [{z (= z 1)}]]]]]]
+   [:rename z.1 [:scan {:table public/z} [{z (= z 1)}]]]]]]

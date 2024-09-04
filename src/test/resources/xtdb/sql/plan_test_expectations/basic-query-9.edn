@@ -8,5 +8,7 @@
     {_min_out_3 (min m.2/year)}]
    [:mega-join
     [{me.1/cert m.2/producer}]
-    [[:rename me.1 [:scan {:table movie_exec} [name cert]]]
-     [:rename m.2 [:scan {:table movie} [producer length year]]]]]]]]
+    [[:rename me.1 [:scan {:table public/movie_exec} [name cert]]]
+     [:rename
+      m.2
+      [:scan {:table public/movie} [producer length year]]]]]]]]

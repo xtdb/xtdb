@@ -75,7 +75,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4605)
+  4621)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
@@ -171,7 +171,7 @@
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
                  :xt/system-from (time/->zdt tt)}]
-               (tu/query-ra '[:scan {:table xt_docs}
+               (tu/query-ra '[:scan {:table public/xt_docs}
                               [_id version
                                _valid_from, _valid_to
                                _system_from, _system_to]]
@@ -190,7 +190,7 @@
                    {:xt/id :foo, :version 1,
                     :xt/valid-from (time/->zdt tt2)
                     :xt/system-from (time/->zdt tt2)}}
-                 (set (tu/query-ra '[:scan {:table xt_docs,
+                 (set (tu/query-ra '[:scan {:table public/xt_docs,
                                             :for-system-time :all-time,
                                             :for-valid-time :all-time}
                                      [_id version
@@ -201,7 +201,7 @@
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (time/->zdt tt)
                    :xt/system-from (time/->zdt tt)}]
-                 (tu/query-ra '[:scan {:table xt_docs}
+                 (tu/query-ra '[:scan {:table public/xt_docs}
                                 [_id version
                                  _valid_from, _valid_to
                                  _system_from, _system_to]]
@@ -263,7 +263,7 @@
                                   (types/col-type->field :utf8)
                                   (types/col-type->field :keyword)
                                   (types/col-type->field :i64))
-                   (.columnField mm "xt_docs" "_id")))
+                   (.columnField mm "public/xt_docs" "_id")))
 
           (t/is (= (types/->field "list" #xt.arrow/type :list true
                                   (types/->field "$data$" #xt.arrow/type :union false
@@ -271,7 +271,7 @@
                                                  (types/col-type->field :utf8)
                                                  (types/col-type->field [:timestamp-tz :micro "UTC"])
                                                  (types/col-type->field :bool)))
-                   (.columnField mm "xt_docs" "list")))
+                   (.columnField mm "public/xt_docs" "list")))
 
           (t/is (= (types/->field "struct" #xt.arrow/type :struct true
                                   (types/->field "a" #xt.arrow/type :union false
@@ -282,7 +282,7 @@
                                                  (types/->field "struct" #xt.arrow/type :struct true
                                                                 (types/->field "c" #xt.arrow/type :utf8 true)
                                                                 (types/->field "d" #xt.arrow/type :utf8 true))))
-                   (.columnField mm "xt_docs" "struct"))))))))
+                   (.columnField mm "public/xt_docs" "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
   (with-open [node (xtn/start-node {})]
@@ -396,9 +396,9 @@
 
           (let [objs (mapv str (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-            (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/log-l00.+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l00.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/meta/log-l00.+?\.arrow" %) objs))))
+            (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/meta/log-l00.+?\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00.+?\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))))))
 
@@ -446,14 +446,14 @@
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                   (let [objs (mapv str (.listAllObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                    (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/log-l00.+\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l00.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/log-l00.+?\.arrow" %) objs))))
+                    (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/meta/log-l00.+?\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00.+?\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))
 
                 (t/is (= :utf8
-                         (types/field->col-type (.columnField mm "device_readings" "_id"))))
+                         (types/field->col-type (.columnField mm "public/device_readings" "_id"))))
 
                 (let [second-half-tx-key (reduce
                                           (fn [_ tx-ops]
@@ -476,7 +476,7 @@
                                 (:tx-id second-half-tx-key)))
 
                       (t/is (= :utf8
-                               (types/field->col-type (.columnField mm "device_info" "_id"))))
+                               (types/field->col-type (.columnField mm "public/device_info" "_id"))))
 
                       (t/is (= second-half-tx-key (-> second-half-tx-key (tu/then-await-tx node3 (Duration/ofSeconds 15)))))
                       (t/is (= second-half-tx-key (tu/latest-completed-tx node3)))
@@ -486,14 +486,14 @@
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                       (let [objs (mapv str (.listAllObjects bp))]
                         (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                        (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/log-l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/meta/log-l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00-.+.arrow" %) objs)))))
 
                       (t/is (= :utf8
-                               (types/field->col-type (.columnField mm "device_info" "_id")))))))))))))))
+                               (types/field->col-type (.columnField mm "public/device_info" "_id")))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -509,7 +509,7 @@
         (tu/finish-chunk! node1)
 
         (t/is (= :utf8
-                 (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
+                 (types/field->col-type (.columnField mm1 "public/xt_docs" "v"))))
 
         (let [tx2 (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                                        [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -519,14 +519,14 @@
           (tu/finish-chunk! node1)
 
           (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                   (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
+                   (types/field->col-type (.columnField mm1 "public/xt_docs" "v"))))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                       (types/field->col-type (.columnField mm2 "xt_docs" "v")))))))))))
+                       (types/field->col-type (.columnField mm2 "public/xt_docs" "v")))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
