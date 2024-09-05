@@ -318,7 +318,22 @@
              (types/merge-fields (types/col-type->field :null) (types/col-type->field :i64))))
 
     (t/is (= (types/col-type->field "union" [:union #{:null :i64 :f64}])
-             (types/merge-fields (types/col-type->field :f64) (types/col-type->field :null) (types/col-type->field :i64)))))
+             (types/merge-fields (types/col-type->field :f64) (types/col-type->field :null) (types/col-type->field :i64))))
+
+    (t/testing "nulls kept within the legs they were originally in"
+      (t/is (= (types/->field "union" #xt.arrow/type :union false
+                              (types/col-type->field :f64)
+                              (types/col-type->field "i64" [:union #{:null :i64}]))
+               (types/merge-fields (types/col-type->field :f64)
+                                   (types/col-type->field [:union #{:null :i64}]))))
+
+      (t/is (= (types/->field "union" #xt.arrow/type :union false
+                              (types/col-type->field :f64)
+                              (types/col-type->field :f32)
+                              (types/col-type->field "i64" [:union #{:null :i64}]))
+               (types/merge-fields (types/col-type->field [:union #{:f64 :f32}])
+                                   (types/col-type->field [:union #{:null :i64}])))
+            "other unions flattened")))
 
   (t/testing "sets"
     (t/is (= (types/col-type->field [:set :i64])

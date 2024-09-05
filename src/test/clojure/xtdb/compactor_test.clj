@@ -5,6 +5,7 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
+            [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -453,8 +454,31 @@
 
         (t/is (= #{{:xt/id 0, :count 12} {:xt/id 1, :count 12}}
                  (set (xt/q node "SELECT _id, count(*) count
-                             FROM docs FOR ALL VALID_TIME
-                             GROUP BY _id"))))
+                                  FROM docs FOR ALL VALID_TIME
+                                  GROUP BY _id"))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/lose-data-on-compaction")))
                        (.resolve node-dir (tables-key "public$docs")) #"log-(.+)\.arrow")))))
+
+(t/deftest test-compaction-promotion-bug-3673
+  (util/with-open [node (xtn/start-node)]
+    (xt/submit-tx node [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
+    (tu/finish-chunk! node)
+    (c/compact-all! node #xt.time/duration "PT0.5S")
+
+    (xt/submit-tx node [[:put-docs :foo {:xt/id 2, :foo 24} {:xt/id 3, :foo 28.1} {:xt/id 4}]])
+    (tu/finish-chunk! node)
+    (c/compact-all! node #xt.time/duration "PT0.5S")
+
+    (t/is (= #{12.0 nil 24 28.1}
+             (->> (xt/q node "SELECT foo FROM foo")
+                  (into #{} (map :foo))))))
+
+  (util/with-open [node (xtn/start-node)]
+    (xt/submit-tx node [[:put-docs :foo {:xt/id 1} {:foo "foo", :xt/id 0} {:foo 3, :xt/id 2}]])
+    (tu/finish-chunk! node)
+    (c/compact-all! node #xt.time/duration "PT0.5S")
+
+    (t/is (= #{"foo" nil 3}
+             (->> (xt/q node "SELECT foo FROM foo")
+                  (into #{} (map :foo)))))))

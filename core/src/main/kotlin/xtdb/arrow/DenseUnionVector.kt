@@ -104,7 +104,7 @@ class DenseUnionVector(
         override fun endList() = writeValueThen().endList()
 
         override fun rowCopier0(src: VectorReader): RowCopier {
-            val innerCopier = inner.rowCopier0(src)
+            val innerCopier = src.rowCopier(inner)
             return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }
         }
 
@@ -168,7 +168,9 @@ class DenseUnionVector(
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
-                if (leg.field.fieldType != fieldType) TODO("promotion")
+                val legFieldType = leg.field.fieldType
+                if (legFieldType.type != fieldType.type || (fieldType.isNullable && !legFieldType.isNullable))
+                    TODO("promotion")
 
                 return LegWriter(i.toByte(), leg)
             }

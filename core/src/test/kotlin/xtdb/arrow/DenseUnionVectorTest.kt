@@ -70,4 +70,26 @@ class DenseUnionVectorTest {
             }
         }
     }
+
+    @Test
+    fun `nullable mono into DUV`() {
+        DoubleVector(allocator, "dbl", true).use { dblVec ->
+            dblVec.writeDouble(3.14)
+            dblVec.writeNull()
+            dblVec.writeDouble(2.71)
+
+            DenseUnionVector(
+                allocator, "dest",
+                listOf(DoubleVector(allocator, "f64", true))
+            ).use { destVec ->
+                dblVec.rowCopier(destVec).run {
+                    copyRow(0)
+                    copyRow(1)
+                    copyRow(2)
+                }
+
+                assertEquals(listOf(3.14, null, 2.71), destVec.asList)
+            }
+        }
+    }
 }

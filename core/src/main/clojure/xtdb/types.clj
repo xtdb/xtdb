@@ -350,39 +350,37 @@
 ;; beware that anywhere this is used, naming of the fields (apart from struct subfields) should not matter
 (defn merge-fields* [& fields]
   (letfn [(merge-field* [acc ^Field field]
-            (let [arrow-type (.getType field)
-                  nullable? (.isNullable field)
-                  acc (cond-> acc
-                        nullable? (assoc #xt.arrow/type :null nil))]
-              (condp = (class arrow-type)
-                ArrowType$Null acc
-                ArrowType$Union (reduce merge-field* acc (.getChildren field))
-                ArrowType$List (update acc arrow-type merge-field* (first (.getChildren field)))
-                SetType (update acc arrow-type merge-field* (first (.getChildren field)))
-                ArrowType$FixedSizeList (update acc arrow-type merge-field*
-                                                (first (.getChildren field)))
-                ArrowType$Struct (update acc arrow-type
-                                         (fn [acc]
-                                           (let [default-field-mapping (if acc {#xt.arrow/type :null nil} nil)
-                                                 children (.getChildren field)]
-                                             (as-> acc acc
-                                               (reduce (fn [acc ^Field field]
-                                                         (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
-                                                       acc
-                                                       children)
-                                               (reduce (fn [acc null-k]
-                                                         (update acc null-k merge-field* null-field))
-                                                       acc
-                                                       (set/difference (set (keys acc))
-                                                                       (set (map #(.getName ^Field %) children))))))))
-                (assoc acc (.getType field) nil))))
+            (let [arrow-type (.getType field)]
+              (if (instance? ArrowType$Union arrow-type)
+                (reduce merge-field* acc (.getChildren field))
 
-          (kv->field [[arrow-type opts] {:keys [nullable?] :or {nullable? false}}]
+                (-> acc
+                    (update arrow-type
+                            (fn [{:keys [nullable?] :as type-opts}]
+                              (into {:nullable? (or nullable? (.isNullable field))}
+                                    (condp = (class arrow-type)
+                                      ArrowType$List {:el (merge-field* (:el type-opts) (first (.getChildren field)))}
+                                      SetType {:el (merge-field* (:el type-opts) (first (.getChildren field)))}
+                                      ArrowType$FixedSizeList {:el (merge-field* (:el type-opts) (first (.getChildren field)))}
+                                      ArrowType$Struct {:fields (let [default-field-mapping (if type-opts {#xt.arrow/type :null {:nullable? true}} nil)
+                                                                      children (.getChildren field)]
+                                                                  (as-> (:fields type-opts) fields-acc
+                                                                    (reduce (fn [field-acc ^Field field]
+                                                                              (update field-acc (.getName field) (fnil merge-field* default-field-mapping) field))
+                                                                            fields-acc
+                                                                            children)
+                                                                    (reduce (fn [field-acc null-k]
+                                                                              (update field-acc null-k merge-field* null-field))
+                                                                            fields-acc
+                                                                            (set/difference (set (keys fields-acc))
+                                                                                            (set (map #(.getName ^Field %) children))))))}
+                                      {}))))))))
+
+          (kv->field [[arrow-type {:keys [nullable?] :as type-opts}]]
             (condp instance? arrow-type
-              ArrowType$List (->field-default-name arrow-type nullable? [(map->field opts)])
-              SetType (->field-default-name arrow-type nullable? [(map->field opts)])
-              ArrowType$FixedSizeList (->field-default-name arrow-type (or (contains? opts #xt.arrow/type :null) nullable?)
-                                                            [(map->field (dissoc opts #xt.arrow/type :null))])
+              ArrowType$List (->field-default-name arrow-type nullable? [(map->field (:el type-opts))])
+              SetType (->field-default-name arrow-type nullable? [(map->field (:el type-opts))])
+              ArrowType$FixedSizeList (->field-default-name arrow-type nullable? [(map->field (:el type-opts))])
               ArrowType$Struct (->field-default-name arrow-type nullable?
                                                      (map (fn [[name opts]]
                                                             (let [^Field field (map->field opts)]
@@ -390,11 +388,11 @@
                                                                      (cond->> (.getChildren field)
                                                                        (not= ArrowType$Struct (class (.getType field)))
                                                                        (map ->canonical-field)))))
-                                                          opts))
+                                                          (:fields type-opts)))
 
               ArrowType$Null (->field-default-name #xt.arrow/type :null true nil)
 
-              TsTzRangeType (->field-default-name #xt.arrow/type :tstz-range true
+              TsTzRangeType (->field-default-name #xt.arrow/type :tstz-range nullable?
                                                   [(->field "$data" temporal-arrow-type false)])
 
               (->field-default-name arrow-type nullable? nil)))
@@ -404,9 +402,11 @@
                   nullable? (contains? arrow-type-map #xt.arrow/type :null)]
               (case (count without-null)
                 0 null-field
-                1 (kv->field (first without-null) {:nullable? nullable?})
+                1 (kv->field (let [[arrow-type type-opts] (first without-null)]
+                               [arrow-type (cond-> type-opts
+                                             nullable? (assoc :nullable? true))]))
 
-                (->field-default-name #xt.arrow/type :union false (map #(kv->field % {}) arrow-type-map)))))]
+                (->field-default-name #xt.arrow/type :union false (map kv->field arrow-type-map)))))]
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
         (map->field))))
