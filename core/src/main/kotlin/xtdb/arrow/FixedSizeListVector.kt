@@ -26,7 +26,12 @@ class FixedSizeListVector(
     private val validityBuffer = ExtensibleBuffer(allocator)
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
-    override fun writeNull() = validityBuffer.writeBit(valueCount++, 0)
+
+    override fun writeNull() {
+        validityBuffer.writeBit(valueCount++, 0)
+        repeat(listSize) { elVector.writeUndefined() }
+    }
+
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): List<*> {

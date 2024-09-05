@@ -170,7 +170,7 @@ class RelationTest {
     @Test
     fun testDuvRoundTrip() {
         val duv = DenseUnionVector(
-            allocator, "duv", false,
+            allocator, "duv",
             listOf(
                 IntVector(allocator, "i32", false),
                 Utf8Vector(allocator, "utf8", true)

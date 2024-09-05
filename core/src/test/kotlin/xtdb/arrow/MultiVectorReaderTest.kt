@@ -195,6 +195,7 @@ class MultiVectorReaderTest {
             listOf(
                 Field("i32", FieldType.notNullable(INT.type), null),
                 Field("utf8", FieldType.notNullable(VARCHAR.type), null),
+                Field("null", FieldType.nullable(NULL.type), null),
             )
         )
 
@@ -202,10 +203,10 @@ class MultiVectorReaderTest {
             Vector.fromField(alloc, duvField).use { duv2 ->
                 duv1.legWriter("i32").writeInt(0)
                 duv2.legWriter("utf8").writeObject("first")
-                duv1.writeNull()
+                duv1.legWriter("null").writeNull()
                 duv2.legWriter("i32").writeInt(3)
                 duv1.legWriter("utf8").writeObject("fourth")
-                duv2.writeNull()
+                duv2.legWriter("null").writeNull()
 
                 val indirectRdr = MultiVectorReader(
                     listOf(duv1, duv2),

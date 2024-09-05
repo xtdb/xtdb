@@ -4,7 +4,9 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import java.nio.ByteBuffer
 
 interface VectorWriter : VectorReader, AutoCloseable {
-    fun writeNull()
+
+    fun writeUndefined(): Unit = writeNull()
+    fun writeNull(): Unit = unsupported("writeNull")
     fun writeBoolean(value: Boolean): Unit = unsupported("writeBoolean")
     fun writeByte(value: Byte): Unit = unsupported("writeByte")
     fun writeShort(value: Short): Unit = unsupported("writeShort")

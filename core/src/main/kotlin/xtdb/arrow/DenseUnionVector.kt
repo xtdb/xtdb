@@ -17,9 +17,10 @@ import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 class DenseUnionVector(
     private val allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
     legVectors: List<Vector>
 ) : Vector() {
+
+    override val nullable: Boolean = false
 
     private val legVectors = legVectors.toMutableList()
 
@@ -131,7 +132,7 @@ class DenseUnionVector(
 
     override fun isNull(idx: Int) = leg(idx)?.isNull(getOffset(idx)) ?: true
 
-    override fun writeNull() {
+    override fun writeUndefined() {
         typeBuffer.writeByte(-1)
         offsetBuffer.writeInt(0)
         valueCount++
@@ -222,7 +223,7 @@ class DenseUnionVector(
         if (dest is DenseUnionVector)
             dest.rowCopier0(this).let { copier ->
                 RowCopier { srcIdx ->
-                    if (getTypeId(srcIdx) < 0) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+                    if (getTypeId(srcIdx) < 0) valueCount.also { dest.writeUndefined() } else copier.copyRow(srcIdx)
                 }
             }
         else {

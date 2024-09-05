@@ -20,24 +20,17 @@ class StructVector(
     private val children: SequencedMap<String, Vector> = LinkedHashMap()
 ) : Vector(), Iterable<Vector> {
 
-    override val field get() =
-        Field(name, FieldType(nullable, ArrowType.Struct.INSTANCE, null), children.map { it.value.field })
+    override val field
+        get() =
+            Field(name, FieldType(nullable, ArrowType.Struct.INSTANCE, null), children.map { it.value.field })
 
     private val validityBuffer = ExtensibleBuffer(allocator)
-
-    private fun writeAbsents() {
-        val valueCount = this.valueCount
-
-        children.sequencedValues().forEach { child ->
-            repeat(valueCount - child.valueCount) { child.writeNull() }
-        }
-    }
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
     override fun writeNull() {
         validityBuffer.writeBit(valueCount++, 0)
-        writeAbsents()
+        children.sequencedValues().forEach { it.writeUndefined() }
     }
 
     override val keys get() = children.keys
@@ -62,7 +55,12 @@ class StructVector(
 
     override fun endStruct() {
         validityBuffer.writeBit(valueCount++, 1)
-        writeAbsents()
+
+        val valueCount = valueCount
+
+        children.sequencedValues().forEach { child ->
+            repeat(valueCount - child.valueCount) { child.writeNull() }
+        }
     }
 
     override fun mapKeyReader(): VectorReader = children.sequencedValues().firstOrNull() ?: TODO("auto-creation")

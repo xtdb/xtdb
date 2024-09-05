@@ -23,7 +23,7 @@ class DenseUnionVectorTest {
     @Test
     fun testDenseUnionVector() {
         DenseUnionVector(
-            allocator, "duv", false,
+            allocator, "duv",
             listOf(
                 IntVector(allocator, "i32", false),
                 Utf8Vector(allocator, "utf8", true)
@@ -55,7 +55,7 @@ class DenseUnionVectorTest {
             myIntVec.writeInt(64)
 
             DenseUnionVector(
-                allocator, "dest", false,
+                allocator, "dest",
                 listOf(
                     Utf8Vector(allocator, "utf8", false),
                     IntVector(allocator, "i32", true)

@@ -13,9 +13,7 @@ abstract class ExtensionVector : Vector() {
 
     override val name get() = inner.name
 
-    override var nullable: Boolean
-        get() = inner.nullable
-        set(value) {inner.nullable = value}
+    override val nullable: Boolean get() = inner.nullable
 
     override var valueCount: Int
         get() = inner.valueCount

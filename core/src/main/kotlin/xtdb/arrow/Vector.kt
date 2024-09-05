@@ -27,7 +27,7 @@ internal fun Any.unsupported(op: String): Nothing =
 
 sealed class Vector : VectorReader, VectorWriter {
 
-    abstract override var nullable: Boolean; internal set
+    abstract override val nullable: Boolean
     override var valueCount: Int = 0; internal set
 
     internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any
@@ -80,7 +80,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
                 override fun visit(type: Union) = when (type.mode!!) {
                     UnionMode.Sparse -> TODO("Not yet implemented")
-                    UnionMode.Dense -> DenseUnionVector(al, name, isNullable, field.children.map { fromField(al, it) })
+                    UnionMode.Dense -> DenseUnionVector(al, name, field.children.map { fromField(al, it) })
                 }
 
                 override fun visit(type: ArrowType.Map): MapVector {
