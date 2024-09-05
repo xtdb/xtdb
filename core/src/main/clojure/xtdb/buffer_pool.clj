@@ -319,7 +319,7 @@
                              ^FileListCache file-list-cache
                              ^ObjectStore object-store
                              ^SortedSet !os-file-names
-                             ^AutoCloseable os-file-name-subscription
+                             ^AutoCloseable !os-file-name-subscription
                              !evictor-max-weight]
   IBufferPool
   (getBuffer [_ k]
@@ -407,8 +407,9 @@
     (.invalidate memory-store k)
     (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
 
-  (close [_]
+  (close [_] 
     (free-memory memory-store)
+    (util/try-close @!os-file-name-subscription)
     (util/close object-store)
     (util/close allocator)))
 
