@@ -7,9 +7,12 @@
         ([query] (compile-query query {}))
 
         ([query query-opts]
-         (let [plan (plan/plan-statement query query-opts)]
+         (let [{:keys [col-syms] :as plan} (plan/plan-statement query query-opts)]
            (-> plan
                (plan/->logical-plan)
-               (vary-meta assoc :param-count (:param-count (meta plan)))
-               #_ (doto clojure.pprint/pprint))))) ;; <<no-commit>>
-      #_util/lru-memoize)) ;; <<no-commit>>
+               (vary-meta
+                assoc
+                :param-count (:param-count (meta plan))
+                :ordered-outer-projection col-syms)
+               #_(doto clojure.pprint/pprint))))) ;; <<no-commit>>
+      util/lru-memoize)) ;; <<no-commit>>
