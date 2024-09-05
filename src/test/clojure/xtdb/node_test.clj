@@ -731,17 +731,17 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (tu/then-await-tx tx tu/*node*))
 
   (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
-        column-fields [{'_id
+        column-fields [{"_id"
                         #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}
-                       {'a
+                       {"a"
                         #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}
-                       {'b
+                       {"b"
                         #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}]]
 
     (t/is (=
            (concat
             column-fields
-            [{'_column_2 #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :i64 true]]}])
+            [{"_column_2" #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :i64 true]]}])
            (.columnFields pq))
           "param type is assumed to be nullable")
 
@@ -751,7 +751,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
        (t/is (=
               (concat
                column-fields
-               [{'_column_2 #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}])
+               [{"_column_2" #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}])
               (.columnFields bq))
              "now param value has been supplied we know its type is non-null")
 
@@ -765,7 +765,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
          (t/is (=
                 (concat
                  column-fields
-                 [{'_column_2 #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}])
+                 [{"_column_2" #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}])
                 (.columnFields bq))
                "now param value has been supplied we know its type is non-null")
 

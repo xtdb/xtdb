@@ -168,7 +168,7 @@
                    (.scanFields scan-emitter wm))))
 
           cache (ConcurrentHashMap.)
-          ordered-outer-projection (:named-projection (meta query))
+          ordered-outer-projection (:ordered-outer-projection (meta query))
           param-fields (mapify-params (mapv (comp types/col-type->field types/col-type->nullable-col-type) param-types-with-defaults))
           default-tz (or default-tz (.getZone expr/*clock*))]
 
