@@ -4,8 +4,7 @@
             [xtdb.bitemporal :as bitemp]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
            [java.time Duration]
@@ -103,12 +102,12 @@
     nil))
 
 (defn ->log-data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [data-rels]
-  (trie/data-rel-schema (->> (for [^IDataRel data-rel data-rels]
-                               (-> (.getSchema data-rel)
-                                   (.findField "op")
-                                   (.getChildren) ^Field first
-                                   types/field->col-type))
-                             (apply types/merge-col-types))))
+  (trie/data-rel-schema (-> (for [^IDataRel data-rel data-rels]
+                                   (-> (.getSchema data-rel)
+                                       (.findField "op")
+                                       (.getChildren) ^Field first))
+                            (->> (apply types/merge-fields))
+                            (types/field-with-name "put"))))
 
 (defn open-recency-wtr ^xtdb.arrow.Vector [allocator]
   (Vector/fromField allocator

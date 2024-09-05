@@ -418,9 +418,11 @@
   (letfn [(normalize-doc [doc]
             (-> (dissoc doc :xt/system-from :xt/valid-from :xt/valid-to)
                 (update-keys util/kw->normal-form-kw)))]
-    (let [data-schema (->> page-idx->documents vals (apply concat) (filter #(= :put (first %)))
-                           (map (comp vw/value->col-type normalize-doc second))
-                           (apply types/merge-col-types))]
+    (let [data-schema (-> page-idx->documents
+                          (->> vals (apply concat) (filter #(= :put (first %)))
+                               (map (comp types/col-type->field vw/value->col-type normalize-doc second))
+                               (apply types/merge-fields))
+                          (types/field-with-name "put"))]
       (util/with-open [data-vsr (VectorSchemaRoot/create (trie/data-rel-schema data-schema) al)
                        data-wtr (vw/root->writer data-vsr)
                        os (FileOutputStream. (.toFile data-file-path))

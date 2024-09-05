@@ -15,7 +15,7 @@
            (java.util.concurrent.atomic AtomicInteger)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.arrow Relation Relation$Loader)
            xtdb.IBufferPool
@@ -84,19 +84,19 @@
                            (types/col-type->field "leaf" [:struct {'data-page-idx :i32
                                                                    'columns meta/metadata-col-type}]))]))
 
-(defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
+(defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [^Field put-doc-field]
   (Schema. [(types/col-type->field "_iid" [:fixed-size-binary 16])
             (types/col-type->field "_system_from" types/temporal-col-type)
             (types/col-type->field "_valid_from" types/temporal-col-type)
             (types/col-type->field "_valid_to" types/temporal-col-type)
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
-                           (types/col-type->field "put" put-doc-col-type)
+                           put-doc-field
                            (types/col-type->field "delete" :null)
                            (types/col-type->field "erase" :null))]))
 
 (defn open-log-data-wtr
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-   (open-log-data-wtr allocator (data-rel-schema [:struct {}])))
+   (open-log-data-wtr allocator (data-rel-schema (types/col-type->field "put" [:struct {}]))))
 
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
