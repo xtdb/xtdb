@@ -72,7 +72,12 @@
         iids-rdr (.structKeyReader put-leg "iids")
         iid-rdr (.listElementReader iids-rdr)
         docs-rdr (.structKeyReader put-leg "documents")
-        valid-from-rdr (.structKeyReader put-leg "_valid_from")
+
+        ;; HACK: can remove this once we're sure a few more people have migrated their logs
+        ^IVectorReader valid-from-rdr (or (.structKeyReader put-leg "_valid_from")
+                                          (when (.structKeyReader put-leg "xt$valid_from")
+                                            (throw (IllegalStateException. "Legacy log format - see https://github.com/xtdb/xtdb/pull/3675 for more details"))))
+
         valid-to-rdr (.structKeyReader put-leg "_valid_to")
         system-time-µs (time/instant->micros system-time)
         tables (->> (.legs docs-rdr)
