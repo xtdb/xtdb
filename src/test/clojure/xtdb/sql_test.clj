@@ -41,14 +41,10 @@
                              :expected (list '~'= exp-plan-file-name# actual-plan#)
                              :actual (list '~'not (list '~'= exp-plan# actual-plan#))})))
            result#)
-         (if regen-expected-files?
-           (do
-             (spit
-              (str (io/resource "xtdb/sql/plan_test_expectations/") exp-plan-file-name# ".edn")
-              (with-out-str (clojure.pprint/pprint actual-plan#))))
-           (t/do-report
-            {:type :error, :message "Missing Expectation File"
-             :expected exp-plan-file-path#  :actual (Exception. "Missing Expectation File")}))))))
+         (do
+           (spit
+            (str (io/resource "xtdb/sql/plan_test_expectations/") exp-plan-file-name# ".edn")
+            (with-out-str (clojure.pprint/pprint actual-plan#))))))))
 
 (deftest test-basic-queries
   (t/is (=plan-file
@@ -1181,7 +1177,12 @@
   (t/is (=plan-file
          "test-delimited-identifiers-in-insert-column-list-2549"
          (plan-sql
-          "INSERT INTO posts (\"_id\", \"user-id\") VALUES (1234, 5678)"))))
+          "INSERT INTO posts (\"_id\", \"user-id\") VALUES (1234, 5678)")))
+
+  (t/is (=plan-file
+         "test-delimited-identifiers-in-insert-column-list-2549"
+         (plan-sql
+          "INSERT INTO posts RECORDS {_id: 1234, \"user-id\": 5678}"))))
 
 (deftest test-table-period-specification-ordering-2260
   (let [opts {:table-info {"foo" #{"bar"}}}
@@ -1551,7 +1552,7 @@
 (t/deftest test-tx-ops-sql-params
   (t/testing "correct number of args"
     (t/is (= (serde/->tx-committed 0 #xt.time/instant "2020-01-01T00:00:00Z")
-             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [1 "dan"] [2 "james"]]])))
+             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, u_name: ?}" [1 "dan"] [2 "james"]]])))
 
     (t/is (= [{:u-name "dan", :xt/id 1}
               {:u-name "james", :xt/id 2}]
@@ -1684,7 +1685,7 @@
            (xt/q tu/*node* "SELECT x FROM foo1 EXCEPT SELECT x FROM foo2 UNION SELECT x FROM foo3"))))
 
 (deftest test-join-cond-subqueries
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, x) VALUES (1, 1), (2, 2)"]
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 1}, {_id: 2, x: 2}"]
                             [:sql "INSERT INTO bar (_id, x) VALUES (1, 1), (2, 3)"]
                             [:sql "INSERT INTO baz (_id, x) VALUES (1, 2)"]])
   (t/is (= [{:x 2, :bar-x 3} {:x 2, :bar-x 1} {:x 1}] 
@@ -1853,8 +1854,8 @@ VALUES
              (q)))))
 
 (t/deftest contains-precedence-bug-3473
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs1 (_id) VALUES (1)"]
-                           [:sql "INSERT INTO docs2 (_id) VALUES (1)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs1 RECORDS {_id: 1}"]
+                           [:sql "INSERT INTO docs2 RECORDS {_id: 1}"]])
 
   (t/is (= [{:one 1}] (xt/q tu/*node* "
 SELECT 1 AS one
@@ -1984,21 +1985,21 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
         "regclass with identical oid are equal")
 
   (t/testing "testing non-literal cast"
-    (xt/submit-tx tu/*node* [[:sql "INSERT INTO bar (_id, tn) VALUES (1, 'foo')"]])
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO bar RECORDS {_id: 1, tn: 'foo'}"]])
 
     (t/is (= [{:v (RegClass. 357712798)}]
              (xt/q tu/*node* "SELECT tn::regclass v FROM bar"))
           "text -> regclass")))
 
 (t/deftest test-regclass-where-expr
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO bar (_id) VALUES (1)"]
-                           [:sql "INSERT INTO bar (_id) VALUES (2)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO bar RECORDS {_id: 1}"]
+                           [:sql "INSERT INTO bar RECORDS {_id: 2}"]])
 
   (t/is (= [{:xt/id 2} {:xt/id 1}]
            (xt/q tu/*node* "SELECT _id FROM bar WHERE 'bar'::regclass = 904292726"))))
 
 (t/deftest test-regclass-search-path-precedence
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO pg_class (_id) VALUES (1)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO pg_class RECORDS {_id: 1}"]])
 
   (t/is (= [{:v (RegClass. 529124840)}]
            (xt/q tu/*node* "SELECT 'pg_class'::regclass v")
@@ -2012,3 +2013,19 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 (t/deftest test-xt-version
   (t/is (str/starts-with? (:version (first (xt/q tu/*node* "SELECT xt.version()")))
                           "XTDB @")))
+
+(t/deftest records-query
+  (t/is (=plan-file "records-query"
+                    (plan-sql "RECORDS {_id: 1, x: 1}, {x: 2.0}")))
+
+  (t/is (= [{:x 1, :xt/id 1} {:x 2.0}]
+           (xt/q tu/*node* "RECORDS {_id: 1, x: 1}, {x: 2.0}"))))
+
+(t/deftest insert-record-literals
+  (t/is (=plan-file "insert-record-literals"
+                    (plan-sql "INSERT INTO foo RECORDS {_id: 1, x: 2}")))
+
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
+
+  (t/is (= [{:x 2, :xt/id 1}]
+           (xt/q tu/*node* "SELECT * FROM foo"))))

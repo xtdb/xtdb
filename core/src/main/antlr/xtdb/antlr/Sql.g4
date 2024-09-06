@@ -355,7 +355,7 @@ booleanValue : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 // spec addition: objectConstructor
 
 objectConstructor
-    : 'OBJECT' '(' (objectNameAndValue (',' objectNameAndValue)*)? ')'
+    : ('RECORD' | 'OBJECT') '(' (objectNameAndValue (',' objectNameAndValue)*)? ')'
     | '{' (objectNameAndValue (',' objectNameAndValue)*)? '}'
     ;
 
@@ -506,6 +506,15 @@ rowValueConstructor
 
 rowValueList : rowValueConstructor (',' rowValueConstructor)* ;
 tableValueConstructor : 'VALUES' rowValueList ;
+
+recordValueConstructor
+    : parameterSpecification # ParameterRecord
+    | objectConstructor # ObjectRecord
+    ;
+
+recordsValueList : recordValueConstructor (',' recordValueConstructor)* ;
+
+recordsValueConstructor : 'RECORDS' recordsValueList ;
 
 /// §7.5 <from clause>
 
@@ -662,6 +671,7 @@ queryTerm
     : selectClause fromClause? whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
     | fromClause whereClause? groupByClause? havingClause? selectClause? windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
+    | recordsValueConstructor # RecordsQuery
     | '(' queryExpressionBody ')' # WrappedQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
     ;
@@ -775,6 +785,7 @@ eraseStatementSearched : 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('W
 insertStatement : 'INSERT' 'INTO' tableName insertColumnsAndSource ;
 insertColumnsAndSource
     : ( '(' columnNameList ')' )? tableValueConstructor # InsertValues
+    | ( '(' columnNameList ')' )? recordsValueConstructor # InsertRecords
     | ( '(' columnNameList ')' )? queryExpression # InsertFromSubquery
     ;
 

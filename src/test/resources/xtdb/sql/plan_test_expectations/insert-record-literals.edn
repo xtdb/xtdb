@@ -1,0 +1,5 @@
+[:insert
+ {:table public/foo}
+ [:project
+  [{x xt.values.1/x} {_id xt.values.1/_id}]
+  [:rename xt.values.1 [:table [x _id] [{:x 2, :_id 1}]]]]]

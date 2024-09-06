@@ -58,6 +58,7 @@
                      (visitColumnName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitFieldName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitCorrelationName [this ctx] (-> (.identifier ctx) (.accept this)))
+                     (visitObjectName [this ctx] (-> (.identifier ctx) (.accept this)))
 
                      (visitRegularIdentifier [_ ctx] (symbol (util/str->normal-form-str (.getText ctx))))
 
@@ -1788,9 +1789,13 @@
   PlanError
   (error-string [_] "INSERT does not contain mandatory _id column"))
 
+(defn- accept-visitor [visitor ^ParserRuleContext ctx]
+  (.accept ctx visitor))
+
 (defrecord TableRowsVisitor [env scope out-col-syms]
   SqlVisitor
   (visitTableValueConstructor [this ctx] (.accept (.rowValueList ctx) this))
+  (visitRecordsValueConstructor [this ctx] (.accept (.recordsValueList ctx) this))
 
   (visitRowValueList [_ ctx]
     (let [expr-plan-visitor (->ExprPlanVisitor env scope)
@@ -1807,7 +1812,6 @@
                                                              (->col-sym (str "_column_" (inc idx))))))))))))
 
           col-keys (mapv keyword col-syms)
-
           col-count (count col-keys)
 
           row-visitor (reify SqlVisitor
@@ -1829,6 +1833,31 @@
                                    (into {}))))))]
 
       {:rows (->> (.rowValueConstructor ctx)
+                  (mapv #(.accept ^ParserRuleContext % row-visitor)))
+       :col-syms col-syms}))
+
+  (visitRecordsValueList [_ ctx]
+    (let [expr-plan-visitor (->ExprPlanVisitor env scope)
+          col-syms (or out-col-syms
+                       (->> (.recordValueConstructor ctx)
+                            (into [] (comp (mapcat (partial accept-visitor
+                                                            (reify SqlVisitor
+                                                              (visitObjectRecord [this ctx]
+                                                                (->> (.objectNameAndValue (.objectConstructor ctx))
+                                                                     (into #{} (map (partial accept-visitor this)))))
+
+                                                              (visitObjectNameAndValue [_ ctx]
+                                                                (identifier-sym (.objectName ctx))))))
+                                           (distinct)))))
+
+          col-keys (mapv keyword col-syms)
+
+          row-visitor (reify SqlVisitor
+                        (visitObjectRecord [_ ctx]
+                          (-> (.accept (.objectConstructor ctx) expr-plan-visitor)
+                              (select-keys col-keys))))]
+
+      {:rows (->> (.recordValueConstructor ctx)
                   (mapv #(.accept ^ParserRuleContext % row-visitor)))
        :col-syms col-syms})))
 
@@ -2041,7 +2070,41 @@
                    (->> col-syms
                         (mapv #(->col-sym (str unique-table-alias) (str %)))))))
 
+  (visitRecordsQuery [this ctx] (-> (.recordsValueConstructor ctx) (.accept this)))
+  (visitRecordsValueConstructor [this ctx] (-> (.recordsValueList ctx) (.accept this)))
+
+  (visitRecordsValueList [{{:keys [!id-count]} :env, :keys [out-col-syms]} ctx]
+    (let [unique-table-alias (symbol (str "xt.values." (swap! !id-count inc)))
+          {:keys [rows col-syms]} (.accept ctx (->TableRowsVisitor env scope out-col-syms))]
+      (->QueryExpr [:rename unique-table-alias
+                    [:table col-syms
+                     rows]]
+
+                   (->> col-syms
+                        (mapv #(->col-sym (str unique-table-alias) (str %)))))))
+
   (visitSubquery [this ctx] (-> (.queryExpression ctx) (.accept this)))
+
+  (visitInsertRecords [this ctx]
+    (as-> (-> (.recordsValueConstructor ctx)
+              (.accept (assoc this :out-col-syms (some->> (.columnNameList ctx)
+                                                          (.columnName)
+                                                          (mapv identifier-sym)))))
+        {:keys [plan col-syms] :as query-expr}
+
+      (remove-ns-qualifiers query-expr env)
+
+      (if (some (comp types/temporal-column? str) col-syms)
+        (->QueryExpr [:project (mapv (fn [col-sym]
+                                       {col-sym
+                                        (if (types/temporal-column? (str col-sym))
+                                          (list 'cast col-sym types/temporal-col-type)
+                                          col-sym)})
+                                     col-syms)
+                      plan]
+                     col-syms)
+
+        query-expr)))
 
   (visitInsertValues [this ctx]
     (let [out-col-syms (->> (.columnName (.columnNameList ctx))
@@ -2571,12 +2634,20 @@
                             (mapv identifier-sym))
           {:keys [rows]} (-> (.tableValueConstructor ctx)
                              (.accept (->TableRowsVisitor env scope out-col-syms)))]
+      rows))
+
+  (visitInsertRecords [_ ctx]
+    (let [out-col-syms (some->> (.columnName (.columnNameList ctx))
+                                (mapv identifier-sym))
+          {:keys [rows]} (-> (.recordsValueConstructor ctx)
+                             (.accept (->TableRowsVisitor env scope out-col-syms)))]
       rows)))
 
 (defn sql->put-docs-ops
   ([sql arg-rows] (sql->put-docs-ops sql arg-rows {}))
 
   ([sql arg-rows {:keys [scope] :as opts}]
+   (prn sql)
    (try
      (let [{:keys [!errors !warnings] :as env} (->env opts)
            put-docs-ops (-> (parse-statement sql)
