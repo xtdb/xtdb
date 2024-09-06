@@ -43,8 +43,9 @@ Updates documents in a table, optionally for a period of valid-time.
 [railroad]
 ----
 const updateTable = rr.Sequence("UPDATE", "<table name>")
+const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
 const forValidTime = rr.Choice(0,
-  rr.Sequence("FOR", "PORTION", "OF", "VALID_TIME", "FROM", "<timestamp>", "TO", "<timestamp>"),
+  rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", "TO", "<timestamp>"),
   rr.Sequence("FOR", "ALL", "VALID_TIME"),
   rr.Sequence("FOR", "VALID_TIME", "ALL"))
 const setClause = rr.Sequence("SET", rr.OneOrMore(rr.Sequence("<column>", "=", "<value>"), ","))
@@ -65,8 +66,9 @@ Deletes documents from a table, optionally for a period of valid-time.
 [railroad]
 ----
 const deleteTable = rr.Sequence("DELETE", "FROM", "<table name>")
+const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
 const forValidTime = rr.Choice(0,
-  rr.Sequence("FOR", "PORTION", "OF", "VALID_TIME", "FROM", "<timestamp>", "TO", "<timestamp>"),
+  rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", "TO", "<timestamp>"),
   rr.Sequence("FOR", "ALL", "VALID_TIME"),
   rr.Sequence("FOR", "VALID_TIME", "ALL"))
 const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
