@@ -2647,7 +2647,6 @@
   ([sql arg-rows] (sql->put-docs-ops sql arg-rows {}))
 
   ([sql arg-rows {:keys [scope] :as opts}]
-   (prn sql)
    (try
      (let [{:keys [!errors !warnings] :as env} (->env opts)
            put-docs-ops (-> (parse-statement sql)
