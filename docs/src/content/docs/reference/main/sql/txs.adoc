@@ -26,8 +26,10 @@ const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
 const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
 const docs = rr.OneOrMore(doc, ",")
 const values = rr.Sequence(colNames, "VALUES", docs)
+const objs = rr.OneOrMore(rr.Choice(0, "<object>", "<param>"), ",")
+const records = rr.Sequence(rr.Optional(colNames, "skip"), "RECORDS", objs)
 const selectQuery = rr.Sequence(rr.Optional(colNames, "skip"), "<select query>")
-return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, selectQuery)))
+return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, selectQuery)))
 ----
 
 * Documents must contain an `_id` column.

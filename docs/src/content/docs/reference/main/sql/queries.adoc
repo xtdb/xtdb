@@ -130,7 +130,6 @@ return rr.Diagram(rr.Sequence("FOR", rr.Choice(0, rr.Sequence(timePeriod, timePe
 [railroad]
 ----
 const colRef = rr.Choice(0, "<column reference>", rr.Sequence('"', "<column reference>", '"'), rr.Sequence('`', "<column reference>", '`'))
-const param = rr.Choice(0, "?", "$<param idx>")
 const unaryOp = rr.Sequence(rr.HorizontalChoice("+", "-"), "<value>")
 const binaryOp = rr.Sequence("<value>", rr.HorizontalChoice("+", "-", "*", "/"), "<value>")
 
@@ -147,16 +146,28 @@ const nullIf = rr.Sequence("NULLIF", "(", "<value>", ",", "<value>", ")")
 const arrayLiteral = rr.Sequence(rr.Optional("ARRAY", "skip"), "[", rr.ZeroOrMore("<value>", ",", "skip"), "]")
 const arrayByQuery = rr.Sequence("ARRAY", "(", "<query>", ")")
 const arrayConstructor = rr.Choice(0, arrayLiteral, arrayByQuery)
-const objectEntries = rr.ZeroOrMore(rr.Sequence("<field name>", ":", "<value>"), ",", "skip")
-const objectBraceConstructor = rr.Sequence("{", objectEntries, "}")
-const objectFnConstructor = rr.Sequence("OBJECT", "(", objectEntries, ")")
-const objectConstructor = rr.Choice(0, objectBraceConstructor, objectFnConstructor)
 
 const wrapped = rr.Sequence("(", "<value>", ")")
 
 const subqs = rr.Sequence(rr.Choice(0, rr.Skip(), "NEST_ONE", "NEST_MANY"), "(", "<query>", ")")
 
-return rr.Diagram(rr.Choice(0, "<literal>", colRef, param, unaryOp, binaryOp, fn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, objectConstructor, subqs, wrapped))
+return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp, fn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, "<object>", subqs, wrapped))
+----
+
+=== <param>
+[railroad]
+----
+return rr.Diagram(rr.Choice(0, "?", "$<param idx>"))
+----
+
+=== <object>
+[railroad]
+----
+const objectEntries = rr.ZeroOrMore(rr.Sequence("<field name>", ":", "<value>"), ",", "skip")
+const objectBraceConstructor = rr.Sequence("{", objectEntries, "}")
+const objectFnConstructor = rr.Sequence("OBJECT", "(", objectEntries, ")")
+
+return rr.Diagram(rr.Choice(0, objectBraceConstructor, objectFnConstructor))
 ----
 
 === <literal>
