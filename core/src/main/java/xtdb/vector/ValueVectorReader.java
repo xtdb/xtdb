@@ -818,9 +818,9 @@ public class ValueVectorReader implements IVectorReader {
         Object getObject0(int idx, IKeyFn<?> keyFn) {
             var startIdx = getListStartIndex(idx);
             return PersistentVector.create(
-                IntStream.range(0, getListCount(idx))
-                    .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx, keyFn))
-                    .toList());
+                    IntStream.range(0, getListCount(idx))
+                            .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx, keyFn))
+                            .toList());
         }
 
         @Override
@@ -988,8 +988,8 @@ public class ValueVectorReader implements IVectorReader {
                 Map<Object, Object> acc = new HashMap<>();
                 for (int entryIdx = 0; entryIdx < entryCount; entryIdx++) {
                     acc.put(
-                        keyReader.getObject(startIdx + entryIdx, keyFn),
-                        valueReader.getObject(startIdx + entryIdx, keyFn));
+                            keyReader.getObject(startIdx + entryIdx, keyFn),
+                            valueReader.getObject(startIdx + entryIdx, keyFn));
                 }
                 return PersistentHashMap.create(acc);
             }
@@ -1072,6 +1072,19 @@ public class ValueVectorReader implements IVectorReader {
         @Override
         public String getLeg(int idx) {
             return legs.get(getTypeId(idx));
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public IVectorReader structKeyReader(String colName) {
+            // HACK - assumes that we only have one struct leg.
+            IVectorReader structLeg = legReader("struct");
+            if (structLeg == null) return null;
+
+            IVectorReader structKeyReader = structLeg.structKeyReader(colName);
+            if (structKeyReader == null) return null;
+
+            return new IndirectVectorReader(structKeyReader, new DuvIndirection(v, (byte) legs.indexOf("struct")));
         }
 
         @Override

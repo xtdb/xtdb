@@ -14,7 +14,8 @@
            (java.util Collection HashMap HashSet LinkedHashSet List Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$PostgresVersionFunctionContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (org.apache.arrow.vector.types.pojo Field Schema)
+           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
            xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
@@ -1838,10 +1839,27 @@
 
   (visitRecordsValueList [_ ctx]
     (let [expr-plan-visitor (->ExprPlanVisitor env scope)
+          arg-fields (some->> ^Schema (:args-schema env) (.getFields))
+
           col-syms (or out-col-syms
                        (->> (.recordValueConstructor ctx)
                             (into [] (comp (mapcat (partial accept-visitor
                                                             (reify SqlVisitor
+                                                              (visitParameterRecord [this ctx] (.accept (.parameterSpecification ctx) this))
+
+                                                              (visitDynamicParameter [this ctx]
+                                                                (when-not arg-fields
+                                                                  (throw (UnsupportedOperationException. "`RECORDS ?` not yet supported outside of DML")))
+
+                                                                (let [param-idx @(:!param-count env)]
+                                                                  (if-let [arg-field (nth arg-fields param-idx nil)]
+                                                                    (vec (for [^Field child-field (types/flatten-union-field arg-field)
+                                                                               :when (= #xt.arrow/type :struct (.getType child-field))
+                                                                               ^Field struct-key (.getChildren child-field)]
+                                                                           (symbol (.getName struct-key))))
+
+                                                                    (throw (UnsupportedOperationException. "TODO")))))
+
                                                               (visitObjectRecord [this ctx]
                                                                 (->> (.objectNameAndValue (.objectConstructor ctx))
                                                                      (into #{} (map (partial accept-visitor this)))))
@@ -1853,12 +1871,14 @@
           col-keys (mapv keyword col-syms)
 
           row-visitor (reify SqlVisitor
+                        (visitParameterRecord [_ ctx]
+                          (.accept (.parameterSpecification ctx) expr-plan-visitor))
                         (visitObjectRecord [_ ctx]
                           (-> (.accept (.objectConstructor ctx) expr-plan-visitor)
                               (select-keys col-keys))))]
 
       {:rows (->> (.recordValueConstructor ctx)
-                  (mapv #(.accept ^ParserRuleContext % row-visitor)))
+                  (mapv (partial accept-visitor row-visitor)))
        :col-syms col-syms})))
 
 (defrecord QueryPlanVisitor [env scope]
@@ -2541,11 +2561,10 @@
     (-> (.directSqlStatement parser)
         #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint)))))) ; <<no-commit>>
 
-
 (defn plan-statement
   ([sql] (plan-statement sql {}))
 
-  ([sql {:keys [scope table-info]}]
+  ([sql {:keys [scope table-info args-schema]}]
    (let [!errors (atom [])
          !warnings (atom [])
          !param-count (atom 0)
@@ -2553,7 +2572,11 @@
               :!warnings !warnings
               :!id-count (atom 0)
               :!param-count !param-count
-              :table-info (xform-table-info table-info)}
+              :table-info (xform-table-info table-info)
+              ;; NOTE this may not necessarily be provided
+              ;; we get it through SQL DML, which is the main case we need it for #3656
+              :args-schema args-schema}
+
          stmt (-> (parse-statement sql)
                   (.accept (->StmtVisitor env scope)))]
      (if-let [errs (not-empty @!errors)]

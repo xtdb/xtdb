@@ -2036,5 +2036,22 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
+  (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
+                          (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))))
+
   (t/is (= [{:x 2, :xt/id 1}]
-           (xt/q tu/*node* "SELECT * FROM foo"))))
+           (xt/q tu/*node* "SELECT * FROM foo")))
+
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO bar RECORDS ?"
+                             [{:_id 2, :x 3}]
+                             [{:_id 3, :x 4.0}]]
+
+                            [:sql "INSERT INTO bar RECORDS ?, {_id: 4, x: 5}"
+                             [{:_id 5, :x 6.0}]]])
+
+  (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0}]
+           (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
+
+  (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
+                          (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
+                                                                    [{:id 2, :x 3}]]]))))))

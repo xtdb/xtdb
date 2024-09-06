@@ -33,7 +33,7 @@
            (java.util.function Consumer IntPredicate)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
-           (org.apache.arrow.vector.ipc ArrowStreamReader)
+           (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
            (xtdb.api.tx TxOp TxOp$XtqlOp)
@@ -402,19 +402,22 @@
                              (accept [_ in-rel]
                                (.indexOp rel-idxer in-rel query-opts))))))))
 
-(defn- foreach-arg-row [^BufferAllocator allocator, ^IVectorReader args-rdr, ^long tx-op-idx, eval-query]
-  (if (.isNull args-rdr tx-op-idx)
+(defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^IVectorReader args-rdr, ^long tx-op-idx]
+  (when-not (.isNull args-rdr tx-op-idx)
+    (let [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject args-rdr tx-op-idx)))] ; could try to use getBytes
+      (ArrowStreamReader. is allocator))))
+
+(defn- foreach-arg-row [^ArrowReader asr, eval-query]
+  (if-not asr
     (eval-query nil)
 
-    (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject args-rdr tx-op-idx))) ; could try to use getBytes
-                asr (ArrowStreamReader. is allocator)]
-      (let [param-root (.getVectorSchemaRoot asr)]
-        (while (.loadNextBatch asr)
-          (let [param-rel (vr/<-root param-root)
-                selection (int-array 1)]
-            (dotimes [idx (.rowCount param-rel)]
-              (aset selection 0 idx)
-              (eval-query (-> param-rel (.select selection))))))))))
+    (let [param-root (.getVectorSchemaRoot asr)]
+      (while (.loadNextBatch asr)
+        (let [param-rel (vr/<-root param-root)
+              selection (int-array 1)]
+          (dotimes [idx (.rowCount param-rel)]
+            (aset selection 0 idx)
+            (eval-query (-> param-rel (.select selection)))))))))
 
 (defn- wrap-sql-args [f ^long param-count]
   (fn [^RelationReader args]
@@ -446,42 +449,42 @@
         erase-idxer (->erase-rel-indexer live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [query-str (.getObject query-rdr tx-op-idx)
-              compiled-query (sql/compile-query query-str {:table-info (scan/tables-with-cols wm-src)})
-              param-count (:param-count (meta compiled-query))]
-          ;; TODO handle error
-          (zmatch (r/vector-zip compiled-query)
-            [:insert query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args param-count)))
+        (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
+          (let [query-str (.getObject query-rdr tx-op-idx)
+                compiled-query (sql/compile-query query-str {:table-info (scan/tables-with-cols wm-src)
+                                                             :args-schema (some-> args-arrow-rdr .getVectorSchemaRoot .getSchema)})
+                param-count (:param-count (meta compiled-query))]
+            ;; TODO handle error
+            (zmatch (r/vector-zip compiled-query)
+              [:insert query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-args param-count)))
 
-            [:update query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args param-count)))
+              [:update query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-args param-count)))
 
-            [:delete query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args param-count)))
+              [:delete query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-args param-count)))
 
-            [:erase query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                 (wrap-sql-args param-count)))
+              [:erase query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-args param-count)))
 
-            [:assert-exists _query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
-                                 (wrap-sql-args param-count)))
+              [:assert-exists _query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
+                                   (wrap-sql-args param-count)))
 
-            (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
-                                                         :query query-str}))))
+              (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
+                                                           :query query-str})))))
 
         nil))))
-
-
 
 (defn- wrap-xtql-args [f]
   (fn [^RelationReader args]
@@ -504,38 +507,39 @@
           (when-not (instance? TxOp$XtqlOp xtql-op)
             (throw (UnsupportedOperationException. "unknown XTQL DML op")))
 
-          (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info (scan/tables-with-cols wm-src)))
-            [:insert query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                 (wrap-xtql-args)))
+          (util/with-open [args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
+            (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info (scan/tables-with-cols wm-src)))
+              [:insert query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-args)))
 
-            [:update query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                 (wrap-xtql-args)))
+              [:update query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-args)))
 
-            [:delete query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                 (wrap-xtql-args)))
+              [:delete query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-args)))
 
-            [:erase query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                 (wrap-xtql-args)))
+              [:erase query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-args)))
 
-            [:assert-not-exists _query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (->assert-idxer :assert-not-exists q-src wm-src inner-query tx-opts)
-                                 (wrap-xtql-args)))
+              [:assert-not-exists _query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (->assert-idxer :assert-not-exists q-src wm-src inner-query tx-opts)
+                                   (wrap-xtql-args)))
 
-            [:assert-exists _query-opts inner-query]
-            (foreach-arg-row allocator args-rdr tx-op-idx
-                             (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
-                                 (wrap-xtql-args)))
+              [:assert-exists _query-opts inner-query]
+              (foreach-arg-row args-arrow-rdr
+                               (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
+                                   (wrap-xtql-args)))
 
-            (throw (UnsupportedOperationException. "xtql query"))))
+              (throw (UnsupportedOperationException. "xtql query")))))
 
         nil))))
 

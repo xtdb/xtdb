@@ -168,3 +168,8 @@
            (tu/query-ra '[:table {unnest-param ?coll}]
                         {:params {'?coll [12.4, nil, 100, 83.0]}
                          :with-col-types? true}))))
+
+(t/deftest test-table-with-map-params
+  (t/is (= [{:a 4.2} {:b "1", :c 2, :a 0} {:b 2, :a 1}]
+           (tu/query-ra '[:table [{:a 4.2} ?record {:a 1, :b 2}]]
+                        {:params {'?record {:a 0, :b "1", :c 2}}}))))

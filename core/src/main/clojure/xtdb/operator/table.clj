@@ -1,6 +1,5 @@
 (ns xtdb.operator.table
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
@@ -11,17 +10,17 @@
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            (java.util ArrayList HashMap HashSet Set)
-           java.util.function.Function
-           org.apache.arrow.vector.ZeroVector
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
+           (org.apache.arrow.vector VectorSchemaRoot ZeroVector)
            (xtdb ICursor)
-           (xtdb.operator ProjectionSpec)
-           (xtdb.vector RelationReader)))
+           xtdb.arrow.VectorPosition
+           (xtdb.vector RelationReader IRelationWriter IVectorWriter)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
          :explicit-col-names (s/? (s/coll-of ::lp/column :kind vector?))
-         :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
+         :table (s/or :rows (s/coll-of (s/or :map (s/map-of simple-ident? any?)
+                                             :param ::lp/param))
                       :column (s/map-of ::lp/column any?, :count 1)
                       :param ::lp/param)))
 
@@ -47,77 +46,94 @@
     explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat types/null-field))))
                            (select-keys explicit-col-names))))
 
-(defn- ->out-rel [{:keys [allocator] :as opts} fields rows ->v]
-  (let [row-count (count rows)]
-    (when (pos? row-count)
-      (util/with-close-on-catch [out-cols (ArrayList. (count fields))]
-        (doseq [[col-name ^Field field] fields
-                :let [col-kw (keyword col-name)
-                      out-vec (.createVector field allocator)]]
-          (util/with-close-on-catch [out-writer (vw/->writer out-vec)]
-
-            (dotimes [idx row-count]
-              (let [row (nth rows idx)
-                    v (-> (get row col-kw) (->v opts))]
-                (.writeObject out-writer v)))
-
-            (.syncValueCount out-writer)
-            (.add out-cols (.withName (vr/vec->reader out-vec) (str col-name)))))
-
-        (vr/rel-reader out-cols row-count)))))
-
 (defn- emit-rows-table [rows table-expr {:keys [param-fields schema] :as opts}]
   (let [param-types (update-vals param-fields types/field->col-type)
         field-sets (HashMap.)
-        row-count (count rows)
-        out-rows (ArrayList. row-count)
-        key-fn #xt/key-fn :kebab-case-keyword
-        rows (map #(update-keys % keyword) rows)
-        columns (->> (mapcat keys rows)
-                     (into #{}))]
-    (doseq [row rows]
-      (let [out-row (HashMap.)
-            absent-columns (set/difference columns (set (keys row)))]
+        out-rows (->> rows
+                      (mapv (fn [[row-tag row-arg]]
+                              (case row-tag
+                                :param (let [^Field struct-field (-> (for [^Field child-field (-> (or (get param-fields row-arg)
+                                                                                                      (throw (UnsupportedOperationException. "missing param")))
+                                                                                                  (types/flatten-union-field))
+                                                                           :when (= #xt.arrow/type :struct (.getType child-field))]
+                                                                       child-field)
+                                                                     (->> (apply types/merge-fields)))
+                                             ks (->> (.getChildren struct-field)
+                                                     (into #{} (map #(symbol (.getName ^Field %)))))]
 
-        (doseq [absent-column absent-columns
-                :let [^Set field-set (.computeIfAbsent field-sets (symbol absent-column) (reify Function (apply [_ _] (HashSet.))))]]
-          (.add field-set types/null-field))
+                                         (doseq [^Field struct-key (.getChildren struct-field)
+                                                 :let [^Set field-set (.computeIfAbsent field-sets (symbol (.getName struct-key))
+                                                                                        (fn [_] (HashSet.)))]]
+                                           (.add field-set struct-key))
 
-        (doseq [[k v] row
-                :let [k-sym (symbol k)]]
-          (let [expr (expr/form->expr v (assoc opts :param-types param-types))
-                ^Set field-set (.computeIfAbsent field-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
-            (case (:op expr)
-              :literal (do
-                         (.add field-set (types/col-type->field (vw/value->col-type v)))
-                         (.put out-row k v))
+                                         {:ks ks
+                                          :write-row! (fn write-param-row! [{:keys [^RelationReader params]}, ^IRelationWriter out-rel]
+                                                        (let [param-rdr (.readerForName params (str row-arg))]
+                                                          (.startRow out-rel)
+                                                          (doseq [k ks
+                                                                  :let [k (str k)]]
+                                                            (.writeValue (.colWriter out-rel k)
+                                                                         (-> (.structKeyReader param-rdr k)
+                                                                             (.valueReader (VectorPosition/build 0)))))
+                                                          (.endRow out-rel)))})
 
-              :param (let [{:keys [param]} expr]
-                       (.add field-set (get param-fields param))
-                       ;; TODO let's try not to copy this out and back in again
-                       (.put out-row k (fn [{:keys [^RelationReader params]}]
-                                         (let [col (.readerForName params (name param))]
-                                           (.getObject col 0 key-fn)))))
+                                :map (let [out-row (->> row-arg
+                                                        (into {}
+                                                              (map (fn [[k v]]
+                                                                     (let [k (symbol k)
+                                                                           expr (expr/form->expr v (assoc opts :param-types param-types))
+                                                                           ^Set field-set (.computeIfAbsent field-sets k (fn [_] (HashSet.)))]
+                                                                       (case (:op expr)
+                                                                         :literal (do
+                                                                                    (.add field-set (types/col-type->field (vw/value->col-type v)))
+                                                                                    (MapEntry/create k (fn write-literal! [_ ^IVectorWriter out-col]
+                                                                                                         (.writeObject out-col v))))
 
-              ;; HACK: this is quite heavyweight to calculate a single value -
-              ;; the EE doesn't yet have an efficient means to do so...
-              (let [input-types (assoc opts :param-types param-types)
-                    expr (expr/form->expr v input-types)
-                    projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
-                (.add field-set (types/col-type->field (.getColumnType projection-spec)))
-                (.put out-row k (fn [{:keys [allocator params]}]
-                                  (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema params)]
-                                    (.getObject out-vec 0 key-fn))))))))
-        (.add out-rows out-row)))
+                                                                         :param (let [{:keys [param]} expr]
+                                                                                  (.add field-set (get param-fields param))
+                                                                                  (MapEntry/create k (fn write-param! [{:keys [^RelationReader params]} ^IVectorWriter out-col]
+                                                                                                       (.writeValue out-col
+                                                                                                                    (-> (.readerForName params (str param))
+                                                                                                                        (.valueReader (VectorPosition/build 0)))))))
 
-    (let [fields (-> field-sets
-                     (->> (into {} (map (juxt key (comp #(apply types/merge-fields %) val)))))
-                     (restrict-cols table-expr))]
-      {:fields fields
-       :->out-rel (fn [opts]
-                    (->out-rel opts fields out-rows
-                               (fn [v opts]
-                                 (if (fn? v) (v opts) v))))})))
+                                                                         ;; HACK: this is quite heavyweight to calculate a single value -
+                                                                         ;; the EE doesn't yet have an efficient means to do so...
+                                                                         (let [input-types (assoc opts :param-types param-types)
+                                                                               expr (expr/form->expr v input-types)
+                                                                               projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
+                                                                           (.add field-set (types/col-type->field (.getColumnType projection-spec)))
+                                                                           (MapEntry/create k (fn write-expr! [{:keys [allocator params]} ^IVectorWriter out-col]
+                                                                                                (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema params)]
+                                                                                                  (.writeValue out-col (.valueReader out-vec (VectorPosition/build 0)))))))))))))]
+
+                                       {:ks (set (keys out-row))
+                                        :write-row! (fn write-row! [opts ^IRelationWriter out-rel]
+                                                      (.startRow out-rel)
+                                                      (doseq [[k write-val!] out-row]
+                                                        (write-val! opts (.colWriter out-rel (str k))))
+                                                      (.endRow out-rel))})))))
+
+        key-freqs (->> (into [] (mapcat :ks) out-rows)
+                       (frequencies))
+        row-count (count out-rows)
+        fields (-> field-sets
+                   (->> (into {} (map (juxt key (fn [[k ^Set !v-types]]
+                                                  (when-not (= row-count (get key-freqs (symbol k)))
+                                                    (.add !v-types types/null-field))
+                                                  (-> (apply types/merge-fields !v-types)
+                                                      (types/field-with-name (str k))))))))
+                   (restrict-cols table-expr))]
+
+    {:fields fields
+     :->out-rel (fn [{:keys [allocator] :as opts}]
+                  (let [row-count (count rows)]
+                    (when (pos? row-count)
+                      (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (or (vals fields) [])) allocator)
+                                                 out-rel (vw/root->writer root)]
+                        (doseq [{:keys [write-row!]} out-rows]
+                          (write-row! opts out-rel))
+
+                        (vw/rel-wtr->rdr out-rel)))))}))
 
 (defn- emit-col-table [col-spec table-expr {:keys [param-fields schema] :as opts}]
   (let [[out-col v] (first col-spec)
