@@ -775,9 +775,11 @@ deleteStatementSearched
       ( 'WHERE' searchCondition )?
     ;
 
-dmlStatementValidTimeExtents : dmlStatementValidTimePortion | dmlStatementValidTimeAll ;
-dmlStatementValidTimePortion : 'FOR' 'PORTION' 'OF' 'VALID_TIME' 'FROM' expr 'TO' expr ;
-dmlStatementValidTimeAll : 'FOR' 'ALL' 'VALID_TIME' | 'FOR' 'VALID_TIME' 'ALL' ;
+dmlStatementValidTimeExtents
+  : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' expr 'TO' expr # DmlStatementValidTimePortion
+  | 'FOR' ('ALL' 'VALID_TIME' | 'VALID_TIME' 'ALL') # DmlStatementValidTimeAll
+  ;
+
 eraseStatementSearched : 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('WHERE' searchCondition)? ;
 
 /// §14.11 <insert statement>

@@ -664,6 +664,11 @@
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-app-time"
          (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"
+                   {:table-info {"public/users" #{"first_name" "id"}}})))
+
+  (t/is (=plan-file
+         "test-dynamic-parameters-103-update-app-time"
+         (plan-sql "UPDATE users FOR VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"
                    {:table-info {"public/users" #{"first_name" "id"}}}))))
 
 (t/deftest test-dynamic-temporal-filters-3068
@@ -1003,6 +1008,10 @@
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
                     (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"
+                              {:table-info {"public/users" #{"id"}}})))
+
+  (t/is (=plan-file "test-sql-delete-plan"
+                    (plan-sql "DELETE FROM users FOR VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"
                               {:table-info {"public/users" #{"id"}}}))))
 
 (deftest test-sql-erase-plan

@@ -2172,8 +2172,6 @@
 
 (defrecord DmlValidTimeExtentsVisitor [env scope]
   SqlVisitor
-  (visitDmlStatementValidTimeExtents [this ctx] (-> (.getChild ctx 0) (.accept this)))
-
   (visitDmlStatementValidTimeAll [_ _]
     {:for-valid-time :all-time,
      :projection [vf-col vt-col]})
