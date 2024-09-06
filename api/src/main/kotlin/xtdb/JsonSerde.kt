@@ -26,6 +26,8 @@ object AnySerde : KSerializer<Any> {
 
     private fun JsonElement.asString() = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonElement.asStringOrThrow() = asString() ?: throw jsonIAEwithMessage("@value must be string!", this)
+    private fun JsonElement.asLong() = (this as? JsonPrimitive)?.longOrNull
+    private fun JsonElement.asDouble() = (this as? JsonPrimitive)?.doubleOrNull
 
     private fun toThrowable(obj: JsonObject): Throwable {
         val errorMessage = obj["xtdb.error/message"]!!.asString()!!
@@ -57,6 +59,16 @@ object AnySerde : KSerializer<Any> {
             } else {
                 val value = this["@value"] ?: throw jsonIAEwithMessage("@value can't be null!", this)
                 when (type) {
+                    "xt:long" ->
+                        value.asLong()
+                            ?: value.asString()?.toLong()
+                            ?: throw jsonIAEwithMessage("@value must be long!", this)
+
+                    "xt:double" ->
+                        value.asDouble()
+                            ?: value.asString()?.toDouble()
+                            ?: throw jsonIAEwithMessage("@value must be double!", this)
+
                     "xt:instant" -> Instant.parse(value.asStringOrThrow())
                     "xt:timestamptz" -> ZonedDateTime.parse(value.asStringOrThrow())
                     "xt:timestamp" -> LocalDateTime.parse(value.asStringOrThrow())

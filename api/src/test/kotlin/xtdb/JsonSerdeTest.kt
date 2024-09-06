@@ -5,6 +5,7 @@ import clojure.lang.Symbol
 import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.msgpack.util.json.JSON
 import xtdb.api.query.*
 import xtdb.api.txKey
 import java.time.*
@@ -30,7 +31,6 @@ class JsonSerdeTest {
         assertEquals(expectedThis, JSON_SERDE.decodeFromString(actualJson))
     }
 
-
     @Test
     fun `roundtrips JSON literals`() {
         null.assertRoundTrip("null")
@@ -39,7 +39,16 @@ class JsonSerdeTest {
             .assertRoundTrip("""[42,"bell",true,{"a":12.5,"b":"bar"}]""")
         mapOf(Keyword.intern("c") to "foo")
             .assertRoundTrip("""{"c":"foo"}""", mapOf("c" to "foo"))
+    }
 
+    @Test
+    fun `parses JSON-LD numbers`() {
+        assertEquals(42L, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:long\", \"@value\": 42 }"))
+        assertEquals(42L, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:long\", \"@value\": \"42\" }"))
+
+        assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42 }"))
+        assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42.0 }"))
+        assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": \"42.0\" }"))
     }
 
     @Test
