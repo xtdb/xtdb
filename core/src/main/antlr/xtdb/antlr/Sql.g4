@@ -657,7 +657,8 @@ asClause : 'AS'? columnName ;
 
 /// §7.13 <query expression>
 
-queryExpression : withClause? queryExpressionBody orderByClause? offsetAndLimit?  ;
+queryExpression : withClause? queryExpressionNoWith ;
+queryExpressionNoWith : queryExpressionBody orderByClause? offsetAndLimit?  ;
 withClause : 'WITH' RECURSIVE? withListElement (',' withListElement)* ;
 withListElement : queryName ('(' columnNameList ')')? 'AS' subquery ;
 
@@ -672,7 +673,7 @@ queryTerm
     | fromClause whereClause? groupByClause? havingClause? selectClause? windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
     | recordsValueConstructor # RecordsQuery
-    | '(' queryExpressionBody ')' # WrappedQuery
+    | '(' queryExpressionNoWith ')' # WrappedQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
     ;
     

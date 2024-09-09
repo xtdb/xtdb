@@ -2070,3 +2070,21 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
   (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
                           (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
                                                                     [{:id 2, :x 3}]]]))))))
+
+(t/deftest limit-parens-3475
+  (let [q "
+(SELECT _id, foo FROM bar LIMIT 1)
+UNION ALL
+(SELECT _id, foo FROM baz LIMIT 1)
+"]
+    (t/is (=plan-file "limit-parens"
+                      (plan-sql q
+                                {:table-info {"public/bar" #{"_id" "foo"}
+                                              "public/baz" #{"_id" "foo"}}})))
+
+    (xt/submit-tx tu/*node*
+                  [[:put-docs :bar {:xt/id 1 :foo 2} {:xt/id 2 :foo 3}]
+                   [:put-docs :baz {:xt/id 3 :foo 4} {:xt/id 4 :foo 5}]])
+
+    (t/is (= [{:xt/id 2, :foo 3} {:xt/id 4, :foo 5}]
+             (xt/q tu/*node* q)))))

@@ -1902,15 +1902,17 @@
 
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor
-  (visitWrappedQuery [this ctx] (-> (.queryExpressionBody ctx) (.accept this)))
+  (visitWrappedQuery [this ctx] (-> (.queryExpressionNoWith ctx) (.accept this)))
 
   (visitQueryExpression [this ctx]
-    (let [{:keys [env] :as this} (-> this
-                                     (assoc-in [:env :ctes] (or (some-> (.withClause ctx)
-                                                                        (.accept (->WithVisitor env scope)))
-                                                                (:ctes env))))
+    (.accept (.queryExpressionNoWith ctx)
+             (-> this
+                 (assoc-in [:env :ctes] (or (some-> (.withClause ctx)
+                                                    (.accept (->WithVisitor env scope)))
+                                            (:ctes env))))))
 
-          order-by-ctx (.orderByClause ctx)
+  (visitQueryExpressionNoWith [{:keys [env] :as this} ctx]
+    (let [order-by-ctx (.orderByClause ctx)
 
           qeb-ctx (.queryExpressionBody ctx)
 
