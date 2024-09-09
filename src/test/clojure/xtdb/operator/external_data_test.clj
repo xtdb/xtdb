@@ -19,7 +19,7 @@
     {:xt/id "foo5", :a-long 53, :a-double 10.0, :an-inst (time/->zdt #inst "2022")}]])
 
 (t/deftest test-csv-cursor
-  (t/is (= {:col-types {"_id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+  (t/is (= {:col-types '{_id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
             :res example-data}
            (tu/query-ra [:csv (-> (io/resource "xtdb/operator/csv-cursor-test.csv")
                                   .toURI

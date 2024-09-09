@@ -69,10 +69,7 @@
                                         (write-batch!)))))
 
 (defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IQuerySource q-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
-  (letfn [(fields->schema ^org.apache.arrow.vector.types.pojo.Schema [fields]
-            (Schema. (map #(types/field-with-name (val (first %)) (str (key (first %)))) fields)))
-
-          (exec-dml [dml fsql-tx-id]
+  (letfn [(exec-dml [dml fsql-tx-id]
             (if fsql-tx-id
               (when-not (.computeIfPresent fsql-txs fsql-tx-id
                                      (reify BiFunction
@@ -85,7 +82,7 @@
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (try
               (with-open [res (.openCursor bq)
-                          vsr (VectorSchemaRoot/create (fields->schema (.columnFields bq)) allocator)]
+                          vsr (VectorSchemaRoot/create (Schema. (.columnFields bq)) allocator)]
                 (.start listener vsr)
 
                 (let [out-wtr (vw/root->writer vsr)]
@@ -163,7 +160,7 @@
                                   (Any/pack)
                                   (.toByteArray)))]
           (.put tickets ticket-handle bq)
-          (FlightInfo. (fields->schema (.columnFields bq)) descriptor
+          (FlightInfo. (Schema. (.columnFields bq)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 
@@ -188,7 +185,7 @@
               ^BoundQuery bound-query (or bound-query
                                           (.bind prepd-query {}))]
           (.put ps :bound-query bound-query)
-          (FlightInfo. (fields->schema (.columnFields bound-query)) descriptor
+          (FlightInfo. (Schema. (.columnFields bound-query)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 

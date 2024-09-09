@@ -731,28 +731,21 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (tu/then-await-tx tx tu/*node*))
 
   (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
-        column-fields [{"_id"
-                        #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}
-                       {"a"
-                        #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}
-                       {"b"
-                        #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}]]
+        column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]
+                       #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]
+                       #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
 
-    (t/is (=
-           (concat
-            column-fields
-            [{"_column_2" #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :i64 true]]}])
-           (.columnFields pq))
+    (t/is (= (conj column-fields
+                   #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 true]])
+             (.columnFields pq))
           "param type is assumed to be nullable")
 
      (with-open [bq (.bind pq {:args [42]})
                  cursor (.openCursor bq)]
 
-       (t/is (=
-              (concat
-               column-fields
-               [{"_column_2" #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]}])
-              (.columnFields bq))
+       (t/is (= (conj column-fields
+                      #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
+                (.columnFields bq))
              "now param value has been supplied we know its type is non-null")
 
        (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
@@ -762,11 +755,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
        (with-open [bq (.bind pq {:args ["fish"]})
                    cursor (.openCursor bq)]
 
-         (t/is (=
-                (concat
-                 column-fields
-                 [{"_column_2" #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]}])
-                (.columnFields bq))
+         (t/is (= (conj column-fields
+                        #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :utf8 false]])
+                  (.columnFields bq))
                "now param value has been supplied we know its type is non-null")
 
          (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
@@ -841,11 +832,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
-
   (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT ? v" {:param-types nil})]
-
-    (t/is (= [{'?_0
-               #xt.arrow/field ["union" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]}]
+    (t/is (= [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]]
              (.paramFields pq))
           "unspecified param-types are assumed to be utf8")
 

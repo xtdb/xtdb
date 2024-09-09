@@ -8,6 +8,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util.function Consumer)
+           org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            xtdb.indexer.IIndexer
@@ -58,5 +59,6 @@
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
-               {:res rows, :col-types (update-vals (into {} (.columnFields bq)) types/field->col-type)}
+               {:res rows, :col-types (->> (.columnFields bq)
+                                           (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))}
                rows))))))))

@@ -5,8 +5,8 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            xtdb.expression.temporal
             xtdb.expression.pg
+            xtdb.expression.temporal
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.operator.apply
@@ -34,11 +34,12 @@
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            java.lang.AutoCloseable
            (java.time Clock Duration)
+           (java.util HashMap)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Function)
-           java.util.HashMap
            [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
+           org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor IResultCursor)
            (xtdb.api.query IKeyFn Query)
            xtdb.metadata.IMetadataManager
@@ -49,7 +50,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
-  (columnFields [])
+  (^java.util.List columnFields [])
   (^xtdb.ICursor openCursor [])
   (^void close []
    "optional: if you close this BoundQuery it'll close any closed-over params relation"))
@@ -59,8 +60,8 @@
   ;; NOTE we could arguably take the actual params here rather than param-fields
   ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
   ;; ... or at least raise questions about who then owns the params
-  (paramFields [])
-  (columnFields [])
+  (^java.util.List paramFields [])
+  (^java.util.List columnFields [])
   (^xtdb.query.BoundQuery bind [queryOpts]
    "queryOpts :: {:params, :table-args, :basis, :default-tz}"))
 
@@ -126,15 +127,18 @@
 
 (defn ->column-fields [ordered-outer-projection fields]
   (if ordered-outer-projection
-    (mapv #(hash-map (str %) (get fields %)) ordered-outer-projection)
-    (mapv #(hash-map (key %) (val %)) fields)))
+    (->> ordered-outer-projection
+         (mapv (fn [field-name]
+                 (-> (get fields field-name)
+                     (types/field-with-name (str field-name))))))
+    (->> fields
+         (mapv (fn [[field-name field]]
+                 (types/field-with-name field (str field-name)))))))
 
 (defn ->param-fields [params]
   (->> params
        (into {} (map (fn [^IVectorReader col]
-                       (MapEntry/create
-                        (symbol (.getName col))
-                        (.getField col)))))))
+                       (MapEntry/create (symbol (.getName col)) (.getField col)))))))
 
 (defn prepare-ra ^xtdb.query.PreparedQuery
   [query
@@ -148,7 +152,7 @@
                               {:plan query
                                :explain (s/explain-data ::lp/logical-plan query)})))
 
-    (let [param-count (or (:param-count (meta query)) 0)
+    (let [{:keys [ordered-outer-projection param-count], :or {param-count 0}} (meta query)
           param-types-with-defaults (->> (concat
                                           (mapv #(if (= :default %) :utf8 %) param-types)
                                           (repeat :utf8))
@@ -168,16 +172,20 @@
                    (.scanFields scan-emitter wm))))
 
           cache (ConcurrentHashMap.)
-          ordered-outer-projection (:ordered-outer-projection (meta query))
-          param-fields (mapify-params (mapv (comp types/col-type->field types/col-type->nullable-col-type) param-types-with-defaults))
+          param-fields (->> param-types-with-defaults
+                            (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                           (map-indexed (fn [idx field]
+                                                          (types/field-with-name field (str "?_" idx)))))))
+          param-fields-by-name (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity)) param-fields)
           default-tz (or default-tz (.getZone expr/*clock*))]
 
       (reify PreparedQuery
         (paramFields [_] param-fields)
         (columnFields [_]
-          (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz (into {} param-fields))]
+          (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
             ;; could store column-fields in the cache/map too
             (->column-fields ordered-outer-projection fields)))
+
         (bind [_ {:keys [args params basis default-tz]
                   :or {default-tz default-tz}}]
 
@@ -194,6 +202,7 @@
                 BoundQuery
                 (columnFields [_]
                   (->column-fields ordered-outer-projection fields))
+
                 (openCursor [_]
                   (when relevant-schema-at-prepare-time
                     (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]

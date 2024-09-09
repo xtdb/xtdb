@@ -1025,50 +1025,42 @@
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
-(defn timestamp-tz-micro? [col-type]
-  (letfn [(pred [ct] (and (vector? ct)
-                          (= :timestamp-tz (first ct))
-                          (= :micro (second ct))))]
-    (if (set? col-type)
-      (every?
-       pred
-       col-type)
-      (pred col-type))))
+(def ^:private col-types->pg-types
+  {:utf8 :text
+   :i64 :int8
+   :i32 :int4
+   :i16 :int2
+   #_#_:i8 :bit
+   :f64 :float8
+   :f32 :float4
+   :uuid :uuid
+   :bool :boolean
+   :null :text
+   :regclass :regclass
+   [:date :day] :date
+   [:timestamp-local :micro] :timestamp
+   [:timestamp-tz :micro] :timestamptz})
 
 (defn col-type->pg-type [col-type]
-  (if (timestamp-tz-micro? col-type)
-    :timestamptz
-    (get
-     {:utf8 :text
-      :i64 :int8
-      :i32 :int4
-      :i16 :int2
-      #_#_:i8 :bit
-      :f64 :float8
-      :f32 :float4
-      :uuid :uuid
-      :bool :boolean
-      :null :text
-      :regclass :regclass
-      [:date :day] :date
-      [:timestamp-local :micro] :timestamp}
-     col-type
-     :json)))
+  (get col-types->pg-types
 
-(defn field->pg-type [field]
-  (let [field-name (str (key (first field)))]
-    (assoc (set/rename-keys
-            (let [col-type (field->col-type (val (first field)))]
-              (if (and (vector? col-type) (= :union (first col-type)))
-                (let [col-types (disj (last col-type) :null)]
-                  (if (= 1 (count col-types))
-                    (pg-types (col-type->pg-type (first col-types)))
-                    (pg-types (col-type->pg-type col-types))))
-                (pg-types (col-type->pg-type col-type))))
-            {:oid :column-oid})
-           :field-name
-           field-name
-           :column-name
-           (.denormalize
-            ^IKeyFn (identity #xt/key-fn :snake-case-string)
-            field-name))))
+       (cond-> col-type
+         ;; ignore TZ
+         (= (col-type-head col-type) :timestamp-tz)
+         (subvec 0 2))
+
+       :json))
+
+(defn field->pg-type [^Field field]
+  (let [field-name (.getName field)
+        col-type (field->col-type field)
+        col-types (-> (flatten-union-types col-type)
+                      (disj :null)
+                      (->> (into #{} (map col-type->pg-type))))]
+    (-> (if (= 1 (count col-types))
+          (first col-types)
+          (col-type->pg-type col-type))
+        (pg-types)
+        (set/rename-keys {:oid :column-oid})
+        (assoc :field-name field-name
+               :column-name field-name))))

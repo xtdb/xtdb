@@ -181,7 +181,7 @@
 
 (defn pg-attribute [^IRelationWriter rel-wtr col-rows]
   (doseq [{:keys [idx table name field]} col-rows
-          :let [{:keys [column-oid typlen]} (types/field->pg-type {name field})]]
+          :let [{:keys [column-oid typlen]} (types/field->pg-type (types/field-with-name field name))]]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
