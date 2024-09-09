@@ -26,7 +26,8 @@
   (do
     (require '[integrant.core :as ig]
              '[integrant.repl :as ir]
-             '[xtdb.util :as util])
+             '[xtdb.util :as util]
+             '[xtdb.pgwire.playground :as pgpg])
 
     (defmethod ig/init-key ::playground [_ _]
       (pgpg/open-playground))
@@ -36,6 +37,9 @@
 
     (ir/set-prep! (fn []
                     {::playground {}})))
+
+  (ir/halt)
+
   (ir/go)
 
   )

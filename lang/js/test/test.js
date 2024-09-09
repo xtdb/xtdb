@@ -2,6 +2,10 @@ import assert from 'assert';
 import postgres from 'postgres';
 import tjs from 'transit-js';
 
+const transitReadHandlers = {
+  'time/zoned-date-time': (s) => new Date(s.replace(/\[.+\]$/, '')),
+}
+
 describe("connects to XT", function() {
 
   let sql;
@@ -21,7 +25,8 @@ describe("connects to XT", function() {
         transit: {
           to: 16384,
           from: [16384],
-          serialize: (v) => tjs.writer('json').write(v)
+          serialize: (v) => tjs.writer('json').write(v),
+          parse: (v) => tjs.reader('json', { handlers: transitReadHandlers }).read(v)
         }
       }
     })
@@ -79,13 +84,22 @@ describe("connects to XT", function() {
     const conn = await sql.reserve()
 
     try {
+      await conn`SET fallback_output_format='transit'`
+
       const ts = new Date('2020-01-01')
 
       await conn`INSERT INTO foo (_id, transit) VALUES (${conn.typed.int(2)}, ${conn.typed.transit({ts})})`
 
-      // no transit writer in the backend yet
+      const res = await conn`SELECT _id, transit FROM foo WHERE _id = 2`
+
+      // HACK can't figure out how to get it doing this automatically
+      res[0].transit = tjs.mapToObject(res[0].transit)
+
+      assert.deepStrictEqual([...res],
+                             [{_id: 2, transit: { ts }}])
+
       assert.deepStrictEqual([...await conn`SELECT _id, (transit).ts + INTERVAL 'P2D' AS third FROM foo WHERE _id = 2`],
-                             [{_id: 2, third: "2020-01-03T00:00Z"}])
+                             [{_id: 2, third: new Date("2020-01-03T00:00Z")}])
 
     } finally {
       await conn.release()

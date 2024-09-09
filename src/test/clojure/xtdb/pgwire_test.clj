@@ -1865,3 +1865,15 @@
 
           (.next rs)
           #_(t/is (= v (.getBoolean rs 1))))))))
+
+(deftest test-fallback-transit
+  ,; FIXME: requires generate_series #3212 and any(array_expr) #3539
+  (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: (DATE '2020-01-01')::timestamptz}}"])
+
+    #_
+    (with-open [stmt (.prepareStatement conn "SELECT * FROM foo")]
+      (t/is (= :bang (result-metadata stmt))))
+
+    #_
+    (t/is (= :bang (jdbc/execute-one! conn ["SELECT * FROM foo"])))))

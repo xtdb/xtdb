@@ -492,10 +492,21 @@
 
 ;;; server impl
 
+
+(defn- parse-session-params [params]
+  (->> params
+       (into {} (mapcat (fn [[k v]]
+                          (let [k (-> (util/->kebab-case-kw k)
+                                      ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
+                            (case k
+                              :options (parse-session-params (for [[_ k v] (re-seq #"-c ([\w_]*)=([\w_]*)" v)]
+                                                               [k v]))
+                              [[k (case k
+                                    :fallback-output-format (#{:json :transit} (util/->kebab-case-kw v))
+                                    v)]])))))))
+
 (defn- set-session-parameter [conn parameter value]
-  (let [parameter (-> (util/->kebab-case-kw parameter)
-                      ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
-    (swap! (:conn-state conn) assoc-in [:session :parameters parameter] value)))
+  (swap! (:conn-state conn) update-in [:session :parameters] (fnil into {}) (parse-session-params {parameter value})))
 
 ;;; pg i/o shared data types
 ;; our io maps just capture a paired :read fn (data-in)
@@ -1323,7 +1334,7 @@
                         :arg-types arg-types})
 
   (let [{:keys [session latest-submitted-tx]} @conn-state
-        {:keys [^Clock clock]} session
+        {:keys [^Clock clock], {:keys [fallback-output-format]} :parameters} session
         {:keys [err statement-type] :as stmt} (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
                                                                     :latest-submitted-tx latest-submitted-tx})
         unsupported-arg-types (remove supported-param-oids arg-types)
@@ -1360,7 +1371,7 @@
 
                     {:prepared-stmt (assoc stmt
                                            :prepared-stmt pq
-                                           :fields (map types/field->pg-type (.columnFields pq))
+                                           :fields (mapv (partial types/field->pg-type fallback-output-format) (.columnFields pq))
                                            :param-fields (->> (.paramFields pq)
                                                               (map types/field->pg-type)
                                                               (map #(set/rename-keys % {:column-oid :oid}))
@@ -1420,7 +1431,7 @@
           ;;if statement is a query, bind it, else use the statement as a portal
           {:keys [portal bind-outcome]} (if (= :query statement-type)
                                           (let [{:keys [session transaction]} @conn-state
-                                                {:keys [^Clock clock]} session
+                                                {:keys [^Clock clock], {:keys [fallback-output-format]} :parameters} session
                                                 {:keys [basis]} transaction
 
                                                 xtify-param (->xtify-param session stmt-with-bind-msg)
@@ -1432,7 +1443,7 @@
 
                                             (try
                                               (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
-                                                (if-let [fields (-> (map types/field->pg-type (.columnFields bound-query))
+                                                (if-let [fields (-> (map (partial types/field->pg-type fallback-output-format) (.columnFields bound-query))
                                                                     (with-result-formats result-format))]
                                                   {:portal (assoc stmt-with-bind-msg
                                                                   :bound-query bound-query

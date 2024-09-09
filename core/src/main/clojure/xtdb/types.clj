@@ -1021,7 +1021,8 @@
    :transit {:typname "transit"
              :oid transit-oid
              :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
-             :write-text (fn [_env ^IVectorReader rdr idx] (serde/write-transit (.getObject rdr idx) :json))}})
+             :write-text (fn [_env ^IVectorReader rdr idx]
+                           (serde/write-transit (.getObject rdr idx) :json))}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
@@ -1039,28 +1040,33 @@
    :regclass :regclass
    [:date :day] :date
    [:timestamp-local :micro] :timestamp
-   [:timestamp-tz :micro] :timestamptz})
+   [:timestamp-tz :micro] :timestamptz
 
-(defn col-type->pg-type [col-type]
+   #_#_ ; FIXME not supported by pgjdbc until we sort #3539
+   :transit :transit})
+
+(defn col-type->pg-type [fallback-pg-type col-type]
   (get col-types->pg-types
-
        (cond-> col-type
          ;; ignore TZ
          (= (col-type-head col-type) :timestamp-tz)
          (subvec 0 2))
 
-       :json))
+       (or fallback-pg-type :json)))
 
-(defn field->pg-type [^Field field]
-  (let [field-name (.getName field)
-        col-type (field->col-type field)
-        col-types (-> (flatten-union-types col-type)
-                      (disj :null)
-                      (->> (into #{} (map col-type->pg-type))))]
-    (-> (if (= 1 (count col-types))
-          (first col-types)
-          (col-type->pg-type col-type))
-        (pg-types)
-        (set/rename-keys {:oid :column-oid})
-        (assoc :field-name field-name
-               :column-name field-name))))
+(defn field->pg-type
+  ([field] (field->pg-type nil field))
+
+  ([fallback-pg-type ^Field field]
+   (let [field-name (.getName field)
+         col-type (field->col-type field)
+         col-types (-> (flatten-union-types col-type)
+                       (disj :null)
+                       (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
+     (-> (if (= 1 (count col-types))
+           (first col-types)
+           (col-type->pg-type fallback-pg-type col-type))
+         (pg-types)
+         (set/rename-keys {:oid :column-oid})
+         (assoc :field-name field-name
+                :column-name field-name)))))
