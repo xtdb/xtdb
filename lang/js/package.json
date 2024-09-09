@@ -25,7 +25,8 @@
     "mocha": "^10.7.3",
     "postgres": "^3.4.4",
     "rimraf": "^3.0.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "transit-js": "^0.8.874"
   },
   "dependencies": {
     "luxon": "^3.4.4",

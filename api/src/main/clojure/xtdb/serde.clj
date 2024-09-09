@@ -7,7 +7,7 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql.edn :as xtql.edn])
-  (:import [java.io ByteArrayOutputStream Writer]
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.time Duration Period)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
@@ -336,9 +336,16 @@
           TxOp$EraseDocs (transit/write-handler "xtdb.tx/erase" render-erase-docs)
           TxOp$Call (transit/write-handler "xtdb.tx/call" render-call-op)}))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-;; was used in Types.kt
-(defn write-transit ^bytes [v]
-  (with-open [baos (ByteArrayOutputStream.)]
-    (transit/write (transit/writer baos :msgpack {:handlers transit-write-handlers}) v)
-    (.toByteArray baos)))
+(defn read-transit
+  ([bytes] (read-transit bytes nil))
+  ([bytes fmt]
+   (with-open [bais (ByteArrayInputStream. bytes)]
+     (transit/read (transit/reader bais (or fmt :msgpack) {:handlers transit-read-handlers})))))
+
+(defn write-transit
+  (^bytes [v] (write-transit v nil))
+  (^bytes [v fmt]
+   (with-open [baos (ByteArrayOutputStream.)]
+     (-> (transit/writer baos (or fmt :msgpack) {:handlers transit-write-handlers})
+         (transit/write v))
+     (.toByteArray baos))))

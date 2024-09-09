@@ -12,13 +12,13 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
-           (com.fasterxml.jackson.databind.node JsonNodeType)
-           (java.io InputStream)
+  (:import (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection PreparedStatement ResultSet Timestamp Types)
+           (java.sql Connection PreparedStatement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
@@ -85,7 +85,7 @@
   params))
 
 ;; connect to the database
-(defn- pg-conn [params]
+(defn- pg-conn ^org.pg.Connection [params]
   (pg/connect (pg-config params)))
 
 (defn- jdbc-url [& params]
@@ -1838,3 +1838,29 @@
 
           (.next rs)
           (t/is (= v (.getBoolean rs 1))))))))
+
+(defn transit->pgobject [v]
+  (doto (PGobject.)
+    (.setType "\"transit\"")
+    (.setValue (String. (serde/write-transit v)))))
+
+(deftest test-transit-param
+  ;; FIXME: requires generate_series #3212 and any(array_expr) #3539
+  #_
+  (doseq [binary? [true false]]
+    (t/testing (format "binary?: %s" binary?)
+
+      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                  stmt (.prepareStatement conn "SELECT ? AS v")]
+
+        (.setObject stmt 1 (transit->pgobject {:a 1, :b 2}))
+
+        (with-open [rs (.executeQuery stmt)]
+
+          ;; TODO migrate to transit tests
+          (t/is (= [{"v" "bool"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          (.next rs)
+          #_(t/is (= v (.getBoolean rs 1))))))))

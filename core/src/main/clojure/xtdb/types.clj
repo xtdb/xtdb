@@ -3,6 +3,7 @@
             [clojure.string :as str]
             xtdb.api
             [xtdb.rewrite :refer [zmatch]]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
@@ -14,10 +15,10 @@
            [java.util UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           xtdb.api.query.IKeyFn
            (xtdb JsonSerde Types)
+           xtdb.api.query.IKeyFn
            [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType RegClassType)))
+           (xtdb.vector.extensions KeywordType RegClassType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -771,6 +772,8 @@
 ;; 946684800000000
 (def ^{:tag 'long} unix-pg-epoch-diff-in-micros (* (.toEpochMilli (.toInstant (.atStartOfDay pg-epoch) ZoneOffset/UTC)) 1000))
 
+(def ^:const ^long transit-oid 16384)
+
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
    ;;default oid is currently only used to describe a parameter without a known type
@@ -1013,7 +1016,12 @@
    :jsonb {:typname "jsonb"
            :oid 3802
            :read-text (fn [_env ba]
-                        (JsonSerde/decode (ByteArrayInputStream. ba)))}})
+                        (JsonSerde/decode (ByteArrayInputStream. ba)))}
+
+   :transit {:typname "transit"
+             :oid transit-oid
+             :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
+             :write-text (fn [_env ^IVectorReader rdr idx] (serde/write-transit (.getObject rdr idx) :json))}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
