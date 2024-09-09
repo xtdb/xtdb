@@ -1042,7 +1042,7 @@
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz
 
-   #_#_ ; FIXME not supported by pgjdbc until we sort #3539
+   #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})
 
 (defn col-type->pg-type [fallback-pg-type col-type]

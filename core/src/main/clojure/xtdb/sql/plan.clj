@@ -20,8 +20,6 @@
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
-(def ^:const postgres-server-version "16")
-
 (defn- ->insertion-ordered-set [coll]
   (LinkedHashSet. ^Collection (vec coll)))
 
@@ -66,6 +64,12 @@
                      (visitDelimitedIdentifier [_ ctx]
                        (let [di-str (.getText ctx)]
                          (symbol (subs di-str 1 (dec (count di-str))))))))))
+
+(defprotocol OptimiseStatement
+  (optimise-stmt [stmt]))
+
+(defrecord QueryExpr [plan col-syms]
+  OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
 
 (defprotocol Scope
   (available-cols [scope chain])
@@ -1595,27 +1599,48 @@
     (plan-sq (.subquery ctx) env scope !subqs
              {:sq-type :exists}))
 
-  (visitQuantifiedComparisonPredicate [{:keys [!subqs] :as this} ctx]
+  (visitQuantifiedComparisonPredicate [this ctx]
     (let [quantifier (case (str/lower-case (.getText (.quantifier ctx)))
                        "all" :all
                        ("some" "any") :any)
           op (symbol (.getText (.compOp ctx)))]
-      (plan-sq (.subquery ctx) env scope !subqs
-               {:sq-type :quantified-comparison
-                :expr (.accept (.expr ctx) this)
-                :op (cond-> op
-                      (= quantifier :all) negate-op)})))
+      (.accept (.quantifiedComparisonPredicatePart3 ctx)
+               (assoc this :qc-pt2 {:expr (.accept (.expr ctx) this)
+                                    :op (cond-> op
+                                          (= quantifier :all) negate-op)}))))
 
-  (visitQuantifiedComparisonPredicatePart2 [{:keys [pt1 !subqs]} ctx]
+  (visitQuantifiedComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
     (let [quantifier (case (str/lower-case (.getText (.quantifier ctx)))
                        "all" :all
                        ("some" "any") :any)
           op (symbol (.getText (.compOp ctx)))]
-      (plan-sq (.subquery ctx) env scope !subqs
-               {:sq-type :quantified-comparison
-                :expr pt1
-                :op (cond-> op
-                      (= quantifier :all) negate-op)})))
+      (.accept (.quantifiedComparisonPredicatePart3 ctx)
+               (assoc this :qc-pt2 {:expr pt1
+                                    :op (cond-> op
+                                          (= quantifier :all) negate-op)}))))
+
+  (visitQuantifiedComparisonSubquery [{:keys [!subqs qc-pt2]} ctx]
+    (plan-sq (.subquery ctx) env scope !subqs
+             (into {:sq-type :quantified-comparison}
+                   qc-pt2)))
+
+  (visitQuantifiedComparisonExpr [{{:keys [!id-count]} :env, :keys [qc-pt2, ^Map !subqs], :as this} ctx]
+    (let [sq-sym (-> (->col-sym (str "_sq_" (swap! !id-count inc)))
+                     (vary-meta assoc :sq-out-sym? true))
+
+          ;; HACK: removing the scope. will unblock #3539,
+          ;; but I wasn't sure of the semantics in the general case
+          expr (.accept (.expr ctx) (assoc this :scope nil))
+
+          expr-sym (->col-sym (str "_qc_expr_" (swap! !id-count inc)))
+          query-plan (->QueryExpr [:table {expr-sym expr}]
+                                  [expr-sym])]
+
+      (.put !subqs sq-sym (into {:sq-type :quantified-comparison
+                                 :query-plan query-plan}
+                                qc-pt2))
+
+      sq-sym))
 
   (visitInPredicate [{:keys [!subqs] :as this} ctx]
     (let [^ParserRuleContext
@@ -1672,12 +1697,6 @@
 (defrecord ColumnCountMismatch [expected given]
   PlanError
   (error-string [_] (format "Column count mismatch: expected %s, given %s" expected given)))
-
-(defprotocol OptimiseStatement
-  (optimise-stmt [stmt]))
-
-(defrecord QueryExpr [plan col-syms]
-  OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
 
 (defn- plan-order-by [^SqlParser$OrderByClauseContext ctx
                       {:keys [!id-count] :as env} inner-scope outer-col-syms]

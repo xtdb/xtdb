@@ -555,6 +555,22 @@
                               {:table-info {"public/foo" #{"a" "b"}
                                             "public/bar" #{"b" "c"}}})))))))
 
+(t/deftest test-qc-array-expr-3539
+  (t/is (=plan-file "test-qc-array-expr"
+                    (plan-sql "SELECT * FROM foo WHERE foo.a = ANY(CURRENT_SCHEMAS(true))"
+                              {:table-info {"public/foo" #{"a"}}})))
+
+  (xt/submit-tx tu/*node* [[:put-docs :foo
+                            {:xt/id 1, :a "pg_catalog"}
+                            {:xt/id 2, :a "public"}
+                            {:xt/id 3, :a "foo"}]])
+
+  (t/is (= [{:xt/id 2, :a "public"}]
+           (xt/q tu/*node* "SELECT * FROM foo WHERE a = ANY(CURRENT_SCHEMAS(false))")))
+
+  (t/is (= [{:xt/id 2, :a "public"} {:xt/id 1, :a "pg_catalog"}]
+           (xt/q tu/*node* "SELECT * FROM foo WHERE a = ANY(CURRENT_SCHEMAS(true))"))))
+
 (t/deftest test-in-subquery
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1 :foo "Hello"}]
                            [:put-docs :docs {:xt/id 2 :x 2 :y 1}]])
@@ -1941,7 +1957,6 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
                  {:default-tz #xt.time/zone "America/New_York"}))))
 
 (t/deftest test-regclass
-
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
   (t/testing "regclass uses search path to resolve unqualified names"

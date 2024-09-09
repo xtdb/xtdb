@@ -1,0 +1,8 @@
+[:project
+ [{a foo.1/a}]
+ [:map
+  [{_sq_2 true}]
+  [:semi-join
+   [{foo.1/a _qc_expr_3}]
+   [:rename foo.1 [:scan {:table public/foo} [a]]]
+   [:table {_qc_expr_3 (current-schemas true)}]]]]

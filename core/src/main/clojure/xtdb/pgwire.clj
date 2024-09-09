@@ -262,6 +262,7 @@
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
 (defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx]}]
+  (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
           {:statement-type :empty-query})

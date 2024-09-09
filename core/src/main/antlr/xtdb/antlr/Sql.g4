@@ -222,7 +222,7 @@ expr
     | expr 'IMMEDIATELY' 'PRECEDES' expr # PeriodImmediatelyPrecedesPredicate
     | expr 'IMMEDIATELY' 'SUCCEEDS' expr # PeriodImmediatelySucceedsPredicate
 
-    | expr compOp quantifier subquery # QuantifiedComparisonPredicate
+    | expr compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicate
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
@@ -707,8 +707,13 @@ predicatePart2
     | 'NOT'? 'LIKE_REGEX' xqueryPattern ('FLAG' xqueryOptionFlag)? # LikeRegexPredicatePart2
     | postgresRegexOperator xqueryPattern # PostgresRegexPredicatePart2
     | 'IS' 'NOT'? 'NULL' # NullPredicatePart2
-    | compOp quantifier subquery # QuantifiedComparisonPredicatePart2
+    | compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicatePart2
     ;
+
+quantifiedComparisonPredicatePart3
+  : subquery # QuantifiedComparisonSubquery
+  | expr #QuantifiedComparisonExpr
+  ;
 
 compOp : '=' | '!=' | '<>' | '<' | '>' | '<=' | '>=' ;
 
