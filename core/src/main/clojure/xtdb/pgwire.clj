@@ -1149,19 +1149,13 @@
           (close-result-cursor conn result-cursor))))))
 
 (defn- cmd-send-row-description [conn cols]
-  (let [defaults {:column-name ""
-                  :table-oid 0
+  (let [defaults {:table-oid 0
                   :column-attribute-number 0
-                  :column-oid oid-json
                   :typlen -1
                   :type-modifier -1
                   :result-format :text}
-        apply-defaults
-        (fn [col]
-          (if (map? col)
-            (merge defaults col)
-            (assoc defaults :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string)
-                                                       (str col)))))
+        apply-defaults (fn [col]
+                         (merge defaults col))
         data {:columns (mapv apply-defaults cols)}]
 
     (log/trace "Sending Row Description - " (assoc data :input-cols cols))
@@ -1406,86 +1400,70 @@
                                 (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode))))))
       (cmd-write-msg conn msg-parse-complete))))
 
-
-(defn resolve-result-format [result-format field-count]
-  (cond (empty? result-format)
-        (repeat field-count :text)
-
-        (= 1 (count result-format))
-        (repeat field-count (first result-format))
-
-        (= (count result-format) field-count)
-        result-format
-
-        :else
-        :invalid-result-format))
-
-(defn update-result-format [resolved-result-format fields]
-  (->> fields
-       (map-indexed
-        (fn [idx field]
-          (assoc field :result-format (nth resolved-result-format idx))))))
+(defn with-result-formats [pg-types result-format]
+  (when-let [result-formats (let [type-count (count pg-types)]
+                              (cond
+                                (empty? result-format) (repeat type-count :text)
+                                (= 1 (count result-format)) (repeat type-count (first result-format))
+                                (= (count result-format) type-count) result-format))]
+    (mapv (fn [pg-type result-format]
+            (assoc pg-type :result-format result-format))
+          pg-types
+          result-formats)))
 
 (defn cmd-bind [{:keys [conn-state] :as conn}
                 {:keys [portal-name stmt-name params result-format] :as bind-msg}]
-  (let [{:keys [statement-type] :as stmt} (get-in @conn-state [:prepared-statements stmt-name])]
-    (if stmt
-      (let [{:keys [prepared-stmt] :as stmt-with-bind-msg}
-            ;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during execute-tx.
-            (merge stmt bind-msg)
-            {:keys [portal bind-outcome]}
-            ;;if statement is a query, bind it, else use the statment as a portal
-            (if (= :query statement-type)
-              (let [{:keys [session transaction]} @conn-state
-                    ^Clock clock (:clock session)
-                    basis (:basis transaction)
+  (if-let [{:keys [statement-type] :as stmt} (get-in @conn-state [:prepared-statements stmt-name])]
+    (let [;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during execute-tx.
+          {:keys [prepared-stmt] :as stmt-with-bind-msg} (merge stmt bind-msg)
 
-                    xtify-param (->xtify-param session stmt-with-bind-msg)
-                    xt-params (vec (map-indexed xtify-param params))
+          ;;if statement is a query, bind it, else use the statement as a portal
+          {:keys [portal bind-outcome]} (if (= :query statement-type)
+                                          (let [{:keys [session transaction]} @conn-state
+                                                {:keys [^Clock clock]} session
+                                                {:keys [basis]} transaction
 
-                    query-opts {:basis (or basis {:current-time (.instant clock)})
-                                :default-tz (.getZone clock)
-                                :args xt-params}]
+                                                xtify-param (->xtify-param session stmt-with-bind-msg)
+                                                xt-params (vec (map-indexed xtify-param params))
 
-                (try
+                                                query-opts {:basis (or basis {:current-time (.instant clock)})
+                                                            :default-tz (.getZone clock)
+                                                            :args xt-params}]
 
-                  (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)
-                        fields (map types/field->pg-type (.columnFields bound-query))
-                        resolved-result-format (resolve-result-format result-format (count fields))]
+                                            (try
+                                              (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
+                                                (if-let [fields (-> (map types/field->pg-type (.columnFields bound-query))
+                                                                    (with-result-formats result-format))]
+                                                  {:portal (assoc stmt-with-bind-msg
+                                                                  :bound-query bound-query
+                                                                  :fields fields)
+                                                   :bind-outcome :success}
 
-                    (if (= :invalid-result-format resolved-result-format)
+                                                  (cmd-send-error conn (err-protocol-violation "invalid result format"))))
 
-                      (cmd-send-error conn (err-protocol-violation "invalid result format"))
+                                              (catch InterruptedException e
+                                                (log/trace e "Interrupt thrown binding prepared statement")
+                                                (throw e))
+                                              (catch Throwable e
+                                                (log/error e)
+                                                (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement")))))
 
-                      {:portal (assoc
-                                stmt-with-bind-msg
-                                :bound-query bound-query
-                                :fields (update-result-format resolved-result-format fields))
-                       :bind-outcome :success}))
+                                          {:portal stmt-with-bind-msg
+                                           :bind-outcome :success})]
 
-                  (catch InterruptedException e
-                    (log/trace e "Interrupt thrown binding prepared statement")
-                    (throw e))
-                  (catch Throwable e
-                    (log/error e)
-                    (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement")))))
+      ;; add the portal
+      (when (= :success bind-outcome)
+        (swap! conn-state assoc-in [:portals portal-name] portal))
 
-              {:portal stmt-with-bind-msg
-               :bind-outcome :success})]
+      ;; track the portal name to the prepared stmt (for close)
+      (when (= :success bind-outcome)
+        (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name))
 
-        ;; add the portal
-        (when (= :success bind-outcome)
-          (swap! conn-state assoc-in [:portals portal-name] portal))
+      (if (and (= :success bind-outcome) (= :extended (:protocol @conn-state)))
+        (cmd-write-msg conn msg-bind-complete)
+        bind-outcome))
 
-        ;; track the portal name to the prepared stmt (for close)
-        (when (= :success bind-outcome)
-          (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name))
-
-        (if (and (= :success bind-outcome) (= :extended (:protocol @conn-state)))
-          (cmd-write-msg conn msg-bind-complete)
-          bind-outcome))
-
-      (cmd-send-error conn (err-protocol-violation "no prepared statement")))))
+    (cmd-send-error conn (err-protocol-violation "no prepared statement"))))
 
 (defn cmd-execute
   "Handles a msg-execute to run a previously bound portal (via msg-bind)."

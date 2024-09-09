@@ -14,7 +14,6 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
@@ -1528,30 +1527,29 @@
           (t/is (nil? z)))))))
 
 (deftest test-datetime-types
-  (let [datetime-types [{:type LocalDate :val #xt.time/date "2018-07-25" :pg-type "date"}
-                        {:type LocalDate :val #xt.time/date "1239-01-24" :pg-type "date"}
-                        {:type LocalDateTime :val #xt.time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
-                        {:type LocalDateTime :val #xt.time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]]
-       (doseq [{:keys [type val pg-type]} datetime-types
-               binary? [true false]]
+  (doseq [{:keys [type val pg-type]} [{:type LocalDate :val #xt.time/date "2018-07-25" :pg-type "date"}
+                                      {:type LocalDate :val #xt.time/date "1239-01-24" :pg-type "date"}
+                                      {:type LocalDateTime :val #xt.time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
+                                      {:type LocalDateTime :val #xt.time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]
+          binary? [true false]]
 
-         (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
+    (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
 
-           (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
-                       stmt (.prepareStatement conn "SELECT ? AS val")]
+      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                  stmt (.prepareStatement conn "SELECT ? AS val")]
 
-             (.execute (.createStatement conn) "SET TIME ZONE '+05:00'")
+        (.execute (.createStatement conn) "SET TIME ZONE '+05:00'")
 
-             (.setObject stmt 1 val)
+        (.setObject stmt 1 val)
 
-             (with-open [rs (.executeQuery stmt)]
+        (with-open [rs (.executeQuery stmt)]
 
-               (t/is (= [{"val" pg-type}]
-                        (result-metadata stmt)
-                        (result-metadata rs)))
+          (t/is (= [{"val" pg-type}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
 
-               (.next rs)
-               (t/is (= val (.getObject rs 1 type)))))))))
+          (.next rs)
+          (t/is (= val (.getObject rs 1 type))))))))
 
 (deftest test-timestamptz
   (let [type OffsetDateTime
@@ -1785,26 +1783,29 @@
              (pg/execute conn "SELECT 101::text v")))))
 
 (deftest test-resolve-result-format
-  (let [field-count 2]
-    (t/is (= [:text :text]
-             (pgwire/resolve-result-format [] field-count))
-          "no formats provided, all fields text")
+  (letfn [(resolve-result-format [fmt type-count]
+            (some->> (pgwire/with-result-formats (repeat type-count {}) fmt)
+                     (mapv :result-format)))]
 
-    (t/is (= [:text :text]
-             (pgwire/resolve-result-format [:text] field-count))
-          "single format provided (text), applies to all fields")
+    (let [field-count 2]
+      (t/is (= [:text :text]
+               (resolve-result-format [] field-count))
+            "no formats provided, all fields text")
 
-    (t/is (= [:binary :binary]
-             (pgwire/resolve-result-format [:binary] field-count))
-          "single format provided (binary), applies to all fields")
+      (t/is (= [:text :text]
+               (resolve-result-format [:text] field-count))
+            "single format provided (text), applies to all fields")
 
-    (t/is (= [:text :binary]
-             (pgwire/resolve-result-format [:text :binary] field-count))
-          "format provided for each field, applies to each by index"))
+      (t/is (= [:binary :binary]
+               (resolve-result-format [:binary] field-count))
+            "single format provided (binary), applies to all fields")
 
-  (t/is (= :invalid-result-format
-           (pgwire/resolve-result-format [:text :binary] 3))
-        "if more than 1 format is provided and it doesn't match the field count this is invalid"))
+      (t/is (= [:text :binary]
+               (resolve-result-format [:text :binary] field-count))
+            "format provided for each field, applies to each by index"))
+
+    (t/is (nil? (resolve-result-format [:text :binary] 3))
+          "if more than 1 format is provided and it doesn't match the field count this is invalid")))
 
 (deftest test-pg-boolean-param
   (doseq [binary? [true false]
