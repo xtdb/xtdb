@@ -826,6 +826,107 @@
             FROM foo "
             {:table-info {"public/foo" #{"a"}}}))))
 
+(deftest test-window-functions
+  (t/is (=plan-file
+         "test-window-with-partition-and-order-by"
+         (plan-sql "SELECT y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) FROM docs"
+                   {:table-info {"public/docs" #{"y" "z"}}})))
+
+  (t/is (thrown-with-msg? UnsupportedOperationException #"TODO"
+                          (plan-sql "SELECT ROW_NUMBER() OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM docs"
+                                    {:table-info {"public/docs" #{"y" "z"}}}))
+        "window frames not yet supported")
+
+  (t/is (thrown-with-msg? UnsupportedOperationException #"TODO"
+                          (plan-sql "SELECT
+                                       ROW_NUMBER() OVER (PARTITION BY y) AS rn,
+                                       ROW_NUMBER() OVER (PARTITION BY z) AS rn2
+                                     FROM docs"
+                                    {:table-info {"public/docs" #{"y" "z"}}}))
+        "multiple windows not supported")
+
+  ;; TODO similar to #3640
+  #_
+  (t/is (= nil
+           (plan-sql "SELECT ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) FROM docs"
+                     {:table-info {"public/docs" #{"_id"}}})))
+
+  (let [docs [{:a 1 :b 20}
+              {:a 1 :b 10}
+              {:a 2 :b 30}
+              {:a 2 :b 40}
+              {:a 1 :b 50}
+              {:a 1 :b 60}
+              {:a 2 :b 70}
+              {:a 3 :b 80}
+              {:a 3 :b 90}]]
+
+    (xt/submit-tx tu/*node* [(into [:put-docs :docs ]
+                                   (for [[id doc] (zipmap (range) docs)] (assoc doc :xt/id id)))])
+
+    (t/is (= #{{:a 1, :b 10, :rn 0}
+               {:a 1, :b 20, :rn 1}
+               {:a 1, :b 50, :rn 2}
+               {:a 1, :b 60, :rn 3}
+               {:a 2, :b 30, :rn 0}
+               {:a 2, :b 40, :rn 1}
+               {:a 2, :b 70, :rn 2}
+               {:a 3, :b 80, :rn 0}
+               {:a 3, :b 90, :rn 1}}
+             (->> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) AS rn FROM docs")
+                  set)))
+
+    (t/is (= #{{:a 1, :b 60, :rn 0}
+               {:a 1, :b 10, :rn 1}
+               {:a 1, :b 50, :rn 2}
+               {:a 1, :b 20, :rn 3}
+               {:a 2, :b 70, :rn 0}
+               {:a 2, :b 30, :rn 1}
+               {:a 2, :b 40, :rn 2}
+               {:a 3, :b 90, :rn 0}
+               {:a 3, :b 80, :rn 1}}
+             (->> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY a) AS rn FROM docs")
+                  set))
+          "only partition by")
+
+    (t/is (= #{{:a 1, :b 10, :rn 0}
+               {:a 1, :b 20, :rn 1}
+               {:a 2, :b 30, :rn 2}
+               {:a 2, :b 40, :rn 3}
+               {:a 1, :b 50, :rn 4}
+               {:a 1, :b 60, :rn 5}
+               {:a 2, :b 70, :rn 6}
+               {:a 3, :b 80, :rn 7}
+               {:a 3, :b 90, :rn 8}}
+             (->> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (ORDER BY b) AS rn FROM docs")
+                  set))
+          "only order by")
+
+    (t/is (= #{{:a 1, :b 60, :rn 0}
+               {:a 2, :b 70, :rn 1}
+               {:a 2, :b 30, :rn 2}
+               {:a 3, :b 90, :rn 3}
+               {:a 1, :b 10, :rn 4}
+               {:a 3, :b 80, :rn 5}
+               {:a 1, :b 50, :rn 6}
+               {:a 2, :b 40, :rn 7}
+               {:a 1, :b 20, :rn 8}}
+             (-> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER () AS rn FROM docs")
+                 set))
+          "nothing")
+    #_
+    (t/is (= [{:a 1, :b 60, :rn 0}
+              {:a 2, :b 70, :rn 1}
+              {:a 2, :b 30, :rn 2}
+              {:a 3, :b 90, :rn 3}
+              {:a 1, :b 10, :rn 4}
+              {:a 3, :b 80, :rn 5}
+              {:a 1, :b 50, :rn 6}
+              {:a 2, :b 40, :rn 7}
+              {:a 1, :b 20, :rn 8}]
+             (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) AS rn FROM docs"))
+          "no existing columns")))
+
 (deftest test-array-subqueries
   (t/are [file q]
     (=plan-file file (plan-sql q {:table-info {"public/a" #{"a" "b"}, "public/b" #{"b1" "b2"}}}))

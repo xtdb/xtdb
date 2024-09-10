@@ -15,7 +15,13 @@
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
            (org.apache.arrow.vector.types.pojo Field Schema)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext
+                       SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext
+                       SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext
+                       SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext
+                       SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext
+                       SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$SortSpecificationListContext
+                       SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
            xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
@@ -684,8 +690,8 @@
       [:table [{}]])))
 
 (defn- ->projected-col-expr [col-idx expr]
-  (let [{:keys [column? sq-out-sym? agg-out-sym? unnamed-unnest-col? identifier]} (meta expr)]
-    (if (and column? (not sq-out-sym?) (not agg-out-sym?) (not unnamed-unnest-col?))
+  (let [{:keys [column? sq-out-sym? agg-out-sym? window-out-sym? unnamed-unnest-col? identifier]} (meta expr)]
+    (if (and column? (not sq-out-sym?) (not agg-out-sym?) (not window-out-sym?) (not unnamed-unnest-col?))
       (->ProjectedCol expr expr)
       (let [col-name (or identifier (->col-sym (str "_column_" (inc col-idx))))]
         (->ProjectedCol {col-name expr} col-name)))))
@@ -695,7 +701,8 @@
   (visitSelectClause [_ ctx]
     (let [sl-ctx (.selectList ctx)
           !subqs (HashMap.)
-          !aggs (HashMap.)]
+          !aggs (HashMap.)
+          !windows (HashMap.)]
 
       {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
                                       (let [renames (->> (for [^SqlParser$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
@@ -728,7 +735,7 @@
                                                                       (visitDerivedColumn [_ ctx]
                                                                         (let [expr-ctx (.expr ctx)]
                                                                           [(let [expr (.accept expr-ctx
-                                                                                               (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs}))]
+                                                                                               (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs :!windows !windows}))]
                                                                              (if-let [as-clause (.asClause ctx)]
                                                                                (let [col-name (->col-sym (identifier-sym as-clause))]
                                                                                  (->ProjectedCol {col-name expr} col-name))
@@ -762,7 +769,8 @@
                                                                             (throw (UnsupportedOperationException. (str "Table not found: " table-name))))))))))
                                                         cat)))))
        :subqs (not-empty (into {} !subqs))
-       :aggs (not-empty (into {} !aggs))})))
+       :aggs (not-empty (into {} !aggs))
+       :windows (not-empty (into {} !windows))})))
 
 (defn- project-all-cols [scope]
   ;; duplicated from the ASTERISK case above
@@ -962,6 +970,10 @@
   PlanError
   (error-string [_] "Aggregates are not allowed in this context"))
 
+(defrecord WindowFunctionsDisallowed []
+  PlanError
+  (error-string [_] "Window functions are not allowed in this context"))
+
 (def ^xtdb.antlr.SqlVisitor string-literal-visitor
   (reify SqlVisitor
     (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
@@ -975,6 +987,8 @@
     (visitCEscapesString [_ ctx]
       (let [str (.getText ctx)]
         (StringUtil/parseCString (subs str 2 (dec (count str))))))))
+
+(declare plan-sort-specification-list)
 
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
@@ -1609,6 +1623,54 @@
 
       agg-sym))
 
+  (visitWindowFunctionExpr [{:keys [^Map !windows] :as this} ctx]
+    (if-not !windows
+      (add-err! env (->WindowFunctionsDisallowed))
+      (let [[window-sym window-projection] (-> (.windowFunctionType ctx) (.accept this))
+            [window-name window-spec] (-> (.windowNameOrSpecification ctx) (.accept this))]
+        (.put !windows window-sym {:windows {window-name window-spec}
+                                   :projections [{window-sym (-> window-projection
+                                                                 (assoc :window-name window-name))}]})
+
+        window-sym)))
+
+  (visitWindowNameOrSpecification [this ctx]
+    (if-let [_window-name-ctx (.windowName ctx)]
+      (throw (UnsupportedOperationException. "TODO: Window names currently not supported!"))
+      (-> (.windowSpecification ctx) (.accept this))))
+
+  (visitRowNumberWindowFunction [{{:keys [!id-count]} :env} _]
+    (let [window-sym (-> (->col-sym (str "xt$row_number_" (swap! !id-count inc)))
+                         (vary-meta assoc :window-out-sym? true))]
+      [window-sym {:window-agg '(row-number)}]))
+
+  (visitWindowSpecification [this ctx]
+    (-> (.windowSpecificationDetails ctx) (.accept this)))
+
+  (visitWindowSpecificationDetails [{{:keys [!id-count]} :env :as this} ctx]
+    (let [window-name (symbol (str "window-name" (swap! !id-count inc)))
+          partition-cols (some-> (.windowPartitionClause ctx) (.accept this))
+          order-specs (some-> (.windowOrderClause ctx) (.accept this))
+          _frame (some-> (.windowFrameClause ctx) (.accept this))]
+      [window-name (cond-> {}
+                     partition-cols (assoc :partition-cols partition-cols)
+                     order-specs (assoc :order-specs order-specs))]))
+
+  (visitWindowPartitionClause [this ctx]
+    (-> (.windowPartitionColumnReferenceList ctx) (.accept this)))
+
+  (visitWindowPartitionColumnReferenceList [this ctx]
+    (mapv #(.accept ^ParserRuleContext % this) (.windowPartitionColumnReference ctx)))
+
+  (visitWindowPartitionColumnReference [this ctx]
+    (-> (.columnReference ctx) (.accept this)))
+
+  (visitWindowOrderClause [_this ctx]
+    (plan-sort-specification-list (.sortSpecificationList ctx) env scope nil))
+
+  (visitWindowFrameClause [_this _ctx]
+    (throw (UnsupportedOperationException. "TODO: Window frames currently not supported!")))
+
   (visitScalarSubqueryExpr [{:keys [!subqs]} ctx]
     (plan-sq (.subquery ctx) env scope !subqs
              {:sq-type :scalar}))
@@ -1728,8 +1790,14 @@
   PlanError
   (error-string [_] (format "Column count mismatch: expected %s, given %s" expected given)))
 
-(defn- plan-order-by [^SqlParser$OrderByClauseContext ctx
-                      {:keys [!id-count] :as env} inner-scope outer-col-syms]
+(defprotocol OptimiseStatement
+  (optimise-stmt [stmt]))
+
+(defrecord QueryExpr [plan col-syms]
+  OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
+
+(defn- plan-sort-specification-list [^SqlParser$SortSpecificationListContext ctx
+                                     {:keys [!id-count] :as env} inner-scope outer-col-syms]
   (let [available-cols (set outer-col-syms)
         ob-expr-visitor (->ExprPlanVisitor env
                                            (reify Scope
@@ -1743,8 +1811,7 @@
                                                        [sym]))
                                                    (find-decls inner-scope chain)))))]
 
-    (-> (.sortSpecificationList ctx)
-        (.sortSpecification)
+    (-> (.sortSpecification ctx)
         (->> (mapv (fn [^SqlParser$SortSpecificationContext sort-spec-ctx]
                      (let [expr (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
                            dir (or (some-> (.orderingSpecification sort-spec-ctx)
@@ -1777,6 +1844,9 @@
                                  {:order-by-spec [in-sym ob-opts]
                                   :in-projection {in-sym expr}})))))))))
 
+(defn- plan-order-by [^SqlParser$OrderByClauseContext ctx env inner-scope outer-col-syms]
+  (plan-sort-specification-list (.sortSpecificationList ctx) env inner-scope outer-col-syms))
+
 (defn- wrap-isolated-ob [plan outer-col-syms ob-specs]
   (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
     (as-> plan plan
@@ -1804,6 +1874,25 @@
       (if in-projs
         [:project (mapv :col-sym projected-cols) plan]
         plan))))
+
+(defn- wrap-windows [plan windows]
+  (let [{:keys [windows] :as window-opts} (apply merge-with into (vals windows))
+        in-projs (not-empty (->> (mapcat :order-specs (vals windows))
+                                 (into [] (keep :in-projection))))
+        window-opts (->> (update-vals windows (fn [window-name->window-spec]
+                                                (update window-name->window-spec :order-specs #(mapv :order-by-spec %))))
+                         (assoc window-opts :windows))]
+
+    (as-> plan plan
+      (if in-projs
+        [:map in-projs plan]
+        plan)
+
+      [:window window-opts
+       plan]
+
+      ;; hygienics happen in the order by planning
+      )))
 
 (defrecord DuplicateColumnProjection [col-sym]
   PlanError
@@ -2075,9 +2164,9 @@
 
           select-clause (.selectClause ctx)
 
-          {:keys [projected-cols] :as select-plan} (if select-clause
-                                                     (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
-                                                     (project-all-cols group-invar-col-tracker))
+          {:keys [projected-cols windows] :as select-plan} (if select-clause
+                                                             (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
+                                                             (project-all-cols group-invar-col-tracker))
 
           aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
           grouped-table? (boolean (or aggs (.groupByClause ctx)))
@@ -2086,9 +2175,14 @@
 
           distinct? (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
 
+          _ (when (> (count windows) 1)
+              (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
+          window-functions? (boolean windows)
+
           ob-specs (some-> order-by-ctx
                            (plan-order-by env qs-scope (mapv :col-sym projected-cols)))
 
+          ;; plan-table-ref reads the state written by all the find-decls
           plan (as-> (plan-table-ref qs-scope) plan
                  (if-let [{:keys [predicate subqs]} where-plan]
                    (-> plan
@@ -2106,6 +2200,9 @@
                    plan)
 
                  (-> plan (apply-sqs (:subqs select-plan)))
+
+                 (cond-> plan
+                   window-functions? (wrap-windows windows))
 
                  (if order-by-ctx
                    (-> plan
