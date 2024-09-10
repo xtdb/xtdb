@@ -351,7 +351,7 @@
    `(letfn [(run-slt-script#
               ([] (run-slt-script# {}))
               ([opts#] (run-slt-script ~script-name (merge ~opts opts#))))]
-      (doto (defn ~nm
+      (doto (defn ~(vary-meta nm assoc :test true)
               ([] (t/test-var (var ~nm)))
               ([opts#] (t/test-var (-> #(run-slt-script# opts#)
                                        (vary-meta into (meta (var ~nm)))))))

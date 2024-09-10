@@ -1,10 +1,8 @@
 ((nil . ((cider-preferred-build-tool . gradle)
          (cider-gradle-parameters . ":clojureRepl")
          (cider-ns-refresh-before-fn . "integrant.repl/suspend")
-         (cider-ns-refresh-after-fn  . "integrant.repl/resume")
-         (cider-clojure-cli-aliases . ":xtdb:dev")))
+         (cider-ns-refresh-after-fn  . "integrant.repl/resume")))
  (clojure-mode . ((eval . (define-clojure-indent
                             (match 1)
                             (for-all 1)
-                            (as-> 2)))
-                  (eval . (add-to-list 'cider-test-defining-forms "def-slt-test")))))
+                            (as-> 2))))))
