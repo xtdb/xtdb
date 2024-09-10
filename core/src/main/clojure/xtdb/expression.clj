@@ -1490,6 +1490,22 @@
                                ~(f :null nil)
                                ~(f :bool `(== ~return-code ~res-sym))))))})))
 
+(defn series [^long start, ^long end, ^long step]
+  (let [box (ValueBox.)]
+    (reify ListValueReader
+      (size [_]
+        (Math/max (int 0)
+                  (int (Math/ceil (/ (Math/subtractExact end start) step)))))
+
+      (nth [_ idx]
+        (doto box
+          (.writeLong (+ start (* step idx))))))))
+
+(defmethod codegen-call [:generate_series :int :int :int] [_]
+  {:return-type [:list :i64]
+   :->call-code (fn [[start end step]]
+                  `(series (long ~start) (long ~end) (long ~step)))})
+
 (defmethod codegen-call [:= :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-types}]
   (throw (UnsupportedOperationException. "TODO: `=` on sets")))
 

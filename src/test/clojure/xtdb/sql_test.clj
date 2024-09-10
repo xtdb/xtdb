@@ -2111,3 +2111,30 @@ UNION ALL
 
     (t/is (= [{:xt/id 2, :foo 3} {:xt/id 4, :foo 5}]
              (xt/q tu/*node* q)))))
+
+(t/deftest test-generate-series-3212
+  (t/is (= [1 2 3]
+           (->> (xt/q tu/*node* "SELECT x FROM generate_series(1, 4) xs (x)")
+                (mapv :x))))
+
+  (t/is (= [1 4 7]
+           (->> (xt/q tu/*node* "SELECT x FROM generate_series(1, 8, 3) xs (x)")
+                (mapv :x))))
+
+  (t/is (empty? (xt/q tu/*node* "SELECT x FROM generate_series(10, 3) xs (x)")))
+
+  (t/is (empty? (-> (xt/q tu/*node* "SELECT x FROM generate_series(1, 1) xs (x)"))))
+
+  (t/is (= [1]
+           (->> (xt/q tu/*node* "SELECT x FROM generate_series(1, 2, 2) xs (x)")
+                (mapv :x))))
+
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, start: -1, end: 3}, {_id: 2, start: 4, end: 6}"]])
+
+  (t/is (= [{:xt/id 2, :x 4}
+            {:xt/id 2, :x 5}
+            {:xt/id 1, :x -1}
+            {:xt/id 1, :x 0}
+            {:xt/id 1, :x 1}
+            {:xt/id 1, :x 2}]
+           (-> (xt/q tu/*node* "SELECT _id, x FROM foo, generate_series(start, end) xs (x)")))))

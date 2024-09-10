@@ -637,6 +637,24 @@
                            (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
                                (vary-meta assoc :unnamed-unnest-col? true)))))))
 
+  (visitGenerateSeriesTable [{{:keys [!id-count]} :env} ctx]
+    (let [expr (-> (.generateSeries ctx)
+                   (.accept (->ExprPlanVisitor env (or left-scope scope))))
+
+          table-projection (->table-projection (.tableProjection ctx))
+          table-alias (identifier-sym (.tableAlias ctx))]
+
+      (assert (or (nil? table-projection)
+                  (= 1 (count table-projection))))
+
+      (->UnnestTable env table-alias
+                     (symbol (str table-alias "." (swap! !id-count inc)))
+                     (or (->col-sym (first table-projection))
+                         (-> (->col-sym (str "_genseries." (swap! !id-count inc)))
+                             (vary-meta assoc :unnamed-unnest-col? true)))
+                     expr
+                     nil)))
+
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
 
   (visitArrowTable [{{:keys [!id-count]} :env} ctx]
@@ -1422,6 +1440,15 @@
     (let [ve1 (-> (.expr ctx 0) (.accept this))
           ve2 (-> (.expr ctx 1) (.accept this))]
       (list 'age ve1 ve2)))
+
+  (visitGenerateSeriesFunction [this ctx]
+    (.accept (.generateSeries ctx) this))
+
+  (visitGenerateSeries [this ctx]
+    (xt/template (generate_series ~(.accept (.expr (.seriesStart ctx)) this)
+                                  ~(.accept (.expr (.seriesEnd ctx)) this)
+                                  ~(or (some-> (.seriesStep ctx) (.expr) (.accept this))
+                                       1))))
 
   (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
 

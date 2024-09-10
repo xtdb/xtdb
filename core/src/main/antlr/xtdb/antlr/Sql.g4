@@ -262,6 +262,7 @@ exprPrimary
     | 'CAST' '(' expr 'AS' dataType ')' # CastExpr
     | arrayValueConstructor # ArrayExpr
     | objectConstructor # ObjectExpr
+    | generateSeries # GenerateSeriesFunction
 
     | 'EXISTS' subquery # ExistsPredicate
 
@@ -370,6 +371,13 @@ parameterSpecification
     ;
 
 columnReference : identifierChain ;
+
+/// generate_series function
+
+generateSeries : 'GENERATE_SERIES' '(' seriesStart ',' seriesEnd (',' seriesStep)? ')' ;
+seriesStart: expr;
+seriesEnd: expr;
+seriesStep: expr;
 
 /// §6.10 <window function>
 
@@ -531,6 +539,7 @@ tableReference
     | subquery tableAlias tableProjection? # DerivedTable
     | 'LATERAL' subquery tableAlias tableProjection? # LateralDerivedTable
     | 'UNNEST' '(' expr ')' withOrdinality? tableAlias tableProjection? # CollectionDerivedTable
+    | generateSeries tableAlias tableProjection? # GenerateSeriesTable
     | 'ARROW_TABLE' '(' characterString ')' tableAlias tableProjection # ArrowTable
     | '(' tableReference ')' # WrappedTableReference
     ;
