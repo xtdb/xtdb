@@ -13,8 +13,10 @@
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)
            (xtdb.watermark Watermark)))
 
-;;TODO add temporal cols
+(defn name->oid [s]
+  (Math/abs ^Integer (hash s)))
 
+;;TODO add temporal cols
 (defn schema-info->col-rows [schema-info]
   (for [table-entry schema-info
         [idx col] (map-indexed #(vector %1 %2) (val table-entry))
@@ -82,7 +84,10 @@
    'pg_catalog/pg_namespace {"oid" (types/col-type->field "oid" :i32)
                              "nspname" (types/col-type->field "nspname" :utf8)
                              "nspowner" (types/col-type->field "nspowner" :i32)
-                             "nspacl" (types/col-type->field "nspacl" :null)}})
+                             "nspacl" (types/col-type->field "nspacl" :null)}
+   'pg_catalog/pg_proc {"oid" (types/col-type->field "oid" :i32)
+                        "proname" (types/col-type->field "proname" :utf8)
+                        "pronamespace" (types/col-type->field "pronamespace" :i32)}})
 
 (def derived-tables (merge info-tables pg-catalog-tables))
 (def table-info (-> derived-tables (update-vals (comp set keys))))
@@ -103,11 +108,12 @@
     "schema_name" "information_schema"
     "schema_owner" "xtdb"}])
 
-(def pg-namespaces (map (fn [{:strs [schema_owner schema_name] :as schema}]
-                          (-> schema
-                              (assoc "nspowner" (hash schema_owner))
-                              (assoc "oid" (hash schema_name))))
-                        schemas))
+(def pg-namespaces
+  (mapv (fn [{:strs [schema_owner schema_name] :as schema}]
+          (-> schema
+              (assoc "nspowner" (name->oid schema_owner))
+              (assoc "oid" (name->oid schema_name))))
+        schemas))
 
 (defn tables [^IRelationWriter rel-wtr schema-info]
   (doseq [table (keys schema-info)]
@@ -140,9 +146,9 @@
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
-        "oid" (.writeInt col-wtr (hash table))
+        "oid" (.writeInt col-wtr (name->oid table))
         "relname" (.writeObject col-wtr (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (name table)))
-        "relnamespace" (.writeObject col-wtr (hash "public"))
+        "relnamespace" (.writeObject col-wtr (name->oid "public"))
         "relkind" (.writeObject col-wtr "r")))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
@@ -155,8 +161,8 @@
       (case col
         "oid" (.writeInt col-wtr oid)
         "typname" (.writeObject col-wtr typname)
-        "typnamespace" (.writeObject col-wtr (hash "pg_catalog"))
-        "typowner" (.writeInt col-wtr (hash "xtdb"))
+        "typnamespace" (.writeObject col-wtr (name->oid "pg_catalog"))
+        "typowner" (.writeInt col-wtr (name->oid "xtdb"))
         "typtype" (.writeObject col-wtr "b")
         "typbasetype" (.writeInt col-wtr 0)
         "typnotnull" (.writeBoolean col-wtr false)
@@ -185,7 +191,7 @@
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
-        "attrelid" (.writeInt col-wtr (Math/abs ^Integer (hash table)))
+        "attrelid" (.writeInt col-wtr (name->oid table))
         "attname" (.writeObject col-wtr (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name))
         "atttypid" (.writeInt col-wtr column-oid)
         "attlen" (.writeInt col-wtr (or typlen -1))
@@ -223,6 +229,25 @@
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
   rel-wtr)
+
+(do ; to eval them both
+  (def procs
+    {'pg_catalog/array_in {:oid (name->oid "array_in")
+                           :proname "array_in"
+                           :pronamespace (name->oid "pg_catalog")}})
+
+  (def oid->proc
+    (into {} (map (juxt (comp :oid val) key) procs))))
+
+(defn pg-proc [^IRelationWriter rel-wtr]
+  (doseq [{:keys [oid proname pronamespace]} (vals procs)]
+    (.startRow rel-wtr)
+    (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
+      (case col
+        "oid" (.writeInt col-wtr oid)
+        "proname" (.writeObject col-wtr proname)
+        "pronamespace" (.writeInt col-wtr pronamespace)))
+    (.endRow rel-wtr)))
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
@@ -264,6 +289,7 @@
                                      pg_catalog/pg_matviews out-rel-wtr
                                      pg_catalog/pg_attribute (pg-attribute out-rel-wtr (schema-info->col-rows schema-info))
                                      pg_catalog/pg_namespace (pg-namespace out-rel-wtr)
+                                     pg_catalog/pg_proc (pg-proc out-rel-wtr)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor

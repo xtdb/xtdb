@@ -184,6 +184,7 @@ dataType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'REGCLASS' #RegClassType
+    | 'REGPROC' #RegProcType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
     ;
 

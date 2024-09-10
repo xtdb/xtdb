@@ -3,59 +3,78 @@
             [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            [xtdb.information-schema :as info-schema]))
+            [xtdb.information-schema :as info]))
 
-(defn symbol-table-names
-  "returns possible symbol table names based on search path for unqualified names"
-  [table]
-  (let [parts (str/split table #"\.")]
+(defn symbol-names
+  "returns possible symbol names based on search path for unqualified names"
+  [needle]
+  (let [parts (str/split needle #"\.")]
     (if (= 1 (count parts))
       (mapv #(symbol % (first parts)) expr/search-path)
       [(symbol (str/join "." (butlast parts)) (last parts))])))
 
-(defn string-table-name [table]
-  (if (contains? (set expr/search-path) (namespace table))
-    (name table)
-    (str (namespace table) "." (name table))))
+(defn string-name [fq-name]
+  (when fq-name
+    (if (contains? (set expr/search-path) (namespace fq-name))
+      (name fq-name)
+      (str (namespace fq-name) "." (name fq-name)))))
+
+(defn table-names [schema]
+  (set/union (set (keys info/table-info))
+             (into #{'xt/txs} (map symbol) (keys schema))))
 
 (defn find-matching-table-name [schema tn]
-  (let [namespaced-schema (merge info-schema/table-info
-                                 {'xt/txs #{"_id" "committed" "error" "system_time"}}
-                                 (update-keys schema symbol))]
-    (some #(when (contains? namespaced-schema %) %) (symbol-table-names tn))))
+  (some (table-names schema)
+        (symbol-names tn)))
 
-(defn table->oid [tn]
-  (Math/abs ^Integer (hash tn)))
+(defn oid->table [schema oid]
+  (->> (table-names schema)
+       (filter #(= oid (info/name->oid %)))
+       (first)))
 
 (defmethod expr/codegen-cast [:utf8 :regclass] [{:keys [target-type]}]
   {:return-type target-type
-   :->call-code
-   (fn [[utf8-code]]
-     `(let [tn# (expr/buf->str ~utf8-code)]
-        (if-let [matching-tn# (find-matching-table-name ~expr/schema-sym tn#)]
-          (table->oid matching-tn#)
-          (throw (err/runtime-err ::unknown-relation
-                                  {::err/message (format "Relation %s does not exist" tn#)})))))})
-
-(defn ->oid->table [schema]
-  (-> (set/union (set (keys info-schema/table-info))
-                 (into #{} (map symbol) (keys schema)))
-      (conj 'xt/txs)
-      (->> (into {} (map (juxt table->oid identity))))))
+   :->call-code (fn [[utf8-code]]
+                  `(let [tn# (expr/buf->str ~utf8-code)]
+                     (if-let [matching-tn# (find-matching-table-name ~expr/schema-sym tn#)]
+                       (info/name->oid matching-tn#)
+                       (throw (err/runtime-err ::unknown-relation
+                                               {::err/message (format "Relation %s does not exist" tn#)})))))})
 
 (defmethod expr/codegen-cast [:regclass :utf8] [{:keys [target-type]}]
   {:return-type target-type
-   :->call-code
-   (fn [[regclass-code]]
-     `(let [oid# ~regclass-code]
-        (if-let [tn# (get (->oid->table ~expr/schema-sym) oid#)]
-          (expr/resolve-utf8-buf (string-table-name tn#))
-          (expr/resolve-utf8-buf (str oid#)))))})
+   :->call-code (fn [[regclass-code]]
+                  `(let [oid# ~regclass-code]
+                     (expr/resolve-utf8-buf (or (string-name (oid->table ~expr/schema-sym oid#))
+                                                (str oid#)))))})
 
 (defmethod expr/codegen-cast [:regclass :int] [{:keys [target-type]}]
   {:return-type target-type
    :->call-code first})
 
 (defmethod expr/codegen-cast [:int :regclass] [{:keys [target-type]}]
+  {:return-type target-type
+   :->call-code first})
+
+(defmethod expr/codegen-cast [:utf8 :regproc] [{:keys [target-type]}]
+  {:return-type target-type
+   :->call-code (fn [[utf8-code]]
+                  `(let [pn# (expr/buf->str ~utf8-code)]
+                     (or (some (comp :oid info/procs) (symbol-names pn#))
+                         (throw (err/runtime-err ::unknown-proc
+                                                 {::err/message (format "Procedure %s does not exist" pn#)})))))})
+
+(defmethod expr/codegen-cast [:regproc :utf8] [{:keys [target-type]}]
+  {:return-type target-type
+   :->call-code (fn [[regproc-code]]
+                  `(let [oid# ~regproc-code]
+                     (expr/resolve-utf8-buf (or (string-name (info/oid->proc oid#))
+                                                (str oid#)))))})
+
+(defmethod expr/codegen-cast [:regproc :int] [{:keys [target-type]}]
+  {:return-type target-type
+   :->call-code first})
+
+(defmethod expr/codegen-cast [:int :regproc] [{:keys [target-type]}]
   {:return-type target-type
    :->call-code first})

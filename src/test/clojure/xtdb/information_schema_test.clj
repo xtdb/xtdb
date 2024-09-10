@@ -205,7 +205,7 @@
               :relname "baseball"}
              {:relkind "r",
               :relnamespace 1106696632,
-              :oid -598393539,
+              :oid 598393539,
               :relname "txs"}
              {:relkind "r",
               :relnamespace 1106696632,
@@ -224,7 +224,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "float4",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 114,
@@ -232,7 +232,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "json",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 3802,
@@ -240,7 +240,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "jsonb",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 16384,
@@ -248,7 +248,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "transit",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 701,
@@ -256,7 +256,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "float8",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 21,
@@ -264,7 +264,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "int2",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 2950,
@@ -272,7 +272,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "uuid",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 1043,
@@ -280,7 +280,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "varchar",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 25,
@@ -288,7 +288,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "text",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 20,
@@ -296,7 +296,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "int8",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 23,
@@ -304,7 +304,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "int4",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 16,
@@ -312,7 +312,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "boolean",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 1082,
@@ -320,7 +320,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "date",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 1114,
@@ -328,7 +328,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "timestamp",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 1184,
@@ -336,7 +336,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "timestamptz",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
               :oid 2205,
@@ -344,7 +344,7 @@
               :typowner 1376455703,
               :typnotnull false,
               :typname "regclass",
-              :typnamespace -2125819141,
+              :typnamespace 2125819141,
               :typbasetype 0}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog/pg_type}
@@ -442,10 +442,10 @@
 (deftest test-pg-namespace
   (t/is (=
          #{{:nspowner 1376455703,
-            :oid -1980112537,
+            :oid 1980112537,
             :nspname "information_schema"}
            {:nspowner 1376455703,
-            :oid -2125819141,
+            :oid 2125819141,
             :nspname "pg_catalog"}
            {:nspowner 1376455703,
             :oid 1106696632,

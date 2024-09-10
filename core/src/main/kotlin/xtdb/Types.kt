@@ -80,13 +80,14 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
     override fun visit(type: ArrowType.Duration) = "duration-${type.unit.toLegPart()}"
 
     override fun visit(type: ArrowType.ExtensionType) = when (type) {
-        is KeywordType -> "keyword"
-        is TransitType -> "transit"
-        is UuidType -> "uuid"
-        is UriType -> "uri"
-        is RegClassType -> "regclass"
-        is SetType -> "set"
-        is TsTzRangeType -> "tstz-range"
+        KeywordType -> "keyword"
+        TransitType -> "transit"
+        UuidType -> "uuid"
+        UriType -> "uri"
+        RegClassType -> "regclass"
+        RegProcType -> "regproc"
+        SetType -> "set"
+        TsTzRangeType -> "tstz-range"
         else -> throw UnsupportedOperationException("not supported for $type")
     }
 })
@@ -125,6 +126,7 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is UUID -> UuidType
     is URI -> UriType
     is RegClass -> RegClassType
+    is RegProc -> RegProcType
     is Keyword -> KeywordType
     is ClojureForm -> TransitType
     is IllegalArgumentException -> TransitType

@@ -165,7 +165,7 @@ public class ValueVectorReader implements IVectorReader {
         return vector.isNull(idx) ? null : getObject0(idx, keyFn);
     }
 
-    Object getObject0(int idx, IKeyFn<?> keyFn) {
+    protected Object getObject0(int idx, IKeyFn<?> keyFn) {
         return vector.getObject(idx);
     }
 
@@ -316,7 +316,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return getBoolean(idx);
             }
         };
@@ -390,7 +390,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return new String(v.get(idx), StandardCharsets.UTF_8);
             }
         };
@@ -406,24 +406,8 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Keyword.intern((String) underlyingVec.getObject(idx));
-            }
-        };
-    }
-
-    public static IVectorReader regClassVector(RegClassVector v) {
-        var underlyingVec = intVector(v.getUnderlyingVector());
-
-        return new ValueVectorReader(v) {
-            @Override
-            public int getInt(int idx) {
-                return underlyingVec.getInt(idx);
-            }
-
-            @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
-                return new RegClass(getInt(idx));
             }
         };
     }
@@ -438,7 +422,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return URI.create((String) underlyingVec.getObject(idx));
             }
         };
@@ -456,7 +440,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return ByteBuffer.wrap(v.getObject(idx));
             }
         };
@@ -470,7 +454,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return ByteBuffer.wrap(v.getObject(idx));
             }
         };
@@ -493,7 +477,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return LocalDate.ofEpochDay(v.get(idx));
             }
         };
@@ -507,7 +491,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return LocalDate.ofEpochDay(getInt(idx));
             }
         };
@@ -525,7 +509,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return v.getObject(idx);
             }
         };
@@ -539,7 +523,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Instant.ofEpochSecond(getLong(idx)).atZone(zoneId(v));
             }
         };
@@ -553,7 +537,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Instant.ofEpochMilli(getLong(idx)).atZone(zoneId(v));
             }
         };
@@ -567,7 +551,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Instant.EPOCH.plus(getLong(idx), MICROS).atZone(zoneId(v));
             }
         };
@@ -581,7 +565,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Instant.ofEpochSecond(0, v.get(idx)).atZone(zoneId(v));
             }
         };
@@ -621,7 +605,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return LocalTime.ofSecondOfDay(v.get(idx));
             }
         };
@@ -635,7 +619,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return LocalTime.ofNanoOfDay(v.get(idx) * 1_000_000L);
             }
         };
@@ -649,7 +633,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return LocalTime.ofNanoOfDay(v.get(idx) * 1_000L);
             }
         };
@@ -663,7 +647,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return LocalTime.ofNanoOfDay(v.get(idx));
             }
         };
@@ -677,7 +661,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return new IntervalYearMonth(Period.ofMonths(getInt(idx)));
             }
 
@@ -699,7 +683,7 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            IntervalDayTime getObject0(int idx, IKeyFn<?> keyFn) {
+            protected IntervalDayTime getObject0(int idx, IKeyFn<?> keyFn) {
                 v.get(idx, holder);
                 return new IntervalDayTime(Period.ofDays(holder.days), Duration.ofMillis(holder.milliseconds));
             }
@@ -723,7 +707,7 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 v.get(idx, holder);
                 return new IntervalMonthDayNano(Period.of(0, holder.months, holder.days), Duration.ofNanos(holder.nanoseconds));
             }
@@ -777,7 +761,7 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 var res = new HashMap<>();
 
                 rdrs.forEach((k, reader) -> {
@@ -815,7 +799,7 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        Object getObject0(int idx, IKeyFn<?> keyFn) {
+        protected Object getObject0(int idx, IKeyFn<?> keyFn) {
             var startIdx = getListStartIndex(idx);
             return PersistentVector.create(
                     IntStream.range(0, getListCount(idx))
@@ -881,7 +865,7 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        Object getObject0(int idx, IKeyFn<?> keyFn) {
+        protected Object getObject0(int idx, IKeyFn<?> keyFn) {
             var startIdx = getListStartIndex(idx);
             return PersistentVector.create(
                     IntStream.range(0, getListCount(idx))
@@ -941,7 +925,7 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return PersistentHashSet.create((List<?>) listReader.getObject(idx, keyFn));
             }
 
@@ -981,7 +965,7 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 var startIdx = listReader.getListStartIndex(idx);
                 int entryCount = listReader.getListCount(idx);
 
@@ -1061,7 +1045,7 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @SuppressWarnings("resource")
-        Object getObject0(int idx, IKeyFn<?> keyFn) {
+        protected Object getObject0(int idx, IKeyFn<?> keyFn) {
             return legReader(getLeg(idx)).getObject(idx, keyFn);
         }
 

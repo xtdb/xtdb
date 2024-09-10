@@ -929,9 +929,8 @@
       {:cast-type :interval
        :cast-opts (when interval-qualifier (iq-context->iq-map interval-qualifier))}))
 
-  (visitRegClassType [_ ctx]
-    {:cast-type :regclass
-     :cast-opts {}})
+  (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
+  (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
 
   (visitCharacterStringType [_ _] {:cast-type :utf8}))
 

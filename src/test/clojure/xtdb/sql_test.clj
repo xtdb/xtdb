@@ -10,7 +10,7 @@
             [xtdb.test-util :as tu]
             [xtdb.types])
   (:import xtdb.api.tx.TxOps
-           xtdb.types.RegClass))
+           (xtdb.types RegClass RegProc)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -2021,6 +2021,29 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
   (t/is (= [{:xt/id 2} {:xt/id 1}]
            (xt/q tu/*node* "SELECT _id FROM bar WHERE 'bar'::regclass = 904292726"))))
+
+(t/deftest test-regproc
+  (t/is (= [{:v (RegProc. 1989914641)}]
+           (xt/q tu/*node* "SELECT 'pg_catalog.array_in'::regproc v")
+           (xt/q tu/*node* "SELECT 'array_in'::regproc v"))
+        "text -> regproc")
+
+  (t/is (= [{:v (RegProc. 1989914641)}]
+           (xt/q tu/*node* "SELECT 1989914641::regproc v"))
+        "int -> regproc")
+
+  (t/is (thrown-with-msg?
+         RuntimeException
+         #"Procedure public.baz does not exist"
+         (xt/q tu/*node* "SELECT 'public.baz'::regproc")))
+
+  (t/is (= [{:v "999999"}]
+           (xt/q tu/*node* "SELECT 999999::regproc::varchar v"))
+        "returns a stringified oid/int")
+
+  (t/is (= [{:v true}]
+           (xt/q tu/*node* "SELECT 1989914641::regproc = 'array_in'::regproc v"))
+        "regproc with identical oid are equal"))
 
 (t/deftest test-regclass-search-path-precedence
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO pg_class RECORDS {_id: 1}"]])

@@ -275,8 +275,7 @@
     :day `(.writeInt ~@args)
     :milli `(.writeLong ~@args)))
 
-(defmethod write-value-code :regclass [_ & args]
-  `(.writeInt ~@args))
+(defmethod write-value-code :regoid [_ & args] `(.writeInt ~@args))
 
 (doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
                  :list ListValueReader, :set ListValueReader, :struct Map}]

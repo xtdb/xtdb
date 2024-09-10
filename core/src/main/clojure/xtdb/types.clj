@@ -16,9 +16,8 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
-           xtdb.api.query.IKeyFn
            [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions KeywordType RegClassType SetType TransitType TsTzRangeType UriType UuidType)))
+           (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -114,6 +113,7 @@
   TsTzRangeType (<-arrow-type [_] :tstz-range)
   KeywordType (<-arrow-type [_] :keyword)
   RegClassType (<-arrow-type [_] :regclass)
+  RegProcType (<-arrow-type [_] :regproc)
   UuidType (<-arrow-type [_] :uuid)
   UriType (<-arrow-type [_] :uri)
   TransitType (<-arrow-type [_] :transit))
@@ -140,6 +140,7 @@
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
     :regclass RegClassType/INSTANCE
+    :regproc RegProcType/INSTANCE
     :uuid UuidType/INSTANCE
     :uri UriType/INSTANCE
     :transit TransitType/INSTANCE
@@ -288,7 +289,9 @@
 
       (derive :tstz-range :any)
 
-      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any) (derive :regclass :any)
+      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any)
+
+      (derive :regclass :regoid) (derive :regproc :regoid) (derive :regoid :any)
 
       (derive :list :any) (derive :struct :any) (derive :set :any) (derive :map :any)))
 
@@ -468,6 +471,9 @@
 
 (defmethod col-type->field* :regclass [col-name nullable? _col-type]
   (->field col-name RegClassType/INSTANCE nullable?))
+
+(defmethod col-type->field* :regproc [col-name nullable? _col-type]
+  (->field col-name RegProcType/INSTANCE nullable?))
 
 (defmethod col-type->field* :uuid [col-name nullable? _col-type]
   (->field col-name UuidType/INSTANCE nullable?))

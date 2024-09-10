@@ -3,7 +3,6 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.math BigDecimal)
@@ -13,9 +12,9 @@
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType)
-           (xtdb.types IntervalDayTime IntervalYearMonth RegClass)
+           (xtdb.types IntervalDayTime IntervalYearMonth RegClass RegProc)
            (xtdb.vector IVectorWriter)
-           (xtdb.vector.extensions KeywordVector TransitVector UriVector UuidVector RegClassVector)))
+           (xtdb.vector.extensions KeywordVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -370,8 +369,9 @@
 
         (t/is (= val (read-binary {} (write-binary {} l-rdr 0))))))))
 
-(t/deftest test-regclass-rountrip
-  (let [vs [(RegClass. 101)]]
+(t/deftest test-reg-rountrip
+  (let [vs [(RegClass. 101)
+            (RegProc. 750)]]
     (t/is (= {:vs vs
-              :vec-types [RegClassVector]}
+              :vec-types [RegClassVector RegProcVector]}
              (test-round-trip vs)))))
