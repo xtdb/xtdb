@@ -1843,31 +1843,36 @@
 (defn transit->pgobject [v]
   (doto (PGobject.)
     (.setType "\"transit\"")
-    (.setValue (String. (serde/write-transit v)))))
+    (.setValue (String. (serde/write-transit v :json)))))
 
 (deftest test-transit-param
-  ;; FIXME: requires generate_series #3212 and any(array_expr) #3539
-  #_
-  (doseq [binary? [true false]]
-    (t/testing (format "binary?: %s" binary?)
+  (with-open [node (xtn/start-node)]
+    (t/testing "pgwire metadata query"
+      (t/is (= [{:oid 16384, :typname "transit"}]
+               (xt/q node "
+SELECT t.oid, t.typname
+FROM pg_catalog.pg_type t
+  JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+WHERE t.typname = $1 AND (n.nspname = $2 OR $3 AND n.nspname = ANY (current_schemas(true)))
+ORDER BY t.oid DESC LIMIT 1"
+                           {:args ["transit" nil true]})))))
 
-      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
-                  stmt (.prepareStatement conn "SELECT ? AS v")]
+  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (transit->pgobject {:a 1, :b 2})])
 
-        (.setObject stmt 1 (transit->pgobject {:a 1, :b 2}))
+    (with-open [stmt (.prepareStatement conn "SELECT v FROM foo")
+                rs (.executeQuery stmt)]
 
-        (with-open [rs (.executeQuery stmt)]
+      (t/is (= [{"v" "json"}]
+               (result-metadata stmt)
+               (result-metadata rs)))
 
-          ;; TODO migrate to transit tests
-          (t/is (= [{"v" "bool"}]
-                   (result-metadata stmt)
-                   (result-metadata rs)))
-
-          (.next rs)
-          #_(t/is (= v (.getBoolean rs 1))))))))
+      (.next rs)
+      (t/is (= "{\"a\":1,\"b\":2}"
+               (.getValue ^PGobject (.getObject rs 1)))))))
 
 (deftest test-fallback-transit
-  ,; FIXME: requires generate_series #3212 and ::regproc (#3683)
+  ,; FIXME: requires generate_series #3212
   (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: (DATE '2020-01-01')::timestamptz}}"])
 
