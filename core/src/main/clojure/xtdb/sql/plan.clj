@@ -1149,6 +1149,10 @@
     (let [nve (-> (.expr ctx) (.accept this))]
       (list 'cardinality nve)))
 
+  (visitArrayUpperFunction [this ctx]
+    (xt/template (array-upper ~(-> (.expr ctx 0) (.accept this))
+                              ~(-> (.expr ctx 1) (.accept this)))))
+
   (visitAbsFunction [this ctx]
     (let [nve (-> (.expr ctx) (.accept this))]
       (list 'abs nve)))

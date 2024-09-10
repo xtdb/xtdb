@@ -1425,6 +1425,17 @@
   {:return-type :i32
    :->call-code #(do `(count-non-empty ~@%))})
 
+(defmethod codegen-call [:array_upper :list :i64] [_]
+  {:return-type :i32
+   :->call-code (fn [[arr dim]]
+                  `(do
+                     (when-not (= ~dim 1)
+                       (throw (err/runtime-err :xtdb.expression/array-dimension-error
+                                               {::err/message "Unsupported: ARRAY_UPPER for dimension != 1"
+                                                :dim ~dim})))
+
+                     (.size ~arr)))})
+
 (defn trim-array-view ^xtdb.arrow.ListValueReader [^long trimmed-value-count ^ListValueReader lst]
   (reify ListValueReader
     (size [_] trimmed-value-count)

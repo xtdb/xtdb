@@ -287,6 +287,7 @@ exprPrimary
     | 'OCTET_LENGTH' '(' expr ')' # OctetLengthFunction
     | 'LENGTH' '(' expr ')' # LengthFunction
     | 'CARDINALITY' '(' expr ')' # CardinalityFunction
+    | 'ARRAY_UPPER' '(' expr ',' expr ')' # ArrayUpperFunction
     | 'ABS' '(' expr ')' # AbsFunction
     | 'MOD' '(' expr ',' expr ')' # ModFunction
     | trigonometricFunctionName '(' expr ')' # TrigonometricFunction

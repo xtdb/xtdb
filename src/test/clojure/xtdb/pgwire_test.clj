@@ -1842,7 +1842,7 @@
 
 (defn transit->pgobject [v]
   (doto (PGobject.)
-    (.setType "\"transit\"")
+    (.setType "transit")
     (.setValue (String. (serde/write-transit v :json)))))
 
 (deftest test-transit-param
@@ -1872,16 +1872,15 @@ ORDER BY t.oid DESC LIMIT 1"
                (.getValue ^PGobject (.getObject rs 1)))))))
 
 (deftest test-fallback-transit
-  ,; FIXME: requires generate_series #3212
   (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: (DATE '2020-01-01')::timestamptz}}"])
 
     (with-open [stmt (.prepareStatement conn "SELECT * FROM foo")]
-      (t/is (= [{"_id" "int8"} {"nest" "transit"}] (result-metadata stmt)))
+      (t/is (= [{"_id" "int8"} {"nest" "transit"}] (result-metadata stmt))))
 
-      #_
-      (with-open [rs (.executeQuery stmt)]
-        (t/is (= :bang (resultset-seq rs)))))
+    (t/is (= {:_id 1,
+              :nest {"ts" #xt.time/zoned-date-time "2020-01-01T00:00Z[Europe/London]"}}
 
-    #_
-    (t/is (= :bang (jdbc/execute-one! conn ["SELECT * FROM foo"])))))
+             (-> (jdbc/execute-one! conn ["SELECT * FROM foo"])
+                 (update :nest (fn [^PGobject nest]
+                                 (serde/read-transit (.getBytes (.getValue nest)) :json))))))))
