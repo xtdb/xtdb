@@ -16,15 +16,24 @@
            xtdb.api.storage.ObjectStore
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
-(defn- get-blob [^BlobContainerClient blob-container-client blob-name]
-  (try
-    (-> (.getBlobClient blob-container-client blob-name)
-        (.downloadContent)
-        (.toByteBuffer))
-    (catch BlobStorageException e
-      (if (= 404 (.getStatusCode e))
-        (throw (os/obj-missing-exception blob-name))
-        (throw e)))))
+(defn- get-blob 
+  ([^BlobContainerClient blob-container-client blob-name]
+   (try
+     (-> (.getBlobClient blob-container-client blob-name)
+         (.downloadContent)
+         (.toByteBuffer))
+     (catch BlobStorageException e
+       (if (= 404 (.getStatusCode e))
+         (throw (os/obj-missing-exception blob-name))
+         (throw e)))))
+  ([^BlobContainerClient blob-container-client blob-name ^Path out-file]
+   (try
+     (-> (.getBlobClient blob-container-client blob-name)
+         (.downloadToFile (str out-file)))
+     (catch BlobStorageException e
+       (if (= 404 (.getStatusCode e))
+         (throw (os/obj-missing-exception blob-name))
+         (throw e))))))
 
 (defn- get-blob-range [^BlobContainerClient blob-container-client blob-name start len]
   (os/ensure-shared-range-oob-behaviour start len)
@@ -124,10 +133,8 @@
       (CompletableFuture/supplyAsync
        (reify Supplier
          (get [_]
-           (let [blob-buffer (get-blob blob-container-client (str prefixed-key))]
-             (util/write-buffer-to-path blob-buffer out-path)
-
-             out-path))))))
+           (get-blob blob-container-client (str prefixed-key) out-path)
+           out-path)))))
 
   (getObjectRange [_ k start len]
     (let [prefixed-key (util/prefix-key prefix k)]
