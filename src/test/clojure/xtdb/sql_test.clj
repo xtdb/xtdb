@@ -2239,3 +2239,4 @@ UNION ALL
             {:xt/id 1, :x 1}
             {:xt/id 1, :x 2}]
            (-> (xt/q tu/*node* "SELECT _id, x FROM foo, generate_series(start, end) xs (x)")))))
+

@@ -220,6 +220,13 @@
     "OVERLAY(foo.a PLACING foo.b FROM 1 for 4)" '(overlay f/a f/b 1 4)
     "OVERLAY(foo.a PLACING foo.b FROM 1)" '(overlay f/a f/b 1 (default-overlay-length f/b))))
 
+(t/deftest test-replace
+  (t/is (= [{:out "foobaz"}] (xt/q tu/*node* "SELECT REPLACE('foobar', 'bar', 'baz') AS out")))
+
+  (t/is (= [{:out "bazfoobaz"}] (xt/q tu/*node* "SELECT REPLACE('barfoobar', 'bar', 'baz') AS out")))
+
+  (t/is (= [{:out "foo"}] (xt/q tu/*node* "SELECT REPLACE('foo', 'bar', 'baz') AS out"))))
+
 (t/deftest test-bool-test-expr
   (t/are [sql expected]
          (= expected (plan-expr-with-foo sql))
@@ -1203,3 +1210,4 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
   (t/is (= [{:xs [-1 0 1 2]}]
            (xt/q tu/*node* "SELECT generate_series(start, end) xs FROM foo"))))
+

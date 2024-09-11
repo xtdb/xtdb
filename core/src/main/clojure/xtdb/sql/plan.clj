@@ -1520,6 +1520,12 @@
         (list 'overlay target placing pos len)
         (list 'overlay target placing pos (list 'default-overlay-length placing)))))
 
+  (visitReplaceFunction [this ctx]
+    (xt/template
+     (replace ~(.accept (.expr ctx) this)
+              ~(.accept (.expr (.replaceTarget ctx)) this)
+              ~(.accept (.expr (.replacement ctx)) this))))
+
   (visitCurrentUserFunction [_ _] '(current-user))
   (visitCurrentSchemaFunction [_ _] '(current-schema))
   (visitCurrentSchemasFunction [this ctx] (list 'current-schemas (-> (.expr ctx) (.accept this))))

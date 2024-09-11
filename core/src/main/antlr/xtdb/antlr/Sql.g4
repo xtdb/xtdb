@@ -322,10 +322,12 @@ exprPrimary
         ( 'USING' charLengthUnits )?
       ')' # OverlayFunction
 
-    | 'CURRENT_USER' # CurrentUserFunction
-    | 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
-    | 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
-    | 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
+    | 'REPLACE' '(' expr ',' replaceTarget ',' replacement ')' # ReplaceFunction
+
+    | (schemaName '.')? 'CURRENT_USER' # CurrentUserFunction
+    | (schemaName '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
+    | (schemaName '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
+    | (schemaName '.')? 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
 
     | currentInstantFunction # CurrentInstantFunction0
     | endOfTimeFunction # EndOfTimeFunction0
@@ -344,6 +346,9 @@ exprPrimary
 
     | 'TRIM_ARRAY' '(' expr ',' expr ')' # TrimArrayFunction
     ;
+
+replaceTarget : expr;
+replacement : expr;
 
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction

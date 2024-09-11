@@ -1190,6 +1190,12 @@
    :->call-code (fn [[target replacement from len]]
                   `(StringUtil/sqlUtf8Overlay (resolve-utf8-buf ~target) (resolve-utf8-buf ~replacement) ~from ~len))})
 
+(defmethod codegen-call [:replace :utf8 :utf8 :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[s target replacement]]
+                  `(-> (.replace (resolve-string ~s) (resolve-string ~target) (resolve-string ~replacement))
+                       (resolve-utf8-buf)))})
+
 (defmethod codegen-call [:overlay :varbinary :varbinary :int :int] [_]
   {:return-type :varbinary
    :->call-code (fn [[target replacement from len]]
