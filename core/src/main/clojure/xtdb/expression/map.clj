@@ -7,7 +7,7 @@
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            java.util.function.IntBinaryOperator
-           java.util.List
+           (java.util List Map)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            (org.apache.arrow.vector NullVector VectorSchemaRoot)
@@ -91,6 +91,7 @@
 
           (-> `(fn [~(expr/with-tag left-rel RelationReader)
                     ~(expr/with-tag right-rel RelationReader)
+                    ~(-> expr/schema-sym (expr/with-tag Map))
                     ~(-> expr/params-sym (expr/with-tag RelationReader))]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
@@ -104,6 +105,9 @@
               (eval))))
       (util/lru-memoize)))
 
+(def ^:private pg-class-schema-hack
+  {"pg_catalog/pg_class" #{}})
+
 (defn- ->equi-comparator [^IVectorReader left-col, ^IVectorReader right-col, params
                           {:keys [nil-keys-equal? param-types]}]
   (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
@@ -114,6 +118,7 @@
                              :param-types param-types})]
     (f (RelationReader/from (vr/rel-reader [(.withName left-col (str left-vec))]))
        (RelationReader/from (vr/rel-reader [(.withName right-col (str right-vec))]))
+       pg-class-schema-hack
        (some-> params RelationReader/from))))
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
@@ -128,7 +133,10 @@
                                                                     {:rel left-rel, :idx left-idx}
                                                                     {:rel right-rel, :idx right-idx})))))))
                             {:var->col-type col-types, :param-types param-types})]
-    (f (RelationReader/from probe-rel) (RelationReader/from build-rel) (RelationReader/from params))))
+    (f (RelationReader/from probe-rel)
+       (RelationReader/from build-rel)
+       pg-class-schema-hack
+       (RelationReader/from params))))
 
 (defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntBinaryOperator comparator, ^long idx, remove-on-match?]
   (if-not hash-bitmap

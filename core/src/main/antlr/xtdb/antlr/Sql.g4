@@ -142,6 +142,7 @@ identifier
         | 'LATEST' | 'SUBMITTED'
         | 'SYSTEM_TIME' | 'VALID_TIME'
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
+        | 'SETTING'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -335,6 +336,8 @@ exprPrimary
     | (schemaName '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
     | (schemaName '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
     | (schemaName '.')? 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
+    | (schemaName '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
+    | (schemaName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
 
     | currentInstantFunction # CurrentInstantFunction0
     | endOfTimeFunction # EndOfTimeFunction0
@@ -387,7 +390,7 @@ columnReference : identifierChain ;
 
 /// generate_series function
 
-generateSeries : 'GENERATE_SERIES' '(' seriesStart ',' seriesEnd (',' seriesStep)? ')' ;
+generateSeries : (schemaName '.')? 'GENERATE_SERIES' '(' seriesStart ',' seriesEnd (',' seriesStep)? ')' ;
 seriesStart: expr;
 seriesEnd: expr;
 seriesStep: expr;

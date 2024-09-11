@@ -96,7 +96,10 @@
    'pg_catalog/pg_stat_user_tables {"relid" (types/col-type->field "relid" :i32)
                                     "schemaname" (types/col-type->field "schemaname" :utf8)
                                     "relname" (types/col-type->field "relname" :utf8)
-                                    "n_live_tup" (types/col-type->field "n_live_tup" :i64)}})
+                                    "n_live_tup" (types/col-type->field "n_live_tup" :i64)}
+
+   'pg_catalog/pg_settings {"name" (types/col-type->field "name" :utf8)
+                            "setting" (types/col-type->field "setting" :utf8)}})
 
 (def derived-tables (merge info-tables pg-catalog-tables))
 (def table-info (-> derived-tables (update-vals (comp set keys))))
@@ -289,6 +292,17 @@
 
   rel-wtr)
 
+(defn pg-settings [^IRelationWriter rel-wtr]
+  (doseq [[setting-name setting] {"max_index_keys" "32"}]
+    (.startRow rel-wtr)
+    (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
+      (case col
+        "name" (.writeObject col-wtr setting-name)
+        "setting" (.writeObject col-wtr setting)))
+    (.endRow rel-wtr))
+
+  rel-wtr)
+
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
   (tryAdvance [this c]
@@ -332,6 +346,7 @@
                                      pg_catalog/pg_proc (pg-proc out-rel-wtr)
                                      pg_catalog/pg_database (pg-database out-rel-wtr)
                                      pg_catalog/pg_stat_user_tables (pg-stat-user-tables out-rel-wtr schema-info)
+                                     pg_catalog/pg_settings (pg-settings out-rel-wtr)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor

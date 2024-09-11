@@ -1413,6 +1413,8 @@
   (visitHasAnyColumnPrivilegePredicate [_ _] true)
   (visitHasTablePrivilegePredicate [_ _] true)
   (visitHasSchemaPrivilegePredicate [_ _] true)
+  (visitPgGetExprFunction [_ _] nil)
+  (visitPgExpandArrayFunction [_ _] nil)
 
   (visitCurrentDateFunction [_ _] '(current-date))
   (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
