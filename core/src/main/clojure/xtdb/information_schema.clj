@@ -87,7 +87,12 @@
                              "nspacl" (types/col-type->field "nspacl" :null)}
    'pg_catalog/pg_proc {"oid" (types/col-type->field "oid" :i32)
                         "proname" (types/col-type->field "proname" :utf8)
-                        "pronamespace" (types/col-type->field "pronamespace" :i32)}})
+                        "pronamespace" (types/col-type->field "pronamespace" :i32)}
+
+   'pg_catalog/pg_database {"oid" (types/col-type->field "oid" :i32)
+                            "datname" (types/col-type->field "datname" :utf8)
+                            "datallowconn" (types/col-type->field "datallowconn" :bool)
+                            "datistemplate" (types/col-type->field "datistemplate" :bool)}})
 
 (def derived-tables (merge info-tables pg-catalog-tables))
 (def table-info (-> derived-tables (update-vals (comp set keys))))
@@ -247,7 +252,25 @@
         "oid" (.writeInt col-wtr oid)
         "proname" (.writeObject col-wtr proname)
         "pronamespace" (.writeInt col-wtr pronamespace)))
-    (.endRow rel-wtr)))
+    (.endRow rel-wtr))
+
+  rel-wtr)
+
+(def databases
+  [{:datname "xtdb"}])
+
+(defn pg-database [^IRelationWriter rel-wtr]
+  (doseq [{:keys [datname]} databases]
+    (.startRow rel-wtr)
+    (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
+      (case col
+        "oid" (.writeInt col-wtr (name->oid datname))
+        "datname" (.writeObject col-wtr datname)
+        "datallowconn" (.writeBoolean col-wtr true)
+        "datistemplate" (.writeBoolean col-wtr false)))
+    (.endRow rel-wtr))
+
+  rel-wtr)
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
@@ -290,6 +313,7 @@
                                      pg_catalog/pg_attribute (pg-attribute out-rel-wtr (schema-info->col-rows schema-info))
                                      pg_catalog/pg_namespace (pg-namespace out-rel-wtr)
                                      pg_catalog/pg_proc (pg-proc out-rel-wtr)
+                                     pg_catalog/pg_database (pg-database out-rel-wtr)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor

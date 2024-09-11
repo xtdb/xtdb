@@ -1347,7 +1347,9 @@
         param-types (map types/pg-types-by-oid arg-types)]
 
     (if err
-      (cmd-send-error conn err)
+      (do
+        (log/debug "Error parsing query: " err)
+        (cmd-send-error conn err))
 
       (-> (if (= :query statement-type)
             (try
