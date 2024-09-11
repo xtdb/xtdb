@@ -1,0 +1,14 @@
+txLog: !Local
+  path: "/var/lib/xtdb/log"
+
+storage: !Local
+  path: "/var/lib/xtdb/buffers"
+
+metrics: !Prometheus
+  port: 8080
+
+modules:
+- !HttpServer
+  port: 3000
+- !PgwireServer
+  port: 5432

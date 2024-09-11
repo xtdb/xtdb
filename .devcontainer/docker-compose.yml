@@ -1,0 +1,25 @@
+services:
+  app:
+    image: "mcr.microsoft.com/devcontainers/universal:2"
+    container_name: app
+
+    volumes:
+      - ..:/workspaces:cached
+
+    # Overrides default command so things don't shut down after the process ends.
+    command: sleep infinity
+
+    depends_on:
+      - xtdb
+
+  xtdb:
+    image: ghcr.io/xtdb/xtdb-standalone-ea:latest
+    container_name: xtdb
+    restart: unless-stopped
+    volumes:
+      - xtdb-data:/var/lib/xtdb
+      - ./xtdb.yaml:/config/xtdb.yaml
+    command: ["-f", "/config/xtdb.yaml"]
+
+volumes:
+  xtdb-data:
