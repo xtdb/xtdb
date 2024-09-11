@@ -2,7 +2,7 @@
   (:require [clojure.java.shell :as sh]
             [clojure.set :as set]
             [clojure.test :as t]
-            [clojure.tools.logging :as log] 
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.azure :as azure]
             [xtdb.buffer-pool :as bp]
@@ -16,7 +16,7 @@
            (com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions)
            (java.io Closeable)
            (java.nio ByteBuffer)
-           (java.nio.file Path)
+           (java.nio.file Files Path)
            (java.time Duration)
            (xtdb.api.storage AzureBlobStorage ObjectStore)
            (xtdb.buffer_pool RemoteBufferPool)
@@ -62,6 +62,22 @@
 (t/deftest ^:azure range-test
   (with-open [os (object-store (random-uuid))]
     (os-test/test-range os)))
+
+(t/deftest ^:azure get-object-to-file-twice-shouldnt-fail
+  (util/with-tmp-dirs #{local-disk-cache}
+    (with-open [^ObjectStore os (object-store (random-uuid))]
+      (let [alice {:xt/id :alice, :name "Alice"}
+            alice-key (util/->path "alice")]
+        (os-test/put-edn os alice-key alice)
+
+        (let [out-path (.resolve local-disk-cache "alice.edn")]
+          (t/testing "first get successful"
+            (t/is (= out-path @(.getObject os alice-key out-path)))
+            (t/is (= alice (read-string (Files/readString out-path)))))
+
+          (t/testing "second get successful & doesn't throw"
+            (t/is (= out-path @(.getObject os alice-key out-path)))
+            (t/is (= alice (read-string (Files/readString out-path))))))))))
 
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node

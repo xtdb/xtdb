@@ -6,9 +6,9 @@
            [com.azure.storage.blob BlobContainerClient]
            [com.azure.storage.blob.models BlobItem BlobRange BlobStorageException DownloadRetryOptions ListBlobsOptions]
            [com.azure.storage.blob.specialized BlockBlobClient]
-           [java.io ByteArrayOutputStream Closeable]
+           [java.io ByteArrayOutputStream Closeable UncheckedIOException]
            [java.nio ByteBuffer]
-           [java.nio.file Path]
+           [java.nio.file FileAlreadyExistsException Path]
            [java.util ArrayList Base64 Base64$Encoder List]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
@@ -29,11 +29,17 @@
   ([^BlobContainerClient blob-container-client blob-name ^Path out-file]
    (try
      (-> (.getBlobClient blob-container-client blob-name)
-         (.downloadToFile (str out-file)))
+         (.downloadToFile (str out-file) false))
      (catch BlobStorageException e
        (if (= 404 (.getStatusCode e))
          (throw (os/obj-missing-exception blob-name))
-         (throw e))))))
+         (throw e)))
+     (catch UncheckedIOException e
+       (let [cause (.getCause e)]
+         (if (instance? FileAlreadyExistsException cause)
+           (do (log/debugf "File at getBlob already exists at output path %s, returning file path" out-file)
+               out-file)
+           (throw e)))))))
 
 (defn- get-blob-range [^BlobContainerClient blob-container-client blob-name start len]
   (os/ensure-shared-range-oob-behaviour start len)
