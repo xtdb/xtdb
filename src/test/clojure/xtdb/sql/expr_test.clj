@@ -1067,6 +1067,10 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 (t/deftest test-postgres-access-control-functions
   ;; These current functions should always should return true
   (t/are [sql expected] (= expected (plan/plan-expr sql))
+    "has_any_column_privilege('xtdb','docs', 'select')" true
+    "has_any_column_privilege('docs', 'select')" true
+    "pg_catalog.has_any_column_privilege('docs', 'select')" true
+
     "has_table_privilege('xtdb','docs', 'select')" true
     "has_table_privilege('docs', 'select')" true
     "pg_catalog.has_table_privilege('docs', 'select')" true

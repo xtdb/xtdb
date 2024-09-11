@@ -88,11 +88,15 @@
    'pg_catalog/pg_proc {"oid" (types/col-type->field "oid" :i32)
                         "proname" (types/col-type->field "proname" :utf8)
                         "pronamespace" (types/col-type->field "pronamespace" :i32)}
-
    'pg_catalog/pg_database {"oid" (types/col-type->field "oid" :i32)
                             "datname" (types/col-type->field "datname" :utf8)
                             "datallowconn" (types/col-type->field "datallowconn" :bool)
-                            "datistemplate" (types/col-type->field "datistemplate" :bool)}})
+                            "datistemplate" (types/col-type->field "datistemplate" :bool)}
+
+   'pg_catalog/pg_stat_user_tables {"relid" (types/col-type->field "relid" :i32)
+                                    "schemaname" (types/col-type->field "schemaname" :utf8)
+                                    "relname" (types/col-type->field "relname" :utf8)
+                                    "n_live_tup" (types/col-type->field "n_live_tup" :i64)}})
 
 (def derived-tables (merge info-tables pg-catalog-tables))
 (def table-info (-> derived-tables (update-vals (comp set keys))))
@@ -272,6 +276,19 @@
 
   rel-wtr)
 
+(defn pg-stat-user-tables [^IRelationWriter rel-wtr, schema-info]
+  (doseq [table (keys schema-info)]
+    (.startRow rel-wtr)
+    (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
+      (case col
+        "relid" (.writeInt col-wtr (name->oid (name table)))
+        "relname" (.writeObject col-wtr (name table))
+        "schemaname" (.writeObject col-wtr (namespace table))
+        "n_live_tup" (.writeLong col-wtr 0)))
+    (.endRow rel-wtr))
+
+  rel-wtr)
+
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
   (tryAdvance [this c]
@@ -314,6 +331,7 @@
                                      pg_catalog/pg_namespace (pg-namespace out-rel-wtr)
                                      pg_catalog/pg_proc (pg-proc out-rel-wtr)
                                      pg_catalog/pg_database (pg-database out-rel-wtr)
+                                     pg_catalog/pg_stat_user_tables (pg-stat-user-tables out-rel-wtr schema-info)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor

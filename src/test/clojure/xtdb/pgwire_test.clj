@@ -643,15 +643,15 @@
                     " 'SHOW'"
                     " 'SETTING'"
                     " '('"
+                    " 'SELECT'"
+                    " 'INSERT'"
+                    " 'UPDATE'"
+                    " 'DELETE'"
+                    " 'ERASE'"
                     " 'WITH'"
                     " 'FROM'"
                     " 'VALUES'"
-                    " 'RECORDS'"
-                    " 'SELECT'"
-                    " 'DELETE'"
-                    " 'ERASE'"
-                    " 'INSERT'"
-                    " 'UPDATE'}"]]
+                    " 'RECORDS'}"]]
                    (read :err))))
 
          (testing "query error allows session to continue"
@@ -1194,15 +1194,15 @@
                   " 'SHOW'"
                   " 'SETTING'"
                   " '('"
+                  " 'SELECT'"
+                  " 'INSERT'"
+                  " 'UPDATE'"
+                  " 'DELETE'"
+                  " 'ERASE'"
                   " 'WITH'"
                   " 'FROM'"
                   " 'VALUES'"
-                  " 'RECORDS'"
-                  " 'SELECT'"
-                  " 'DELETE'"
-                  " 'ERASE'"
-                  " 'INSERT'"
-                  " 'UPDATE'}"]] s)))
+                  " 'RECORDS'}"]] s)))
 
        (send "BEGIN READ WRITE;\n")
        (read)

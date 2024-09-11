@@ -1410,6 +1410,7 @@
      (period ~(some-> (.expr ctx 0) (.accept this))
              ~(some-> (.expr ctx 1) (.accept this)))))
 
+  (visitHasAnyColumnPrivilegePredicate [_ _] true)
   (visitHasTablePrivilegePredicate [_ _] true)
   (visitHasSchemaPrivilegePredicate [_ _] true)
 

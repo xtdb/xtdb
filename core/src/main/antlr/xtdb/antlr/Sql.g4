@@ -141,6 +141,7 @@ identifier
         | 'VERSION'
         | 'LATEST' | 'SUBMITTED'
         | 'SYSTEM_TIME' | 'VALID_TIME'
+        | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -265,6 +266,12 @@ exprPrimary
     | generateSeries # GenerateSeriesFunction
 
     | 'EXISTS' subquery # ExistsPredicate
+
+    | (schemaName '.')? 'HAS_ANY_COLUMN_PRIVILEGE' '('
+        ( userString ',' )?
+        tableString ','
+        privilegeString
+      ')' # HasAnyColumnPrivilegePredicate
 
     | (schemaName '.')? 'HAS_TABLE_PRIVILEGE' '('
         ( userString ',' )?
