@@ -13,7 +13,7 @@ services:
       - xtdb
 
   xtdb:
-    image: ghcr.io/xtdb/xtdb-standalone-ea:latest
+    image: ghcr.io/xtdb/xtdb-standalone-ea:edge
     container_name: xtdb
     restart: unless-stopped
     volumes:
