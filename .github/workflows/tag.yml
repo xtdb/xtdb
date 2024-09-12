@@ -1,0 +1,16 @@
+name: XTDB Release
+run-name: XTDB Release
+
+on:
+  push:
+    tags:
+      - 'v2.**'
+
+jobs:
+  docker:
+    if: github.repository == 'xtdb/xtdb'
+    uses: ./.github/workflows/docker.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
