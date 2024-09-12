@@ -2,7 +2,7 @@ image::img/xtdb-logo-banner.svg[XTDB Logo]
 
 https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel. XTDB has been built to simplify application development and address complex data compliance requirements. XTDB can be used via SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL].
 
-XTDB 2.x is currently in early access; if you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb/tree/1.x.
+XTDB 2.x is in 'beta' whilst we collaborate closely with our https://forms.gle/K2bMsPxkbreKSKqs9[Design Partners] ahead of General Availability; if you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb/tree/1.x.
 
 Major features:
 
@@ -83,9 +83,9 @@ XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x 
 
 [cols=3*]
 |===
-| | XTDB 1.x | XTDB 2.x (early access)
-| Status | Stable | Experimental (pre-alpha)
-| Initial Stable Release | 2019 | TBD
+| | XTDB 1.x | XTDB 2.x
+| Status | Stable | Beta
+| Initial Stable Release | 2019 | 2024-2025
 | Query languages | EDN Datalog | XTQL + SQL:2011
 | Bitemporal Querying | Timeslice only (point-in-time) | Fully bitemporal - SQL:2011 and beyond
 | Query focus | OLTP | OLAP + OLTP ('HTAP')
@@ -97,17 +97,6 @@ XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x 
 | Always-On Bitemporality | Yes | Yes
 | Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
 |===
-
-== Repo Layout
-
-2.x is split across multiple projects which are maintained within this repository.
-
-* `api` contains the user API to XTDB 2.x.
-* `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, S3 DB etc.).
-  Implementations of these storage options are located in their own projects.
-* `http-server` and `http-client-jvm` contain the HTTP server implementation, and a remote client for JVM users.
-* Storage and other modules are under `modules`.
-  Modules are published to Maven independently so that you can maintain granular dependencies on precisely the individual components needed for your application.
 
 == Questions, Thoughts & Feedback
 
