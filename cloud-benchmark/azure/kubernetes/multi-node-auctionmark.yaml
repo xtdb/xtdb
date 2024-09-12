@@ -132,6 +132,6 @@ spec:
             name: xtdb-env-config
         env:
         - name: XTDB_LOCAL_DISK_CACHE
-          value: "/var/lib/xtdb/buffers/disk-cache-2"
+          value: "/var/lib/xtdb/buffers/disk-cache-3"
         - name: AUCTIONMARK_LOAD_PHASE
           value: "False"
