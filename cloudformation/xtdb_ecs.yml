@@ -152,7 +152,7 @@ Resources:
       NetworkMode: 'bridge'
       ContainerDefinitions:
         - Name: 'xtdb-container'
-          Image: 'ghcr.io/xtdb/xtdb-aws-ea:latest'
+          Image: 'ghcr.io/xtdb/xtdb-aws:latest'
           Essential: true
           PortMappings:
             - ContainerPort: 3000

@@ -31,7 +31,7 @@ jobs:
         id: standalone-meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/xtdb/xtdb-ea
+          images: ghcr.io/xtdb/xtdb
           tags: |
             type=pep440,pattern={{version}}
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
@@ -41,7 +41,7 @@ jobs:
         id: aws-meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/xtdb/xtdb-aws-ea
+          images: ghcr.io/xtdb/xtdb-aws
           tags: |
             type=pep440,pattern={{version}}
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
@@ -51,7 +51,7 @@ jobs:
         id: azure-meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/xtdb/xtdb-azure-ea
+          images: ghcr.io/xtdb/xtdb-azure
           tags: |
             type=pep440,pattern={{version}}
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}

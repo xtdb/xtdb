@@ -41,7 +41,7 @@ resource "azurerm_container_app" "xtdb_app" {
     min_replicas = 1
 
     container {
-      image = "ghcr.io/danmason/xtdb-azure-ea:test"
+      image = "ghcr.io/danmason/xtdb-azure:latest"
       name  = "xtdb-node"
 
       cpu    = 2
