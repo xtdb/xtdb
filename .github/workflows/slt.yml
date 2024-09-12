@@ -2,12 +2,13 @@ name: XTDB SLT
 run-name: XTDB SLT
 
 on:
+  workflow_dispatch:
   schedule:
     - cron:  '0 19 * * 1-5'
 
 jobs:
   slt-test-dir:
-    if: github.repository == 'xtdb/xtdb'
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'xtdb/xtdb'
     name: SLT Test Dir
     runs-on: ubuntu-latest
     strategy:

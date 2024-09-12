@@ -11,13 +11,13 @@ env:
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
 on:
+  workflow_dispatch:
   schedule:
     - cron:  '0 19 * * 1-5'
 
-
 jobs:
   nightly-test:
-    if: github.repository == 'xtdb/xtdb'
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'xtdb/xtdb'
     name: Nightly test
     runs-on: ubuntu-latest
     permissions:
