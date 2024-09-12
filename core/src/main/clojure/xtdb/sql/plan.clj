@@ -256,8 +256,7 @@
 
   (visitPeriodSpecLiteral [_ ctx] (-> (.literal ctx) (.accept expr-visitor)))
   (visitPeriodSpecParam [_ ctx] (-> (.parameterSpecification ctx) (.accept expr-visitor)))
-  (visitPeriodSpecNow [_ _] :now)
-  (visitPeriodSpecEndOfTime [_ _] nil))
+  (visitPeriodSpecNow [_ _] :now))
 
 (defrecord MultipleTimePeriodSpecifications []
   PlanError
@@ -1421,10 +1420,8 @@
   (visitCurrentTimestampFunction [_ ctx] (fn-with-precision 'current-timestamp (.precision ctx)))
   (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
   (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
-  (visitEndOfTimeFunction [_ _] 'xtdb/end-of-time)
 
   (visitCurrentInstantFunction0 [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
-  (visitEndOfTimeFunction0 [this ctx] (-> (.endOfTimeFunction ctx) (.accept this)))
 
   (visitDateTruncFunction [this ctx]
     (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))

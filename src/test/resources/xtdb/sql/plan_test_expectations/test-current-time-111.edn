@@ -8,7 +8,5 @@
   {_column_7 (local-time)}
   {_column_8 (local-time 6)}
   {_column_9 (local-timestamp)}
-  {_column_10 (local-timestamp 9)}
-  {_column_11 xtdb/end-of-time}
-  {_column_12 xtdb/end-of-time}]
+  {_column_10 (local-timestamp 9)}]
  [:rename u.1 [:scan {:table public/u} [a]]]]

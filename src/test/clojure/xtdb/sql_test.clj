@@ -637,8 +637,7 @@
                     CURRENT_DATE,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(4),
                     LOCALTIME, LOCALTIME(6),
-                    LOCALTIMESTAMP, LOCALTIMESTAMP(9),
-                    END_OF_TIME, END_OF_TIME()
+                    LOCALTIMESTAMP, LOCALTIMESTAMP(9)
                     FROM u"
                     {:table-info {"public/u" #{"a"}}}))))
 
@@ -1124,11 +1123,11 @@
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
-                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"
+                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u.id = ?"
                               {:table-info {"public/users" #{"id"}}})))
 
   (t/is (=plan-file "test-sql-delete-plan"
-                    (plan-sql "DELETE FROM users FOR VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"
+                    (plan-sql "DELETE FROM users FOR VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u.id = ?"
                               {:table-info {"public/users" #{"id"}}}))))
 
 (deftest test-sql-erase-plan
@@ -1138,7 +1137,7 @@
 
 (deftest test-sql-update-plan
   (t/is (=plan-file "test-sql-update-plan"
-                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.id = ?"
+                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u.id = ?"
                               {:table-info {"public/users" #{"id" "first_name" "last_name"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"

@@ -340,7 +340,6 @@ exprPrimary
     | (schemaName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
 
     | currentInstantFunction # CurrentInstantFunction0
-    | endOfTimeFunction # EndOfTimeFunction0
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
     | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
@@ -365,8 +364,6 @@ currentInstantFunction
     | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision ')')? # CurrentTimestampFunction
     | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
     ;
-
-endOfTimeFunction : 'END_OF_TIME' ('(' ')')? ;
 
 booleanValue : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
 
@@ -586,7 +583,6 @@ periodSpecificationExpr
     : literal #PeriodSpecLiteral
     | parameterSpecification #PeriodSpecParam
     | ('NOW' | 'CURRENT_TIMESTAMP') #PeriodSpecNow
-    | 'END_OF_TIME' #PeriodSpecEndOfTime
     ;
 
 tableOrQueryName : tableName ;

@@ -6,12 +6,7 @@
     (greatest
      _valid_from
      (cast #xt.time/date "2020-05-01" [:timestamp-tz :micro "UTC"]))}
-   {_valid_to
-    (least
-     (coalesce _valid_to xtdb/end-of-time)
-     (coalesce
-      (cast xtdb/end-of-time [:timestamp-tz :micro "UTC"])
-      xtdb/end-of-time))}]
+   {_valid_to _valid_to}]
   [:project
    [{_iid u.1/_iid}
     {_valid_from u.1/_valid_from}
