@@ -38,42 +38,6 @@ ____
 
 image::img/xtdb-node-1.svg[XTDB 2.x Architecture Diagram, 1000, 460]
 
-== Pre-Release Snapshot Builds
-
-Maven snapshot versions are periodically published under `2.0.0-SNAPSHOT` and are used to facilitate support and debugging activities during the development cycle.
-To access snapshots versions, the Sonatype snapshot repository must be added to your project definition:
-
-[source,xml]
-----
-<repository>
-  <id>sonatype.snapshots</id>
-  <name>Sonatype Snapshot Repository</name>
-  <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
-  <releases>
-    <enabled>false</enabled>
-  </releases>
-  <snapshots>
-    <enabled>true</enabled>
-  </snapshots>
-</repository>
-----
-
-[source,clojure]
-----
-;; project.clj
-:repositories [["sonatype-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}]]
-----
-
-[source,clojure]
-----
-;; deps.edn
-:mvn/repos {"sonatype-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
-----
-
-In contrast to regular releases which are immutable, a `2.0.0-SNAPSHOT` release can be "updated" - this mutability can often be useful but may also cause unexpected surprises when depending on `2.0.0-SNAPSHOT` for longer than necessary.
-Snapshot versions, including full `2.0.0-<timestamp>` coordinates (which are useful to avoid being caught out by mutation), can be found https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/xtdb-core/dev-SNAPSHOT/[here].
-
-
 == XTDB 1.x
 
 XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
