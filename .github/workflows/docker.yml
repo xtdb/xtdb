@@ -35,7 +35,6 @@ jobs:
           tags: |
             type=pep440,pattern={{version}}
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=edge,branch=edge
             type=edge,branch=main
 
       - name: AWS meta
@@ -46,7 +45,6 @@ jobs:
           tags: |
             type=pep440,pattern={{version}}
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=edge,branch=edge
             type=edge,branch=main
 
       - name: Azure meta
@@ -57,7 +55,6 @@ jobs:
           tags: |
             type=pep440,pattern={{version}}
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=edge,branch=edge
             type=edge,branch=main
 
       - name: Build Uberjar

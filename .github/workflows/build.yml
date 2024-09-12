@@ -5,8 +5,6 @@ on:
   push:
     branches-ignore:
       - docs-live
-      - docker-latest
-      - edge
 
 jobs:
   test:

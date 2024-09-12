@@ -2,9 +2,6 @@ name: XTDB Edge
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - edge
 
 jobs:
   docker:
