@@ -2,7 +2,7 @@
   (:gen-class))
 
 (defn -main [& args]
-  (println (str "Starting XTDB 2.x (pre-alpha)"
+  (println (str "Starting XTDB 2.x"
                 (when-let [version (System/getenv "XTDB_VERSION")]
                   (str " @ " version))
 
