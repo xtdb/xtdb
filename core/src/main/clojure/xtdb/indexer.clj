@@ -361,32 +361,24 @@
             (-> (.liveTable live-idx-tx (str table))
                 (.logErase iid))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode ^IQuerySource q-src, wm-src
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src
                                                      query, {:keys [basis default-tz] :as tx-opts}]
-  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)
-        ^IntPredicate valid-query-pred (case mode
-                                         :assert-exists (reify IntPredicate
-                                                          (test [_ i] (pos? i)))
-                                         :assert-not-exists (reify IntPredicate
-                                                              (test [_ i] (zero? i))))]
+  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
       (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz})
                           (.openCursor))]
 
-        (letfn [(test-row-count [row-count]
-                  (when-not (.test valid-query-pred row-count)
-                    (throw (err/runtime-err :xtdb/assert-failed
-                                            {::err/message (format "Precondition failed: %s" (name mode))
-                                             :row-count row-count}))))]
+        (letfn [(throw-assert-failed []
+                  (throw (err/runtime-err :xtdb/assert-failed
+                                          {::err/message "Assert failed"})))]
           (or (.tryAdvance res
                            (reify Consumer
                              (accept [_ in-rel]
                                (let [^RelationReader in-rel in-rel]
-                                 (assert (= 1 (.rowCount in-rel)))
-                                 (assert (= 1 (count (seq in-rel))))
+                                 (when-not (pos? (.rowCount in-rel))
+                                   (throw-assert-failed))))))
 
-                                 (test-row-count (.getLong ^IVectorReader (first in-rel) 0))))))
-              (test-row-count 0)))
+              (throw-assert-failed)))
 
         (assert (not (.tryAdvance res nil))
                 "only expecting one batch in assert")))))
@@ -452,7 +444,9 @@
         (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
           (let [query-str (.getObject query-rdr tx-op-idx)
                 compiled-query (sql/compile-query query-str {:table-info (scan/tables-with-cols wm-src)
-                                                             :args-schema (some-> args-arrow-rdr .getVectorSchemaRoot .getSchema)})
+                                                             :args-schema (some-> args-arrow-rdr
+                                                                                  .getVectorSchemaRoot
+                                                                                  .getSchema)})
                 param-count (:param-count (meta compiled-query))]
             ;; TODO handle error
             (zmatch (r/vector-zip compiled-query)
@@ -476,9 +470,9 @@
                                (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
                                    (wrap-sql-args param-count)))
 
-              [:assert-exists _query-opts inner-query]
+              [:assert _query-opts inner-query]
               (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
+                               (-> (->assert-idxer q-src wm-src inner-query tx-opts)
                                    (wrap-sql-args param-count)))
 
               (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
@@ -529,14 +523,9 @@
                                (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
                                    (wrap-xtql-args)))
 
-              [:assert-not-exists _query-opts inner-query]
+              [:assert _query-opts inner-query]
               (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer :assert-not-exists q-src wm-src inner-query tx-opts)
-                                   (wrap-xtql-args)))
-
-              [:assert-exists _query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer :assert-exists q-src wm-src inner-query tx-opts)
+                               (-> (->assert-idxer q-src wm-src inner-query tx-opts)
                                    (wrap-xtql-args)))
 
               (throw (UnsupportedOperationException. "xtql query")))))

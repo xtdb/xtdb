@@ -488,7 +488,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
               {:tx-id 2,
                :system-time #xt.time/instant "2020-01-03T00:00:00Z",
                :committed? false,
-               :error #xt/runtime-err [:xtdb/assert-failed "Precondition failed: assert-not-exists" {:row-count 1}]})
+               :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]})
 
              (xt/execute-tx tu/*node* [[:assert-not-exists '(from :users [{:first-name $name}])
                                         {:name "James"}]
@@ -499,9 +499,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
              (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
 
     (t/is (= [{:xt/id 2,
-               :error ["Precondition failed: assert-not-exists"
-                       {::err/error-key :xtdb/assert-failed,
-                        :row-count 1}]}]
+               :error ["Assert failed" {::err/error-key :xtdb/assert-failed}]}]
 
              (->> (xt/q tu/*node* '(from :xt/txs [{:committed false} xt/id error]))
                   (map (fn [row]
@@ -512,7 +510,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
               {:tx-id 3,
                :system-time #xt.time/instant "2020-01-04T00:00:00Z",
                :committed? false,
-               :error #xt/runtime-err [:xtdb/assert-failed "Precondition failed: assert-exists" {:row-count 0}]})
+               :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]})
              (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:first-name $name}])
                                         {:name "Mike"}]
                                        [:put-docs :users {:xt/id :mike, :first-name "Mike"}] ])))
@@ -527,9 +525,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
              (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
 
     (t/is (= [{:xt/id 3,
-               :error ["Precondition failed: assert-exists"
-                       {::err/error-key :xtdb/assert-failed,
-                        :row-count 0}]}]
+               :error ["Assert failed" {::err/error-key :xtdb/assert-failed,}]}]
 
              (->> (xt/q tu/*node* '(-> (from :xt/txs [{:committed false} xt/id error])
                                        (where (> xt/id 2))))

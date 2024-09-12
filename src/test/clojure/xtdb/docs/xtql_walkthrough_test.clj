@@ -628,9 +628,7 @@
                                         [[:assert-exists '(from :users [{:xt/id :james}])]
                                          [:put-docs :orders {:xt/id :james, :item "fewer bugs"}]])]
     (t/is (= [{:committed? false
-               :error (err/runtime-err :xtdb/assert-failed
-                                       {::err/message "Precondition failed: assert-exists"
-                                        :row-count 0})}]
+               :error (err/runtime-err :xtdb/assert-failed {::err/message "Assert failed"})}]
              (-> (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
                        {:args {:tx-id my-tx-id}}))))))
 
@@ -650,9 +648,7 @@
         ,]
     (t/is (= ;; tag::DML-Assert-query-result[]
            [{:committed? false
-             :error (err/runtime-err :xtdb/assert-failed
-                                     {::err/message "Precondition failed: assert-not-exists"
-                                      :row-count 1})}]
+             :error (err/runtime-err :xtdb/assert-failed {::err/message "Assert failed"})}]
            ;; end::DML-Assert-query-result[]
            (-> ;; tag::DML-Assert-query[]
             (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
@@ -660,11 +656,9 @@
             ;; end::DML-Assert-query[]
             ))))
 
-  ;; TODO: Once implemented
-  #_
   (let [{:keys [tx-id]}
         (xt/submit-tx tu/*node*
-                      [[:sql (sql-example "DML-Assert-sql")]])]
+                      [[:sql (sql-example "DML-Assert-Not-sql")]])]
     (t/is (= [{:committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
                    {:args {:tx-id tx-id}})))))

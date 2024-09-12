@@ -1363,7 +1363,7 @@
 
     (q conn ["SET TRANSACTION READ WRITE"])
     (t/is (thrown-with-msg? Exception
-                            #"ERROR: Precondition failed: assert-exists"
+                            #"ERROR: Assert failed"
                             (jdbc/with-transaction [tx conn]
                               (jdbc/execute! tx ["ASSERT 1 = (SELECT COUNT(*) FROM foo)"])
                               (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (2)"]))))
@@ -1372,8 +1372,7 @@
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
     (t/is (= [{:_id 2, :committed false,
-               :error {"row-count" 0, "error-key" "xtdb/assert-failed",
-                       "message" "Precondition failed: assert-exists"}}
+               :error {"error-key" "xtdb/assert-failed", "message" "Assert failed"}}
               {:_id 1, :committed true, :error nil}
               {:_id 0, :committed true, :error nil}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))

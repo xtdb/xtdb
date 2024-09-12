@@ -2708,7 +2708,7 @@
 
   AssertStmt
   (->logical-plan [{:keys [query-plan]}]
-    [:assert-exists {} (->logical-plan query-plan)]))
+    [:assert {} (->logical-plan query-plan)]))
 
 (defn parse-statement ^SqlParser$DirectSqlStatementContext [sql]
   (let [parser (->parser sql)]

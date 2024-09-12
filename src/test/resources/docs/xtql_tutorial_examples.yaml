@@ -162,5 +162,5 @@ DML-Erase-sql: |
 
 DML-Assert-Not-sql: |
   -- tag::DML-Assert-sql[]
-  ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@juxt.pro')
+  ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')
   -- end::DML-Assert-sql[]

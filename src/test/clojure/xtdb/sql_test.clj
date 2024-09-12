@@ -1912,6 +1912,21 @@
 
   (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))
 
+(deftest test-assert-exists-3686-3689
+  (t/is (true? (-> (xt/execute-tx tu/*node* [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')"]
+                                             [:sql "INSERT INTO users RECORDS {_id: 'james', name: 'James', email: 'james@example.com'}"]])
+                   :committed?)))
+
+  (t/is (= [{:xt/id "james", :name "James", :email "james@example.com"}]
+           (xt/q tu/*node* "SELECT * FROM users")))
+
+  (t/is (false? (-> (xt/execute-tx tu/*node* [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')"]
+                                              [:sql "INSERT INTO users RECORDS {_id: 'james2', name: 'James 2', email: 'james@example.com'}"]])
+                    :committed?)))
+
+  (t/is (= [{:xt/id "james", :name "James", :email "james@example.com"}]
+           (xt/q tu/*node* "SELECT * FROM users"))))
+
 (deftest test-date-id-caught-3446
   (t/is (thrown-with-msg? RuntimeException
                           #"Invalid ID type: java.time.LocalDate"
