@@ -11,7 +11,6 @@
            [java.nio.file FileAlreadyExistsException Path]
            [java.util ArrayList Base64 Base64$Encoder List]
            [java.util.concurrent CompletableFuture]
-           [java.util.function Supplier]
            [reactor.core Exceptions]
            xtdb.api.storage.ObjectStore
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
@@ -29,7 +28,7 @@
   ([^BlobContainerClient blob-container-client blob-name ^Path out-file]
    (try
      (-> (.getBlobClient blob-container-client blob-name)
-         (.downloadToFile (str out-file) false))
+         (.downloadToFile (str out-file) true))
      (catch BlobStorageException e
        (if (= 404 (.getStatusCode e))
          (throw (os/obj-missing-exception blob-name))
@@ -137,10 +136,9 @@
   (getObject [_ k out-path]
     (let [prefixed-key (util/prefix-key prefix k)]
       (CompletableFuture/supplyAsync
-       (reify Supplier
-         (get [_]
-           (get-blob blob-container-client (str prefixed-key) out-path)
-           out-path)))))
+       (fn []
+         (get-blob blob-container-client (str prefixed-key) out-path)
+         out-path))))
 
   (getObjectRange [_ k start len]
     (let [prefixed-key (util/prefix-key prefix k)]

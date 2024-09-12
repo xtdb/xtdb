@@ -125,7 +125,6 @@
                         "upload" ".arrow"
                         (make-array FileAttribute 0)))
 
-
 (defrecord LocalBufferPool [allocator, ^Cache memory-store, ^Path disk-store, ^long max-size]
   IBufferPool
   (getBuffer [_ k]
@@ -334,11 +333,15 @@
                                                                          (.thenApply (fn [{:keys [pinned?]}]
                                                                                        (log/tracef "Key %s found in local-disk-cache - returning buffer" k)
                                                                                        {:path buffer-cache-path :previously-pinned? pinned?})))
-                                                                     (do (util/create-parents buffer-cache-path)
-                                                                         (log/debugf "Key %s not found in local-disk-cache, loading from object store" k)
-                                                                         (-> (.getObject object-store k buffer-cache-path)
-                                                                             (.thenApply (fn [path]
-                                                                                           {:path path :previously-pinned? false})))))
+                                                                     (let [tmp-path (create-tmp-path local-disk-cache)]
+                                                                       (log/debugf "Key %s not found in local-disk-cache, loading from object store" k)
+
+                                                                       (util/create-parents buffer-cache-path)
+                                                                       (-> (.getObject object-store k tmp-path)
+                                                                           (.thenApply (fn [tmp-path]
+                                                                                         (util/atomic-move tmp-path buffer-cache-path)
+                                                                                         {:path buffer-cache-path, :previously-pinned? false})))))
+
                                                                    (.thenApply (fn [{:keys [path previously-pinned?]}]
                                                                                  (let [file-size (util/size-on-disk path)
                                                                                        nio-buffer (util/->mmap-path path)
