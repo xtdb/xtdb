@@ -106,6 +106,35 @@ describe("connects to XT", function() {
     }
   })
 
+  /** TODO #3694
+  it("should round-trip top-level transit via RECORDS", async () => {
+    const conn = await sql.reserve()
+
+    try {
+      await conn`SET fallback_output_format='transit'`
+
+      const m = {'_id': 2,
+		 'd': new Date('2020-01-01')}
+
+      await conn`INSERT INTO foo RECORDS ${conn.typed.transit(m)}`
+
+      const res = await conn`SELECT _id, transit FROM foo WHERE _id = 2`
+
+      // HACK can't figure out how to get it doing this automatically
+      res[0].transit = tjs.mapToObject(res[0].transit)
+
+      assert.deepStrictEqual([...res],
+                             [m])
+
+      assert.deepStrictEqual([...await conn`SELECT _id, d + INTERVAL 'P2D' AS third FROM foo WHERE _id = 2`],
+                             [{_id: 2, third: new Date("2020-01-03T00:00Z")}])
+
+    } finally {
+      await conn.release()
+    }
+  })
+  **/
+
   it("accepts tagged numbers as floats/ints", async () => {
     const conn = await sql.reserve()
 
