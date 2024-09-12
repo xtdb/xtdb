@@ -1,0 +1,15 @@
+name: XTDB Edge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - edge
+
+jobs:
+  docker:
+    uses: ./.github/workflows/docker.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
