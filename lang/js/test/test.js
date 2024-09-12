@@ -105,4 +105,24 @@ describe("connects to XT", function() {
       await conn.release()
     }
   })
+
+  it("accepts tagged numbers as floats/ints", async () => {
+    const conn = await sql.reserve()
+
+    try {
+      await conn`INSERT INTO tagged_nums RECORDS {_id: 1, nest: ${conn.typed.transit({a: 1, b: 1.0, c: 1.1, d: tjs.tagged('f64', 1)})}}`
+
+      let res = await conn`SELECT _id, nest FROM tagged_nums`
+
+      res[0].nest = tjs.mapToObject(res[0].nest)
+
+      assert.deepStrictEqual([...res], [{_id: 1, nest: {a: 1, b: 1, c: 1.1, d: 1}}])
+
+      res = await conn`select * from information_schema.columns WHERE table_name = 'tagged_nums' AND column_name = 'nest'`
+      const type = res[0].data_type;
+      assert.equal('[:struct {a :i64, b :i64, c :f64, d :f64}]', type, `data_type is actually ${type}`);
+    } finally {
+      await conn.release()
+    }
+  })
 })

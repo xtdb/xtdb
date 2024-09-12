@@ -291,7 +291,13 @@
           "xtdb.tx/delete" (transit/read-handler delete-docs-reader)
           "xtdb.tx/erase" (transit/read-handler erase-docs-reader)
           "xtdb.tx/call" (transit/read-handler call-op-reader)
-          "xtdb/tx-opts" (transit/read-handler tx-opts-read-fn)}))
+          "xtdb/tx-opts" (transit/read-handler tx-opts-read-fn)
+          "f64" (transit/read-handler double)
+          "f32" (transit/read-handler float)
+          "i64" (transit/read-handler long)
+          "i32" (transit/read-handler int)
+          "i16" (transit/read-handler short)
+          "i8" (transit/read-handler byte)}))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; TransitVector
 (defn transit-msgpack-reader [in]
