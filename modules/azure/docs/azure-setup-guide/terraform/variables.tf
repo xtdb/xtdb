@@ -28,7 +28,7 @@ variable "storage_account_name" {
 variable "kafka_persisent_data_max_size_gb" {
   description = "The size in Gigabytes of the storage share to store Kafka data in."
   type        = number
-  default     = 5120
+  default     = 100
 }
 
 variable "local_disk_cache_max_size_gb" {
