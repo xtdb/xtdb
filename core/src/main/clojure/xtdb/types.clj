@@ -890,13 +890,18 @@
                  :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
                                 (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
                                   (LocalDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
+
                  :read-text (fn [_env ba]
-                             (LocalDateTime/parse (read-utf8 ba) iso-offset-date-time-formatter-with-space))
+                              (let [res (time/parse-sql-timestamp-literal (read-utf8 ba))]
+                                (when (instance? LocalDateTime res)
+                                  res)))
+
                  :write-binary (fn [_env ^IVectorReader rdr idx]
                                  (let [micros (- (.getLong rdr idx) unix-pg-epoch-diff-in-micros)
                                        bb (doto (ByteBuffer/allocate typlen)
                                             (.putLong micros))]
                                    (.array bb)))
+
                  :write-text (fn [_env ^IVectorReader rdr idx]
                                (-> ^LocalDateTime (.getObject rdr idx)
                                    (.format iso-offset-date-time-formatter-with-space)
@@ -916,8 +921,12 @@
                                   ;;infer one, so opting for UTC
                                   (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
                                     (OffsetDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
+
                    :read-text (fn [_env ba]
-                                (OffsetDateTime/parse (read-utf8 ba) iso-offset-date-time-formatter-with-space))
+                                (let [res (time/parse-sql-timestamp-literal (read-utf8 ba))]
+                                  (when (or (instance? ZonedDateTime res) (instance? OffsetDateTime res))
+                                    res)))
+
                    :write-binary (fn [_env ^IVectorReader rdr idx]
                                    ;;despite the wording in the docs, based off pgjdbc behaviour
                                    ;;and other sources, this appears to be in UTC rather than the session tz
@@ -930,6 +939,7 @@
                                            bb (doto (ByteBuffer/allocate typlen)
                                                 (.putLong micros))]
                                        (.array bb))))
+
                    :write-text (fn [_env ^IVectorReader rdr idx]
                                  ;; pgjdbc allows you to return offsets in string format,
                                  ;; seems non-standard, but the standard isn't clear.

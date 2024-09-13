@@ -91,7 +91,7 @@
     0))
 
 (defn parse-sql-timestamp-literal [ts-str]
-  (when-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?(?:\[([\w\/]+)\])?" ts-str)]
+  (when-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::\d{2})?)?(?:\[([\w\/]+)\])?" ts-str)]
     (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
                                 (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
       (cond
