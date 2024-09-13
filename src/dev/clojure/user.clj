@@ -31,6 +31,11 @@
   (in-ns 'dev))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn pgpg []
+  (require 'playground)
+  (in-ns 'playground))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn set-log-level! [ns level]
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
              (when level

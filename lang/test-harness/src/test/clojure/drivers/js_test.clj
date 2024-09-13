@@ -2,8 +2,7 @@
   (:require [clojure.java.shell :refer [sh]]
             [clojure.test :as t]
             [test-harness.test-utils :as tu]
-            [xtdb.node :as xtn]
-            [xtdb.pgwire.playground :as pgpg]))
+            [xtdb.node :as xtn]))
 
 (def project-root (str @tu/root-path "/lang/js/"))
 
@@ -21,28 +20,6 @@
   (with-open [node (xtn/start-node {:pgwire-server {:port 0}})]
     (binding [*pg-port* (.getPgPort node)]
       (f))))
-
-(comment
-  (do
-    (require '[integrant.core :as ig]
-             '[integrant.repl :as ir]
-             '[xtdb.util :as util]
-             '[xtdb.pgwire.playground :as pgpg])
-
-    (defmethod ig/init-key ::playground [_ _]
-      (pgpg/open-playground))
-
-    (defmethod ig/halt-key! ::playground [_ playground]
-      (util/close playground))
-
-    (ir/set-prep! (fn []
-                    {::playground {}})))
-
-  (ir/halt)
-
-  (ir/go)
-
-  )
 
 (t/use-fixtures :once yarn-install)
 (t/use-fixtures :each with-node)
