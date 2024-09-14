@@ -10,11 +10,13 @@
 (defmulti parse-tx-op
   (fn [tx-op]
     (when-not (vector? tx-op)
-      (throw (err/illegal-arg :xtql/malformed-tx-op {:tx-op tx-op})))
+      (throw (err/illegal-arg :xtql/malformed-tx-op
+                              {::err/message "expected vector for tx-op", :tx-op tx-op})))
 
     (let [[op] tx-op]
       (when-not (keyword? op)
-        (throw (err/illegal-arg :xtql/malformed-tx-op {:tx-op tx-op})))
+        (throw (err/illegal-arg :xtql/malformed-tx-op
+                                {::err/message "expected keyword for op", :tx-op tx-op, :op op})))
 
       op))
   :default ::default)
@@ -94,25 +96,30 @@
 
 (defmethod parse-tx-op :insert-into [[_ table query & arg-rows :as this]]
   (when-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table {:table table, :insert this})))
+    (throw (err/illegal-arg :xtql/malformed-table
+                            {::err/message "expected keyword", :table table, :insert this})))
 
   (cond-> (TxOps/insert (str (symbol table)) (xtql.edn/parse-query query))
     (seq arg-rows) (.argRows ^List arg-rows)))
 
 (defmethod parse-tx-op :update [[_ opts & arg-rows :as this]]
   (when-not (map? opts)
-    (throw (err/illegal-arg :xtql/malformed-opts {:opts opts, :update this})))
+    (throw (err/illegal-arg :xtql/malformed-opts
+                            {::err/message "expected map", :opts opts, :update this})))
 
   (let [{:keys [table for-valid-time bind unify], set-specs :set} opts]
 
     (when-not (keyword? table)
-      (throw (err/illegal-arg :xtql/malformed-table {:table table, :update this})))
+      (throw (err/illegal-arg :xtql/malformed-table
+                              {::err/message "expected keyword", :table table, :update this})))
 
     (when-not (map? set-specs)
-      (throw (err/illegal-arg :xtql/malformed-set {:set set-specs, :update this})))
+      (throw (err/illegal-arg :xtql/malformed-set
+                              {:err/message "expected map", :set set-specs, :update this})))
 
     (when-not (or (nil? bind) (vector? bind))
-      (throw (err/illegal-arg :xtql/malformed-bind {:bind bind, :update this})))
+      (throw (err/illegal-arg :xtql/malformed-bind
+                              {::err/message "expected nil or vector", :bind bind, :update this})))
 
     (cond-> (TxOps/update (str (symbol table)) (xtql.edn/parse-col-specs set-specs this))
       for-valid-time (.forValidTime (xtql.edn/parse-temporal-filter for-valid-time :for-valid-time this))
@@ -122,7 +129,8 @@
 
 (defmethod parse-tx-op :delete [[_ {table :from, :keys [for-valid-time bind unify]} & arg-rows :as this]]
   (when-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table {:from table, :delete this})))
+    (throw (err/illegal-arg :xtql/malformed-table
+                            {::err/message "expected keyword", :from table, :delete this})))
 
   (cond-> (TxOps/delete (str (symbol table)))
     for-valid-time (.forValidTime (xtql.edn/parse-temporal-filter for-valid-time :for-valid-time this))
@@ -140,7 +148,8 @@
 
 (defmethod parse-tx-op :erase [[_ {table :from, :keys [bind unify]} & arg-rows :as this]]
   (when-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table {:table table, :erase this})))
+    (throw (err/illegal-arg :xtql/malformed-table
+                            {::err/message "expected keyword", :table table, :erase this})))
 
   (cond-> (TxOps/erase (str (symbol table)))
     bind (.binding (xtql.edn/parse-out-specs bind this))
