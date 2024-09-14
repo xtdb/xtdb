@@ -97,31 +97,34 @@ user=> SELECT * FROM people;
 
 ### Handling ‘documents’
 
-XTDB is designed to work with JSON-like nested data as a first-class concept (i.e. not restricted to JSON or JSONB types). This means you can easily handle complex document-like nested data structures:
+XTDB is designed to work with JSON-like nested data as a first-class concept (i.e. not restricted to JSON or JSONB types). This means you can easily handle complex document-like nested data. Here the `RECORDS` syntax, combined with the 'upsert' behavior of the `INSERT`, avoids the chore of having to be explicit about all the individual columns involved:
 
 <TabbedExample>
   <Fiddle magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-03"
          txs={`
-UPDATE people
-SET info = {contact: [{loc: 'home',
-                       tel: '123'},
-                      {loc: 'work',
-                       tel: '456',
-                       registered: DATE '2024-01-01'}]}
-  WHERE people.name = 'fred'`}/>
+INSERT INTO people RECORDS
+{_id: 6,
+ name: 'fred',
+ info: {contact: [{loc: 'home',
+                   tel: '123'},
+                  {loc: 'work',
+                   tel: '456',
+                   registered: DATE '2024-01-01'}]}}
+`}/>
     <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
   </Fiddle>
   <Card slot="2">
 ```sql
-user=> UPDATE people
-SET info = {contact: [{loc: 'home',
-                       tel: '123'},
-                      {loc: 'work',
-                       tel: '456',
-                       registered: DATE '2024-01-01'}]}
-  WHERE people.name = 'fred';
-UPDATE 0
+user=> INSERT INTO people RECORDS
+{_id: 6,
+ name: 'fred',
+ info: {contact: [{loc: 'home',
+                   tel: '123'},
+                  {loc: 'work',
+                   tel: '456',
+                   registered: DATE '2024-01-01'}]}};
+INSERT 0 0
 ```
   </Card>
 </TabbedExample>
@@ -478,7 +481,7 @@ We can specify the `_valid_from` column during an INSERT statement to record whe
          txs={`
 INSERT INTO people (_id, name, favorite_color, _valid_from)
   VALUES (2, 'carol', 'blue', DATE '2023-01-01')`}/>
-    <Query q="SELECT name, _valid_from, FROM people" />
+    <Query q="SELECT name, _valid_from FROM people" />
   </Fiddle>
   <Card slot="2">
 ```sql
