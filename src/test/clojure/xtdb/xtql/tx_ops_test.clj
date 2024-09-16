@@ -37,7 +37,7 @@
                                        :set {:version (inc v)}}])))
 
   (t/is (thrown-with-msg?
-         xtdb.IllegalArgumentException #"Illegal argument: 'xtql/malformed-bind'"
+         xtdb.IllegalArgumentException #"expected nil or vector"
          (roundtrip-tx-op '[:update {:table :foo
                                      :bind {:not-a vector}
                                      :set {:version (inc v)}}]))))
