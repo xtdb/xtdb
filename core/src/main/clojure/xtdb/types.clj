@@ -16,6 +16,7 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
+           (xtdb.types ZonedDateTimeRange)
            [xtdb.vector IVectorReader]
            (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
@@ -829,18 +830,18 @@
    ;;
    ;;Java boolean maps to both bit and bool, opting to support latter only for now
    #_#_:bit {:typname "bit"
-         :oid 1500
-         :typlen 1
-         :read-binary (fn [ba] (-> ba ByteBuffer/wrap .get))
-         :read-text (fn [ba] (-> ba read-utf8 Byte/parseByte))
-         :write-binary (fn [^IVectorReader rdr idx]
-                         (when-not (.isNull rdr idx)
-                           (let [bb (doto (ByteBuffer/allocate 1)
-                                      (.put (.getByte rdr idx)))]
-                             (.array bb))))
-         :write-text (fn [^IVectorReader rdr idx]
-                       (when-not (.isNull rdr idx)
-                         (utf8 (.getByte rdr idx))))}
+             :oid 1500
+             :typlen 1
+             :read-binary (fn [ba] (-> ba ByteBuffer/wrap .get))
+             :read-text (fn [ba] (-> ba read-utf8 Byte/parseByte))
+             :write-binary (fn [^IVectorReader rdr idx]
+                             (when-not (.isNull rdr idx)
+                               (let [bb (doto (ByteBuffer/allocate 1)
+                                          (.put (.getByte rdr idx)))]
+                                 (.array bb))))
+             :write-text (fn [^IVectorReader rdr idx]
+                           (when-not (.isNull rdr idx)
+                             (utf8 (.getByte rdr idx))))}
 
    :float4 (let [typlen 4]
              {:typname "float4"
@@ -948,6 +949,31 @@
                                    (-> ^ZonedDateTime zdt
                                        (.format iso-offset-date-time-formatter-with-space)
                                        (utf8))))})
+
+   :tstz-range {:typname "tstz-range"
+                :oid 3910
+                :read-text (fn [_env ba]
+                             (letfn [(parse-datetime [s]
+                                       (when s
+                                         (let [ts (time/parse-sql-timestamp-literal s)]
+                                           (cond
+                                             (instance? ZonedDateTime ts) ts
+                                             (instance? OffsetDateTime ts) (.toZonedDateTime ^OffsetDateTime ts)
+                                             :else ::malformed-date-time))))]
+                               (when-let [[_ from to] (re-matches #"\[([^,]*),([^\)]*)\)" (read-utf8 ba))]
+                                 (let [from (parse-datetime from)
+                                       to (parse-datetime to)]
+                                   (when-not (or (= ::malformed-date-time from)
+                                                 (= ::malformed-date-time to))
+                                     (ZonedDateTimeRange. from to))))))
+
+                :write-text (fn [_env ^IVectorReader rdr idx]
+                              (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
+                                (utf8
+                                 (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                      "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                      ")"))))}
+
    :date (let [typlen 4]
            {:typname "date"
             :col-type [:date :day]
@@ -1057,6 +1083,7 @@
    [:date :day] :date
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz
+   :tstz-range :tstz-range
 
    #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})

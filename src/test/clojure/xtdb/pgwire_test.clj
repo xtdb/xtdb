@@ -1581,6 +1581,35 @@
                  (.getObject rs 1 type))
                 "ZonedDateTimes can be read even if not written"))))))
 
+(deftest test-tstz-range-3652
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, v: 1}"])
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, v: 2}"])
+
+    (t/is (= [{:_id 1, :v 2,
+               :_valid_time {:type "tstz-range", :value "[2020-01-02 00:00:00+00:00,)"}}
+              {:_id 1, :v 1,
+               :_valid_time {:type "tstz-range", :value "[2020-01-01 00:00:00+00:00,2020-01-02 00:00:00+00:00)"}}]
+             (->> (jdbc/execute! conn ["SELECT *, _valid_time FROM foo FOR ALL VALID_TIME"])
+                  (mapv #(update % :_valid_time (fn [^PGobject vt]
+                                                  {:type (.getType vt)
+                                                   :value (.getValue vt)})))))))
+
+  (when (psql-available?)
+    (psql-session
+       (fn [send read]
+         (send "INSERT INTO bar RECORDS {_id: 1, v: 1};\n")
+         (read)
+         (send "INSERT INTO bar RECORDS {_id: 1, v: 2};\n")
+         (read)
+
+         (send "SELECT *, _valid_time FROM bar FOR ALL VALID_TIME;\n")
+
+         (t/is (= [["_id" "v" "_valid_time"]
+                   ["1" "2" "[2020-01-04 00:00:00+00:00,)"]
+                   ["1" "1" "[2020-01-03 00:00:00+00:00,2020-01-04 00:00:00+00:00)"]]
+                  (read)))))))
+
 (when (psql-available?)
   (deftest test-datetime-formatting
     (require-server)

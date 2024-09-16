@@ -339,6 +339,14 @@
               :typnamespace 2125819141,
               :typbasetype 0}
              {:typtypmod -1,
+               :oid 3910,
+               :typtype "b",
+               :typowner 1376455703,
+               :typnotnull false,
+               :typname "tstz-range",
+               :typnamespace 2125819141,
+               :typbasetype 0}
+             {:typtypmod -1,
               :oid 2205,
               :typtype "b",
               :typowner 1376455703,
