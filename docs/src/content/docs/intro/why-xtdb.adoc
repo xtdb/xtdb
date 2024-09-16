@@ -36,7 +36,7 @@ We have designed XTDB to solve each of these problems in a cohesive way that we 
 
 For the everyday application developer who is not working on regulated systems and is less concerned about the nuanced understanding and implications of bitemporal modelling, it is sufficient to simply be aware that the model underpins three distinct layers of capabilities, which the documentation explains in depth. In order of significance:
 
-. *Basis* - using a timestamp as a stable basis for querying prior database states - an essential safety net for developers and organizations alike - and the key to consistent downstreaming processing (e.g. creating a businss KPI report without ETL)
+. *Basis* - using a timestamp as a stable basis for querying prior database states - an essential safety net for developers and organizations alike - and the key to consistent downstreaming processing (e.g. creating a business KPI report without ETL)
 . *System-Time* - a pair of hidden timestamp columns built-in to every table, maintained automatically, that can be used to retrieve old versions of data
 . *Valid-Time* - an advanced versioning mechanism that is helpful for scheduling changes across data, and critical for time-aware applications where system-time alone is not enough
 
