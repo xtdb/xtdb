@@ -1,5 +1,4 @@
-name: XTDB Nightly
-run-name: XTDB Nightly
+name: XTDB nightly tests
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}

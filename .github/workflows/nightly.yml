@@ -1,0 +1,14 @@
+name: XTDB nightly Docker
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  '0 22 * * 1-5'
+
+jobs:
+  docker:
+    uses: ./.github/workflows/docker.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write

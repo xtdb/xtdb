@@ -33,8 +33,8 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb
           tags: |
-            type=pep440,pattern={{version}}
-            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
+            type=semver,pattern={{version}}
+            type=schedule
             type=edge,branch=main
 
       - name: AWS meta
@@ -43,8 +43,8 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-aws
           tags: |
-            type=pep440,pattern={{version}}
-            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
+            type=semver,pattern={{version}}
+            type=schedule
             type=edge,branch=main
 
       - name: Azure meta
@@ -53,8 +53,8 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-azure
           tags: |
-            type=pep440,pattern={{version}}
-            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
+            type=semver,pattern={{version}}
+            type=schedule
             type=edge,branch=main
 
       - name: Build Uberjar
