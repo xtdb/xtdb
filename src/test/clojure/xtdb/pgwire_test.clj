@@ -1905,3 +1905,11 @@ ORDER BY t.oid DESC LIMIT 1"
              (-> (jdbc/execute-one! conn ["SELECT * FROM foo"])
                  (update :nest (fn [^PGobject nest]
                                  (serde/read-transit (.getBytes (.getValue nest)) :json))))))))
+
+(deftest insert-select-test-3684
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO docs (_id) VALUES (1), (2)"])
+    (jdbc/execute! conn ["INSERT INTO docs (SELECT *, 'hi' AS foo FROM docs WHERE _id = 1)"])
+
+    (t/is (= #{{:_id 1, :foo "hi"} {:_id 2, :foo nil}}
+             (set (q conn ["SELECT * FROM docs"]))))))
