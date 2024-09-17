@@ -43,6 +43,5 @@
     "vega": "^5.28.0",
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.0"
-  },
-  "packageManager": "yarn@4.3.1+sha224.934d21773e22af4b69a7032a2d3b4cb38c1f7c019624777cc9916b23"
+  }
 }
