@@ -2,7 +2,7 @@
 
 resource "azurerm_resource_group" "cloud_benchmark" {
   name     = "cloud-benchmark-resources"
-  location = "West Europe"
+  location = "East US"
 }
 
 resource "azurerm_virtual_network" "cloud_benchmark" {
@@ -80,7 +80,7 @@ resource "azurerm_container_registry" "acr" {
 ## Kubernetes Cluster
 resource "azurerm_kubernetes_cluster" "cloud_benchmark" {
   name                = "cloud-benchmark-cluster"
-  location            = "East US"
+  location            = azurerm_resource_group.cloud_benchmark.location
   resource_group_name = azurerm_resource_group.cloud_benchmark.name
   dns_prefix          = "cloud-benchmark-cluster"
 
