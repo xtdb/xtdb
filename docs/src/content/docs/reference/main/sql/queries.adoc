@@ -1,15 +1,8 @@
 ---
 title: SQL Queries
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/sql.html
-:kotlin: /drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/open-query.html
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
-
-For examples on how to run SQL queries in each client library, see the individual driver documentation:
+For examples on how to run SQL queries in each client library, see the link:/clients[individual driver documentation].
 
 == Top-level queries
 

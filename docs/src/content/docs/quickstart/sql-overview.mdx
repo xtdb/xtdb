@@ -103,14 +103,14 @@ XTDB is designed to work with JSON-like nested data as a first-class concept (i.
   <Fiddle magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-03"
          txs={`
-INSERT INTO people RECORDS
-{_id: 6,
- name: 'fred',
- info: {contact: [{loc: 'home',
-                   tel: '123'},
-                  {loc: 'work',
-                   tel: '456',
-                   registered: DATE '2024-01-01'}]}}
+INSERT INTO people
+  RECORDS {_id: 6,
+           name: 'fred',
+           info: {contact: [{loc: 'home',
+                             tel: '123'},
+                            {loc: 'work',
+                             tel: '456',
+                             registered: DATE '2024-01-01'}]}}
 `}/>
     <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
   </Fiddle>
@@ -180,7 +180,7 @@ Capturing fast-changing data may be powerful, but what if we made a mistake some
 
 ## A log of transactions
 
-XTDB provides a [Postgres wire protocol](/drivers/postgres/getting-started) compatibility endpoint that enables developers to re-use many existing tools and drivers that have been built for connecting to real Postgres servers.
+XTDB provides a Postgres wire-compatible endpoint that enables developers to re-use many existing tools and drivers that have been built for connecting to real Postgres servers.
 
 A key distinction between interacting with Postgres and interacting with XTDB (e.g. using `psql` or otherwise) is that all clients connected to XTDB operate in a 'stateless' manner that:
 

@@ -1,5 +1,5 @@
 ---
-title: Getting started with XTDB on AWS
+title: Setting up a cluster on AWS
 ---
 
 This guide will walk you through the process of configuring an XTDB cluster on AWS, featuring a customizable number of nodes operating on https://aws.amazon.com/ecs/[**ECS**], all accessible via a load balancer.
@@ -138,4 +138,4 @@ curl $LoadBalancerUrl/status
 
 NOTE: As our nodes are behind an application load balancer, be aware that messages sent over HTTP will be spread across the nodes, so you may see some differing values coming back from the status as each node in the cluster processes new transactions.
 
-Should the above be successful, you should be ready to go with an XTDB cluster! For more information on performing operations on the node over HTTP, see the https://docs.xtdb.com/drivers/openapi/index.html[**HTTP API docs**].
+Should the above be successful, you should be ready to go with an XTDB cluster!

@@ -1913,3 +1913,4 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (t/is (= #{{:_id 1, :foo "hi"} {:_id 2, :foo nil}}
              (set (q conn ["SELECT * FROM docs"]))))))
+

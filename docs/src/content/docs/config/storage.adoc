@@ -1,9 +1,6 @@
 ---
 title: Storage
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/configuration
-:kotlin: /drivers/kotlin/kdoc/xtdb-core/xtdb.api.storage/-storage
 
 One of the key components of an XTDB node is the storage module - used to store the data and indexes that make up the database.
 
@@ -47,12 +44,6 @@ storage: !Local
   # maxCacheBytes: 536870912
 ----
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#local-storage]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}/-local-storage-factory/index.html]
-
-For examples on how to enable/configure the local-disk storage module as part of your node, see the individual client library documentation:
-
 [#remote]
 == Remote
 
@@ -95,10 +86,4 @@ Each Object Store implementation is configured separately - see the individual d
 * link:storage/s3[S3]
 * link:storage/azure[Azure]
 * link:storage/google-cloud[Google Cloud]
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}#remote-storage]
-image:{icon}/kotlin.svg[Clojure,link={kotlin}/-remote-storage-factory/index.html]
-
-For examples on how to enable/configure the remote storage module as part of your node, see the individual client library documentation:
 

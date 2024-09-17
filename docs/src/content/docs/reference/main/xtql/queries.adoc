@@ -1,7 +1,6 @@
 ---
 title: XTQL Queries (Clojure)
 ---
-:openapi: /drivers/http/openapi/index.html
 
 XTQL queries consist of composable operators, optionally combined with a pipeline.
 

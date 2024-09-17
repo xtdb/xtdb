@@ -1,10 +1,6 @@
 ---
 title: Azure Blob Storage
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/configuration#azure
-:kotlin: /drivers/kotlin/kdoc/modules/xtdb-azure/xtdb.api.storage/-azure-blob-storage/index.html
-
 Azure Blob Storage can be used as a shared object-store for XTDB's remote storage module.
 
 [NOTE]
@@ -90,10 +86,3 @@ storage: !Remote
   localDiskCache: /var/cache/xtdb/object-store
 ----
 
-=== Examples
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
-
-For examples on how to enable/configure the Azure module as part of your node, for each client library, see the individual driver documentation:

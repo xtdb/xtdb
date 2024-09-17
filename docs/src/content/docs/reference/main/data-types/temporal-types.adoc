@@ -1,8 +1,6 @@
 ---
 title: XTDB Temporal Types
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/temporal
 
 NOTE: The contents of this page focus mainly on construction and casting of Temporal Types. For information on functions which apply to temporal types, see the link:../stdlib/temporal[Temporal Functions] page.
 
@@ -60,10 +58,8 @@ PERIOD(DATE '1998-01-05', DATE '1998-01-12') -- A Period specified with two date
 
 === XTQL / Client Library Examples
 
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-
-The temporal types can also be constructed for use in XTQL queries and transactions within our various client libraries. For examples of these, see the individual client library documentation:
+The temporal types can also be constructed for use in XTQL queries and transactions within our various client libraries.
+For examples of these, see the link:/clients[individual client library documentation].
 
 
 == Casting Between Temporal Types

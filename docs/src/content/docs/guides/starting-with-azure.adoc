@@ -1,5 +1,5 @@
 ---
-title: Getting started with XTDB on Azure
+title: Setting up a cluster on Azure
 ---
 
 This guide will walk you through the process of configuring & running an XTDB Node on Azure. This setup will:
@@ -146,4 +146,3 @@ curl http://$FullyQualifiedDomainName/status
 ```
 
 If the above succeeds, you now have an XTDB node open to the internet over HTTP. 
-For more information on performing operations on the node over HTTP, see the https://docs.xtdb.com/drivers/http/openapi/index.html#/[**HTTP API docs**]. 

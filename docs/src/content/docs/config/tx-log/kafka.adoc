@@ -1,10 +1,6 @@
 ---
 title: Kafka
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/configuration#kafka
-:kotlin: /drivers/kotlin/kdoc/modules/xtdb-kafka/xtdb.api.log/-kafka/-factory/index.html
-
 https://kafka.apache.org/[Apache Kafka] can be used as an XTDB transaction log.
 
 == Setup
@@ -85,12 +81,6 @@ txLog: !Kafka
   # A map of Kafka connection properties, supplied directly to the Kafka client.
   # propertiesMap:
 ----
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
-
-For examples on how to enable/configure the Kafka module as part of your node, for each client library, see the individual driver documentation:
 
 [#auth_example]
 === SASL Authenticated Kafka Example

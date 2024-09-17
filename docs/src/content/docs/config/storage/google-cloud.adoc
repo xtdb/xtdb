@@ -1,10 +1,6 @@
 ---
 title: Google Cloud Storage
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/configuration#google-cloud
-:kotlin: /drivers/kotlin/kdoc/modules/xtdb-google-cloud/xtdb.api.storage/-google-cloud-storage/index.html
-
 Google Cloud Storage can be used as a shared object-store for XTDB's remote storage module.
 
 == Setup
@@ -83,10 +79,3 @@ storage: !Remote
   localDiskCache: /var/cache/xtdb/object-store
 ----
 
-=== Examples
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
-
-For examples on how to enable/configure the Google Cloud module as part of your node, for each client library, see the individual driver documentation:

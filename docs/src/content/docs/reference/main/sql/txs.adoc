@@ -2,15 +2,7 @@
 title: SQL Transactions
 ---
 
-:icon: /images/icons
-:clojure: /drivers/clojure/sql.html#txs
-:kotlin: /drivers/kotlin/kdoc/xtdb-api/xtdb.api/-i-xtdb/execute-tx.html
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
-
-For examples on how to submit SQL transactions in each client library, see the individual driver documentation:
+For examples on how to submit SQL transactions in each client library, see the link:/clients[individual driver documentation].
 
 [#tx-ops]
 == Transaction operations

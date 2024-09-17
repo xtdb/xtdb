@@ -1,8 +1,0 @@
----
-title: Getting started (HTTP + JSON)
----
-
-== Connecting through HTTP
-
-1. Firstly, to run the XTDB server, check out the general link:/intro/getting-started[getting started guide].
-2. Refer to the link:/drivers/http/openapi/index.html[OpenAPI] documentation

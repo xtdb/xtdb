@@ -2,8 +2,6 @@
 title: XTQL Transactions (Clojure)
 ---
 :examples: ../src/test/resources/docs/xtql_dml_json_examples.yaml
-:clojure: /drivers/clojure/txs
-:icon: /images/icons
 
 Transactions in XTDB are submitted to the link:/config/tx-log[transaction log], to be processed asynchronously.
 They each consist of an array of link:#tx-ops[operations].

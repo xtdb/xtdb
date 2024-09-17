@@ -1,0 +1,23 @@
+---
+title: XTDB Clients
+---
+
+XTDB exposes a PostgreSQL wire-compatible server, and is therefore compatible with standard PostgreSQL tools and drivers.
+
+XTDB (unlike some other PostgreSQL wire-compatible databases) does not try to emulate PostgreSQL itself completely, feature-for-feature, bug-for-bug.
+XTDB is sufficiently different in certain areas, especially DDL/Schema support, that this is often undesirable (and sometimes impossible!).
+
+That said, the advantage of embracing wire-protocol compatibility is that many PostgreSQL clients or drivers are able to connect to XTDB seamlessly and run many useful queries without issue.
+
+For details of how to connect to XTDB from your favourite language, see the following pages:
+
+* link:/clients/clojure[Clojure]
+* link:/clients/java[Java]
+* link:/clients/kotlin[Kotlin]
+// * link:/clients/nodejs[Node.js]
+// * link:/clients/python[Python]
+
+XTDB is also compatible with many different PostgreSQL tools, including:
+
+* https://www.postgresql.org/docs/current/app-psql.html[psql] (PostgreSQL CLI) - connect with `psql -h localhost`
+* link:https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools[SQLTools^] (VSCode extension)

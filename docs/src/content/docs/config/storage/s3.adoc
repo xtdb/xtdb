@@ -1,10 +1,6 @@
 ---
 title: S3
 ---
-:icon: /images/icons
-:clojure: /drivers/clojure/configuration#s3
-:kotlin: /drivers/kotlin/kdoc/modules/xtdb-aws/xtdb.aws/-s3/index.html
-
 S3 can be used as a shared object-store for XTDB's remote storage module.
 
 == Setup
@@ -72,10 +68,3 @@ storage: !Remote
 
 If configured as an in-process node, you can also specify an `S3Configurator` instance - this is used to modify the requests sent to S3.
 
-=== Examples
-
-[.lang-icons.right]
-image:{icon}/clojure.svg[Clojure,link={clojure}]
-image:{icon}/kotlin.svg[Kotlin,link={kotlin}]
-
-For examples on how to enable/configure the S3 module as part of your node, for each client library, see the individual driver documentation:

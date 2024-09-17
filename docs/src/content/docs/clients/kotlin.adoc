@@ -1,0 +1,67 @@
+---
+title: Using XTDB from Kotlin
+---
+
+In Kotlin, you can talk to a running XTDB node using standard https://docs.oracle.com/javase/tutorial/jdbc/overview/[Java JDBC^] tooling, using XTDB's Postgres wire-compatibility.
+
+== Install
+
+To install the Postgres driver, add the following dependency to your Gradle `build.gradle.kts`:
+
+[source,kotlin]
+----
+implementation("org.postgresql:postgresql:42.7.4")
+----
+
+Or, for Maven:
+
+[source,xml]
+----
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>42.7.4</version>
+</dependency>
+----
+
+
+== Connect
+
+Once you've link:/intro/installation-via-docker[started your XTDB node], you can use the following code to connect to it:
+
+[source,kotlin]
+----
+import java.sql.DriverManager
+
+// This is using relatively raw JDBC - you can also use standard connection pools
+// and JDBC abstraction libraries.
+
+fun main() {
+    DriverManager.getConnection("jdbc:postgresql://localhost:5432/xtdb").use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}")
+
+            statement.executeQuery("SELECT * FROM users").use { rs ->
+                println("Users:")
+
+                while (rs.next()) {
+                    println("  * ${rs.getString("_id")}: ${rs.getString("name")}")
+                }
+            }
+        }
+    }
+}
+
+/* Output:
+
+Users:
+  * jms: James
+  * joe: Joe
+*/
+----
+
+== Notes:
+
+* XTDB currently ignores the database, username and password arguments.
+
+// TODO local testing

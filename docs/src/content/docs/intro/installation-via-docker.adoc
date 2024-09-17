@@ -2,9 +2,7 @@
 title: Installation via Docker
 ---
 :icon: /images/icons
-:clojure: /drivers/clojure/getting-started.html
-:java: /drivers/java/getting-started.html
-:kotlin: /drivers/kotlin/getting-started.html
+:clojure: /clients/clojure.html
 
 == Try Online
 
@@ -14,7 +12,7 @@ Otherwise, let's get XTDB downloaded and running on your own machine...
 
 == Docker Install
 
-XTDB supports production usage via the Postgres link:link:/drivers/postgres/getting-started[wire protocol] (so that you can work with various Postgres-compatible tools, drivers etc.) and also has an link:drivers/http/getting-started.html[HTTP API].
+XTDB supports production usage via the Postgres wire protocol (so that you can work with various Postgres-compatible tools, drivers etc.) and also has a link:/clients/clojure[Clojure API].
 
 You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server using the following command:
 
@@ -43,8 +41,6 @@ If everything is running you will see this response `{"latestCompletedTx":null,"
 # if you have Postgres installed, psql is already available
 psql -h localhost -p 5432
 ----
-
-You can similarly connect with other Postgres-compatible tools like VSCode's link:https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools[SQLTools] extension, but not everything is guaranteed to work as expected if you are referring to Postgres' own documentation (XTDB is not attempting to be 100% compatible with Postgres). For guidance on tools we've tested, see link:/drivers/postgres/getting-started[Postgres drivers & compatability].
 
 == Run your first query
 
