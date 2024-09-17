@@ -14,4 +14,5 @@
     <logger name="kafka" level="ERROR" />
     <logger name="org.apache.arrow" level="WARN" />
     <logger name="org.eclipse.jetty" level="WARN" />
+    <logger name="reactor" level="ERROR" />
 </configuration>

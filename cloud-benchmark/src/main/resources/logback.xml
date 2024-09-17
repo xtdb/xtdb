@@ -9,4 +9,5 @@
   </root>
   <logger name="xtdb" level="INFO" />
   <logger name="com.azure" level="ERROR" />
+  <logger name="reactor" level="ERROR" />
 </configuration>
