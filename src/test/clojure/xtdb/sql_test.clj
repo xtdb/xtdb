@@ -2227,9 +2227,12 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
                              [{:_id 3, :x 4.0}]]
 
                             [:sql "INSERT INTO bar RECORDS ?, {_id: 4, x: 5}"
-                             [{:_id 5, :x 6.0}]]])
+                             [{:_id 5, :x 6.0}]]
 
-  (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0}]
+                            [:sql "INSERT INTO bar RECORDS $1"
+                             [{:_id 7, :x "8"}]]])
+
+  (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
   (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"

@@ -375,6 +375,7 @@
                                     [])]})))
 
           (catch Exception e
+            (log/debug e "Error parsing SQL")
             {:err (err-pg-exception e "error parsing sql")})))))
 
 (defn- json-clj

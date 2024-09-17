@@ -1943,6 +1943,10 @@
 (defn- accept-visitor [visitor ^ParserRuleContext ctx]
   (.accept ctx visitor))
 
+(defrecord InvalidParamIndex [arg-count param-idx]
+  PlanError
+  (error-string [_] (format "Invalid parameter index: %d (%d arguments provided)" param-idx arg-count)))
+
 (defrecord TableRowsVisitor [env scope out-col-syms]
   SqlVisitor
   (visitTableValueConstructor [this ctx] (.accept (.rowValueList ctx) this))
@@ -1992,31 +1996,34 @@
           arg-fields (some->> ^Schema (:args-schema env) (.getFields))
 
           col-syms (or out-col-syms
-                       (->> (.recordValueConstructor ctx)
-                            (into [] (comp (mapcat (partial accept-visitor
-                                                            (reify SqlVisitor
-                                                              (visitParameterRecord [this ctx] (.accept (.parameterSpecification ctx) this))
+                       (letfn [(emit-param [param-idx]
+                                 (when-not arg-fields
+                                   (throw (err/illegal-arg ::records-param-outside-DML
+                                                           {::err/message "RECORDS ? not supported outside of DML"})))
 
-                                                              (visitDynamicParameter [this ctx]
-                                                                (when-not arg-fields
-                                                                  (throw (UnsupportedOperationException. "`RECORDS ?` not yet supported outside of DML")))
+                                 (if-let [arg-field (nth arg-fields param-idx nil)]
+                                   (vec (for [^Field child-field (types/flatten-union-field arg-field)
+                                              :when (= #xt.arrow/type :struct (.getType child-field))
+                                              ^Field struct-key (.getChildren child-field)]
+                                          (symbol (.getName struct-key))))
 
-                                                                (let [param-idx @(:!param-count env)]
-                                                                  (if-let [arg-field (nth arg-fields param-idx nil)]
-                                                                    (vec (for [^Field child-field (types/flatten-union-field arg-field)
-                                                                               :when (= #xt.arrow/type :struct (.getType child-field))
-                                                                               ^Field struct-key (.getChildren child-field)]
-                                                                           (symbol (.getName struct-key))))
+                                   (add-err! env (->InvalidParamIndex param-idx (count arg-fields)))))]
 
-                                                                    (throw (UnsupportedOperationException. "TODO")))))
+                         (->> (.recordValueConstructor ctx)
+                              (into [] (comp (mapcat (partial accept-visitor
+                                                              (reify SqlVisitor
+                                                                (visitParameterRecord [this ctx] (.accept (.parameterSpecification ctx) this))
 
-                                                              (visitObjectRecord [this ctx]
-                                                                (->> (.objectNameAndValue (.objectConstructor ctx))
-                                                                     (into #{} (map (partial accept-visitor this)))))
+                                                                (visitDynamicParameter [_ _] (emit-param @(:!param-count env)))
+                                                                (visitPostgresParameter [_ _] (emit-param (dec (parse-long (subs (.getText ctx) 1)))))
 
-                                                              (visitObjectNameAndValue [_ ctx]
-                                                                (identifier-sym (.objectName ctx))))))
-                                           (distinct)))))
+                                                                (visitObjectRecord [this ctx]
+                                                                  (->> (.objectNameAndValue (.objectConstructor ctx))
+                                                                       (into #{} (map (partial accept-visitor this)))))
+
+                                                                (visitObjectNameAndValue [_ ctx]
+                                                                  (identifier-sym (.objectName ctx))))))
+                                             (distinct))))))
 
           col-keys (mapv keyword col-syms)
 
