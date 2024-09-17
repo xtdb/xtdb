@@ -322,25 +322,20 @@
       (close-method server)
       (check-server-resources-freed server))))
 
-(defn <-pgobject
-  "Transform PGobject containing `json` or `jsonb` value to Clojure
-  data."
-  [^org.postgresql.util.PGobject v]
-  (let [type  (.getType v)
-        value (.getValue v)]
-    (if (#{"jsonb" "json"} type)
-      (when value
-        (json/read-str value))
-      value)))
+(defn <-pgobject [v]
+  (if (instance? PGobject v)
+    (let [^PGobject v v
+          type (.getType v)
+          value (.getValue v)]
+      (if (#{"jsonb" "json"} type)
+        (some-> value json/read-str)
+        value))
+    v))
 
 (defn q [conn sql]
   (->> (jdbc/execute! conn sql)
        (mapv (fn [row]
-               (update-vals row
-                            (fn [v]
-                              (if (instance? org.postgresql.util.PGobject v)
-                                (<-pgobject v)
-                                v)))))))
+               (update-vals row <-pgobject)))))
 
 (defn q-seq [conn sql]
   (->> (jdbc/execute! conn sql {:builder-fn result-set/as-arrays})
@@ -1171,11 +1166,12 @@
   (testing "Query"
     (with-open [conn (jdbc-conn)]
       (is (thrown-with-msg? PSQLException #"mismatched input 'SLECT' expecting" (q conn ["SLECT 1 FROM foo"])))))
+
   (testing "DML"
     (with-open [conn (jdbc-conn)]
       (q conn ["BEGIN READ WRITE"])
-      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory _id column" (q conn ["INSERT INTO foo (a) values (42)"])))
-      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory _id column" (q conn ["COMMIT"]))))))
+      (q conn ["INSERT INTO foo (a) values (42)"])
+      (is (thrown-with-msg? PSQLException #"missing-id" (q conn ["COMMIT"]))))))
 
 (when (psql-available?)
   (deftest psql-analyzer-error-test
@@ -1208,10 +1204,7 @@
        (read)
        ;; no-id
        (send "INSERT INTO foo (x) values (42);\n")
-       (let [s (read :err)]
-         (is (not= :timeout s))
-         (is (= [["ERROR:  Errors planning SQL statement:"]
-                 ["  - INSERT does not contain mandatory _id column"]] s)))
+       (read)
 
        (send "COMMIT;\n")
        (let [s (read :err)]

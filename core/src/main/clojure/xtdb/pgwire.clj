@@ -336,33 +336,28 @@
                      (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
                      (visitInsertStatement [_ _]
-                       (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :insert
                         :query sql, :transformed-query sql-trimmed})
 
                      (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
                      (visitUpdateStatementSearched [_ _]
-                       (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :update
                         :query sql, :transformed-query sql-trimmed})
 
                      (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
 
                      (visitDeleteStatementSearched [_ _]
-                       (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :delete
                         :query sql, :transformed-query sql-trimmed})
 
                      (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
                      (visitEraseStatementSearched [_ _]
-                       (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :erase
                         :query sql, :transformed-query sql-trimmed})
 
                      (visitAssertStatement [_ _]
-                       (plan/plan-statement sql) ; plan to raise up any SQL errors pre tx-log
                        {:statement-type :dml, :dml-type :assert
                         :query sql, :transformed-query sql-trimmed})
 
@@ -1075,6 +1070,8 @@
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
+      (catch IllegalArgumentException e (throw e))
+      (catch RuntimeException e (throw e))
       (catch Throwable e
         (log/debug e "Error on execute-tx")
         (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
@@ -1213,22 +1210,27 @@
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                 :system-time tx-system-time})]
-       
-        (if error
-          (do
-            (swap! conn-state (fn [conn-state]
-                                (-> conn-state
-                                    (update :transaction assoc :failed true, :err error)
-                                    (assoc :latest-submitted-tx tx-res))))
-            (cmd-send-error conn (err-protocol-violation (ex-message error))))
-          (do
-            (swap! conn-state (fn [conn-state]
-                                (-> conn-state
-                                    (dissoc :transaction)
-                                    (assoc :latest-submitted-tx tx-res))))
-            (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
+      (try
+        (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                                   :system-time tx-system-time})]
+          (if error
+            (do
+              (swap! conn-state (fn [conn-state]
+                                  (-> conn-state
+                                      (update :transaction assoc :failed true, :err error)
+                                      (assoc :latest-submitted-tx tx-res))))
+              (cmd-send-error conn (err-protocol-violation (ex-message error))))
+            (do
+              (swap! conn-state (fn [conn-state]
+                                  (-> conn-state
+                                      (dissoc :transaction)
+                                      (assoc :latest-submitted-tx tx-res))))
+              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))
+
+        (catch IllegalArgumentException e
+          (cmd-send-error conn (err-protocol-violation (ex-message e))))
+        (catch RuntimeException e
+          (cmd-send-error conn (err-protocol-violation (ex-message e))))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
