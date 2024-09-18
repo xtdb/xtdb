@@ -18,7 +18,7 @@ metadata:
   namespace: "cloud-benchmark"
 data:
   CLOUD_PLATFORM_NAME: "Azure"
-  XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "c76c6e6a-59e2-4172-8097-6c48d36cdb92"
+  XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "7992730c-e4a3-4b37-84ae-bd802bb58524"
   XTDB_AZURE_STORAGE_ACCOUNT: "xtdbazurebenchmark"
   XTDB_AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
   XTDB_AZURE_SERVICE_BUS_NAMESPACE: "cloud-benchmark-eventbus"
