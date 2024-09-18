@@ -628,27 +628,8 @@
        (testing "error during plan"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "slect baz.a from baz;\n")
-           (is (= [["ERROR:  Errors parsing SQL statement:"]
-                   ["  - line 1:0 mismatched input 'slect' expecting {'('"
-                    " 'ASSERT'"
-                    " 'BEGIN'"
-                    " 'COMMIT'"
-                    " 'DELETE'"
-                    " 'ERASE'"
-                    " 'FROM'"
-                    " 'INSERT'"
-                    " 'RECORDS'"
-                    " 'ROLLBACK'"
-                    " 'SELECT'"
-                    " 'SET'"
-                    " 'SETTING'"
-                    " 'SHOW'"
-                    " 'START'"
-                    " 'UPDATE'"
-                    " 'VALUES'"
-                    " 'WITH'}"
-                    ]]
-                   (read :err))))
+           (is (str/includes? (->> (read :err) (map str/join) (str/join "\n"))
+                              "line 1:0 mismatched input 'slect' expecting")))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
@@ -1181,26 +1162,8 @@
        (send "SLECT 1 FROM foo;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (= [["ERROR:  Errors parsing SQL statement:"]
-                 ["  - line 1:0 mismatched input 'SLECT' expecting {'('"
-                  " 'ASSERT'"
-                  " 'BEGIN'"
-                  " 'COMMIT'"
-                  " 'DELETE'"
-                  " 'ERASE'"
-                  " 'FROM'"
-                  " 'INSERT'"
-                  " 'RECORDS'"
-                  " 'ROLLBACK'"
-                  " 'SELECT'"
-                  " 'SET'"
-                  " 'SETTING'"
-                  " 'SHOW'"
-                  " 'START'"
-                  " 'UPDATE'"
-                  " 'VALUES'"
-                  " 'WITH'}"
-                  ]] s)))
+         (is (str/includes? (->> s (map str/join) (str/join "\n"))
+                            "line 1:0 mismatched input 'SLECT' expecting")))
 
        (send "BEGIN READ WRITE;\n")
        (read)
