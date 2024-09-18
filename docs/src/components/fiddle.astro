@@ -42,6 +42,11 @@ if (autoLoad) {
             document.getElementById('hl-dark').setAttribute("disabled", "disabled");
         }
     }
-    set_hljs_theme(getTheme());
-    onThemeChange(set_hljs_theme);
+    // TODO: Figure out dynamically changing the theme
+    //       For context we had an issue where swup was taking ~2s to load a page
+    //       The issue was that it was waiting for one of the hljs themes to load
+    //       Vendoring the css didn't fix the issue so for now I'm disabling theme switching and just always using `atom-dark`
+    //       It's a little harder to read on light mode but not too bad
+    //set_hljs_theme(getTheme());
+    //onThemeChange(set_hljs_theme);
 </script>

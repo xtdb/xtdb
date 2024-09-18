@@ -1,5 +1,7 @@
 import hljs from "highlight.js/lib/core"
 import hljsSql from "highlight.js/lib/languages/sql"
+//import 'highlight.js/styles/atom-one-light.min.css';
+import 'highlight.js/styles/atom-one-dark.min.css';
 
 hljs.registerLanguage('sql', hljsSql);
 
