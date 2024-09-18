@@ -15,7 +15,6 @@
                                                                           :window-agg projection}}) projection-specs) }
                                  [::tu/blocks '{a :i64, b :i64} blocks]])
                    into-fn))))]
-
     (t/is (= #{} (run-test '{:partition-cols [a]
                              :order-specs [[b]]}
                            '{rn (row-number)}
@@ -42,6 +41,7 @@
                          {:a 3 :b 80}
                          {:a 3 :b 90}]]))
           "only partition by")
+
     (t/is (= #{{:a 1, :b 10, :rn 0}
                {:a 1, :b 20, :rn 1}
                {:a 2, :b 30, :rn 2}
@@ -111,18 +111,19 @@
                        (partial sort-by (juxt :a :b))))
           "testing dense-rank")
 
-    (t/is (= [{:a 1, :b 10, :r 0}
-              {:a 1, :b 10, :r 0}
-              {:a 1, :b 50, :r 2}
-              {:a 1, :b 60, :r 3}
-              {:a 2, :b 30, :r 0}
-              {:a 2, :b 40, :r 1}
-              {:a 2, :b 40, :r 1}
-              {:a 2, :b 40, :r 1}
-              {:a 2, :b 50, :r 4}]
+    (t/is (= [{:a 1, :b 10, :r 0 :dr 0}
+              {:a 1, :b 10, :r 0 :dr 0}
+              {:a 1, :b 50, :r 2 :dr 1}
+              {:a 1, :b 60, :r 3 :dr 2}
+              {:a 2, :b 30, :r 0 :dr 0}
+              {:a 2, :b 40, :r 1 :dr 1}
+              {:a 2, :b 40, :r 1 :dr 1}
+              {:a 2, :b 40, :r 1 :dr 1}
+              {:a 2, :b 50, :r 4 :dr 2}]
              (run-test '{:partition-cols [a]
                          :order-specs [[b]]}
-                       '{r (rank)}
+                       '{dr (dense-rank)
+                         r (rank)}
                        [[{:a 1 :b 10}
                          {:a 1 :b 10}
                          {:a 2 :b 30}
@@ -133,4 +134,42 @@
                          {:a 2 :b 40}
                          {:a 2 :b 50}]]
                        (partial sort-by (juxt :a :b))))
+          "testing rank + dense-rank (two analytical functions, same window)")))
+
+(deftest test-multiple-window-operators
+  (letfn [(run-test
+            ([windows projections blocks] (run-test windows projections blocks set))
+            ([windows projections blocks into-fn]
+             (-> (tu/query-ra [:window {:windows windows
+                                        :projections projections}
+                               [::tu/blocks '{a :i64, b :i64, c :i64} blocks]])
+                 into-fn)))]
+
+    (t/is (= [{:a 1, :b 10, :c 50 :r 0 :dr 1}
+              {:a 1, :b 10, :c 60 :r 0 :dr 2}
+              {:a 1, :b 50, :c 10 :r 2 :dr 0}
+              {:a 1, :b 60, :c 10 :r 3 :dr 0}
+              {:a 2, :b 30, :c 50 :r 0 :dr 2}
+              {:a 2, :b 40, :c 40 :r 1 :dr 1}
+              {:a 2, :b 40, :c 40 :r 1 :dr 1}
+              {:a 2, :b 40, :c 40 :r 1 :dr 1}
+              {:a 2, :b 50, :c 30 :r 4 :dr 0}]
+             (run-test '{window1 {:partition-cols [a]
+                                  :order-specs [[b]]}
+                         window2 {:partition-cols [a]
+                                  :order-specs [[c]]}}
+                       '[{r {:window-name window1
+                             :window-agg (rank)}}
+                         {dr {:window-name window2
+                              :window-agg (dense-rank)}}]
+                       [[{:a 1 :b 10 :c 60}
+                         {:a 1 :b 10 :c 50}
+                         {:a 2 :b 30 :c 50}
+                         {:a 2 :b 40 :c 40}]
+                        [{:a 1 :b 50 :c 10}
+                         {:a 1 :b 60 :c 10}
+                         {:a 2 :b 40 :c 40}
+                         {:a 2 :b 40 :c 40}
+                         {:a 2 :b 50 :c 30}]]
+                       (partial sort-by (juxt :a :b :c ))))
           "testing rank")))
