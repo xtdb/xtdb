@@ -94,8 +94,8 @@ export default defineConfig({
                         { label: 'Clojure', link: '/clients/clojure' },
                         { label: 'Java', link: '/clients/java' },
                         { label: 'Kotlin', link: '/clients/kotlin' },
-                        // { label: 'Node.js', link: '/clients/node' },
-                        // { label: 'Python', link: '/clients/python' },
+                        { label: 'Node.js', link: '/clients/nodejs' },
+                        { label: 'Python', link: '/clients/python' },
                     ]
                 },
 

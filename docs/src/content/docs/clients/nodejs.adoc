@@ -1,0 +1,35 @@
+---
+title: Using XTDB from JavaScript
+---
+
+In NodeJS, you can talk to a running XTDB node using the https://www.npmjs.com/package/postgres['postgres'] package, taking advantage of XTDB's PostgreSQL wire-compatibility.
+
+[source,javascript]
+----
+"use strict"
+
+import postgres from 'postgres';
+
+const sql = postgres({
+  host: "localhost",
+  port: 5432,
+  fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
+  types: {
+    bool: {to: 16},
+    int: {
+        to: 20,
+        from: [23, 20], // int4, int8
+        parse: parseInt
+    }
+  }
+});
+
+async function main() {
+    await sql`INSERT INTO users (_id, name) VALUES (${conn.typed.int(1)}, 'James'), (${conn.typed.int(2)}, 'Jeremy')`
+
+    console.log([...await conn`SELECT _id, name FROM users`])
+    // => [{_id: 1, name: "James"}, [{_id: 2, name: "Jeremy"}]]
+}
+
+main();
+----
