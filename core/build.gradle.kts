@@ -54,14 +54,14 @@ dependencies {
     api("io.micrometer", "micrometer-registry-prometheus", "1.12.2")
 
     api(kotlin("stdlib-jdk8"))
-    api("com.charleskorn.kaml","kaml","0.56.0")
+    api("com.charleskorn.kaml", "kaml", "0.56.0")
 
     antlr("org.antlr:antlr4:4.13.1")
     implementation("org.antlr:antlr4-runtime:4.13.1")
 
     testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
-    testImplementation("io.mockk","mockk", "1.13.9")
-    testImplementation("org.clojure","test.check", "1.1.1")
+    testImplementation("io.mockk", "mockk", "1.13.9")
+    testImplementation("org.clojure", "test.check", "1.1.1")
     testImplementation(project(":xtdb-http-client-jvm"))
     testImplementation(project(":xtdb-http-server"))
     testImplementation(project(":modules:xtdb-kafka"))
@@ -93,8 +93,13 @@ tasks.compileTestKotlin {
     dependsOn("generateTestGrammarSource")
 }
 
-tasks.withType(AntlrTask::class.java) {
-    arguments = listOf("-package", "xtdb.antlr", "-visitor", "-no-listener")
+tasks.generateGrammarSource {
+    arguments = listOf(
+        "-visitor", "-no-listener",
+        "-package", "xtdb.antlr",
+        "-Xexact-output-dir",
+    )
+    outputDirectory = file("${layout.buildDirectory.get().asFile}/generated-src/antlr/main/xtdb/antlr")
 }
 
 tasks.dokkaHtmlPartial {

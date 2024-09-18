@@ -15,13 +15,7 @@
            java.util.function.Function
            (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
            (org.apache.arrow.vector.types.pojo Field Schema)
-           (xtdb.antlr SqlLexer SqlParser SqlParser$BaseTableContext SqlParser$DirectSqlStatementContext
-                       SqlParser$IntervalQualifierContext SqlParser$JoinSpecificationContext SqlParser$JoinTypeContext
-                       SqlParser$ObjectNameAndValueContext SqlParser$OrderByClauseContext
-                       SqlParser$QualifiedRenameColumnContext SqlParser$QueryBodyTermContext SqlParser$QuerySpecificationContext
-                       SqlParser$RenameColumnContext SqlParser$SearchedWhenClauseContext SqlParser$SetClauseContext
-                       SqlParser$SimpleWhenClauseContext SqlParser$SortSpecificationContext SqlParser$SortSpecificationListContext
-                       SqlParser$WhenOperandContext SqlParser$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql Sql$BaseTableContext Sql$DirectSqlStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
@@ -266,7 +260,7 @@
   PlanError
   (error-string [_] (format "Period specifications not allowed on CTE reference: %s" table-name)))
 
-(defrecord BaseTable [env, ^SqlParser$BaseTableContext ctx
+(defrecord BaseTable [env, ^Sql$BaseTableContext ctx
                       schema-name table-name table-alias unique-table-alias cols
                       ^Map !reqd-cols]
   Scope
@@ -323,8 +317,8 @@
          (mapcat #(find-decls % chain)))))
 
 (defrecord JoinTable [env l r
-                      ^SqlParser$JoinTypeContext join-type-ctx
-                      ^SqlParser$JoinSpecificationContext join-spec-ctx
+                      ^Sql$JoinTypeContext join-type-ctx
+                      ^Sql$JoinSpecificationContext join-spec-ctx
                       common-cols]
   Scope
   (available-cols [_ chain]
@@ -706,7 +700,7 @@
           !windows (HashMap.)]
 
       {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
-                                      (let [renames (->> (for [^SqlParser$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
+                                      (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                                   (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
                                                                  out-col-name (.columnName (.asClause rename-pair))
@@ -749,7 +743,7 @@
                                                                             (throw (UnsupportedOperationException. "schema not supported")))
 
                                                                           (if-let [table-cols (available-cols scope [table-name])]
-                                                                            (let [renames (->> (for [^SqlParser$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
+                                                                            (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                                  (.qualifiedRenameColumn))]
                                                                                                  (let [sym (find-decl scope [(identifier-sym (.identifier rename-pair)) table-name])
                                                                                                        out-col-name (.columnName (.asClause rename-pair))]
@@ -876,7 +870,7 @@
     (list 'multi-field-interval ve start-field leading-precision end-field fractional-precision)
     (list 'single-field-interval ve start-field leading-precision fractional-precision)))
 
-(defn iq-context->iq-map [^SqlParser$IntervalQualifierContext ctx]
+(defn iq-context->iq-map [^Sql$IntervalQualifierContext ctx]
   (if-let [sdf (.singleDatetimeField ctx)]
     (let [field (-> (.getChild sdf 0) (.getText) (str/upper-case))
           fp (some-> (.intervalFractionalSecondsPrecision sdf) (.getText) (parse-long))]
@@ -913,7 +907,7 @@
           time-unit (if precision
                       (if (<= precision 6) :micro :nano)
                       :micro)]
-      (if (instance? SqlParser$WithTimeZoneContext
+      (if (instance? Sql$WithTimeZoneContext
                      (.withOrWithoutTimeZone ctx))
         {:->cast-fn (fn [ve]
                       (list* 'cast-tstz ve
@@ -929,7 +923,7 @@
           time-unit (if precision
                       (if (<= precision 6) :micro :nano)
                       :micro)]
-      (if (instance? SqlParser$WithTimeZoneContext
+      (if (instance? Sql$WithTimeZoneContext
                      (.withOrWithoutTimeZone ctx))
         {:->cast-fn (fn [ve]
                       (list 'cast-tstz ve
@@ -1477,7 +1471,7 @@
   (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
 
   (visitObjectConstructor [this ctx]
-    (->> (for [^SqlParser$ObjectNameAndValueContext kv (.objectNameAndValue ctx)]
+    (->> (for [^Sql$ObjectNameAndValueContext kv (.objectNameAndValue ctx)]
            (MapEntry/create (keyword (-> (.objectName kv) (.accept this)))
                             (-> (.expr kv) (.accept this))))
          (into {})))
@@ -1540,7 +1534,7 @@
   (visitSimpleCaseExpr [this ctx]
     (let [case-operand (-> (.expr ctx) (.accept this))
           when-clauses (->> (.simpleWhenClause ctx)
-                            (mapv #(.accept ^SqlParser$SimpleWhenClauseContext % this))
+                            (mapv #(.accept ^Sql$SimpleWhenClauseContext % this))
                             (reduce into []))
           else-clause (some-> (.elseClause ctx) (.accept this))]
       (list* 'case case-operand (cond-> when-clauses
@@ -1548,7 +1542,7 @@
 
   (visitSearchedCaseExpr [this ctx]
     (let [when-clauses (->> (.searchedWhenClause ctx)
-                            (mapv #(.accept ^SqlParser$SearchedWhenClauseContext % this))
+                            (mapv #(.accept ^Sql$SearchedWhenClauseContext % this))
                             (reduce into []))
           else-clause (some-> (.elseClause ctx) (.accept this))]
       (list* 'cond (cond-> when-clauses
@@ -1556,7 +1550,7 @@
 
   (visitSimpleWhenClause [this ctx]
     (let [when-operands (-> (.whenOperandList ctx) (.whenOperand))
-          when-exprs (mapv #(.accept (.getChild ^SqlParser$WhenOperandContext % 0) this) when-operands)
+          when-exprs (mapv #(.accept (.getChild ^Sql$WhenOperandContext % 0) this) when-operands)
           then-expr (-> (.expr ctx) (.accept this))]
       (->> (for [when-expr when-exprs]
              [when-expr then-expr])
@@ -1808,7 +1802,7 @@
 (defrecord QueryExpr [plan col-syms]
   OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
 
-(defn- plan-sort-specification-list [^SqlParser$SortSpecificationListContext ctx
+(defn- plan-sort-specification-list [^Sql$SortSpecificationListContext ctx
                                      {:keys [!id-count] :as env} inner-scope outer-col-syms]
   (let [available-cols (set outer-col-syms)
         ob-expr-visitor (->ExprPlanVisitor env
@@ -1824,7 +1818,7 @@
                                                    (find-decls inner-scope chain)))))]
 
     (-> (.sortSpecification ctx)
-        (->> (mapv (fn [^SqlParser$SortSpecificationContext sort-spec-ctx]
+        (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
                      (let [expr (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
                            dir (or (some-> (.orderingSpecification sort-spec-ctx)
                                            (.getText)
@@ -1856,7 +1850,7 @@
                                  {:order-by-spec [in-sym ob-opts]
                                   :in-projection {in-sym expr}})))))))))
 
-(defn- plan-order-by [^SqlParser$OrderByClauseContext ctx env inner-scope outer-col-syms]
+(defn- plan-order-by [^Sql$OrderByClauseContext ctx env inner-scope outer-col-syms]
   (plan-sort-specification-list (.sortSpecificationList ctx) env inner-scope outer-col-syms))
 
 (defn- wrap-isolated-ob [plan outer-col-syms ob-specs]
@@ -2055,8 +2049,8 @@
           qeb-ctx (.queryExpressionBody ctx)
 
           ;; see SQL:2011 §7.13, syntax rule 28c
-          simple-table-query? (when (instance? SqlParser$QueryBodyTermContext qeb-ctx)
-                                (instance? SqlParser$QuerySpecificationContext (.queryTerm ^SqlParser$QueryBodyTermContext qeb-ctx)))]
+          simple-table-query? (when (instance? Sql$QueryBodyTermContext qeb-ctx)
+                                (instance? Sql$QuerySpecificationContext (.queryTerm ^Sql$QueryBodyTermContext qeb-ctx)))]
 
       (as-> (.accept qeb-ctx (cond-> (assoc this :scope scope)
                                simple-table-query? (assoc :order-by-ctx order-by-ctx)))
@@ -2490,7 +2484,7 @@
 
           expr-visitor (->ExprPlanVisitor env dml-scope)
 
-          set-clauses (for [^SqlParser$SetClauseContext set-clause (->> (.setClauseList ctx) (.setClause))
+          set-clauses (for [^Sql$SetClauseContext set-clause (->> (.setClauseList ctx) (.setClause))
                             :let [set-target (.setTarget set-clause)]]
                         {(identifier-sym (.columnName set-target))
                          (.accept (.expr (.updateSource set-clause)) expr-visitor)})
@@ -2645,11 +2639,11 @@
                            {::err/message (str "Errors parsing SQL statement:\n  - "
                                                (format "line %s:%s %s" line char-position-in-line msg))})))))))
 
-(defn ->parser ^xtdb.antlr.SqlParser [sql]
+(defn ->parser ^xtdb.antlr.Sql [sql]
   (-> (SqlLexer. (CharStreams/fromString sql))
       (add-throwing-error-listener)
       (CommonTokenStream.)
-      (SqlParser.)
+      (Sql.)
       (add-throwing-error-listener)))
 
 (defn- xform-table-info [table-info]
@@ -2730,7 +2724,7 @@
   (->logical-plan [{:keys [query-plan]}]
     [:assert {} (->logical-plan query-plan)]))
 
-(defn parse-statement ^SqlParser$DirectSqlStatementContext [sql]
+(defn parse-statement ^Sql$DirectSqlStatementContext [sql]
   (let [parser (->parser sql)]
     (-> (.directSqlStatement parser)
         #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint)))))) ; <<no-commit>>

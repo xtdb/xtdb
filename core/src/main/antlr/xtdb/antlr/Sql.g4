@@ -1,37 +1,10 @@
-grammar Sql;
+parser grammar Sql;
 
 options {
   language = Java;
   caseInsensitive = true;
+  tokenVocab = SqlLexer;
 }
-
-BLOCK_COMMENT : '/*' ( BLOCK_COMMENT | . )*? '*/'  -> skip ;
-LINE_COMMENT : '--' ~[\r\n]* -> skip ;
-
-PLUS : '+' ;
-MINUS : '-' ;
-ASTERISK : '*' ;
-SOLIDUS : '/' ;
-
-TRUE : 'TRUE' ;
-FALSE : 'FALSE' ;
-NULL : 'NULL' ;
-
-fragment DIGIT : [0-9] ;
-fragment LETTER : [a-z] ;
-fragment HEX_DIGIT : [0-9a-f] ;
-fragment SIGN : '+' | '-' ;
-
-WHITESPACE : [ \n\r\t]+ -> skip ;
-
-/// SQL Keywords
-
-ALL: 'ALL' ;
-DISTINCT: 'DISTINCT' ;
-NOT: 'NOT' ;
-ASYMMETRIC: 'ASYMMETRIC' ;
-SYMMETRIC: 'SYMMETRIC' ;
-RECURSIVE: 'RECURSIVE' ;
 
 /// §22 Direct invocation of SQL
 
@@ -98,28 +71,10 @@ literal
     | NULL #NullLiteral
     ;
 
-fragment EXPONENT : 'E' SIGN? DIGIT+ ;
-UNSIGNED_FLOAT : DIGIT+ ('.' DIGIT+ EXPONENT? | EXPONENT) ;
-UNSIGNED_INTEGER : DIGIT+ ;
-
-CHARACTER_STRING : '\'' ('\'\'' | ~('\''|'\n'))* '\'' ;
-C_ESCAPES_STRING : 'E\''
-  ( '\\' [0-7] [0-7]? [0-7]?
-  | '\\x' HEX_DIGIT HEX_DIGIT
-  | '\\u' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT
-  | '\\U' HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT HEX_DIGIT
-  | '\\' ('b' | 'f' | 'n' | 'r' | 't' | '\\' | '\'' | '"')
-  | '\'\''
-  | ~('\\' | '\'')
-  )*
-  '\'' ;
-
 characterString
     : CHARACTER_STRING #SqlStandardString
     | C_ESCAPES_STRING #CEscapesString
     ;
-
-BINARY_STRING : 'X(\'' HEX_DIGIT* '\')' ;
 
 intervalQualifier : startField 'TO' endField | singleDatetimeField ;
 startField : nonSecondPrimaryDatetimeField ;
@@ -146,15 +101,6 @@ identifier
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
-    ;
-
-POSTGRES_PARAMETER_SPECIFICATION : '$' DIGIT+ ;
-
-REGULAR_IDENTIFIER : (LETTER | '$' | '_') (LETTER | DIGIT | '$' | '_' )* ;
-
-DELIMITED_IDENTIFIER
-    : '"' ('"' '"' | ~'"')* '"'
-    | '`' ('`' '`' | ~'`')* '`'
     ;
 
 schemaName : identifier ;
@@ -698,7 +644,7 @@ queryTerm
     | '(' queryExpressionNoWith ')' # WrappedQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
     ;
-    
+
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;
 
 offsetAndLimit

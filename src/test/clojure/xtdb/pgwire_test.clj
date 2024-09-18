@@ -629,24 +629,25 @@
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "slect baz.a from baz;\n")
            (is (= [["ERROR:  Errors parsing SQL statement:"]
-                   ["  - line 1:0 mismatched input 'slect' expecting {'ASSERT'"
-                    " 'START'"
+                   ["  - line 1:0 mismatched input 'slect' expecting {'('"
+                    " 'ASSERT'"
                     " 'BEGIN'"
-                    " 'SET'"
                     " 'COMMIT'"
-                    " 'ROLLBACK'"
-                    " 'SHOW'"
-                    " 'SETTING'"
-                    " '('"
-                    " 'SELECT'"
-                    " 'INSERT'"
-                    " 'UPDATE'"
                     " 'DELETE'"
                     " 'ERASE'"
-                    " 'WITH'"
                     " 'FROM'"
+                    " 'INSERT'"
+                    " 'RECORDS'"
+                    " 'ROLLBACK'"
+                    " 'SELECT'"
+                    " 'SET'"
+                    " 'SETTING'"
+                    " 'SHOW'"
+                    " 'START'"
+                    " 'UPDATE'"
                     " 'VALUES'"
-                    " 'RECORDS'}"]]
+                    " 'WITH'}"
+                    ]]
                    (read :err))))
 
          (testing "query error allows session to continue"
@@ -1181,24 +1182,25 @@
        (let [s (read :err)]
          (is (not= :timeout s))
          (is (= [["ERROR:  Errors parsing SQL statement:"]
-                 ["  - line 1:0 mismatched input 'SLECT' expecting {'ASSERT'"
-                  " 'START'"
+                 ["  - line 1:0 mismatched input 'SLECT' expecting {'('"
+                  " 'ASSERT'"
                   " 'BEGIN'"
-                  " 'SET'"
                   " 'COMMIT'"
-                  " 'ROLLBACK'"
-                  " 'SHOW'"
-                  " 'SETTING'"
-                  " '('"
-                  " 'SELECT'"
-                  " 'INSERT'"
-                  " 'UPDATE'"
                   " 'DELETE'"
                   " 'ERASE'"
-                  " 'WITH'"
                   " 'FROM'"
+                  " 'INSERT'"
+                  " 'RECORDS'"
+                  " 'ROLLBACK'"
+                  " 'SELECT'"
+                  " 'SET'"
+                  " 'SETTING'"
+                  " 'SHOW'"
+                  " 'START'"
+                  " 'UPDATE'"
                   " 'VALUES'"
-                  " 'RECORDS'}"]] s)))
+                  " 'WITH'}"
+                  ]] s)))
 
        (send "BEGIN READ WRITE;\n")
        (read)
