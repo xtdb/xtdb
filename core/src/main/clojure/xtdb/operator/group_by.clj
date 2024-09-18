@@ -86,7 +86,8 @@
     (util/try-close rel-map)))
 
 (defn ->group-mapper [^BufferAllocator allocator, group-fields]
-  (let [gm-vec (IntVector. "group-mapping" allocator)]
+  (let [gm-vec (.createVector #xt.arrow/field ["group-mapping" #xt.arrow/field-type [#xt.arrow/type :i32 false]]
+                              allocator)]
     (if-let [group-col-names (not-empty (set (keys group-fields)))]
       (GroupMapper. group-col-names
                     (emap/->relation-map allocator {:build-fields group-fields
