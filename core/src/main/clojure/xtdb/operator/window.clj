@@ -156,11 +156,11 @@
 
                                                                         [:unary _agg-opts]
                                                                         (throw (UnsupportedOperationException.))))))))
-              fields (-> (into fields
-                               (->> window-fn-factories
-                                    (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)
-                                                        #(.getToColumnField ^IWindowFnSpecFactory %)))))))]
-          {:fields fields
+              out-fields (-> (into fields
+                                   (->> window-fn-factories
+                                        (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)
+                                                            #(.getToColumnField ^IWindowFnSpecFactory %)))))))]
+          {:fields out-fields
 
            :->cursor (fn [{:keys [allocator]} in-cursor]
                        (util/with-close-on-catch [window-fn-specs (LinkedList.)]
