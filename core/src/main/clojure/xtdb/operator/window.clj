@@ -1,6 +1,7 @@
 (ns xtdb.operator.window
   (:require [clojure.spec.alpha :as s]
             [xtdb.expression :as expr]
+            [xtdb.expression.comparator :as expr.comp]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
             [xtdb.operator.order-by :as order-by]
@@ -15,8 +16,8 @@
            (java.util LinkedList List Spliterator)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector)
-           (xtdb ICursor)
            (org.apache.arrow.vector.types.pojo Field)
+           (xtdb ICursor)
            (xtdb.operator.group_by IGroupMapper)
            (xtdb.vector RelationWriter IVectorWriter)))
 
@@ -98,6 +99,83 @@
           Closeable
           (close [_] (.close out-vec)))))))
 
+(defmethod ->window-fn-factory :dense_rank [{:keys [to-name order-specs]}]
+  (reify IWindowFnSpecFactory
+    (getToColumnName [_] to-name)
+    (getToColumnField [_] (types/col-type->field :i64))
+
+    (build [_ al]
+      (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
+                                      (.createVector al))
+            ^LongArrayList group-to-cnt (LongArrayList.)]
+        (reify
+          IWindowFnSpec
+          (aggregate [_ group-mapping sortMapping in-rel]
+            (let [cmp (order-by/order-specs->comp in-rel order-specs)
+                  offset (.getValueCount out-vec)
+                  row-count (.getValueCount group-mapping)]
+              (.setValueCount out-vec (+ offset row-count))
+              (when (pos-int? row-count)
+                (.set out-vec (+ offset 0) 0)
+                (doseq [^long idx (range 1 row-count)]
+                  (let [sort-idx (aget sortMapping idx)
+                        p-sort-idx (aget sortMapping (dec idx))
+                        group (.get group-mapping sort-idx)
+                        previous-group (.get group-mapping p-sort-idx)]
+                    (if (not= previous-group group)
+                      (.set out-vec ^long (+ offset idx) 0)
+                      (let [cnt (.get group-to-cnt group)]
+                        (if (neg-int? (.compare cmp p-sort-idx sort-idx))
+                          (do (.set out-vec (+ offset idx) (inc cnt))
+                              (.set group-to-cnt group (inc cnt)))
+                          (.set out-vec (+ offset idx) cnt)))))))
+              (vr/vec->reader out-vec)))
+
+          Closeable
+          (close [_] (.close out-vec)))))))
+
+(defmethod ->window-fn-factory :rank [{:keys [to-name order-specs]}]
+  (reify IWindowFnSpecFactory
+    (getToColumnName [_] to-name)
+    (getToColumnField [_] (types/col-type->field :i64))
+
+    (build [_ al]
+      (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
+                                      (.createVector al))
+            ^LongArrayList group-to-cnt (LongArrayList.)]
+        (reify
+          IWindowFnSpec
+          (aggregate [_ group-mapping sortMapping in-rel]
+            (let [cmp (order-by/order-specs->comp in-rel order-specs)
+                  offset (.getValueCount out-vec)
+                  row-count (.getValueCount group-mapping)]
+              (.setValueCount out-vec (+ offset row-count))
+              (when (pos-int? row-count)
+                (.set out-vec (+ offset 0) 0)
+                (when (< 0 row-count)
+                  (loop [idx 1 gap 1]
+                    (when (< idx row-count)
+                      (let [sort-idx (aget sortMapping idx)
+                            p-sort-idx (aget sortMapping (dec idx))
+                            group (.get group-mapping sort-idx)
+                            previous-group (.get group-mapping p-sort-idx)]
+                        (if (not= previous-group group)
+                          (do
+                            (.set out-vec ^long (+ offset idx) 0)
+                            (recur (inc idx) 1))
+                          (let [cnt (.get group-to-cnt group)]
+                            (if (neg-int? (.compare cmp p-sort-idx sort-idx))
+                              (do (.set out-vec (+ offset idx) (+ cnt gap))
+                                  (.set group-to-cnt group (+ cnt gap))
+                                  (recur (inc idx) 1))
+                              (do (.set out-vec (+ offset idx) cnt)
+                                  (recur (inc idx) (inc gap)))))))))))
+              (vr/vec->reader out-vec)))
+
+          Closeable
+          (close [_] (.close out-vec)))))))
+
+
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
                          ^IPersistentMap static-fields
@@ -152,6 +230,7 @@
                                          ;; ignoring window-name for now
                                          (let [[to-column {:keys [_window-name window-agg]}] (first p)]
                                            (->window-fn-factory (into {:to-name to-column
+                                                                       :order-specs order-specs
                                                                        :zero-row? (empty? partition-cols)}
                                                                       (zmatch window-agg
                                                                         [:nullary agg-opts]
