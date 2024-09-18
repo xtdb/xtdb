@@ -1,0 +1,1131 @@
+{
+  "properties": {
+    "lenses": [
+      {
+        "order": 0,
+        "parts": [
+          {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "colSpan": 5,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "jvm_memory_used",
+                          "aggregationType": 3,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "jvm_memory_used",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "JVM -  Max Memory Usage Per Node",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "colorMap": {
+                          "xtdb-node-d39193": "#e3008c"
+                        },
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 5,
+              "y": 0,
+              "colSpan": 6,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "jvm_memory_used",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "jvm_memory_used",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "JVM - Average Memory Usage Per Node",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 11,
+              "y": 0,
+              "colSpan": 5,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "jvm_buffer_memory_used",
+                          "aggregationType": 3,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "jvm_buffer_memory_used",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "JVM - (Max) Buffer Memory used per Node",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 0,
+              "y": 3,
+              "colSpan": 5,
+              "rowSpan": 4
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "jvm_threads_started",
+                          "aggregationType": 3,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "jvm_threads_started",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "JVM - Max Live Threads Per Node ",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              },
+              "filters": {
+                "MsPortalFx_TimeRange": {
+                  "model": {
+                    "format": "utc",
+                    "granularity": "auto",
+                    "relative": "60m"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 5,
+              "y": 3,
+              "colSpan": 11,
+              "rowSpan": 4
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "jvm_threads_states",
+                          "aggregationType": 3,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "jvm_threads_states",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "JVM - Max Thread States",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": [
+                          "node-id",
+                          "state"
+                        ],
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 0,
+              "y": 7,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "get-comment",
+                          "aggregationType": 7,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "get-comment",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: get-comment by node",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 4,
+              "y": 7,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "get-item",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "get-item",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionark: get-item",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 8,
+              "y": 7,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "get-user-info",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "get-user-info",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: get-user-info",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 12,
+              "y": 7,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "index-item-status-groups",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "index-item-status-groups",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: index-item-status-groups",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 0,
+              "y": 10,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "new-comment",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "new-comment",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: new-comment",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 4,
+              "y": 10,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "new-item",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "new-item",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: new-item",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 8,
+              "y": 10,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "new-bid",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "new-bid",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: new-bid",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 12,
+              "y": 10,
+              "colSpan": 4,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "new-user",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "new-user",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Auctionmark: new-user",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 0,
+              "y": 13,
+              "colSpan": 8,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "query_timer",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "query_timer",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Average Query Timer",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "position": {
+              "x": 8,
+              "y": 13,
+              "colSpan": 8,
+              "rowSpan": 3
+            },
+            "metadata": {
+              "inputs": [
+                {
+                  "name": "options",
+                  "isOptional": true
+                },
+                {
+                  "name": "sharedTimeRange",
+                  "isOptional": true
+                }
+              ],
+              "type": "Extension/HubsExtension/PartType/MonitorChartPart",
+              "settings": {
+                "content": {
+                  "options": {
+                    "chart": {
+                      "metrics": [
+                        {
+                          "resourceMetadata": {
+                            "id": "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/microsoft.insights/components/cloud-benchmark-insights"
+                          },
+                          "name": "tx_op_timer",
+                          "aggregationType": 4,
+                          "namespace": "azure.applicationinsights",
+                          "metricVisualization": {
+                            "displayName": "tx_op_timer",
+                            "resourceDisplayName": "cloud-benchmark-insights"
+                          }
+                        }
+                      ],
+                      "title": "Average tx-op timer",
+                      "titleKind": 2,
+                      "visualization": {
+                        "chartType": 2,
+                        "legendVisualization": {
+                          "isVisible": true,
+                          "position": 2,
+                          "hideHoverCard": false,
+                          "hideLabelNames": true
+                        },
+                        "axisVisualization": {
+                          "x": {
+                            "isVisible": true,
+                            "axisType": 2
+                          },
+                          "y": {
+                            "isVisible": true,
+                            "axisType": 1
+                          }
+                        },
+                        "disablePinning": true
+                      },
+                      "grouping": {
+                        "dimension": "node-id",
+                        "sort": 2,
+                        "top": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "model": {
+        "timeRange": {
+          "value": {
+            "relative": {
+              "duration": 24,
+              "timeUnit": 1
+            }
+          },
+          "type": "MsPortalFx.Composition.Configuration.ValueTypes.TimeRange"
+        },
+        "filterLocale": {
+          "value": "en-us"
+        },
+        "filters": {
+          "value": {
+            "MsPortalFx_TimeRange": {
+              "model": {
+                "format": "utc",
+                "granularity": "auto",
+                "relative": "30m"
+              },
+              "displayCache": {
+                "name": "UTC Time",
+                "value": "Past 30 minutes"
+              },
+              "filteredPartIds": [
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102732",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102734",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102736",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102738",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102740",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a1027c2",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a1027f7",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a10296e",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102980",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a10298c",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102998",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102d35",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102d45",
+                "StartboardPart-MonitorChartPart-7dd40ff6-4568-40c3-bd27-aa6f9a102ff9",
+                "StartboardPart-MonitorChartPart-e4406d05-d1fc-4ad5-9235-a5f34bad71ef"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "name": "Monitoring Dashboard",
+  "type": "Microsoft.Portal/dashboards",
+  "location": "INSERT LOCATION",
+  "tags": {
+    "hidden-title": "Monitoring Dashboard"
+  },
+  "apiVersion": "2022-12-01-preview"
+}

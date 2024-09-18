@@ -1,8 +1,9 @@
 (ns xtdb.metrics
-  (:require [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Timer Timer$Sample)
+  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
@@ -51,6 +52,9 @@
                        :azure-monitor :xtdb.azure.monitor/metrics)
                      opts))
 
+(defn random-node-id []
+  (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
+
 (defmethod ig/init-key :xtdb.metrics/registry [_ ^Metrics$Factory factory]
   (let [^Metrics metrics (if factory
                            (.openMetrics factory)
@@ -60,6 +64,12 @@
 
                              (close [_])))
         reg (.getRegistry metrics)]
+    
+    ;; Add common tag for the node
+    (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))]
+      (log/infof "Metrics server - tagging all metrics with node-id: %s" node-id)
+      (-> (.config reg)
+          (.commonTags [(Tag/of "node-id" node-id)])))
 
     (doseq [^MeterBinder metric [(ClassLoaderMetrics.) (JvmMemoryMetrics.) (JvmHeapPressureMetrics.)
                                  (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]

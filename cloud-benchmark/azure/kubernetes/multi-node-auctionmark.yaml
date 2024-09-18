@@ -23,6 +23,7 @@ data:
   XTDB_AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
   XTDB_AZURE_SERVICE_BUS_NAMESPACE: "cloud-benchmark-eventbus"
   XTDB_AZURE_SERVICE_BUS_TOPIC_NAME: "cloud-benchmark-servicebus-topic"
+  XTDB_AZURE_INSTRUMENTATION_KEY: "7859bb2f-b43c-4474-a51c-7357e551b3e5"
   KAFKA_BOOTSTRAP_SERVERS: "kafka-service.cloud-benchmark.svc.cluster.local:9092"
   XTDB_TX_TOPIC: "xtdb-tx-topic"
   XTDB_FILES_TOPIC: "xtdb-files-topic"
@@ -81,6 +82,8 @@ spec:
           value: "/var/lib/xtdb/buffers/disk-cache-lp"
         - name: AUCTIONMARK_LOAD_PHASE_ONLY
           value: "True"
+        - name: XTDB_NODE_ID
+          value: "bench-load-phase"
       containers:
       - name: xtdb-azure-bench-1
         image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
@@ -100,6 +103,8 @@ spec:
           value: "/var/lib/xtdb/buffers/disk-cache-1"
         - name: AUCTIONMARK_LOAD_PHASE
           value: "False"
+        - name: XTDB_NODE_ID
+          value: "bench-node-1"
       - name: xtdb-azure-bench-2
         image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
         volumeMounts:
@@ -118,6 +123,8 @@ spec:
           value: "/var/lib/xtdb/buffers/disk-cache-2"
         - name: AUCTIONMARK_LOAD_PHASE
           value: "False"
+        - name: XTDB_NODE_ID
+          value: "bench-node-2"
       - name: xtdb-azure-bench-3
         image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
         volumeMounts:
@@ -136,3 +143,5 @@ spec:
           value: "/var/lib/xtdb/buffers/disk-cache-3"
         - name: AUCTIONMARK_LOAD_PHASE
           value: "False"
+        - name: XTDB_NODE_ID
+          value: "bench-node-3"
