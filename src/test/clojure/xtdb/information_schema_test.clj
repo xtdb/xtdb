@@ -90,7 +90,7 @@
               :attnotnull false,
               :attlen -1,
               :atttypid 114,
-              :attnum 0,
+              :attnum 1,
               :attname "_id",
               :attisdropped false}
              {:atttypmod -1,
@@ -100,7 +100,7 @@
               :attnotnull false,
               :attlen -1,
               :atttypid 114,
-              :attnum 0,
+              :attnum 1,
               :attname "_id",
               :attisdropped false}
              {:atttypmod -1,
@@ -110,7 +110,7 @@
               :attnotnull false,
               :attlen -1,
               :atttypid 114,
-              :attnum 1,
+              :attnum 2,
               :attname "col1",
               :attisdropped false}
              {:atttypmod -1,
@@ -120,7 +120,7 @@
               :attnotnull false,
               :attlen 8,
               :atttypid 20,
-              :attnum 1,
+              :attnum 2,
               :attname "col2",
               :attisdropped false}
              {:atttypmod -1,
@@ -130,7 +130,7 @@
               :attnotnull false,
               :attlen 8,
               :atttypid 20,
-              :attnum 2,
+              :attnum 3,
               :attname "col1",
               :attisdropped false}
              {:atttypmod -1,
@@ -140,7 +140,7 @@
               :attnotnull false,
               :attlen -1,
               :atttypid 114,
-              :attnum 3,
+              :attnum 4,
               :attname "error",
               :attisdropped false}
              {:atttypmod -1,
@@ -150,7 +150,7 @@
               :attnotnull false,
               :attlen 8,
               :atttypid 20,
-              :attnum 2,
+              :attnum 3,
               :attname "_id",
               :attisdropped false}
              {:atttypmod -1,
@@ -160,7 +160,7 @@
               :attnotnull false,
               :attlen 8,
               :atttypid 1184,
-              :attnum 0,
+              :attnum 1,
               :attname "system_time",
               :attisdropped false}
              {:atttypmod -1,
@@ -170,7 +170,7 @@
               :attnotnull false,
               :attlen 1,
               :atttypid 16,
-              :attnum 1,
+              :attnum 2,
               :attname "committed",
               :attisdropped false}}
            (set (tu/query-ra '[:scan

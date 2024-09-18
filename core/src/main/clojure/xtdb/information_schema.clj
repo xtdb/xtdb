@@ -24,7 +24,7 @@
               name (key col)
               col-field (val col)]]
 
-    {:idx idx ;; no guarentee of order/stability of idx for a given col
+    {:idx (inc idx) ;; no guarentee of order/stability of idx for a given col
      :table table
      :name name
      :field col-field
