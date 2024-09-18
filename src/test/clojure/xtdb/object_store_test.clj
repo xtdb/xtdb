@@ -39,7 +39,7 @@
   (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
 ;; Generates a byte buffer of random characters
-(defn generate-random-byte-buffer [buffer-size]
+(defn generate-random-byte-buffer ^ByteBuffer [buffer-size]
   (let [random         (java.util.Random.)
         byte-buffer    (ByteBuffer/allocate buffer-size)]
     (loop [i 0]

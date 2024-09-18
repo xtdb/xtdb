@@ -20,10 +20,10 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-object-store [^AzureBlobStorage$Factory factory] 
-  (let [storage-account-endpoint (cond
-                                   (.getStorageAccountEndpoint factory) (.getStorageAccountEndpoint factory)
-                                   (.getStorageAccount factory) (format "https://%s.blob.core.windows.net" (.getStorageAccount factory))
-                                   :else (throw (err/illegal-arg :xtdb/missing-storage-account {::err/message "At least one of storageAccount or storageAccountEndpoint must be provided."})))
+  (let [^String storage-account-endpoint (cond
+                                           (.getStorageAccountEndpoint factory) (.getStorageAccountEndpoint factory)
+                                           (.getStorageAccount factory) (format "https://%s.blob.core.windows.net" (.getStorageAccount factory))
+                                           :else (throw (err/illegal-arg :xtdb/missing-storage-account {::err/message "At least one of storageAccount or storageAccountEndpoint must be provided."})))
         user-managed-identity-id (.getUserManagedIdentityClientId factory)
         credential (.build (cond-> (DefaultAzureCredentialBuilder.)
                              user-managed-identity-id (.managedIdentityClientId user-managed-identity-id))) 
