@@ -108,12 +108,11 @@
      (when-not done?
        (set! (.done? this) true)
 
-       (let [grouping-vec-name "grouping-vec"]
+       (let [window-groups (gensym "window-groups")]
          ;; TODO we likely want to do some retaining here instead of copying
          (util/with-open [rel-wtr (RelationWriter. allocator (for [^Field field static-fields]
                                                                (vw/->writer (.createVector field allocator))))
-                          ;; TODO check why grouping can be null
-                          ^IVectorWriter grouping-wtr (-> #xt.arrow/field ["grouping-vec" #xt.arrow/field-type [#xt.arrow/type :i32 true]]
+                          ^IVectorWriter grouping-wtr (-> (types/->field (str window-groups) #xt.arrow/type :i32 false)
                                                           (.createVector allocator)
                                                           vw/->writer)]
 
@@ -124,7 +123,7 @@
 
            (let [rel-rdr (vw/rel-wtr->rdr rel-wtr)
                  sort-mapping (order-by/sorted-idxs (vr/rel-reader (conj (seq rel-rdr) (vw/vec-wtr->rdr grouping-wtr)))
-                                                    (into [[(symbol grouping-vec-name)]] order-specs))]
+                                                    (into [[window-groups]] order-specs))]
              (util/with-open [window-cols (->> window-specs
                                                (mapv #(.aggregate ^IWindowFnSpec % (.getVector grouping-wtr) sort-mapping rel-rdr)))]
                (let [out-rel (vr/rel-reader (concat (seq (.select rel-rdr sort-mapping)) window-cols))]
