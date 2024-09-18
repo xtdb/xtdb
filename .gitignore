@@ -18,3 +18,4 @@ build
 /_manifest
 .DS_Store
 
+/.calva/
