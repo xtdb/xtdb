@@ -77,7 +77,7 @@
         blob-id (BlobId/of bucket-name (str prefixed-key))]
     (.delete storage-service blob-id)))
 
-(defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix]
+(defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name ^Path prefix]
   ObjectStore
   (getObject [this k]
     (CompletableFuture/completedFuture

@@ -19,6 +19,7 @@
            (java.nio.file Files Path)
            (java.time Duration)
            (xtdb.api.storage AzureBlobStorage ObjectStore)
+           (xtdb.azure.object_store AzureBlobObjectStore)
            (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
@@ -141,9 +142,10 @@
                                                            (.prefix (util/->path (str prefix))))))))
 
     (t/testing "storageAccountEndpoint specified - should work correctly"
-      (with-open [os (azure/open-object-store (-> (AzureBlobStorage/azureBlobStorage nil container)
-                                                  (.prefix (util/->path (str prefix)))
-                                                  (.storageAccountEndpoint "https://xtdbteststorageaccount.blob.core.windows.net")))]
+      (with-open [os ^AzureBlobObjectStore (azure/open-object-store 
+                                            (-> (AzureBlobStorage/azureBlobStorage nil container)
+                                                (.prefix (util/->path (str prefix)))
+                                                (.storageAccountEndpoint "https://xtdbteststorageaccount.blob.core.windows.net")))]
         (os-test/put-edn os (util/->path "alice") :alice)
         (t/is (= (mapv util/->path ["alice"]) (.listAllObjects ^ObjectStore os)))))))
 
