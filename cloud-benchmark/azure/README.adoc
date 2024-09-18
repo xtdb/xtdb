@@ -218,6 +218,12 @@ There is a helper script to do _all_ of the above, which can be run by:
 
 == Monitoring
 
+=== Setup
+
+To monitor the benchmark, we can use Azure Application Insights. We set up an applications insights resource in the terraform configuration, and output an instrumentation key. 
+
+=== Collecting metrics from node
+
 To see the benchmark metrics you need to supply an application insights instrumentation key via an environment variable in the `single-node-auctionmark.yaml` or `multi-node-auctionmark.yaml` file as below:
 
 ```yaml
@@ -238,3 +244,16 @@ terraform output -raw insights_instrumentation_key
 
 After a while you should be able to see the metrics in the Azure portal under the Application Insights resource, navigating to Monitoring > Metrics and looking under Metric Namespace > Custom.
 
+=== Observing metrics in the Dashboard
+
+We have made a custom dashboard for various XTDB, JVM and auctionmark metrics that we care about, with the ability to split them by node.
+
+To setup the dashboard itself, there's a few steps we must take:
+
+* Before anything else - ensure we can filter/split custom metrics. This can be found under the `usage and estimated costs` section of the Application Insights resource, and we should update this to allow "Alerting on Custom Metric Dimensions".
+* With that setup, we can create our custom dashboard.
+** Got to `Application Dashbard` on the Application Insights resource.
+** Create a new custom dashboard.
+** We can upload this from a template - you can use the template found within the `cloud-benchmark/azure` directory, `application-insights/dashboard.json`. 
+
+We already have a shared dashboard setup, under "Monitoring Dashboard"
