@@ -10,7 +10,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap)
-           (com.carrotsearch.hppc LongLongMap LongLongHashMap)
+           (com.carrotsearch.hppc LongArrayList)
            (java.io Closeable)
            (java.util LinkedList List Spliterator)
            (org.apache.arrow.memory BufferAllocator)
@@ -81,7 +81,7 @@
     (build [_ al]
       (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
                                       (.createVector al))
-            ^LongLongMap group-to-cnt (LongLongHashMap.)]
+            ^LongArrayList group-to-cnt (LongArrayList.)]
         (reify
           IWindowFnSpec
           (aggregate [_ group-mapping sortMapping _in-rel]
@@ -89,7 +89,10 @@
                   row-count (.getValueCount group-mapping)]
               (.setValueCount out-vec (+ offset row-count))
               (dotimes [idx row-count]
-                (.set out-vec (+ offset idx) (.putOrAdd group-to-cnt (.get group-mapping (aget sortMapping idx)) 0 1)))
+                (let [group (.get group-mapping (aget sortMapping idx))
+                      cnt (.get group-to-cnt group)]
+                  (.set out-vec (+ offset idx) cnt)
+                  (.set group-to-cnt group (inc cnt))))
               (vr/vec->reader out-vec)))
 
           Closeable
