@@ -2141,7 +2141,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
              :attnotnull false,
              :attlen 8,
              :atttypid 20,
-             :attnum 0,
+             :attnum 1,
              :attname "_id",
              :attisdropped false}]
            (xt/q tu/*node* "SELECT * FROM pg_attribute WHERE attrelid = 'public.foo'::regclass")))
