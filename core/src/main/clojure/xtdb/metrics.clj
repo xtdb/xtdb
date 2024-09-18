@@ -9,6 +9,7 @@
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (java.util.function Supplier)
+           java.util.List
            (java.util.stream Stream)
            (xtdb.api Xtdb$Config)
            (xtdb.api.metrics Metrics Metrics$Factory PrometheusMetrics$Factory)))
@@ -66,10 +67,11 @@
         reg (.getRegistry metrics)]
     
     ;; Add common tag for the node
-    (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))]
+    (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
+          ^List tags [(Tag/of "node-id" node-id)]]
       (log/infof "Metrics server - tagging all metrics with node-id: %s" node-id)
       (-> (.config reg)
-          (.commonTags [(Tag/of "node-id" node-id)])))
+          (.commonTags tags)))
 
     (doseq [^MeterBinder metric [(ClassLoaderMetrics.) (JvmMemoryMetrics.) (JvmHeapPressureMetrics.)
                                  (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]
