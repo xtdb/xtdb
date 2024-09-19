@@ -4,7 +4,8 @@
             [xtdb.bitemporal :as bitemp]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.metrics :as metrics])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
            [java.time Duration]
@@ -237,14 +238,16 @@
   (into {:allocator (ig/ref :xtdb/allocator)
          :buffer-pool (ig/ref :xtdb/buffer-pool)
          :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
-         :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))}
+         :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))
+         :metrics-registry (ig/ref :xtdb.metrics/registry)}
         opts))
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads]}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
+    (metrics/add-allocator-gauge metrics-registry "compactor.allocator.allocated_memory" allocator)
     (let [page-size *page-size*
           l1-file-size-rows *l1-file-size-rows*
           ignore-signal-block? *ignore-signal-block?*]

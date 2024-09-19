@@ -694,6 +694,7 @@
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator metadata-mgr, q-src, live-index metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
+    (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
     (->Indexer allocator metadata-mgr q-src live-index
 
                nil ;; indexer-error

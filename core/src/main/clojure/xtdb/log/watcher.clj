@@ -5,6 +5,7 @@
             xtdb.indexer
             [xtdb.log :as xt-log]
             xtdb.operator.scan
+            [xtdb.metrics :as metrics]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import java.lang.AutoCloseable
@@ -18,7 +19,8 @@
 (defmethod ig/prep-key :xtdb.log/watcher [_ opts]
   (into {:allocator (ig/ref :xtdb/allocator)
          :log (ig/ref :xtdb/log)
-         :indexer (ig/ref :xtdb/indexer)}
+         :indexer (ig/ref :xtdb/indexer)
+         :metrics-registry (ig/ref :xtdb.metrics/registry)}
         opts))
 
 (defn- get-bb-long [^ByteBuffer buf ^long pos default]
@@ -60,8 +62,9 @@
                            (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get (.getRecord record) 0))))))))))
     !cancel-hook))
 
-(defmethod ig/init-key :xtdb.log/watcher [_ {:keys [allocator] :as deps}]
+(defmethod ig/init-key :xtdb.log/watcher [_ {:keys [allocator metrics-registry] :as deps}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "watcher")]
+    (metrics/add-allocator-gauge metrics-registry "watcher.allocator.allocated_memory" allocator)
     (let [!watcher-cancel-hook (watch-log! (-> deps
                                                (assoc :allocator allocator)))]
 
