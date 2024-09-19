@@ -136,11 +136,8 @@
               (when-not (util/path-exists buffer-cache-path)
                 (throw (os/obj-missing-exception k)))
 
-              (try
-                (let [nio-buffer (util/->mmap-path buffer-cache-path)]
-                  (cache-compute memory-store k #(util/->arrow-buf-view allocator nio-buffer)))
-                (catch ClosedByInterruptException _
-                  (throw (InterruptedException.)))))))))
+              (let [nio-buffer (util/->mmap-path buffer-cache-path)]
+                (cache-compute memory-store k #(util/->arrow-buf-view allocator nio-buffer))))))))
 
   (putObject [_ k buffer]
     (try

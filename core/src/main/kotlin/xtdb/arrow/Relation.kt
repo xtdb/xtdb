@@ -268,7 +268,13 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         @JvmStatic
         fun loader(buf: ArrowBuf): Loader {
             buf.referenceManager.retain()
-            return BufferLoader(buf, readFooter(buf))
+            
+            try {
+                return BufferLoader(buf, readFooter(buf))
+            } catch (e: Throwable) {
+                buf.close()
+                throw e
+            }
         }
 
         @Suppress("unused")

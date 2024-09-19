@@ -221,16 +221,24 @@
    (->mmap-path path FileChannel$MapMode/READ_ONLY))
 
   (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode]
-   (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
-                                         #{:read}
-                                         #{:read :write}))]
-     (.map in map-mode 0 (.size in))))
+   (try
+     (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
+                                           #{:read}
+                                           #{:read :write}))]
+       (.map in map-mode 0 (.size in)))
+
+     (catch ClosedByInterruptException _
+       (throw (InterruptedException.)))))
 
   (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode ^long start ^long len]
-   (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
-                                         #{:read}
-                                         #{:read :write}))]
-     (.map in map-mode start len))))
+   (try
+     (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
+                                           #{:read}
+                                           #{:read :write}))]
+       (.map in map-mode start len))
+
+     (catch ClosedByInterruptException _
+       (throw (InterruptedException.))))))
 
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []

@@ -416,12 +416,12 @@
     (util/close buf)))
 
 (defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys]
-  (util/with-close-on-catch [data-bufs (ArrayList.)]
-    (->> trie-keys
-         (mapv (fn [trie-key]
-                 (let [data-buf (.getBuffer buffer-pool (->table-data-file-path table-path trie-key))]
-                   (.add data-bufs data-buf)
-                   (ArrowDataRel. data-buf (Relation/loader data-buf) (ArrayList.))))))))
+  (util/with-close-on-catch [data-rels (ArrayList.)]
+    (doseq [trie-key trie-keys]
+      (util/with-close-on-catch [data-buf (.getBuffer buffer-pool (->table-data-file-path table-path trie-key))]
+        (.add data-rels (ArrowDataRel. data-buf (Relation/loader data-buf) (ArrayList.)))))
+
+    (vec data-rels)))
 
 (defn load-data-page [^MergePlanNode merge-plan-node]
   (let [{:keys [^IDataRel data-rel]} (.getSegment merge-plan-node)
