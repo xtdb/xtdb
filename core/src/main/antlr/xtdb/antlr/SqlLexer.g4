@@ -46,6 +46,7 @@ RBRACK : ']' ;
 LBRACE : '{' ;
 RBRACE : '}' ;
 CONCAT : '||' ;
+TILDE : '~' ;
 
 PLUS : '+' ;
 MINUS : '-' ;
@@ -61,7 +62,6 @@ LE : '<=' ;
 GE : '>=' ;
 
 PG_CAST : '::' ;
-PG_REGEX : '~' ;
 PG_REGEX_I : '~*' ;
 PG_NOT_REGEX : '!~' ;
 PG_NOT_REGEX_I : '!~*' ;
