@@ -7,6 +7,7 @@ on:
 
 jobs:
   docker:
+    if: github.repository == 'xtdb/xtdb'
     uses: ./.github/workflows/docker.yml
     secrets: inherit
     permissions:
