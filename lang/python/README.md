@@ -1,7 +1,8 @@
-# XTDB Python SDK
+# XTDB Python client library
 
-This is the Python SDK for the [XTDB](https://xtdb.com) database.
+This will be the home of the XTDB client library for Python.
 
+In the main, users should use standard PostgreSQL tooling to connect to XTDB - this repo will contain helper functions for advanced usage.
 
 ## Development
 
@@ -12,17 +13,9 @@ To install the dependencies, run:
 poetry install
 ```
 
-
 ## Testing
 
 See the test harness README for how to nodes are spun up and down.
-
-You can run the http-proxy locally via the test harness:
-
-`./gradlew :lang:test-harness:httpProxy`
-
-This will run the http-proxy server on `http://localhost:3300`.
-You can then run the tests via:
 
 ```shell
 poetry run pytest

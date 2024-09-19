@@ -1,33 +1,8 @@
-# XTDB JavaScript/TypeScript SDK
+# XTDB JavaScript/TypeScript client library
 
-This is _very_ early days as yet. Particularly, it's currently missing tests and user documentation.
+This will be the home of the XTDB client library for JavaScript/TypeScript.
 
-## Get started
-
-1. It's published to NPM as `@xtdb/xtdb` - to add it to a project:
-   - `npm install '@xtdb/xtdb'`
-   - `yarn add '@xtdb/xtdb'`
-2. `import Xtdb, { q, tx, ex } from '@xtdb/xtdb'`
-3. `const xtdb = new Xtdb('http://localhost:3000')`
-4. Transactions:
-   
-   ```javascript
-   const txKey = await xtdb.submitTx([
-   tx.putDocs('myTable',
-       {"xt/id": 1, ...},
-       {"xt/id": 2, ...}),
-
-   ...
-   ])
-   ```
-5. Queries:
-
-   ```javascript
-   const res = await node.query([
-     q.from('myTable'),
-     q.aggregate({rc: ex.call("row-count")})
-   ])
-   ```
+In the main, users should use standard PostgreSQL tooling to connect to XTDB - this repo will contain helper functions for advanced usage.
 
 ## Publishing
 
