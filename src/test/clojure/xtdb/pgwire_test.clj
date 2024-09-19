@@ -691,25 +691,6 @@
 
       (is (= #{{:name "Fred"}, {:name "Bob"}} (set (q conn ["select a.name from a"])))))))
 
-;; SET is not supported properly at the moment, so this ensure we do not really do anything too embarrassing (like crash)
-(deftest set-statement-test
-  (let [params #(-> (get-last-conn) :conn-state deref :session :parameters (select-keys %))]
-    (with-open [conn (jdbc-conn)]
-
-      (testing "literals saved as is"
-        (is (q conn ["SET a = 'b'"]))
-        (is (= {:a "b"} (params [:a])))
-        (is (q conn ["SET b = 42"]))
-        (is (= {:a "b", :b 42} (params [:a :b]))))
-
-      (testing "properties can be overwritten"
-        (q conn ["SET a = 42"])
-        (is (= {:a 42} (params [:a]))))
-
-      (testing "TO syntax can be used"
-        (q conn ["SET a TO 43"])
-        (is (= {:a 43} (params [:a])))))))
-
 (deftest db-queryable-after-transaction-error-test
   (with-open [conn (jdbc-conn)]
     (try
@@ -1879,3 +1860,18 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (= #{{:_id 1, :foo "hi"} {:_id 2, :foo nil}}
              (set (q conn ["SELECT * FROM docs"]))))))
 
+(deftest test-startup-params
+  ;;TODO test should really explicitly set the default clock of the node and/or pgwire server
+  ;;to something other than the param value in the test. But this currently isn't possible.
+  (t/testing "TimeZone"
+    (with-open [conn (pg-conn {:pg-params {"TimeZone" "Pacific/Tarawa"}})]
+
+      (t/is (= [{:timezone "Pacific/Tarawa"}]
+               (pg/execute conn "SHOW TIME ZONE"))
+            "Exact case"))
+
+    (with-open [conn (pg-conn {:pg-params {"TiMEzONe" "Pacific/Tarawa"}})]
+
+      (t/is (= [{:timezone "Pacific/Tarawa"}]
+               (pg/execute conn "SHOW TIME ZONE"))
+            "arbitrary case"))))

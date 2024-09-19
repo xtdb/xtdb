@@ -261,6 +261,15 @@
 (defn- statement-head [s]
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
+(defn session-param-name [^ParserRuleContext ctx]
+  (some-> ctx
+          (.accept (reify SqlVisitor
+                     (visitRegularIdentifier [_ ctx] (.getText ctx))
+                     (visitDelimitedIdentifier [_ ctx]
+                       (let [di-str (.getText ctx)]
+                         (subs di-str 1 (dec (count di-str)))))))
+          (str/lower-case)))
+
 (defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
@@ -277,7 +286,7 @@
 
                      (visitSetSessionVariableStatement [_ ctx]
                        {:statement-type :set-session-parameter
-                        :parameter (plan/identifier-sym (.identifier ctx))
+                        :parameter (session-param-name (.identifier ctx))
                         :value (-> (.literal ctx)
                                    (.accept (plan/->ExprPlanVisitor nil nil)))})
 
@@ -329,9 +338,11 @@
                      (visitRollbackStatement [_ _] {:statement-type :rollback})
 
                      (visitSetTimeZoneStatement [_ ctx]
+                       ;; not sure if handlling time zone explicitly is the right approach
+                       ;; might be cleaner to handle it like any other session param
                        {:statement-type :set-time-zone
-                        :tz (let [region (.getText (.characterString ctx))]
-                              (ZoneId/of (subs region 1 (dec (count region)))))})
+                        :tz (let [v (.getText (.characterString ctx))]
+                              (subs v 1 (dec (count v)))) })
 
                      (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
@@ -464,7 +475,7 @@
          acc {}]
     (let [x (.read in)]
       (if (zero? x)
-        {:startup-parameters acc}
+        acc
         (do (.unread in (byte x))
             (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
@@ -489,21 +500,15 @@
 
 ;;; server impl
 
-
 (defn- parse-session-params [params]
   (->> params
        (into {} (mapcat (fn [[k v]]
-                          (let [k (-> (util/->kebab-case-kw k)
-                                      ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
-                            (case k
-                              :options (parse-session-params (for [[_ k v] (re-seq #"-c ([\w_]*)=([\w_]*)" v)]
-                                                               [k v]))
-                              [[k (case k
-                                    :fallback-output-format (#{:json :transit} (util/->kebab-case-kw v))
-                                    v)]])))))))
-
-(defn- set-session-parameter [conn parameter value]
-  (swap! (:conn-state conn) update-in [:session :parameters] (fnil into {}) (parse-session-params {parameter value})))
+                          (case k
+                            "options" (parse-session-params (for [[_ k v] (re-seq #"-c ([\w_]*)=([\w_]*)" v)]
+                                                             [k v]))
+                            [[k (case k
+                                  "fallback_output_format" (#{:json :transit} (util/->kebab-case-kw v))
+                                  v)]]))))))
 
 ;;; pg i/o shared data types
 ;; our io maps just capture a paired :read fn (data-in)
@@ -804,6 +809,17 @@
      (.writeInt out (+ 4 (alength arr)))
      (.write out arr))))
 
+(def time-zone-nf-param-name "timezone")
+(def pg-param-nf->display-format
+  {time-zone-nf-param-name "TimeZone"})
+
+(defn- set-session-parameter [conn parameter value]
+  ;;https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-NAMES-VALUES
+  ;;parameter names are case insensitive, choosing to lossily downcase them for now and store a mapping to a display format
+  ;;for any name not typically displayed in lower case.
+  (swap! (:conn-state conn) update-in [:session :parameters] (fnil into {}) (parse-session-params {parameter value}))
+  (cmd-write-msg conn msg-parameter-status {:parameter (get pg-param-nf->display-format parameter parameter), :value (str value)}))
+
 (defn cmd-send-ready
   "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
   If the status is omitted, the status is determined from whether a transaction is currently open."
@@ -883,23 +899,29 @@
   [{:keys [!closing?]}]
   (reset! !closing? true))
 
+(defn set-time-zone [{:keys [conn-state] :as conn} tz]
+  (swap! conn-state update-in [:session :clock] (fn [^Clock clock]
+                                                  (.withZone clock (ZoneId/of tz))))
+  (set-session-parameter conn time-zone-nf-param-name tz))
+
 (defn cmd-startup-pg30 [conn msg-in]
   (let [{:keys [server]} conn
         {:keys [server-state]} server]
-    ;; send server parameters
+
+    ;; send auth-ok to client
     (cmd-write-msg conn msg-auth {:result 0})
 
-    (doseq [[k v] (merge
-                    ;; TimeZone derived from the servers :clock for now
-                    ;; this may change
-                    {"TimeZone" (str (.getZone ^Clock (:clock @server-state)))}
-                    (:parameters @server-state))]
-      (cmd-write-msg conn msg-parameter-status {:parameter k, :value v}))
+    (let [default-server-params (-> (:parameters @server-state)
+                                    (update-keys str/lower-case))
+          startup-parameters-from-client (-> (read-startup-parameters msg-in)
+                                             (update-keys str/lower-case))]
 
-    ;; set initial session parameters specified by client
-    (let [{:keys [startup-parameters]} (read-startup-parameters msg-in)]
-      (doseq [[k v] startup-parameters]
-        (set-session-parameter conn k v)))
+      (doseq [[k v] (merge default-server-params
+                           startup-parameters-from-client)]
+        ;;again explicit handing of timezone
+        (if (= time-zone-nf-param-name k)
+          (set-time-zone conn v)
+          (set-session-parameter conn k v))))
 
     ;; backend key data (used to identify conn for cancellation)
     (cmd-write-msg conn msg-backend-key-data {:process-id (:cid conn), :secret-key 0})
@@ -1269,8 +1291,8 @@
 
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn cmd-set-time-zone [{:keys [conn-state] :as conn} ^ZoneId tz]
-  (swap! conn-state update-in [:session :clock] (fn [^Clock clock] (.withZone clock tz)))
+(defn cmd-set-time-zone [conn tz]
+  (set-time-zone conn tz)
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
@@ -1338,7 +1360,7 @@
                         :arg-types arg-types})
 
   (let [{:keys [session latest-submitted-tx]} @conn-state
-        {:keys [^Clock clock], {:keys [fallback-output-format]} :parameters} session
+        {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
         {:keys [err statement-type] :as stmt} (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
                                                                     :latest-submitted-tx latest-submitted-tx})
         unsupported-arg-types (remove supported-param-oids arg-types)
@@ -1377,7 +1399,7 @@
 
                     {:prepared-stmt (assoc stmt
                                            :prepared-stmt pq
-                                           :fields (mapv (partial types/field->pg-type fallback-output-format) (.columnFields pq))
+                                           :fields (mapv (partial types/field->pg-type fallback_output_format) (.columnFields pq))
                                            :param-fields (->> (.paramFields pq)
                                                               (map types/field->pg-type)
                                                               (map #(set/rename-keys % {:column-oid :oid}))
@@ -1437,7 +1459,7 @@
           ;;if statement is a query, bind it, else use the statement as a portal
           {:keys [portal bind-outcome]} (if (= :query statement-type)
                                           (let [{:keys [session transaction]} @conn-state
-                                                {:keys [^Clock clock], {:keys [fallback-output-format]} :parameters} session
+                                                {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
                                                 {:keys [basis]} transaction
 
                                                 xtify-param (->xtify-param session stmt-with-bind-msg)
@@ -1449,7 +1471,7 @@
 
                                             (try
                                               (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
-                                                (if-let [fields (-> (map (partial types/field->pg-type fallback-output-format) (.columnFields bound-query))
+                                                (if-let [fields (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
                                                                     (with-result-formats result-format))]
                                                   {:portal (assoc stmt-with-bind-msg
                                                                   :bound-query bound-query
@@ -1753,13 +1775,16 @@
                                 :accept-socket accept-socket
                                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                                 :!closing? (atom false)
-                                :server-state (atom {:clock (Clock/systemDefaultZone)
-                                                     :drain-wait drain-wait
-                                                     :parameters {"server_version" expr/postgres-server-version
-                                                                  "server_encoding" "UTF8"
-                                                                  "client_encoding" "UTF8"
-                                                                  "DateStyle" "ISO"
-                                                                  "integer_datetimes" "on"}})
+                                ;;TODO use clock from node or at least take clock as a param for testing
+                                :server-state (atom (let [default-clock (Clock/systemDefaultZone)]
+                                                      {:clock default-clock
+                                                       :drain-wait drain-wait
+                                                       :parameters {"server_version" expr/postgres-server-version
+                                                                    "server_encoding" "UTF8"
+                                                                    "client_encoding" "UTF8"
+                                                                    "DateStyle" "ISO"
+                                                                    "TimeZone" (str (.getZone ^Clock default-clock))
+                                                                    "integer_datetimes" "on"}}))
                                 :ssl-ctx ssl-ctx})
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
