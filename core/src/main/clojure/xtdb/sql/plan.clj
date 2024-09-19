@@ -697,32 +697,9 @@
     (let [sl-ctx (.selectList ctx)
           !subqs (HashMap.)
           !aggs (HashMap.)
-          !windows (HashMap.)]
+          !windows (HashMap.)
 
-      {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
-                                      (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
-                                                                                                                  (.renameColumn))]
-                                                           (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                                 out-col-name (.columnName (.asClause rename-pair))
-                                                                 sym (find-decl scope chain)]
-
-                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
-                                                         (into {}))
-
-                                            excludes (when-let [exclude-ctx (.excludeClause star-ctx)]
-                                                       (into #{} (map identifier-sym) (.identifier exclude-ctx)))]
-                                        (->> (for [table-name (available-tables scope)
-                                                   col-name (available-cols scope [table-name])
-                                                   :when (not (contains? excludes col-name))
-                                                   :let [sym (find-decl scope [col-name table-name])]
-                                                   :when (not (contains? excludes sym))]
-                                               sym)
-                                             (map-indexed (fn [col-idx sym]
-                                                            (if-let [renamed-col (get renames sym)]
-                                                              (->ProjectedCol {renamed-col sym} renamed-col)
-                                                              (->projected-col-expr col-idx sym))))
-                                             (into []))))
-                                    (->> (.selectSublist sl-ctx)
+          explicitly-projected-cols (->> (.selectSublist sl-ctx)
                                          (into [] (comp (map-indexed
                                                          (fn [col-idx ^ParserRuleContext sl-elem]
                                                            (.accept (.getChild sl-elem 0)
@@ -744,7 +721,7 @@
 
                                                                           (if-let [table-cols (available-cols scope [table-name])]
                                                                             (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
-                                                                                                                                                                 (.qualifiedRenameColumn))]
+                                                                                                                                                           (.qualifiedRenameColumn))]
                                                                                                  (let [sym (find-decl scope [(identifier-sym (.identifier rename-pair)) table-name])
                                                                                                        out-col-name (.columnName (.asClause rename-pair))]
                                                                                                    (MapEntry/create sym (identifier-sym out-col-name))))
@@ -762,7 +739,35 @@
                                                                                                              (->projected-col-expr col-idx sym)))))))
 
                                                                             (throw (UnsupportedOperationException. (str "Table not found: " table-name))))))))))
-                                                        cat)))))
+                                                        cat)))]
+
+      {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
+                                      (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
+                                                                                                            (.renameColumn))]
+                                                           (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
+                                                                 out-col-name (.columnName (.asClause rename-pair))
+                                                                 sym (find-decl scope chain)]
+
+                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                         (into {}))
+
+                                            excludes (set/union (into #{} (map :col-sym) explicitly-projected-cols)
+                                                                (when-let [exclude-ctx (.excludeClause star-ctx)]
+                                                                  (into #{} (map identifier-sym) (.identifier exclude-ctx))))]
+
+                                        (->> (for [table-name (available-tables scope)
+                                                   col-name (available-cols scope [table-name])
+                                                   :when (not (contains? excludes col-name))
+                                                   :let [sym (find-decl scope [col-name table-name])]
+                                                   :when (not (contains? excludes sym))]
+                                               sym)
+                                             (map-indexed (fn [col-idx sym]
+                                                            (if-let [renamed-col (get renames sym)]
+                                                              (->ProjectedCol {renamed-col sym} renamed-col)
+                                                              (->projected-col-expr col-idx sym))))
+                                             (into []))))
+
+                                    explicitly-projected-cols))
        :subqs (not-empty (into {} !subqs))
        :aggs (not-empty (into {} !aggs))
        :windows (not-empty (into {} !windows))})))

@@ -2284,3 +2284,12 @@ UNION ALL
             {:xt/id 1, :x 2}]
            (-> (xt/q tu/*node* "SELECT _id, x FROM foo, generate_series(start, end) xs (x)")))))
 
+(t/deftest star-goes-at-end-too-3706
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"]])
+
+  (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo",
+             :column-name "x", :data-type ":utf8"}
+            {:table-catalog "xtdb", :table-schema "public", :table-name "foo",
+             :column-name "_id", :data-type ":i64"}]
+
+           (xt/q tu/*node* "SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo';"))))
