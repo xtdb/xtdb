@@ -14,56 +14,27 @@
             [reitit.http.interceptors.parameters :as ri.parameters]
             [reitit.interceptor.sieppari :as r.sieppari]
             [reitit.ring :as r.ring]
-            [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
-            [ring.util.response :as ring-response]
             [spec-tools.core :as st]
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.serde :as serde]
-            [xtdb.util :as util])
-  (:import (java.io InputStream OutputStream)
+            [xtdb.serde :as serde])
+  (:import (java.io OutputStream)
            (java.time Duration ZoneId)
            (java.util Map)
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
-           (xtdb JsonSerde)
            (xtdb.api HttpServer$Factory IXtdb TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.api.query Basis IKeyFn Query QueryRequest)
-           (xtdb.api.tx TxOptions TxRequest)))
-
-(defn decoder [_options]
-  (reify
-    mf/Decode
-    (decode [_ data _charset] ; TODO charset
-      (if (string? data)
-        (JsonSerde/decode ^String data)
-        (JsonSerde/decode ^InputStream data)))))
-
-(defn encoder [_options]
-  (reify
-    mf/EncodeToBytes
-    (encode-to-bytes [_ data charset]
-      (.getBytes ^String (JsonSerde/encode data) ^String charset))
-    mf/EncodeToOutputStream
-    (encode-to-output-stream [_ data _charset] ; TODO charset
-      (fn [^OutputStream output-stream]
-        (JsonSerde/encode data output-stream)))))
-
-(def json-format
-  (mf/map->Format
-   {:name "application/json"
-    :decoder [decoder]
-    :encoder [encoder]}))
+           (xtdb.api.query Basis IKeyFn Query)
+           (xtdb.api.tx TxOptions)))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
-      (m/select-formats #{"application/transit+json"})
-      (assoc-in [:formats "application/json"] json-format)
+      (m/select-formats #{"application/transit+json", "application/json"})
       (assoc :default-format "application/json")
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 serde/transit-read-handlers)
@@ -82,43 +53,14 @@
 
 (s/def ::opts (s/nilable #(instance? TxOptions %)))
 
-(defn- json-status-encoder []
-  (reify
-    mf/EncodeToBytes
-    (encode-to-bytes [_ data charset]
-      (if-not (ex-data data)
-        (.getBytes ^String (JsonSerde/encodeStatus (update-keys data name)) ^String charset)
-        (.getBytes (JsonSerde/encode data) ^String charset)))
-    mf/EncodeToOutputStream))
-
 (defmethod route-handler :status [_]
-  {:muuntaja (m/create (-> muuntaja-opts
-                           (assoc-in [:formats "application/json" :encoder] (json-status-encoder))))
+  {:muuntaja (m/create muuntaja-opts)
 
    :get (fn [{:keys [node] :as _req}]
           {:status 200, :body (xtp/status node)})})
 
-(defn- json-tx-encoder []
-  (reify
-    mf/EncodeToBytes
-    (encode-to-bytes [_ data charset]
-      (if-not (ex-data data)
-        (.getBytes ^String (JsonSerde/encode data TransactionKey) ^String charset)
-        (.getBytes (JsonSerde/encode data) ^String charset)))
-    mf/EncodeToOutputStream))
-
-(defn json-tx-decoder []
-  (reify
-    mf/Decode
-    (decode [_ data _]
-      (with-open [^InputStream data data]
-        (let [^TxRequest tx (JsonSerde/decode data TxRequest)]
-          {:tx-ops (.getTxOps tx) :opts (.getOpts tx)})))))
-
 (defmethod route-handler :tx [_]
-  {:muuntaja (m/create (-> muuntaja-opts
-                           (assoc-in [:formats "application/json" :encoder] (json-tx-encoder))
-                           (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
+  {:muuntaja (m/create muuntaja-opts)
 
    :post {:handler (fn [{:keys [^IXtdb node] :as req}]
                      (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])]
@@ -164,57 +106,6 @@
 
 (def ^:private ascii-newline (int \newline))
 
-(defn- ->jsonl-resultset-encoder [_opts]
-  (reify
-    mf/EncodeToBytes
-
-    mf/EncodeToOutputStream
-    (encode-to-output-stream [_ res _]
-      (fn [^OutputStream out]
-        (if-not (ex-data res)
-          (with-open [^Stream res res]
-            (try
-              (.forEach res
-                        (reify Consumer
-                          (accept [_ el]
-                            (JsonSerde/encode el out)
-                            (.write out ^byte ascii-newline))))
-              (catch Throwable t
-                (JsonSerde/encode t out)
-                (.write out ^byte ascii-newline))
-              (finally
-                (util/close res)
-                (util/close out))))
-
-          (try
-            (JsonSerde/encode res out)
-            (finally
-              (util/close out))))))))
-
-(defn- ->json-resultset-encoder [_opts]
-  (reify
-    mf/EncodeToBytes
-
-    mf/EncodeToOutputStream
-    (encode-to-output-stream [_ res _]
-      (fn [^OutputStream out]
-        (if-not (ex-data res)
-          (with-open [^Stream res res]
-            (try
-              (JsonSerde/encode (.toList res) out)
-
-              (catch Throwable t
-                (JsonSerde/encode t out)
-                (.write out ^byte ascii-newline))
-              (finally
-                (util/close res)
-                (util/close out))))
-
-          (try
-            (JsonSerde/encode res out)
-            (finally
-              (util/close out))))))))
-
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
@@ -233,32 +124,12 @@
   (s/keys :req-un [::query],
           :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
-(defn json-query-decoder []
-  (reify
-    mf/Decode
-    (decode [_ data _]
-      (with-open [^InputStream data data]
-        (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)]
-          (-> (into {} (.queryOpts query-request))
-              (assoc :query (.sql query-request))))))))
-
 (defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts
                            (assoc :return :output-stream)
 
                            (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])
-
-                           (assoc-in [:formats "application/json" :encoder]
-                                     [->json-resultset-encoder {}])
-
-                           (assoc-in [:formats "application/jsonl" :encoder]
-                                     [->jsonl-resultset-encoder {}])
-
-                           (assoc-in [:formats "application/json" :encoder]
-                                     [->json-resultset-encoder {}])
-
-                           (assoc-in [:formats "application/json" :decoder] (json-query-decoder))))
+                                     [->tj-resultset-encoder {:handlers serde/transit-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
@@ -275,12 +146,6 @@
                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))}))
 
           :parameters {:body ::query-body}}})
-
-(defmethod route-handler :openapi [_]
-  {:get {:handler (fn [_req]
-                    (-> (ring-response/resource-response "openapi.yaml")
-                        (assoc "Access-Control-Allow-Origin" "*")))
-         :muuntaja (m/create m/default-options)}})
 
 (defn- handle-ex-info [ex _req]
   {:status 400, :body ex})
@@ -319,8 +184,7 @@
 
                 :data {:muuntaja (m/create muuntaja-opts)
                        :coercion rc.spec/coercion
-                       :interceptors [r.swagger/swagger-feature
-                                      [ri.parameters/parameters-interceptor]
+                       :interceptors [[ri.parameters/parameters-interceptor]
                                       [ri.muuntaja/format-negotiate-interceptor]
 
                                       [ri.muuntaja/format-response-interceptor]
@@ -334,10 +198,7 @@
                                                :muuntaja/decode handle-muuntaja-decode-error
                                                ::ri.exception/wrap (fn [handler e req]
                                                                      (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
-                                                                     (let [response-format (:raw-format (:muuntaja/response req))]
-                                                                       (cond-> (handler e req)
-                                                                         (#{"application/jsonl"} response-format)
-                                                                         (assoc :muuntaja/content-type "application/json"))))})]
+                                                                     (handler e req))})]
 
                                       [ri.muuntaja/format-request-interceptor]
                                       [rh.coercion/coerce-request-interceptor]]}}))

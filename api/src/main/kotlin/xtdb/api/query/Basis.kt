@@ -1,10 +1,6 @@
-@file:UseSerializers(InstantSerde::class)
 package xtdb.api.query
 
 import clojure.lang.*
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.UseSerializers
-import xtdb.InstantSerde
 import xtdb.api.TransactionKey
 import java.time.Instant
 
@@ -17,7 +13,6 @@ private val CURRENT_TIME_KEY: Keyword = Keyword.intern("current-time")
  * @see atTx
  * @see currentTime
  */
-@Serializable
 data class Basis(
     /**
      * An upper bound on the transactions visible to the query - the query will not see the effects of any transaction after this one.

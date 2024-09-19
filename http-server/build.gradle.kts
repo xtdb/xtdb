@@ -36,7 +36,6 @@ dependencies {
     api("metosin", "reitit-ring", "0.5.15")
     api("metosin", "reitit-http", "0.5.15")
     api("metosin", "reitit-sieppari", "0.5.15")
-    api("metosin", "reitit-swagger", "0.5.15")
     api("metosin", "reitit-spec", "0.5.15")
 
     api("com.cognitect", "transit-clj", "1.0.329")

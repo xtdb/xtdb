@@ -1,14 +1,8 @@
-@file:UseSerializers(AnySerde::class, InstantSerde::class)
-
 package xtdb.api.tx
 
 import clojure.lang.Keyword
 import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.UseSerializers
-import xtdb.AnySerde
 import xtdb.IllegalArgumentException
-import xtdb.InstantSerde
 import xtdb.api.query.Binding
 import xtdb.api.query.TemporalFilter.TemporalExtents
 import xtdb.api.query.XtqlQuery
@@ -54,7 +48,6 @@ sealed interface TxOp {
         @JvmField val docIds: List<*>,
     ) : TxOp
 
-    @Serializable
     data class Sql(
         @JvmField @SerialName("sql") val sql: String,
         @JvmField val argRows: List<List<*>>? = null,

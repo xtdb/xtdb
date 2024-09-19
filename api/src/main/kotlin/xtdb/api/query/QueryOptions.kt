@@ -1,21 +1,7 @@
-@file:UseSerializers(AnySerde::class, InstantSerde::class, DurationSerde::class, ZoneIdSerde::class)
-
 package xtdb.api.query
 
 import clojure.lang.*
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.UseSerializers
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonDecoder
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
 import xtdb.*
-import xtdb.AnySerde.toValue
 import xtdb.api.TransactionKey
 import java.time.Duration
 import java.time.ZoneId
@@ -28,9 +14,8 @@ private val DEFAULT_TZ_KEY: Keyword = Keyword.intern("default-tz")
 private val EXPLAIN_KEY: Keyword? = Keyword.intern("explain?")
 private val KEY_FN_KEY: Keyword = Keyword.intern("key-fn")
 
-@Serializable
 data class QueryOptions(
-    @JvmField @Serializable(ArgsSerde::class) val args: Map<String, *>? = null,
+    @JvmField val args: Map<String, *>? = null,
     @JvmField val basis: Basis? = null,
     @JvmField val afterTx: TransactionKey? = null,
     @JvmField val txTimeout: Duration? = null,
@@ -38,23 +23,6 @@ data class QueryOptions(
     @JvmField val explain: Boolean = false,
     @JvmField val keyFn: IKeyFn<*>? = null
 ) : ILookup, Seqable {
-
-    internal object ArgsSerde: KSerializer<Map<String, *>> {
-        @OptIn(ExperimentalSerializationApi::class)
-        override val descriptor = SerialDescriptor("xtdb.ArgsSerde", JsonElement.serializer().descriptor)
-
-        override fun serialize(encoder: Encoder, value: Map<String, *>) = AnySerde.serialize(encoder, value)
-
-        @Suppress("UNCHECKED_CAST")
-        override fun deserialize(decoder: Decoder): Map<String, *> {
-            require(decoder is JsonDecoder)
-            return when (val element = decoder.decodeJsonElement()) {
-                is JsonArray -> element.map { it.toValue() } .mapIndexed{ idx, arg -> "_$idx" to arg }.toMap()
-                is JsonObject -> element.toValue()
-                else -> throw jsonIAE("unknown-args-json-type", element)
-            } as Map<String, *>
-        }
-    }
 
     /**
      * @suppress

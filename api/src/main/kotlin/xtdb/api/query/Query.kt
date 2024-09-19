@@ -1,21 +1,12 @@
 package xtdb.api.query
 
-import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.*
 import xtdb.api.query.Expr.Param
 import xtdb.api.query.Exprs.lVar
 import xtdb.api.query.XtqlQuery.OrderDirection.ASC
 import xtdb.api.query.XtqlQuery.OrderDirection.DESC
 import xtdb.api.query.XtqlQuery.OrderNulls.FIRST
 import xtdb.api.query.XtqlQuery.OrderNulls.LAST
-import xtdb.jsonIAE
 
 sealed interface Query
 

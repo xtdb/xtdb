@@ -23,7 +23,4 @@
            :description "Submits a transaction to the cluster"}]
 
    ["/query" {:name :query
-              :summary "Query"}]
-
-   ["/openapi.yaml" {:name :openapi
-                     :no-doc true}]])
+              :summary "Query"}]])

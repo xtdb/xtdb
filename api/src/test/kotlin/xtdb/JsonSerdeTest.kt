@@ -5,9 +5,6 @@ import clojure.lang.Symbol
 import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.msgpack.util.json.JSON
-import xtdb.api.query.*
-import xtdb.api.txKey
 import java.time.*
 import java.util.*
 
@@ -150,42 +147,6 @@ class JsonSerdeTest {
                 }
               }
             }""".trimJson()
-        )
-    }
-
-    private inline fun <reified T : Any> T.assertRoundTrip2(expectedJson: String) {
-        val actualJson = JSON_SERDE.encodeToString(this)
-        assertEquals(expectedJson, actualJson)
-        assertEquals(this, JSON_SERDE.decodeFromString<T>(actualJson))
-    }
-
-    @Test
-    fun shouldDeserializeQueryRequest() {
-        val txKey = txKey(1, Instant.EPOCH)
-        QueryRequest(
-            "SELECT * FROM foo",
-            queryOpts()
-                .args(mapOf("foo" to "bar"))
-                .basis(Basis(txKey, Instant.EPOCH))
-                .afterTx(txKey)
-                .txTimeout(Duration.parse("PT3H"))
-                .defaultTz(ZoneId.of("America/Los_Angeles"))
-                .explain(true)
-                .keyFn(IKeyFn.KeyFn.KEBAB_CASE_KEYWORD)
-                .build()
-        ).assertRoundTrip2(
-            """{
-                "sql": "SELECT * FROM foo",
-                "queryOpts": {"args":{"foo":"bar"},
-                              "basis":{"atTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
-                                       "currentTime": "1970-01-01T00:00:00Z"},
-                              "afterTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
-                              "txTimeout":"PT3H",
-                              "defaultTz":"America/Los_Angeles",
-                              "explain":true,
-                              "keyFn":"KEBAB_CASE_KEYWORD"}
-              }
-            """.trimJson()
         )
     }
 }
