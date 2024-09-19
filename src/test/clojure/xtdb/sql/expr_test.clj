@@ -1102,7 +1102,56 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
            (xt/q tu/*node* "SELECT - 53 / + 86 * - + 44 - 66 + + + 71 AS col2")))
 
   (t/is (= [{:col2 -8}]
-           (xt/q tu/*node* "SELECT ALL - - 72 - 27 + + ( - 53 ) col2"))))
+           (xt/q tu/*node* "SELECT ALL - - 72 - 27 + + ( - 53 ) col2")))
+
+  (t/testing "bitwise and"
+    (t/is (= [{:col2 true}]
+             (xt/q tu/*node* "SELECT 2 * 3 & 1 = 0 col2")
+             (xt/q tu/*node* "SELECT 6 / 3 & 1 = 0 col2")
+             (xt/q tu/*node* "SELECT 2 + 3 & 2 = 0 col2")
+             (xt/q tu/*node* "SELECT 3 - 2 & 2 = 0 col2"))))
+
+  (t/testing "bitwise or"
+    (t/is (= [{:col2 true}]
+             (xt/q tu/*node* "SELECT 2 * 3 | 1 = 7 col2")
+             (xt/q tu/*node* "SELECT 6 / 3 | 1 = 3 col2")
+             (xt/q tu/*node* "SELECT 2 + 3 | 2 = 7 col2")
+             (xt/q tu/*node* "SELECT 3 - 2 | 2 = 3 col2")
+             (xt/q tu/*node* "SELECT 6 & 2 | 1 = 3 col2"))))
+
+  (t/testing "bitwise xor"
+    (t/is (= [{:col2 true}]
+             (xt/q tu/*node* "SELECT 2 * 3 # 1 = 7 col2")
+             (xt/q tu/*node* "SELECT 6 / 3 # 1 = 3 col2")
+             (xt/q tu/*node* "SELECT 2 + 3 # 2 = 7 col2")
+             (xt/q tu/*node* "SELECT 3 - 2 # 2 = 3 col2")
+             (xt/q tu/*node* "SELECT 6 & 2 # 1 = 3 col2")
+             (xt/q tu/*node* "SELECT 5 | 3 # 6 = 1 col2")
+             (xt/q tu/*node* "SELECT 6 # 3 | 5 = 5 col2"))))
+
+  (t/testing "bitwise shift-left"
+    (t/is (= [{:col2 true}]
+             (xt/q tu/*node* "SELECT 2 * 3 << 1 = 12 col2")
+             (xt/q tu/*node* "SELECT 6 / 3 << 1 = 4 col2")
+             (xt/q tu/*node* "SELECT 2 + 3 << 1 = 10 col2")
+             (xt/q tu/*node* "SELECT 3 - 2 << 1 = 2 col2")
+             (xt/q tu/*node* "SELECT 5 & 1 << 1 = 2 col2")
+             (xt/q tu/*node* "SELECT 3 | 2 << 1 = 6 col2"))))
+
+  (t/testing "bitwise shift-right"
+    (t/is (= [{:col2 true}]
+             (xt/q tu/*node* "SELECT 2 * 3 >> 1 = 3 col2")
+             (xt/q tu/*node* "SELECT 6 / 3 >> 1 = 1 col2")
+             (xt/q tu/*node* "SELECT 2 + 3 >> 1 = 2 col2")
+             (xt/q tu/*node* "SELECT 3 - 2 >> 1 = 0 col2")
+             (xt/q tu/*node* "SELECT 5 & 4 >> 1 = 2 col2")
+             (xt/q tu/*node* "SELECT 3 | 2 >> 1 = 1 col2")
+             (xt/q tu/*node* "SELECT 3 << 2 >> 1 = 6 col2")
+             (xt/q tu/*node* "SELECT 3 >> 1 << 2 = 4 col2"))))
+
+  (t/testing "bitwise shift-not"
+    (t/is (= [{:col2 -1}]
+             (xt/q tu/*node* "SELECT 2 + ~ - 1 + 3 col2")))))
 
 (t/deftest test-uuid-literal
   (t/testing "Planning Success"

@@ -755,6 +755,48 @@
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(* ~@%))})
 
+(defmethod codegen-call [:bit_not :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-type)
+                          `(bit-not ~@(with-math-integer-cast return-type emitted-args))))}))
+
+(defmethod codegen-call [:bit_and :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-type)
+                          `(bit-and ~@(with-math-integer-cast return-type emitted-args))))}))
+
+(defmethod codegen-call [:bit_or :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-type)
+                          `(bit-or ~@(with-math-integer-cast return-type emitted-args))))}))
+
+(defmethod codegen-call [:bit_xor :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-type)
+                          `(bit-xor ~@(with-math-integer-cast return-type emitted-args))))}))
+
+(defmethod codegen-call [:bit_shift_left :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-type)
+                          `(bit-shift-left ~@(with-math-integer-cast return-type emitted-args))))}))
+
+(defmethod codegen-call [:bit_shift_right :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast return-type)
+                          `(bit-shift-right ~@(with-math-integer-cast return-type emitted-args))))}))
+
 (defmethod codegen-call [:mod :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(mod ~@%))})
