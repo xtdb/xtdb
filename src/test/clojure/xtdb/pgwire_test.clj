@@ -20,6 +20,8 @@
            (java.sql Connection PreparedStatement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
+           java.util.TimeZone
+           java.util.Calendar
            java.util.List
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
@@ -1674,7 +1676,11 @@
     (with-open [conn (jdbc-conn "prepareThreshold" -1)
                 stmt (.prepareStatement conn "SELECT ? AS v")]
 
-      (.setObject stmt 1 (Timestamp/from #xt.time/instant "2030-01-04T12:44:55Z"))
+      (.setTimestamp
+       stmt
+       1
+       (Timestamp/from #xt.time/instant "2030-01-04T12:44:55Z")
+       (Calendar/getInstance (TimeZone/getTimeZone "GMT")))
 
       (with-open [rs (.executeQuery stmt)]
 
