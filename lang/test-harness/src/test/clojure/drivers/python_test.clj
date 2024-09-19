@@ -13,7 +13,6 @@
   (f))
 
 (use-fixtures :once poetry-install)
-(use-fixtures :each tu/with-system)
 
 (deftest python-test
   (let [out (sh "poetry"
