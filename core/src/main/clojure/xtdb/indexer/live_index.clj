@@ -5,6 +5,7 @@
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
             [xtdb.metadata :as meta]
+            [xtdb.metrics :as metrics]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -403,11 +404,13 @@
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :metadata-mgr (ig/ref ::meta/metadata-manager)
    :compactor (ig/ref :xtdb/compactor)
+   :metrics-registry (ig/ref :xtdb.metrics/registry)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr compactor ^IndexerConfig config]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr compactor ^IndexerConfig config metrics-registry]}]
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
+      (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
         (->LiveIndex allocator buffer-pool metadata-mgr compactor
                      latest-completed-tx latest-completed-tx

@@ -2,6 +2,7 @@
 
 package xtdb.api.storage
 
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -21,7 +22,7 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
-        fun openStorage(allocator: BufferAllocator, log: Log): IBufferPool
+        fun openStorage(allocator: BufferAllocator, log: Log, metricsRegistry: MeterRegistry): IBufferPool
     }
 
     /**
@@ -32,8 +33,8 @@ object Storage {
     @SerialName("!InMemory")
     data object InMemoryStorageFactory : Factory {
 
-        override fun openStorage(allocator: BufferAllocator, log: Log) =
-            requiringResolve("xtdb.buffer-pool/open-in-memory-storage").invoke(allocator) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator, log: Log, metricsRegistry: MeterRegistry) =
+            requiringResolve("xtdb.buffer-pool/open-in-memory-storage").invoke(allocator, metricsRegistry) as IBufferPool
     }
 
     @JvmStatic
@@ -66,8 +67,8 @@ object Storage {
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun openStorage(allocator: BufferAllocator, log: Log) =
-            requiringResolve("xtdb.buffer-pool/open-local-storage").invoke(allocator, this) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator, log: Log, metricsRegistry: MeterRegistry) =
+            requiringResolve("xtdb.buffer-pool/open-local-storage").invoke(allocator, this, metricsRegistry) as IBufferPool
     }
 
     @JvmStatic
@@ -121,8 +122,8 @@ object Storage {
         fun maxDiskCachePercentage(maxDiskCachePercentage: Long) = apply { this.maxDiskCachePercentage = maxDiskCachePercentage }
         fun maxDiskCacheBytes(maxDiskCacheBytes: Long) = apply { this.maxDiskCacheBytes = maxDiskCacheBytes }
 
-        override fun openStorage(allocator: BufferAllocator, log: Log) =
-            requiringResolve("xtdb.buffer-pool/open-remote-storage").invoke(allocator, this, log) as IBufferPool
+        override fun openStorage(allocator: BufferAllocator, log: Log, metricsRegistry: MeterRegistry) =
+            requiringResolve("xtdb.buffer-pool/open-remote-storage").invoke(allocator, this, log, metricsRegistry) as IBufferPool
     }
 
     @JvmStatic

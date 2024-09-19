@@ -11,6 +11,7 @@
            (java.util.function Supplier)
            java.util.List
            (java.util.stream Stream)
+           (org.apache.arrow.memory BufferAllocator)
            (xtdb.api Xtdb$Config)
            (xtdb.api.metrics Metrics Metrics$Factory PrometheusMetrics$Factory)))
 
@@ -41,6 +42,9 @@
           (get [_] (f))))
        (cond-> (:unit opts) (.baseUnit (str (:unit opts))))
        (.register reg))))
+
+(defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
+  (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
 (defmethod xtn/apply-config! :xtdb.metrics/prometheus [^Xtdb$Config config _ {:keys [port], :or {port 8080}}]
   (.setMetrics config (PrometheusMetrics$Factory. port)))

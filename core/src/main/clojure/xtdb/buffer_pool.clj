@@ -4,7 +4,8 @@
             [xtdb.file-list-cache :as flc]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.metrics :as metrics])
   (:import (clojure.lang PersistentQueue)
            (com.github.benmanes.caffeine.cache AsyncCache Cache Caffeine Policy$Eviction RemovalListener Weigher)
            [java.io ByteArrayOutputStream Closeable File]
@@ -17,6 +18,8 @@
            (java.util NavigableMap)
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet ForkJoinPool TimeUnit]
            [java.util.function BiFunction]
+           [io.micrometer.core.instrument MeterRegistry]
+           [io.micrometer.core.instrument.simple SimpleMeterRegistry]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
@@ -58,6 +61,11 @@
   (.. memory-store asMap (compute k (reify BiFunction
                                       (apply [_ _k v]
                                         (retain (or v (f))))))))
+
+(defn ->buffer-pool-child-allocator [^BufferAllocator allocator ^MeterRegistry metrics-registry]
+  (let [child-allocator (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)]
+    (metrics/add-allocator-gauge metrics-registry "buffer-pool.allocator.allocated_memory" child-allocator)
+    child-allocator))
 
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
@@ -116,9 +124,8 @@
     (util/close allocator)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-in-memory-storage [^BufferAllocator allocator]
-  (->MemoryBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
-                      (TreeMap.)))
+(defn open-in-memory-storage [^BufferAllocator allocator, ^MeterRegistry metrics-registry]
+  (->MemoryBufferPool (->buffer-pool-child-allocator allocator metrics-registry) (TreeMap.)))
 
 (defn- create-tmp-path ^Path [^Path disk-store]
   (Files/createTempFile (doto (.resolve disk-store ".tmp") util/mkdirs)
@@ -212,8 +219,8 @@
       (.build)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory]
-  (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
+(defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory, ^MeterRegistry metrics-registry]
+  (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                      (->memory-buffer-cache (.getMaxCacheBytes factory))
                      (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs)
                      (.getMaxCacheBytes factory)))
@@ -224,7 +231,7 @@
   (let [bp-path (util/tmp-dir "tmp-buffer-pool")
         storage-root (.resolve bp-path storage-root)]
     (util/copy-dir dir storage-root)
-    (open-local-storage allocator (Storage/localStorage bp-path))))
+    (open-local-storage allocator (Storage/localStorage bp-path) (SimpleMeterRegistry.))))
 
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/localStorage (util/->path path))
@@ -457,7 +464,7 @@
     (log/debugf "%s%% of total disk space on filestore %s is %s bytes" percentage (.name file-store) disk-size-limit)
     disk-size-limit))
 
-(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileListCache file-list-cache]
+(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileListCache file-list-cache, ^MeterRegistry metrics-registry]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [!os-file-names (ConcurrentSkipListSet.)
           !os-file-name-subscription (promise)
@@ -485,7 +492,7 @@
                      (.setMaximum eviction-policy (max 0 new-size)))))
 
       
-      (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
+      (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                           (->memory-buffer-cache (.getMaxCacheBytes factory))
                           local-disk-cache local-disk-cache-evictor
                           file-list-cache object-store !os-file-names !os-file-name-subscription
@@ -550,10 +557,11 @@
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)
    :factory factory
-   :file-list-cache (ig/ref :xtdb/log)})
+   :file-list-cache (ig/ref :xtdb/log)
+   :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileListCache file-list-cache]}]
-  (.openStorage factory allocator file-list-cache))
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileListCache file-list-cache metrics-registry]}]
+  (.openStorage factory allocator file-list-cache metrics-registry))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^IBufferPool buffer-pool]
   (util/close buffer-pool))

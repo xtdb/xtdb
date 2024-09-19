@@ -26,6 +26,7 @@
 
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
+                           :xtdb.metrics/registry nil
                            :xtdb.indexer/live-index (IndexerConfig.)
                            :xtdb/log (Logs/inMemoryLog)
                            :xtdb/buffer-pool Storage$InMemoryStorageFactory/INSTANCE

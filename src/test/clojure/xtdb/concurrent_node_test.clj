@@ -39,7 +39,8 @@
 
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
-  (tu/with-system {:xtdb/allocator {}
+  (tu/with-system {:xtdb.metrics/registry nil
+                   :xtdb/allocator {}
                    :xtdb/log (Logs/localLog (.resolve (.toPath node-dir) "logs"))
                    :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))}
     (fn []

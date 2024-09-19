@@ -10,6 +10,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (com.github.benmanes.caffeine.cache AsyncCache)
+           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (java.io File)
            (java.nio ByteBuffer)
            [java.nio.charset StandardCharsets]
@@ -154,7 +155,8 @@
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
                           (Storage/remoteStorage simulated-obj-store-factory (create-tmp-dir))
-                          FileListCache/SOLO))
+                          FileListCache/SOLO
+                          (SimpleMeterRegistry.)))
 
 (defn get-remote-calls [test-bp]
   @(:!calls (:object-store test-bp)))
@@ -208,7 +210,8 @@
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
                         (.maxCacheBytes 12))
-                    FileListCache/SOLO)]
+                    FileListCache/SOLO
+                    (SimpleMeterRegistry.))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
@@ -235,7 +238,8 @@
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
                         (.maxCacheBytes 12))
-                    FileListCache/SOLO)]
+                    FileListCache/SOLO
+                    (SimpleMeterRegistry.))]
       (insert-utf8-to-local-cache bp (util/->path "a") 4)
       (insert-utf8-to-local-cache bp (util/->path "b") 4)
       (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
@@ -246,7 +250,8 @@
                     (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
                         (.maxDiskCacheBytes 10)
                         (.maxCacheBytes 12))
-                    FileListCache/SOLO)]
+                    FileListCache/SOLO
+                    (SimpleMeterRegistry.))]
       (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "a"))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf)))))
 
@@ -255,7 +260,7 @@
 
 (t/deftest local-buffer-pool
   (tu/with-tmp-dirs #{tmp-dir}
-    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir))]
+    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
       (t/testing "empty buffer pool"
         (t/is (= [] (.listAllObjects bp)))
         (t/is (= [] (.listObjects bp (.toPath (io/file "foo")))))))))
@@ -263,7 +268,7 @@
 (t/deftest dont-list-temporary-objects-3544
   (tu/with-tmp-dirs #{tmp-dir}
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
-      (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir))
+      (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))
                   rel (Relation. tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
         (t/is (= [] (.listAllObjects bp)))))))
