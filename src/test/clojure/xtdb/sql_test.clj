@@ -2293,3 +2293,8 @@ UNION ALL
              :column-name "_id", :data-type ":i64"}]
 
            (xt/q tu/*node* "SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo';"))))
+
+(deftest missing-values-in-insert-shouldnt-stop-ingestion-3721
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 3 AS _id"]])
+
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))

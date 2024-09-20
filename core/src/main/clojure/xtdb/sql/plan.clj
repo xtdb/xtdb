@@ -2240,9 +2240,14 @@
           {:keys [plan col-syms] :as query-expr}
 
         (if out-col-syms
-          (->QueryExpr [:rename (zipmap col-syms out-col-syms)
-                        plan]
-                       out-col-syms)
+          (let [out-count (count out-col-syms)
+                in-count (count col-syms)]
+            (if (not= out-count in-count)
+              (add-err! env (->ColumnCountMismatch out-count in-count))
+
+              (->QueryExpr [:rename (zipmap col-syms out-col-syms)
+                            plan]
+                           out-col-syms)))
           query-expr)
 
         (if distinct?
