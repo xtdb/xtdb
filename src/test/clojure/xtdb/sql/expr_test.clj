@@ -1153,6 +1153,18 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:col2 -1}]
              (xt/q tu/*node* "SELECT 2 + ~ - 1 + 3 col2")))))
 
+(t/deftest test-bitwise-type-widening
+  (t/is (= java.lang.Short
+           (-> (xt/q tu/*node* "SELECT ~1::smallint col2") first :col2 type)))
+  (t/is (= java.lang.Integer
+           (-> (xt/q tu/*node* "SELECT 0::smallint | 32::int col2") first :col2 type)))
+  (t/is (= java.lang.Integer
+           (-> (xt/q tu/*node* "SELECT 0::smallint # 32::int col2") first :col2 type)))
+  (t/is (= java.lang.Short
+           (-> (xt/q tu/*node* "SELECT 1::smallint >> 2::int col2") first :col2 type)))
+  (t/is (= java.lang.Short
+           (-> (xt/q tu/*node* "SELECT 1::smallint << 16::int col2") first :col2 type))))
+
 (t/deftest test-uuid-literal
   (t/testing "Planning Success"
     (t/is (= #uuid "550e8400-e29b-41d4-a716-446655440000"
