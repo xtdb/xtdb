@@ -52,7 +52,13 @@
                      (visitSchemaName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitAsClause [this ctx] (-> (.columnName ctx) (.accept this)))
                      (visitQueryName [this ctx] (-> (.identifier ctx) (.accept this)))
-                     (visitTableName [this ctx] (-> (.identifier ctx) (.accept this)))
+
+                     (visitTableName [this ctx]
+                       (let [tn (-> (.identifier ctx) (.accept this))]
+                         (if-let [sn (some-> (.schemaName ctx) (.accept this))]
+                           (symbol (str sn) (str tn))
+                           tn)))
+
                      (visitTableAlias [this ctx] (-> (.correlationName ctx) (.accept this)))
                      (visitColumnName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitFieldName [this ctx] (-> (.identifier ctx) (.accept this)))

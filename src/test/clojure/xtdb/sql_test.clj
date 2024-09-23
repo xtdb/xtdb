@@ -2298,3 +2298,29 @@ UNION ALL
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 3 AS _id"]])
 
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
+
+(t/deftest test-insert-into-schema-qualified-table
+  (t/is (=plan-file "insert-into-schema-qualified-table"
+                    (plan-sql "INSERT INTO foo.bar RECORDS {_id: 1, x: 2}")))
+
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo.bar RECORDS {_id: 1, x: 2}"]])
+
+  (t/is (=plan-file "select-from-schema-qualified-table"
+                    (plan-sql "SELECT * FROM foo.bar"
+                              {:table-info {"foo/bar" #{"_id" "x"}}})))
+
+  (t/is (= [{:x 2, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar")))
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM bar")))
+
+  (xt/execute-tx tu/*node* [[:sql "UPDATE foo.bar SET x = 3 WHERE _id = 1"]])
+  (xt/execute-tx tu/*node* [[:sql "UPDATE bar SET x = x + 1 WHERE _id = 1"]])
+
+  (t/is (= [{:x 3, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar")))
+
+  (xt/execute-tx tu/*node* [[:sql "DELETE FROM bar WHERE _id = 1"]])
+
+  (t/is (= [{:x 3, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar")))
+
+  (xt/execute-tx tu/*node* [[:sql "DELETE FROM foo.bar WHERE _id = 1"]])
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo.bar")))
+  (t/is (= [{:x 3, :xt/id 1} {:x 2, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar FOR ALL VALID_TIME"))))
