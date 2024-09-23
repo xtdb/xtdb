@@ -25,7 +25,7 @@
            java.util.List
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
-           (org.postgresql.util PGobject PSQLException)
+           (org.postgresql.util PGobject PSQLException PGInterval)
            xtdb.JsonSerde))
 
 (set! *warn-on-reflection* false)
@@ -1951,3 +1951,15 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (false?  (.execute stmt)))
     (let [rs (.getGeneratedKeys stmt)]
       (t/is (= [] (rs->maps rs))))))
+
+(deftest test-interval-encoding-3697
+  (t/testing "Intervals"
+    (with-open [conn (jdbc-conn)]
+      (t/is (= [{:i (PGInterval. "P1DT1H1M1.111111S")}]
+               (jdbc/execute! conn ["SELECT INTERVAL 'P1DT1H1M1.111111111S' AS i"])))
+
+      (t/is (= [{:i (PGInterval. "P12MT0S")}]
+               (jdbc/execute! conn ["SELECT INTERVAL 'P12MT0S' AS i"])))
+
+      (t/is (= [{:i (PGInterval. "P-22MT0S")}]
+               (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"]))))))

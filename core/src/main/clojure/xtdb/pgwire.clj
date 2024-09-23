@@ -1815,6 +1815,7 @@
                                                                     "server_encoding" "UTF8"
                                                                     "client_encoding" "UTF8"
                                                                     "DateStyle" "ISO"
+                                                                    "IntervalStyle" "ISO_8601"
                                                                     "TimeZone" (str (.getZone ^Clock default-clock))
                                                                     "integer_datetimes" "on"}}))
                                 :ssl-ctx ssl-ctx})
