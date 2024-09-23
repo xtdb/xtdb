@@ -6,6 +6,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.services.s3.S3AsyncClient
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
@@ -70,14 +73,27 @@ object S3 {
         s3(bucket).also(configure)
 
     @Serializable
+    data class BasicCredentials(
+        @Serializable(StringWithEnvVarSerde::class) val accessKey: String,
+        @Serializable(StringWithEnvVarSerde::class) val secretKey: String
+    )
+
+    @Serializable
     @SerialName("!S3")
     data class Factory(
         @Serializable(StringWithEnvVarSerde::class) val bucket: String,
         @Serializable(PathWithEnvVarSerde::class) var prefix: Path? = null,
+        var credentials: BasicCredentials? = null,
+        @Serializable(StringWithEnvVarSerde::class) var endpoint: String? = null,
         @Transient var s3Configurator: S3Configurator = DefaultS3Configurator,
     ) : ObjectStoreFactory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
+
+        fun credentials(accessKey: String, secretKey: String) =
+            apply { this.credentials = BasicCredentials(accessKey, secretKey) }
+
+        fun endpoint(endpoint: String) = apply { this.endpoint = endpoint }
 
         /**
          * @param s3Configurator An optional [xtdb.aws.s3.S3Configurator] instance with extra S3 configuration options to be used by the object store.
@@ -95,4 +111,11 @@ object S3 {
             registry.registerObjectStore(Factory::class)
         }
     }
+}
+
+fun foo(accessKey: String, secretKey: String) {
+
+    S3AsyncClient.builder().credentialsProvider(
+        StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey))
+    ).build()
 }

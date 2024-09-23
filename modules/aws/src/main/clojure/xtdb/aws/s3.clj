@@ -3,11 +3,13 @@
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import [java.io Closeable]
+           java.net.URI
            [java.nio ByteBuffer]
            [java.nio.file Path]
            [java.util ArrayList List]
            [java.util.concurrent CompletableFuture]
            [java.util.function Function]
+           [software.amazon.awssdk.auth.credentials AwsBasicCredentials StaticCredentialsProvider]
            [software.amazon.awssdk.core ResponseBytes]
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
@@ -23,7 +25,7 @@
     (-> (GetObjectRequest/builder)
         (.bucket bucket)
         (.key (str prefixed-key))
-        (->> (.configureGet configurator))
+        (doto (->> (.configureGet configurator)))
         ^GetObjectRequest (.build))))
 
 (defn- get-obj-range-req
@@ -34,7 +36,7 @@
         (.bucket bucket)
         (.key (str prefixed-key))
         (.range (format "bytes=%d-%d" start end-byte))
-        (->> (.configureGet configurator))
+        (doto (->> (.configureGet configurator)))
         ^GetObjectRequest (.build))))
 
 (defn list-objects [{:keys [^S3AsyncClient client bucket ^Path prefix] :as s3-opts} continuation-token]
@@ -70,7 +72,7 @@
                 (-> (PutObjectRequest/builder)
                     (.bucket bucket)
                     (.key (str prefixed-key))
-                    (->> (.configurePut configurator))
+                    (doto (->> (.configurePut configurator)))
                     ^PutObjectRequest (.build))
                 (AsyncRequestBody/fromByteBuffer buf))))
 
@@ -150,7 +152,7 @@
                        (-> (HeadObjectRequest/builder)
                            (.bucket bucket)
                            (.key (str prefixed-key))
-                           (->> (.configureHead configurator))
+                           (doto (->> (.configureHead configurator)))
                            ^HeadObjectRequest (.build)))
           (.thenApply (fn [_resp] true))
           (.exceptionally (fn [^Exception e]
@@ -195,17 +197,28 @@
   (close [_]
     (.close client)))
 
-(defmethod bp/->object-store-factory ::object-store [_ {:keys [bucket ^S3Configurator configurator prefix]}]
+(defmethod bp/->object-store-factory ::object-store [_ {:keys [bucket ^S3Configurator configurator prefix credentials endpoint]}]
   (cond-> (S3/s3 bucket)
     configurator (.s3Configurator configurator)
-    prefix (.prefix (util/->path prefix))))
+    prefix (.prefix (util/->path prefix))
+    credentials (.credentials (:access-key credentials) (:secret-key credentials))
+    endpoint (.endpoint endpoint)))
 
 (def minimum-part-size (* 5 1024 1024))
 
 (defn open-object-store ^ObjectStore [^S3$Factory factory]
   (let [bucket (.getBucket factory)
         configurator (.getS3Configurator factory)
-        s3-client (.makeClient configurator)
+        credentials (.getCredentials factory)
+        endpoint (.getEndpoint factory)
+        s3-client (-> (S3AsyncClient/builder)
+                      (doto (cond-> credentials (doto (.credentialsProvider
+                                                       (-> (AwsBasicCredentials/create (.getAccessKey credentials)
+                                                                                       (.getSecretKey credentials))
+                                                           (StaticCredentialsProvider/create))))
+                                    endpoint (.endpointOverride (URI. endpoint))))
+                      (doto (->> (.configureClient configurator)))
+                      (.build))
         prefix (.getPrefix factory)
         prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)]
   

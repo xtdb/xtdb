@@ -1,4 +1,3 @@
-version: '2'
 services:
   kafka:
     image: 'confluentinc/cp-kafka:7.5.1'
@@ -16,3 +15,11 @@ services:
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@127.0.0.1:9093
       - ALLOW_PLAINTEXT_LISTENER=yes
       - CLUSTER_ID=q1Sh-9_ISia_zwGINzRvyQ
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001" # MinIO Console
+    command: server /data --console-address ":9001"
