@@ -10,13 +10,13 @@
            [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
-           [java.time LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
+           [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
-           (xtdb.types ZonedDateTimeRange)
+           (xtdb.types IntervalMonthDayNano ZonedDateTimeRange)
            [xtdb.vector IVectorReader]
            (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
@@ -781,6 +781,9 @@
 
 (def ^:const ^long transit-oid 16384)
 
+(defn trunc-duration-to-micros [^Duration dur]
+  (.withNanos dur (* (quot (.getNano dur) 1000) 1000)))
+
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
    ;;default oid is currently only used to describe a parameter without a known type
@@ -1015,6 +1018,7 @@
                               ba ^bytes (byte-array (.remaining bb))]
                           (.get bb ba)
                           ba))}
+
    :regclass {:typname "regclass"
               :col-type :regclass
               :oid 2205
@@ -1048,6 +1052,24 @@
                              (byte-array [(if (.getBoolean rdr idx) 1 0)]))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (utf8 (if (.getBoolean rdr idx) "t" "f")))}
+
+   :interval {:typname "interval"
+              :col-type [:interval :month-day-nano]
+              :typlen 16
+              :oid 1186
+              :read-binary (fn [_env _ba]
+                             (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
+              :read-text (fn [_env _ba]
+                           (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
+              :write-binary (fn [_env ^IVectorReader rdr idx]
+                              (throw (IllegalArgumentException. "Interval binary encoding currently unsupported")))
+              :write-text (fn [_env ^IVectorReader rdr idx]
+                            ;; Postgres only has month-day-micro intervals so we truncate the nanos
+                            (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
+                                  p (.period itvl)
+                                  d (trunc-duration-to-micros  (.duration itvl))]
+                              ;; we use the standard toString for encoding
+                              (utf8 (IntervalMonthDayNano. p d) )))}
 
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
@@ -1084,6 +1106,7 @@
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz
    :tstz-range :tstz-range
+   [:interval :month-day-nano] :interval
 
    #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})
