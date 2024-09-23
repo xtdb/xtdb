@@ -1154,16 +1154,22 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
              (xt/q tu/*node* "SELECT 2 + ~ - 1 + 3 col2")))))
 
 (t/deftest test-bitwise-type-widening
-  (t/is (= java.lang.Short
-           (-> (xt/q tu/*node* "SELECT ~1::smallint col2") first :col2 type)))
-  (t/is (= java.lang.Integer
-           (-> (xt/q tu/*node* "SELECT 0::smallint | 32::int col2") first :col2 type)))
-  (t/is (= java.lang.Integer
-           (-> (xt/q tu/*node* "SELECT 0::smallint # 32::int col2") first :col2 type)))
-  (t/is (= java.lang.Short
-           (-> (xt/q tu/*node* "SELECT 1::smallint >> 2::int col2") first :col2 type)))
-  (t/is (= java.lang.Short
-           (-> (xt/q tu/*node* "SELECT 1::smallint << 16::int col2") first :col2 type))))
+  (let [ret (-> (xt/q tu/*node* "SELECT ~1::smallint col2") first :col2)]
+    (t/is (= java.lang.Short (type ret)))
+    (t/is (= -2 ret)))
+  (let [ret (-> (xt/q tu/*node* "SELECT 0::smallint | 32::int col2") first :col2)]
+    (t/is (= java.lang.Integer (type ret)))
+    (t/is (= 32 ret)))
+  (let [ret (-> (xt/q tu/*node* "SELECT 0::smallint # 32::int col2") first :col2)]
+    (t/is (= java.lang.Integer (type ret)))
+    (t/is (= 32 ret)))
+  (let [ret (-> (xt/q tu/*node* "SELECT 1::smallint >> 2::int col2") first :col2)]
+    (t/is (= java.lang.Short (type ret)))
+    (t/is (= 0 ret)))
+  (let [ret (-> (xt/q tu/*node* "SELECT 1::smallint << 16::int col2") first :col2)]
+    (t/is (= java.lang.Short (type ret)))
+    (t/is (= 0 ret)))
+  (t/is (= [{:col2 0}] (xt/q tu/*node* "SELECT 1::int << 32::int col2"))))
 
 (t/deftest test-uuid-literal
   (t/testing "Planning Success"
