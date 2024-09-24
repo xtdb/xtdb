@@ -1944,3 +1944,10 @@ ORDER BY t.oid DESC LIMIT 1"
       (pg/execute conn "SELECT 2 AS b FROM docs GROUP BY b")
       (t/is (= #{"Table not found: docs" "Column not found: b"}
                (set @warns))))))
+
+(deftest test-ignore-returning-keys-3668
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn "INSERT INTO people (_id, name) VALUES (6, 'fred')" Statement/RETURN_GENERATED_KEYS)]
+    (t/is (false?  (.execute stmt)))
+    (let [rs (.getGeneratedKeys stmt)]
+      (t/is (= [] (rs->maps rs))))))

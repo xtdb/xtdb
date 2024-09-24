@@ -748,6 +748,9 @@ nullOrdering : 'NULLS' 'FIRST' | 'NULLS' 'LAST' ;
 
 /// §14 Data manipulation
 
+/// Postgres return statements
+returningStatement : 'RETURNING' selectList # DmlReturningStatement;
+
 /// §14.9 <delete statement: searched>
 
 deleteStatementSearched
@@ -755,6 +758,7 @@ deleteStatementSearched
       dmlStatementValidTimeExtents?
       ( 'AS'? correlationName )?
       ( 'WHERE' searchCondition )?
+      returningStatement?
     ;
 
 dmlStatementValidTimeExtents
@@ -766,7 +770,7 @@ eraseStatementSearched : 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('W
 
 /// §14.11 <insert statement>
 
-insertStatement : 'INSERT' 'INTO' tableName insertColumnsAndSource ;
+insertStatement : 'INSERT' 'INTO' tableName insertColumnsAndSource returningStatement?;
 insertColumnsAndSource
     : ( '(' columnNameList ')' )? tableValueConstructor # InsertValues
     | ( '(' columnNameList ')' )? recordsValueConstructor # InsertRecords
@@ -781,6 +785,7 @@ updateStatementSearched
       ( 'AS'? correlationName )?
       'SET' setClauseList
       ( 'WHERE' searchCondition )?
+      returningStatement?
     ;
 
 /// §14.15 <set clause list>
@@ -820,4 +825,3 @@ levelOfIsolation
     | 'REPEATABLE' 'READ' # RepeatableReadIsolation
     | 'SERIALIZABLE' # SerializableIsolation
     ;
-
