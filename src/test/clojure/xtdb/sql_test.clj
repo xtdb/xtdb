@@ -277,6 +277,17 @@
            (plan-sql "SELECT si.`year` = 'foo' FROM stars_in AS si ORDER BY si.`year` = 'foo'"
                      {:table-info {"public/stars_in" #{"year"}}}))))
 
+(t/deftest test-limit-offset-params-3699
+  (t/is (=plan-file "test-limit-offset-params-3699"
+                    (plan-sql "SELECT * FROM foo OFFSET ? LIMIT ?"
+                              {:table-info {"public/foo" #{"a"}}})))
+
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo SELECT _id FROM generate_series(1, 100) ids (_id)"]])
+
+  (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
+           (xt/q tu/*node* "SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?"
+                 {:args [20 5]}))))
+
 (t/deftest test-unnest
   (t/is (=plan-file
           "basic-query-29"

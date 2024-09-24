@@ -70,3 +70,21 @@
 
         (t/is (= [[{:idx 3}]]
                  (top 3 nil)))))))
+
+(t/deftest test-param-3699
+  (let [blocks '[::tu/blocks {idx :i64}
+                 [[{:idx 0}, {:idx 1}]
+                  [{:idx 2}, {:idx 3}]]]]
+
+    (t/is (= [{:idx 1}, {:idx 2}]
+             (tu/query-ra [:top '{:skip ?_0, :limit ?_1} blocks]
+                          {:params '{?_0 1, ?_1 2}})))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: null"
+                            (tu/query-ra [:top '{:skip ?_0, :limit ?_1} blocks]))
+          "missing params")
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: 1"
+                            (tu/query-ra [:top '{:limit ?_0} blocks]
+                                         {:params '{?_0 "1"}}))
+          "got a string")))

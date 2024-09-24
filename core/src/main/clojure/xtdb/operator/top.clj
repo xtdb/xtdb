@@ -1,13 +1,14 @@
 (ns xtdb.operator.top
   (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
             [xtdb.logical-plan :as lp])
   (:import java.util.function.Consumer
            java.util.stream.IntStream
            xtdb.ICursor
            xtdb.vector.RelationReader))
 
-(s/def ::skip (s/nilable nat-int?))
-(s/def ::limit (s/nilable nat-int?))
+(s/def ::skip (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
+(s/def ::limit (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
 
 (defmethod lp/ra-expr :top [_]
   (s/cat :op #{:λ :top}
@@ -51,9 +52,26 @@
   (close [_]
     (.close in-cursor)))
 
-(defmethod lp/emit-expr :top [{:keys [relation], {:keys [skip limit]} :top} args]
+(defn- read-param [^RelationReader params param]
+  (let [v (some-> params (.readerForName (str param)) (.getObject 0))]
+    (if (nat-int? v)
+      v
+      (throw (err/illegal-arg :xtdb/expected-number
+                              {::err/message (format "Expected: number, got: %s" v)
+                               :v v, :param param})))))
+
+(defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
   (lp/unary-expr (lp/emit-expr relation args)
     (fn [fields]
       {:fields fields
-       :->cursor (fn [_opts in-cursor]
-                   (TopCursor. in-cursor (or skip 0) (or limit Long/MAX_VALUE) 0))})))
+       :->cursor (fn [{:keys [params]} in-cursor]
+                   (TopCursor. in-cursor
+                               (case skip-tag
+                                 :literal skip-arg
+                                 :param (read-param params skip-arg)
+                                 nil 0)
+                               (case limit-tag
+                                 :literal limit-arg
+                                 :param (read-param params limit-arg)
+                                 nil Long/MAX_VALUE)
+                               0))})))
