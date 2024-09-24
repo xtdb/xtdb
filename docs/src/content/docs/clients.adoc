@@ -14,10 +14,11 @@ For details of how to connect to XTDB from your favourite language, see the foll
 * link:/clients/clojure[Clojure]
 * link:/clients/java[Java]
 * link:/clients/kotlin[Kotlin]
-// * link:/clients/nodejs[Node.js]
-// * link:/clients/python[Python]
+* link:/clients/nodejs[Node.js]
+* link:/clients/python[Python]
 
 XTDB is also compatible with many different PostgreSQL tools, including:
 
 * https://www.postgresql.org/docs/current/app-psql.html[psql] (PostgreSQL CLI) - connect with `psql -h localhost`
 * link:https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools[SQLTools^] (VSCode extension)
+* link:https://www.metabase.com[Metabase^]
