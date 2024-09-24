@@ -2806,7 +2806,9 @@
              #_(doto clojure.pprint/pprint) ;; <<no-commit>>
              (optimise-stmt) ;; <<no-commit>>
              #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-             (vary-meta assoc :param-count @!param-count)))))))
+             (vary-meta assoc
+                        :param-count @!param-count
+                        :warnings @!warnings)))))))
 
 (comment
   (plan-statement "WITH foo AS (SELECT id FROM bar WHERE id = 5)

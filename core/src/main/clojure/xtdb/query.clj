@@ -63,6 +63,7 @@
   ;; ... or at least raise questions about who then owns the params
   (^java.util.List paramFields [])
   (^java.util.List columnFields [])
+  (^java.util.List warnings [])
   (^xtdb.query.BoundQuery bind [queryOpts]
    "queryOpts :: {:params, :table-args, :basis, :default-tz}"))
 
@@ -153,7 +154,7 @@
                               {:plan query
                                :explain (s/explain-data ::lp/logical-plan query)})))
 
-    (let [{:keys [ordered-outer-projection param-count], :or {param-count 0}} (meta query)
+    (let [{:keys [ordered-outer-projection param-count warnings], :or {param-count 0}} (meta query)
           param-types-with-defaults (->> (concat
                                           (mapv #(if (= :default %) :utf8 %) param-types)
                                           (repeat :utf8))
@@ -186,6 +187,7 @@
           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
             ;; could store column-fields in the cache/map too
             (->column-fields ordered-outer-projection fields)))
+        (warnings [_] warnings)
 
         (bind [_ {:keys [args params basis default-tz]
                   :or {default-tz default-tz}}]
