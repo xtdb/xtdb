@@ -276,6 +276,7 @@ RENAME : 'RENAME' ;
 REPEATABLE : 'REPEATABLE' ;
 REPLACE : 'REPLACE' ;
 RESPECT : 'RESPECT' ;
+RETURNING : 'RETURNING';
 RIGHT : 'RIGHT' ;
 ROLLBACK : 'ROLLBACK' ;
 ROW : 'ROW' ;
@@ -354,4 +355,3 @@ DELIMITED_IDENTIFIER
     : '"' ('"' '"' | ~'"')* '"'
     | '`' ('`' '`' | ~'`')* '`'
     ;
-

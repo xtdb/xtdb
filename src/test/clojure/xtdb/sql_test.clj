@@ -2335,3 +2335,12 @@ UNION ALL
   (xt/execute-tx tu/*node* [[:sql "DELETE FROM foo.bar WHERE _id = 1"]])
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo.bar")))
   (t/is (= [{:x 3, :xt/id 1} {:x 2, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar FOR ALL VALID_TIME"))))
+
+(deftest ignore-returning-keys-3668
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES(1, 'bar') RETURNING * EXCLUDE foo"]
+                           [:sql "INSERT INTO docs (_id, foo) VALUES(2, 'bar'), (3, 'wuf') RETURNING _id"]
+                           [:sql "UPDATE docs SET foo = 'toto' WHERE _id = 1 RETURNING _id + 1, foo AS bar"]
+                           [:sql "DELETE FROM docs WHERE _id = 3 RETURNING *"]])
+
+  (t/is (= [{:xt/id 2, :foo "bar"} {:xt/id 1, :foo "toto"}]
+           (xt/q tu/*node* "SELECT * FROM docs"))))
