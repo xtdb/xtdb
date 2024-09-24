@@ -1770,9 +1770,9 @@
         to-box (ValueBox.)
         weight-box (ValueBox.)
         box (doto (ValueBox.)
-              (.writeObject {"xt$from" from-box
-                             "xt$to" to-box
-                             "xt$weight" weight-box}))
+              (.writeObject {"_from" from-box
+                             "_to" to-box
+                             "_weight" weight-box}))
         r-size (- r-to r-from)
 
         base (-> (- r-from origin)
@@ -1807,9 +1807,9 @@
                   (pr-str from-type) (pr-str to-type) (pr-str origin-type)))
 
   (let [{bb1 :batch-bindings, stride->duration :->call-code} (expr/codegen-cast {:source-type i-type, :target-type [:duration :micro]})]
-    {:return-type [:list [:struct {'xt$from types/temporal-col-type,
-                                   'xt$to types/temporal-col-type,
-                                   'xt$weight :f64}]]
+    {:return-type [:list [:struct {'_from types/temporal-col-type,
+                                   '_to types/temporal-col-type,
+                                   '_weight :f64}]]
      :batch-bindings bb1
      :->call-code (fn [[stride-code from-code to-code origin-code]]
                     `(emit-range-bins ~(stride->duration [stride-code])
