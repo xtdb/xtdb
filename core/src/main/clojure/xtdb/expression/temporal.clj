@@ -1814,3 +1814,17 @@
      :->call-code (fn [[stride-code from-code to-code origin-code]]
                     `(emit-range-bins ~(stride->duration [stride-code])
                                       ~from-code ~to-code ~origin-code))}))
+
+(defmethod expr/codegen-call [:range_bins :interval :date-time :date-time :date-time] [{[i-type from-type to-type origin-type] :arg-types}]
+  (let [{bb-from :batch-bindings, ->from-code :->call-code} (expr/codegen-cast {:source-type from-type, :target-type types/temporal-col-type})
+        {bb-to :batch-bindings, ->to-code :->call-code} (expr/codegen-cast {:source-type to-type, :target-type types/temporal-col-type})
+        {bb-origin :batch-bindings, ->origin-code :->call-code} (expr/codegen-cast {:source-type origin-type, :target-type types/temporal-col-type})
+
+        {ret :return-type, bb :batch-bindings, ->call-code :->call-code}
+        (expr/codegen-call {:f :range_bins
+                            :arg-types [i-type types/temporal-col-type types/temporal-col-type types/temporal-col-type]})]
+
+    {:return-type ret
+     :batch-bindings (concat bb-from bb-to bb-origin bb)
+     :->call-code (fn [[i-code from-code to-code origin-code]]
+                    (->call-code [i-code (->from-code [from-code]) (->to-code [to-code]) (->origin-code [origin-code])]))}))

@@ -814,27 +814,33 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
                                               TIMESTAMP '2020-01-01T00:00:00Z')
                                      AS with_origin")))
 
-  (t/is (= [#:xt{:from #xt.time/zoned-date-time "2023-12-19T00:00Z[UTC]",
-                 :to #xt.time/zoned-date-time "2024-01-18T00:00Z[UTC]",
-                 :weight 0.1118421052631579}
-            #:xt{:from #xt.time/zoned-date-time "2024-01-18T00:00Z[UTC]",
-                 :to #xt.time/zoned-date-time "2024-02-17T00:00Z[UTC]",
-                 :weight 0.19736842105263158}
-            #:xt{:from #xt.time/zoned-date-time "2024-02-17T00:00Z[UTC]",
-                 :to #xt.time/zoned-date-time "2024-03-18T00:00Z[UTC]",
-                 :weight 0.19736842105263158}
-            #:xt{:from #xt.time/zoned-date-time "2024-03-18T00:00Z[UTC]",
-                 :to #xt.time/zoned-date-time "2024-04-17T00:00Z[UTC]",
-                 :weight 0.19736842105263158}
-            #:xt{:from #xt.time/zoned-date-time "2024-04-17T00:00Z[UTC]",
-                 :to #xt.time/zoned-date-time "2024-05-17T00:00Z[UTC]",
-                 :weight 0.19736842105263158}
-            #:xt{:from #xt.time/zoned-date-time "2024-05-17T00:00Z[UTC]",
-                 :to #xt.time/zoned-date-time "2024-06-16T00:00Z[UTC]",
-                 :weight 0.09868421052631579}]
-           (xt/q tu/*node* "SELECT (bins.p)._from, (bins.p)._to, (bins.p)._weight
-                            FROM UNNEST(RANGE_BINS(INTERVAL 'P30D', PERIOD(TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-06-01T00:00:00Z'))) AS bins(p)"))
-        "migrate away from `$` (#3735)"))
+
+  (let [bins [#:xt{:from #xt.time/zoned-date-time "2023-12-19T00:00Z[UTC]",
+                  :to #xt.time/zoned-date-time "2024-01-18T00:00Z[UTC]",
+                  :weight 0.1118421052631579}
+             #:xt{:from #xt.time/zoned-date-time "2024-01-18T00:00Z[UTC]",
+                  :to #xt.time/zoned-date-time "2024-02-17T00:00Z[UTC]",
+                  :weight 0.19736842105263158}
+             #:xt{:from #xt.time/zoned-date-time "2024-02-17T00:00Z[UTC]",
+                  :to #xt.time/zoned-date-time "2024-03-18T00:00Z[UTC]",
+                  :weight 0.19736842105263158}
+             #:xt{:from #xt.time/zoned-date-time "2024-03-18T00:00Z[UTC]",
+                  :to #xt.time/zoned-date-time "2024-04-17T00:00Z[UTC]",
+                  :weight 0.19736842105263158}
+             #:xt{:from #xt.time/zoned-date-time "2024-04-17T00:00Z[UTC]",
+                  :to #xt.time/zoned-date-time "2024-05-17T00:00Z[UTC]",
+                  :weight 0.19736842105263158}
+             #:xt{:from #xt.time/zoned-date-time "2024-05-17T00:00Z[UTC]",
+                  :to #xt.time/zoned-date-time "2024-06-16T00:00Z[UTC]",
+                  :weight 0.09868421052631579}]]
+    (t/is (= bins
+             (xt/q tu/*node* "SELECT (bins.p)._from, (bins.p)._to, (bins.p)._weight
+                              FROM UNNEST(RANGE_BINS(INTERVAL 'P30D', PERIOD(TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-06-01T00:00:00Z'))) AS bins(p)"))
+          "migrate away from `$` (#3735)")
+
+    (t/is (= [{:bins bins}]
+             (xt/q tu/*node* "SELECT RANGE_BINS(INTERVAL 'P30D', PERIOD(DATE '2024-01-01', DATE '2024-06-01')) bins"))
+          "support dates too (#3734)")))
 
 (t/deftest test-extract-plan
   (t/testing "TIMESTAMP behaviour"
