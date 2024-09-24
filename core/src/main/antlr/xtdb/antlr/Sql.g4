@@ -98,6 +98,7 @@ identifier
         | 'SYSTEM_TIME' | 'VALID_TIME'
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
         | 'SETTING'
+        | 'CARDINALITY'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
