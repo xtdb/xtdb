@@ -8,6 +8,7 @@
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.query]
+            [xtdb.serde :as serde]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -27,9 +28,8 @@
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.antlr SqlVisitor)
-           [xtdb.api PgwireServer$Factory Xtdb$Config]
+           [xtdb.api PgwireServer$Factory TransactionKey Xtdb$Config]
            xtdb.api.module.XtdbModule
-           xtdb.api.query.IKeyFn
            xtdb.IResultCursor
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
@@ -372,8 +372,21 @@
                        {:statement-type :dml, :dml-type :assert
                         :query sql, :transformed-query sql-trimmed})
 
-                     (visitQueryExpr [_ _]
-                       {:statement-type :query, :query sql, :transformed-query sql-trimmed})
+                     (visitQueryExpr [this ctx]
+                       (let [q {:statement-type :query, :query sql, :transformed-query sql-trimmed}]
+                         (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
+                              (transduce (keep (partial plan/accept-visitor this)) conj q))))
+
+                     ;; handled in plan
+                     (visitSettingDefaultValidTime [_ _])
+                     (visitSettingDefaultSystemTime [_ _])
+
+                     (visitSettingCurrentTime [_ ctx]
+                       [:current-time (time/->instant (.accept (.currentTime ctx) (plan/->ExprPlanVisitor nil nil)))])
+
+                     (visitSettingBasis [_ ctx]
+                       (let [at-tx (.accept (.basis ctx) (plan/->ExprPlanVisitor nil nil))]
+                         [:at-tx (serde/map->TxKey {:system-time (time/->instant at-tx)})]))
 
                      (visitShowVariableStatement [_ _]
                        {:statement-type :query, :query sql, :transformed-query sql-trimmed})
@@ -1214,9 +1227,9 @@
            (let [{:keys [^Clock clock]} session]
              (-> st
                  (assoc :transaction
-                        (-> {:basis {:current-time (.instant clock)
-                                     :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
-                                                         latest-submitted-tx)}}
+                        (-> {:current-time (.instant clock)
+                             :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
+                                                 latest-submitted-tx)}
                             (into (:characteristics session))
                             (into (:next-transaction session))
                             (into tx-opts)))
@@ -1460,12 +1473,14 @@
           {:keys [portal bind-outcome]} (if (= :query statement-type)
                                           (let [{:keys [session transaction]} @conn-state
                                                 {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
-                                                {:keys [basis]} transaction
 
                                                 xtify-param (->xtify-param session stmt-with-bind-msg)
                                                 xt-params (vec (map-indexed xtify-param params))
 
-                                                query-opts {:basis (or basis {:current-time (.instant clock)})
+                                                query-opts {:basis {:at-tx (or (:at-tx stmt) (:at-tx transaction))
+                                                                    :current-time (or (:current-time stmt)
+                                                                                      (:current-time transaction)
+                                                                                      (.instant clock))}
                                                             :default-tz (.getZone clock)
                                                             :args xt-params}]
 

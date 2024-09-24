@@ -13,7 +13,7 @@ options {
 directSqlStatement : directlyExecutableStatement ';'? EOF ;
 
 directlyExecutableStatement
-    : settingDefaultTimePeriod? queryExpression #QueryExpr
+    : settingQueryVariables? queryExpression #QueryExpr
     | insertStatement #InsertStmt
     | updateStatementSearched #UpdateStmt
     | deleteStatementSearched #DeleteStmt
@@ -36,14 +36,14 @@ showVariable
    | ('TIME' 'ZONE' | 'TIMEZONE') # ShowTimeZone
    ;
 
-settingDefaultTimePeriod : 'SETTING'
-   ( (defaultValidTimePeriod (',' defaultSystemTimePeriod)?)
-   | (defaultSystemTimePeriod (',' defaultValidTimePeriod)?)
-   )
-   ;
+settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable)* ;
 
-defaultValidTimePeriod : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification ;
-defaultSystemTimePeriod : 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification ;
+settingQueryVariable
+    : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
+    | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
+    | 'BASIS' ('TO' | '=') basis=literal # SettingBasis
+    | 'CURRENT_TIME' ('TO' | '=') currentTime=literal # SettingCurrentTime
+    ;
 
 //// §5 Lexical Elements
 
@@ -97,7 +97,7 @@ identifier
         | 'LATEST' | 'SUBMITTED'
         | 'SYSTEM_TIME' | 'VALID_TIME'
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
-        | 'SETTING'
+        | 'SETTING' | 'BASIS'
         | 'CARDINALITY'
         | setFunctionType )
         # RegularIdentifier

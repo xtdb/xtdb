@@ -1970,7 +1970,7 @@
   PlanError
   (error-string [_] "INSERT does not contain mandatory _id column"))
 
-(defn- accept-visitor [visitor ^ParserRuleContext ctx]
+(defn accept-visitor [visitor ^ParserRuleContext ctx]
   (.accept ctx visitor))
 
 (defrecord InvalidParamIndex [arg-count param-idx]
@@ -2474,21 +2474,28 @@
   SqlVisitor
   (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
 
-  (visitQueryExpr [_ ctx]
-    (let [tt-visitor (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope))
-          valid-time-default (some-> (.settingDefaultTimePeriod ctx)
-                                     (.defaultValidTimePeriod)
-                                     (.tableTimePeriodSpecification)
-                                     (.accept tt-visitor))
-          sys-time-default (some-> (.settingDefaultTimePeriod ctx)
-                                   (.defaultSystemTimePeriod)
-                                   (.tableTimePeriodSpecification)
-                                   (.accept tt-visitor))]
+  (visitQueryExpr [this ctx]
+    (let [env (->> (some-> (.settingQueryVariables ctx)
+                           (.settingQueryVariable))
+                   (transduce (keep (partial accept-visitor this))
+                              conj env))]
+
       (-> (.queryExpression ctx)
-          (.accept (->QueryPlanVisitor (cond-> env
-                                         valid-time-default (assoc :valid-time-default valid-time-default)
-                                         sys-time-default (assoc :sys-time-default sys-time-default))
-                                       scope)))))
+          (.accept (->QueryPlanVisitor env scope)))))
+
+  (visitSettingDefaultSystemTime [this ctx]
+    [:sys-time-default
+     (.accept (.tableTimePeriodSpecification ctx)
+              (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope)))])
+
+  (visitSettingDefaultValidTime [this ctx]
+    [:valid-time-default
+     (.accept (.tableTimePeriodSpecification ctx)
+              (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope)))])
+
+  ;; dealt with earlier
+  (visitSettingBasis [this ctx])
+  (visitSettingCurrentTime [this ctx])
 
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 

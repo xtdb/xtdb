@@ -1029,7 +1029,7 @@
                :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
                :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
-                            SELECT version, _valid_from, _valid_to FROM foo ORDER BY version"])))
+                       SELECT version, _valid_from, _valid_to FROM foo ORDER BY version"])))
 
       (is (= [{:version 1,
                :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
@@ -1058,6 +1058,49 @@
                :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
                :_valid_to nil}]
              (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))
+
+(t/deftest test-setting-basis-current-time-3505
+  (with-open [conn (jdbc-conn)]
+    (is (= [{:ts #inst "2020-01-01"}]
+           (q conn ["SETTING CURRENT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
+                     SELECT CURRENT_TIMESTAMP AS ts"])))
+
+    (q conn ["INSERT INTO foo (_id, version) VALUES ('foo', 0)"])
+
+    (is (= [{:version 0,
+             :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
+             :_valid_to nil}]
+           (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
+
+    (q conn ["UPDATE foo SET version = 1 WHERE _id = 'foo'"])
+
+    (is (= [{:version 1,
+             :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+             :_valid_to nil}]
+           (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
+
+    (is (= [{:version 0,
+             :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
+             :_valid_to nil
+             :ts #inst "2024-01-01"}]
+           (q conn ["SETTING BASIS = TIMESTAMP '2020-01-01T00:00:00Z',
+                             CURRENT_TIME = TIMESTAMP '2024-01-01T00:00:00Z'
+                     SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
+        "both basis and current time")
+
+    (q conn ["UPDATE foo SET version = 2 WHERE _id = 'foo'"])
+
+    (is (= [{:version 2}]
+           (q conn ["SELECT version FROM foo"])))
+
+    (is (= [{:version 0}]
+           (q conn ["SETTING BASIS = TIMESTAMP '2020-01-01T00:00:00Z'
+                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+        "for system-time cannot override basis")
+
+    (is (= [{:version 1}]
+           (q conn ["SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+        "version would have been 1 if basis was not set")))
 
 (t/deftest test-setting-import-system-time-3616
   (with-open [conn (jdbc-conn)]
