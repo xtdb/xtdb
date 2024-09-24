@@ -12,6 +12,7 @@
                (plan/->logical-plan)
                (vary-meta
                 assoc
+                :warnings (:warnings (meta plan))
                 :param-count (:param-count (meta plan))
                 :ordered-outer-projection col-syms)
                #_(doto clojure.pprint/pprint))))) ;; <<no-commit>>

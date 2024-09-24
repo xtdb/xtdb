@@ -17,7 +17,7 @@
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection PreparedStatement Timestamp Types)
+           (java.sql Connection PreparedStatement Timestamp Types Statement SQLWarning)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.TimeZone
@@ -95,6 +95,12 @@
 
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
     (format "jdbc:postgresql://localhost:%s/xtdb%s" *port* (or param-str ""))))
+
+(defn- stmt->warnings [^Statement stmt]
+  (loop [warn (.getWarnings stmt) res []]
+    (if-not warn
+      res
+      (recur (.getNextWarning warn) (conj res warn)))))
 
 (deftest connect-with-next-jdbc-test
   (with-open [_ (jdbc/get-connection (jdbc-url))])
@@ -1924,3 +1930,17 @@ ORDER BY t.oid DESC LIMIT 1"
       (t/is (= [{:timezone "Pacific/Tarawa"}]
                (pg/execute conn "SHOW TIME ZONE"))
             "arbitrary case"))))
+
+(deftest error-propegation
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn "SELECT 2 AS b FROM docs GROUP BY b")]
+    (.execute stmt)
+
+    (t/is (= #{"Table not found: docs" "Column not found: b"}
+             (set (map #(.getMessage ^SQLWarning %) (stmt->warnings stmt))))))
+
+  (let [warns (atom [])]
+    (with-open [conn (pg-conn {:fn-notice (fn [notice] (swap! warns conj (:message notice)))})]
+      (pg/execute conn "SELECT 2 AS b FROM docs GROUP BY b")
+      (t/is (= #{"Table not found: docs" "Column not found: b"}
+               (set @warns))))))

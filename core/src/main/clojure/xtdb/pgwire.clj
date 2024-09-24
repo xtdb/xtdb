@@ -217,6 +217,12 @@
    :sql-state "57014"
    :message msg})
 
+(defn- notice-warning [msg]
+  {:severity "WARNING"
+   :localized-severity "WARNING"
+   :sql-state "01000"
+   :message msg})
+
 (defn err-pg-exception
   "Returns a pg specific error for an XTDB exception"
   [^Throwable ex generic-msg]
@@ -638,10 +644,10 @@
                     (.write out arr))
                 (.writeInt out -1)))}))
 
-(def ^:private io-error-field
+(def ^:private io-error-notice-field
   "An io-data type that writes a (vector/map-entry pair) k and v as an error field."
   {:read no-read
-   :write (fn write-error-field [^DataOutputStream out [k v]]
+   :write (fn write-error-or-notice-field [^DataOutputStream out [k v]]
             (let [field-char8 ({:localized-severity \S
                                 :severity \V
                                 :sql-state \C
@@ -738,7 +744,10 @@
 ;;; server messages
 
 (def-msg msg-error-response :server \E
-  :error-fields (io-null-terminated-list io-error-field))
+  :error-fields (io-null-terminated-list io-error-notice-field))
+
+(def-msg msg-notice-response :server \N
+  :notice-fields (io-null-terminated-list io-error-notice-field))
 
 (def-msg msg-bind-complete :server \2
   :result {:read no-read
@@ -767,7 +776,6 @@
 
 (def-msg msg-empty-query :server \I)
 
-(def-msg msg-notice-response :server \N)
 
 (def-msg msg-auth :server \R
   :result io-uint32)
@@ -861,6 +869,11 @@
   (swap! conn-state util/maybe-update :transaction assoc :failed true, :err err)
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
+
+(defn cmd-send-notice
+  "Sends an notice message back to the client (e.g (cmd-send-notice conn (warning \"You are doing this wrong!\"))."
+  [conn notice]
+  (cmd-write-msg conn msg-notice-response {:notice-fields notice}))
 
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
   (let [rows (rows conn)]
@@ -1409,6 +1422,10 @@
                         ^PreparedQuery pq (if ra-plan
                                             (.prepareRaQuery node ra-plan query-opts)
                                             (.prepareQuery node ^String transformed-query query-opts))]
+                    (when-let [warnings (.warnings pq)]
+                      (clojure.pprint/pprint warnings)
+                      (doseq [warning warnings]
+                        (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
 
                     {:prepared-stmt (assoc stmt
                                            :prepared-stmt pq
