@@ -1123,6 +1123,31 @@
           (-> (.numericExpr ctx 0) (.accept this))
           (-> (.numericExpr ctx 1) (.accept this))))
 
+  (visitNumericBitwiseNotExpr [this ctx]
+    (list 'bit_not
+          (-> (.numericExpr ctx) (.accept this))))
+
+  (visitNumericBitwiseAndExpr [this ctx]
+    (list 'bit_and
+          (-> (.numericExpr ctx 0) (.accept this))
+          (-> (.numericExpr ctx 1) (.accept this))))
+
+  (visitNumericBitwiseOrExpr [this ctx]
+    (list (cond
+            (.BITWISE_OR ctx) 'bit_or
+            (.BITWISE_XOR ctx) 'bit_xor
+            :else (throw (IllegalStateException.)))
+          (-> (.numericExpr ctx 0) (.accept this))
+          (-> (.numericExpr ctx 1) (.accept this))))
+
+  (visitNumericBitwiseShiftExpr [this ctx]
+    (list (cond
+            (.BITWISE_SHIFT_LEFT ctx) 'bit_shift_left
+            (.BITWISE_SHIFT_RIGHT ctx) 'bit_shift_right
+            :else (throw (IllegalStateException.)))
+          (-> (.numericExpr ctx 0) (.accept this))
+          (-> (.numericExpr ctx 1) (.accept this))))
+
   (visitConcatExpr [this ctx]
     (list 'concat
           (-> (.exprPrimary ctx 0) (.accept this))

@@ -184,6 +184,10 @@ numericExpr
     | '-' numericExpr #UnaryMinusExpr
     | numericExpr (SOLIDUS | ASTERISK) numericExpr #NumericFactorExpr
     | numericExpr (PLUS | MINUS) numericExpr #NumericTermExpr
+    | TILDE numericExpr #NumericBitwiseNotExpr
+    | numericExpr AMPERSAND numericExpr #NumericBitwiseAndExpr
+    | numericExpr (BITWISE_OR | BITWISE_XOR) numericExpr #NumericBitwiseOrExpr
+    | numericExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) numericExpr #NumericBitwiseShiftExpr
     | exprPrimary #ExprPrimary1
     ;
 
