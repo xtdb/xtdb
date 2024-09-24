@@ -18,7 +18,7 @@ You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server 
 
 [source,bash]
 ----
-docker run -it --pull=always -p 6543:3000 -p 5432:5432 ghcr.io/xtdb/xtdb
+docker run -it --pull=always -p 6543:3000 -p 5432:5432 ghcr.io/xtdb/xtdb:nightly
 ----
 
 This command starts a Postgres wire-compatible endpoint on port 5432 and an HTTP server available at http://localhost:6543
