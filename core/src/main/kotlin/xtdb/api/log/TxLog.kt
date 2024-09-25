@@ -3,7 +3,6 @@ package xtdb.api.log
 import xtdb.api.TransactionKey
 import java.nio.ByteBuffer
 import java.util.concurrent.CompletableFuture
-import java.util.function.Consumer
 
 interface TxLog {
     fun appendTx(record: ByteBuffer): CompletableFuture<TransactionKey>

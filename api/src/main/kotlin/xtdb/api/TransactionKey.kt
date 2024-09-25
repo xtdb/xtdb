@@ -18,7 +18,6 @@ import java.time.Instant
 /**
  * A key representing a single transaction on the log.
  *
- * @see IXtdb.submitTx
  * @see xtdb.api.query.QueryOptions.basis
  * @see xtdb.api.query.QueryOptions.afterTx
  */

@@ -40,7 +40,7 @@ object PgwireServer {
          */
         fun ssl(keyStore: Path, keyStorePassword: String) = apply { ssl = SslSettings(keyStore, keyStorePassword) }
 
-        override fun openModule(xtdb: IXtdb): XtdbModule =
+        override fun openModule(xtdb: Xtdb): XtdbModule =
             requiringResolve("xtdb.pgwire/open-server")(xtdb, this) as XtdbModule
     }
 

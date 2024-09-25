@@ -31,7 +31,7 @@ object HttpServer {
 
         fun port(port: Int) = apply { this.port = port }
 
-        override fun openModule(xtdb: IXtdb) =
+        override fun openModule(xtdb: Xtdb) =
             requiringResolve("xtdb.server/open-server")(xtdb, this) as XtdbModule
     }
 

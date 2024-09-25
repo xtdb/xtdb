@@ -11,7 +11,6 @@
            java.lang.AutoCloseable
            java.util.Spliterator
            [java.util.stream StreamSupport]
-           (xtdb.api IXtdb)
            (xtdb.api.query Basis)))
 
 (def transit-opts
@@ -84,16 +83,6 @@
                    :as ::transit+json->result-or-error})))
 
 (defrecord XtdbClient [base-url, ^HttpClient http-client, !latest-submitted-tx]
-  IXtdb
-  (openQuery [client query query-opts]
-   (xtp/open-sql-query client query query-opts))
-
-  (submitTx [client opts tx-ops]
-    (xtp/submit-tx client tx-ops opts))
-
-  (executeTx [client opts tx-ops]
-    (xtp/execute-tx client tx-ops opts))
-
   xtp/PNode
   (submit-tx [client tx-ops opts]
     (let [{tx-key :body} (request client :post :tx

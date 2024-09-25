@@ -3,7 +3,7 @@ package xtdb.api.module
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.serializer
-import xtdb.api.IXtdb
+import xtdb.api.Xtdb
 import xtdb.api.log.Log
 import xtdb.api.metrics.Metrics
 import xtdb.api.storage.ObjectStoreFactory
@@ -14,7 +14,7 @@ interface XtdbModule : AutoCloseable {
     interface Factory{
         val moduleKey: String
 
-        fun openModule(xtdb: IXtdb): XtdbModule
+        fun openModule(xtdb: Xtdb): XtdbModule
     }
 
     interface Registry {

@@ -31,7 +31,7 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api HttpServer$Factory IXtdb TransactionKey Xtdb$Config)
+           (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.api.query Basis IKeyFn Query QueryRequest)
            (xtdb.api.tx TxOptions TxRequest)))
@@ -120,7 +120,7 @@
                            (assoc-in [:formats "application/json" :encoder] (json-tx-encoder))
                            (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
 
-   :post {:handler (fn [{:keys [^IXtdb node] :as req}]
+   :post {:handler (fn [{:keys [node] :as req}]
                      (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])]
                        {:status 200
                         :body (if await-tx?

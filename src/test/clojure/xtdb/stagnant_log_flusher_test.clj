@@ -78,7 +78,7 @@
   (let [^IIndexer indexer (tu/component node :xtdb/indexer)]
     (= (:tx (last (node-log node))) (.latestCompletedTx indexer))))
 
-(defn start-node ^xtdb.api.IXtdb [flush-duration]
+(defn start-node ^xtdb.api.Xtdb [flush-duration]
   (xtn/start-node {:indexer {:flush-duration flush-duration}}))
 
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test

@@ -70,9 +70,9 @@
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
   For more information on the configuration options, see the relevant module pages in the [Clojure docs](https://docs.xtdb.com/clients/clojure/codox/index.html)"
-  (^xtdb.api.IXtdb [] (start-node {}))
+  (^xtdb.api.Xtdb [] (start-node {}))
 
-  (^xtdb.api.IXtdb [opts]
+  (^xtdb.api.Xtdb [opts]
    (cond
      (instance? Xtdb$Config opts) (Xtdb/openNode ^Xtdb$Config opts)
      (instance? Path opts) (Xtdb/openNode ^Path opts)
