@@ -488,3 +488,22 @@
            (xt/q tu/*node*
                  "SELECT data_type FROM information_schema.columns
                   WHERE column_name = 'set_column'"))))
+
+#_ ; required for Postgrex
+(deftest test-pg-range-3737
+  (t/is (= :bang
+           (xt/q tu/*node* "
+   SELECT t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput,
+          COALESCE(d.typelem, t.typelem), COALESCE(r.rngsubtype, 0),
+          ARRAY (
+            SELECT a.atttypid
+            FROM pg_attribute AS a
+            WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+            ORDER BY a.attnum
+          )
+
+   FROM pg_type AS t
+   LEFT JOIN pg_type AS d ON t.typbasetype = d.oid
+   LEFT JOIN pg_range AS r ON r.rngtypid = t.oid OR r.rngmultitypid = t.oid OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)
+   WHERE (t.typrelid = 0)
+     AND (t.typelem = 0 OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type s WHERE s.typrelid != 0 AND s.oid = t.typelem))"))))
