@@ -2,7 +2,12 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [clojure.walk :as w]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [next.jdbc :as jdbc]
+            [next.jdbc.optional :as jdbc.optional]
+            [next.jdbc.prepare :as jdbc.prep]
+            [next.jdbc.result-set :as jdbc.rs]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -10,6 +15,7 @@
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.query-ra :as ra]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -17,30 +23,31 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
-           clojure.lang.ExceptionInfo
+           (clojure.lang ExceptionInfo)
            (java.io FileOutputStream)
            java.net.ServerSocket
            (java.nio.channels Channels)
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
+           (java.sql PreparedStatement ResultSet Types)
            (java.time Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util LinkedList TreeMap)
+           (java.util LinkedList Map TreeMap)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.types.pojo Schema)
+           org.postgresql.util.PGobject
            org.slf4j.LoggerFactory
-           (xtdb ICursor)
+           (xtdb ICursor JsonSerde)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
            xtdb.indexer.live_index.ILiveTable
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util TemporalBounds TemporalDimension)
-           xtdb.util.RowCounter
+           (xtdb.util RowCounter TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
@@ -58,9 +65,13 @@
                      (.buffer *allocator* 10)
                      (throw (ex-info "boom!" {})))))))
 
-(def ^:dynamic *node-opts* {})
+(def ^:dynamic *node-opts* {:pgwire-server {:port 0}})
+
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^xtdb.api.IXtdb *node*)
+
+#_{:clj-kondo/ignore [:uninitialized-var]}
+(def ^:dynamic ^java.sql.Connection *conn*)
 
 (defn with-opts
   ([opts] (partial with-opts opts))
@@ -69,9 +80,52 @@
      (f))))
 
 (defn with-node [f]
-  (util/with-open [node (xtn/start-node *node-opts*)]
-    (binding [*node* node]
+  (util/with-open [node (xtn/start-node *node-opts*)
+                   conn (jdbc/get-connection {:dbtype "postgresql"
+                                              :host "localhost"
+                                              :port (.getPgPort node)
+                                              :database "xtdb"
+                                              :options "-c fallback_output_format=transit"})]
+    (binding [*node* node, *conn* conn]
       (f))))
+
+(extend-protocol jdbc.prep/SettableParameter
+  java.util.Date
+  (set-parameter [v ^PreparedStatement ps ^long i]
+    (.setObject ps i (-> (.toInstant v) (.atZone #xt.time/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
+
+(def denormalize-kw
+  (let [^IKeyFn key-fn #xt/key-fn :kebab-case-keyword]
+    (fn [kw]
+      (.denormalize key-fn kw))))
+
+(def jdbc-qopts
+  {:builder-fn
+   (jdbc.rs/as-maps-adapter
+    (fn [rs opts]
+      (jdbc.optional/as-unqualified-modified-maps rs (-> opts
+                                                         (assoc :label-fn denormalize-kw))))
+    (fn col-reader [^ResultSet rs, rsmeta, ^long idx]
+      (let [v (jdbc.rs/read-column-by-index (.getObject rs idx) rsmeta idx)]
+        (if (instance? PGobject v)
+          (let [t (.getType ^PGobject v)
+                value (.getValue ^PGobject v)]
+            (case t
+              ("json" "jsonb")
+              (->> (JsonSerde/decode value)
+                   (w/prewalk (fn [v]
+                                (cond-> v
+                                  (instance? Map v) (update-keys denormalize-kw)))))
+
+              "transit" (-> (.getBytes ^String value)
+                            (serde/read-transit :json)
+                            (->> (w/prewalk (fn [v]
+                                              (cond-> v
+                                                (instance? Map v) (update-keys denormalize-kw))))))
+
+              v))
+
+          v))))})
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *sys*)

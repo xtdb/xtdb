@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
             [xtdb.serde :as serde]
@@ -286,7 +287,11 @@
 
   (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
            (xt/q tu/*node* "SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?"
-                 {:args [20 5]}))))
+                 {:args [20 5]})))
+
+  (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
+           (jdbc/execute! tu/*conn* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5]
+                          tu/jdbc-qopts))))
 
 (t/deftest test-unnest
   (t/is (=plan-file
@@ -731,9 +736,12 @@
                               {:xt/id :matthew}]
                              [:put-docs {:into :docs, :valid-from #inst "2018"}
                               {:xt/id :mark}]])
-    (t/is
-     (= [{:xt/id :matthew}]
-        (xt/q tu/*node* "SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" {:args [#inst "2016"]})))))
+    (t/is (= [{:xt/id :matthew}]
+             (xt/q tu/*node* "SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" {:args [#inst "2016"]})))
+
+    (t/is (= [{:xt/id :matthew}]
+             (jdbc/execute! tu/*conn* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"]
+                            tu/jdbc-qopts)))))
 
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
@@ -2303,7 +2311,9 @@ UNION ALL
             {:table-catalog "xtdb", :table-schema "public", :table-name "foo",
              :column-name "_id", :data-type ":i64"}]
 
-           (xt/q tu/*node* "SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo';"))))
+           (jdbc/execute! tu/*conn*
+                          ["SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo';"]
+                          tu/jdbc-qopts))))
 
 (deftest missing-values-in-insert-shouldnt-stop-ingestion-3721
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 3 AS _id"]])

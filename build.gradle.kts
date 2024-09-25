@@ -239,8 +239,11 @@ dependencies {
 
     api("ch.qos.logback", "logback-classic", "1.4.5")
 
+    api("org.clojure", "tools.logging", "1.2.4")
+    api("com.github.seancorfield", "next.jdbc", "1.3.939")
+    api("org.postgresql", "postgresql", "42.7.3")
+
     testImplementation("org.clojure", "data.csv", "1.0.1")
-    testImplementation("org.clojure", "tools.logging", "1.2.4")
     testImplementation("org.clojure", "tools.cli", "1.0.206")
 
     devImplementation("integrant", "repl", "0.3.2")
@@ -249,13 +252,11 @@ dependencies {
     devImplementation("clojure.java-time:clojure.java-time:1.4.2")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
-    testImplementation("org.postgresql", "postgresql", "42.7.3")
     testImplementation("metosin", "jsonista", "0.3.3")
     testImplementation("clj-commons", "clj-yaml", "1.0.27")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
     testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
-    testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
     testImplementation("com.github.igrishaev", "pg2-core", "0.1.17")
 
     // For generating clojure docs

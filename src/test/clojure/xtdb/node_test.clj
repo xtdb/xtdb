@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
@@ -10,11 +11,11 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import [xtdb.api Xtdb$Config]
+  (:import [java.time ZonedDateTime]
+           [xtdb.api Xtdb$Config]
            [xtdb.api.tx TxOps]
            [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
-           [java.time ZonedDateTime]
            xtdb.types.RegClass))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -571,17 +572,26 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
 
 (t/deftest test-nested-field-normalisation
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(_id, data) VALUES(1, OBJECT (field_name1: OBJECT(field_name2: true),
-                                                                                field_name3: OBJECT(baz: -4113466)))"]])
+  (jdbc/execute! tu/*conn* ["INSERT INTO t1(_id, data)
+                             VALUES(1, {field_name1: {field_name2: true},
+                                        field_name3: {baz: -4113466}})"])
 
   (t/is (= [{:data {:field-name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
-           (xt/q tu/*node* "SELECT t1.data FROM t1"))
+           (jdbc/execute! tu/*conn* ["SELECT t1.data FROM t1"]
+                          tu/jdbc-qopts))
         "testing insert worked")
 
   (t/is (= [{:field-name2 true}]
            (xt/q tu/*node* "SELECT (t2.field_name1).field_name2, t2.field$name4.baz
                             FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"))
-        "testing insert worked"))
+        "testing insert worked")
+
+  (t/is (= [{:field-name2 true}]
+           (jdbc/execute! tu/*conn*
+                          ["SELECT (t2.field_name1).field_name2, t2.field$name4.baz
+                            FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"]
+                          tu/jdbc-qopts))
+        "testing insert worked (JDBC)"))
 
 (t/deftest test-get-field-on-duv-with-struct-2425
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(_id, data) VALUES(1, 'bar')"]
