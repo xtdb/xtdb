@@ -48,7 +48,7 @@
 (defmethod apply-config! :flight-sql-server [config _ opts]
   (apply-config! config :xtdb.flight-sql/server opts))
 
-(defmethod apply-config! :pgwire-server [config _ opts]
+(defmethod apply-config! :server [config _ opts]
   (apply-config! config :xtdb.pgwire/server opts))
 
 (defmethod apply-config! :metrics [config _ opts]

@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.expression :as expr]
             [xtdb.node :as xtn]
@@ -29,7 +30,7 @@
            [org.apache.arrow.vector PeriodDuration]
            org.postgresql.util.PGobject
            (xtdb.antlr SqlVisitor)
-           [xtdb.api PgwireServer$Factory Xtdb$Config]
+           [xtdb.api ServerConfig Xtdb$Config]
            xtdb.api.module.XtdbModule
            xtdb.IResultCursor
            xtdb.node.impl.IXtdbInternal
@@ -98,7 +99,7 @@
           (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
             (log/error "Could not shutdown thread pool gracefully" {:port port})))
 
-        (log/info "PGWire server stopped")))))
+        (log/info "Server stopped.")))))
 
 ;;; Connection
 ;; Represents a single client connection to the server
@@ -1787,7 +1788,7 @@
   (log/trace "exiting accept loop"))
 
 (defn serve
-  "Creates and starts a pgwire server.
+  "Creates and starts a PostgreSQL wire-compatible server.
 
   node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection
 
@@ -1831,10 +1832,10 @@
        server))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads ssl]}]
-  (.module config (cond-> (PgwireServer$Factory.)
-                    (some? port) (.port port)
-                    (some? num-threads) (.numThreads num-threads)
-                    (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl)))))
+  (cond-> (.getServer config)
+    (some? port) (.port port)
+    (some? num-threads) (.numThreads num-threads)
+    (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl))))
 
 (defn- ->ssl-ctx [^Path ks-path, ^String ks-password]
   (let [ks-password (.toCharArray ks-password)
@@ -1846,16 +1847,20 @@
     (doto (SSLContext/getInstance "TLS")
       (.init (.getKeyManagers kmf) nil nil))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server ^xtdb.pgwire.Server [node ^PgwireServer$Factory module]
-  (let [port (.getPort module)
-        num-threads (.getNumThreads module)
-        {:keys [port] :as srv} (serve node {:port port,
-                                            :num-threads num-threads
-                                            :ssl-ctx (when-let [ssl (.getSsl module)]
-                                                       (->ssl-ctx (.getKeyStore ssl) (.getKeyStorePassword ssl)))})]
-    (log/info "PGWire server started on port:" port)
+(defmethod ig/prep-key ::server [_ ^ServerConfig config]
+  {:node (ig/ref :xtdb/node)
+   :port (.getPort config)
+   :num-threads (.getNumThreads config)
+   :ssl-ctx (when-let [ssl (.getSsl config)]
+              (->ssl-ctx (.getKeyStore ssl) (.getKeyStorePassword ssl)))})
+
+(defmethod ig/init-key ::server [_ {:keys [node] :as opts}]
+  (let [{:keys [port] :as srv} (serve node opts)]
+    (log/info "Server started on port:" port)
     srv))
+
+(defmethod ig/halt-key! ::server [_ srv]
+  (util/close srv))
 
 (defn transit->pgobject [v]
   (doto (PGobject.)

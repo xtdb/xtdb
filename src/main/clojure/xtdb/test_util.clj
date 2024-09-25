@@ -65,7 +65,7 @@
                      (.buffer *allocator* 10)
                      (throw (ex-info "boom!" {})))))))
 
-(def ^:dynamic *node-opts* {:pgwire-server {:port 0}})
+(def ^:dynamic *node-opts* {:server {:port 0}})
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^xtdb.api.Xtdb *node*)
@@ -83,7 +83,7 @@
   (util/with-open [node (xtn/start-node *node-opts*)
                    conn (jdbc/get-connection {:dbtype "postgresql"
                                               :host "localhost"
-                                              :port (xtp/pg-port node)
+                                              :port (.getServerPort node)
                                               :database "xtdb"
                                               :options "-c fallback_output_format=transit"})]
     (binding [*node* node, *conn* conn]
@@ -319,7 +319,8 @@
                                            compactor?]
                                     :or {compactor? true buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
-    (xtn/start-node (cond-> {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+    (xtn/start-node (cond-> {:server {:port 0}
+                             :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                              :storage [:local {:path (.resolve node-dir buffers-dir)}]
                              :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                            (into {} (filter val)))}

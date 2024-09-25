@@ -73,13 +73,12 @@
                  system, close-fn,
                  query-timer]
   Xtdb
-  xtp/PNode
-  (pg-port [this]
-    (or (some-> (util/component this :xtdb/modules)
-                (get "xtdb.pgwire-server")
+  (getServerPort [this]
+    (or (some-> (util/component this :xtdb.pgwire/server)
                 (:port))
         (throw (IllegalStateException. "No Postgres wire server running."))))
 
+  xtp/PNode
   (submit-tx [this tx-ops opts]
     (let [system-time (some-> ^TxOptions opts .getSystemTime)
           tx-key (try
@@ -96,19 +95,19 @@
     (let [{:keys [tx-id] :as tx-key} (xtp/submit-tx this tx-ops opts)]
       (with-open [res (xtp/open-sql-query this "SELECT committed AS \"committed?\", error FROM xt.txs WHERE _id = ?"
                                           {:args [tx-id]
-                                           :key-fn #xt/key-fn :kebab-case-keyword})]
+                                           :key-fn (serde/read-key-fn :kebab-case-keyword)})]
         (let [{:keys [committed? error]} (-> (.findFirst res) (.orElse nil))]
           (if committed?
             (serde/->tx-committed tx-key)
             (serde/->tx-aborted tx-key error))))))
 
   (open-sql-query [this query query-opts]
-    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
       (-> (.prepareQuery this ^String query query-opts)
           (then-execute-prepared-query query-timer query-opts))))
 
   (open-xtql-query [this query query-opts]
-    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
       (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
           (then-execute-prepared-query query-timer query-opts))) )
 
@@ -121,14 +120,14 @@
   IXtdbInternal
   (^PreparedQuery prepareQuery [_ ^String query, query-opts]
    (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
      (.awaitTx indexer after-tx tx-timeout)
      (let [plan (.planQuery q-src query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (^PreparedQuery prepareQuery [_ ^XtqlQuery query, query-opts]
    (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
      (.awaitTx indexer after-tx tx-timeout)
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
@@ -136,7 +135,7 @@
 
   (prepareRaQuery [_ plan query-opts]
     (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx #xt/key-fn :snake-case-string)]
+          (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
      (.awaitTx indexer after-tx tx-timeout)
 
      (.prepareRaQuery q-src plan wm-src query-opts)))
@@ -207,10 +206,11 @@
        :xtdb.query/query-source {}
        :xtdb/compactor {}
 
-       :xtdb.metrics/registry (.getMetrics opts)
-       :xtdb/buffer-pool (.getStorage opts)
-       :xtdb.indexer/live-index (.indexer opts)
+       :xtdb.pgwire/server (.getServer opts)
        :xtdb/log (.getTxLog opts)
+       :xtdb/buffer-pool (.getStorage opts)
+       :xtdb.metrics/registry (.getMetrics opts)
+       :xtdb.indexer/live-index (.indexer opts)
        :xtdb/modules (.getModules opts)
        :xtdb/default-tz (.getDefaultTz opts)
        :xtdb.stagnant-log-flusher/flusher (.indexer opts)}

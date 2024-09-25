@@ -21,5 +21,3 @@ metrics: !Prometheus
 modules: 
 - !HttpServer
   port: 3000
-- !PgwireServer
-  port: 5432

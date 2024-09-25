@@ -24,16 +24,22 @@ class YamlSerdeTest {
     @Test
     fun testDecoder() {
         val input = """
-        defaultTz: "America/Los_Angeles"
+        server: 
+            port: 3000
+            numThreads: 42
+            ssl: 
+                keyStore: test-path
+                keyStorePassword: password
         txLog: !InMemory
-        indexer:
-            logLimit: 65
-            flushDuration: PT4H
         storage: !Local
             path: local-storage
             maxCacheEntries: 1025
+        indexer:
+            logLimit: 65
+            flushDuration: PT4H
         metrics: !Prometheus
             port: 3000
+        defaultTz: "America/Los_Angeles"
         """.trimIndent()
 
         println(nodeConfig(input).toString())
@@ -169,8 +175,6 @@ class YamlSerdeTest {
         modules:
             - !HttpServer
               port: 3001
-            - !PgwireServer
-              port: 5433
             - !FlightSqlServer
               port: 9833
         """.trimIndent()
@@ -178,7 +182,6 @@ class YamlSerdeTest {
         assertEquals(
             listOf(
                 HttpServer.Factory(port = 3001),
-                PgwireServer.Factory(port = 5433),
                 FlightSqlServer.Factory(port = 9833)
             ),
             nodeConfig(input).getModules()

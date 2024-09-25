@@ -30,7 +30,9 @@ internal class XtdbFileTest {
     @Test
     fun validConfigFile() {
         val resourcePath = XtdbFileTest::class.java.classLoader.getResource("node-config.yaml")!!.path
-        assertDoesNotThrow { Xtdb.openNode(path = Path(resourcePath)) }
+        val node = assertDoesNotThrow { Xtdb.openNode(path = Path(resourcePath)) }.use { node ->
+            assertEquals(5433, node.serverPort)
+        }
 
         File("/tmp/test-storage").deleteRecursively()
         File("/tmp/test-log").deleteRecursively()

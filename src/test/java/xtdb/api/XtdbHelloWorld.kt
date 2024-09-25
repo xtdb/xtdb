@@ -1,17 +1,29 @@
 package xtdb.api
 
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 import java.sql.DriverManager
 
-fun main() {
-    DriverManager.getConnection("jdbc:postgresql://localhost:5432/xtdb").use { connection ->
-        connection.createStatement().use { statement ->
-            statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}")
+class XtdbHelloWorld {
+    data class User(val id: String, val name: String)
 
-            statement.executeQuery("SELECT * FROM users").use { rs ->
-                println("Users:")
+    @Test
+    fun `hello world`() {
+        Xtdb.openNode().use { xtdb ->
+            DriverManager.getConnection("jdbc:postgresql://localhost:${xtdb.serverPort}/xtdb").use { conn ->
+                conn.createStatement().use { statement ->
+                    statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}")
 
-                while (rs.next()) {
-                    println("  * ${rs.getString("_id")}: ${rs.getString("name")}")
+                    statement.executeQuery("SELECT * FROM users").use { rs ->
+
+                        val users = mutableListOf<User>()
+
+                        while (rs.next()) {
+                            users.add(User(rs.getString("_id"), rs.getString("name")))
+                        }
+
+                        assertEquals(listOf(User("joe", "Joe"), User("jms", "James")), users)
+                    }
                 }
             }
         }
