@@ -56,6 +56,8 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
     api("com.charleskorn.kaml", "kaml", "0.56.0")
 
+    api("org.postgresql", "postgresql", "42.7.3")
+
     antlr("org.antlr:antlr4:4.13.1")
     implementation("org.antlr:antlr4-runtime:4.13.1")
 

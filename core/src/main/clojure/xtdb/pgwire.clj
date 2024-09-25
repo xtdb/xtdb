@@ -27,8 +27,9 @@
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
+           org.postgresql.util.PGobject
            (xtdb.antlr SqlVisitor)
-           [xtdb.api PgwireServer$Factory TransactionKey Xtdb$Config]
+           [xtdb.api PgwireServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
            xtdb.IResultCursor
            xtdb.node.impl.IXtdbInternal
@@ -1860,3 +1861,8 @@
   (or (some-> (util/component node ::server)
               (:port))
       (throw (IllegalStateException. "No Postgres wire server running."))))
+
+(defn transit->pgobject [v]
+  (doto (PGobject.)
+    (.setType "transit")
+    (.setValue (String. (serde/write-transit v :json)))))

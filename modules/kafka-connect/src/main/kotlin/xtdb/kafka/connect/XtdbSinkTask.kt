@@ -6,9 +6,10 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.connect.sink.SinkRecord
 import org.apache.kafka.connect.sink.SinkTask
-import xtdb.api.IXtdb
-import xtdb.api.XtdbClient
 import java.net.URI
+import java.sql.Connection
+import java.sql.DriverManager
+import javax.sql.DataSource
 
 class XtdbSinkTask : SinkTask() {
     companion object {
@@ -21,13 +22,13 @@ class XtdbSinkTask : SinkTask() {
     }
 
     private var config: XtdbSinkConfig? = null
-    private var client: IXtdb? = null
+    private var client: Connection? = null
 
     override fun version(): String = XtdbSinkConnector().version()
 
     override fun start(props: Map<String, String>) {
         val config = XtdbSinkConfig.parse(props).also { this.config = it }
-        this.client = XtdbClient.openClient(URI(config.url).toURL())
+        this.client = DriverManager.getConnection(config.jdbcUrl)
     }
 
     override fun put(sinkRecords: Collection<SinkRecord>) {

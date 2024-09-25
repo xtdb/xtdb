@@ -242,6 +242,8 @@ dependencies {
     api("org.clojure", "tools.logging", "1.2.4")
     api("com.github.seancorfield", "next.jdbc", "1.3.939")
     api("org.postgresql", "postgresql", "42.7.3")
+    api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
+    api(project(":xtdb-core"))
 
     testImplementation("org.clojure", "data.csv", "1.0.1")
     testImplementation("org.clojure", "tools.cli", "1.0.206")

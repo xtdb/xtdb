@@ -2,11 +2,12 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [next.jdbc :as jdbc]
             [xtdb.error :as err]
-            [xtdb.api :as xt])
-  (:import [org.apache.kafka.connect.data Schema Struct Field]
+            [xtdb.pgwire :as pgwire])
+  (:import [java.util List Map]
+           [org.apache.kafka.connect.data Field Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
-           [java.util Map List]
            (xtdb.kafka.connect XtdbSinkConfig)))
 
 (defn- map->edn [m]
@@ -106,37 +107,34 @@
 (defn- tombstone? [^SinkRecord record]
   (and (nil? (.value record)) (.key record)))
 
-(defn- relation [table valid-from valid-to]
-  (cond-> {:into table}
-          valid-from (assoc :valid-from valid-from)
-          valid-to (assoc :valid-to valid-to)))
-
 (defn table-name [^XtdbSinkConfig conf, ^SinkRecord record]
   (let [topic (.topic record)
         table-name-format (.getTableNameFormat conf)]
-    (keyword (str/replace table-name-format "${topic}" topic))))
+    (str/replace table-name-format "${topic}" topic)))
 
 (defn transform-sink-record [^XtdbSinkConfig conf, ^SinkRecord record]
   (log/debug "sink record:" record)
-  (let [table (table-name conf record)
-        tx-op (if (tombstone? record)
-                (if (= "record_key" (.getIdMode conf))
-                  (let [id (find-record-key-eid conf record)]
-                    [:delete-docs table id])
-                  (throw (err/illegal-arg :unsupported-tombstone-mode
+  (let [table (table-name conf record)]
+    (doto (cond
+            (not (tombstone? record))
+            (let [doc (record->edn record)
+                  id (find-eid conf record doc)
+                  valid-from (get doc (keyword (.getValidFromField conf)))
+                  valid-to (get doc (keyword (.getValidToField conf)))]
+              [(format "INSERT INTO %s RECORDS ?" table)
+               (pgwire/transit->pgobject (assoc doc :_id id, :_valid_from valid-from, :_valid_to valid-to))])
+
+            (= "record_key" (.getIdMode conf))
+            (let [id (find-record-key-eid conf record)]
+              [(format "DELETE FROM %s WHERE _id = ?" table) id])
+
+            :else (throw (err/illegal-arg :unsupported-tombstone-mode
                                           {::err/message (str "Unsupported tombstone mode: " record)})))
-                (let [doc (record->edn record)
-                      id (find-eid conf record doc)
-                      valid-from-field (.getValidFromField conf)
-                      valid-from (get doc (keyword valid-from-field))
-                      valid-to-field (.getValidToField conf)
-                      valid-to (get doc (keyword valid-to-field))]
-                  [:put-docs (relation table valid-from valid-to) (assoc doc :xt/id id)]))]
-    (log/debug "tx op:" tx-op)
-    tx-op))
+
+      (->> (log/debug "tx op:")))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn submit-sink-records [api props records]
-  (when (seq records)
-    (xt/submit-tx api (vec (for [record records]
-                              (transform-sink-record props record))))))
+(defn submit-sink-records [conn props records]
+  (jdbc/with-transaction [tx conn]
+    (doseq [record records]
+      (jdbc/execute! tx (transform-sink-record props record)))))

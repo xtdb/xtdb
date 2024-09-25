@@ -1862,11 +1862,6 @@
           (.next rs)
           (t/is (= v (.getBoolean rs 1))))))))
 
-(defn transit->pgobject [v]
-  (doto (PGobject.)
-    (.setType "transit")
-    (.setValue (String. (serde/write-transit v :json)))))
-
 (deftest test-transit-param
   (with-open [node (xtn/start-node)]
     (t/testing "pgwire metadata query"
@@ -1880,7 +1875,7 @@ ORDER BY t.oid DESC LIMIT 1"
                            {:args ["transit" nil true]})))))
 
   (with-open [conn (jdbc-conn "prepareThreshold" -1)]
-    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (transit->pgobject {:a 1, :b 2})])
+    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (pgwire/transit->pgobject {:a 1, :b 2})])
 
     (with-open [stmt (.prepareStatement conn "SELECT v FROM foo")
                 rs (.executeQuery stmt)]

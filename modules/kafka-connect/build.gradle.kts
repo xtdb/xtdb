@@ -25,7 +25,10 @@ dependencies {
     api("org.clojure", "tools.logging", "1.2.4")
     api("cheshire", "cheshire", "5.13.0")
     api("org.slf4j", "slf4j-api", "1.7.36")
+    api("com.github.seancorfield", "next.jdbc", "1.3.939")
+    api("org.postgresql", "postgresql", "42.7.3")
 
+    testImplementation(project(":"))
     testImplementation(project(":xtdb-core"))
 }
 

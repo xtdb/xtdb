@@ -18,6 +18,7 @@
 
 (defn- with-node [f]
   (with-open [node (xtn/start-node {:pgwire-server {:port 0}})]
+    (prn (keys (:system node)))
     (binding [*pg-port* (.getPgPort node)]
       (f))))
 

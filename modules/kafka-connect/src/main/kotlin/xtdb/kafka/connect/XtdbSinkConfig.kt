@@ -8,7 +8,7 @@ import org.apache.kafka.common.config.ConfigDef.Type.STRING
 import org.apache.kafka.common.config.ConfigDef.Validator
 import org.apache.kafka.common.config.ConfigException
 
-internal const val URL_CONFIG: String = "url"
+internal const val JDBC_URL_CONFIG: String = "jdbcUrl"
 internal const val ID_MODE_CONFIG: String = "id.mode"
 internal const val ID_FIELD_CONFIG: String = "id.field"
 internal const val VALID_FROM_FIELD_CONFIG: String = "validFrom.field"
@@ -27,8 +27,8 @@ private class EnumValidator(private val validValues: Set<String>) : Validator {
 
 internal val CONFIG_DEF: ConfigDef = ConfigDef()
     .define(
-        URL_CONFIG, STRING, NO_DEFAULT_VALUE, HIGH,
-        "Destination URL of XTDB HTTP end point."
+        JDBC_URL_CONFIG, STRING, NO_DEFAULT_VALUE, HIGH,
+        "JDBC URL of XTDB server."
     )
     .define(
         ID_MODE_CONFIG, STRING, NO_DEFAULT_VALUE, EnumValidator(setOf("record_key", "record_value")), HIGH,
@@ -52,7 +52,7 @@ internal val CONFIG_DEF: ConfigDef = ConfigDef()
     )
 
 data class XtdbSinkConfig(
-    val url: String,
+    val jdbcUrl: String,
     var idMode: String,
     var idField: String,
     var validFromField: String,
@@ -71,7 +71,7 @@ data class XtdbSinkConfig(
             }
 
             return XtdbSinkConfig(
-                url = parsedConfig.getString(URL_CONFIG),
+                jdbcUrl = parsedConfig.getString(JDBC_URL_CONFIG),
                 idMode = idMode,
                 idField = idField,
                 validFromField = parsedConfig.getString(VALID_FROM_FIELD_CONFIG),
@@ -83,7 +83,7 @@ data class XtdbSinkConfig(
 
     val taskConfig
         get() = mapOf(
-            URL_CONFIG to url,
+            JDBC_URL_CONFIG to jdbcUrl,
             ID_MODE_CONFIG to idMode,
             ID_FIELD_CONFIG to idField,
             VALID_FROM_FIELD_CONFIG to validFromField,
