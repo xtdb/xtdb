@@ -1423,7 +1423,6 @@
                                             (.prepareRaQuery node ra-plan query-opts)
                                             (.prepareQuery node ^String transformed-query query-opts))]
                     (when-let [warnings (.warnings pq)]
-                      (clojure.pprint/pprint warnings)
                       (doseq [warning warnings]
                         (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
 
