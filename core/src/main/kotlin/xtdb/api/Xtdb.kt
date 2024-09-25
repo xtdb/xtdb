@@ -1,4 +1,5 @@
 @file:UseSerializers(ZoneIdSerde::class)
+
 package xtdb.api
 
 import kotlinx.serialization.Serializable
@@ -7,7 +8,6 @@ import xtdb.ZoneIdSerde
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
 import xtdb.api.metrics.Metrics
-import xtdb.api.metrics.PrometheusMetrics
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.inMemoryStorage
@@ -18,7 +18,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlin.io.path.extension
 
-object Xtdb {
+interface Xtdb : AutoCloseable {
 
     @Serializable
     data class Config(
@@ -40,39 +40,43 @@ object Xtdb {
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
 
-        fun open() = requiringResolve("xtdb.node.impl/open-node").invoke(this) as IXtdb
         fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
         @JvmSynthetic
         fun metrics(metrics: Metrics.Factory) = apply { this.metrics = metrics }
+
+        fun open(): Xtdb = requiringResolve("xtdb.node.impl/open-node").invoke(this) as Xtdb
     }
 
-    @JvmStatic
-    fun configure() = Config()
+    companion object {
 
-    @JvmStatic
-    @JvmOverloads
-    fun openNode(config: Config = Config()) = config.open()
+        @JvmStatic
+        fun configure() = Config()
 
-    /**
-     * Opens a node using a YAML configuration file - will throw an exception if the specified path does not exist
-     * or is not a valid `.yaml` extension file.
-     */
-    @JvmStatic
-    fun openNode(path: Path): IXtdb {
-        if (path.extension != "yaml") {
-            throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
-        } else if (!path.toFile().exists()) {
-            throw IllegalArgumentException("Provided config file does not exist")
+        @JvmStatic
+        @JvmOverloads
+        fun openNode(config: Config = Config()) = config.open()
+
+        /**
+         * Opens a node using a YAML configuration file - will throw an exception if the specified path does not exist
+         * or is not a valid `.yaml` extension file.
+         */
+        @JvmStatic
+        fun openNode(path: Path): Any {
+            if (path.extension != "yaml") {
+                throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
+            } else if (!path.toFile().exists()) {
+                throw IllegalArgumentException("Provided config file does not exist")
+            }
+
+            val yamlString = Files.readString(path)
+            val config = nodeConfig(yamlString)
+
+            return config.open()
         }
 
-        val yamlString = Files.readString(path)
-        val config = nodeConfig(yamlString)
-
-        return config.open()
+        @JvmSynthetic
+        fun openNode(configure: Config.() -> Unit) = openNode(Config().also(configure))
     }
-
-    @JvmSynthetic
-    fun openNode(configure: Config.() -> Unit) = openNode(Config().also(configure))
 }

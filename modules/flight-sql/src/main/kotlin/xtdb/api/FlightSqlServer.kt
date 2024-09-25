@@ -20,7 +20,7 @@ object FlightSqlServer {
         fun host(host: String) = apply { this.host = host }
         fun port(port: Int) = apply { this.port = port }
 
-        override fun openModule(xtdb: IXtdb) =
+        override fun openModule(xtdb: Xtdb) =
             requiringResolve("xtdb.flight-sql/open-server")(xtdb, this) as XtdbModule
     }
 

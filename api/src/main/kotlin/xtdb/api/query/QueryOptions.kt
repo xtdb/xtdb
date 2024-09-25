@@ -145,7 +145,7 @@ data class QueryOptions(
          *
          * If not provided, this defaults to the latest transaction submitted through this client - this means that (assuming you query the same client that you submitted to) you will always see the effect of any transaction you've submitted (known as 'reading your writes').
          *
-         * (If you're not querying through the same client you submitted to, pass your result from [xtdb.api.IXtdb.submitTx] as [afterTx] to achieve the same effect.
+         * (If you're not querying through the same client you submitted to, pass your result from submitTx as [afterTx] to achieve the same effect.)
          */
         fun afterTx(afterTx: TransactionKey?) = apply { this.afterTx = afterTx }
 

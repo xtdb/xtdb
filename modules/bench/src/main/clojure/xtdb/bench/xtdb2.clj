@@ -35,9 +35,9 @@
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))
 
-(defn ->local-node ^xtdb.api.IXtdb [{:keys [node-dir ^String buffers-dir
-                                            rows-per-chunk log-limit page-limit instant-src]
-                                     :or {buffers-dir "objects"}}]
+(defn ->local-node [{:keys [node-dir ^String buffers-dir
+                            rows-per-chunk log-limit page-limit instant-src]
+                     :or {buffers-dir "objects"}}]
   (let [node-dir (util/->path node-dir)]
     (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]

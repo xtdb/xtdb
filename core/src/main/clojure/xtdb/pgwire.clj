@@ -1857,11 +1857,6 @@
     (log/info "PGWire server started on port:" port)
     srv))
 
-(defn pg-port [node]
-  (or (some-> (util/component node ::server)
-              (:port))
-      (throw (IllegalStateException. "No Postgres wire server running."))))
-
 (defn transit->pgobject [v]
   (doto (PGobject.)
     (.setType "transit")

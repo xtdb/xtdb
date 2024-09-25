@@ -2,7 +2,8 @@
   (:require [clojure.java.shell :refer [sh]]
             [clojure.test :as t]
             [test-harness.test-utils :as tu]
-            [xtdb.node :as xtn]))
+            [xtdb.node :as xtn]
+            [xtdb.protocols :as xtp]))
 
 (def project-root (str @tu/root-path "/lang/js/"))
 
@@ -18,8 +19,7 @@
 
 (defn- with-node [f]
   (with-open [node (xtn/start-node {:pgwire-server {:port 0}})]
-    (prn (keys (:system node)))
-    (binding [*pg-port* (.getPgPort node)]
+    (binding [*pg-port* (xtp/pg-port node)]
       (f))))
 
 (t/use-fixtures :once yarn-install)

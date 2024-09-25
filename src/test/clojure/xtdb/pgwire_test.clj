@@ -12,20 +12,21 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection PreparedStatement Timestamp Types Statement SQLWarning)
+           (java.sql Connection PreparedStatement SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           (java.util.concurrent CountDownLatch TimeUnit)
-           java.util.TimeZone
            java.util.Calendar
+           (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
+           java.util.TimeZone
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
-           (org.postgresql.util PGobject PSQLException PGInterval)
+           (org.postgresql.util PGInterval PGobject PSQLException)
            xtdb.JsonSerde))
 
 (set! *warn-on-reflection* false)
@@ -601,7 +602,7 @@
   (with-open [node (xtn/start-node {:pgwire-server {:port 0
                                                     :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                                           :keystore-password "password123"}}})]
-    (binding [*port* (.getPgPort node)]
+    (binding [*port* (xtp/pg-port node)]
       (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
         (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
         (t/is (= [{:_id 1}]
@@ -1336,7 +1337,7 @@
 
 (t/deftest test-pg-port
   (util/with-open [node (xtn/start-node {::pgwire/server {:port 0}})]
-    (binding [*port* (.getPgPort node)]
+    (binding [*port* (xtp/pg-port node)]
       (with-open [conn (jdbc-conn)]
         (t/is (= "ping" (ping conn)))))))
 

@@ -18,7 +18,7 @@
            (java.io Writer)
            (java.util List Map Iterator)
            [java.util.stream Stream]
-           (xtdb.api IXtdb TransactionKey)
+           (xtdb.api TransactionKey)
            (xtdb.api.query Basis QueryOptions)
            (xtdb.api.tx TxOptions)
            xtdb.types.ClojureForm))
@@ -174,8 +174,8 @@
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
 
-  (^TransactionKey [^IXtdb node, tx-ops] (submit-tx node tx-ops {}))
-  (^TransactionKey [^IXtdb node, tx-ops tx-opts]
+  (^TransactionKey [node, tx-ops] (submit-tx node tx-ops {}))
+  (^TransactionKey [node, tx-ops tx-opts]
    (xtp/submit-tx node (vec tx-ops) (->TxOptions tx-opts))))
 
 (defn execute-tx
@@ -204,8 +204,8 @@
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
 
-  (^TransactionKey [^IXtdb node, tx-ops] (execute-tx node tx-ops {}))
-  (^TransactionKey [^IXtdb node, tx-ops tx-opts]
+  (^TransactionKey [node, tx-ops] (execute-tx node tx-ops {}))
+  (^TransactionKey [node, tx-ops tx-opts]
    (xtp/execute-tx node (vec tx-ops) (->TxOptions tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

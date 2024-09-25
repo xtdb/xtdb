@@ -16,7 +16,7 @@
            (java.util.concurrent ExecutionException)
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api IXtdb TransactionKey Xtdb$Config)
+           (xtdb.api Xtdb TransactionKey Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis XtqlQuery)
@@ -72,23 +72,14 @@
                  !latest-submitted-tx
                  system, close-fn,
                  query-timer]
-  IXtdb
-  (getPgPort [this]
+  Xtdb
+  xtp/PNode
+  (pg-port [this]
     (or (some-> (util/component this :xtdb/modules)
                 (get "xtdb.pgwire-server")
                 (:port))
         (throw (IllegalStateException. "No Postgres wire server running."))))
 
-  (submitTx [this opts tx-ops]
-    (xtp/submit-tx this tx-ops opts))
-
-  (executeTx [this opts tx-ops]
-    (xtp/execute-tx this tx-ops opts))
-
-  (openQuery [this query query-opts]
-    (xtp/open-sql-query this query query-opts))
-
-  xtp/PNode
   (submit-tx [this tx-ops opts]
     (let [system-time (some-> ^TxOptions opts .getSystemTime)
           tx-key (try
@@ -181,8 +172,8 @@
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
   (let [node (map->Node (-> deps
-                            (assoc :!latest-submitted-tx (atom nil))
-                            (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
+                            (assoc :!latest-submitted-tx (atom nil)
+                                   :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]
     ;; TODO seems to create heap memory pressure, disabled for now
     #_(metrics/add-gauge registry "node.tx.lag.seconds"
@@ -226,7 +217,7 @@
       (doto ig/load-namespaces)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-node ^xtdb.api.IXtdb [opts]
+(defn open-node ^xtdb.api.Xtdb [opts]
   (let [!closing (atom false)
         system (-> (node-system opts)
                    ig/prep
