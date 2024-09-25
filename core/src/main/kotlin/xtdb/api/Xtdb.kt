@@ -24,7 +24,7 @@ interface Xtdb : AutoCloseable {
 
     @Serializable
     data class Config(
-        val server : ServerConfig = ServerConfig(),
+        var server : ServerConfig? = ServerConfig(),
         var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
         var metrics: Metrics.Factory? = null,
@@ -37,7 +37,7 @@ interface Xtdb : AutoCloseable {
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }
 
         @JvmSynthetic
-        fun server(configure: ServerConfig.() -> Unit) = apply { server.configure() }
+        fun server(configure: ServerConfig.() -> Unit) = apply { (server ?: ServerConfig()).configure() }
 
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }

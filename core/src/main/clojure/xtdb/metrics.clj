@@ -73,7 +73,7 @@
     ;; Add common tag for the node
     (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
           ^List tags [(Tag/of "node-id" node-id)]]
-      (log/infof "Metrics server - tagging all metrics with node-id: %s" node-id)
+      (log/infof "tagging all metrics with node-id: %s" node-id)
       (-> (.config reg)
           (.commonTags tags)))
 
