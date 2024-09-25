@@ -1960,3 +1960,24 @@ ORDER BY t.oid DESC LIMIT 1"
 
       (t/is (= [{:i (PGInterval. "P-22MT0S")}]
                (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"]))))))
+
+(deftest test-playground
+  (with-open [srv (pgwire/open-playground {:port 5432})]
+    (let [{:keys [port]} srv]
+      (letfn [(pg-conn [db]
+                {:dbtype "postgresql"
+                 :host "localhost"
+                 :port port
+                 :dbname db
+                 :options "-c fallback_output_format=transit"})]
+        (with-open [conn1a (jdbc/get-connection (pg-conn "foo1"))
+                    conn1b (jdbc/get-connection (pg-conn "foo1"))
+                    conn2 (jdbc/get-connection (pg-conn "foo2"))]
+
+          (jdbc/execute! conn1a ["INSERT INTO foo RECORDS {_id: 1}"])
+          (jdbc/execute! conn1b ["INSERT INTO bar RECORDS {_id: 1}"])
+          (jdbc/execute! conn2 ["INSERT INTO foo RECORDS {_id: 2}"])
+
+          (t/is (= [{:_id 1}] (jdbc/execute! conn1a ["SELECT * FROM bar"])))
+          (t/is (= [{:_id 1}] (jdbc/execute! conn1b ["SELECT * FROM foo"])))
+          (t/is (= [{:_id 2}] (jdbc/execute! conn2 ["SELECT * FROM foo"]))))))))

@@ -23,7 +23,7 @@
            [java.security KeyStore]
            [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
-           [java.util.concurrent ExecutorService Executors TimeUnit]
+           [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
@@ -63,7 +63,9 @@
                    !closing?
 
                    ;; atom to hold server state, such as current connections, and the connection :cid counter.
-                   server-state]
+                   server-state
+
+                   !tmp-nodes]
   XtdbModule
   (close [_]
     (when (compare-and-set! !closing? false true)
@@ -99,6 +101,10 @@
           (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
             (log/error "Could not shutdown thread pool gracefully" {:port port})))
 
+        (when !tmp-nodes
+          (log/debug "closing tmp nodes")
+          (util/close !tmp-nodes))
+
         (log/info "Server stopped.")))))
 
 ;;; Connection
@@ -108,7 +114,7 @@
 ;; and is registered under the :connections map under the servers :server-state.
 
 (defrecord Connection [^Server server
-                       node close-node?
+                       node
                        ^Socket socket
 
                        ;; a positive integer that identifies the connection on this server
@@ -132,9 +138,6 @@
 
     (let [{:keys [server-state]} server]
       (swap! server-state update :connections dissoc cid))
-
-    (when close-node?
-      (util/close node))
 
     (log/debug "Connection ended" {:cid cid})))
 
@@ -1678,6 +1681,12 @@
           (handle-msg (read-typed-msg in) conn)
           (recur))))))
 
+(defn- ->tmp-node [{:keys [^Map !tmp-nodes]} conn-state]
+  (.computeIfAbsent !tmp-nodes (get-in conn-state [:session :parameters "database"] "xtdb")
+                    (fn [db]
+                      (log/debug "starting tmp-node" (pr-str db))
+                      (xtn/start-node {:server nil}))))
+
 (defn- connect
   "Starts and runs a connection on the current thread until it closes.
 
@@ -1685,30 +1694,24 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [server-state, port] :as server} ^Socket conn-socket, node]
+  [{:keys [server-state, port, node] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid] :as conn} (util/with-close-on-catch [_ conn-socket]
                                  (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-
-                                       create-node? (nil? node)
-
-                                       node (or node
-                                                (do
-                                                  (log/debug "starting in-memory node")
-                                                  (xtn/start-node)))]
+                                       !conn-state (atom {:close-promise close-promise
+                                                          :session {:access-mode :read-only
+                                                                    :clock (:clock @server-state)}})]
                                    (try
                                      (-> (map->Connection {:cid cid,
                                                            :server server,
-                                                           :node node
-                                                           :close-node? create-node?
                                                            :socket conn-socket,
+                                                           :node node
                                                            :in (DataInputStream. (.getInputStream conn-socket)),
                                                            :out (DataOutputStream. (.getOutputStream conn-socket))
                                                            :!closing? (atom false)
-                                                           :conn-state (atom {:close-promise close-promise
-                                                                              :session {:access-mode :read-only
-                                                                                        :clock (:clock @server-state)}})})
-                                         (cmd-startup))
+                                                           :conn-state !conn-state})
+                                         (cmd-startup)
+                                         (cond-> (nil? node) (assoc :node (->tmp-node server @!conn-state))))
                                      (catch Throwable t
                                        (log/warn t "error on conn startup")))))]
 
@@ -1752,9 +1755,7 @@
   a connection is created on the servers :thread-pool via the (connect) function."
   [{:keys [^ServerSocket accept-socket,
            ^ExecutorService thread-pool]
-    :as server}
-
-   node]
+    :as server}]
 
   (try
     (loop []
@@ -1771,7 +1772,7 @@
             (let [conn-socket (.accept accept-socket)]
               (.setTcpNoDelay conn-socket true)
               ;; TODO fix buffer on tp? q gonna be infinite right now
-              (.submit thread-pool ^Runnable (fn [] (connect server conn-socket node))))
+              (.submit thread-pool ^Runnable (fn [] (connect server conn-socket))))
             (catch SocketException e
               (when (and (not (.isClosed accept-socket))
                          (not= "Socket closed" (.getMessage e)))
@@ -1804,7 +1805,8 @@
                drain-wait 5000}}]
    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
      (let [port (.getLocalPort accept-socket)
-           server (map->Server {:port port
+           server (map->Server {:node node
+                                :port port
                                 :accept-socket accept-socket
                                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                                 :!closing? (atom false)
@@ -1819,23 +1821,29 @@
                                                                     "IntervalStyle" "ISO_8601"
                                                                     "TimeZone" (str (.getZone ^Clock default-clock))
                                                                     "integer_datetimes" "on"}}))
-                                :ssl-ctx ssl-ctx})
+                                :ssl-ctx ssl-ctx
+                                :!tmp-nodes (when-not node
+                                              (ConcurrentHashMap.))})
+
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)
                              (.unstarted (fn []
-                                           (accept-loop server node))))
+                                           (accept-loop server))))
 
            server (assoc server :accept-thread accept-thread)]
 
        (.start accept-thread)
        server))))
 
-(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads ssl]}]
-  (cond-> (.getServer config)
-    (some? port) (.port port)
-    (some? num-threads) (.numThreads num-threads)
-    (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl))))
+(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads ssl] :as server}]
+  (if server
+    (cond-> (.getServer config)
+      (some? port) (.port port)
+      (some? num-threads) (.numThreads num-threads)
+      (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl)))
+
+    (.setServer config nil)))
 
 (defn- ->ssl-ctx [^Path ks-path, ^String ks-password]
   (let [ks-password (.toCharArray ks-password)
@@ -1847,20 +1855,30 @@
     (doto (SSLContext/getInstance "TLS")
       (.init (.getKeyManagers kmf) nil nil))))
 
-(defmethod ig/prep-key ::server [_ ^ServerConfig config]
-  {:node (ig/ref :xtdb/node)
-   :port (.getPort config)
+(defn- <-config [^ServerConfig config]
+  {:port (.getPort config)
    :num-threads (.getNumThreads config)
    :ssl-ctx (when-let [ssl (.getSsl config)]
               (->ssl-ctx (.getKeyStore ssl) (.getKeyStorePassword ssl)))})
 
+(defmethod ig/prep-key ::server [_ config]
+  (into {:node (ig/ref :xtdb/node)}
+        (<-config config)))
+
 (defmethod ig/init-key ::server [_ {:keys [node] :as opts}]
   (let [{:keys [port] :as srv} (serve node opts)]
-    (log/info "Server started on port:" port)
+    (log/info (if node "Server" "Playground") "started on port:" port)
     srv))
 
 (defmethod ig/halt-key! ::server [_ srv]
   (util/close srv))
+
+(defn open-playground
+  (^xtdb.pgwire.Server [] (open-playground nil))
+
+  (^xtdb.pgwire.Server [{:keys [port], :or {port 0}}]
+   (ig/init-key ::server (<-config (doto (ServerConfig.)
+                                     (.port port))))))
 
 (defn transit->pgobject [v]
   (doto (PGobject.)
