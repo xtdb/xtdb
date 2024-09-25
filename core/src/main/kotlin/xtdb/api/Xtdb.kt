@@ -20,8 +20,11 @@ import kotlin.io.path.extension
 
 interface Xtdb : AutoCloseable {
 
+    val serverPort: Int
+
     @Serializable
     data class Config(
+        val server : ServerConfig = ServerConfig(),
         var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
         var metrics: Metrics.Factory? = null,
@@ -30,21 +33,24 @@ interface Xtdb : AutoCloseable {
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
+        fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }
+
+        @JvmSynthetic
+        fun server(configure: ServerConfig.() -> Unit) = apply { server.configure() }
+
+        @JvmSynthetic
+        fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
+
+        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
+
+        @JvmSynthetic
+        fun metrics(metrics: Metrics.Factory) = apply { this.metrics = metrics }
 
         fun getModules(): List<XtdbModule.Factory> = modules
         fun module(module: XtdbModule.Factory) = apply { this.modules += module }
         fun modules(vararg modules: XtdbModule.Factory) = apply { this.modules += modules }
         fun modules(modules: List<XtdbModule.Factory>) = apply { this.modules += modules }
-
-        @JvmSynthetic
-        fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
-
-        fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
-        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
-
-        @JvmSynthetic
-        fun metrics(metrics: Metrics.Factory) = apply { this.metrics = metrics }
 
         fun open(): Xtdb = requiringResolve("xtdb.node.impl/open-node").invoke(this) as Xtdb
     }
@@ -63,7 +69,7 @@ interface Xtdb : AutoCloseable {
          * or is not a valid `.yaml` extension file.
          */
         @JvmStatic
-        fun openNode(path: Path): Any {
+        fun openNode(path: Path): Xtdb {
             if (path.extension != "yaml") {
                 throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
             } else if (!path.toFile().exists()) {

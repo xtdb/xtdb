@@ -31,13 +31,13 @@
   (alter-var-root #'node (constantly nil)))
 
 (def standalone-config
-  {::xtdb {:node-opts {:log [:local {:path (io/file dev-node-dir "log")}]
+  {::xtdb {:node-opts {:server {:port 5432
+                                :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+                                      :keystore-password "password123"}}
+                       :log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
-                       :http-server {}
                        :metrics [:prometheus {:port 8080}]
-                       :pgwire-server {:port 5433
-                                       :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
-                                             :keystore-password "password123"}}
+                       :http-server {}
                        :flight-sql-server {:port 52358}}}})
 
 (comment

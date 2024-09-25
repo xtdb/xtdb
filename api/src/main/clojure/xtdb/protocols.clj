@@ -7,8 +7,7 @@
   (^java.util.stream.Stream open-sql-query [node ^String query ^QueryOptions opts])
   (^java.util.stream.Stream open-xtql-query [node query opts])
   (^xtdb.api.TransactionKey submit-tx [node tx-ops ^TxOptions opts])
-  (^xtdb.api.TransactionResult execute-tx [node tx-ops ^TxOptions opts])
-  (^long pg-port [node]))
+  (^xtdb.api.TransactionResult execute-tx [node tx-ops ^TxOptions opts]))
 
 (defprotocol PStatus
   (latest-submitted-tx [node])

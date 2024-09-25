@@ -12,7 +12,6 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
-            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -599,10 +598,10 @@
       "verify-ca" :unsupported
       "verify-full" :unsupported))
 
-  (with-open [node (xtn/start-node {:pgwire-server {:port 0
-                                                    :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
-                                                          :keystore-password "password123"}}})]
-    (binding [*port* (xtp/pg-port node)]
+  (with-open [node (xtn/start-node {:server {:port 0
+                                             :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+                                                   :keystore-password "password123"}}})]
+    (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
         (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
         (t/is (= [{:_id 1}]
@@ -1337,7 +1336,7 @@
 
 (t/deftest test-pg-port
   (util/with-open [node (xtn/start-node {::pgwire/server {:port 0}})]
-    (binding [*port* (xtp/pg-port node)]
+    (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc-conn)]
         (t/is (= "ping" (ping conn)))))))
 
