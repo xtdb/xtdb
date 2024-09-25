@@ -22,11 +22,13 @@ You can run the http-proxy locally via the test harness:
 `./gradlew :lang:test-harness:httpProxy`
 
 This will run the http-proxy server on `http://localhost:3300`.
-You can then run the tests via:
+  * [ ] You can then run the tests via:
 
 ```shell
-poetry run pytest
+poetry run pytest ---ignore=xtdb/test/test_pgwire.py
 ```
+See `drivers.python-test/python-http-test` for specific ivocation
+
 
 There is also the option of running a static typechecker
 ```shell

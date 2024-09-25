@@ -39,3 +39,15 @@ POST $base_url/tx
 # Tear down the node like so
 GET http://localhost:3300/teardown?<token>
 ```
+
+### Postgres (pgwire) Local Driver Testing
+
+Start a repl `./gradlew :clojureRepl`
+
+Run `(user/pgpg)` -> `(go)` which starts a new pgwire server for each connection
+
+Run driver tests directly:
+
+Python: `PG_PORT=5432 poetry run pytest xtdb/test/test_pgwire.py`
+
+JS: `PG_PORT=5432 yarn test`
