@@ -9,7 +9,7 @@ describe("accepts ISO-formatted timestamps, #3685", function() {
   before (async () => {
     sql = postgres({
       host: "localhost",
-      port: process.env.PG_PORT,
+      port: process.env.PG_PORT || 5439,
       fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
       types: {
         bool: {to: 16},

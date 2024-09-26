@@ -1,43 +1,44 @@
 import assert from 'assert';
 import postgres from 'postgres';
 import tjs from 'transit-js';
+import * as uuid from 'uuid';
 
 const transitReadHandlers = {
   'time/zoned-date-time': (s) => new Date(s.replace(/\[.+\]$/, '')),
 }
 
-describe("connects to XT", function() {
+let sql;
 
-  let sql;
-
-  before (async () => {
-    sql = postgres({
-      host: "localhost",
-      port: process.env.PG_PORT,
-      fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
-      types: {
-        bool: {to: 16},
-        int: {
-          to: 20,
-          from: [23, 20], // int4, int8
-          parse: parseInt
-        },
-        transit: {
-          to: 16384,
-          from: [16384],
-          serialize: (v) => tjs.writer('json').write(v),
-          parse: (v) => tjs.reader('json', { handlers: transitReadHandlers }).read(v)
-        }
+beforeEach (async () => {
+  sql = postgres({
+    host: "localhost",
+    port: process.env.PG_PORT || 5439,
+    database: uuid.v4().toString(),
+    fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
+    types: {
+      bool: {to: 16},
+      int: {
+        to: 20,
+        from: [23, 20], // int4, int8
+        parse: parseInt
+      },
+      transit: {
+        to: 16384,
+        from: [16384],
+        serialize: (v) => tjs.writer('json').write(v),
+        parse: (v) => tjs.reader('json', { handlers: transitReadHandlers }).read(v)
       }
-    })
-
-    await sql`SELECT 1` // HACK https://github.com/porsager/postgres/issues/751
+    }
   })
 
-  after(async () => {
-    await sql.end()
-  })
+  await sql`SELECT 1` // HACK https://github.com/porsager/postgres/issues/751
+})
 
+afterEach(async () => {
+  await sql.end()
+})
+
+describe("connects to XT", function() {
   it("should return the inserted row", async () => {
     const conn = await sql.reserve()
 
@@ -113,8 +114,6 @@ describe("connects to XT", function() {
       await conn`INSERT INTO tagged_nums RECORDS {_id: 1, nest: ${conn.typed.transit({a: 1, b: 1.0, c: 1.1, d: tjs.tagged('f64', 1)})}}`
 
       let res = await conn`SELECT _id, nest FROM tagged_nums`
-
-      res[0].nest = tjs.mapToObject(res[0].nest)
 
       assert.deepStrictEqual([...res], [{_id: 1, nest: {a: 1, b: 1, c: 1.1, d: 1}}])
 

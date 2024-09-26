@@ -10,7 +10,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.compactor :as c]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.pgwire :as pgw])
   (:import [java.nio.file Path]
            java.time.Duration
            [org.apache.arrow.memory RootAllocator]
@@ -46,6 +47,16 @@
     (util/delete-dir (util/->path dev-node-dir))
     (go)))
 
+(def playground-config
+  {::playground {:port 5439}})
+
+(defmethod i/init-key ::playground [_ {:keys [port]}]
+  (pgw/open-playground {:port port}))
+
+(defmethod i/halt-key! ::playground [_ srv]
+  (util/close srv))
+
+(ir/set-prep! (fn [] playground-config))
 (ir/set-prep! (fn [] standalone-config))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

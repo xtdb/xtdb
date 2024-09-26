@@ -7,22 +7,27 @@
     "prepare": "rimraf dist && tsc",
     "test": "mocha"
   },
-  "files": ["dist/"],
+  "files": [
+    "dist/"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/xtdb/xtdb"
   },
-  "keywords": ["xtdb"],
+  "keywords": [
+    "xtdb"
+  ],
   "author": "JUXT Ltd",
   "license": "MPL-2.0",
   "devDependencies": {
-    "luxon": "^3.4.4",
     "@types/luxon": "^3.4.2",
+    "luxon": "^3.4.4",
     "mocha": "^10.7.3",
+    "mocha-junit-reporter": "^2.2.1",
     "postgres": "^3.4.4",
     "rimraf": "^3.0.2",
-    "typescript": "^5.3.3",
     "transit-js": "^0.8.874",
-    "mocha-junit-reporter": "^2.2.1"
+    "typescript": "^5.3.3",
+    "uuid": "^10.0.0"
   }
 }
