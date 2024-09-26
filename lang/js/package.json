@@ -21,6 +21,7 @@
   "devDependencies": {
     "mocha": "^10.7.3",
     "mocha-junit-reporter": "^2.2.1",
+    "pg": "^8.13.0",
     "postgres": "^3.4.4",
     "transit-js": "^0.8.874",
     "uuid": "^10.0.0"
