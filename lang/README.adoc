@@ -1,0 +1,23 @@
+= Non-JVM languages
+
+This project provides two things:
+
+* A test suite for each of the supported languages that demonstrates connectivity with XTDB, and enumerates pgwire-specific nuances of the individual drivers.
+* (Eventually) XTDB utility libraries where required - i.e. if a particular language needs a lot of shoe-horning to work with the standard PostgreSQL drivers.
+
+== Usage
+
+All of the test suites here depend on a running XTDB playground.
+
+You can either:
+
+1. Create an XTDB playground through a running REPL and the dev.clj namespace (see the dev README for more details) - this means you can make live changes, and then re-run the test suites.
+2. Use docker-compose to start it (this is what CI does):
+  a) `./gradlew :docker:standalone:shadowJar` in the project root
+  b) `docker compose up -d xtdb` in this directory.
+
+Then, to run the tests, either:
+
+1. If you have all of the dependencies installed, you don't need to use docker-compose to run the test suites.
+   See the docker-compose.yml file and the respective Dockerfiles for what CI runs (nothing surprising - NodeJS is `yarn install`, `yarn run test`, for example).
+2. Otherwise, `docker compose run --rm js|python|etc`.

@@ -7,8 +7,8 @@ on:
       - docs-live
 
 jobs:
-  test:
-    name: Test
+  gradle-test:
+    name: Gradle Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,21 +20,10 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-      - name: Setup Node.JS
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - uses: Gr1N/setup-poetry@v8
-        with:
-          poetry-version: "1.8.1"
       - name: Test
         uses: gradle/actions/setup-gradle@v3
         with:
-          arguments: test --continue
+          arguments: test
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
         if: success() || failure() # always run even if the previous step fails
@@ -47,7 +36,50 @@ jobs:
         with:
           status: ${{ job.status }}
           notification_title: "*{workflow}* has {status_message}:"
-          message_format: "{emoji} `test` job has {status_message} in *{workflow}*"
+          message_format: "{emoji} `gradle-test` job has {status_message} in *{workflow}*"
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  lang-test:
+    name: Non-JVM language tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build XTDB shadowJar
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          arguments: :docker:standalone:shadowJar
+      - name: XTDB service
+        uses: hoverkraft-tech/compose-action@v2.0.2
+        with:
+          services: "xtdb"
+          cwd: "lang"
+      - name: JS test
+        working-directory: "lang"
+        run: |
+          docker compose run js
+
+      - name: Python test
+        working-directory: "lang"
+        run: |
+          docker compose run python
+
+      - name: Post Slack Notification (On Fail)
+        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notification_title: "*{workflow}* has {status_message}:"
+          message_format: "{emoji} `lang-test` job has {status_message} in *{workflow}*"
           notify_when: "failure"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

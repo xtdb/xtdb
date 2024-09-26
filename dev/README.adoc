@@ -25,7 +25,7 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** `(go)` to start up the dev node
 ** `(halt)` to stop it
 ** `(reset)` to stop it, reload changed namespaces, and restart it
-** if you're using Emacs/CIDER, `cider-ns-refresh` will do all this for you - `C-c M-n M-r`, `, s x` in Spacemacs, `, n r` in Doom.
+** if you're using Emacs/CIDER, `cider-ns-refresh` will do all this for you - `C-c M-n M-r`, `, s x` in Spacemacs, `, r r` in Doom.
 ** Conjure users can use `ConjureRefresh`, see the https://github.com/Olical/conjure#mappings[docs] for bindings
 ** see https://github.com/weavejester/integrant-repl[Integrant REPL] for more details.
 * You should now have a running XTDB node under `dev/node` - you can verify this by calling `(xt/status node)` (in the `dev` namespace).
@@ -36,6 +36,15 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
 ** To run a single test file, run (e.g.) `./gradlew test --tests 'xtdb.api_test**'`
 ** Run `git config core.hooksPath .githooks` to add xtdb hooks to your local repo.
+
+== XTDB 'playground'
+
+XTDB nodes can be started in 'playground' mode - either through `--playground` flag to `clj -m xtdb.main` or the standalone Docker image, or by running the `playground-config` `ir/set-prep` in the `dev` namespace.
+
+In playground mode, to begin with, we only start the pgwire server, without an associated XTDB node.
+Then, whenever a new connection is initiated, we create a new isolated in-memory node for every distinct 'database' specified in the connection parameters.
+
+This is particularly useful for non-JVM testing - see the `/lang` README for more details.
 
 == Attaching a debugger to the Clojure REPL
 
@@ -79,7 +88,6 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 * Create a private key for the service account, saving a copy of the JSON credential file locally.
 * Authenticate as the service account, using `gcloud auth activate-service-account <example-service-account@domain.com> --key-file <private-key.json>`
 * Start the Gradle REPL and connect to it, to have all of the google cloud creds available.
-
 
 == Profiling
 

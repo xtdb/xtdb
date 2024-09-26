@@ -11,7 +11,7 @@ let sql;
 
 beforeEach (async () => {
   sql = postgres({
-    host: "localhost",
+    host: process.env.PG_HOST || "localhost",
     port: process.env.PG_PORT || 5439,
     database: uuid.v4().toString(),
     fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607

@@ -1,0 +1,19 @@
+services:
+  xtdb:
+    build:
+      context: ../docker/standalone
+    command: ["--playground-port=5439"]
+
+  js:
+    build:
+      context: js
+    environment:
+      PG_HOST: xtdb
+      PG_PORT: 5439
+
+  python:
+    build:
+      context: python
+    environment:
+      PG_HOST: xtdb
+      PG_PORT: 5439

@@ -1,3 +1,6 @@
-*
-!target/
-!docker/
+/build/resources/test/
+/src/test/
+/docs/
+.git
+docker-compose.yml
+Dockerfile.*
