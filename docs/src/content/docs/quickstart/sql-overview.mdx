@@ -561,10 +561,12 @@ SELECT name, favorite_color , _valid_from, _system_from FROM people`}/>
     </Fiddle>
   <Card slot="2">
 ```sql
-user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-06-01';
- _id | favorite_color | info | likes | name
------+----------------+------+-------+-------
-   2 | blue           |      |       | carol
+user=> SETTING DEFAULT VALID_TIME AS OF DATE '2023-10-01',
+DEFAULT SYSTEM_TIME AS OF DATE '2030-01-01'; -- (some recent/latest timestamp)
+SELECT name, favorite_color , _valid_from, _system_from FROM people;
+ name  | favorite_color |        _valid_from        |           _system_from
+-------+----------------+---------------------------+----------------------------------
+ carol | red            | 2023-09-01 00:00:00+00:00 | 2024-07-18 20:09:27.822861+00:00
 (1 row)
 ```
   </Card>
