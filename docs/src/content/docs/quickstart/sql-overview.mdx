@@ -532,6 +532,9 @@ INSERT INTO people (_id, name, favorite_color, _valid_from)
   </Fiddle>
   <Card slot="2">
 ```sql
+user=> INSERT INTO people (_id, name, favorite_color, _valid_from)
+  VALUES (2, 'carol', 'red', DATE '2023-09-01');
+INSERT 0 0
 user=> SELECT name, favorite_color, _valid_from, _valid_to, _system_from, _system_to
 FROM people FOR VALID_TIME ALL FOR SYSTEM_TIME ALL;
  name  | favorite_color |          _valid_from          |      _valid_to      |         _system_from          |          _system_to
