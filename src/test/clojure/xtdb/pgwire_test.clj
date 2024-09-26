@@ -2000,3 +2000,11 @@ ORDER BY t.oid DESC LIMIT 1"
               stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
     (t/is (is (thrown-with-msg? PSQLException #"Illegal argument: 'missing-id'" (.execute stmt))))
     (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"])))))
+
+(deftest test-param-type-hints-dml
+  (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" true)
+              stmt1 (.prepareStatement conn "INSERT INTO docs (_id, foo) VALUES(1, ?::FLOAT, ?)")
+              stmt2 (.prepareStatement conn "INSERT INTO docs (_id, foo) VALUES(1, ?, ?::FLOAT)")]
+
+    (t/is (= ["float4" nil] (param-metadata stmt1)))
+    (t/is (= [nil "float4"] (param-metadata stmt2)))))
