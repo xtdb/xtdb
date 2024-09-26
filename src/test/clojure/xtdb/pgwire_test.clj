@@ -271,6 +271,7 @@
      ;; dates / times
 
      {:sql "DATE '2021-12-24'", :clj "2021-12-24"}
+     {:sql "TIME '03:04:11'", :clj "03:04:11"}
      {:sql "TIMESTAMP '2021-03-04 03:04:11'", :clj "2021-03-04T03:04:11"}
      {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'", :clj "2021-03-04T03:04:11+02:00"}
      {:sql "TIMESTAMP '2021-12-24 11:23:44.003'", :clj "2021-12-24T11:23:44.003"}
@@ -1981,3 +1982,11 @@ ORDER BY t.oid DESC LIMIT 1"
           (t/is (= [{:_id 1}] (jdbc/execute! conn1a ["SELECT * FROM bar"])))
           (t/is (= [{:_id 1}] (jdbc/execute! conn1b ["SELECT * FROM foo"])))
           (t/is (= [{:_id 2}] (jdbc/execute! conn2 ["SELECT * FROM foo"]))))))))
+
+(deftest test-time
+  (with-open [conn (pg-conn {})]
+
+    (t/is (=
+           [{:v "20:40:31.932254"}]
+           (pg/execute conn "SELECT TIME '20:40:31.932254' v"))
+          "time is returned as json")))

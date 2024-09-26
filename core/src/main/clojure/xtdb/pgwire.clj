@@ -21,7 +21,7 @@
            [java.nio.charset StandardCharsets]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
+           [java.time Clock Duration LocalTime LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
@@ -441,6 +441,7 @@
     ;; java.time datetime-ish toString is already iso8601, we may want to tweak this later
     ;; as the string format often omits redundant components (like trailing seconds) which may make parsing harder
     ;; for clients, doesn't matter for now - json probably gonna die anyway
+    (instance? LocalTime obj) (str obj)
     (instance? LocalDate obj) (str obj)
     (instance? LocalDateTime obj) (str obj)
     (instance? OffsetDateTime obj) (str obj)
