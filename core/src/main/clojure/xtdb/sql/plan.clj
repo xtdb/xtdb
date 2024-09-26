@@ -2407,8 +2407,8 @@
 
   (visitDmlStatementValidTimePortion [_ ctx]
     (let [expr-visitor (->ExprPlanVisitor env scope)
-          from-expr (-> (.expr ctx 0) (.accept expr-visitor))
-          to-expr (-> (.expr ctx 1) (.accept expr-visitor))]
+          from-expr (-> (.from ctx) (.accept expr-visitor))
+          to-expr (some-> (.to ctx) (.accept expr-visitor))]
       {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
        :projection [{vf-col (xt/template
                              (greatest ~vf-col (cast ~(or from-expr '(current-timestamp)) ~types/temporal-col-type)))}

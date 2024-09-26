@@ -762,7 +762,7 @@ deleteStatementSearched
     ;
 
 dmlStatementValidTimeExtents
-  : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' expr 'TO' expr # DmlStatementValidTimePortion
+  : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' from=expr ('TO' to=expr)? # DmlStatementValidTimePortion
   | 'FOR' ('ALL' 'VALID_TIME' | 'VALID_TIME' 'ALL') # DmlStatementValidTimeAll
   ;
 
