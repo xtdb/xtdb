@@ -33,7 +33,9 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb
           tags: |
-            type=semver,pattern={{version}}
+            # temporarily use `match` so that it tags `latest` even on pre-releases
+            # type=semver,pattern={{version}}
+            type=match,pattern=v(.*),group=1
             type=schedule
             type=edge,branch=main
 
@@ -43,7 +45,9 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-aws
           tags: |
-            type=semver,pattern={{version}}
+            # temporarily use `match` so that it tags `latest` even on pre-releases
+            # type=semver,pattern={{version}}
+            type=match,pattern=v(.*),group=1
             type=schedule
             type=edge,branch=main
 
@@ -53,7 +57,9 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-azure
           tags: |
-            type=semver,pattern={{version}}
+            # temporarily use `match` so that it tags `latest` even on pre-releases
+            # type=semver,pattern={{version}}
+            type=match,pattern=v(.*),group=1
             type=schedule
             type=edge,branch=main
 
