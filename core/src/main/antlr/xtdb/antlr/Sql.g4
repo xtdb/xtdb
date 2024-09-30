@@ -25,7 +25,7 @@ directlyExecutableStatement
     | 'ROLLBACK' # RollbackStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
-    | 'SET' identifier ( 'TO' | '=' ) literal #SetSessionVariableStatement
+    | 'SET' identifier ( 'TO' | '=' )? (literal | 'NONE') #SetSessionVariableStatement
     | 'SHOW' showVariable # ShowVariableStatement
     | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
     ;

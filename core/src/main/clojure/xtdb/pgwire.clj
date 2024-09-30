@@ -298,8 +298,8 @@
                      (visitSetSessionVariableStatement [_ ctx]
                        {:statement-type :set-session-parameter
                         :parameter (session-param-name (.identifier ctx))
-                        :value (-> (.literal ctx)
-                                   (.accept (plan/->ExprPlanVisitor nil nil)))})
+                        :value (some-> (.literal ctx)
+                                       (.accept (plan/->ExprPlanVisitor nil nil)))})
 
                      (visitSetSessionCharacteristicsStatement [this ctx]
                        {:statement-type :set-session-characteristics

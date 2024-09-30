@@ -226,6 +226,7 @@ NEST_MANY : 'NEST_MANY' ;
 NEST_ONE : 'NEST_ONE' ;
 NEXT : 'NEXT' ;
 NO : 'NO' ;
+NONE : 'NONE';
 NOT: 'NOT' ;
 NOW : 'NOW' ;
 NTH_VALUE : 'NTH_VALUE' ;

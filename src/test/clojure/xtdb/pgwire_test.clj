@@ -1990,3 +1990,7 @@ ORDER BY t.oid DESC LIMIT 1"
            [{:v "20:40:31.932254"}]
            (pg/execute conn "SELECT TIME '20:40:31.932254' v"))
           "time is returned as json")))
+
+(deftest set-role-none-3745
+  (with-open [conn (jdbc-conn {})]
+    (jdbc/execute! conn ["SET ROLE NONE"])))
