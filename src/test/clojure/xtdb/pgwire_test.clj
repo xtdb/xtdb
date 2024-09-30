@@ -1990,3 +1990,16 @@ ORDER BY t.oid DESC LIMIT 1"
            [{:v "20:40:31.932254"}]
            (pg/execute conn "SELECT TIME '20:40:31.932254' v"))
           "time is returned as json")))
+
+(deftest test-monormorphic-coercion-3693
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO docs(_id, i, f) VALUES (1, 1::SMALLINT, 1.0::FLOAT)"])
+    (jdbc/execute! conn ["INSERT INTO docs(_id, i, f) VALUES (2, 2::INT, 2.0::DOUBLE PRECISION)"])
+
+    (with-open [stmt (.prepareStatement conn "SELECT * FROM docs")]
+
+      (t/is (= [{"_id" "int8"} {"f" "float8"} {"i" "int8"}] (result-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"_id" 2, "f" 2.0, "i" 2} {"_id" 1, "f" 1.0, "i" 1}] (rs->maps rs)))))))
