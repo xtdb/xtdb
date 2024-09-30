@@ -1977,6 +1977,10 @@
   PlanError
   (error-string [_] (format "Invalid parameter index: %d (%d arguments provided)" param-idx arg-count)))
 
+(defrecord MissingColumnNameList []
+  PlanError
+  (error-string [_ ] "INSERT with VALUES needs column name list"))
+
 (defrecord TableRowsVisitor [env scope out-col-syms]
   SqlVisitor
   (visitTableValueConstructor [this ctx] (.accept (.rowValueList ctx) this))
@@ -2336,8 +2340,9 @@
         query-expr)))
 
   (visitInsertValues [this ctx]
-    (let [out-col-syms (->> (.columnName (.columnNameList ctx))
-                            (mapv identifier-sym))]
+    (if-let [out-col-syms (some->> (.columnNameList ctx)
+                                   (.columnName)
+                                   (mapv identifier-sym))]
       (as-> (-> (.tableValueConstructor ctx)
                 (.accept (assoc this :out-col-syms out-col-syms)))
           {:keys [plan col-syms] :as query-expr}
@@ -2354,7 +2359,8 @@
                         plan]
                        col-syms)
 
-          query-expr))))
+          query-expr))
+      (add-err! env (->MissingColumnNameList))))
 
   (visitInsertFromSubquery [this ctx]
     (let [out-col-syms (some->> (.columnNameList ctx) .columnName

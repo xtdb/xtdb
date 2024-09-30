@@ -2354,3 +2354,15 @@ UNION ALL
 
   (t/is (= [{:xt/id 2, :foo "bar"} {:xt/id 1, :foo "toto"}]
            (xt/q tu/*node* "SELECT * FROM docs"))))
+
+(deftest test-no-column-name-list-insert-with-values-3752
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs VALUES(1, 'bar')"]])
+
+  (t/is (= #xt/illegal-arg [:xtdb/sql-error "Errors planning SQL statement:
+  - INSERT with VALUES needs column name list
+  - INSERT does not contain mandatory _id column" {:errors [{} {}]}]
+           (-> (xt/q tu/*node* '(from :xt/txs [error]))
+               first
+               :error)))
+
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
