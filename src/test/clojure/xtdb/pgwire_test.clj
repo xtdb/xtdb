@@ -1958,9 +1958,22 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest set-role
   (with-open [conn (jdbc-conn {})]
-    (testing "SET ROLE identifier")
-      (jdbc/execute! conn ["SET ROLE anything"])
-    (testing "SET ROLE NONE")
-      (jdbc/execute! conn ["SET ROLE NONE"])
-    (testing "ROLE can be used as identifier")
-      (jdbc/execute! conn ["SELECT 1 AS ROLE"])))
+    (testing "SET ROLE identifier"
+      (jdbc/execute! conn ["SET ROLE anything"]))
+    (testing "SET ROLE NONE"
+      (jdbc/execute! conn ["SET ROLE NONE"]))
+    (testing "ROLE can be used as identifier"
+      (jdbc/execute! conn ["SELECT 1 AS ROLE"]))))
+
+(deftest test-monormorphic-coercion-3693
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO docs(_id, i, f) VALUES (1, 1::SMALLINT, 1.0::FLOAT)"])
+    (jdbc/execute! conn ["INSERT INTO docs(_id, i, f) VALUES (2, 2::INT, 2.0::DOUBLE PRECISION)"])
+
+    (with-open [stmt (.prepareStatement conn "SELECT * FROM docs")]
+
+      (t/is (= [{"_id" "int8"} {"f" "float8"} {"i" "int8"}] (result-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+
+        (t/is (= [{"_id" 2, "f" 2.0, "i" 2} {"_id" 1, "f" 1.0, "i" 1}] (rs->maps rs)))))))
