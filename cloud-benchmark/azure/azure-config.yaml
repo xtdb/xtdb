@@ -1,3 +1,7 @@
+# Use any available port for PGWire Server.
+server: 
+  port: 0
+
 # CONFIG FOR RUNNING WITH AZURE INFRA
 txLog: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
