@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xtdb-env-config
+  namespace: xtdb-deployment
+data:
+  XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "aaaaaaaa-aaaa-1111-1111-aaaaaaaaaaaa"
+  XTDB_AZURE_STORAGE_ACCOUNT: "xtdbexamplestorage"
+  XTDB_AZURE_STORAGE_CONTAINER: "xtdbstorage"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service.xtdb-deployment.svc.cluster.local:9092"
+  XTDB_TX_TOPIC: "xtdb-tx-topic"
+  XTDB_FILES_TOPIC: "xtdb-files-topic"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: xtdb-statefulset
+  namespace: xtdb-deployment
+  labels:
+    app: xtdb-statefulset
+spec:
+  serviceName: xtdb-service
+  replicas: 3
+  selector:
+    matchLabels:
+      app: xtdb-statefulset
+  template:
+    metadata:
+      labels:
+        app: xtdb-statefulset
+        azure.workload.identity/use: "true" 
+    spec:
+      serviceAccountName: xtdb-service-account
+      nodeSelector:
+        nodepool: "xtdbpool"
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox
+        command: ['sh', '-c', 'until nc -z kafka-service.xtdb-deployment.svc.cluster.local 9092; do echo waiting for kafka; sleep 5; done;']
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "256Mi"
+      containers:
+      - name: xtdb-container
+        image: ghcr.io/xtdb/xtdb-azure:nightly
+        volumeMounts:
+        - name: xtdb-persistent-storage
+          mountPath: /var/lib/xtdb/buffers
+        resources:
+          requests:
+            memory: 5120Mi
+          limits:
+            memory: 5120Mi
+        envFrom:
+        - configMapRef:
+            name: xtdb-env-config
+        env:
+        - name: ORDINAL_NUMBER
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        - name: XTDB_LOCAL_DISK_CACHE
+          value: /var/lib/xtdb/buffers/disk-cache-$(ORDINAL_NUMBER)
+        - name: XTDB_NODE_ID
+          value: "xtdb-node-$(ORDINAL_NUMBER)"
+  volumeClaimTemplates:
+  - metadata:
+      name: xtdb-persistent-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 50Gi
+      storageClassName: managed-csi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: xtdb-service
+  namespace: xtdb-deployment
+  labels:
+    app: xtdb-statefulset
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      name: http
+    - port: 5432
+      name: pgwire
+  selector:
+    app: xtdb-statefulset
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: xtdb-prometheus
+  namespace: xtdb-deployment
+  labels:
+    app: xtdb-statefulset
+spec:
+  ports:
+    - name: metrics
+      port: 80
+      protocol: TCP
+      targetPort: 8080
+  clusterIP: None 
+  selector:
+    app: xtdb-statefulset
