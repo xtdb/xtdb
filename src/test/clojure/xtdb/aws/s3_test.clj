@@ -39,7 +39,8 @@
 
 (defn start-kafka-node [local-disk-cache prefix] 
   (xtn/start-node
-   {:storage [:remote
+   {:server {:port 0}
+    :storage [:remote
               {:object-store [:s3 {:bucket bucket
                                    :prefix (util/->path (str "xtdb.s3-test." prefix))}]
                :local-disk-cache local-disk-cache}]
