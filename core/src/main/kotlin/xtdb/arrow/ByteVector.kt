@@ -27,7 +27,7 @@ class ByteVector(
         else {
             if (src.nullable) nullable = true
             RowCopier { srcIdx ->
-                valueCount.also { writeBoolean(src.getBoolean(srcIdx)) }
+                valueCount.also { writeByte(src.getByte(srcIdx)) }
             }
         }
 }
