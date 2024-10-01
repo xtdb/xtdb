@@ -29,6 +29,18 @@ internal class CeilingTest {
     }
 
     @Test
+    fun testBinarySearch() {
+        val list = longs.from(10, 8, 6, 4, 2)
+        assertEquals(0, list.binarySearch(10))
+        assertEquals(2, list.binarySearch(6))
+        assertEquals(4, list.binarySearch(2))
+        assertEquals(-2, list.binarySearch(9))
+        assertEquals(-1, list.binarySearch(11))
+        assertEquals(-5, list.binarySearch(3))
+        assertEquals(-6, list.binarySearch(1))
+    }
+
+    @Test
     fun testAppliesLogs() {
         assertEquals(longs.from(MAX_LONG, MIN_LONG), ceiling.validTimes)
         assertEquals(longs.from(MAX_LONG), ceiling.sysTimeCeilings)

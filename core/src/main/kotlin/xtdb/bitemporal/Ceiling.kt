@@ -25,6 +25,21 @@ internal fun LongArrayList.reverseLinearSearch(needle: Long): Int {
     return -1
 }
 
+internal fun LongArrayList.binarySearch(needle: Long): Int {
+    var left = 0
+    var right = elementsCount
+    while (left < right) {
+        val mid = (left + right) / 2
+        val x = buffer[mid]
+        when {
+            x == needle -> return mid
+            x > needle -> left = mid + 1
+            else -> right = mid
+        }
+    }
+    return -left - 1
+}
+
 data class Ceiling(val validTimes: LongArrayList, val sysTimeCeilings: LongArrayList) {
     constructor() : this(LongArrayList(), LongArrayList()) {
         reset()
@@ -50,11 +65,11 @@ data class Ceiling(val validTimes: LongArrayList, val sysTimeCeilings: LongArray
     fun applyLog(systemFrom: Long, validFrom: Long, validTo: Long) {
         if (validFrom >= validTo) return
 
-        var end = validTimes.reverseLinearSearch(validTo)
+        var end = validTimes.binarySearch(validTo)
         val insertedEnd = end < 0
         if (insertedEnd) end = -(end + 1)
 
-        var start = validTimes.reverseLinearSearch(validFrom)
+        var start = validTimes.binarySearch(validFrom)
         val insertedStart = start < 0
         if (insertedStart) start = -(start + 1)
 
