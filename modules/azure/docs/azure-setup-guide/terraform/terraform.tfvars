@@ -1,13 +1,11 @@
 # Infra config & Tiers
-resource_group_location             = "East US"
-storage_account_tier                = "Standard"
-container_app_workload_profile_type = "D4"
+resource_group_location      = "East US"
+storage_account_tier         = "Standard"
+aks_system_pool_vm_size      = "Standard_D2_v2"
+aks_application_pool_vm_size = "Standard_D8_v3"
+
+kubernetes_namespace            = "xtdb-deployment"
+kubernetes_service_account_name = "xtdb-service-account"
 
 # Must be set & globally unique
-storage_account_name  = ""
-
-# Size of persistent disk backing the Kafka node
-kafka_persisent_data_max_size_gb = 100
-
-# Size of the mounted disk cache volume for the XTDB node
-local_disk_cache_max_size_gb = 50
+storage_account_name = ""
