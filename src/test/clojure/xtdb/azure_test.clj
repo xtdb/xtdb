@@ -82,7 +82,8 @@
 
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
-   {:storage [:remote
+   {:server {:port 0}
+    :storage [:remote
               {:object-store [:azure {:storage-account storage-account
                                       :container container
                                       :prefix (util/->path (str "xtdb.azure-test." prefix))}]
