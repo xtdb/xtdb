@@ -37,7 +37,7 @@ data class Polygon(val validTimes: LongArrayList, val sysTimeCeilings: LongArray
             validTimes.add(validTime)
             sysTimeCeilings.add(ceiling.getSystemTime(ceilIdx))
 
-            validTime = min(ceilValidTo.toDouble(), validTo.toDouble()).toLong()
+            validTime = min(ceilValidTo, validTo)
         } while (validTime != validTo)
 
         validTimes.add(validTime)
