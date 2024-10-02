@@ -56,7 +56,9 @@
                         "typtype" (types/col-type->field "typtype" :utf8)
                         "typbasetype" (types/col-type->field "typbasetype" :i32)
                         "typnotnull" (types/col-type->field "typnotnull" :bool)
-                        "typtypmod" (types/col-type->field "typtypmod" :i32)}
+                        "typtypmod" (types/col-type->field "typtypmod" :i32)
+                        "typsend" (types/col-type->field "typsend" :utf8)
+                        "typreceive" (types/col-type->field "typreceive" :utf8)}
    'pg_catalog/pg_class {"oid" (types/col-type->field "oid" :i32)
                          "relname" (types/col-type->field "relname" :utf8)
                          "relnamespace" (types/col-type->field "relnamespace" :i32)
@@ -167,7 +169,7 @@
   rel-wtr)
 
 (defn pg-type [^IRelationWriter rel-wtr]
-  (doseq [{:keys [oid typname] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
+  (doseq [{:keys [oid typname typsend typreceive] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
@@ -178,7 +180,9 @@
         "typtype" (.writeObject col-wtr "b")
         "typbasetype" (.writeInt col-wtr 0)
         "typnotnull" (.writeBoolean col-wtr false)
-        "typtypmod" (.writeInt col-wtr -1)))
+        "typtypmod" (.writeInt col-wtr -1)
+        "typsend" (.writeObject col-wtr typsend)
+        "typreceive" (.writeObject col-wtr typreceive)))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
   rel-wtr)
