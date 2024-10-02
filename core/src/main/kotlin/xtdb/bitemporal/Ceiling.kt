@@ -1,6 +1,7 @@
 package xtdb.bitemporal
 
 import com.carrotsearch.hppc.LongArrayList
+import xtdb.util.SkipList
 
 /**
  * searches a descending-sorted list for the last element greater than or equal to the needle
@@ -40,12 +41,27 @@ internal fun LongArrayList.binarySearch(needle: Long): Int {
     return -left - 1
 }
 
-data class Ceiling(val validTimes: LongArrayList, val sysTimeCeilings: LongArrayList) {
-    constructor() : this(LongArrayList(), LongArrayList()) {
+internal fun SkipList<Long>.binarySearch(needle: Long): Int {
+    var left = 0
+    var right = size
+    while (left < right) {
+        val mid = (left + right) / 2
+        val x = get(mid)
+        when {
+            x == needle -> return mid
+            x > needle -> left = mid + 1
+            else -> right = mid
+        }
+    }
+    return -left - 1
+}
+
+data class Ceiling(val validTimes: SkipList<Long>, val sysTimeCeilings: SkipList<Long>) {
+    constructor() : this(SkipList<Long>(), SkipList<Long>()) {
         reset()
     }
 
-    private fun reverseIdx(idx: Int) = validTimes.elementsCount - 1 - idx
+    private fun reverseIdx(idx: Int) = validTimes.size - 1 - idx
 
     fun getValidFrom(rangeIdx: Int) = validTimes[reverseIdx(rangeIdx)]
 
@@ -61,15 +77,17 @@ data class Ceiling(val validTimes: LongArrayList, val sysTimeCeilings: LongArray
     fun getCeilingIndex(validTime: Long): Int {
         var idx = validTimes.binarySearch(validTime)
         if (idx < 0) idx = -(idx + 1)
-        if (idx < validTimes.elementsCount - 1 && validTime < validTimes[idx]) idx++
-        if (idx == validTimes.elementsCount) idx--
+        if (idx < validTimes.size - 1 && validTime < validTimes[idx]) idx++
+        // TODO this shouldn't be necessary
+        if (idx == validTimes.size) idx--
         return reverseIdx(idx)
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
     fun reset() {
         validTimes.clear()
-        validTimes.add(Long.MAX_VALUE, Long.MIN_VALUE)
+        validTimes.add(Long.MAX_VALUE)
+        validTimes.add(Long.MIN_VALUE)
 
         sysTimeCeilings.clear()
         sysTimeCeilings.add(Long.MAX_VALUE)
