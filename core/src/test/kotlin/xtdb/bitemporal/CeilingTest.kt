@@ -1,5 +1,6 @@
 package xtdb.bitemporal
 
+import com.carrotsearch.hppc.LongArrayList
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,6 +39,18 @@ internal class CeilingTest {
         assertEquals(-1, list.binarySearch(11))
         assertEquals(-5, list.binarySearch(3))
         assertEquals(-6, list.binarySearch(1))
+    }
+
+    @Test
+    fun testGetCeilingIndex() {
+        val list = longs.from(10, 8, 6, 4, 2)
+        // the second part shouldn't be used
+        val ceiling = Ceiling(list, LongArrayList())
+        assertEquals(0, ceiling.getCeilingIndex(1))
+        assertEquals(0, ceiling.getCeilingIndex(2))
+        assertEquals(4, ceiling.getCeilingIndex(10))
+        assertEquals(4, ceiling.getCeilingIndex(11))
+        assertEquals(1, ceiling.getCeilingIndex(5))
     }
 
     @Test
