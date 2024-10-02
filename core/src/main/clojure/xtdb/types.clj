@@ -978,6 +978,20 @@
                 :oid 3910
                 :typsend "range_send"
                 :typreceive "range_recv"
+                :read-binary (fn [_env ba]
+                               (letfn [(parse-datetime [s]
+                                         (when s
+                                           (let [ts (time/parse-sql-timestamp-literal s)]
+                                             (cond
+                                               (instance? ZonedDateTime ts) ts
+                                               (instance? OffsetDateTime ts) (.toZonedDateTime ^OffsetDateTime ts)
+                                               :else ::malformed-date-time))))]
+                                 (when-let [[_ from to] (re-matches #"\[([^,]*),([^\)]*)\)" (read-utf8 ba))]
+                                   (let [from (parse-datetime from)
+                                         to (parse-datetime to)]
+                                     (when-not (or (= ::malformed-date-time from)
+                                                   (= ::malformed-date-time to))
+                                       (ZonedDateTimeRange. from to))))))
                 :read-text (fn [_env ba]
                              (letfn [(parse-datetime [s]
                                        (when s
@@ -998,7 +1012,14 @@
                                 (utf8
                                  (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                       "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
-                                      ")"))))}
+                                      ")"))))
+                :write-binary (fn [_env ^IVectorReader rdr idx]
+                                (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
+                                  (byte-array
+                                   (.getBytes
+                                    (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                         "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                         ")")))))}
 
    :date (let [typlen 4]
            {:typname "date"
@@ -1029,11 +1050,17 @@
              :typsend "varcharsend"
              :typreceive "varcharrecv"
              :read-text (fn [_env ba] (read-utf8 ba))
+             :read-binary (fn [_env ba] (read-utf8 ba))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (let [bb (.getBytes rdr idx)
                                  ba ^bytes (byte-array (.remaining bb))]
                              (.get bb ba)
-                             ba))}
+                             ba))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (let [bb (.getBytes rdr idx)
+                                   ba ^bytes (byte-array (.remaining bb))]
+                               (.get bb ba)
+                               ba))}
    ;;same as varchar which makes this technically lossy in roundtrip
    ;;text is arguably more correct for us than varchar
    :text {:typname "text"
@@ -1042,11 +1069,17 @@
           :typsend "textsend"
           :typreceive "textrecv"
           :read-text (fn [_env ba] (read-utf8 ba))
+          :read-binary (fn [_env ba] (read-utf8 ba))
           :write-text (fn [_env ^IVectorReader rdr idx]
                         (let [bb (.getBytes rdr idx)
                               ba ^bytes (byte-array (.remaining bb))]
                           (.get bb ba)
-                          ba))}
+                          ba))
+          :write-binary (fn [_env ^IVectorReader rdr idx]
+                          (let [bb (.getBytes rdr idx)
+                                ba ^bytes (byte-array (.remaining bb))]
+                            (.get bb ba)
+                            ba))}
 
    :regclass {:typname "regclass"
               :col-type :regclass
@@ -1059,7 +1092,14 @@
                             ;;oid here, however regclass is usually not returned from queries
                             ;;could reimplement oid -> table name resolution here or in getObject
                             ;;if the user cannot adjust the query to cast to varchar/text
-                            (utf8 (Integer/toUnsignedString (.getInt rdr idx))))}
+                            (utf8 (Integer/toUnsignedString (.getInt rdr idx))))
+              :write-binary (fn [_env ^IVectorReader rdr idx]
+                            ;;postgres returns the table name rather than a string of the
+                            ;;oid here, however regclass is usually not returned from queries
+                            ;;could reimplement oid -> table name resolution here or in getObject
+                            ;;if the user cannot adjust the query to cast to varchar/text
+                              (byte-array
+                               (utf8 (Integer/toUnsignedString (.getInt rdr idx)))))}
    :boolean {:typname "boolean"
              :col-type :bool
              :typlen 1
@@ -1097,7 +1137,12 @@
               :read-text (fn [_env _ba]
                            (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
               :write-binary (fn [_env ^IVectorReader rdr idx]
-                              (throw (IllegalArgumentException. "Interval binary encoding currently unsupported")))
+                              (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
+                                    p (.period itvl)
+                                    d (trunc-duration-to-micros  (.duration itvl))]
+                                ;; we use the standard toString for encoding
+                                (byte-array
+                                 (utf8 (IntervalMonthDayNano. p d)))))
               :write-text (fn [_env ^IVectorReader rdr idx]
                             ;; Postgres only has month-day-micro intervals so we truncate the nanos
                             (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
