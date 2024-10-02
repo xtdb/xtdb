@@ -21,9 +21,9 @@ data class Polygon(val validTimes: LongArrayList, val sysTimeCeilings: LongArray
         validTimes.clear()
         sysTimeCeilings.clear()
 
-        var ceilIdx = 0
-
         var validTime = validFrom
+
+        var ceilIdx = ceiling.getCeilingIndex(validFrom)
 
         do {
             var ceilValidTo: Long
