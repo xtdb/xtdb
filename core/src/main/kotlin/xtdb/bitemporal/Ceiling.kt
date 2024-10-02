@@ -53,6 +53,19 @@ data class Ceiling(val validTimes: LongArrayList, val sysTimeCeilings: LongArray
 
     fun getSystemTime(rangeIdx: Int) = sysTimeCeilings[reverseIdx(rangeIdx) - 1]
 
+    /**
+     * @return the index (in reverse order) such that `validTimes[reverseIdx(idx)] <= validTime < validTimes[reverseIdx(idx + 1)]`
+     * or 0 if `validTime < validTimes[reverseIdx(0)]`
+     * or `validTimes.elementsCount - 1` if `validTime >= validTimes[reverseIdx(validTimes.elementsCount - 1)]`
+     */
+    fun getCeilingIndex(validTime: Long): Int {
+        var idx = validTimes.binarySearch(validTime)
+        if (idx < 0) idx = -(idx + 1)
+        if (idx < validTimes.elementsCount - 1 && validTime < validTimes[idx]) idx++
+        if (idx == validTimes.elementsCount) idx--
+        return reverseIdx(idx)
+    }
+
     @Suppress("MemberVisibilityCanBePrivate")
     fun reset() {
         validTimes.clear()
@@ -107,4 +120,5 @@ data class Ceiling(val validTimes: LongArrayList, val sysTimeCeilings: LongArray
         validTimes.removeRange(end + 1, start)
         sysTimeCeilings.removeRange(end + 1, start)
     }
+
 }
