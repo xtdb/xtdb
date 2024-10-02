@@ -797,6 +797,8 @@
             :col-type :i64
             :oid 20
             :typlen typlen
+            :typsend "int8send"
+            :typreceive "int8recv"
             :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getLong))
             :read-text (fn [_env ba] (-> ba read-utf8 Long/parseLong))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -810,6 +812,8 @@
             :col-type :i32
             :oid 23
             :typlen typlen
+            :typsend "int4send"
+            :typreceive "int4recv"
             :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getInt))
             :read-text (fn [_env ba] (-> ba read-utf8 Integer/parseInt))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -823,6 +827,8 @@
             :col-type :i16
             :oid 21
             :typlen typlen
+            :typsend "int2send"
+            :typreceive "int2recv"
             :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getShort))
             :read-text (fn [_env ba] (-> ba read-utf8 Short/parseShort))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -852,6 +858,8 @@
               :col-type :f32
               :oid 700
               :typlen typlen
+              :typsend "float4send"
+              :typreceive "float4recv"
               :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getFloat))
               :read-text (fn [_env ba] (-> ba read-utf8 Float/parseFloat))
               :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -865,6 +873,8 @@
               :col-type :f64
               :oid 701
               :typlen typlen
+              :typsend "float8send"
+              :typreceive "float8recv"
               :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getDouble))
               :read-text (fn [_env ba] (-> ba read-utf8 Double/parseDouble))
               :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -878,6 +888,8 @@
             :col-type :uuid
             :oid 2950
             :typlen typlen
+            :typsend "uuid_send"
+            :typreceive "uuid_recv"
             :read-binary (fn [_env ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
             :read-text (fn [_env ba] (UUID/fromString (read-utf8 ba)))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -892,6 +904,8 @@
                  :col-type [:timestamp-local :micro]
                  :oid 1114
                  :typlen typlen
+                 :typsend "timestamp_send"
+                 :typreceive "timestamp_recv"
                  :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
                                 (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
                                   (LocalDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
@@ -922,6 +936,8 @@
                    ;;could try to emit expression for zone agnostic tstz
                    :oid 1184
                    :typlen typlen
+                   :typsend "timestamptz_send"
+                   :typreceive "timestamptz_recv"
                    :read-binary (fn [_env ba] ;; not sent via pgjdbc, reverse engineered
                                   ;;unsure how useful binary tstz inputs are and if therefore if any drivers actually send them, as AFAIK
                                   ;;the wire format for tstz contains no offset, unlike the text format. Therefore we have to
@@ -960,6 +976,8 @@
 
    :tstz-range {:typname "tstz-range"
                 :oid 3910
+                :typsend "range_send"
+                :typreceive "range_recv"
                 :read-text (fn [_env ba]
                              (letfn [(parse-datetime [s]
                                        (when s
@@ -987,6 +1005,8 @@
             :col-type [:date :day]
             :oid 1082
             :typlen typlen
+            :typsend "date_send"
+            :typreceive "date_recv"
             :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
                            (let [days (+
                                        (-> ba ByteBuffer/wrap .getInt)
@@ -1006,6 +1026,8 @@
    :varchar {:typname "varchar"
              :col-type :utf8
              :oid 1043
+             :typsend "varcharsend"
+             :typreceive "varcharrecv"
              :read-text (fn [_env ba] (read-utf8 ba))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (let [bb (.getBytes rdr idx)
@@ -1017,6 +1039,8 @@
    :text {:typname "text"
           :col-type :utf8
           :oid 25
+          :typsend "textsend"
+          :typreceive "textrecv"
           :read-text (fn [_env ba] (read-utf8 ba))
           :write-text (fn [_env ^IVectorReader rdr idx]
                         (let [bb (.getBytes rdr idx)
@@ -1027,6 +1051,8 @@
    :regclass {:typname "regclass"
               :col-type :regclass
               :oid 2205
+              :typsend "regclasssend"
+              :typreceive "regclassrecv"
               ;;skipping read impl, unsure if anything can/would send a regclass param
               :write-text (fn [_env ^IVectorReader rdr idx]
                             ;;postgres returns the table name rather than a string of the
@@ -1038,6 +1064,8 @@
              :col-type :bool
              :typlen 1
              :oid 16
+             :typsend "boolsend"
+             :typreceive "boolrecv"
              :read-binary (fn [_env ba]
                             (case (-> ba ByteBuffer/wrap .get)
                               1 true
@@ -1062,6 +1090,8 @@
               :col-type [:interval :month-day-nano]
               :typlen 16
               :oid 1186
+              :typsend "interval_send"
+              :typreceive "interval_recv"
               :read-binary (fn [_env _ba]
                              (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
               :read-text (fn [_env _ba]
@@ -1074,21 +1104,27 @@
                                   p (.period itvl)
                                   d (trunc-duration-to-micros  (.duration itvl))]
                               ;; we use the standard toString for encoding
-                              (utf8 (IntervalMonthDayNano. p d) )))}
+                              (utf8 (IntervalMonthDayNano. p d))))}
 
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
           :oid 114
+          :typsend "json_send"
+          :typreceive "json_recv"
           :read-text (fn [_env ba]
                        (JsonSerde/decode (ByteArrayInputStream. ba)))}
 
    :jsonb {:typname "jsonb"
            :oid 3802
+           :typsend "jsonb_send"
+           :typreceive "jsonb_recv"
            :read-text (fn [_env ba]
                         (JsonSerde/decode (ByteArrayInputStream. ba)))}
 
    :transit {:typname "transit"
              :oid transit-oid
+             :typsend "transit_send"
+             :typreceive "transit_recv"
              :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (serde/write-transit (.getObject rdr idx) :json))}})
