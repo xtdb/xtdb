@@ -3,6 +3,7 @@ package xtdb.bitemporal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.util.SkipList
 import com.carrotsearch.hppc.LongArrayList.from as longs
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
@@ -136,8 +137,8 @@ internal class PolygonTest {
         ceiling.applyLog(8, 8, 10)
         ceiling.applyLog(6, 6, 8)
 
-        assertEquals(longs(MAX_LONG, 12, 10, 8, 6, MIN_LONG), ceiling.validTimes)
-        assertEquals(longs(MAX_LONG, 10, 8, 6, MAX_LONG), ceiling.sysTimeCeilings)
+        assertEquals(SkipList.from(MAX_LONG, 12, 10, 8, 6, MIN_LONG), ceiling.validTimes)
+        assertEquals(SkipList.from(MAX_LONG, 10, 8, 6, MAX_LONG), ceiling.sysTimeCeilings)
 
         applyEvent(4, 4, 6)
         assertEquals(longs(4, 6), polygon.validTimes)
