@@ -35,19 +35,21 @@
 (def ^:dynamic ^:private *node* nil)
 (def ^:dynamic ^:private *server* nil)
 
-(defn require-node []
-  (when-not *node*
-    (set! *node* (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]}))))
+(defn require-node
+  ([] (require-node {}))
+  ([opts]
+   (when-not *node*
+     (set! *node* (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                   :server (merge {:num-threads 1}
+                                                  opts
+                                                  {:port 0, :drain-wait 250})})))))
 
 (defn require-server
   ([] (require-server {}))
   ([opts]
-   (require-node)
+   (require-node opts)
    (when-not *port*
-     (set! *server* (->> (merge {:num-threads 1}
-                                opts
-                                {:port 0, :drain-wait 250})
-                         (pgwire/serve *node*)))
+     (set! *server* (-> *node* :system :xtdb.pgwire/server))
      (set! *port* (:port *server*)))))
 
 (t/use-fixtures :once
@@ -1864,7 +1866,7 @@
           (t/is (= v (.getBoolean rs 1))))))))
 
 (deftest test-transit-param
-  (with-open [node (xtn/start-node)]
+  (with-open [node (xtn/start-node {:server {:port 0}})]
     (t/testing "pgwire metadata query"
       (t/is (= [{:oid 16384, :typname "transit"}]
                (xt/q node "
@@ -1963,7 +1965,7 @@ ORDER BY t.oid DESC LIMIT 1"
                (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"]))))))
 
 (deftest test-playground
-  (with-open [srv (pgwire/open-playground {:port 5432})]
+  (with-open [srv (pgwire/open-playground)]
     (let [{:keys [port]} srv]
       (letfn [(pg-conn [db]
                 {:dbtype "postgresql"
