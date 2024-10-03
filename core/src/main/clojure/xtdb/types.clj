@@ -1132,6 +1132,7 @@
               :read-text (fn [_env _ba]
                            (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
               :write-binary (fn [_env ^IVectorReader rdr idx]
+                            ;; Postgres only has month-day-micro intervals so we truncate the nanos
                               (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
                                     p (.period itvl)
                                     d (trunc-duration-to-micros  (.duration itvl))]
@@ -1152,22 +1153,29 @@
           :typsend "json_send"
           :typreceive "json_recv"
           :read-text (fn [_env ba]
-                       (JsonSerde/decode (ByteArrayInputStream. ba)))}
+                       (JsonSerde/decode (ByteArrayInputStream. ba)))
+          :read-binary (fn [_env ba]
+                         (JsonSerde/decode (ByteArrayInputStream. ba)))}
 
    :jsonb {:typname "jsonb"
            :oid 3802
            :typsend "jsonb_send"
            :typreceive "jsonb_recv"
            :read-text (fn [_env ba]
-                        (JsonSerde/decode (ByteArrayInputStream. ba)))}
+                        (JsonSerde/decode (ByteArrayInputStream. ba)))
+           :read-binary (fn [_env ba]
+                          (JsonSerde/decode (ByteArrayInputStream. ba)))}
 
    :transit {:typname "transit"
              :oid transit-oid
              :typsend "transit_send"
              :typreceive "transit_recv"
              :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
+             :read-binary (fn [_env ^bytes ba] (serde/read-transit ba :json))
              :write-text (fn [_env ^IVectorReader rdr idx]
-                           (serde/write-transit (.getObject rdr idx) :json))}})
+                           (serde/write-transit (.getObject rdr idx) :json))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (serde/write-transit (.getObject rdr idx) :json))}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
