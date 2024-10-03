@@ -32,25 +32,7 @@
 (set! *unchecked-math* false)
 
 (def ^:dynamic ^:private *port* nil)
-(def ^:dynamic ^:private *node* nil)
 (def ^:dynamic ^:private *server* nil)
-
-(defn require-node
-  ([] (require-node {}))
-  ([opts]
-   (when-not *node*
-     (set! *node* (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
-                                   :server (merge {:num-threads 1}
-                                                  opts
-                                                  {:port 0, :drain-wait 250})})))))
-
-(defn require-server
-  ([] (require-server {}))
-  ([opts]
-   (require-node opts)
-   (when-not *port*
-     (set! *server* (-> *node* :system :xtdb.pgwire/server))
-     (set! *port* (:port *server*)))))
 
 (t/use-fixtures :once
 
@@ -65,38 +47,36 @@
       (DriverManager/registerDriver fsql-driver))
     (f)))
 
-(t/use-fixtures :each
-  (fn [f]
-    (binding [*port* nil
-              *server* nil
-              *node* nil]
-      (try
-        (f)
-        (finally
-          (util/try-close *server*)
-          (util/try-close *node*))))))
+(defn with-server-and-port [f]
+  (let [server (-> tu/*node* :system :xtdb.pgwire/server)]
+    (binding [*server* server
+              *port* (:port server)]
+      (f))))
+
+(defn serve
+  ([] (serve {}))
+  ([opts] (pgwire/serve tu/*node* (merge {:num-threads 1} opts {:port 0, :drain-wait 250}))))
+
+(t/use-fixtures :each tu/with-mock-clock tu/with-node with-server-and-port)
 
 (defn- pg-config [params]
-  (when-not *port*
-    (require-server))
-
   (merge
    {:host "localhost"
     :port *port*
     :user "xtdb"
     :database "xtdb"}
-  params))
+   params))
 
 ;; connect to the database
 (defn- pg-conn ^org.pg.Connection [params]
   (pg/connect (pg-config params)))
 
 (defn- jdbc-url [& params]
-  (when-not *port*
-    (require-server))
-
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
     (format "jdbc:postgresql://localhost:%s/xtdb%s" *port* (or param-str ""))))
+
+(defn- jdbc-conn ^Connection [& params]
+  (jdbc/get-connection (apply jdbc-url params)))
 
 (defn- stmt->warnings [^Statement stmt]
   (loop [warn (.getWarnings stmt) res []]
@@ -153,14 +133,11 @@
 
 (deftest gssenc-test
   (t/are [gssencmode expect]
-    (= expect (try-gssencmode gssencmode))
+      (= expect (try-gssencmode gssencmode))
 
     "disable" :ok
     "prefer" :ok
     "require" :unsupported))
-
-(defn- jdbc-conn ^Connection [& params]
-  (jdbc/get-connection (apply jdbc-url params)))
 
 (deftest query-test
   (with-open [conn (jdbc-conn)
@@ -311,25 +288,20 @@
                 (when clj-pred
                   (is (clj-pred clj-value) "parsed value should pass :clj-pred"))))))))))
 
-(defn check-server-resources-freed
-  ([]
-   (require-server)
-   (check-server-resources-freed *server*))
-  ([server]
-   (testing "accept socket"
-     (is (.isClosed (:accept-socket server))))
+(defn check-server-resources-freed [server]
+  (testing "accept socket"
+    (is (.isClosed (:accept-socket server))))
 
-   (testing "accept thread"
-     (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
+  (testing "accept thread"
+    (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
 
-   (testing "thread pool shutdown"
-     (is (.isShutdown (:thread-pool server)))
-     (is (.isTerminated (:thread-pool server))))))
+  (testing "thread pool shutdown"
+    (is (.isShutdown (:thread-pool server)))
+    (is (.isTerminated (:thread-pool server)))))
 
 (deftest server-resources-freed-on-close-test
-  (require-node)
   (doseq [close-method [#(.close %)]]
-    (with-open [server (pgwire/serve *node* {:port 0})]
+    (with-open [server (pgwire/serve tu/*node* {:port 0})]
       (close-method server)
       (check-server-resources-freed server))))
 
@@ -358,40 +330,39 @@
       :ping))
 
 (deftest accept-thread-interrupt-closes-thread-test
-  (require-server {:accept-so-timeout 10})
+  (with-open [server (serve {:accept-so-timeout 10})]
+    (.interrupt (:accept-thread server))
+    (.join (:accept-thread server) 1000)
 
-  (.interrupt (:accept-thread *server*))
-  (.join (:accept-thread *server*) 1000)
-
-  (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
+    (is (= Thread$State/TERMINATED (.getState (:accept-thread server))))))
 
 (deftest accept-thread-interrupt-allows-server-shutdown-test
-  (require-server {:accept-so-timeout 10})
+  (with-open [server (serve {:accept-so-timeout 10})]
+    (.interrupt (:accept-thread server))
+    (.join (:accept-thread server) 1000)
 
-  (.interrupt (:accept-thread *server*))
-  (.join (:accept-thread *server*) 1000)
-
-  (.close *server*)
-  (check-server-resources-freed))
+    (.close server)
+    (check-server-resources-freed server)))
 
 (deftest accept-thread-socket-close-stops-thread-test
-  (require-server)
-  (.close (:accept-socket *server*))
-  (.join (:accept-thread *server*) 1000)
-  (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
+  (with-open [server (serve)]
+    (.close (:accept-socket server))
+    (.join (:accept-thread server) 1000)
+    (is (= Thread$State/TERMINATED (.getState (:accept-thread server))))))
 
 (deftest accept-thread-socket-close-allows-cleanup-test
-  (require-server)
-  (.close (:accept-socket *server*))
-  (.join (:accept-thread *server*) 1000)
-  (.close *server*)
-  (check-server-resources-freed))
+  (with-open [server (serve)]
+    (.close (:accept-socket server))
+    (.join (:accept-thread server) 1000)
+    (.close server)
+    (check-server-resources-freed server)))
 
-(defn- get-connections []
-  (vals (:connections @(:server-state *server*))))
+(defn- get-connections [server]
+  (vals (:connections @(:server-state server))))
 
-(defn- get-last-conn []
-  (last (sort-by :cid (get-connections))))
+(defn- get-last-conn
+  ([] (get-last-conn *server*))
+  ([server] (last (sort-by :cid (get-connections server)))))
 
 (defn- wait-for-close [server-conn ms]
   (deref (:close-promise @(:conn-state server-conn)) ms false))
@@ -401,14 +372,12 @@
     (t/is (.isClosed socket))))
 
 (deftest conn-force-closed-by-server-frees-resources-test
-  (require-server)
   (with-open [_ (jdbc-conn)]
     (let [srv-conn (get-last-conn)]
       (.close srv-conn)
       (check-conn-resources-freed srv-conn))))
 
 (deftest conn-closed-by-client-frees-resources-test
-  (require-server)
   (with-open [client-conn (jdbc-conn)
               server-conn (get-last-conn)]
     (.close client-conn)
@@ -416,15 +385,15 @@
     (check-conn-resources-freed server-conn)))
 
 (deftest server-close-closes-idle-conns-test
-  (require-server {:drain-wait 0})
-  (with-open [_client-conn (jdbc-conn)
-              server-conn (get-last-conn)]
-    (.close *server*)
-    (is (wait-for-close server-conn 500))
-    (check-conn-resources-freed server-conn)))
+  (with-open [server (serve {:drain-wait 0})]
+    (binding [*port* (:port server)]
+      (with-open [_client-conn (jdbc-conn)
+                  server-conn (get-last-conn server)]
+        (.close server)
+        (is (wait-for-close server-conn 500))
+        (check-conn-resources-freed server-conn)))))
 
 (deftest canned-response-test
-  (require-server)
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgwire/canned-responses [{:q "hello!"
@@ -434,79 +403,80 @@
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
 
 (deftest concurrent-conns-test
-  (require-server {:num-threads 2})
-  (let [results (atom [])
-        spawn (fn spawn []
-                (future
-                  (with-open [conn (jdbc-conn)]
-                    (swap! results conj (ping conn)))))
-        futs (vec (repeatedly 10 spawn))]
+  (with-open [server (serve {:num-threads 2})]
+    (binding [*port* (:port server)]
+      (let [results (atom [])
+            spawn (fn spawn []
+                    (future
+                      (with-open [conn (jdbc-conn)]
+                        (swap! results conj (ping conn)))))
+            futs (vec (repeatedly 10 spawn))]
 
-    (is (every? #(not= :timeout (deref % 500 :timeout)) futs))
-    (is (= 10 (count @results)))
+        (is (every? #(not= :timeout (deref % 500 :timeout)) futs))
+        (is (= 10 (count @results)))
 
-    (.close *server*)
-    (check-server-resources-freed)))
+        (.close server)
+        (check-server-resources-freed server)))))
 
 (deftest concurrent-conns-close-midway-test
-  (require-server {:num-threads 2
-                   :accept-so-timeout 10})
-  (tu/with-log-level 'xtdb.pgwire :off
-    (let [spawn (fn spawn [i]
-                  (future
-                    (try
-                      (with-open [conn (jdbc-conn "loginTimeout" "1"
-                                                  "socketTimeout" "1")]
-                        (loop [query-til (+ (System/currentTimeMillis)
-                                            (* i 1000))]
-                          (ping conn)
-                          (when (< (System/currentTimeMillis) query-til)
-                            (recur query-til))))
-                      ;; we expect an ex here, whether or not draining
-                      (catch PSQLException _))))
+  (with-open [server (serve {:num-threads 2 :accept-so-timeout 10})]
+    (binding [*port* (:port server)]
+      (tu/with-log-level 'xtdb.pgwire :off
+        (let [spawn (fn spawn [i]
+                      (future
+                        (try
+                          (with-open [conn (jdbc-conn "loginTimeout" "1"
+                                                      "socketTimeout" "1")]
+                            (loop [query-til (+ (System/currentTimeMillis)
+                                                (* i 1000))]
+                              (ping conn)
+                              (when (< (System/currentTimeMillis) query-til)
+                                (recur query-til))))
+                          ;; we expect an ex here, whether or not draining
+                          (catch PSQLException _))))
 
-          futs (mapv spawn (range 10))]
+              futs (mapv spawn (range 10))]
 
-      (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
+          (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
 
-      (.close *server*)
+          (.close server)
 
-      (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
+          (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
 
-      (check-server-resources-freed))))
+          (check-server-resources-freed server))))))
 
 ;; the goal of this test is to cause a bunch of ping queries to block on parse
 ;; until the server is draining
 ;; and observe that connection continue until the multi-message extended interaction is done
 ;; (when we introduce read transactions I will probably extend this to short-lived transactions)
 (deftest close-drains-active-extended-queries-before-stopping-test
-  (require-server {:num-threads 10})
-  (let [cmd-parse @#'pgwire/cmd-parse
-        {:keys [!closing?]} *server*
-        latch (CountDownLatch. 10)]
-    ;; redefine parse to block when we ping
-    (with-redefs [pgwire/cmd-parse
-                  (fn [conn {:keys [query] :as cmd}]
-                    (if-not (str/starts-with? query "select 'ping'")
-                      (cmd-parse conn cmd)
-                      (do
-                        (.countDown latch)
-                        ;; delay until we see a draining state
-                        (loop [wait-until (+ (System/currentTimeMillis) 5000)]
-                          (when (and (< (System/currentTimeMillis) wait-until)
-                                     (not @!closing?))
-                            (recur wait-until)))
-                        (cmd-parse conn cmd))))]
-      (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
-            futs (vec (repeatedly 10 spawn))]
+  (with-open [server (serve {:num-threads 10})]
+    (let [cmd-parse @#'pgwire/cmd-parse
+          {:keys [!closing?]} server
+          latch (CountDownLatch. 10)]
+      ;; redefine parse to block when we ping
+      (with-redefs [pgwire/cmd-parse
+                    (fn [conn {:keys [query] :as cmd}]
+                      (if-not (str/starts-with? query "select 'ping'")
+                        (cmd-parse conn cmd)
+                        (do
+                          (.countDown latch)
+                          ;; delay until we see a draining state
+                          (loop [wait-until (+ (System/currentTimeMillis) 5000)]
+                            (when (and (< (System/currentTimeMillis) wait-until)
+                                       (not @!closing?))
+                              (recur wait-until)))
+                          (cmd-parse conn cmd))))]
+        (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
+              futs (vec (repeatedly 10 spawn))]
 
-        (is (.await latch 1 TimeUnit/SECONDS))
+          (is (.await latch 1 TimeUnit/SECONDS))
 
-        (util/close *server*)
+          (util/close server)
 
-        (is (every? #(= "ping" (deref % 1000 :timeout)) futs))
+          (is (every? #(= "ping" (deref % 1000 :timeout)) futs))
 
-        (check-server-resources-freed)))))
+          (check-server-resources-freed server))))))
 
 ;;TODO no current support for cancelling queries
 
@@ -537,7 +507,6 @@
 
   Send puts a string in to psql stdin, reads the next string from psql stdout. You can use (read :err) if you wish to read from stderr instead."
   [f]
-  (require-server)
   ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
   (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv"]
         pb (ProcessBuilder. argv)
@@ -585,7 +554,6 @@
 ;; (will probably move to a selector)
 (when (psql-available?)
   (deftest psql-connect-test
-    (require-server)
     (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select 'ping' ping")]
       (is (= 0 exit))
       (is (str/includes? out " ping\n(1 row)")))))
@@ -659,8 +627,8 @@
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (xt/submit-tx *node* [[:put-docs :a {:xt/id "map-test", :a {:b 42}}]])
-        (tu/then-await-tx *node*))
+    (-> (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id "map-test", :a {:b 42}}]])
+        (tu/then-await-tx tu/*node*))
 
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {"b" 42}}] rs)))))
@@ -689,10 +657,9 @@
 
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-basis-to-last-tx-test
-  (require-node)
-  (let [insert #(xt/submit-tx *node* [[:put-docs %1 %2]])]
+  (let [insert #(xt/submit-tx tu/*node* [[:put-docs %1 %2]])]
     (-> (insert :a {:xt/id :fred, :name "Fred"})
-        (tu/then-await-tx *node*))
+        (tu/then-await-tx tu/*node*))
 
     (with-open [conn (jdbc-conn)]
       (jdbc/with-transaction [db conn]
@@ -724,7 +691,6 @@
   (-> server-conn :conn-state deref :session :next-transaction (select-keys ks)))
 
 (deftest session-access-mode-default-test
-  (require-node)
   (with-open [_ (jdbc-conn)]
     (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode])))))
 
@@ -844,7 +810,6 @@
           (q conn ["BEGIN"])))))
 
 (deftest test-current-time
-  (require-server)
   ;; no support for setting current-time so need to interact with clock directly
   (let [custom-clock (Clock/fixed (Instant/parse "2000-08-16T11:08:03Z") (ZoneId/of "GMT"))]
 
@@ -873,7 +838,6 @@
                 (t/is (= epoch (current-time tx)))))))))))
 
 (deftest test-timezone
-  (require-server {:num-threads 2})
   (with-open [conn (jdbc-conn)]
 
     (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "timezone")
@@ -1605,7 +1569,6 @@
 
 (when (psql-available?)
   (deftest test-datetime-formatting
-    (require-server)
     ;; no way to set current-time yet, so setting it via custom clock
     (let [custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03.123456789Z") (ZoneOffset/ofHoursMinutes 4 44))]
 
