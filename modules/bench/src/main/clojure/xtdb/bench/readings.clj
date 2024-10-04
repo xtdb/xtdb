@@ -75,24 +75,31 @@
                                               {:basis {:at-tx latest-completed-tx
                                                        :current-time (:system-time latest-completed-tx)}})))}]}))
 
+(defn ->ingestion-stage
+  ([size devices] (->ingestion-stage size devices {}))
+  ([size devices {:keys [backfill?] :or {backfill? false}}]
+   [{:t :do
+     :stage :ingest
+     :tasks [{:t :call :f (fn [{:keys [sut]}]
+                            ;; batching by day
+                            (doseq [batch (partition-all (* 24 12) (docs size devices))]
+                              (xt/submit-tx sut batch (if backfill?
+                                                        {}
+                                                        {:system-time (batch->largest-valid-time batch)}))))}]}
+    {:t :do
+     :stage :sync
+     :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofMinutes 5)))}]}
+
+    {:t :do
+     :stage :compact
+     :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/compact! sut))}]}]))
+
 (defn benchmark [{:keys [size devices seed load-phase] :or {seed 0}}]
   {:title "Readings benchmarks"
    :seed seed
    :tasks
    (concat (if load-phase
-             [{:t :do
-               :stage :ingest
-               :tasks [{:t :call :f (fn [{:keys [sut]}]
-                                      ;; batching by day
-                                      (doseq [batch (partition-all (* 24 12) (docs size devices))]
-                                        (xt/submit-tx sut batch {:system-time (batch->largest-valid-time batch)})))}]}
-              {:t :do
-               :stage :sync
-               :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofMinutes 5)))}]}
-
-              {:t :do
-               :stage :compact
-               :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/compact! sut))}]}]
+             (->ingestion-stage size devices)
              [])
 
            [{:t :call :f (fn [{:keys [sut ^AbstractMap custom-state]}]
@@ -110,6 +117,24 @@
            ;; running the same queries but a year (valid-time) in the past
            (for [interval [:now :day :week :month :quarter :year]]
              (->query-stage interval :year)))})
+
+
+(defn overwritten-readings [{:keys [size devices seed load-phase] :or {seed 0}}]
+  {:title "Degenerative backfill case"
+   :seed seed
+   :tasks
+   (concat (if load-phase
+             (concat (->ingestion-stage size devices) (->ingestion-stage size devices {:backfill? true}))
+             [])
+           [{:t :call :f (fn [{:keys [sut ^AbstractMap custom-state]}]
+                           (let [{:keys [latest-completed-tx]} (xt/status sut)
+                                 max-valid-time (-> (xt/q sut max-valid-time-q {:basis {:at-tx latest-completed-tx}})
+                                                    first
+                                                    :max-valid-time)]
+                             (.putAll custom-state {:latest-completed-tx latest-completed-tx
+                                                    :max-valid-time max-valid-time})))}
+            ;; a year and one device is sufficient to show the issue
+            (->query-stage :year)])})
 
 (comment
   (require '[clojure.java.io :as io]

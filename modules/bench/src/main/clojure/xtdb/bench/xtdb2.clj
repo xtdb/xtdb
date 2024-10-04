@@ -43,7 +43,8 @@
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
                      :metrics [:prometheus {:port 8080}]
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
-                                   (into {} (filter val)))})))
+                                   (into {} (filter val)))
+                     :server {:port 0}})))
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
@@ -70,7 +71,9 @@
                     :products
                     ((requiring-resolve 'xtdb.bench.products/benchmark) benchmark-opts)
                     :readings
-                    ((requiring-resolve 'xtdb.bench.readings/benchmark) benchmark-opts))
+                    ((requiring-resolve 'xtdb.bench.readings/benchmark) benchmark-opts)
+                    :overwritten-readings
+                    ((requiring-resolve 'xtdb.bench.readings/overwritten-readings) benchmark-opts))
 
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (with-open [node (->local-node node-opts)]

@@ -72,6 +72,13 @@
                      :devices 10}
               :node-dir node-dir})
 
+  (run-bench {:type :overwritten-readings
+              :opts {:load-phase true
+                     ;; ~1 years
+                     :size (* 1 (+ (* 366 24 12) 1000))
+                     :devices 1}
+              :node-dir node-dir})
+
 
   ;; test benchmark
   (run-bench {:type :test-bm
