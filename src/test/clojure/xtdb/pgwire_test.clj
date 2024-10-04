@@ -1959,3 +1959,11 @@ ORDER BY t.oid DESC LIMIT 1"
 (deftest set-role-none-3745
   (with-open [conn (jdbc-conn {})]
     (jdbc/execute! conn ["SET ROLE NONE"])))
+
+(deftest test-param-type-hints-dml
+  (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" true)
+              stmt1 (.prepareStatement conn "INSERT INTO docs (_id, foo) VALUES(1, ?::FLOAT, ?)")
+              stmt2 (.prepareStatement conn "INSERT INTO docs (_id, foo) VALUES(1, ?, ?::FLOAT)")]
+
+    (t/is (= ["float4" nil] (param-metadata stmt1)))
+    (t/is (= [nil "float4"] (param-metadata stmt2)))))
