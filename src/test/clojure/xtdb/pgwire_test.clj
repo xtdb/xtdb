@@ -1956,6 +1956,11 @@ ORDER BY t.oid DESC LIMIT 1"
            (pg/execute conn "SELECT TIME '20:40:31.932254' v"))
           "time is returned as json")))
 
-(deftest set-role-none-3745
+(deftest set-role
   (with-open [conn (jdbc-conn {})]
-    (jdbc/execute! conn ["SET ROLE NONE"])))
+    (testing "SET ROLE identifier")
+      (jdbc/execute! conn ["SET ROLE anything"])
+    (testing "SET ROLE NONE")
+      (jdbc/execute! conn ["SET ROLE NONE"])
+    (testing "ROLE can be used as identifier")
+      (jdbc/execute! conn ["SELECT 1 AS ROLE"])))

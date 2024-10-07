@@ -298,8 +298,8 @@
                      (visitSetSessionVariableStatement [_ ctx]
                        {:statement-type :set-session-parameter
                         :parameter (session-param-name (.identifier ctx))
-                        :value (some-> (.literal ctx)
-                                       (.accept (plan/->ExprPlanVisitor nil nil)))})
+                        :value (-> (.literal ctx)
+                                   (.accept (plan/->ExprPlanVisitor nil nil)))})
 
                      (visitSetSessionCharacteristicsStatement [this ctx]
                        {:statement-type :set-session-characteristics
@@ -347,6 +347,8 @@
 
                      (visitCommitStatement [_ _] {:statement-type :commit})
                      (visitRollbackStatement [_ _] {:statement-type :rollback})
+
+                     (visitSetRoleStatement [_ _] {:statement-type :set-role})
 
                      (visitSetTimeZoneStatement [_ ctx]
                        ;; not sure if handlling time zone explicitly is the right approach
@@ -1554,6 +1556,7 @@
       :canned-response (cmd-write-canned-response conn canned-response)
       :set-session-parameter (cmd-set-session-parameter conn parameter value)
       :set-session-characteristics (cmd-set-session-characteristics conn session-characteristics)
+      :set-role nil
       :set-transaction (cmd-set-transaction conn tx-characteristics)
       :set-time-zone (cmd-set-time-zone conn tz)
       :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
