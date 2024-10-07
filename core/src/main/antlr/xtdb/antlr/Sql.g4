@@ -24,8 +24,9 @@ directlyExecutableStatement
     | 'COMMIT' # CommitStatement
     | 'ROLLBACK' # RollbackStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
+    | 'SET' 'ROLE' ( identifier | 'NONE' ) # SetRoleStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
-    | 'SET' identifier ( 'TO' | '=' )? (literal | 'NONE') #SetSessionVariableStatement
+    | 'SET' identifier ( 'TO' | '=' ) literal # SetSessionVariableStatement
     | 'SHOW' showVariable # ShowVariableStatement
     | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
     ;
@@ -99,6 +100,7 @@ identifier
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
         | 'SETTING' | 'BASIS'
         | 'CARDINALITY'
+        | 'ROLE'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
