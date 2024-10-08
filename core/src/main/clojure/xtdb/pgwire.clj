@@ -14,7 +14,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import [clojure.lang PersistentQueue]
+  (:import [clojure.lang PersistentQueue ExceptionInfo MapEntry]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang Thread$State]
            [java.net ServerSocket Socket SocketException]
@@ -628,8 +628,15 @@
 (defn- io-null-terminated-list
   "An io data type for a null terminated list of elements given by io-el."
   [io-el]
-  (let [el-wtr (:write io-el)]
-    {:read no-read
+  (let [el-rdr (:read io-el)
+        el-wtr (:write io-el)]
+    {:read (fn read-null-terminated-list [^DataInputStream in]
+             (loop [els []]
+               (if-let [el (el-rdr in)]
+                 (recur (conj els el))
+                 (cond->> els
+                   (instance? MapEntry (first els)) (into {})))))
+
      :write (fn write-null-terminated-list [^DataOutputStream out coll]
               (run! (partial el-wtr out) coll)
               (.writeByte out 0))}))
@@ -652,17 +659,26 @@
                     (.write out arr))
                 (.writeInt out -1)))}))
 
+(def ^:private error-or-notice-type->char
+  {:localized-severity \S
+   :severity \V
+   :sql-state \C
+   :message \M
+   :detail \D
+   :position \P
+   :where \W})
+
+(def ^:private char->error-or-notice-type (set/map-invert error-or-notice-type->char))
+
 (def ^:private io-error-notice-field
   "An io-data type that writes a (vector/map-entry pair) k and v as an error field."
-  {:read no-read
+  {:read (fn read-error-or-notice-field [^DataInputStream in]
+           (let [field-key (char->error-or-notice-type (char (.readByte in)))]
+             ;; TODO this might fail if we don't implement some message type
+             (when field-key
+               (MapEntry/create field-key (read-c-string in)))))
    :write (fn write-error-or-notice-field [^DataOutputStream out [k v]]
-            (let [field-char8 ({:localized-severity \S
-                                :severity \V
-                                :sql-state \C
-                                :message \M
-                                :detail \D
-                                :position \P
-                                :where \W} k)]
+            (let [field-char8 (error-or-notice-type->char k)]
               (when field-char8
                 (.writeByte out (byte field-char8))
                 (write-c-string out (str v)))))})
@@ -680,7 +696,7 @@
 ;;; msg definition
 
 (def ^:private ^:redef client-msgs {})
-(def ^:private ^:redef server-msgs {})
+(def ^:redef server-msgs {})
 
 (defmacro ^:private def-msg
   "Defs a typed-message with the given kind (:client or :server) and fields.
@@ -757,9 +773,7 @@
 (def-msg msg-notice-response :server \N
   :notice-fields (io-null-terminated-list io-error-notice-field))
 
-(def-msg msg-bind-complete :server \2
-  :result {:read no-read
-           :write (fn [^DataOutputStream out _] (.writeInt out 4))})
+(def-msg msg-bind-complete :server \2)
 
 (def-msg msg-close-complete :server \3)
 
@@ -795,7 +809,12 @@
 (def-msg msg-copy-in-response :server \G)
 
 (def-msg msg-ready :server \Z
-  :status {:read no-read
+  :status {:read (fn [^DataInputStream in]
+                   (case (char (.read in))
+                     \I :idle
+                     \T :transaction
+                     \E :failed-transaction
+                     :unknown))
            :write (fn [^DataOutputStream out status]
                     (.writeByte out (byte ({:idle \I
                                             :transaction \T
