@@ -17,8 +17,8 @@ RUN wget https://www.yourkit.com/download/docker/YourKit-JavaProfiler-2024.3-doc
   unzip /tmp/YourKit-JavaProfiler-2024.3-docker.zip -d /usr/local && \
   rm /tmp/YourKit-JavaProfiler-2024.3-docker.zip
 
-# Expose Port for Yourkit Agent
-EXPOSE 10001
+# Default Port for Yourkit
+ENV YOURKIT_PORT=10001
 
 # Expose metrics port
 EXPOSE 8080
@@ -30,16 +30,16 @@ ENTRYPOINT ["java", \
     "-Dlogback.configurationFile=logback.xml", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
-    "-Xmx1750m", "-Xms1750m", \
-    "-XX:MaxDirectMemorySize=1750m", \
+    "-Xmx2000m", "-Xms2000m", \
+    "-XX:MaxDirectMemorySize=2000m", \
     "-XX:MaxMetaspaceSize=500m", \
     "-XX:+HeapDumpOnOutOfMemoryError", \
-    "-XX:HeapDumpPath=/external/dir", \
+    "-XX:HeapDumpPath=/var/lib/xtdb/heapdump", \
     # UNCOMMENT BELOW If you want to run a Yourkit agent for Remote Profiling
-    "-agentpath:/usr/local/YourKit-JavaProfiler-2024.3/bin/linux-x86-64/libyjpagent.so=port=10001,listen=all", \
+    "-agentpath:/usr/local/YourKit-JavaProfiler-2024.3/bin/linux-x86-64/libyjpagent.so=port=${YOURKIT_PORT},listen=all", \
     "-cp","xtdb-local-auctionmark.jar", \
     "clojure.main", "-m", "xtdb.run-auctionmark.main"]
-
+    
 HEALTHCHECK --start-period=15s --timeout=3s \
     CMD curl -f http://localhost:3000/status || exit 1
 
@@ -55,4 +55,5 @@ LABEL org.opencontainers.image.version=${XTDB_VERSION}
 LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 ADD local-config.yaml node-config.yaml
+ADD local-config-kafka.yaml local-config-kafka.yaml
 ADD build/libs/xtdb-local-auctionmark.jar xtdb-local-auctionmark.jar

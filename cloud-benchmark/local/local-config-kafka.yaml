@@ -1,0 +1,14 @@
+# Use any available port for PGWire Server.
+server: 
+  port: 0
+
+txLog: !Kafka
+  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  txTopic: !Env XTDB_TX_TOPIC
+  filesTopic: !Env XTDB_FILES_TOPIC
+
+storage: !Local
+  path: !Env XTDB_STORAGE_DIR
+
+metrics: !Prometheus
+  port: 0

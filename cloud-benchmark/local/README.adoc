@@ -10,6 +10,80 @@ Various options for configuration:
 ** Include a `SLACK_WEBHOOK_URL` to send slack notifications of your local run to Slack.
 ** Update the various Auctionmark settings.
 
-You can use the `build.sh` script to build the local dockerized Auctionmark, and `run.sh` to run it with the various extra bits of config passed in (local-vars file, exposed Yourkit ports, etc)
+You can use the `scripts/build.sh` script to build the local dockerized Auctionmark, and `scripts/run.sh` to run it with the various extra bits of config passed in (local-vars file, exposed Yourkit ports, etc)
 
 NOTE: You may at points want to test the Cloud environments against this local version of Auctionmark. (ie, to test running auctionmark on docker in the cloud though without the various bits of infrastructure, to test some of the more 'local' components). This can be accomplished by building the local docker container, and then tagging and pushing it accordingly for use in the cloud.
+
+== Setting up with Local Kubernetes
+
+You can setup a multi-node XTDB benchmark run locally using Kubernetes.
+
+This will require:
+
+* `kubectl` - see link:https://kubernetes.io/docs/tasks/tools/[here]
+* `minikube` - see link:https://minikube.sigs.k8s.io/docs/start/?arch=%2Flinux%2Fx86-64%2Fstable%2Fbinary+download[here] 
+
+The nodes ran here will use Kafka for the shared Transaction Log - we will run/deploy Kafka on Kubernetes.
+
+NOTE: This will use "local-config-kafka.yaml" to storage the Kafka configuration - you can update this file to change the configuration of the XTDB nodes ran on Kubernetes.
+
+To get started, start a local Kubernetes cluster using Minikube:
+```
+minikube start
+```
+
+With the cluster up and running, we can create a namespace to run our benchmark in:
+```
+minikube kubectl create namespace xtdb-benchmark
+```
+
+We can then deploy Kafka to the cluster, run:
+```
+minikube kubectl -- apply -f kubernetes/kafka.yaml
+```
+
+To see the Kafka deployment, run:
+```
+minikube kubectl -- get pods --namespace xtdb-benchmark
+```
+
+Once Kafka is up and running, you can setup the XTDB benchmark. This will:
+
+* Create a persistent volume claim for the XTDB data
+* Run the benchmark as a job on the Kubernetes cluster - an initcontainer will run to setup the XTDB data / do the loadphase, and then the benchmark will run for a specified amount of time.
+
+Prior to deploying the benchmark, we will need to both build the local image and ensure it is available to the Kubernetes cluster. To do this, run:
+```
+./scripts/build.sh
+minikube image load xtdb-local-auctionmark:latest
+```
+
+To deploy the benchmark, run:
+```
+minikube kubectl -- apply -f kubernetes/multi-node-auctionmark.yaml
+```
+
+To see the status of the pods within the Job, run:
+```
+minikube kubectl -- get pods --namespace xtdb-benchmark
+```
+
+You should now have a running benchmark on your local Kubernetes cluster.
+
+=== Trailing the Logs
+
+You can trail the logs of each node within the job by running:
+
+```
+minikube kubectl -- logs job.batch/xtdb-multi-node-auctionmark --namespace xtdb-benchmark -c <container-name> -f
+```
+
+For example, to see the logs from the load-phase, run:
+```
+minikube kubectl -- logs job.batch/xtdb-multi-node-auctionmark --namespace xtdb-benchmark -c load-phase -f
+```
+
+To see the logs of one of the nodes, run:
+```
+minikube kubectl -- logs job.batch/xtdb-multi-node-auctionmark --namespace xtdb-benchmark -c xtdb-bench-1 -f
+```
