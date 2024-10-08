@@ -30,6 +30,12 @@ Before starting, ensure you have the following installed:
 
 Within Azure, ensure that you have an existing Subscription, and that you are authenticated with the Azure CLI.
 
+Ensure that your existing Subscription has the necessary resource providers - see link:https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-providers-and-types[**this article**^] for more information. This guide requires the following providers:
+
+* `Microsoft.ContainerService` - for the AKS resources.
+* `Microsoft.ManagedIdentity` - for the user assigned managed identity resources.
+* `Microsoft.Storage` - for the storage account resources. 
+
 To login to Azure using the command line, run the following:
 
 ```bash
@@ -50,6 +56,11 @@ For other authentication scenarios, see the link:https://developer.hashicorp.com
 == Getting started with Terraform
 
 The following assumes that you are authenticated on the Azure CLI, have Terraform installed on your machine, and are located within the root `terraform` directory provided above.
+
+From the root of the directory, run:
+```bash
+cd terraform
+```
 
 Before applying or creating any resources, initialize the Terraform working directory. 
 This will download the necessary provider plugins for Azure, set up the sample modules, and configure the backend for storing the state.
@@ -109,6 +120,8 @@ Before creating the Terraform resources, review and update the `terraform.tfvars
 
 * You are **required** to set a unique and valid `storage_account_name` for your environment.
 * You may also wish to change resource tiers, the location of the resource group, or the VM sizes used by the AKS cluster.
+** The VM sizes used within the examples may not always be available in your subscription - if this is the case, see alternative/equivalent VM sizes that you can use within the link:https://docs.microsoft.com/en-us/azure/virtual-machines/sizes[**Azure VM Sizes**^] document.  
+** Ensure that the quota for the VM size and region is set appropriately in `Subscription > Settings > Usage + Quotas`.
 
 To get a full list of the resources that will be deployed by the templates, run:
 ```bash
@@ -293,6 +306,8 @@ With the Prometheus data source added, the XTDB metrics are now available to Gra
 * Navigate to the `Dashboards -> New -> New dashboard`.
 * Click `Import dashboard`.
 * `Upload dashboard JSON file` -> Upload the `grafana/dashboard.json` file from the example directory.
+** Select the `xtdb` data source.
+** Click `Import`.
 
 This will create a new dashboard with a number of useful metrics about the XTDB nodes.
 
