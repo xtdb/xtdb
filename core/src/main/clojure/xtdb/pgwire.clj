@@ -25,6 +25,7 @@
            [java.util List Map]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
+           [java.text ParseException]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
@@ -226,6 +227,18 @@
   {:severity "WARNING"
    :localized-severity "WARNING"
    :sql-state "01000"
+   :message msg})
+
+(defn- invalid-text-representation [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "22P02"
+   :message msg})
+
+(defn- invalid-binary-representation [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "22P03"
    :message msg})
 
 (defn err-pg-exception
@@ -1157,9 +1170,13 @@
             mapping (get types/pg-types-by-oid param-oid)
             _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
             {:keys [read-binary, read-text]} mapping]
-        (if (= :binary param-format)
-          (read-binary session param)
-          (read-text session param))))))
+        (try
+          (if (= :binary param-format)
+            (read-binary session param)
+            (read-text session param))
+          (catch ParseException e
+            (throw (ex-info (ex-message e) {:param-format param-format} e))))))))
+
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (if (or (not= (count param-fields) (count params))
@@ -1647,6 +1664,12 @@
             #'msg-password nil
 
             (cmd-send-error conn (err-protocol-violation "unknown client message"))))))
+    (catch ExceptionInfo e
+      (let [{:keys [param-format]} (ex-data e)]
+        (cmd-send-error conn (case param-format
+                               :binary (invalid-binary-representation (ex-message e))
+                               :text (invalid-text-representation (ex-message e))
+                               nil (throw e)))))
     (catch InterruptedException e (throw e))
     (catch Throwable e (log/error e "Uncaught exception in handle-msg"))))
 
