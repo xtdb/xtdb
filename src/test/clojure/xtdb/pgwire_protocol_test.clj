@@ -323,3 +323,24 @@
                 {:message-type "msg-command-complete", :command "SELECT 1"}
                 {:message-type "msg-ready", :status :idle}]
                (extended-query socket query))))))
+
+(deftest test-wrong-param-encoding-3653
+  (let [port *port*
+        user "xtdb"
+        database "xtdb"
+        param-types [(-> types/pg-types :timestamp :oid)]
+        param-values ["alan"]
+        query "SELECT $1 as v"]
+    (with-open [^AutoCloseable socket (connect port)]
+
+      (startup socket user database)
+
+      (t/is (= [{:message-type "msg-parse-complete"}
+                {:error-fields
+                 {:severity "ERROR",
+                  :localized-severity "ERROR",
+                  :sql-state "22P02",
+                  :message "Can not parse 'alan' as timestamp"},
+                 :message-type "msg-error-response"}
+                {:status :idle, :message-type "msg-ready"}]
+               (extended-query socket query param-types param-values))))))
