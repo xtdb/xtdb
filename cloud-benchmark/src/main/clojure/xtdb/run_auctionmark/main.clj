@@ -33,6 +33,8 @@
 
 (def platform (or (System/getenv "CLOUD_PLATFORM_NAME") "Local"))
 
+(def config-file (or (System/getenv "CONFIG_FILE") "node-config.yaml"))
+
 (defn send-message-to-slack [message]
   (when slack-url
     (http/post slack-url {:headers {"Content-Type" "application/json"}
@@ -100,8 +102,8 @@
         (throw e)))))
 
 (defn -main []
-  (log/info "Starting node with config... \n" (slurp (io/file "node-config.yaml")))
-  (with-open [node (xtn/start-node (io/file "node-config.yaml"))]
+  (log/info "Starting node with config... \n" (slurp (io/file config-file)))
+  (with-open [node (xtn/start-node (io/file config-file))]
     (if load-phase-only?
       (run-load-phase-only node)
       (run-full-auctionmark node))))
