@@ -25,6 +25,7 @@
            [java.util List Map]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
+           [java.text ParseException]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
@@ -226,6 +227,18 @@
   {:severity "WARNING"
    :localized-severity "WARNING"
    :sql-state "01000"
+   :message msg})
+
+(defn- invalid-text-representation [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "22P02"
+   :message msg})
+
+(defn- invalid-binary-representation [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "22P03"
    :message msg})
 
 (defn err-pg-exception
@@ -1165,6 +1178,14 @@
           (read-binary session param)
           (read-text session param))))))
 
+(defn- xtify-params [xtify-param params {:keys [param-format] :as _stmt}]
+  (try
+    [:success (vec (map-indexed xtify-param params))]
+    (catch Exception e
+      [:error (if (= param-format :binary)
+                (invalid-binary-representation (ex-message e))
+                (invalid-text-representation (ex-message e)))])))
+
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (if (or (not= (count param-fields) (count params))
           (some #(= 0 (:oid %)) param-fields))
@@ -1172,32 +1193,36 @@
         (cmd-send-error
          conn
          (err-protocol-violation "Missing types for params - Client must specify types for all params in DML statements")))
+
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
           xtify-param (->xtify-param session stmt)
-          xt-params (vec (map-indexed xtify-param params))
-
+          [type xt-params-or-error] (xtify-params xtify-param params stmt)
           stmt {:query query,
                 :transformed-query transformed-query
-                :params xt-params}
-
+                :params xt-params-or-error}
           cmd-complete-msg {:command (case dml-type
-                                        ;; insert <oid> <rows>
-                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
-                                        ;; rows is 0 for us cus async
-                                        :insert "INSERT 0 0"
-                                        ;; otherwise head <rows>
-                                        :delete "DELETE 0"
-                                        :update "UPDATE 0"
-                                        :erase "ERASE 0"
-                                        :assert "ASSERT")}]
+                                       ;; insert <oid> <rows>
+                                       ;; oid is always 0 these days, its legacy thing in the pg protocol
+                                       ;; rows is 0 for us cus async
+                                       :insert "INSERT 0 0"
+                                       ;; otherwise head <rows>
+                                       :delete "DELETE 0"
+                                       :update "UPDATE 0"
+                                       :erase "ERASE 0"
+                                       :assert "ASSERT")}]
 
-      (if transaction
+      (cond
+        (= type :error)
+        (cmd-send-error conn xt-params-or-error)
+
+        transaction
         ;; we buffer the statement in the transaction (to be flushed with COMMIT)
         (do
           (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
           (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
+        :else
         (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
           (if error
             (cmd-send-error conn (err-protocol-violation (ex-message error)))
@@ -1518,32 +1543,34 @@
                                                 {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
                                                 xtify-param (->xtify-param session stmt-with-bind-msg)
-                                                xt-params (vec (map-indexed xtify-param params))
+                                                [type xt-params-or-error] (xtify-params xtify-param params stmt)
 
                                                 query-opts {:basis {:at-tx (or (:at-tx stmt) (:at-tx transaction))
                                                                     :current-time (or (:current-time stmt)
                                                                                       (:current-time transaction)
                                                                                       (.instant clock))}
                                                             :default-tz (.getZone clock)
-                                                            :args xt-params}]
+                                                            :args xt-params-or-error}]
+                                            (if (= type :error)
+                                              (cmd-send-error conn xt-params-or-error)
 
-                                            (try
-                                              (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
-                                                (if-let [fields (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
-                                                                    (with-result-formats result-format))]
-                                                  {:portal (assoc stmt-with-bind-msg
-                                                                  :bound-query bound-query
-                                                                  :fields fields)
-                                                   :bind-outcome :success}
+                                              (try
+                                                (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
+                                                  (if-let [fields (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
+                                                                      (with-result-formats result-format))]
+                                                    {:portal (assoc stmt-with-bind-msg
+                                                                    :bound-query bound-query
+                                                                    :fields fields)
+                                                     :bind-outcome :success}
 
-                                                  (cmd-send-error conn (err-protocol-violation "invalid result format"))))
+                                                    (cmd-send-error conn (err-protocol-violation "invalid result format"))))
 
-                                              (catch InterruptedException e
-                                                (log/trace e "Interrupt thrown binding prepared statement")
-                                                (throw e))
-                                              (catch Throwable e
-                                                (log/error e)
-                                                (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement")))))
+                                                (catch InterruptedException e
+                                                  (log/trace e "Interrupt thrown binding prepared statement")
+                                                  (throw e))
+                                                (catch Throwable e
+                                                  (log/error e)
+                                                  (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement"))))))
 
                                           {:portal stmt-with-bind-msg
                                            :bind-outcome :success})]
