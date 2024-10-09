@@ -10,6 +10,7 @@
            [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
+           [java.text ParseException]
            [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util UUID]
@@ -896,9 +897,11 @@
                                   (LocalDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
 
                  :read-text (fn [_env ba]
-                              (let [res (time/parse-sql-timestamp-literal (read-utf8 ba))]
-                                (when (instance? LocalDateTime res)
-                                  res)))
+                              (let [text (read-utf8 ba)
+                                    res (time/parse-sql-timestamp-literal text)]
+                                (if (instance? LocalDateTime res)
+                                  res
+                                  (throw (IllegalArgumentException. (format "Can not parse '%s' as timestamp" text))))))
 
                  :write-binary (fn [_env ^IVectorReader rdr idx]
                                  (let [micros (- (.getLong rdr idx) unix-pg-epoch-diff-in-micros)
@@ -927,9 +930,11 @@
                                     (OffsetDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
 
                    :read-text (fn [_env ba]
-                                (let [res (time/parse-sql-timestamp-literal (read-utf8 ba))]
-                                  (when (or (instance? ZonedDateTime res) (instance? OffsetDateTime res))
-                                    res)))
+                                (let [text (read-utf8 ba)
+                                      res (time/parse-sql-timestamp-literal text)]
+                                  (if (or (instance? ZonedDateTime res) (instance? OffsetDateTime res))
+                                    res
+                                    (throw (IllegalArgumentException. (format "Can not parse '%s' as timestamptz" text))))))
 
                    :write-binary (fn [_env ^IVectorReader rdr idx]
                                    ;;despite the wording in the docs, based off pgjdbc behaviour
