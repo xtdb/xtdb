@@ -785,6 +785,17 @@
 (defn trunc-duration-to-micros [^Duration dur]
   (.withNanos dur (* (quot (.getNano dur) 1000) 1000)))
 
+(def pg-ranges
+  ;; we only support one
+  {:tzts-range
+   {:rngtypid 3910
+    :rngsubtype 1184
+    :rngmultitypid 4534
+    :rngcollation 0
+    :rngsubopc 3127
+    :rngcanonical ""
+    :rngsubdiff "tstzrange_subdiff"}})
+
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
    ;;default oid is currently only used to describe a parameter without a known type
