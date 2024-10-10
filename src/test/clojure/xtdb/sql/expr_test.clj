@@ -124,11 +124,12 @@
   (t/is (= '(lower f/a) (plan-expr-with-foo "LOWER(foo.a)"))))
 
 (t/deftest test-substring-expr
-  (t/are
-   [sql expected] (= expected (plan-expr-with-foo sql))
+  (t/are [sql expected] (= expected (plan-expr-with-foo sql))
     "SUBSTRING(foo.a FROM 1)" '(substring f/a 1)
     "SUBSTRING(foo.a FROM 1 FOR 2)" '(substring f/a 1 2)
-    "SUBSTRING(foo.a FROM 1 USING CHARACTERS)" '(substring f/a 1)))
+    "SUBSTRING(foo.a FROM 1 USING CHARACTERS)" '(substring f/a 1)
+    "SUBSTRING(foo.a, 1)" '(substring f/a 1)
+    "SUBSTRING(foo.a, 1, 2)" '(substring f/a 1, 2)))
 
 (t/deftest test-concat-expr
   (t/is (= '(concat f/a f/b) (plan-expr-with-foo "foo.a || foo.b")))

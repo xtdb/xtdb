@@ -266,9 +266,8 @@ exprPrimary
     // string value functions
     | 'SUBSTRING' '('
         expr
-        'FROM' startPosition
-        ( 'FOR' stringLength )?
-        ( 'USING' charLengthUnits )?
+        ('FROM'? startPosition ( 'FOR'? stringLength )? ( 'USING' charLengthUnits )?
+         | ',' startPosition (',' stringLength)? )
       ')' # CharacterSubstringFunction
 
     | 'UPPER' '(' expr ')' # UpperFunction
