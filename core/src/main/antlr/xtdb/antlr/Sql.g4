@@ -290,6 +290,7 @@ exprPrimary
     | (schemaName '.')? 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
     | (schemaName '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
     | (schemaName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
+    | (schemaName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
 
     | currentInstantFunction # CurrentInstantFunction0
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
