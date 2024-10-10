@@ -150,7 +150,7 @@
   ^String [^InputStream in]
   (loop [baos (ByteArrayOutputStream.)
          x (.read in)]
-    (if (zero? x)
+    (if (or (zero? x) (neg? x))
       (String. (.toByteArray baos) StandardCharsets/UTF_8)
       (recur (doto baos
                (.write x))
