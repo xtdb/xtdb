@@ -60,7 +60,7 @@ BITWISE_SHIFT_LEFT : '<<' ;
 BITWISE_SHIFT_RIGHT : '>>' ;
 
 EQUAL : '=' ;
-NOT_EQUAL : '!=' ;
+NOT_EQUAL : '!=' { setText("<>"); } ;
 LT_GT : '<>' ;
 LT : '<' ;
 GT : '>' ;
