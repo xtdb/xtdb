@@ -1280,7 +1280,8 @@
           (-> (.expr ctx 1) (.accept this))))
 
   (visitComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
-    (list (symbol (.getText (.compOp ctx)))
+    (list ((some-fn {'!= '<>} identity)
+           (symbol (.getText (.compOp ctx))))
           pt1
           (-> (.expr ctx) (.accept (dissoc this :pt1)))))
 
