@@ -28,7 +28,6 @@ import xtdb.arrow.*;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
-import xtdb.types.RegClass;
 import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
@@ -328,6 +327,18 @@ public class ValueVectorReader implements IVectorReader {
             public byte getByte(int idx) {
                 return v.get(idx);
             }
+            @Override
+            public short getShort(int idx) {
+                return v.get(idx);
+            }
+            @Override
+            public int getInt(int idx) {
+                return v.get(idx);
+            }
+            @Override
+            public long getLong(int idx) {
+                return v.get(idx);
+            }
         };
     }
 
@@ -337,6 +348,14 @@ public class ValueVectorReader implements IVectorReader {
             public short getShort(int idx) {
                 return v.get(idx);
             }
+            @Override
+            public int getInt(int idx) {
+                return v.get(idx);
+            }
+            @Override
+            public long getLong(int idx) {
+                return v.get(idx);
+            }
         };
     }
 
@@ -344,6 +363,10 @@ public class ValueVectorReader implements IVectorReader {
         return new ValueVectorReader(v) {
             @Override
             public int getInt(int idx) {
+                return v.get(idx);
+            }
+            @Override
+            public long getLong(int idx) {
                 return v.get(idx);
             }
         };
@@ -362,6 +385,10 @@ public class ValueVectorReader implements IVectorReader {
         return new ValueVectorReader(v) {
             @Override
             public float getFloat(int idx) {
+                return v.get(idx);
+            }
+            @Override
+            public double getDouble(int idx) {
                 return v.get(idx);
             }
         };
@@ -1042,6 +1069,12 @@ public class ValueVectorReader implements IVectorReader {
         @Override
         public long getLong(int idx) {
             return legReader(getLeg(idx)).getLong(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public double getDouble(int idx) {
+            return legReader(getLeg(idx)).getDouble(idx);
         }
 
         @SuppressWarnings("resource")

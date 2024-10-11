@@ -1120,6 +1120,12 @@
 
        (or fallback-pg-type :json)))
 
+(defn ->unified-col-type [col-types]
+  (cond
+    (= 1 (count col-types)) (first col-types)
+    (set/subset? col-types #{:float4 :float8}) :float8
+    (set/subset? col-types #{:int2 :int4 :int8}) :int8))
+
 (defn field->pg-type
   ([field] (field->pg-type nil field))
 
@@ -1129,8 +1135,8 @@
          col-types (-> (flatten-union-types col-type)
                        (disj :null)
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
-     (-> (if (= 1 (count col-types))
-           (first col-types)
+     (-> (if-let [col-type (->unified-col-type col-types)]
+           col-type
            (col-type->pg-type fallback-pg-type col-type))
          (pg-types)
          (set/rename-keys {:oid :column-oid})
