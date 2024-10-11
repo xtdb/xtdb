@@ -1121,10 +1121,11 @@
        (or fallback-pg-type :json)))
 
 (defn ->unified-col-type [col-types]
-  (cond
-    (= 1 (count col-types)) (first col-types)
-    (set/subset? col-types #{:float4 :float8}) :float8
-    (set/subset? col-types #{:int2 :int4 :int8}) :int8))
+  (when (pos? (count col-types))
+    (cond
+      (= 1 (count col-types)) (first col-types)
+      (set/subset? col-types #{:float4 :float8}) :float8
+      (set/subset? col-types #{:int2 :int4 :int8}) :int8)))
 
 (defn field->pg-type
   ([field] (field->pg-type nil field))
