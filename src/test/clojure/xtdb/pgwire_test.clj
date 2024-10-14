@@ -17,7 +17,8 @@
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
-           (java.sql Connection PreparedStatement SQLWarning Statement Timestamp Types)
+           [java.net Socket]
+           (java.sql Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            java.util.Calendar
            (java.util.concurrent CountDownLatch TimeUnit)
@@ -98,13 +99,13 @@
         :unsupported
         (throw e)))))
 
-(defn rs->maps [rs]
+(defn rs->maps [^ResultSet rs]
   (let [md (.getMetaData rs)]
     (-> (loop [res []]
           (if (.next rs)
             (recur (->>
                     (for [idx (range 1 (inc (.getColumnCount md)))]
-                      {(.getColumnName md idx) (.getObject rs idx)})
+                      {(.getColumnName md idx) (.getObject rs ^long idx)})
                     (into {})
                     (conj res)))
             res))
@@ -368,7 +369,7 @@
   (deref (:close-promise @(:conn-state server-conn)) ms false))
 
 (defn check-conn-resources-freed [server-conn]
-  (let [{:keys [socket]} server-conn]
+  (let [{{:keys [^Socket socket]} :frontend} server-conn]
     (t/is (.isClosed socket))))
 
 (deftest conn-force-closed-by-server-frees-resources-test
@@ -450,7 +451,7 @@
 ;; and observe that connection continue until the multi-message extended interaction is done
 ;; (when we introduce read transactions I will probably extend this to short-lived transactions)
 (deftest close-drains-active-extended-queries-before-stopping-test
-  (with-open [server (serve {:num-threads 10})]
+  (util/with-open [server (serve {:num-threads 10})]
     (let [cmd-parse @#'pgwire/cmd-parse
           {:keys [!closing?]} server
           latch (CountDownLatch. 10)]
@@ -1483,10 +1484,10 @@
           (t/is (nil? z)))))))
 
 (deftest test-datetime-types
-  (doseq [{:keys [type val pg-type]} [{:type LocalDate :val #xt.time/date "2018-07-25" :pg-type "date"}
-                                      {:type LocalDate :val #xt.time/date "1239-01-24" :pg-type "date"}
-                                      {:type LocalDateTime :val #xt.time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
-                                      {:type LocalDateTime :val #xt.time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]
+  (doseq [{:keys [^Class type val pg-type]} [{:type LocalDate :val #xt.time/date "2018-07-25" :pg-type "date"}
+                                             {:type LocalDate :val #xt.time/date "1239-01-24" :pg-type "date"}
+                                             {:type LocalDateTime :val #xt.time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
+                                             {:type LocalDateTime :val #xt.time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]
           binary? [true false]]
 
     (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
