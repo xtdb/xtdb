@@ -5,7 +5,8 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [clojure.tools.logging :as log])
   (:import (clojure.lang MapEntry)
            [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
@@ -300,10 +301,18 @@
 (def num-types (descendants col-type-hierarchy :num))
 (def date-time-types (descendants col-type-hierarchy :date-time))
 
+(defn list-type? [col-type]
+  (= :list (col-type-head col-type)))
+
 (defn flatten-union-types [col-type]
   (if (= :union (col-type-head col-type))
     (second col-type)
     #{col-type}))
+
+(defn flatten-list-unions [col-type]
+  (if (list-type? col-type)
+    [:list (flatten-union-types (second col-type))]
+    col-type))
 
 (defn flatten-union-field [^Field field]
   (if (instance? ArrowType$Union (.getType field))
@@ -1191,7 +1200,87 @@
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (serde/write-transit (.getObject rdr idx) :json))
              :write-binary (fn [_env ^IVectorReader rdr idx]
-                             (serde/write-transit (.getObject rdr idx) :json))}})
+                             (serde/write-transit (.getObject rdr idx) :json))}
+
+   :_int4 {:typname "_int4"
+           :oid 1007
+           :typsend "array_send"
+           :typreceive "array_recv"
+           :read-text (fn [_env arr]
+                        (log/tracef "read-text_int4 %s" arr)
+                        (let [elems (when-not (empty? arr)
+                                      (let [sa (str/trim arr)]
+                                        (-> sa
+                                            (subs 1 (dec (count sa)))
+                                            (str/split #","))))]
+                          (mapv #(Integer/parseInt %) elems)))
+                    ;; :read-binary #()
+           :write-text (fn [_env ^IVectorReader list-rdr idx]
+                         (let [^IVectorReader el-rdr (.listElementReader list-rdr)
+                               sb (StringBuilder. "{")]
+                           (if-not (zero? (.getListCount list-rdr idx))
+                             (do
+                               (dotimes [i (.getListCount list-rdr idx)]
+                                 (.append sb (if (.isNull el-rdr (+ i (.getListStartIndex list-rdr idx)))
+                                               "NULL"
+                                               (.getInt el-rdr (+ i (.getListStartIndex list-rdr idx)))))
+                                 (.append sb ","))
+                               (.setCharAt sb (dec (.length sb)) \}))
+                             (.append sb "}"))
+                           (utf8 (.toString sb))))
+           :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                           (let [^IVectorReader el-rdr (.listElementReader list-rdr)
+                                 sb (StringBuilder. "{")]
+                             (if (zero? (.getListCount list-rdr idx))
+                               (.append sb "}")
+                               (do
+                                 (dotimes [i (.getListCount list-rdr idx)]
+                                   (.append sb (if (.isNull el-rdr (+ i (.getListStartIndex list-rdr idx)))
+                                                 ""
+                                                 (.getInt el-rdr (+ i (.getListStartIndex list-rdr idx)))))
+                                   (.append sb ","))
+                                 (.setCharAt sb (dec (.length sb)) \})))
+                             (utf8 (.toString sb))))}
+
+   :_int8 {:typname "_int8"
+           :oid 1016
+           :typsend "array_send"
+           :typreceive "array_recv"
+           :read-text (fn [_env arr]
+                        (log/tracef "read-text_int8 %s" arr)
+                        (let [elems (when-not (empty? arr)
+                                      (let [sa (str/trim arr)]
+                                        (-> sa
+                                            (subs 1 (dec (count sa)))
+                                            (str/split #","))))]
+                          (mapv #(Long/parseLong %) elems)))
+                      ;; :read-binary #()
+           :write-text (fn [_env ^IVectorReader list-rdr idx]
+                         (let [^IVectorReader el-rdr (.listElementReader list-rdr)
+                               sb (StringBuilder. "{")]
+                           (if-not (zero? (.getListCount list-rdr idx))
+                             (do
+                               (dotimes [i (.getListCount list-rdr idx)]
+                                 (.append sb (if (.isNull el-rdr (+ i (.getListStartIndex list-rdr idx)))
+                                               "NULL"
+                                               (.getLong el-rdr (+ i (.getListStartIndex list-rdr idx)))))
+                                 (.append sb ","))
+                               (.setCharAt sb (dec (.length sb)) \}))
+                             (.append sb "}"))
+                           (utf8 (.toString sb))))
+           :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                           (let [^IVectorReader el-rdr (.listElementReader list-rdr)
+                                 sb (StringBuilder. "{")]
+                             (if (zero? (.getListCount list-rdr idx))
+                               (.append sb "}")
+                               (do
+                                 (dotimes [i (.getListCount list-rdr idx)]
+                                   (.append sb (if (.isNull el-rdr (+ i (.getListStartIndex list-rdr idx)))
+                                                 "" ; not really sure about this
+                                                 (.getLong el-rdr (+ i (.getListStartIndex list-rdr idx)))))
+                                   (.append sb ","))
+                                 (.setCharAt sb (dec (.length sb)) \})))
+                             (utf8 (.toString sb))))}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
@@ -1212,13 +1301,19 @@
    [:timestamp-tz :micro] :timestamptz
    :tstz-range :tstz-range
    [:interval :month-day-nano] :interval
+   [:list :i32] :_int4
+   [:list :i64] :_int8
 
-   #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
-   :transit :transit})
+   #_#_; FIXME not supported by pgjdbc until we sort #3683 and #3212
+       :transit :transit})
 
 (defn col-type->pg-type [fallback-pg-type col-type]
   (get col-types->pg-types
        (cond-> col-type
+         ;; ignore lists
+         (list-type? col-type)
+         (subvec 0 2)
+
          ;; ignore TZ
          (= (col-type-head col-type) :timestamp-tz)
          (subvec 0 2))
@@ -1230,7 +1325,20 @@
     (cond
       (= 1 (count col-types)) (first col-types)
       (set/subset? col-types #{:float4 :float8}) :float8
-      (set/subset? col-types #{:int2 :int4 :int8}) :int8)))
+      (set/subset? col-types #{:int2 :int4 :int8}) :int8
+      (list-type? col-types) [:list (->unified-col-type (second col-types))])))
+
+(defn remove-nulls
+  [typ]
+  (if (list-type? typ)
+    (let [inner (-> typ
+                    second
+                    (disj :null))]
+      ;; wrap in extra vector as next step maps - we want the whole [:list :inner] evaluated
+      [[:list (if (= 1 (count inner))
+                (first inner)
+                inner)]])
+    (disj typ :null)))
 
 (defn field->pg-type
   ([field] (field->pg-type nil field))
@@ -1238,9 +1346,12 @@
   ([fallback-pg-type ^Field field]
    (let [field-name (.getName field)
          col-type (field->col-type field)
-         col-types (-> (flatten-union-types col-type)
-                       (disj :null)
+         col-types (-> ((if (list-type? col-type)
+                          flatten-list-unions
+                          flatten-union-types) col-type)
+                       remove-nulls
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
+     (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
      (-> (if-let [col-type (->unified-col-type col-types)]
            col-type
            (col-type->pg-type fallback-pg-type col-type))

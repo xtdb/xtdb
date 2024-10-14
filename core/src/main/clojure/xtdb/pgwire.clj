@@ -598,7 +598,9 @@
 (def ^:private io-uint32
   "An unsigned 32bit integer"
   {:read #(.readInt ^DataInputStream %)
-   :write #(.writeInt ^DataOutputStream %1 (int %2))})
+   :write (fn [^DataOutputStream out v]
+              (when v
+                (.writeInt out (int v))))})
 
 (def ^:private io-string
   "A postgres null-terminated utf8 string"
@@ -1140,6 +1142,7 @@
                (let [row (mapv
                           (fn [{:keys [field-name write-binary write-text result-format]}]
                             (let [rdr (.readerForName ^RelationReader rel field-name)]
+                              (log/tracef "writing %s for rel %s field-name %s" result-format rel field-name)
                               (when-not (.isNull rdr idx)
                                 (if (= :binary result-format)
                                   (write-binary session rdr idx)
