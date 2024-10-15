@@ -1110,7 +1110,7 @@
            :else
            (try
              (dotimes [idx (.rowCount ^RelationReader rel)]
-               (let [row (map
+               (let [row (mapv
                           (fn [{:keys [field-name write-binary write-text result-format]}]
                             (let [rdr (.readerForName ^RelationReader rel field-name)]
                               (when-not (.isNull rdr idx)
