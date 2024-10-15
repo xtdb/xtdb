@@ -369,7 +369,7 @@
   (deref (:close-promise @(:conn-state server-conn)) ms false))
 
 (defn check-conn-resources-freed [server-conn]
-  (let [{{:keys [^Socket socket]} :frontend} server-conn]
+  (let [{:keys [^Socket socket]} server-conn]
     (t/is (.isClosed socket))))
 
 (deftest conn-force-closed-by-server-frees-resources-test
