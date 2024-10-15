@@ -1,13 +1,7 @@
 variable "resource_group_location" {
   description = "The location of the created resource group."
   type        = string
-  default     = "West Europe"
-}
-
-variable "container_app_workload_profile_type" {
-  description = "The workload profile type to run container apps on."
-  type        = string
-  default     = "D4"
+  default     = "East US"
 }
 
 variable "storage_account_tier" {
@@ -25,14 +19,27 @@ variable "storage_account_name" {
   }
 }
 
-variable "kafka_persisent_data_max_size_gb" {
-  description = "The size in Gigabytes of the storage share to store Kafka data in."
-  type        = number
-  default     = 100
+variable "kubernetes_namespace" {
+  description = "The namespace to deploy the Kubernetes cluster into"
+  type        = string
+  default     = "xtdb-infra"
 }
 
-variable "local_disk_cache_max_size_gb" {
-  description = "The size of the local disk cache in GB."
-  type        = number
-  default     = 50
+variable "kubernetes_service_account_name" {
+  description = "The name of the service account to create for the Kubernetes cluster"
+  type        = string
+  default     = "xtdb-service-account"
 }
+
+variable "aks_system_pool_vm_size" {
+  description = "The size of VM to use for the Kubernetes system node pool "
+  type        = string
+  default     = "Standard_D2_v2"
+}
+
+variable "aks_application_pool_vm_size" {
+  description = "The size of VM to use for the Kubernetes application node pool"
+  type        = string
+  default     = "Standard_D8_v3"
+}
+
