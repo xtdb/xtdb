@@ -478,8 +478,8 @@
                 (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
                                                              :query query-str})))
 
-              (catch IllegalArgumentException e (throw e))
-              (catch RuntimeException e (throw e))
+              (catch xtdb.IllegalArgumentException e (throw e))
+              (catch xtdb.RuntimeException e (throw e))
               (catch Exception e
                 (log/error e "Error processing SQL transaction operation" (pr-str {:query query-str}))
                 (throw e)))))
