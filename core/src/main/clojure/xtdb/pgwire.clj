@@ -14,18 +14,17 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import [clojure.lang PersistentQueue ExceptionInfo MapEntry]
+  (:import [clojure.lang MapEntry PersistentQueue]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
-           [java.lang Thread$State]
+           [java.lang AutoCloseable Thread$State]
            [java.net ServerSocket Socket SocketException]
            [java.nio.charset StandardCharsets]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration LocalTime LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
+           [java.time Clock Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
-           [java.text ParseException]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
@@ -108,15 +107,84 @@
 
         (log/info "Server stopped.")))))
 
+(defprotocol Frontend
+  (send-client-msg!
+    [frontend msg-def]
+    [frontend msg-def data])
+
+  (upgrade-to-ssl [frontend ssl-ctx])
+
+  (flush! [frontend]))
+
+(declare ->socket-frontend)
+
+(defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
+  Frontend
+  (send-client-msg! [_ msg-def]
+    (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
+
+    (.writeByte out (byte (:char8 msg-def)))
+    (.writeInt out 4))
+
+  (send-client-msg! [_ msg-def data]
+    (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
+    (let [bytes-out (ByteArrayOutputStream.)
+          msg-out (DataOutputStream. bytes-out)
+          _ ((:write msg-def) msg-out data)
+          arr (.toByteArray bytes-out)]
+      (.writeByte out (byte (:char8 msg-def)))
+      (.writeInt out (+ 4 (alength arr)))
+      (.write out arr)))
+
+  (upgrade-to-ssl [this ssl-ctx]
+    (if (and ssl-ctx (not (instance? SSLSocket socket)))
+      ;; upgrade the socket, then wait for the client's next startup message
+
+      (do
+        (log/trace "upgrading to SSL")
+
+        (.writeByte out (byte \S))
+
+        (let [^SSLSocket ssl-socket (-> (.getSocketFactory ^SSLContext ssl-ctx)
+                                        (.createSocket socket
+                                                       (-> (.getInetAddress socket)
+                                                           (.getHostAddress))
+                                                       (.getPort socket)
+                                                       true))]
+          (try
+            (.setUseClientMode ssl-socket false)
+            (.startHandshake ssl-socket)
+            (log/trace "SSL handshake successful")
+            (catch Exception e
+              (log/debug e "error in SSL handshake")
+              (throw e)))
+
+          (->socket-frontend ssl-socket)))
+
+      ;; unsupported - recur and give the client another chance to say hi
+      (do
+        (.writeByte out (byte \N))
+        this)))
+
+  (flush! [_] (.flush out))
+
+  AutoCloseable
+  (close [_]
+    (when-not (.isClosed socket)
+      (util/try-close socket))))
+
+(defn ->socket-frontend [^Socket socket]
+  (->SocketFrontend socket
+                    (DataInputStream. (.getInputStream socket))
+                    (DataOutputStream. (.getOutputStream socket))))
+
 ;;; Connection
 ;; Represents a single client connection to the server
 ;; identified by an integer 'cid'
 ;; each connection holds some state under :conn-state (such as prepared statements, session params and such)
 ;; and is registered under the :connections map under the servers :server-state.
 
-(defrecord Connection [^Server server
-                       node
-                       ^Socket socket
+(defrecord Connection [^Server server, frontend, node
 
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
@@ -126,16 +194,11 @@
                        !closing?
 
                        ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
-                       conn-state
-
-                       ;; io
-                       ^DataInputStream in
-                       ^DataOutputStream out]
+                       conn-state]
 
   Closeable
   (close [_]
-    (when-not (.isClosed socket)
-      (util/try-close socket))
+    (util/close frontend)
 
     (let [{:keys [server-state]} server]
       (swap! server-state update :connections dissoc cid))
@@ -724,7 +787,7 @@
          (apply io-record fields#)]
 
      (def ~sym
-       {:name ~(name sym)
+       {:name ~(keyword sym)
         :kind kind#
         :char8 char8#
         :fields fields#
@@ -854,21 +917,11 @@
 
 (defn- cmd-write-msg
   "Writes out a single message given a definition (msg-def) and optional data record."
-  ([conn msg-def]
-   (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out (:out conn)]
-     (.writeByte out (byte (:char8 msg-def)))
-     (.writeInt out 4)))
-  ([conn msg-def data]
-   (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out (:out conn)
-         bytes-out (ByteArrayOutputStream.)
-         msg-out (DataOutputStream. bytes-out)
-         _ ((:write msg-def) msg-out data)
-         arr (.toByteArray bytes-out)]
-     (.writeByte out (byte (:char8 msg-def)))
-     (.writeInt out (+ 4 (alength arr)))
-     (.write out arr))))
+  ([{:keys [frontend]} msg-def]
+   (send-client-msg! frontend msg-def))
+
+  ([{:keys [frontend]} msg-def data]
+   (send-client-msg! frontend msg-def data)))
 
 (def time-zone-nf-param-name "timezone")
 (def pg-param-nf->display-format
@@ -970,7 +1023,7 @@
                                                   (.withZone clock (ZoneId/of tz))))
   (set-session-parameter conn time-zone-nf-param-name tz))
 
-(defn cmd-startup-pg30 [conn msg-in]
+(defn cmd-startup-pg30 [conn startup-params]
   (let [{:keys [server]} conn
         {:keys [server-state]} server]
 
@@ -979,7 +1032,7 @@
 
     (let [default-server-params (-> (:parameters @server-state)
                                     (update-keys str/lower-case))
-          startup-parameters-from-client (-> (read-startup-parameters msg-in)
+          startup-parameters-from-client (-> startup-params
                                              (update-keys str/lower-case))]
 
       (doseq [[k v] (merge default-server-params
@@ -1018,53 +1071,21 @@
   (cmd-send-error conn err)
   (cmd-terminate conn))
 
-(defn- upgrade-conn-to-ssl [{:keys [^Socket socket, ^DataOutputStream out], {:keys [^SSLContext ssl-ctx]} :server, :as conn}]
-  (if (and ssl-ctx (not (instance? SSLSocket socket)))
-    ;; upgrade the socket, then wait for the client's next startup message
-
-    (do
-      (log/trace "upgrading to SSL")
-
-      (.writeByte out (byte \S))
-
-      (let [^SSLSocket ssl-socket (-> (.getSocketFactory ssl-ctx)
-                                      (.createSocket socket
-                                                     (-> (.getInetAddress socket)
-                                                         (.getHostAddress))
-                                                     (.getPort socket)
-                                                     true))]
-        (try
-          (.setUseClientMode ssl-socket false)
-          (.startHandshake ssl-socket)
-          (log/trace "SSL handshake successful")
-          (catch Exception e
-            (log/debug e "error in SSL handshake")
-            (throw e)))
-
-        (assoc conn
-               :socket ssl-socket
-               :in (DataInputStream. (.getInputStream ssl-socket))
-               :out (DataOutputStream. (.getOutputStream ssl-socket)))))
-
-    ;; unsupported - recur and give the client another chance to say hi
-    (do
-      (.writeByte out (byte \N))
-      conn)))
-
 (defn cmd-startup [conn]
-  (loop [{:keys [in] :as conn} conn]
+  (loop [{{:keys [in]} :frontend, :keys [server], :as conn} conn]
     (let [{:keys [version msg-in]} (read-version in)]
       (case version
         :gssenc (doto conn
                   (cmd-startup-err (err-protocol-violation "GSSAPI is not supported")))
 
-        :ssl (recur (upgrade-conn-to-ssl conn))
+        :ssl (let [{:keys [^SSLContext ssl-ctx]} server]
+               (recur (update conn :frontend upgrade-to-ssl ssl-ctx)))
 
         :cancel (doto conn
                   (cmd-startup-cancel msg-in))
 
         :30 (doto conn
-              (cmd-startup-pg30 msg-in))
+              (cmd-startup-pg30 (read-startup-parameters msg-in)))
 
         (doto conn
           (cmd-startup-err (err-protocol-violation "Unknown protocol version")))))))
@@ -1265,7 +1286,9 @@
                   :type-modifier -1
                   :result-format :text}
         apply-defaults (fn [col]
-                         (merge defaults col))
+                         (-> (merge defaults col)
+                             (select-keys [:column-name :table-oid :column-attribute-number
+                                           :column-oid :typlen :type-modifier :result-format])))
         data {:columns (mapv apply-defaults cols)}]
 
     (log/trace "Sending Row Description - " (assoc data :input-cols cols))
@@ -1413,7 +1436,7 @@
 (defn cmd-flush
   "Flushes any pending output to the client."
   [conn]
-  (.flush ^OutputStream (:out conn)))
+  (flush! (:frontend conn)))
 
 (defn resolve-defaulted-params [declared-params inferred-params]
   (let [declared-params (vec declared-params)]
@@ -1684,7 +1707,10 @@
 
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
-(defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-state], !conn-closing? :!closing?, :as conn}]
+(defn- conn-loop [{:keys [cid, server, conn-state],
+                   {:keys [^Socket socket, in]} :frontend,
+                   !conn-closing? :!closing?,
+                   :as conn}]
   (let [{:keys [port], !server-closing? :!closing?} server]
     (loop []
       (cond
@@ -1754,10 +1780,8 @@
                                    (try
                                      (-> (map->Connection {:cid cid,
                                                            :server server,
-                                                           :socket conn-socket,
+                                                           :frontend (->socket-frontend conn-socket),
                                                            :node node
-                                                           :in (DataInputStream. (.getInputStream conn-socket)),
-                                                           :out (DataOutputStream. (.getOutputStream conn-socket))
                                                            :!closing? (atom false)
                                                            :conn-state !conn-state})
                                          (cmd-startup)
