@@ -362,15 +362,14 @@
   (vals (:connections @(:server-state server))))
 
 (defn- get-last-conn
-  ([] (get-last-conn *server*))
-  ([server] (last (sort-by :cid (get-connections server)))))
+  (^xtdb.pgwire.Connection [] (get-last-conn *server*))
+  (^xtdb.pgwire.Connection [server] (last (sort-by :cid (get-connections server)))))
 
 (defn- wait-for-close [server-conn ms]
   (deref (:close-promise @(:conn-state server-conn)) ms false))
 
-(defn check-conn-resources-freed [server-conn]
-  (let [{:keys [^Socket socket]} server-conn]
-    (t/is (.isClosed socket))))
+(defn check-conn-resources-freed [{{:keys [^Socket socket]} :frontend :as server-conn}]
+  (t/is (.isClosed socket)))
 
 (deftest conn-force-closed-by-server-frees-resources-test
   (with-open [_ (jdbc-conn)]
