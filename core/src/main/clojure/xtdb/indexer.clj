@@ -448,35 +448,41 @@
                                                                                   .getVectorSchemaRoot
                                                                                   .getSchema)})
                 param-count (:param-count (meta compiled-query))]
-            ;; TODO handle error
-            (zmatch (r/vector-zip compiled-query)
-              [:insert query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+            (try
+              (zmatch (r/vector-zip compiled-query)
+                [:insert query-opts inner-query]
+                (foreach-arg-row args-arrow-rdr
+                                 (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                     (wrap-sql-args param-count)))
 
-              [:update query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                [:update query-opts inner-query]
+                (foreach-arg-row args-arrow-rdr
+                                 (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                     (wrap-sql-args param-count)))
 
-              [:delete query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                [:delete query-opts inner-query]
+                (foreach-arg-row args-arrow-rdr
+                                 (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                     (wrap-sql-args param-count)))
 
-              [:erase query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                [:erase query-opts inner-query]
+                (foreach-arg-row args-arrow-rdr
+                                 (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                     (wrap-sql-args param-count)))
 
-              [:assert _query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer q-src wm-src inner-query tx-opts)
-                                   (wrap-sql-args param-count)))
+                [:assert _query-opts inner-query]
+                (foreach-arg-row args-arrow-rdr
+                                 (-> (->assert-idxer q-src wm-src inner-query tx-opts)
+                                     (wrap-sql-args param-count)))
 
-              (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
-                                                           :query query-str})))))
+                (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
+                                                             :query query-str})))
+
+              (catch IllegalArgumentException e (throw e))
+              (catch RuntimeException e (throw e))
+              (catch Exception e
+                (log/error e "Error processing SQL transaction operation" (pr-str {:query query-str}))
+                (throw e)))))
 
         nil))))
 
@@ -636,7 +642,7 @@
                           (catch InterruptedException e
                             (throw e))
                           (catch Throwable t
-                            (log/error t "error in indexer")
+                            (log/error t "error in indexer, indexing" tx-key)
                             (throw t)))]
                   (if e
                     (do
