@@ -214,11 +214,12 @@
   ^String [^InputStream in]
   (loop [baos (ByteArrayOutputStream.)
          x (.read in)]
-    (if (zero? x)
-      (String. (.toByteArray baos) StandardCharsets/UTF_8)
-      (recur (doto baos
-               (.write x))
-             (.read in)))))
+    (cond
+      (neg? x) (throw (EOFException. "EOF in read-c-string"))
+      (zero? x) (String. (.toByteArray baos) StandardCharsets/UTF_8)
+      :else (recur (doto baos
+                     (.write x))
+                   (.read in)))))
 
 (defn- write-c-string
   "Postgres strings are null terminated, writes a null terminated utf8 string to out."
@@ -1074,10 +1075,11 @@
   (loop [in (PushbackInputStream. in)
          acc {}]
     (let [x (.read in)]
-      (if (zero? x)
-        acc
-        (do (.unread in (byte x))
-            (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
+      (cond
+        (neg? x) (throw (EOFException. "EOF in read-startup-parameters"))
+        (zero? x) acc
+        :else (do (.unread in (byte x))
+                  (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
