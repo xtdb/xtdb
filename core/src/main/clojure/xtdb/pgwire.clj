@@ -229,18 +229,6 @@
 (def ^:private oid-varchar (get-in types/pg-types [:varchar :oid]))
 (def ^:private oid-json (get-in types/pg-types [:json :oid]))
 
-;; all postgres client IO arrives as either an untyped (startup) or typed message
-(defn- read-untyped-msg [^DataInputStream in]
-  (let [size (- (.readInt in) 4)
-        barr (byte-array size)
-        _ (.readFully in barr)]
-    {:msg-in (DataInputStream. (ByteArrayInputStream. barr))
-     :msg-len size}))
-
-(defn- read-typed-msg [^DataInputStream in]
-  (let [type-byte (.readUnsignedByte in)]
-    (assoc (read-untyped-msg in)
-      :msg-char8 (char type-byte))))
 
 ;;; errors
 
@@ -573,33 +561,6 @@
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
 
-(defn- read-startup-parameters [^DataInputStream in]
-  (loop [in (PushbackInputStream. in)
-         acc {}]
-    (let [x (.read in)]
-      (if (zero? x)
-        acc
-        (do (.unread in (byte x))
-            (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
-
-;; startup negotiation utilities (see cmd-startup)
-
-(def ^:private version-messages
-  "Integer codes sent by the client to identify a startup msg"
-  {
-   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
-   196608 :30
-   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
-   80877102 :cancel
-   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
-   80877103 :ssl
-   ;; gssapi encoding is not supported by xt, and we tell the client that
-   80877104 :gssenc})
-
-(defn- read-version [^DataInputStream in]
-  (let [{:keys [^DataInputStream msg-in] :as msg} (read-untyped-msg in)
-        version (.readInt msg-in)]
-    (assoc msg :version (version-messages version))))
 
 ;;; server impl
 
@@ -1070,6 +1031,53 @@
 (defn cmd-startup-err [conn err]
   (cmd-send-error conn err)
   (cmd-terminate conn))
+
+;; startup negotiation utilities (see cmd-startup)
+
+(def ^:private version-messages
+  "Integer codes sent by the client to identify a startup msg"
+  {
+   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
+   196608 :30
+   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
+   80877102 :cancel
+   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
+   80877103 :ssl
+   ;; gssapi encoding is not supported by xt, and we tell the client that
+   80877104 :gssenc})
+
+;; all postgres client IO arrives as either an untyped (startup) or typed message
+
+(defn- read-untyped-msg [^DataInputStream in]
+  (let [size (- (.readInt in) 4)
+        barr (byte-array size)
+        _ (.readFully in barr)]
+    (DataInputStream. (ByteArrayInputStream. barr))))
+
+(defn- read-version [^DataInputStream in]
+  (let [^DataInputStream msg-in (read-untyped-msg in)
+        version (.readInt msg-in)]
+    {:msg-in msg-in
+     :version (version-messages version)}))
+
+(defn- read-typed-msg [{{:keys [^DataInputStream in]} :frontend :as conn}]
+  (let [type-char (char (.readUnsignedByte in))]
+    (if-let [msg-var (client-msgs type-char)]
+      (let [rdr (:read @msg-var)]
+        (try
+          (assoc (rdr (read-untyped-msg in)) :msg-name (:name @msg-var))
+          (catch Exception e
+            (cmd-send-error conn (err-protocol-violation (str "Error reading client message " (ex-message e)))))))
+      (cmd-send-error conn (err-protocol-violation (str "Unknown client message " type-char))))))
+
+(defn- read-startup-parameters [^DataInputStream in]
+  (loop [in (PushbackInputStream. in)
+         acc {}]
+    (let [x (.read in)]
+      (if (zero? x)
+        acc
+        (do (.unread in (byte x))
+            (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
 (defn cmd-startup [conn]
   (loop [{{:keys [in]} :frontend, :keys [server], :as conn} conn]
@@ -1664,51 +1672,49 @@
         (cmd-execute conn {:portal-name portal-name})
         (close-portal conn portal-name))
 
-       ;;close/remove stmt
+      ;;close/remove stmt
       (swap! conn-state update :prepared-statements dissoc stmt-name)))
 
   (cmd-send-ready conn))
 
-(defn- handle-msg [{:keys [msg-char8, msg-in]} {:keys [cid, conn-state] :as conn}]
+(defn handle-msg [{:keys [cid, conn-state] :as conn} {:keys [msg-name] :as msg}]
   (try
-    (let [msg-var (client-msgs msg-char8)]
+    (log/trace "Read client msg" {:cid cid, :msg msg})
 
-      (log/trace "Read client msg"
-                 {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
+    (cond
 
-      (when (:skip-until-sync @conn-state)
-        (if (= msg-var #'msg-sync)
-          (cmd-enqueue-cmd conn [#'cmd-sync])
-          (log/trace "Skipping msg until next sync due to error in extended protocol"
-                     {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
+      (:skip-until-sync @conn-state)
+      (if (= :msg-sync msg-name)
+        (cmd-enqueue-cmd conn [#'cmd-sync])
+        (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg}))
 
-      (when-not msg-var
-        (cmd-send-error conn (err-protocol-violation "unknown client message")))
 
-      (when (and msg-var (not (:skip-until-sync @conn-state)))
-        (let [msg-data ((:read @msg-var) msg-in)]
-          (condp = msg-var
-            #'msg-simple-query (cmd-simple-query conn msg-data)
-            #'msg-terminate (cmd-terminate conn)
-            #'msg-close (cmd-close conn msg-data)
-            #'msg-parse (cmd-parse conn msg-data)
-            #'msg-bind (cmd-bind conn msg-data)
-            #'msg-sync (cmd-sync conn)
-            #'msg-execute (cmd-execute conn msg-data)
-            #'msg-describe (cmd-describe conn msg-data)
-            #'msg-flush (cmd-flush conn)
+      (not msg)
+      (cmd-send-error conn (err-protocol-violation "unknown client message"))
 
-            ;; ignored by xt
-            #'msg-password nil
+      :else
+      (case msg-name
+        :msg-simple-query (cmd-simple-query conn msg)
+        :msg-terminate (cmd-terminate conn)
+        :msg-close (cmd-close conn msg)
+        :msg-parse (cmd-parse conn msg)
+        :msg-bind (cmd-bind conn msg)
+        :msg-sync (cmd-sync conn)
+        :msg-execute (cmd-execute conn msg)
+        :msg-describe (cmd-describe conn msg)
+        :msg-flush (cmd-flush conn)
 
-            (cmd-send-error conn (err-protocol-violation "unknown client message"))))))
+        ;; ignored by xt
+        :msg-password nil
+
+        (cmd-send-error conn (err-protocol-violation "unknown client message"))))
     (catch InterruptedException e (throw e))
     (catch Throwable e (log/error e "Uncaught exception in handle-msg"))))
 
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
 (defn- conn-loop [{:keys [cid, server, conn-state],
-                   {:keys [^Socket socket, in]} :frontend,
+                   {:keys [^Socket socket]} :frontend,
                    !conn-closing? :!closing?,
                    :as conn}]
   (let [{:keys [port], !server-closing? :!closing?} server]
@@ -1754,8 +1760,10 @@
         ;; go idle until we receive another msg from the client
         :else
         (do
-          (handle-msg (read-typed-msg in) conn)
+          (when-let [msg (read-typed-msg conn)]
+            (handle-msg conn msg))
           (recur))))))
+
 
 (defn- ->tmp-node [{:keys [^Map !tmp-nodes]} conn-state]
   (.computeIfAbsent !tmp-nodes (get-in conn-state [:session :parameters "database"] "xtdb")
