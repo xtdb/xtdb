@@ -545,7 +545,7 @@
        (into {} (mapcat (fn [[k v]]
                           (case k
                             "options" (parse-session-params (for [[_ k v] (re-seq #"-c ([\w_]*)=([\w_]*)" v)]
-                                                             [k v]))
+                                                              [k v]))
                             [[k (case k
                                   "fallback_output_format" (#{:json :transit} (util/->kebab-case-kw v))
                                   v)]]))))))
@@ -836,13 +836,13 @@
 
 (def-msg msg-row-description :server \T
   :columns (->> (io-record
-                  :column-name io-string
-                  :table-oid io-uint32
-                  :column-attribute-number io-uint16
-                  :column-oid io-uint32
-                  :typlen  io-uint16
-                  :type-modifier io-uint32
-                  :result-format io-format-code)
+                 :column-name io-string
+                 :table-oid io-uint32
+                 :column-attribute-number io-uint16
+                 :column-oid io-uint32
+                 :typlen  io-uint16
+                 :type-modifier io-uint32
+                 :result-format io-format-code)
                 (io-list io-uint16)))
 
 ;;; server commands
@@ -920,7 +920,7 @@
     (doseq [row rows]
       (cmd-write-msg conn msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (types/utf8 v))) row)}))
 
-       (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))})))
+    (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))})))
 
 (defn- close-portal
   [{:keys [conn-state, cid]} portal-name]
@@ -1141,7 +1141,7 @@
                (log/error e "An exception was caught during query result set iteration")
                (cmd-send-error conn (err-internal "unexpected server error during query execution"))))))))
 
-      (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
+    (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
 
 (defn- close-result-cursor [conn ^IResultCursor result-cursor]
   (try
