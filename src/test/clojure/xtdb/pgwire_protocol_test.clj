@@ -1,13 +1,9 @@
 (ns xtdb.pgwire-protocol-test
   (:require [clojure.test :as t :refer [deftest]]
-            [clojure.tools.logging :as log]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
             [xtdb.types :as types])
-  (:import [java.io ByteArrayOutputStream DataInputStream DataOutputStream IOException InputStream]
-           [java.lang AutoCloseable]
-           [java.net Socket]
-           [java.nio ByteBuffer]
+  (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
            [java.time Clock]))
 
@@ -100,16 +96,17 @@
   ([conn query arg-types param-values]
    (let [portal-name "pg-test"
          stmt-name "pg-test"]
-     (pgwire/cmd-parse conn {:stmt-name stmt-name :query query :arg-types arg-types})
-     (pgwire/cmd-bind conn {:portal-name portal-name :stmt-name stmt-name
-                            :param-format (repeat (count param-values) 0)
-                            ;; we are assuming strings for now
-                            :params (map #(.getBytes %) param-values)
-                            ;; can be ommitted
-                            :result-format nil})
-     (pgwire/cmd-describe conn {:describe-type :prepared-stmt :describe-name stmt-name})
-     (pgwire/cmd-execute conn {:portal-name portal-name})
-     (pgwire/cmd-sync conn))))
+     (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name :query query :arg-types arg-types})
+     (pgwire/handle-msg conn {:msg-name :msg-bind
+                              :portal-name portal-name :stmt-name stmt-name
+                              :param-format (repeat (count param-values) 0)
+                              ;; we are assuming strings for now
+                              :params (map #(.getBytes %) param-values)
+                              ;; can be ommitted
+                              :result-format nil})
+     (pgwire/handle-msg conn {:msg-name :msg-describe :describe-type :prepared-stmt :describe-name stmt-name})
+     (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name portal-name})
+     (pgwire/handle-msg conn {:msg-name :msg-sync}))))
 
 (deftest test-extended-query
   (let [insert "INSERT INTO docs (_id, name) VALUES ('aln', $1)"
@@ -175,22 +172,5 @@
                    :localized-severity "ERROR",
                    :sql-state "22P02",
                    :message "Can not parse 'alan' as timestamp"}}]
-                [:msg-parameter-description {:parameter-oids [1114]}]
-                [:msg-row-description
-                 {:columns
-                  [{:column-name "v",
-                    :table-oid 0,
-                    :column-attribute-number 0,
-                    :column-oid 1114,
-                    :typlen 8,
-                    :type-modifier -1,
-                    :result-format :text}]}]
-                ;; TODO should this return a second error?
-                [:msg-error-response
-                 {:error-fields
-                  {:severity "ERROR",
-                   :localized-severity "ERROR",
-                   :sql-state "08P01",
-                   :message "no such portal"}}]
                 [:msg-ready {:status :idle}]]
                @!msgs)))))
