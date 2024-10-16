@@ -14,7 +14,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import [clojure.lang MapEntry PersistentQueue]
+  (:import [clojure.lang MapEntry]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang AutoCloseable Thread$State]
            [java.net ServerSocket Socket SocketException]
@@ -1098,13 +1098,6 @@
         (doto conn
           (cmd-startup-err (err-protocol-violation "Unknown protocol version")))))))
 
-(defn cmd-enqueue-cmd
-  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue).
-
-  Commands can be queued with (non-conn) args using vectors like so (enqueue-cmd conn [#'cmd-simple-query {:query some-sql}])"
-  [{:keys [conn-state]} & cmds]
-  (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
-
 (def json-bytes (comp types/utf8 json/json-str json-clj))
 
 (defn write-json [_env ^IVectorReader rdr idx]
@@ -1683,11 +1676,8 @@
 
     (cond
 
-      (:skip-until-sync @conn-state)
-      (if (= :msg-sync msg-name)
-        (cmd-enqueue-cmd conn [#'cmd-sync])
-        (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg}))
-
+      (and (:skip-until-sync @conn-state) (not= :msg-sync msg-name))
+      (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
 
       (not msg)
       (cmd-send-error conn (err-protocol-violation "unknown client message"))
@@ -1742,20 +1732,6 @@
         (.isClosed socket)
         (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
             (reset! !conn-closing? true))
-
-        ;; we have queued a command to be processed
-        ;; a command represents something we want the server to do for the client
-        ;; such as error, or send data.
-        (seq (:cmd-buf @conn-state))
-        (let [cmd-buf (:cmd-buf @conn-state)
-              [cmd-fn & cmd-args] (peek cmd-buf)]
-          (if (seq cmd-buf)
-            (swap! conn-state assoc :cmd-buf (pop cmd-buf))
-            (swap! conn-state dissoc :cmd-buf))
-
-          (when cmd-fn (apply cmd-fn conn cmd-args))
-
-          (recur))
 
         ;; go idle until we receive another msg from the client
         :else
