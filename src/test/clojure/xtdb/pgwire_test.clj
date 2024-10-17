@@ -1172,10 +1172,14 @@
        (read)
 
        (send "COMMIT;\n")
-       (let [s (read :err)]
+       (let [error (read :err)]
+         (is (not= :timeout error))
+         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] error)))
+
+       (send "ROLLBACK;\n")
+       (let [s (read)]
          (is (not= :timeout s))
-         (= [["ERROR:  Errors planning SQL statement:"]
-             ["  - INSERT does not contain mandatory _id column"]] s))))))
+         (is (= [["ROLLBACK"]] s)))))))
 
 (deftest runtime-error-query-test
   (tu/with-log-level 'xtdb.pgwire :off
