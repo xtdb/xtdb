@@ -125,6 +125,7 @@ allprojects {
                     if (project.hasProperty("debugJvm")) {
                         jvmArgs += "-Xdebug"
                         jvmArgs += "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
+                        jvmArgs += "-Dclojure.compiler.disable-locals-clearing=true"
                     }
 
                     if (project.hasProperty("arrowUnsafeMemoryAccess")) {
