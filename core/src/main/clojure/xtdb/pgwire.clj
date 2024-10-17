@@ -1079,6 +1079,9 @@
         (do (.unread in (byte x))
             (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
+(defn skip-until-sync? [{:keys [conn-state] :as _conn}]
+  (:skip-until-sync @conn-state))
+
 (defn cmd-startup [conn]
   (loop [{{:keys [in]} :frontend, :keys [server], :as conn} conn]
     (let [{:keys [version msg-in]} (read-version in)]
@@ -1163,6 +1166,7 @@
                (log/error e "An exception was caught during query result set iteration")
                (cmd-send-error conn (err-internal "unexpected server error during query execution"))))))))
 
+    ;; TODO should this be sent in case of error?
     (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
 
 (defn- close-result-cursor [conn ^IResultCursor result-cursor]
@@ -1200,13 +1204,13 @@
           (read-binary session param)
           (read-text session param))))))
 
-(defn- xtify-params [xtify-param params {:keys [param-format] :as _stmt}]
+(defn- xtify-params [{:keys [conn-state] :as conn} params {:keys [param-format] :as stmt}]
   (try
-    [:success (vec (map-indexed xtify-param params))]
+    (vec (map-indexed (->xtify-param (:session @conn-state) stmt) params))
     (catch Exception e
-      [:error (if (= param-format :binary)
-                (invalid-binary-representation (ex-message e))
-                (invalid-text-representation (ex-message e)))])))
+      (cmd-send-error conn (if (= param-format :binary)
+                             (invalid-binary-representation (ex-message e))
+                             (invalid-text-representation (ex-message e)))))))
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (if (or (not= (count param-fields) (count params))
@@ -1218,11 +1222,10 @@
 
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
-          xtify-param (->xtify-param session stmt)
-          [type xt-params-or-error] (xtify-params xtify-param params stmt)
+          xt-params (xtify-params conn params stmt)
           stmt {:query query,
                 :transformed-query transformed-query
-                :params xt-params-or-error}
+                :params xt-params}
           cmd-complete-msg {:command (case dml-type
                                        ;; insert <oid> <rows>
                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
@@ -1235,8 +1238,7 @@
                                        :assert "ASSERT")}]
 
       (cond
-        (= type :error)
-        (cmd-send-error conn xt-params-or-error)
+        (skip-until-sync? conn) nil
 
         transaction
         ;; we buffer the statement in the transaction (to be flushed with COMMIT)
@@ -1566,18 +1568,15 @@
                                           (let [{:keys [session transaction]} @conn-state
                                                 {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
-                                                xtify-param (->xtify-param session stmt-with-bind-msg)
-                                                [type xt-params-or-error] (xtify-params xtify-param params stmt)
+                                                xt-params (xtify-params conn params stmt-with-bind-msg)
 
                                                 query-opts {:basis {:at-tx (or (:at-tx stmt) (:at-tx transaction))
                                                                     :current-time (or (:current-time stmt)
                                                                                       (:current-time transaction)
                                                                                       (.instant clock))}
                                                             :default-tz (.getZone clock)
-                                                            :args xt-params-or-error}]
-                                            (if (= type :error)
-                                              (cmd-send-error conn xt-params-or-error)
-
+                                                            :args xt-params}]
+                                            (when-not (skip-until-sync? conn)
                                               (try
                                                 (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
                                                   (if-let [fields (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
@@ -1670,13 +1669,14 @@
 
   (cmd-send-ready conn))
 
-(defn handle-msg [{:keys [cid, conn-state] :as conn} {:keys [msg-name] :as msg}]
+
+(defn handle-msg [{:keys [cid] :as conn} {:keys [msg-name] :as msg}]
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
     (cond
 
-      (and (:skip-until-sync @conn-state) (not= :msg-sync msg-name))
+      (and (skip-until-sync? conn) (not= :msg-sync msg-name))
       (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
 
       (not msg)
