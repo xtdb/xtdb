@@ -694,7 +694,7 @@ quantifiedComparisonPredicatePart3
   | expr #QuantifiedComparisonExpr
   ;
 
-compOp : '=' | '!=' | '<>' | '<' | '>' | '<=' | '>=' ;
+compOp : EQUAL | NOT_EQUAL | LT_GT | LT | GT | LE | GE ;
 
 inPredicateValue
     : subquery # InSubquery
