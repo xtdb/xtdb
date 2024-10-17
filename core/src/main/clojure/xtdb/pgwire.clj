@@ -1181,17 +1181,15 @@
 (def supported-param-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node]} dml-buf tx-opts]
+(defn- execute-tx [{:keys [node] :as conn} dml-buf tx-opts]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query params])
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
-      (catch IllegalArgumentException e (throw e))
-      (catch RuntimeException e (throw e))
       (catch Throwable e
         (log/debug e "Error on execute-tx")
-        (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
+        (cmd-send-error conn (err-pg-exception e "unexpected error on tx submit (report as a bug)"))))))
 
 (defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
@@ -1250,11 +1248,11 @@
 
         :else
         (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
-          (if error
-            (cmd-send-error conn (err-protocol-violation (ex-message error)))
-            (do
-              (cmd-write-msg conn msg-command-complete cmd-complete-msg)
-              (swap! conn-state assoc :latest-submitted-tx tx-res))))))))
+          (when-not (skip-until-sync? conn)
+            (if error
+              (cmd-send-error conn (err-protocol-violation (ex-message error)))
+              (cmd-write-msg conn msg-command-complete cmd-complete-msg))
+            (swap! conn-state assoc :latest-submitted-tx tx-res)))))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1339,27 +1337,24 @@
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (try
-        (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                   :system-time tx-system-time})]
-          (if error
-            (do
-              (swap! conn-state (fn [conn-state]
-                                  (-> conn-state
-                                      (update :transaction assoc :failed true, :err error)
-                                      (assoc :latest-submitted-tx tx-res))))
-              (cmd-send-error conn (err-protocol-violation (ex-message error))))
-            (do
-              (swap! conn-state (fn [conn-state]
-                                  (-> conn-state
-                                      (dissoc :transaction)
-                                      (assoc :latest-submitted-tx tx-res))))
-              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))
+      (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                                 :system-time tx-system-time})]
+        (cond
+          ;; skip - can't use skip-until-sync as we might be in a simple query
+          (-> @conn-state :transaction :failed) nil
 
-        (catch IllegalArgumentException e
-          (cmd-send-error conn (err-protocol-violation (ex-message e))))
-        (catch RuntimeException e
-          (cmd-send-error conn (err-protocol-violation (ex-message e))))))))
+          error (do
+                  (swap! conn-state (fn [conn-state]
+                                      (-> conn-state
+                                          (update :transaction assoc :failed true, :err error)
+                                          (assoc :latest-submitted-tx tx-res))))
+                  (cmd-send-error conn (err-protocol-violation (ex-message error))))
+          :else (do
+                  (swap! conn-state (fn [conn-state]
+                                      (-> conn-state
+                                          (dissoc :transaction)
+                                          (assoc :latest-submitted-tx tx-res))))
+                  (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
