@@ -362,15 +362,14 @@
   (vals (:connections @(:server-state server))))
 
 (defn- get-last-conn
-  ([] (get-last-conn *server*))
-  ([server] (last (sort-by :cid (get-connections server)))))
+  (^xtdb.pgwire.Connection [] (get-last-conn *server*))
+  (^xtdb.pgwire.Connection [server] (last (sort-by :cid (get-connections server)))))
 
 (defn- wait-for-close [server-conn ms]
   (deref (:close-promise @(:conn-state server-conn)) ms false))
 
-(defn check-conn-resources-freed [server-conn]
-  (let [{:keys [^Socket socket]} server-conn]
-    (t/is (.isClosed socket))))
+(defn check-conn-resources-freed [{{:keys [^Socket socket]} :frontend :as server-conn}]
+  (t/is (.isClosed socket)))
 
 (deftest conn-force-closed-by-server-frees-resources-test
   (with-open [_ (jdbc-conn)]
@@ -1174,8 +1173,7 @@
        (send "COMMIT;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (= [["ERROR:  Errors planning SQL statement:"]
-             ["  - INSERT does not contain mandatory _id column"]] s))))))
+         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] s)))))))
 
 (deftest runtime-error-query-test
   (tu/with-log-level 'xtdb.pgwire :off
@@ -1978,3 +1976,9 @@ ORDER BY t.oid DESC LIMIT 1"
       (with-open [rs (.executeQuery stmt)]
 
         (t/is (= [{"_id" 2, "f" 2.0, "i" 2} {"_id" 1, "f" 1.0, "i" 1}] (rs->maps rs)))))))
+
+(deftest test-missing-id-pg-wire-3768
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
+    (t/is (is (thrown-with-msg? PSQLException #"Illegal argument: 'missing-id'" (.execute stmt))))
+    (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"])))))

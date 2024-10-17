@@ -14,18 +14,17 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import [clojure.lang PersistentQueue ExceptionInfo MapEntry]
+  (:import [clojure.lang MapEntry]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
-           [java.lang Thread$State]
+           [java.lang AutoCloseable Thread$State]
            [java.net ServerSocket Socket SocketException]
            [java.nio.charset StandardCharsets]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration LocalTime LocalDate LocalDateTime OffsetDateTime Period ZoneId ZonedDateTime]
+           [java.time Clock Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [java.util.function Consumer]
-           [java.text ParseException]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
@@ -108,15 +107,84 @@
 
         (log/info "Server stopped.")))))
 
+(defprotocol Frontend
+  (send-client-msg!
+    [frontend msg-def]
+    [frontend msg-def data])
+
+  (upgrade-to-ssl [frontend ssl-ctx])
+
+  (flush! [frontend]))
+
+(declare ->socket-frontend)
+
+(defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
+  Frontend
+  (send-client-msg! [_ msg-def]
+    (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
+
+    (.writeByte out (byte (:char8 msg-def)))
+    (.writeInt out 4))
+
+  (send-client-msg! [_ msg-def data]
+    (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
+    (let [bytes-out (ByteArrayOutputStream.)
+          msg-out (DataOutputStream. bytes-out)
+          _ ((:write msg-def) msg-out data)
+          arr (.toByteArray bytes-out)]
+      (.writeByte out (byte (:char8 msg-def)))
+      (.writeInt out (+ 4 (alength arr)))
+      (.write out arr)))
+
+  (upgrade-to-ssl [this ssl-ctx]
+    (if (and ssl-ctx (not (instance? SSLSocket socket)))
+      ;; upgrade the socket, then wait for the client's next startup message
+
+      (do
+        (log/trace "upgrading to SSL")
+
+        (.writeByte out (byte \S))
+
+        (let [^SSLSocket ssl-socket (-> (.getSocketFactory ^SSLContext ssl-ctx)
+                                        (.createSocket socket
+                                                       (-> (.getInetAddress socket)
+                                                           (.getHostAddress))
+                                                       (.getPort socket)
+                                                       true))]
+          (try
+            (.setUseClientMode ssl-socket false)
+            (.startHandshake ssl-socket)
+            (log/trace "SSL handshake successful")
+            (catch Exception e
+              (log/debug e "error in SSL handshake")
+              (throw e)))
+
+          (->socket-frontend ssl-socket)))
+
+      ;; unsupported - recur and give the client another chance to say hi
+      (do
+        (.writeByte out (byte \N))
+        this)))
+
+  (flush! [_] (.flush out))
+
+  AutoCloseable
+  (close [_]
+    (when-not (.isClosed socket)
+      (util/try-close socket))))
+
+(defn ->socket-frontend [^Socket socket]
+  (->SocketFrontend socket
+                    (DataInputStream. (.getInputStream socket))
+                    (DataOutputStream. (.getOutputStream socket))))
+
 ;;; Connection
 ;; Represents a single client connection to the server
 ;; identified by an integer 'cid'
 ;; each connection holds some state under :conn-state (such as prepared statements, session params and such)
 ;; and is registered under the :connections map under the servers :server-state.
 
-(defrecord Connection [^Server server
-                       node
-                       ^Socket socket
+(defrecord Connection [^Server server, frontend, node
 
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
@@ -126,16 +194,11 @@
                        !closing?
 
                        ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
-                       conn-state
-
-                       ;; io
-                       ^DataInputStream in
-                       ^DataOutputStream out]
+                       conn-state]
 
   Closeable
   (close [_]
-    (when-not (.isClosed socket)
-      (util/try-close socket))
+    (util/close frontend)
 
     (let [{:keys [server-state]} server]
       (swap! server-state update :connections dissoc cid))
@@ -151,11 +214,12 @@
   ^String [^InputStream in]
   (loop [baos (ByteArrayOutputStream.)
          x (.read in)]
-    (if (zero? x)
-      (String. (.toByteArray baos) StandardCharsets/UTF_8)
-      (recur (doto baos
-               (.write x))
-             (.read in)))))
+    (cond
+      (neg? x) (throw (EOFException. "EOF in read-c-string"))
+      (zero? x) (String. (.toByteArray baos) StandardCharsets/UTF_8)
+      :else (recur (doto baos
+                     (.write x))
+                   (.read in)))))
 
 (defn- write-c-string
   "Postgres strings are null terminated, writes a null terminated utf8 string to out."
@@ -166,18 +230,6 @@
 (def ^:private oid-varchar (get-in types/pg-types [:varchar :oid]))
 (def ^:private oid-json (get-in types/pg-types [:json :oid]))
 
-;; all postgres client IO arrives as either an untyped (startup) or typed message
-(defn- read-untyped-msg [^DataInputStream in]
-  (let [size (- (.readInt in) 4)
-        barr (byte-array size)
-        _ (.readFully in barr)]
-    {:msg-in (DataInputStream. (ByteArrayInputStream. barr))
-     :msg-len size}))
-
-(defn- read-typed-msg [^DataInputStream in]
-  (let [type-byte (.readUnsignedByte in)]
-    (assoc (read-untyped-msg in)
-      :msg-char8 (char type-byte))))
 
 ;;; errors
 
@@ -510,33 +562,6 @@
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
 
-(defn- read-startup-parameters [^DataInputStream in]
-  (loop [in (PushbackInputStream. in)
-         acc {}]
-    (let [x (.read in)]
-      (if (zero? x)
-        acc
-        (do (.unread in (byte x))
-            (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
-
-;; startup negotiation utilities (see cmd-startup)
-
-(def ^:private version-messages
-  "Integer codes sent by the client to identify a startup msg"
-  {
-   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
-   196608 :30
-   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
-   80877102 :cancel
-   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
-   80877103 :ssl
-   ;; gssapi encoding is not supported by xt, and we tell the client that
-   80877104 :gssenc})
-
-(defn- read-version [^DataInputStream in]
-  (let [{:keys [^DataInputStream msg-in] :as msg} (read-untyped-msg in)
-        version (.readInt msg-in)]
-    (assoc msg :version (version-messages version))))
 
 ;;; server impl
 
@@ -724,7 +749,7 @@
          (apply io-record fields#)]
 
      (def ~sym
-       {:name ~(name sym)
+       {:name ~(keyword sym)
         :kind kind#
         :char8 char8#
         :fields fields#
@@ -854,21 +879,11 @@
 
 (defn- cmd-write-msg
   "Writes out a single message given a definition (msg-def) and optional data record."
-  ([conn msg-def]
-   (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out (:out conn)]
-     (.writeByte out (byte (:char8 msg-def)))
-     (.writeInt out 4)))
-  ([conn msg-def data]
-   (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
-   (let [^DataOutputStream out (:out conn)
-         bytes-out (ByteArrayOutputStream.)
-         msg-out (DataOutputStream. bytes-out)
-         _ ((:write msg-def) msg-out data)
-         arr (.toByteArray bytes-out)]
-     (.writeByte out (byte (:char8 msg-def)))
-     (.writeInt out (+ 4 (alength arr)))
-     (.write out arr))))
+  ([{:keys [frontend]} msg-def]
+   (send-client-msg! frontend msg-def))
+
+  ([{:keys [frontend]} msg-def data]
+   (send-client-msg! frontend msg-def data)))
 
 (def time-zone-nf-param-name "timezone")
 (def pg-param-nf->display-format
@@ -970,7 +985,7 @@
                                                   (.withZone clock (ZoneId/of tz))))
   (set-session-parameter conn time-zone-nf-param-name tz))
 
-(defn cmd-startup-pg30 [conn msg-in]
+(defn cmd-startup-pg30 [conn startup-params]
   (let [{:keys [server]} conn
         {:keys [server-state]} server]
 
@@ -979,7 +994,7 @@
 
     (let [default-server-params (-> (:parameters @server-state)
                                     (update-keys str/lower-case))
-          startup-parameters-from-client (-> (read-startup-parameters msg-in)
+          startup-parameters-from-client (-> startup-params
                                              (update-keys str/lower-case))]
 
       (doseq [[k v] (merge default-server-params
@@ -1018,63 +1033,75 @@
   (cmd-send-error conn err)
   (cmd-terminate conn))
 
-(defn- upgrade-conn-to-ssl [{:keys [^Socket socket, ^DataOutputStream out], {:keys [^SSLContext ssl-ctx]} :server, :as conn}]
-  (if (and ssl-ctx (not (instance? SSLSocket socket)))
-    ;; upgrade the socket, then wait for the client's next startup message
+;; startup negotiation utilities (see cmd-startup)
 
-    (do
-      (log/trace "upgrading to SSL")
+(def ^:private version-messages
+  "Integer codes sent by the client to identify a startup msg"
+  {
+   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
+   196608 :30
+   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
+   80877102 :cancel
+   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
+   80877103 :ssl
+   ;; gssapi encoding is not supported by xt, and we tell the client that
+   80877104 :gssenc})
 
-      (.writeByte out (byte \S))
+;; all postgres client IO arrives as either an untyped (startup) or typed message
 
-      (let [^SSLSocket ssl-socket (-> (.getSocketFactory ssl-ctx)
-                                      (.createSocket socket
-                                                     (-> (.getInetAddress socket)
-                                                         (.getHostAddress))
-                                                     (.getPort socket)
-                                                     true))]
+(defn- read-untyped-msg [^DataInputStream in]
+  (let [size (- (.readInt in) 4)
+        barr (byte-array size)
+        _ (.readFully in barr)]
+    (DataInputStream. (ByteArrayInputStream. barr))))
+
+(defn- read-version [^DataInputStream in]
+  (let [^DataInputStream msg-in (read-untyped-msg in)
+        version (.readInt msg-in)]
+    {:msg-in msg-in
+     :version (version-messages version)}))
+
+(defn- read-typed-msg [{{:keys [^DataInputStream in]} :frontend :as conn}]
+  (let [type-char (char (.readUnsignedByte in))]
+    (if-let [msg-var (client-msgs type-char)]
+      (let [rdr (:read @msg-var)]
         (try
-          (.setUseClientMode ssl-socket false)
-          (.startHandshake ssl-socket)
-          (log/trace "SSL handshake successful")
+          (assoc (rdr (read-untyped-msg in)) :msg-name (:name @msg-var))
           (catch Exception e
-            (log/debug e "error in SSL handshake")
-            (throw e)))
+            (cmd-send-error conn (err-protocol-violation (str "Error reading client message " (ex-message e)))))))
+      (cmd-send-error conn (err-protocol-violation (str "Unknown client message " type-char))))))
 
-        (assoc conn
-               :socket ssl-socket
-               :in (DataInputStream. (.getInputStream ssl-socket))
-               :out (DataOutputStream. (.getOutputStream ssl-socket)))))
+(defn- read-startup-parameters [^DataInputStream in]
+  (loop [in (PushbackInputStream. in)
+         acc {}]
+    (let [x (.read in)]
+      (cond
+        (neg? x) (throw (EOFException. "EOF in read-startup-parameters"))
+        (zero? x) acc
+        :else (do (.unread in (byte x))
+                  (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
-    ;; unsupported - recur and give the client another chance to say hi
-    (do
-      (.writeByte out (byte \N))
-      conn)))
+(defn skip-until-sync? [{:keys [conn-state] :as _conn}]
+  (:skip-until-sync @conn-state))
 
 (defn cmd-startup [conn]
-  (loop [{:keys [in] :as conn} conn]
+  (loop [{{:keys [in]} :frontend, :keys [server], :as conn} conn]
     (let [{:keys [version msg-in]} (read-version in)]
       (case version
         :gssenc (doto conn
                   (cmd-startup-err (err-protocol-violation "GSSAPI is not supported")))
 
-        :ssl (recur (upgrade-conn-to-ssl conn))
+        :ssl (let [{:keys [^SSLContext ssl-ctx]} server]
+               (recur (update conn :frontend upgrade-to-ssl ssl-ctx)))
 
         :cancel (doto conn
                   (cmd-startup-cancel msg-in))
 
         :30 (doto conn
-              (cmd-startup-pg30 msg-in))
+              (cmd-startup-pg30 (read-startup-parameters msg-in)))
 
         (doto conn
           (cmd-startup-err (err-protocol-violation "Unknown protocol version")))))))
-
-(defn cmd-enqueue-cmd
-  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue).
-
-  Commands can be queued with (non-conn) args using vectors like so (enqueue-cmd conn [#'cmd-simple-query {:query some-sql}])"
-  [{:keys [conn-state]} & cmds]
-  (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
 (def json-bytes (comp types/utf8 json/json-str json-clj))
 
@@ -1141,6 +1168,7 @@
                (log/error e "An exception was caught during query result set iteration")
                (cmd-send-error conn (err-internal "unexpected server error during query execution"))))))))
 
+    ;; TODO should this be sent in case of error?
     (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
 
 (defn- close-result-cursor [conn ^IResultCursor result-cursor]
@@ -1153,17 +1181,15 @@
 (def supported-param-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node]} dml-buf tx-opts]
+(defn- execute-tx [{:keys [node] :as conn} dml-buf tx-opts]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query params])
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
-      (catch IllegalArgumentException e (throw e))
-      (catch RuntimeException e (throw e))
       (catch Throwable e
         (log/debug e "Error on execute-tx")
-        (err-pg-exception e "unexpected error on tx submit (report as a bug)")))))
+        (cmd-send-error conn (err-pg-exception e "unexpected error on tx submit (report as a bug)"))))))
 
 (defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
@@ -1178,13 +1204,13 @@
           (read-binary session param)
           (read-text session param))))))
 
-(defn- xtify-params [xtify-param params {:keys [param-format] :as _stmt}]
+(defn- xtify-params [{:keys [conn-state] :as conn} params {:keys [param-format] :as stmt}]
   (try
-    [:success (vec (map-indexed xtify-param params))]
+    (vec (map-indexed (->xtify-param (:session @conn-state) stmt) params))
     (catch Exception e
-      [:error (if (= param-format :binary)
-                (invalid-binary-representation (ex-message e))
-                (invalid-text-representation (ex-message e)))])))
+      (cmd-send-error conn (if (= param-format :binary)
+                             (invalid-binary-representation (ex-message e))
+                             (invalid-text-representation (ex-message e)))))))
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
   (if (or (not= (count param-fields) (count params))
@@ -1196,11 +1222,10 @@
 
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
-          xtify-param (->xtify-param session stmt)
-          [type xt-params-or-error] (xtify-params xtify-param params stmt)
+          xt-params (xtify-params conn params stmt)
           stmt {:query query,
                 :transformed-query transformed-query
-                :params xt-params-or-error}
+                :params xt-params}
           cmd-complete-msg {:command (case dml-type
                                        ;; insert <oid> <rows>
                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
@@ -1213,8 +1238,7 @@
                                        :assert "ASSERT")}]
 
       (cond
-        (= type :error)
-        (cmd-send-error conn xt-params-or-error)
+        (skip-until-sync? conn) nil
 
         transaction
         ;; we buffer the statement in the transaction (to be flushed with COMMIT)
@@ -1224,11 +1248,11 @@
 
         :else
         (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
-          (if error
-            (cmd-send-error conn (err-protocol-violation (ex-message error)))
-            (do
-              (cmd-write-msg conn msg-command-complete cmd-complete-msg)
-              (swap! conn-state assoc :latest-submitted-tx tx-res))))))))
+          (when-not (skip-until-sync? conn)
+            (if error
+              (cmd-send-error conn (err-protocol-violation (ex-message error)))
+              (cmd-write-msg conn msg-command-complete cmd-complete-msg))
+            (swap! conn-state assoc :latest-submitted-tx tx-res)))))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1265,7 +1289,9 @@
                   :type-modifier -1
                   :result-format :text}
         apply-defaults (fn [col]
-                         (merge defaults col))
+                         (-> (merge defaults col)
+                             (select-keys [:column-name :table-oid :column-attribute-number
+                                           :column-oid :typlen :type-modifier :result-format])))
         data {:columns (mapv apply-defaults cols)}]
 
     (log/trace "Sending Row Description - " (assoc data :input-cols cols))
@@ -1311,27 +1337,23 @@
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (try
-        (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                   :system-time tx-system-time})]
-          (if error
-            (do
-              (swap! conn-state (fn [conn-state]
-                                  (-> conn-state
-                                      (update :transaction assoc :failed true, :err error)
-                                      (assoc :latest-submitted-tx tx-res))))
-              (cmd-send-error conn (err-protocol-violation (ex-message error))))
-            (do
-              (swap! conn-state (fn [conn-state]
-                                  (-> conn-state
-                                      (dissoc :transaction)
-                                      (assoc :latest-submitted-tx tx-res))))
-              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))
+      (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                                 :system-time tx-system-time})]
+        (cond
+          (skip-until-sync? conn) nil
 
-        (catch IllegalArgumentException e
-          (cmd-send-error conn (err-protocol-violation (ex-message e))))
-        (catch RuntimeException e
-          (cmd-send-error conn (err-protocol-violation (ex-message e))))))))
+          error (do
+                  (swap! conn-state (fn [conn-state]
+                                      (-> conn-state
+                                          (update :transaction assoc :failed true, :err error)
+                                          (assoc :latest-submitted-tx tx-res))))
+                  (cmd-send-error conn (err-protocol-violation (ex-message error))))
+          :else (do
+                  (swap! conn-state (fn [conn-state]
+                                      (-> conn-state
+                                          (dissoc :transaction)
+                                          (assoc :latest-submitted-tx tx-res))))
+                  (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
@@ -1413,7 +1435,7 @@
 (defn cmd-flush
   "Flushes any pending output to the client."
   [conn]
-  (.flush ^OutputStream (:out conn)))
+  (flush! (:frontend conn)))
 
 (defn resolve-defaulted-params [declared-params inferred-params]
   (let [declared-params (vec declared-params)]
@@ -1542,18 +1564,15 @@
                                           (let [{:keys [session transaction]} @conn-state
                                                 {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
-                                                xtify-param (->xtify-param session stmt-with-bind-msg)
-                                                [type xt-params-or-error] (xtify-params xtify-param params stmt)
+                                                xt-params (xtify-params conn params stmt-with-bind-msg)
 
                                                 query-opts {:basis {:at-tx (or (:at-tx stmt) (:at-tx transaction))
                                                                     :current-time (or (:current-time stmt)
                                                                                       (:current-time transaction)
                                                                                       (.instant clock))}
                                                             :default-tz (.getZone clock)
-                                                            :args xt-params-or-error}]
-                                            (if (= type :error)
-                                              (cmd-send-error conn xt-params-or-error)
-
+                                                            :args xt-params}]
+                                            (when-not (skip-until-sync? conn)
                                               (try
                                                 (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
                                                   (if-let [fields (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
@@ -1641,50 +1660,49 @@
         (cmd-execute conn {:portal-name portal-name})
         (close-portal conn portal-name))
 
-       ;;close/remove stmt
+      ;;close/remove stmt
       (swap! conn-state update :prepared-statements dissoc stmt-name)))
 
   (cmd-send-ready conn))
 
-(defn- handle-msg [{:keys [msg-char8, msg-in]} {:keys [cid, conn-state] :as conn}]
+
+(defn handle-msg [{:keys [cid] :as conn} {:keys [msg-name] :as msg}]
   (try
-    (let [msg-var (client-msgs msg-char8)]
+    (log/trace "Read client msg" {:cid cid, :msg msg})
 
-      (log/trace "Read client msg"
-                 {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})
+    (cond
 
-      (when (:skip-until-sync @conn-state)
-        (if (= msg-var #'msg-sync)
-          (cmd-enqueue-cmd conn [#'cmd-sync])
-          (log/trace "Skipping msg until next sync due to error in extended protocol"
-                     {:cid cid, :msg (or msg-var msg-char8), :char8 msg-char8})))
+      (and (skip-until-sync? conn) (not= :msg-sync msg-name))
+      (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
 
-      (when-not msg-var
-        (cmd-send-error conn (err-protocol-violation "unknown client message")))
+      (not msg)
+      (cmd-send-error conn (err-protocol-violation "unknown client message"))
 
-      (when (and msg-var (not (:skip-until-sync @conn-state)))
-        (let [msg-data ((:read @msg-var) msg-in)]
-          (condp = msg-var
-            #'msg-simple-query (cmd-simple-query conn msg-data)
-            #'msg-terminate (cmd-terminate conn)
-            #'msg-close (cmd-close conn msg-data)
-            #'msg-parse (cmd-parse conn msg-data)
-            #'msg-bind (cmd-bind conn msg-data)
-            #'msg-sync (cmd-sync conn)
-            #'msg-execute (cmd-execute conn msg-data)
-            #'msg-describe (cmd-describe conn msg-data)
-            #'msg-flush (cmd-flush conn)
+      :else
+      (case msg-name
+        :msg-simple-query (cmd-simple-query conn msg)
+        :msg-terminate (cmd-terminate conn)
+        :msg-close (cmd-close conn msg)
+        :msg-parse (cmd-parse conn msg)
+        :msg-bind (cmd-bind conn msg)
+        :msg-sync (cmd-sync conn)
+        :msg-execute (cmd-execute conn msg)
+        :msg-describe (cmd-describe conn msg)
+        :msg-flush (cmd-flush conn)
 
-            ;; ignored by xt
-            #'msg-password nil
+        ;; ignored by xt
+        :msg-password nil
 
-            (cmd-send-error conn (err-protocol-violation "unknown client message"))))))
+        (cmd-send-error conn (err-protocol-violation "unknown client message"))))
     (catch InterruptedException e (throw e))
     (catch Throwable e (log/error e "Uncaught exception in handle-msg"))))
 
 ;; connection loop
 ;; we run a blocking io server so a connection is simple a loop sitting on some thread
-(defn- conn-loop [{:keys [cid, server, ^Socket socket, in, conn-state], !conn-closing? :!closing?, :as conn}]
+(defn- conn-loop [{:keys [cid, server, conn-state],
+                   {:keys [^Socket socket]} :frontend,
+                   !conn-closing? :!closing?,
+                   :as conn}]
   (let [{:keys [port], !server-closing? :!closing?} server]
     (loop []
       (cond
@@ -1711,25 +1729,13 @@
         (do (log/trace "Connection closed unexpectedly" {:port port, :cid cid})
             (reset! !conn-closing? true))
 
-        ;; we have queued a command to be processed
-        ;; a command represents something we want the server to do for the client
-        ;; such as error, or send data.
-        (seq (:cmd-buf @conn-state))
-        (let [cmd-buf (:cmd-buf @conn-state)
-              [cmd-fn & cmd-args] (peek cmd-buf)]
-          (if (seq cmd-buf)
-            (swap! conn-state assoc :cmd-buf (pop cmd-buf))
-            (swap! conn-state dissoc :cmd-buf))
-
-          (when cmd-fn (apply cmd-fn conn cmd-args))
-
-          (recur))
-
         ;; go idle until we receive another msg from the client
         :else
         (do
-          (handle-msg (read-typed-msg in) conn)
+          (when-let [msg (read-typed-msg conn)]
+            (handle-msg conn msg))
           (recur))))))
+
 
 (defn- ->tmp-node [{:keys [^Map !tmp-nodes]} conn-state]
   (.computeIfAbsent !tmp-nodes (get-in conn-state [:session :parameters "database"] "xtdb")
@@ -1754,10 +1760,8 @@
                                    (try
                                      (-> (map->Connection {:cid cid,
                                                            :server server,
-                                                           :socket conn-socket,
+                                                           :frontend (->socket-frontend conn-socket),
                                                            :node node
-                                                           :in (DataInputStream. (.getInputStream conn-socket)),
-                                                           :out (DataOutputStream. (.getOutputStream conn-socket))
                                                            :!closing? (atom false)
                                                            :conn-state !conn-state})
                                          (cmd-startup)
