@@ -1338,22 +1338,22 @@
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
       (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                 :system-time tx-system-time})
-            skip (skip-until-sync? conn)]
-        (if (or error skip)
-          (do
-            (swap! conn-state (fn [conn-state]
-                                (cond-> conn-state
-                                  true (update :transaction assoc :failed true, :err error)
-                                  error (assoc :latest-submitted-tx tx-res))))
-            (when-not skip
-              (cmd-send-error conn (err-protocol-violation (ex-message error)))))
-          (do
-            (swap! conn-state (fn [conn-state]
-                                (-> conn-state
-                                    (dissoc :transaction)
-                                    (assoc :latest-submitted-tx tx-res))))
-            (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
+                                                                 :system-time tx-system-time})]
+        (cond
+          (skip-until-sync? conn) nil
+
+          error (do
+                  (swap! conn-state (fn [conn-state]
+                                      (-> conn-state
+                                          (update :transaction assoc :failed true, :err error)
+                                          (assoc :latest-submitted-tx tx-res))))
+                  (cmd-send-error conn (err-protocol-violation (ex-message error))))
+          :else (do
+                  (swap! conn-state (fn [conn-state]
+                                      (-> conn-state
+                                          (dissoc :transaction)
+                                          (assoc :latest-submitted-tx tx-res))))
+                  (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
