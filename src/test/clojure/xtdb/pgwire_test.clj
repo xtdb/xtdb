@@ -1981,3 +1981,9 @@ ORDER BY t.oid DESC LIMIT 1"
       (with-open [rs (.executeQuery stmt)]
 
         (t/is (= [{"_id" 2, "f" 2.0, "i" 2} {"_id" 1, "f" 1.0, "i" 1}] (rs->maps rs)))))))
+
+(deftest test-missing-id-pg-wire-3768
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
+    (t/is (is (thrown-with-msg? PSQLException #"Illegal argument: 'missing-id'" (.execute stmt))))
+    (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"])))))
