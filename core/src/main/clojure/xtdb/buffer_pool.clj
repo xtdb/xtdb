@@ -62,9 +62,10 @@
                                       (apply [_ _k v]
                                         (retain (or v (f))))))))
 
-(defn ->buffer-pool-child-allocator [^BufferAllocator allocator ^MeterRegistry metrics-registry]
+(defn ->buffer-pool-child-allocator [^BufferAllocator allocator, ^MeterRegistry metrics-registry]
   (let [child-allocator (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)]
-    (metrics/add-allocator-gauge metrics-registry "buffer-pool.allocator.allocated_memory" child-allocator)
+    (when metrics-registry
+      (metrics/add-allocator-gauge metrics-registry "buffer-pool.allocator.allocated_memory" child-allocator))
     child-allocator))
 
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]

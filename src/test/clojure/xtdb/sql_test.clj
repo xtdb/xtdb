@@ -5,6 +5,7 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
+            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
@@ -2366,3 +2367,28 @@ UNION ALL
                :error)))
 
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
+
+(deftest read-write-promotion-conflict-in-live-rel-3709
+  (t/testing "original repro"
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (1, 'bar')"]])
+
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs SELECT * EXCLUDE _id, 3 AS _id FROM docs WHERE _id = 1"]])
+
+    (t/is (= [{:xt/id 1,
+               :foo "bar",
+               :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              {:xt/id 3,
+               :foo "bar",
+               :xt/valid-from #xt.time/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
+
+             (xt/q tu/*node* "SELECT _id, foo, _valid_from FROM docs FOR ALL VALID_TIME"))))
+
+  (t/testing "update repro"
+    (xt/submit-tx tu/*node* [[:put-docs :docs2 {:xt/id 1, :foo "bar", :bar 1}]])
+    (xt/submit-tx tu/*node* [[:sql "UPDATE docs2 SET bar = foo, foo = bar"]])
+
+    (t/is (= [{:xt/id 1, :bar "bar", :foo 1,
+               :xt/valid-from #xt.time/zoned-date-time "2020-01-04T00:00Z[UTC]"}
+              {:xt/id 1, :bar 1, :foo "bar",
+               :xt/valid-from #xt.time/zoned-date-time "2020-01-03T00:00Z[UTC]"}]
+             (xt/q tu/*node* "SELECT *, _valid_from FROM docs2 FOR ALL VALID_TIME")))))

@@ -43,7 +43,7 @@
 (definterface ILiveTable
   (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.TransactionKey txKey
                                                   ^boolean newLiveTable])
-  (^xtdb.watermark.ILiveTableWatermark openWatermark [^boolean retain])
+  (^xtdb.watermark.ILiveTableWatermark openWatermark [])
   (^java.util.List #_<Map$Entry> finishChunk [^long firstRow ^long nextRow])
   (^void close []))
 
@@ -81,25 +81,24 @@
     (assert (= #xt.arrow/type :struct (.getType live-rel-field)))
     (into {} (map (comp (juxt #(.getName ^Field %) identity))) (.getChildren live-rel-field))))
 
-(defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, retain?]
+(defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel]
   (let [out-cols (ArrayList.)]
     (try
       (doseq [^IVectorWriter w (vals rel)]
         (.syncValueCount w)
-        (.add out-cols (vr/vec->reader (cond-> (.getVector w)
-                                         retain? (util/slice-vec)))))
+        (.add out-cols (vr/vec->reader (util/slice-vec (.getVector w)))))
 
       (vr/rel-reader out-cols)
 
       (catch Throwable t
-        (when retain? (util/close out-cols))
+        (util/close out-cols)
         (throw t)))))
 
-(defn live-table-wm [^IRelationWriter live-rel, trie, retain?]
+(defn live-table-wm [^IRelationWriter live-rel, trie]
   (let [fields (live-rel->fields live-rel)
-        wm-live-rel (open-wm-live-rel live-rel retain?)
-        wm-live-trie (cond-> ^LiveHashTrie trie
-                       retain? (.withIidReader (.readerForName wm-live-rel "_iid")))]
+        wm-live-rel (open-wm-live-rel live-rel)
+        wm-live-trie (-> ^LiveHashTrie trie
+                         (.withIidReader (.readerForName wm-live-rel "_iid")))]
     (reify ILiveTableWatermark
       (columnField [_ col-name]
         (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
@@ -109,7 +108,7 @@
       (liveTrie [_] wm-live-trie)
 
       AutoCloseable
-      (close [_] (when retain? (util/close wm-live-rel))))))
+      (close [_] (util/close wm-live-rel)))))
 
 (deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
@@ -166,7 +165,7 @@
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
           (.addRows row-counter 1))
 
-        (openWatermark [_] (live-table-wm live-rel @!transient-trie false))
+        (openWatermark [_] (live-table-wm live-rel @!transient-trie))
 
         (commit [_]
           (set! (.-live-trie this-table) @!transient-trie)
@@ -193,7 +192,7 @@
                            {:fields (live-rel->fields live-rel)
                             :row-count row-count})))))
 
-  (openWatermark [this retain?] (live-table-wm live-rel (.live-trie this) retain?))
+  (openWatermark [this] (live-table-wm live-rel (.live-trie this)))
 
   TestLiveTable
   (live-trie [_] live-trie)
@@ -230,7 +229,7 @@
   (util/with-close-on-catch [wms (HashMap.)]
 
     (doseq [[table-name ^ILiveTable live-table] tables]
-      (.put wms table-name (.openWatermark live-table true)))
+      (.put wms table-name (.openWatermark live-table)))
 
     (reify ILiveIndexWatermark
       (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
@@ -320,7 +319,7 @@
               (.put wms table-name (.openWatermark live-table-tx)))
 
             (doseq [[table-name ^ILiveTable live-table] tables]
-              (.computeIfAbsent wms table-name (fn [_] (.openWatermark live-table false))))
+              (.computeIfAbsent wms table-name (fn [_] (.openWatermark live-table))))
 
             (reify ILiveIndexWatermark
               (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))

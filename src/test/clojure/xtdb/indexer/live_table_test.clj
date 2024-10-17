@@ -145,7 +145,7 @@
 
         (.commit live-table-tx)
 
-        (with-open [live-table-wm (.openWatermark live-table true)]
+        (with-open [live-table-wm (.openWatermark live-table)]
           (let [live-table-before (live-table-wm->data live-table-wm)]
 
             (.finishChunk live-table 0 (.getChunkRowCount rc))
