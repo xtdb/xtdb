@@ -1892,6 +1892,7 @@
                                                        :parameters {"server_version" expr/postgres-server-version
                                                                     "server_encoding" "UTF8"
                                                                     "client_encoding" "UTF8"
+                                                                    "search_path" "public"
                                                                     "DateStyle" "ISO"
                                                                     "IntervalStyle" "ISO_8601"
                                                                     "TimeZone" (str (.getZone ^Clock default-clock))

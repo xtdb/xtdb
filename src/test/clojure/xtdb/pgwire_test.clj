@@ -1766,7 +1766,11 @@
              (q conn ["SHOW DateStyle"])))
 
     (t/is (= [{:intervalstyle "ISO_8601"}]
-             (q conn ["SHOW IntervalStyle"])))))
+             (q conn ["SHOW IntervalStyle"])))
+
+    (t/is (= [{:search_path "public"}]
+             (q conn ["SHOW search_path"]))
+          "#3782")))
 
 (t/deftest test-psql-bind-3572
   #_ ; FIXME #3622
