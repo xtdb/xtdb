@@ -387,7 +387,11 @@
   (t/is (thrown-with-msg? RuntimeException #"division by zero"
                           (project1 '(/ a 0.0) {:a 5})))
   (t/is (thrown-with-msg? RuntimeException #"division by zero"
-                          (project1 '(/ a 0) {:a 5.0}))))
+                          (project1 '(/ a 0) {:a 5.0})))
+  (t/is (thrown-with-msg? RuntimeException #"overflow"
+                          (project1 '(+ a 9223372036854775807) {:a 9223372036854775807})))
+  (t/is (thrown-with-msg? RuntimeException #"overflow"
+                          (project1 '(- a -9223372036854775807) {:a 9223372036854775807}))))
 
 (defn- project-mono-value [f-sym val col-type]
   (with-open [rel (tu/open-rel [(tu/open-vec (types/col-type->field "s"  col-type) [val])])]

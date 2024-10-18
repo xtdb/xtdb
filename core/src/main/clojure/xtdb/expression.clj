@@ -814,12 +814,7 @@
 
 (defmethod codegen-call [:/ :int :int] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
-   :->call-code #(do `(try
-                        (quot ~@%)
-                        (catch ArithmeticException e#
-                          (case (.getMessage e#)
-                            "/ by zero" (throw-div-0)
-                            (throw e#)))))})
+   :->call-code #(do `(quot ~@%))})
 
 (defmethod codegen-call [:/ :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
@@ -1611,6 +1606,20 @@
   (fn [expr opts]
     (f expr (assoc opts :zone-id (.getZone *clock*)))))
 
+(defn arithmetic-ex->runtime-ex [^Throwable cause]
+  (let [message (.getMessage cause)]
+    (prn message)
+    (cond
+      (and message (str/index-of message "/ by zero"))
+      (err/runtime-err ::division-by-zero {::err/message "data exception — division by zero"} cause)
+
+      (and message (str/index-of message "overflow"))
+      (err/runtime-err ::overflow-error {::err/message "data exception — overflow error"} cause)
+
+      :else
+      (err/runtime-err ::unknown-arithmetic-error {::err/message "data exception - arithmetic exception"} cause))))
+
+
 (def ^:private emit-projection
   "NOTE: we macroexpand inside the memoize on the assumption that
    everything outside yields the same result on the pre-expanded expr - this
@@ -1630,9 +1639,11 @@
                                           ~@writer-bindings
                                           row-count# (.getRowCount ~rel-sym)]
                                       (dotimes [~idx-sym row-count#]
-                                        ~(continue (fn [t c]
-                                                     (write-value-out! t c))))))
-
+                                        (try
+                                          ~(continue (fn [t c]
+                                                       (write-value-out! t c)))
+                                          (catch ArithmeticException e#
+                                            (throw (arithmetic-ex->runtime-ex e#)))))))
                                  #_(doto clojure.pprint/pprint) ; <<no-commit>>
                                  #_(->> (binding [*print-meta* true]))
                                  eval))
