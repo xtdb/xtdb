@@ -5,6 +5,10 @@ options {
   caseInsensitive = true;
 }
 
+@members {
+    String dollarTag = null;
+}
+
 BLOCK_COMMENT : '/*' ( BLOCK_COMMENT | . )*? '*/'  -> skip ;
 LINE_COMMENT : '--' ~[\r\n]* -> skip ;
 WHITESPACE : [ \n\r\t]+ -> skip ;
@@ -352,9 +356,18 @@ WRITE : 'WRITE' ;
 YEAR : 'YEAR' ;
 ZONE : 'ZONE' ;
 
-REGULAR_IDENTIFIER : (LETTER | '$' | '_') (LETTER | DIGIT | '$' | '_' )* ;
+fragment DOLLAR_TAG_NAME : (LETTER | '_') (LETTER | DIGIT | '_' )* ;
+
+DOLLAR_TAG : '$' DOLLAR_TAG_NAME? '$' {dollarTag = getText();} -> pushMode(DOLLAR_MODE);
+
+REGULAR_IDENTIFIER : (LETTER | '_') (LETTER | DIGIT | '$' | '_' )* ;
 
 DELIMITED_IDENTIFIER
     : '"' ('"' '"' | ~'"')* '"'
     | '`' ('`' '`' | ~'`')* '`'
     ;
+
+mode DOLLAR_MODE;
+
+DM_END_TAG : '$' DOLLAR_TAG_NAME? '$' { dollarTag.equals(getText()) }? { dollarTag = null; } -> popMode;
+DM_TEXT: (~'$')+ | '$' ;

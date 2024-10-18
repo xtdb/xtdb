@@ -72,9 +72,12 @@ literal
     | NULL #NullLiteral
     ;
 
+dollarStringText: DM_TEXT+ ;
+
 characterString
     : CHARACTER_STRING #SqlStandardString
     | C_ESCAPES_STRING #CEscapesString
+    | DOLLAR_TAG dollarStringText? DM_END_TAG #DollarString
     ;
 
 intervalQualifier : startField 'TO' endField | singleDatetimeField ;

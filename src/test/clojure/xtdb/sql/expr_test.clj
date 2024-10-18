@@ -1309,3 +1309,27 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= [{:xs [-1 0 1 2]}]
            (xt/q tu/*node* "SELECT generate_series(start, end) xs FROM foo"))))
 
+(t/deftest test-dollar-quoted-strings
+  (t/is (= "" (plan/plan-expr "$$$$")))
+  (t/is (= "" (plan/plan-expr "$tag$$tag$")))
+
+  (t/is (= "foo" (plan/plan-expr "$$foo$$")))
+  (t/is (= "inner" (plan/plan-expr "$tagged$inner$tagged$")))
+  (t/is (= "with$ dollars $ " (plan/plan-expr "$$with$ dollars $ $$")))
+  (t/is (= "foo $$" (plan/plan-expr "$in$foo $$$in$"))
+        "inner $$")
+
+  (t/is (= "foo\nbar" (plan/plan-expr "$$foo\nbar$$")))
+
+  (t/testing "no matching end tag"
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"no viable alternative"
+                            (plan/plan-expr "$$foo")))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"no viable alternative"
+                            (plan/plan-expr "$tag$foo")))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"no viable alternative"
+                            (plan/plan-expr "$tag$foo$tagg$")))))

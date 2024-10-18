@@ -992,7 +992,11 @@
 
     (visitCEscapesString [_ ctx]
       (let [str (.getText ctx)]
-        (StringUtil/parseCString (subs str 2 (dec (count str))))))))
+        (StringUtil/parseCString (subs str 2 (dec (count str))))))
+
+    (visitDollarString [_ ctx]
+      (or (some-> (.dollarStringText ctx) (.getText))
+          ""))))
 
 (declare plan-sort-specification-list)
 
