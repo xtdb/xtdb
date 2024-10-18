@@ -387,7 +387,11 @@
   (t/is (thrown-with-msg? RuntimeException #"division by zero"
                           (project1 '(/ a 0.0) {:a 5})))
   (t/is (thrown-with-msg? RuntimeException #"division by zero"
-                          (project1 '(/ a 0) {:a 5.0}))))
+                          (project1 '(/ a 0) {:a 5.0})))
+  (t/is (thrown-with-msg? RuntimeException #"overflow"
+                          (project1 '(+ a 9223372036854775807) {:a 9223372036854775807})))
+  (t/is (thrown-with-msg? RuntimeException #"overflow"
+                          (project1 '(- a -9223372036854775807) {:a 9223372036854775807}))))
 
 (defn- project-mono-value [f-sym val col-type]
   (with-open [rel (tu/open-rel [(tu/open-vec (types/col-type->field "s"  col-type) [val])])]
@@ -1411,16 +1415,16 @@
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
-    (t/is (thrown? ArithmeticException
+    (t/is (thrown? RuntimeException
                    (run-binary-test '+ (Integer/MAX_VALUE) (int 4))))
 
-    (t/is (thrown? ArithmeticException
+    (t/is (thrown? RuntimeException
                    (run-binary-test '- (Integer/MIN_VALUE) (int 4))))
 
-    (t/is (thrown? ArithmeticException
+    (t/is (thrown? RuntimeException
                    (run-unary-test '- (Integer/MIN_VALUE))))
 
-    (t/is (thrown? ArithmeticException
+    (t/is (thrown? RuntimeException
                    (run-binary-test '* (Integer/MIN_VALUE) (int 2))))
 
     #_ ; TODO this one throws IAE because that's what clojure.lang.Numbers/shortCast throws
@@ -1507,10 +1511,10 @@
                                 #(->dur-vec "x" TimeUnit/SECOND 154)
                                 #(->ts-vec "y" TimeUnit/NANOSECOND 1234))))
 
-      (t/is (thrown? ArithmeticException
-                     (test-projection '+
-                                      #(->ts-vec "x" TimeUnit/MILLISECOND (- Long/MAX_VALUE 500))
-                                      #(->dur-vec "y" TimeUnit/SECOND 1))))
+      (t/is (thrown-with-msg? RuntimeException  #"data exception - overflow error"
+                              (test-projection '+
+                                               #(->ts-vec "x" TimeUnit/MILLISECOND (- Long/MAX_VALUE 500))
+                                               #(->dur-vec "y" TimeUnit/SECOND 1))))
 
       (t/is (= {:res [(time/->zdt #inst "2020-12-31T23:59:59.998Z")]
                 :res-type [:timestamp-tz :micro "UTC"]}

@@ -128,7 +128,7 @@
           body (decode-json body)]
       (t/is (= 200 status))
       (t/is (instance? xtdb.RuntimeException body))
-      (t/is (= "data exception — division by zero" (ex-message body)))
+      (t/is (= "data exception - division by zero" (ex-message body)))
       (t/is (= {:xtdb.error/error-key :xtdb.expression/division-by-zero}
                (ex-data body)))))
 

@@ -551,7 +551,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                           (xt/q tu/*node* '(from docs [name]))))
 
   (t/is (thrown-with-msg? xtdb.RuntimeException
-                          #"data exception — division by zero"
+                          #"data exception - division by zero"
                           (xt/q tu/*node* '(-> (rel [{}] [])
                                                (with {:foo (/ 1 0)})))))
 
