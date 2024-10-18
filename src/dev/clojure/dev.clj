@@ -18,6 +18,8 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$RecencyBranch ArrowHashTrie$Node)))
 
+(require '[xtdb.logging :refer [set-log-level!]])
+
 (def dev-node-dir
   (io/file "dev/dev-node"))
 

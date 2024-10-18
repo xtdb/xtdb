@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.indexer :as idx]
+            [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
@@ -183,7 +184,7 @@
                                    (/ 1 0)
                                    [])]])
 
-      (tu/with-log-level 'xtdb.indexer :error
+      (logging/with-log-level 'xtdb.indexer :error
         (xt/submit-tx tu/*node* [[:call :exception-fn]
                                  [:call :assoc-version :fail]])
         (t/is (= 0 (foo-version)))

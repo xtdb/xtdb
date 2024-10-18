@@ -4,6 +4,7 @@
             [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
             [xtdb.query :as query]
@@ -355,7 +356,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
 
 (t/deftest test-txs-table-485
-  (tu/with-log-level 'xtdb.indexer :error
+  (logging/with-log-level 'xtdb.indexer :error
     (t/is (= (serde/->tx-committed 0 #xt.time/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 

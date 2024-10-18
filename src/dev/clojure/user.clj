@@ -1,6 +1,7 @@
 (ns user
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as ctn]
+            [xtdb.logging :as logging]
             xtdb.serde
             [xtdb.util :as util]
             [xtdb.xray :as xray :refer [xray]])
@@ -12,6 +13,7 @@
 
 (ctn/disable-reload!)
 (util/install-uncaught-exception-handler!)
+(logging/set-from-env! (System/getenv))
 
 (apply ctn/set-refresh-dirs (conj (for [^File dir (concat [(io/file ".")]
                                                           (.listFiles (io/file "."))
@@ -37,6 +39,4 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn set-log-level! [ns level]
-  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
-             (when level
-               (Level/valueOf (name level)))))
+  (logging/set-log-level! ns level))

@@ -2,8 +2,9 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
-            [clojure.tools.logging :as log] 
+            [clojure.tools.logging :as log]
             [xtdb.error :as err]
+            [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
             [xtdb.util :as util])
@@ -89,6 +90,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-node-from-command-line [args]
   (util/install-uncaught-exception-handler!)
+  (logging/set-from-env! (System/getenv))
 
   (let [{::keys [errors help playground-port node-opts]} (parse-args args)]
     (cond

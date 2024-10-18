@@ -22,8 +22,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [ch.qos.logback.classic Level Logger]
-           (clojure.lang ExceptionInfo)
+  (:import (clojure.lang ExceptionInfo)
            (java.io FileOutputStream)
            java.net.ServerSocket
            (java.nio.channels Channels)
@@ -40,7 +39,6 @@
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.types.pojo Schema)
            org.postgresql.util.PGobject
-           org.slf4j.LoggerFactory
            (xtdb ICursor JsonSerde)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
@@ -344,34 +342,6 @@
          (with-tmp-dirs #{~@more-bindings}
            ~@body)))
     `(do ~@body)))
-
-(defn set-log-level! [ns level]
-  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
-             (when level
-               (Level/valueOf (name level)))))
-
-(defn get-log-level! [ns]
-  (some->> (.getLevel ^Logger (LoggerFactory/getLogger (name ns)))
-           (str)
-           (.toLowerCase)
-           (keyword)))
-
-(defn with-log-levels* [ns-level-pairs f]
-  (let [nses (mapv first ns-level-pairs)
-        orig-levels (mapv get-log-level! nses)]
-    (try
-      (doseq [[ns l] ns-level-pairs] (set-log-level! ns l))
-      (f)
-      (finally
-        (doseq [[ns ol] (mapv vector nses orig-levels)]
-          (set-log-level! ns ol))))))
-
-(defmacro with-log-levels [ns-level-pairs & body]
-  `(with-log-levels* ~ns-level-pairs (fn [] ~@body)))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defmacro with-log-level [ns level & body]
-  `(with-log-levels {~ns ~level} ~@body))
 
 (defn ->min-max-page-bounds
   ([min max] (->min-max-page-bounds min max min))

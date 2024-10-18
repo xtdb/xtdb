@@ -10,6 +10,7 @@
             [next.jdbc.result-set :as result-set]
             [pg.core :as pg]
             [xtdb.api :as xt]
+            [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
@@ -421,7 +422,7 @@
 (deftest concurrent-conns-close-midway-test
   (with-open [server (serve {:num-threads 2 :accept-so-timeout 10})]
     (binding [*port* (:port server)]
-      (tu/with-log-level 'xtdb.pgwire :off
+      (logging/with-log-level 'xtdb.pgwire :off
         (let [spawn (fn spawn [i]
                       (future
                         (try
@@ -1181,7 +1182,7 @@
          (is (= [["ROLLBACK"]] s)))))))
 
 (deftest runtime-error-query-test
-  (tu/with-log-level 'xtdb.pgwire :off
+  (logging/with-log-level 'xtdb.pgwire :off
     (with-open [conn (jdbc-conn)]
       (is (thrown-with-msg? PSQLException #"Data Exception - trim error."
                             (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"]))))))
