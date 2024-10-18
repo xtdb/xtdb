@@ -28,6 +28,7 @@ directlyExecutableStatement
     | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
     | 'SET' identifier ( 'TO' | '=' ) literal # SetSessionVariableStatement
     | 'SHOW' showVariable # ShowVariableStatement
+    | 'SHOW' identifier # ShowSessionVariableStatement
     | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
     ;
 

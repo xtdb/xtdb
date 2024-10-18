@@ -346,7 +346,7 @@
                          (subs di-str 1 (dec (count di-str)))))))
           (str/lower-case)))
 
-(defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx]}]
+(defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
@@ -474,7 +474,16 @@
                         :ra-plan [:table '[tx_id system_time]
                                   (if-let [{:keys [tx-id system-time]} latest-submitted-tx]
                                     [{:tx_id tx-id, :system_time system-time}]
-                                    [])]})))
+                                    [])]})
+
+                     ;; HACK: these values are fixed at prepare-time - if they were to change,
+                     ;; and the same prepared statement re-evaluated, the value would be stale.
+                     (visitShowSessionVariableStatement [_ ctx]
+                       (let [k (session-param-name (.identifier ctx))]
+                         {:statement-type :query, :query sql, :transformed-query sql-trimmed
+                          :ra-plan [:table (if-let [v (get session-parameters k)]
+                                             [{(keyword k) v}]
+                                             [])]}))))
 
           (catch Exception e
             (log/debug e "Error parsing SQL")
@@ -886,8 +895,11 @@
    (send-client-msg! frontend msg-def data)))
 
 (def time-zone-nf-param-name "timezone")
+
 (def pg-param-nf->display-format
-  {time-zone-nf-param-name "TimeZone"})
+  {time-zone-nf-param-name "TimeZone"
+   "datestyle" "DateStyle"
+   "intervalstyle" "IntervalStyle"})
 
 (defn- set-session-parameter [conn parameter value]
   ;;https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-NAMES-VALUES
@@ -1461,9 +1473,10 @@
                         :arg-types arg-types})
 
   (let [{:keys [session latest-submitted-tx]} @conn-state
-        {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
+        {:keys [^Clock clock], {:strs [fallback_output_format] :as session-parameters} :parameters} session
         {:keys [err statement-type] :as stmt} (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
-                                                                    :latest-submitted-tx latest-submitted-tx})
+                                                                    :latest-submitted-tx latest-submitted-tx
+                                                                    :session-parameters session-parameters})
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
         err (or err

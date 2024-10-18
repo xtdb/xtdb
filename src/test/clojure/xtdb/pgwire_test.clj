@@ -1760,6 +1760,14 @@
     (t/is (= [{:tx_id 1, :system_time #inst "2020-01-02"}]
              (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))
 
+(t/deftest test-show-session-variable-3804
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [{:datestyle "ISO"}]
+             (q conn ["SHOW DateStyle"])))
+
+    (t/is (= [{:intervalstyle "ISO_8601"}]
+             (q conn ["SHOW IntervalStyle"])))))
+
 (t/deftest test-psql-bind-3572
   #_ ; FIXME #3622
   (when (psql-available?)

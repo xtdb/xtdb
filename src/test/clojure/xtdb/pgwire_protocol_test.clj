@@ -60,8 +60,8 @@
       (t/is (= [[:msg-auth {:result 0}]
                 [:msg-parameter-status {:parameter "server_encoding", :value "UTF8"}]
                 [:msg-parameter-status {:parameter "client_encoding", :value "UTF8"}]
-                [:msg-parameter-status {:parameter "datestyle", :value "ISO"}]
-                [:msg-parameter-status {:parameter "intervalstyle", :value "ISO_8601"}]
+                [:msg-parameter-status {:parameter "DateStyle", :value "ISO"}]
+                [:msg-parameter-status {:parameter "IntervalStyle", :value "ISO_8601"}]
                 [:msg-parameter-status {:parameter "user", :value "xtdb"}]
                 [:msg-parameter-status {:parameter "database", :value "xtdb"}]
                 [:msg-backend-key-data {:process-id -1, :secret-key 0}]
@@ -101,7 +101,7 @@
                               :portal-name portal-name :stmt-name stmt-name
                               :param-format (repeat (count param-values) 0)
                               ;; we are assuming strings for now
-                              :params (map #(.getBytes %) param-values)
+                              :params (map #(.getBytes ^String %) param-values)
                               ;; can be ommitted
                               :result-format nil})
      (pgwire/handle-msg conn {:msg-name :msg-describe :describe-type :prepared-stmt :describe-name stmt-name})
