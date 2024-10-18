@@ -157,11 +157,11 @@
 
 ;;TODO ADD support for multiple statments in a single simple query
 #_(deftest mulitiple-statement-simple-query-test
-  (with-open [conn (jdbc-conn "preferQueryMode" "simple")
-              stmt (.createStatement conn)
-              rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
-    (is (= true (.next rs)))
-    (is (= false (.next rs)))))
+    (with-open [conn (jdbc-conn "preferQueryMode" "simple")
+                stmt (.createStatement conn)
+                rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
+      (is (= true (.next rs)))
+      (is (= false (.next rs)))))
 
 (deftest prepared-query-test
   (with-open [conn (jdbc-conn "prepareThreshold" "1")
@@ -618,7 +618,7 @@
        (testing "error during query execution"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "select (1 / 0) from (values (42)) a (a);\n")
-           (is (= [["ERROR:  data exception — division by zero"]] (read :err))))
+           (is (= [["ERROR:  data exception - division by zero"]] (read :err))))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
@@ -798,17 +798,17 @@
   (with-open [conn (jdbc-conn)]
     (q conn ["BEGIN"])
     (is (thrown-with-msg?
-          PSQLException
-          #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
-          (q conn ["SET TRANSACTION READ WRITE"])))))
+         PSQLException
+         #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
+         (q conn ["SET TRANSACTION READ WRITE"])))))
 
 (deftest begin-in-a-transaction-error-test
   (with-open [conn (jdbc-conn)]
     (q conn ["BEGIN"])
     (is (thrown-with-msg?
-          PSQLException
-          #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
-          (q conn ["BEGIN"])))))
+         PSQLException
+         #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
+         (q conn ["BEGIN"])))))
 
 (deftest test-current-time
   ;; no support for setting current-time so need to interact with clock directly
@@ -992,8 +992,8 @@
       (sql "COMMIT")
 
       (is (= [{:version 1,
-              :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-              :_valid_to nil}]
+               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
+               :_valid_to nil}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 0,
@@ -1347,7 +1347,7 @@
 
       (.setObject stmt 1 nil)
 
-        (t/is (= ["text"] (param-metadata stmt)))
+      (t/is (= ["text"] (param-metadata stmt)))
 
       (with-open [rs (.executeQuery stmt)]
 
@@ -1559,18 +1559,18 @@
 
   (when (psql-available?)
     (psql-session
-       (fn [send read]
-         (send "INSERT INTO bar RECORDS {_id: 1, v: 1};\n")
-         (read)
-         (send "INSERT INTO bar RECORDS {_id: 1, v: 2};\n")
-         (read)
+     (fn [send read]
+       (send "INSERT INTO bar RECORDS {_id: 1, v: 1};\n")
+       (read)
+       (send "INSERT INTO bar RECORDS {_id: 1, v: 2};\n")
+       (read)
 
-         (send "SELECT *, _valid_time FROM bar FOR ALL VALID_TIME;\n")
+       (send "SELECT *, _valid_time FROM bar FOR ALL VALID_TIME;\n")
 
-         (t/is (= [["_id" "v" "_valid_time"]
-                   ["1" "2" "[2020-01-04 00:00:00+00:00,)"]
-                   ["1" "1" "[2020-01-03 00:00:00+00:00,2020-01-04 00:00:00+00:00)"]]
-                  (read)))))))
+       (t/is (= [["_id" "v" "_valid_time"]
+                 ["1" "2" "[2020-01-04 00:00:00+00:00,)"]
+                 ["1" "1" "[2020-01-03 00:00:00+00:00,2020-01-04 00:00:00+00:00)"]]
+                (read)))))))
 
 (when (psql-available?)
   (deftest test-datetime-formatting
@@ -1582,49 +1582,49 @@
       (psql-session
        (fn [send read]
 
-           (t/testing "timestamps are correctly output in text format"
-             ;;note nanosecond timestamp is returned as json
-             (send "SET TIME ZONE '+03:21';\n")
-             (read)
-             (send "SHOW timezone;\n")
-             (t/is (= [["timezone"] ["+03:21"]] (read)))
+         (t/testing "timestamps are correctly output in text format"
+           ;;note nanosecond timestamp is returned as json
+           (send "SET TIME ZONE '+03:21';\n")
+           (read)
+           (send "SHOW timezone;\n")
+           (t/is (= [["timezone"] ["+03:21"]] (read)))
 
-             (send "SELECT
+           (send "SELECT
                     TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
                     CURRENT_DATE cd,
                     CURRENT_TIMESTAMP cts, CURRENT_TIMESTAMP(4) cts4,
                     LOCALTIMESTAMP lts, LOCALTIMESTAMP(9) lts9;\n")
 
-             (t/is (=
-                    [["zdt" "cd" "cts" "cts4" "lts" "lts9"]
-                     ["3000-04-15 20:40:31+01:00"
-                      "2022-08-16"
-                      "2022-08-16 14:29:03.123456+03:21"
-                      "2022-08-16 14:29:03.1234+03:21"
-                      "2022-08-16 14:29:03.123456"
-                      "\"2022-08-16T14:29:03.123456789\""]]
-                    (read)))
+           (t/is (=
+                  [["zdt" "cd" "cts" "cts4" "lts" "lts9"]
+                   ["3000-04-15 20:40:31+01:00"
+                    "2022-08-16"
+                    "2022-08-16 14:29:03.123456+03:21"
+                    "2022-08-16 14:29:03.1234+03:21"
+                    "2022-08-16 14:29:03.123456"
+                    "\"2022-08-16T14:29:03.123456789\""]]
+                  (read)))
 
-             (send "SET TIME ZONE 'GMT';\n")
-             (read)
-             (send "SHOW timezone;\n")
-             (t/is (= [["timezone"] ["GMT"]] (read))))
+           (send "SET TIME ZONE 'GMT';\n")
+           (read)
+           (send "SHOW timezone;\n")
+           (t/is (= [["timezone"] ["GMT"]] (read))))
 
-             (send "SELECT
+         (send "SELECT
                     TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]' zdt,
                     CURRENT_DATE cd,
                     CURRENT_TIMESTAMP cts, CURRENT_TIMESTAMP(4) cts4,
                     LOCALTIMESTAMP lts, LOCALTIMESTAMP(9) lts9;\n")
 
-             (t/is (=
-                    [["zdt" "cd" "cts" "cts4" "lts" "lts9"]
-                     ["3000-04-15 20:40:31+01:00"
-                      "2022-08-16"
-                      "2022-08-16 11:08:03.123456+00:00"
-                      "2022-08-16 11:08:03.1234+00:00"
-                      "2022-08-16 11:08:03.123456"
-                      "\"2022-08-16T11:08:03.123456789\""]]
-                    (read))))))))
+         (t/is (=
+                [["zdt" "cd" "cts" "cts4" "lts" "lts9"]
+                 ["3000-04-15 20:40:31+01:00"
+                  "2022-08-16"
+                  "2022-08-16 11:08:03.123456+00:00"
+                  "2022-08-16 11:08:03.1234+00:00"
+                  "2022-08-16 11:08:03.123456"
+                  "\"2022-08-16T11:08:03.123456789\""]]
+                (read))))))))
 
 (deftest test-pg
   (with-open [conn (pg-conn {})]
@@ -1669,7 +1669,7 @@
              PGErrorResponse
              #"Missing types for params - client must specify types for all params in DML statements"
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
-                                                                          :oids [OID/DEFAULT]}))
+                                                                        :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
              treated as unspecified and therefore also error"))))
 
@@ -1855,7 +1855,7 @@ FROM pg_catalog.pg_type t
   JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 WHERE t.typname = $1 AND (n.nspname = $2 OR $3 AND n.nspname = ANY (current_schemas(true)))
 ORDER BY t.oid DESC LIMIT 1"
-                           {:args ["transit" nil true]})))))
+                     {:args ["transit" nil true]})))))
 
   (with-open [conn (jdbc-conn "prepareThreshold" -1)]
     (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (pgwire/transit->pgobject {:a 1, :b 2})])
