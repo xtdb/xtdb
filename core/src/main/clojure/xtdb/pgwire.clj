@@ -1644,25 +1644,32 @@
   (swap! conn-state assoc :protocol :simple)
 
   (let [portal-name ""
-        {:keys [prepared-stmt prep-outcome stmt-name]} (parse conn {:query query :stmt-name ""})]
+        {:keys [prepared-stmt prep-outcome stmt-name] {:keys [param-fields]} :prepared-stmt}
+        (parse conn {:query query :stmt-name ""})]
 
-    (when (= :success prep-outcome)
-      (swap! conn-state assoc-in [:prepared-statements stmt-name] prepared-stmt)
+    (cond
+      (seq param-fields)
+      (cmd-send-error conn (err-protocol-violation "Parameters not allowed in simple querys"))
 
-      (when (= :success (cmd-bind conn {:portal-name portal-name
-                                        :stmt-name stmt-name}))
 
-        (when (#{:query :canned-response} (:statement-type prepared-stmt))
-          ;; Client only expects to see a RowDescription (result of cmd-descibe)
-          ;; for certain statement types
-          (cmd-describe conn {:describe-type :portal
-                              :describe-name portal-name}))
+      (= :success prep-outcome)
+      (do
+        (swap! conn-state assoc-in [:prepared-statements stmt-name] prepared-stmt)
 
-        (cmd-execute conn {:portal-name portal-name})
-        (close-portal conn portal-name))
+        (when (= :success (cmd-bind conn {:portal-name portal-name
+                                          :stmt-name stmt-name}))
 
-      ;;close/remove stmt
-      (swap! conn-state update :prepared-statements dissoc stmt-name)))
+          (when (#{:query :canned-response} (:statement-type prepared-stmt))
+            ;; Client only expects to see a RowDescription (result of cmd-descibe)
+            ;; for certain statement types
+            (cmd-describe conn {:describe-type :portal
+                                :describe-name portal-name}))
+
+          (cmd-execute conn {:portal-name portal-name})
+          (close-portal conn portal-name))
+
+        ;;close/remove stmt
+        (swap! conn-state update :prepared-statements dissoc stmt-name))))
 
   (cmd-send-ready conn))
 

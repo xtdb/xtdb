@@ -174,3 +174,20 @@
                    :message "Can not parse 'alan' as timestamp"}}]
                 [:msg-ready {:status :idle}]]
                @!msgs)))))
+
+(deftest test-simple-query-with-params-fails-3605
+  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
+    (with-open [conn (->conn frontend {"user" "xtdb"
+                                       "database" "xtdb"})]
+      (reset! !msgs [])
+
+      (pgwire/cmd-simple-query conn {:query "SELECT $1"})
+
+      (t/is (= [[:msg-error-response
+                 {:error-fields
+                  {:severity "ERROR",
+                   :localized-severity "ERROR",
+                   :sql-state "08P01",
+                   :message "Parameters not allowed in simple querys"}}]
+                [:msg-ready {:status :idle}]]
+               @!msgs)))))
