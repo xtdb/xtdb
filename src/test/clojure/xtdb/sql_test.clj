@@ -2392,3 +2392,8 @@ UNION ALL
               {:xt/id 1, :bar 1, :foo "bar",
                :xt/valid-from #xt.time/zoned-date-time "2020-01-03T00:00Z[UTC]"}]
              (xt/q tu/*node* "SELECT *, _valid_from FROM docs2 FOR ALL VALID_TIME")))))
+
+(deftest insert-with-bad-select-shouldnt-stop-ingestion-3797
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 1"]])
+  (t/is (= 1 (count (xt/q tu/*node* '(from :xt/txs [error])))))
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
