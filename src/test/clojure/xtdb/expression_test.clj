@@ -1392,15 +1392,17 @@
     (t/is (= {:res 3.0, :res-type [:union #{:f64 :decimal}]}
              (run-test 'greatest (double 3.0) (bigdec 2.0))))
 
+
     ;; TODO decide on behaviour
     ;; out of fixed precision range
-    (t/is (thrown? UnsupportedOperationException
+    (t/is (thrown? RuntimeException
                    (run-test '+ (bigdec 1E+19M) (bigdec 1E+19M))))
     ;; overflow
-    (t/is (thrown? UnsupportedOperationException
+    (t/is (thrown? RuntimeException
                    (run-test '+ (bigdec 1E+35M) (bigdec 1E-35M))))
+
     ;; underflow
-    (t/is (thrown? ArithmeticException
+    (t/is (thrown? RuntimeException
                    (run-test '/ (bigdec 1E-35M) (bigdec 1E+35M))))))
 
 (t/deftest test-throws-on-overflow

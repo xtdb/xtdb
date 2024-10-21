@@ -215,10 +215,19 @@ private class TimeNanoVectorWriter(override val vector: TimeNanoVector) : TimeVe
     override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
 }
 
+private val DECIMAL_ERROR_KEY = Keyword.intern("xtdb.error", "decimal-error")
+
 private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVectorWriter(vector) {
+    @Throws(RuntimeException::class)
     override fun writeObject0(obj: Any) {
         if (obj !is BigDecimal) throw InvalidWriteObjectException(field, obj)
-        vector.setSafe(wp.getPositionAndIncrement(), obj.setScale(vector.scale))
+        try {
+            vector.setSafe(wp.getPositionAndIncrement(), obj.setScale(vector.scale))
+        } catch (e: Exception) {
+            throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
+        } catch (e: ArithmeticException) {
+            throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
+        }
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
