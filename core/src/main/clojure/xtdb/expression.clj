@@ -229,6 +229,10 @@
                              :source-type source-type
                              :target-type target-type}))))
 
+(doseq [int-type [:int :uint]]
+  (defmethod codegen-cast [int-type :bool] [_]
+    {:return-type :bool, :->call-code #(do `(not (zero? ~@%)))}))
+
 (defmethod codegen-cast [:num :num] [{:keys [target-type]}]
   {:return-type target-type
    :->call-code #(do `(~(type->cast target-type) ~@%))})

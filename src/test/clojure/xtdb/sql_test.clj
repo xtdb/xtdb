@@ -2397,3 +2397,6 @@ UNION ALL
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 1"]])
   (t/is (= 1 (count (xt/q tu/*node* '(from :xt/txs [error])))))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
+
+(deftest test-boolean-cast
+  (t/is (= [{:v true}] (xt/q tu/*node* "SELECT ?::boolean v" {:args [1]}))))

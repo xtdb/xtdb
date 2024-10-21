@@ -903,6 +903,7 @@
 
 (defrecord CastArgsVisitor [env]
   SqlVisitor
+  (visitBooleanType [_ _] {:cast-type :bool})
   (visitIntegerType [_ ctx]
     {:cast-type (case (str/lower-case (.getText ctx))
                   "smallint" :i16

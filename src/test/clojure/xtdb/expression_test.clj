@@ -1972,7 +1972,10 @@
     (t/is (= (int 42) (test-cast "42" :i32)))
     (t/is (= (long 42) (test-cast "42" :i64)))
     (t/is (= (float 42) (test-cast "42" :f32)))
-    (t/is (= (double 42) (test-cast "42" :f64)))))
+    (t/is (= (double 42) (test-cast "42" :f64)))
+
+    (t/is (= true (test-cast 42 :bool)))
+    (t/is (= false (test-cast 0 :bool)))))
 
 (t/deftest test-cast-null
   (letfn [(test-null-cast [tgt-type]
