@@ -12,3 +12,9 @@
 
     (t/is (= [{:t1-count 10, :y 2}]
              (xt/q tu/*node* "SELECT (SELECT (10 + count(*) + count(*)) FROM t1 WHERE t1.x = t2.y ) AS t1_count, t2.y FROM t2"))))
+
+(t/deftest test-not-equal
+  (xt/execute-tx tu/*node* [[:put-docs :t {:xt/id 1 :x 1}]
+                            [:put-docs :t {:xt/id 2 :x 2}]])
+  (t/is (= [{:cnt 1}]
+           (xt/q tu/*node* "SELECT count(*) as cnt FROM t WHERE x != 1"))))

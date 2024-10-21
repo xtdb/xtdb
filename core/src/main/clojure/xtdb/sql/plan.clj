@@ -1277,7 +1277,8 @@
   (visitUnaryNotExpr [this ctx] (list 'not (-> (.expr ctx) (.accept this))))
 
   (visitComparisonPredicate [this ctx]
-    (list (symbol (.getText (.compOp ctx)))
+    (list ((some-fn {'!= '<>} identity)
+           (symbol (.getText (.compOp ctx))))
           (-> (.expr ctx 0) (.accept this))
           (-> (.expr ctx 1) (.accept this))))
 
