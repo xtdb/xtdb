@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.expression :as expr]
             [xtdb.node :as xtn]
@@ -29,7 +30,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
            org.postgresql.util.PGobject
-           (xtdb.antlr SqlVisitor)
+           (xtdb.antlr SqlVisitor Sql$DirectlyExecutableStatementContext)
            [xtdb.api ServerConfig Xtdb$Config]
            xtdb.api.module.XtdbModule
            xtdb.IResultCursor
@@ -356,10 +357,8 @@
           {:statement-type :canned-response, :canned-response canned-response})
 
         (try
-          (.accept (plan/parse-statement sql-trimmed)
+          (.accept (antlr/parse-statement sql-trimmed)
                    (reify SqlVisitor
-                     (visitDirectSqlStatement [this ctx] (.accept (.directlyExecutableStatement ctx) this))
-
                      (visitSetSessionVariableStatement [_ ctx]
                        {:statement-type :set-session-parameter
                         :parameter (session-param-name (.identifier ctx))
@@ -425,33 +424,28 @@
                      (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
                      (visitInsertStatement [_ _]
-                       {:statement-type :dml, :dml-type :insert
-                        :query sql, :transformed-query sql-trimmed})
+                       {:statement-type :dml, :dml-type :insert, :query sql})
 
                      (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
                      (visitUpdateStatementSearched [_ _]
-                       {:statement-type :dml, :dml-type :update
-                        :query sql, :transformed-query sql-trimmed})
+                       {:statement-type :dml, :dml-type :update, :query sql})
 
                      (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
 
                      (visitDeleteStatementSearched [_ _]
-                       {:statement-type :dml, :dml-type :delete
-                        :query sql, :transformed-query sql-trimmed})
+                       {:statement-type :dml, :dml-type :delete, :query sql})
 
                      (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
                      (visitEraseStatementSearched [_ _]
-                       {:statement-type :dml, :dml-type :erase
-                        :query sql, :transformed-query sql-trimmed})
+                       {:statement-type :dml, :dml-type :erase, :query sql})
 
                      (visitAssertStatement [_ _]
-                       {:statement-type :dml, :dml-type :assert
-                        :query sql, :transformed-query sql-trimmed})
+                       {:statement-type :dml, :dml-type :assert, :query sql})
 
                      (visitQueryExpr [this ctx]
-                       (let [q {:statement-type :query, :query sql, :transformed-query sql-trimmed}]
+                       (let [q {:statement-type :query, :query sql, :parsed-query ctx}]
                          (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
                               (transduce (keep (partial plan/accept-visitor this)) conj q))))
 
@@ -466,11 +460,11 @@
                        (let [at-tx (.accept (.basis ctx) (plan/->ExprPlanVisitor nil nil))]
                          [:at-tx (serde/map->TxKey {:system-time (time/->instant at-tx)})]))
 
-                     (visitShowVariableStatement [_ _]
-                       {:statement-type :query, :query sql, :transformed-query sql-trimmed})
+                     (visitShowVariableStatement [_ ctx]
+                       {:statement-type :query, :query sql, :parsed-query ctx})
 
                      (visitShowLatestSubmittedTransactionStatement [_ _]
-                       {:statement-type :query, :query sql, :transformed-query sql-trimmed
+                       {:statement-type :query, :query sql
                         :ra-plan [:table '[tx_id system_time]
                                   (if-let [{:keys [tx-id system-time]} latest-submitted-tx]
                                     [{:tx_id tx-id, :system_time system-time}]
@@ -480,7 +474,7 @@
                      ;; and the same prepared statement re-evaluated, the value would be stale.
                      (visitShowSessionVariableStatement [_ ctx]
                        (let [k (session-param-name (.identifier ctx))]
-                         {:statement-type :query, :query sql, :transformed-query sql-trimmed
+                         {:statement-type :query, :query sql
                           :ra-plan [:table (if-let [v (get session-parameters k)]
                                              [{(keyword k) v}]
                                              [])]}))))
@@ -1194,8 +1188,8 @@
   (set (map :oid (vals types/pg-types))))
 
 (defn- execute-tx [{:keys [node] :as conn} dml-buf tx-opts]
-  (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
-                       [:sql transformed-query params])
+  (let [tx-ops (mapv (fn [{:keys [query params]}]
+                       [:sql query params])
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
@@ -1224,7 +1218,7 @@
                              (invalid-binary-representation (ex-message e))
                              (invalid-text-representation (ex-message e)))))))
 
-(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params param-fields] :as stmt}]
+(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query params param-fields] :as stmt}]
   (if (or (not= (count param-fields) (count params))
           (some #(= 0 (:oid %)) param-fields))
     (do (log/error "Missing types for params in DML statement")
@@ -1236,7 +1230,6 @@
           ^Clock clock (:clock session)
           xt-params (xtify-params conn params stmt)
           stmt {:query query,
-                :transformed-query transformed-query
                 :params xt-params}
           cmd-complete-msg {:command (case dml-type
                                        ;; insert <oid> <rows>
@@ -1501,7 +1494,7 @@
                                                                                            (map :typname)
                                                                                            (distinct))))))))
 
-                  (let [{:keys [ra-plan, ^String transformed-query]} stmt
+                  (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
                         query-opts {:after-tx latest-submitted-tx
                                     :tx-timeout (Duration/ofSeconds 1)
                                     :param-types param-col-types
@@ -1509,7 +1502,7 @@
 
                         ^PreparedQuery pq (if ra-plan
                                             (.prepareRaQuery node ra-plan query-opts)
-                                            (.prepareQuery node ^String transformed-query query-opts))]
+                                            (.prepareQuery node parsed-query query-opts))]
                     (when-let [warnings (.warnings pq)]
                       (doseq [warning warnings]
                         (cmd-send-notice conn (notice-warning (plan/error-string warning)))))

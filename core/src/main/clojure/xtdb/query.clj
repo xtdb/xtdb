@@ -42,6 +42,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor IResultCursor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
@@ -280,7 +281,9 @@
                 (reify Function
                   (apply [_ _]
                     (let [plan (cond
-                                 (string? query) (sql/compile-query query plan-query-opts)
+                                 (or (string? query)
+                                     (instance? Sql$DirectlyExecutableStatementContext query))
+                                 (sql/compile-query query plan-query-opts)
 
                                  (seq? query) (xtql/compile-query (xtql.edn/parse-query query) plan-query-opts)
 

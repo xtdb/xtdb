@@ -1,6 +1,7 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.antlr :as antlr]
             [xtdb.api :as api]
             xtdb.indexer
             [xtdb.log :as log]
@@ -16,7 +17,8 @@
            (java.util.concurrent ExecutionException)
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.api Xtdb TransactionKey Xtdb$Config)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext)
+           (xtdb.api TransactionKey Xtdb Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query Basis XtqlQuery)
@@ -39,6 +41,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IXtdbInternal
   (^xtdb.query.PreparedQuery prepareQuery [^java.lang.String query, query-opts])
+  (^xtdb.query.PreparedQuery prepareQuery [^xtdb.antlr.Sql$DirectlyExecutableStatementContext parsed-query, query-opts])
   (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
@@ -118,11 +121,15 @@
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
 
   IXtdbInternal
-  (^PreparedQuery prepareQuery [_ ^String query, query-opts]
+  (^PreparedQuery prepareQuery [this ^String query, query-opts]
+   (.prepareQuery this (antlr/parse-statement query)
+                  query-opts))
+
+  (^PreparedQuery prepareQuery [_ ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
    (let [{:keys [after-tx tx-timeout] :as query-opts}
          (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
      (.awaitTx indexer after-tx tx-timeout)
-     (let [plan (.planQuery q-src query wm-src query-opts)]
+     (let [plan (.planQuery q-src parsed-query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (^PreparedQuery prepareQuery [_ ^XtqlQuery query, query-opts]

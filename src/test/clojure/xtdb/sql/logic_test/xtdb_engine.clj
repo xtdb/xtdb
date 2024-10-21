@@ -1,5 +1,6 @@
 (ns xtdb.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
+            [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.error :as err]
             xtdb.node.impl
@@ -83,8 +84,6 @@
 
 (defrecord InsertOpsVisitor [node statement]
   SqlVisitor
-  (visitDirectSqlStatement [this ctx] (.accept (.directlyExecutableStatement ctx) this))
-
   (visitInsertStmt [this ctx] (.accept (.insertStatement ctx) this))
 
   (visitInsertStatement [this ctx]
@@ -119,8 +118,6 @@
 
 (defrecord SltStmtVisitor [node statement]
   SqlVisitor
-  (visitDirectSqlStatement [this ctx] (.accept (.directlyExecutableStatement ctx) this))
-
   (visitErrorNode [_ ctx]
     (if-let [record (or (parse-create-table statement)
                         (parse-create-view statement))]
@@ -149,7 +146,7 @@
 
       (:direct-sql slt/*opts*) (execute-sql-statement node statement variables (select-keys slt/*opts* [:decorrelate? :direct-sql]))
 
-      :else (-> (plan/parse-statement statement)
+      :else (-> (antlr/parse-statement statement)
                 (.accept (->SltStmtVisitor node statement)))))
 
   (execute-query [this query variables]

@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.information-schema :as info-schema]
@@ -13,9 +14,9 @@
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
            (java.util Collection HashMap HashSet LinkedHashSet List Map SequencedSet Set UUID)
            java.util.function.Function
-           (org.antlr.v4.runtime BaseErrorListener CharStreams CommonTokenStream ParserRuleContext Recognizer)
+           (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
-           (xtdb.antlr Sql Sql$BaseTableContext Sql$DirectSqlStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
            xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
@@ -1564,6 +1565,7 @@
 
   (visitReplaceFunction [this ctx]
     (xt/template
+     #_{:clj-kondo/ignore [:invalid-arity]}
      (replace ~(.accept (.expr ctx) this)
               ~(.accept (.expr (.replaceTarget ctx)) this)
               ~(.accept (.expr (.replacement ctx)) this))))
@@ -1628,7 +1630,7 @@
       (add-err! env (->AggregatesDisallowed))
       (-> (.aggregateFunction ctx) (.accept this))))
 
-  (visitCountStarFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs]} ctx]
+  (visitCountStarFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs]} _ctx]
     (let [agg-sym (-> (->col-sym (str "_row_count_" (swap! !id-count inc)))
                       (vary-meta assoc :agg-out-sym? true))]
       (.put !aggs agg-sym {:agg-expr '(row-count)})
@@ -1837,12 +1839,6 @@
 (defrecord ColumnCountMismatch [expected given]
   PlanError
   (error-string [_] (format "Column count mismatch: expected %s, given %s" expected given)))
-
-(defprotocol OptimiseStatement
-  (optimise-stmt [stmt]))
-
-(defrecord QueryExpr [plan col-syms]
-  OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
 
 (defn- plan-sort-specification-list [^Sql$SortSpecificationListContext ctx
                                      {:keys [!id-count] :as env} inner-scope outer-col-syms]
@@ -2444,7 +2440,7 @@
   
   (available-tables [_] [table-alias])
 
-  (find-decls [_ [col-name table-name :as chain]]
+  (find-decls [_ [col-name table-name :as _chain]]
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (contains? cols col-name) (types/temporal-column? col-name)))
       [(.computeIfAbsent !reqd-cols (->col-sym col-name)
@@ -2484,8 +2480,6 @@
 
 (defrecord StmtVisitor [env scope]
   SqlVisitor
-  (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
-
   (visitQueryExpr [this ctx]
     (let [env (->> (some-> (.settingQueryVariables ctx)
                            (.settingQueryVariable))
@@ -2495,19 +2489,19 @@
       (-> (.queryExpression ctx)
           (.accept (->QueryPlanVisitor env scope)))))
 
-  (visitSettingDefaultSystemTime [this ctx]
+  (visitSettingDefaultSystemTime [_ ctx]
     [:sys-time-default
      (.accept (.tableTimePeriodSpecification ctx)
               (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope)))])
 
-  (visitSettingDefaultValidTime [this ctx]
+  (visitSettingDefaultValidTime [_ ctx]
     [:valid-time-default
      (.accept (.tableTimePeriodSpecification ctx)
               (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope)))])
 
   ;; dealt with earlier
-  (visitSettingBasis [this ctx])
-  (visitSettingCurrentTime [this ctx])
+  (visitSettingBasis [_ _ctx])
+  (visitSettingCurrentTime [_ _ctx])
 
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
@@ -2687,25 +2681,6 @@
     (->QueryExpr [:table [{:timezone '(current-timezone)}]]
                  [(->col-sym 'timezone)])))
 
-(defn add-throwing-error-listener [^Recognizer x]
-  (doto x
-    (.removeErrorListeners)
-    (.addErrorListener 
-     (proxy 
-      [BaseErrorListener] []
-       (syntaxError [_ _ line char-position-in-line msg _]
-         (throw 
-          (err/illegal-arg :xtdb/sql-error
-                           {::err/message (str "Errors parsing SQL statement:\n  - "
-                                               (format "line %s:%s %s" line char-position-in-line msg))})))))))
-
-(defn ->parser ^xtdb.antlr.Sql [sql]
-  (-> (SqlLexer. (CharStreams/fromString sql))
-      (add-throwing-error-listener)
-      (CommonTokenStream.)
-      (Sql.)
-      (add-throwing-error-listener)))
-
 (defn- xform-table-info [table-info]
   (into {}
         (for [[tn cns] (merge info-schema/table-info
@@ -2738,7 +2713,7 @@
 
   ([sql {:keys [scope] :as opts}]
    (let [{:keys [!errors !warnings] :as env} (->env opts)
-         parser (->parser sql)
+         parser (antlr/->parser sql)
          plan (-> (.expr parser)
                   #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
                   (.accept (->ExprPlanVisitor env scope)))]
@@ -2784,16 +2759,18 @@
   (->logical-plan [{:keys [query-plan]}]
     [:assert {} (->logical-plan query-plan)]))
 
-(defn parse-statement ^Sql$DirectSqlStatementContext [sql]
-  (let [parser (->parser sql)]
-    (-> (.directSqlStatement parser)
-        #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint)))))) ; <<no-commit>>
+(defprotocol PlanStatement
+  (-plan-statement [query opts]))
 
-(defn plan-statement
-  ([sql] (plan-statement sql {}))
+(extend-protocol PlanStatement
+  String
+  (-plan-statement [sql opts]
+    (-> (antlr/parse-statement sql)
+        (-plan-statement opts)))
 
-  ([sql {:keys [scope table-info args-schema]}]
-   (let [!errors (atom [])
+  Sql$DirectlyExecutableStatementContext
+  (-plan-statement [ctx {:keys [scope table-info args-schema]}]
+    (let [!errors (atom [])
          !warnings (atom [])
          !param-count (atom 0)
          env {:!errors !errors
@@ -2805,8 +2782,7 @@
               ;; we get it through SQL DML, which is the main case we need it for #3656
               :args-schema args-schema}
 
-         stmt (-> (parse-statement sql)
-                  (.accept (->StmtVisitor env scope)))]
+          stmt (.accept ctx (->StmtVisitor env scope))]
      (if-let [errs (not-empty @!errors)]
        (throw (err/illegal-arg :xtdb/sql-error
                                {::err/message (str "Errors planning SQL statement:\n  - "
@@ -2822,6 +2798,10 @@
                         :param-count @!param-count
                         :warnings @!warnings)))))))
 
+(defn plan-statement
+  ([sql] (plan-statement sql {}))
+  ([sql opts] (-plan-statement sql opts)))
+
 (comment
   (plan-statement "WITH foo AS (SELECT id FROM bar WHERE id = 5)
                    SELECT foo.id, baz.id
@@ -2830,7 +2810,6 @@
 
 (defrecord SqlToPutsVisitor [env scope arg-rows]
   SqlVisitor
-  (visitDirectSqlStatement [this ctx] (-> (.directlyExecutableStatement ctx) (.accept this)))
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
   (visitUpdateStmt [_ _])
   (visitDeleteStmt [_ _])
@@ -2900,7 +2879,7 @@
   ([sql arg-rows {:keys [scope] :as opts}]
    (try
      (let [{:keys [!errors !warnings] :as env} (->env opts)
-           put-docs-ops (-> (parse-statement sql)
+           put-docs-ops (-> (antlr/parse-statement sql)
                             (.accept (->SqlToPutsVisitor env scope arg-rows)))]
        (when (and (empty? @!errors) (empty? @!warnings))
          put-docs-ops))
