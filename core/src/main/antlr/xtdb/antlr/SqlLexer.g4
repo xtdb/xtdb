@@ -363,8 +363,8 @@ DOLLAR_TAG : '$' DOLLAR_TAG_NAME? '$' {dollarTag = getText();} -> pushMode(DOLLA
 REGULAR_IDENTIFIER : (LETTER | '_') (LETTER | DIGIT | '$' | '_' )* ;
 
 DELIMITED_IDENTIFIER
-    : '"' ('"' '"' | ~'"')* '"'
-    | '`' ('`' '`' | ~'`')* '`'
+    : '"' ('"' '"' | ~["/])* '"'
+    | '`' ('`' '`' | ~[`/])* '`'
     ;
 
 mode DOLLAR_MODE;

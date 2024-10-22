@@ -2400,3 +2400,8 @@ UNION ALL
 
 (deftest test-boolean-cast
   (t/is (= [{:v true}] (xt/q tu/*node* "SELECT ?::boolean v" {:args [1]}))))
+
+(deftest disallow-slashes-in-delimited-identifiers-3799
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"token recognition error at: '\"zip/'"
+                          (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]]))))))
