@@ -44,9 +44,7 @@ class IndirectMultiVectorReader(
         return readers[readerIndirection[idx]] ?: throw unsupported()
     }
 
-    override fun valueCount(): Int {
-        return readerIndirection.valueCount()
-    }
+    override fun valueCount(): Int =  readerIndirection.valueCount()
 
     override fun getName(): String {
         return name
@@ -100,11 +98,27 @@ class IndirectMultiVectorReader(
 
     override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys() }.toSet()
 
-    override fun listElementReader(): IVectorReader = IndirectMultiVectorReader(
-        readers.map { it?.listElementReader() }, readerIndirection, vectorIndirections
-    )
+    // TODO - the following is a fairly dumb implementation requiring order O(n) where n is the total number of
+    //        elements in all lists. Can we do something better?
+    private fun range(start: Int, len: Int): IntArray = IntArray(len) { it + start }
+    private fun repeat(len: Int, item: Int) : IntArray = IntArray(len) { item }
 
-    override fun getListStartIndex(idx: Int): Int = safeReader(idx).getListStartIndex(vectorIndirections[idx])
+    override fun listElementReader(): IVectorReader {
+        val listElementReaders = readers.map { it?.listElementReader() }
+        var readerIndirectionArray = intArrayOf()
+        var vectorIndirectionArray = intArrayOf()
+        for (i in 0 until this.valueCount()) {
+            if (readerIndirection[i] < 0 || readers[readerIndirection[i]] == null) continue
+            val rdr = safeReader(i)
+            val listCount = rdr.getListCount(vectorIndirections[i])
+            readerIndirectionArray += repeat(listCount, readerIndirection[i])
+            vectorIndirectionArray += range(rdr.getListStartIndex(vectorIndirections[i]), listCount)
+        }
+        return IndirectMultiVectorReader(
+            listElementReaders, VectorIndirection.selection(readerIndirectionArray), VectorIndirection.selection(vectorIndirectionArray))
+    }
+
+    override fun getListStartIndex(idx: Int): Int = (0 until idx).map { safeReader(it).getListCount(vectorIndirections[it]) }.sum()
 
     override fun getListCount(idx: Int): Int = safeReader(idx).getListCount(vectorIndirections[idx])
 
