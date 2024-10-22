@@ -93,10 +93,10 @@
 
 (defn extended-query
   ([conn query] (extended-query conn query [] []))
-  ([conn query arg-types param-values]
+  ([conn query param-oids param-values]
    (let [portal-name "pg-test"
          stmt-name "pg-test"]
-     (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name :query query :arg-types arg-types})
+     (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name :query query :param-oids param-oids})
      (pgwire/handle-msg conn {:msg-name :msg-bind
                               :portal-name portal-name :stmt-name stmt-name
                               :param-format (repeat (count param-values) 0)
@@ -188,6 +188,6 @@
                   {:severity "ERROR",
                    :localized-severity "ERROR",
                    :sql-state "08P01",
-                   :message "Parameters not allowed in simple querys"}}]
+                   :message "Parameters not allowed in simple queries"}}]
                 [:msg-ready {:status :idle}]]
                @!msgs)))))

@@ -30,7 +30,7 @@
            (org.postgresql.util PGInterval PGobject PSQLException)
            xtdb.JsonSerde))
 
-(set! *warn-on-reflection* false)
+(set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
 
 (def ^:dynamic ^:private *port* nil)
@@ -1667,7 +1667,7 @@
 
       (t/is (thrown-with-msg?
              PGErrorResponse
-             #"Missing types for params - Client must specify types for all params in DML statements"
+             #"Missing types for params - client must specify types for all params in DML statements"
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
                                                                           :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
