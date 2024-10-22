@@ -1,5 +1,6 @@
 import assert from 'assert';
 import postgres from 'postgres';
+import pg from 'pg'
 import tjs from 'transit-js';
 import * as uuid from 'uuid';
 
@@ -147,6 +148,45 @@ describe("connects to XT", function() {
 
     } finally {
       await conn.release()
+    }
+  })
+})
+
+describe("connects to XT via node-postgres", function() {
+  it("test type casts in parameters", async () => {
+    const { Client } = pg
+    const client = new Client({
+      host: 'localhost',
+      port: process.env.PG_PORT || 5439,
+    })
+
+    try {
+      await client.connect()
+
+      var res
+      res = await client.query('SELECT $1::text as message', ['Hello world!'])
+      assert.deepStrictEqual(res.rows[0].message, 'Hello world!')
+
+      let d = new Date()
+      res = await client.query('SELECT $1::DOUBLE PRECISION AS f, $2::TIMESTAMPTZ AS d', [42, d])
+      assert.deepStrictEqual(res.rows[0].f, 42.0)
+      assert.deepStrictEqual(res.rows[0].d, d)
+
+      await client.query('INSERT INTO docs(_id, foo) VALUES ($1::INT, $2::FLOAT)', [1, 42.0])
+      res = await client.query('SELECT * FROM docs')
+      assert.deepStrictEqual(res.rows, [{_id: 1, foo: 42.0}])
+
+      await assert.rejects(
+        async () => {
+          await client.query('INSERT INTO docs(_id, foo) VALUES ($1, $2::FLOAT)', [1, 42.0]);
+        },
+        /^error: Missing types for params/
+      );
+
+
+
+    } finally {
+      await client.end()
     }
   })
 })

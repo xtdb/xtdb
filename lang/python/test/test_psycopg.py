@@ -1,6 +1,5 @@
 import psycopg as pg
 import os
-import pytest
 import uuid
 
 ## Useful links
@@ -61,3 +60,33 @@ def test_integer_type():
         with conn.cursor() as cur:
             cur.execute('SELECT %b', [1])
             assert cur.fetchall() == [(1,)]
+
+def test_string_parameters_3589():
+    with pg.connect(**conn_params, prepare_threshold=0) as conn:
+
+        conn.autocommit = True
+
+        with conn.cursor() as cur:
+
+            for x in range(4):
+                cur.execute('''
+                    INSERT INTO test_pg (_id, name)
+                        VALUES (%s::INTEGER, %s::VARCHAR);
+            ''',
+                            (x, str(x)))
+
+            cur.execute('SELECT * FROM test_pg;')
+            assert set(cur.fetchall()) == {(0, '0'), (1, '1'), (2, '2'), (3, '3')}
+
+            # TODO: this somehow fails because of schema change + prepared statement invalidation
+
+            # for x in range(4):
+            #     cur.execute('''
+            #         INSERT INTO test_pg (_id, name)
+            #             VALUES (%s::INTEGER, %s);
+            # ''',
+            #                 (x, x % 2 == 0))
+            #
+            # cur.execute('SELECT * FROM test_pg;')
+            # assert set(cur.fetchall()) == {(0, True), (1, False), (2, True), (3, False)}
+
