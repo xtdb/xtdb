@@ -1,5 +1,6 @@
 (ns xtdb.indexer
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [sci.core :as sci]
             [xtdb.api :as xt]
@@ -30,7 +31,7 @@
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
-           (java.util.function Consumer IntPredicate)
+           (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
@@ -84,19 +85,27 @@
                     (into {} (map (fn [table-name]
                                     (let [table-docs-rdr (.legReader docs-rdr table-name)
                                           doc-rdr (.listElementReader table-docs-rdr)
-                                          ^RelationReader table-rel-rdr (vr/rel-reader (for [sk (.structKeys doc-rdr)]
-                                                                                         (.structKeyReader doc-rdr sk))
-                                                                                       (.valueCount doc-rdr))
-                                          live-table (.liveTable live-idx-tx table-name)]
-                                      (MapEntry/create table-name
-                                                       {:id-rdr (.structKeyReader doc-rdr "_id")
+                                          ks (.structKeys doc-rdr)]
+                                      (when-let [forbidden-cols (not-empty (->> ks
+                                                                                (into #{} (filter (every-pred #(str/starts-with? % "_")
+                                                                                                              (complement #{"_id" "_fn"}))))))]
+                                        (throw (err/illegal-arg :xtdb/forbidden-columns
+                                                                {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
+                                                                 :table-name table-name
+                                                                 :forbidden-cols forbidden-cols})))
+                                      (let [^RelationReader table-rel-rdr (vr/rel-reader (for [sk ks]
+                                                                                           (.structKeyReader doc-rdr sk))
+                                                                                         (.valueCount doc-rdr))
+                                            live-table (.liveTable live-idx-tx table-name)]
+                                        (MapEntry/create table-name
+                                                         {:id-rdr (.structKeyReader doc-rdr "_id")
 
-                                                        :live-table live-table
+                                                          :live-table live-table
 
-                                                        :docs-rdr table-docs-rdr
+                                                          :docs-rdr table-docs-rdr
 
-                                                        :doc-copier (-> (.docWriter live-table)
-                                                                        (.rowCopier table-rel-rdr))}))))))]
+                                                          :doc-copier (-> (.docWriter live-table)
+                                                                          (.rowCopier table-rel-rdr))})))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]

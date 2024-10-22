@@ -2458,12 +2458,20 @@
              :for-valid-time :all-time}
       (vec (.keySet !reqd-cols))]]))
 
-(def ^:private forbidden-update-cols
-  (into #{'_id} (map symbol) (keys types/temporal-col-types)))
+(defn forbidden-update-col? [col]
+  (str/starts-with? (str col) "_"))
+
+(def forbidden-insert-col?
+  (every-pred forbidden-update-col?
+              (complement '#{_id _valid_from _valid_to})))
 
 (defrecord ForbiddenColumnUpdate [col]
   PlanError
   (error-string [_] (format "Cannot UPDATE %s column" col)))
+
+(defrecord ForbiddenColumnInsert [col]
+  PlanError
+  (error-string [_] (format "Cannot INSERT %s column" col)))
 
 (defrecord InsertStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
@@ -2513,6 +2521,9 @@
       (when-not (contains? (set col-syms) '_id)
         (add-err! env (->InsertWithoutXtId)))
 
+      (doseq [col (into #{} (filter forbidden-insert-col?) col-syms)]
+        (add-err! env (->ForbiddenColumnInsert col)))
+
       (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
                     insert-plan)))
 
@@ -2545,7 +2556,9 @@
                         {(identifier-sym (.columnName set-target))
                          (.accept (.expr (.updateSource set-clause)) expr-visitor)})
 
-          _ (doseq [forbidden-col (set/intersection (set (map (comp key first) set-clauses)) forbidden-update-cols)]
+          _ (doseq [forbidden-col (->> set-clauses
+                                       (into #{} (comp (map (comp key first))
+                                                       (filter forbidden-update-col?))))]
               (add-err! env (->ForbiddenColumnUpdate forbidden-col)))
 
           set-clauses-cols (set (mapv ffirst set-clauses))

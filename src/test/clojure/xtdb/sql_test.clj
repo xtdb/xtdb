@@ -2405,3 +2405,13 @@ UNION ALL
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"token recognition error at: '\"zip/'"
                           (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]]))))))
+
+(t/deftest disallow-inserting-to-system-time-cols-3748
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Cannot put documents with columns: #\{\"_system_from\" \"_valid_time\"\}"
+         (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, TIMESTAMP '2024-01-01T00:00:00Z', 'foo')"]])))))
+
+  (let [{:keys [error]} (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, CURRENT_TIME - INTERVAL 'P1D', 'foo')"]])
+        ex-msg (ex-message error)]
+    (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
+    (t/is (str/includes? ex-msg "Cannot INSERT _system_from column"))))
