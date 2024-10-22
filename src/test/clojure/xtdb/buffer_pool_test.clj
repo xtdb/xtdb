@@ -148,9 +148,10 @@
             (CompletableFuture/completedFuture nil)))))))
 
 (def simulated-obj-store-factory
-  (reify ObjectStoreFactory
-    (openObjectStore [_]
-      (->SimulatedObjectStore (atom []) (atom {})))))
+  (let [!buffers (atom {})]
+    (reify ObjectStoreFactory
+      (openObjectStore [_]
+        (->SimulatedObjectStore (atom []) !buffers)))))
 
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
