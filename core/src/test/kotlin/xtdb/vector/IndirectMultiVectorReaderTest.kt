@@ -4,7 +4,10 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.IntVector
 import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.StructVector
+import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
@@ -14,9 +17,14 @@ import org.junit.jupiter.api.Test
 import xtdb.arrow.VectorPosition
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.toArrowType
+import xtdb.toLeg
 import org.apache.arrow.vector.types.Types.MinorType.DENSEUNION as DENSEUNION_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BOOL_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
+import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
+
+private val I32 = FieldType.notNullable(Types.MinorType.INT.type)
 
 fun <T> cycle(list: List<T>): Sequence<T> {
     return sequence {
@@ -305,4 +313,96 @@ class IndirectMultiVectorReaderTest {
 
         rdr1.close()
     }
+
+
+    @Test
+    fun testListElementReader () {
+        val listField = Field("my-list", FieldType(false, LIST_TYPE, null), listOf(Field("\$data\$", I32, null)))
+        val listVec1 = listField.createVector(alloc) as ListVector
+        val listVec2 = listField.createVector(alloc) as ListVector
+        val listVectorWriter1 = writerFor(listVec1)
+        val listVectorWriter2 = writerFor(listVec2)
+
+        listVectorWriter1.writeObject(listOf(0, 1, 2))
+        listVectorWriter1.writeObject(listOf(3, 4, 5))
+
+        listVectorWriter2.writeObject(listOf(6, 7))
+        listVectorWriter2.writeObject(listOf(8, 9))
+
+        val rdr1 = ValueVectorReader.listVector(listVec1)
+        val rdr2 = ValueVectorReader.listVector(listVec2)
+
+        // This represents the vector [[0, 1, 2], [6, 7], [3, 4, 5], [8, 9]]
+        val indirectRdr = IndirectMultiVectorReader(
+            listOf(rdr1, rdr2),
+
+            selection(intArrayOf(0, 1, 0, 1)),
+            selection(intArrayOf(0, 0, 1, 1))
+        )
+
+        assertEquals(listOf(0, 1, 2), indirectRdr.getObject(0))
+        assertEquals(listOf(8, 9), indirectRdr.getObject(3))
+
+        assertEquals(3, indirectRdr.getListStartIndex(1))
+        assertEquals(5, indirectRdr.getListStartIndex(2))
+
+        assertEquals(3, indirectRdr.getListCount(0))
+        assertEquals(2, indirectRdr.getListCount(1))
+
+        // The elementRdr should contain [0, 1, 2, 6, 7, 3, 4, 5, 8, 9]a
+        val listElementRdr = indirectRdr.listElementReader()
+
+        val r = 0..9
+        assertEquals(listOf(0, 1, 2, 6, 7, 3, 4, 5, 8, 9) , r.map { listElementRdr.getInt(it) }.toList())
+
+        indirectRdr.close()
+        rdr1.close()
+        rdr2.close()
+    }
+
+    @Test
+    fun testListElementReaderWithPolymophicUnderlyingVectors () {
+        val listField = Field("my-list", FieldType(false, LIST_TYPE, null), listOf(Field("\$data\$", I32, null)))
+        val listVec = listField.createVector(alloc) as ListVector
+        val intVec = IntVector("my-int", alloc)
+
+        val listWriter = writerFor(listVec)
+        val intWriter = writerFor(intVec)
+
+        listWriter.writeObject(listOf(0, 1, 2))
+        listWriter.writeObject(listOf(3, 4, 5))
+
+        intWriter.writeInt(0)
+        intWriter.writeInt(1)
+
+        val rdr1 = ValueVectorReader.listVector(listVec)
+        val rdr2 = ValueVectorReader.intVector(intVec)
+
+        // This represents the vector [[0, 1, 2], 0, [3, 4, 5], 1]
+        val indirectRdr = IndirectMultiVectorReader(
+            listOf(rdr1, rdr2),
+
+            selection(intArrayOf(0, 1, 0, 1)),
+            selection(intArrayOf(0, 0, 1, 1))
+        )
+
+        assertEquals(listOf(0, 1, 2), indirectRdr.getObject(0))
+        assertEquals(1, indirectRdr.getObject(3))
+
+        val listRdr = indirectRdr.legReader("list")
+
+        assertEquals(0, listRdr.getListStartIndex(0))
+        assertEquals(3, listRdr.getListStartIndex(1))
+
+        val listElementRdr = listRdr.listElementReader()
+
+        val r = 0 until listElementRdr.valueCount()
+        assertEquals(listOf(0, 1, 2, 3, 4, 5) , r.map { listElementRdr.getInt(it) }.toList())
+
+        indirectRdr.close()
+        rdr1.close()
+        rdr2.close()
+    }
+
+
 }
