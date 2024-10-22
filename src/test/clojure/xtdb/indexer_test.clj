@@ -597,13 +597,11 @@ Errors planning SQL statement:
                  (:error)
                  (ex-message))))))
 
-#_ ; FIXME #3388
 (t/deftest hyphen-in-struct-key-halts-ingestion-3388
   (util/with-open [node (xtn/start-node)]
-    (t/is (= :TODO
-             (-> (xt/execute-tx node [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
-                 (:error)
-                 (ex-message))))))
+    (xt/execute-tx node [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
+    (t/is (= [{:xt/id 1, :value {:hyphen-bug 1}}]
+             (xt/q node "SELECT * FROM docs")))))
 
 (t/deftest different-tzs-halt-ingestion-3483
   (with-open [node (xtn/start-node)]
