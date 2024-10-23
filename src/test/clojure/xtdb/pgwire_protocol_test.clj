@@ -74,8 +74,7 @@
                                        "database" "xtdb"})]
       (reset! !msgs [])
 
-      (pgwire/cmd-simple-query conn {:query "SELECT 1"})
-
+      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT 1"})
 
       (t/is (= [[:msg-row-description
                  {:columns
@@ -181,7 +180,7 @@
                                        "database" "xtdb"})]
       (reset! !msgs [])
 
-      (pgwire/cmd-simple-query conn {:query "SELECT $1"})
+      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT $1"})
 
       (t/is (= [[:msg-error-response
                  {:error-fields

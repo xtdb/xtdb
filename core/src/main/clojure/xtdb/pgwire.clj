@@ -186,6 +186,13 @@
 (defmethod print-method Server [wtr o] ((get-method print-method Object) wtr o))
 (defmethod print-method Connection [wtr o] ((get-method print-method Object) wtr o))
 
+(defmulti handle-msg*
+  #_{:clj-kondo/ignore [:unused-binding]}
+  (fn [conn {:keys [msg-name] :as msg}]
+    msg-name)
+
+  :default ::default)
+
 (defn- read-c-string
   "Postgres strings are null terminated, reads a null terminated utf-8 string from in."
   ^String [^InputStream in]
@@ -925,10 +932,8 @@
     (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj portal-name)
     (swap! conn-state update :portals dissoc portal-name)))
 
-(defn cmd-close
-  "Closes a prepared statement or portal that was opened with bind / parse."
-  [{:keys [conn-state, cid] :as conn} {:keys [close-type, close-name]}]
-
+(defmethod handle-msg* :msg-close [{:keys [conn-state, cid] :as conn} {:keys [close-type, close-name]}]
+  ;; Closes a prepared statement or portal that was opened with bind / parse.
   (case close-type
     :prepared-stmt
     (do
@@ -947,9 +952,7 @@
 
   (cmd-write-msg conn msg-close-complete))
 
-(defn cmd-terminate
-  "Causes the connection to start closing."
-  [{:keys [!closing?]}]
+(defmethod handle-msg* :msg-terminate [{:keys [!closing?]} _]
   (reset! !closing? true))
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
@@ -998,11 +1001,11 @@
 
     (when cancel-target (cmd-cancel cancel-target))
 
-    (cmd-terminate conn)))
+    (handle-msg* conn {:msg-name :msg-terminate})))
 
 (defn cmd-startup-err [conn err]
   (cmd-send-error conn err)
-  (cmd-terminate conn))
+  (handle-msg* conn {:msg-name :msg-terminate}))
 
 (def ^:private version-messages
   "Integer codes sent by the client to identify a startup msg"
@@ -1270,9 +1273,8 @@
   (swap! conn-state dissoc :transaction)
   (cmd-write-msg conn msg-command-complete {:command "ROLLBACK"}))
 
-(defn cmd-describe
-  "Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal."
-  [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name]}]
+;;; Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal.
+(defmethod handle-msg* :msg-describe [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name]}]
   (let [coll-k (case describe-type
                  :portal :portals
                  :prepared-stmt :prepared-statements
@@ -1328,10 +1330,10 @@
       (and (= :query statement-type) (= :read-write access-mode))
       (err-protocol-violation "Queries are unsupported in a DML transaction"))))
 
-(defn cmd-sync
-  "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
-  and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
-  [{:keys [conn-state] :as conn}]
+(defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
+  ;; Sync commands are sent by the client to commit transactions (we do not do anything here yet),
+  ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
+
   ;; TODO commit / rollback should be used here if not in an explicit tx?
 
   (when-not (:transaction @conn-state)
@@ -1343,9 +1345,7 @@
   (cmd-send-ready conn)
   (swap! conn-state dissoc :skip-until-sync, :protocol))
 
-(defn cmd-flush
-  "Flushes any pending output to the client."
-  [conn]
+(defmethod handle-msg* :msg-flush [conn _]
   (flush! (:frontend conn)))
 
 (defn resolve-defaulted-params [declared-params inferred-params]
@@ -1433,9 +1433,7 @@
           (assoc :stmt-name stmt-name
                  :statement-type statement-type)))))
 
-(defn cmd-parse
-  "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state] :as conn} {:keys [param-oids] :as msg-data}]
+(defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [param-oids] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
 
   (if-let [unsupported-param-oids (not-empty (into #{} (remove supported-param-oids) param-oids))]
@@ -1503,8 +1501,8 @@
       {:portal stmt-with-bind-msg
        :bind-outcome :success})))
 
-(defn cmd-bind [{:keys [conn-state] :as conn}
-                {:keys [portal-name stmt-name params result-format] :as bind-msg}]
+(defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn}
+                                 {:keys [portal-name stmt-name params result-format] :as bind-msg}]
   (if-let [stmt (get-in @conn-state [:prepared-statements stmt-name])]
     (let [{:keys [portal bind-outcome]} (bind-stmt conn bind-msg stmt)]
       (when (= :success bind-outcome)
@@ -1534,15 +1532,14 @@
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 
-(defn cmd-execute
-  "Handles a msg-execute to run a previously bound portal (via msg-bind)."
-  [{:keys [conn-state] :as conn} {:keys [portal-name _limit]}]
+(defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name _limit]}]
+  ;; Handles a msg-execute to run a previously bound portal (via msg-bind).
   (if-some [portal (get-in @conn-state [:portals portal-name])]
     (execute-portal conn portal)
 
     (cmd-send-error conn (err-protocol-violation "no such portal"))))
 
-(defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
+(defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)
 
   (let [{:keys [prepared-stmt prep-outcome], {:keys [param-fields]} :prepared-stmt} (parse conn {:query query})]
@@ -1564,6 +1561,12 @@
 
   (cmd-send-ready conn))
 
+;; ignored by xt
+(defmethod handle-msg* :msg-password [_ _])
+
+(defmethod handle-msg* ::default [conn _]
+  (cmd-send-error conn (err-protocol-violation "unknown client message")))
+
 (defn handle-msg [{:keys [cid] :as conn} {:keys [msg-name] :as msg}]
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
@@ -1575,22 +1578,8 @@
       (nil? msg)
       (cmd-send-error conn (err-protocol-violation "unknown client message"))
 
-      :else
-      (case msg-name
-        :msg-simple-query (cmd-simple-query conn msg)
-        :msg-terminate (cmd-terminate conn)
-        :msg-close (cmd-close conn msg)
-        :msg-parse (cmd-parse conn msg)
-        :msg-bind (cmd-bind conn msg)
-        :msg-sync (cmd-sync conn)
-        :msg-execute (cmd-execute conn msg)
-        :msg-describe (cmd-describe conn msg)
-        :msg-flush (cmd-flush conn)
+      :else (handle-msg* conn msg))
 
-        ;; ignored by xt
-        :msg-password nil
-
-        (cmd-send-error conn (err-protocol-violation "unknown client message"))))
     (catch InterruptedException e (throw e))
     (catch Throwable e (log/error e "Uncaught exception in handle-msg"))))
 
@@ -1621,11 +1610,10 @@
             (reset! !conn-closing? true))
 
         ;; go idle until we receive another msg from the client
-        :else
-        (do
-          (when-let [msg (read-typed-msg conn)]
-            (handle-msg conn msg))
-          (recur))))))
+        :else (do
+                (when-let [{:keys [msg-name] :as msg} (read-typed-msg conn)]
+                  (handle-msg conn msg))
+                (recur))))))
 
 (defn- ->tmp-node [{:keys [^Map !tmp-nodes]} conn-state]
   (.computeIfAbsent !tmp-nodes (get-in conn-state [:session :parameters "database"] "xtdb")
