@@ -4,7 +4,7 @@
   []
   [:rename a.1 [:scan {:table public/a} [{a (= a 42)}]]]
   [:group-by
-   [{_sq_2 (array_agg b1)}]
+   [{_sq_2 (vec_agg b1)}]
    [:project
     [{b1 b.3/b1}]
     [:rename b.3 [:scan {:table public/b} [{b2 (= b2 42)} b1]]]]]]]

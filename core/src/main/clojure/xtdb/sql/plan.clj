@@ -177,7 +177,7 @@
 
                  :array-by-query [:apply :single-join sq-refs
                                   plan
-                                  [:group-by [{sq-sym (list 'array_agg (first (:col-syms query-plan)))}]
+                                  [:group-by [{sq-sym (list 'vec_agg (first (:col-syms query-plan)))}]
                                    (:plan query-plan)]]
 
 

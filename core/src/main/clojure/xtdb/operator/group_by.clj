@@ -505,7 +505,7 @@
                                 ^:unsynchronized-mutable ^ListVector out-vec
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps
-                                zero-row?]
+                                on-empty]
   IAggregateSpec
   (aggregate [this in-rel group-mapping]
     (let [in-vec (.readerForName in-rel (str from-name))
@@ -538,8 +538,14 @@
           (.endList list-writer))
 
         (let [value-count (.size group-idxmaps)]
-          (.setValueCount out-vec (if (and zero-row? (zero? value-count))
-                                    1
+          (when (and (zero? value-count) (= :empty-vec on-empty))
+            (.startList list-writer)
+            (.endList list-writer))
+          (.setValueCount out-vec (if (zero? value-count)
+                                    (case on-empty
+                                     :null 1
+                                     :empty-rel 0
+                                     :empty-vec 1)
                                     value-count)))
         (vr/vec->reader out-vec))))
 
@@ -557,11 +563,22 @@
       (build [_ al]
         (ArrayAggAggregateSpec. al from-name to-name to-type
                                 (vw/->vec-writer al (str to-name) (FieldType/notNullable #xt.arrow/type :union))
-                                nil 0 (ArrayList.) zero-row?)))))
+                                nil 0 (ArrayList.) (if zero-row? :null :empty-rel))))))
 
 (defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :array_agg))
       (wrap-distinct from-name from-type)))
+
+(defmethod ->aggregate-factory :vec_agg [{:keys [from-name from-type to-name zero-row?]}]
+  (let [to-type [:list from-type]]
+    (reify IAggregateSpecFactory
+      (getToColumnName [_] to-name)
+      (getToColumnField [_] (types/col-type->field to-type))
+
+      (build [_ al]
+        (ArrayAggAggregateSpec. al from-name to-name to-type
+                                (vw/->vec-writer al (str to-name) (FieldType/notNullable #xt.arrow/type :union))
+                                nil 0 (ArrayList.) (if zero-row? :empty-vec :empty-rel))))))
 
 (defn- bool-agg-factory [step-f-kw {:keys [from-name] :as agg-opts}]
   (reducing-agg-factory (into agg-opts

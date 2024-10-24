@@ -994,6 +994,11 @@
   (t/is (= [{:xt/column-1 [42]}]
            (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))))
 
+(t/deftest test-empty-array-3818
+  (t/is (= [{:xt/column-1 []}]
+           (xt/q tu/*node* "SELECT ARRAY(select 1 where false)"))
+        "select array over empty relation return empty array"))
+
 (t/deftest test-expr-in-equi-join
   (t/is
    (=plan-file

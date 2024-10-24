@@ -347,8 +347,8 @@
                           [:table []]]))
         "array-agg empty returns empty when there are groups")
 
-  (t/is (= [{:arr [nil]}]
-           (tu/query-ra '[:group-by [{arr (array-agg a)}]
+  (t/is (= [{:arr-out [nil]}]
+           (tu/query-ra '[:group-by [{arr-out (array-agg a)}]
                           [:table [{:a nil}]]]))
         "array-agg preserves nulls")
 
@@ -359,6 +359,31 @@
 
   (t/is (= [{:a 42, :arr-out [nil]} {:a 45, :arr-out [1 nil]}]
            (tu/query-ra '[:group-by [a {arr-out (array-agg b)}]
+                          [:table [{:a 42, :b nil} {:a 45, :b 1} {:a 45, :b nil}]]]))))
+
+(t/deftest test-vec-agg
+  (t/is (= [{:vec-out []}]
+           (tu/query-ra '[:group-by [{vec-out (vec-agg a)}]
+                          [:table []]]))
+        "array agg empty returns null")
+
+  (t/is (= []
+           (tu/query-ra '[:group-by [b {vec-out (vec-agg a)}]
+                          [:table []]]))
+        "vec-agg empty returns empty when there are groups")
+
+  (t/is (= [{:vec-out [nil]}]
+           (tu/query-ra '[:group-by [{vec-out (vec-agg a)}]
+                          [:table [{:a nil}]]]))
+        "vec-agg preserves nulls")
+
+  (t/testing "vec-agg group all null"
+    (t/is (= [{:a 42, :vec-out [nil]}]
+             (tu/query-ra '[:group-by [a {vec-out (vec-agg b)}]
+                            [:table [{:a 42, :b nil}]]]))))
+
+  (t/is (= [{:a 42, :vec-out [nil]} {:a 45, :vec-out [1 nil]}]
+           (tu/query-ra '[:group-by [a {vec-out (vec-agg b)}]
                           [:table [{:a 42, :b nil} {:a 45, :b 1} {:a 45, :b nil}]]]))))
 
 (t/deftest test-bool-aggs
