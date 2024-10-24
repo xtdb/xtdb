@@ -361,6 +361,22 @@
               :typnotnull false,
               :typname "interval",
               :typnamespace 2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 1007,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "_int4",
+              :typnamespace 2125819141,
+              :typbasetype 0}
+             {:typtypmod -1,
+              :oid 1016,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "_int8",
+              :typnamespace 2125819141,
               :typbasetype 0}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog/pg_type}

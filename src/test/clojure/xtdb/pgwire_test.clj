@@ -15,11 +15,12 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
-           [java.net Socket]
-           (java.sql Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
+           (java.net Socket)
+           (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            java.util.Calendar
            (java.util.concurrent CountDownLatch TimeUnit)
@@ -105,8 +106,10 @@
     (-> (loop [res []]
           (if (.next rs)
             (recur (->>
-                    (for [idx (range 1 (inc (.getColumnCount md)))]
-                      {(.getColumnName md idx) (.getObject rs ^long idx)})
+                    (for [idx (range 1 (inc (.getColumnCount md)))
+                          :let [obj (.getObject rs idx)]]
+                      {(.getColumnName md idx) (cond-> obj
+                                                 (instance? Array obj) (-> .getArray vec))})
                     (into {})
                     (conj res)))
             res))
@@ -265,7 +268,7 @@
      ;; arrays
 
      {:sql "ARRAY []", :clj []}
-     {:sql "ARRAY [42]", :clj [42]}
+     {:sql "ARRAY ['foo']", :clj ["foo"]}
      {:sql "ARRAY ['2022-01-02']", :clj ["2022-01-02"]}
      {:sql "ARRAY [ARRAY ['42'], 42, '42']", :clj [["42"] 42 "42"]}]))
 
@@ -2000,3 +2003,64 @@ ORDER BY t.oid DESC LIMIT 1"
               stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
     (t/is (is (thrown-with-msg? PSQLException #"Illegal argument: 'missing-id'" (.execute stmt))))
     (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"])))))
+
+(deftest test-primitive-array
+  (t/testing "array as subselect"
+    (with-open [conn (jdbc-conn)]
+      (jdbc/execute! conn ["INSERT INTO docs(_id) VALUES (1)"])
+      (jdbc/execute! conn ["INSERT INTO docs(_id) VALUES (2)"])
+
+      (with-open [stmt (.prepareStatement conn "SELECT ARRAY(SELECT _id FROM docs ORDER BY _id) AS ids")]
+        (with-open [rs (.executeQuery stmt)]
+          (t/is (= [{"ids" "_int8"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          (t/is (= [{"ids" [1 2]}] (rs->maps rs)))))))
+
+  (t/testing "array in select"
+    (with-open [conn (jdbc-conn)]
+      (with-open [stmt (.prepareStatement conn "SELECT [1, 2, 3] AS arr")]
+
+        (t/is (= [{"arr" "_int8"}] (result-metadata stmt)))
+
+        (with-open [rs (.executeQuery stmt)]
+          (t/is (= [{"arr" [1 2 3]}] (rs->maps rs))))))))
+
+(deftest test-elixir-client-complex-array
+  (with-open [conn (jdbc-conn)]
+    (with-open [stmt (.prepareStatement conn
+                                        "SELECT ARRAY (SELECT a.atttypid
+                                                       FROM pg_attribute AS a
+                                                       WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+                                                       ORDER BY a.attnum) as arr
+                                         FROM pg_type AS t
+                                           LEFT JOIN pg_type AS d ON t.typbasetype = d.oid
+                                           LEFT JOIN pg_range AS r ON r.rngtypid = t.oid
+                                                                   OR r.rngmultitypid = t.oid
+                                                                   OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)
+                                         WHERE (t.typrelid = 0)
+                                           AND (t.typelem = 0
+                                                OR NOT EXISTS (SELECT 1
+                                                               FROM pg_catalog.pg_type s
+                                                               WHERE s.typrelid <> 0 AND s.oid = t.typelem))")]
+      (with-open [rs (.executeQuery stmt)]
+        (t/is (= [{"arr" "_int4"}]
+                 (result-metadata stmt)
+                 (result-metadata rs)))
+
+        (doseq [res (rs->maps rs)
+                :let [arr (get res "arr")]]
+          (t/is (= [] arr)))))))
+
+(deftest test-array-field
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO docs(_id, arr) VALUES (8, ARRAY[1, 2, 3])"])
+    (jdbc/execute! conn ["INSERT INTO docs(_id, arr) VALUES (9, ARRAY[4, 5, 6])"])
+
+    (with-open [stmt (.prepareStatement conn "SELECT * FROM docs order by _id")]
+
+      (t/is (= [{"_id" "int8"} {"arr" "_int8"}] (result-metadata stmt)))
+
+      (with-open [rs (.executeQuery stmt)]
+        (t/is (= [{"_id" 8, "arr" [1 2 3]} {"_id" 9, "arr" [4 5 6]}] (rs->maps rs)))))))

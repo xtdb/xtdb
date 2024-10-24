@@ -948,7 +948,7 @@
   [group-by-specs]
   (let [found? (volatile! false)]
     (w/prewalk
-     #(if (and (= 'array-agg %)
+     #(if (and (contains? #{'array-agg 'array_agg 'vec-agg 'vec_agg} %)
                (not (column? %)))
         (vreset! found? true)
         %)

@@ -992,12 +992,23 @@
            (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42")))
 
   (t/is (= [{:xt/column-1 [42]}]
-           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))))
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42")))
+
+  (t/is (= [{:xt/column-1 []}]
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b and b.b2 = 43) FROM a where a.a = 42"))))
 
 (t/deftest test-empty-array-3818
   (t/is (= [{:xt/column-1 []}]
            (xt/q tu/*node* "SELECT ARRAY(select 1 where false)"))
         "select array over empty relation return empty array"))
+
+(t/deftest test-complex-empty-array
+  (let [result (xt/q tu/*node* "SELECT ARRAY (
+                                     SELECT a.atttypid FROM pg_attribute AS a
+                                       WHERE a.attrelid = t.typrelid) as arr
+                                   FROM pg_type AS t")]
+    (doseq [r result]
+      (t/is (= {:arr []} r)))))
 
 (t/deftest test-expr-in-equi-join
   (t/is

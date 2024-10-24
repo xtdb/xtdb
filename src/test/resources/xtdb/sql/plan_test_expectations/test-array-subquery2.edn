@@ -1,13 +1,11 @@
 [:project
  [{_column_1 _sq_2}]
- [:group-by
-  [a.1/b a.1/a _row_number_0 {_sq_2 (vec_agg b1)}]
-  [:apply
-   :left-outer-join
-   {a.1/b ?_sq_b_3}
-   [:map
-    [{_row_number_0 (row-number)}]
-    [:rename a.1 [:scan {:table public/a} [b {a (= a 42)}]]]]
+ [:apply
+  :single-join
+  {a.1/b ?_sq_b_3}
+  [:rename a.1 [:scan {:table public/a} [b {a (= a 42)}]]]
+  [:group-by
+   [{_sq_2 (vec_agg b1)}]
    [:project
     [{b1 b.3/b1}]
     [:rename

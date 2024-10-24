@@ -5,12 +5,12 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [clojure.tools.logging :as log])
   (:import (clojure.lang MapEntry)
            [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
-           [java.text ParseException]
            [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util UUID]
@@ -796,6 +796,37 @@
     :rngcanonical ""
     :rngsubdiff "tstzrange_subdiff"}})
 
+(defn binary-list-header [length element-oid typlen]
+  ;; list: <<byte-length,dimensions=1,data-offset=0,oid,elem-count=(lenght-of-list),l-bound=1?,data>>
+  ;; https://github.com/postgres/postgres/blob/master/src/include/utils/array.h
+  (let [payload-size (+ (* 5 4) (* typlen length) (* 4 length))] ;; 5 integers describing array + data prefixed by their length
+    (doto
+     (ByteBuffer/allocate (+ 4 payload-size)) ;; 4 is for int4 - payload size
+      (.putInt payload-size)
+      (.putInt 1) ;; dimensions
+      (.putInt 0) ;; data offset
+      (.putInt element-oid)
+      (.putInt length)
+      ;; l-bound - MUST BE 1
+      (.putInt 1))))
+
+(defn read-binary-array [ba]
+  (let [bb (ByteBuffer/wrap ba)
+        ;; _payload-size (.getInt bb)
+        ;; _dimensions (.getInt bb 4)
+        data-offset (.getInt bb 8)
+        oid (.getInt bb 12)
+        length (.getInt bb 16)
+        [typlen get-elem] (case oid
+                            (23 1007) [4 (fn [bb idx] (.getInt bb idx))]
+                            (20 1016) [8 (fn [bb idx] (.getLong bb idx))])
+        start  (+ data-offset 20)]
+    (into []
+          (map
+           (fn [idx]
+             (get-elem bb (+ start (* idx typlen))))
+           (range length)))))
+
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
    ;;default oid is currently only used to describe a parameter without a known type
@@ -1191,7 +1222,91 @@
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (serde/write-transit (.getObject rdr idx) :json))
              :write-binary (fn [_env ^IVectorReader rdr idx]
-                             (serde/write-transit (.getObject rdr idx) :json))}})
+                             (serde/write-transit (.getObject rdr idx) :json))}
+
+   :_int4 (let [typlen 4
+                oid 1007
+                typelem 23]
+            {:typname "_int4"
+             :typlen typlen
+             :oid oid
+             :typelem typelem
+             :typsend "array_send"
+             :typreceive "array_recv"
+             :typinput "array_in"
+             :typoutput "array_out"
+             :read-text (fn [_env arr]
+                          (log/tracef "read-text_int4 %s" arr)
+                          (let [elems (when-not (empty? arr)
+                                        (let [sa (str/trim arr)]
+                                          (-> sa
+                                              (subs 1 (dec (count sa)))
+                                              (str/split #","))))]
+                            (mapv #(Integer/parseInt %) elems)))
+             :read-binary (fn [_env ba]
+                            (read-binary-array ba))
+             :write-text (fn [_env ^IVectorReader list-rdr idx]
+                           (let [list (.getObject list-rdr idx)
+                                 sb (StringBuilder. "{")]
+                             (doseq [elem list]
+                               (.append sb (or elem "NULL"))
+                               (.append sb ","))
+                             (if (seq list)
+                               (.setCharAt sb (dec (.length sb)) \})
+                               (.append sb "}"))
+                             (utf8 (.toString sb))))
+             :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                             (let [list (.getObject list-rdr idx)
+                                   ^ByteBuffer bb (binary-list-header (count list) typelem typlen)]
+                               (doseq [elem list]
+                                 ;; apparently each element has to be prefixed with its length
+                                 ;; https://stackoverflow.com/questions/4016412/postgresqls-libpq-encoding-for-binary-transport-of-array-data
+                                 ;; also the way vanilla postgres does it seems to confirm this
+                                 (.putInt bb typlen)
+                                 (.putInt bb elem))
+                               (.array bb)))})
+
+   :_int8 (let [typlen 8
+                oid 1016
+                typelem 20]
+            {:typname "_int8"
+             :typlen typlen
+             :oid oid
+             :typelem typelem
+             :typsend "array_send"
+             :typreceive "array_recv"
+             :typinput "array_in"
+             :typoutput "array_out"
+             :read-text (fn [_env arr]
+                          (log/tracef "read-text_int8 %s" arr)
+                          (let [elems (when-not (empty? arr)
+                                        (let [sa (str/trim arr)]
+                                          (-> sa
+                                              (subs 1 (dec (count sa)))
+                                              (str/split #","))))]
+                            (mapv #(Long/parseLong %) elems)))
+             :read-binary (fn [_env ba]
+                            (read-binary-array ba))
+             :write-text (fn [_env ^IVectorReader list-rdr idx]
+                           (let [list (.getObject list-rdr idx)
+                                 sb (StringBuilder. "{")]
+                             (doseq [elem list]
+                               (.append sb (or elem "NULL"))
+                               (.append sb ","))
+                             (if (seq list)
+                               (.setCharAt sb (dec (.length sb)) \})
+                               (.append sb "}"))
+                             (utf8 (.toString sb))))
+             :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                             (let [list (.getObject list-rdr idx)
+                                   ^ByteBuffer bb (binary-list-header (count list) typelem typlen)]
+                               (doseq [elem list]
+                                 ;; apparently each element has to be prefixed with its length
+                                 ;; https://stackoverflow.com/questions/4016412/postgresqls-libpq-encoding-for-binary-transport-of-array-data
+                                 ;; also the way vanilla postgres does it seems to confirm this
+                                 (.putInt bb typlen)
+                                 (.putLong bb elem))
+                               (.array bb)))})})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
@@ -1212,6 +1327,8 @@
    [:timestamp-tz :micro] :timestamptz
    :tstz-range :tstz-range
    [:interval :month-day-nano] :interval
+   [:list :i32] :_int4
+   [:list :i64] :_int8
 
    #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})
@@ -1230,7 +1347,22 @@
     (cond
       (= 1 (count col-types)) (first col-types)
       (set/subset? col-types #{:float4 :float8}) :float8
-      (set/subset? col-types #{:int2 :int4 :int8}) :int8)))
+      (set/subset? col-types #{:int2 :int4 :int8}) :int8
+      (set/subset? col-types #{:_int4 :_int8}) :_int8)))
+
+(defn remove-nulls
+  [typ]
+  (zmatch typ
+    [:union inner-types] (let [res (->> (disj inner-types :null)
+                                        (into #{} (map remove-nulls)))]
+                           (if (<= (count res) 1)
+                             (first res)
+                             [:union res]))
+    [:list inner-type] [:list (remove-nulls inner-type)]
+    [:set inner-type] [:set (remove-nulls inner-type)]
+    [:struct field-map] [:struct (zipmap (keys field-map)
+                                         (map remove-nulls (vals field-map)))]
+    typ))
 
 (defn field->pg-type
   ([field] (field->pg-type nil field))
@@ -1238,9 +1370,10 @@
   ([fallback-pg-type ^Field field]
    (let [field-name (.getName field)
          col-type (field->col-type field)
-         col-types (-> (flatten-union-types col-type)
-                       (disj :null)
+         col-types (-> (remove-nulls col-type)
+                       flatten-union-types
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
+     (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
      (-> (if-let [col-type (->unified-col-type col-types)]
            col-type
            (col-type->pg-type fallback-pg-type col-type))

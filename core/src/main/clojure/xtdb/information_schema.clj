@@ -181,7 +181,8 @@
   rel-wtr)
 
 (defn pg-type [^IRelationWriter rel-wtr]
-  (doseq [{:keys [oid typname typsend typreceive] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
+  (doseq [{:keys [oid typname typsend typreceive
+                  typelem typinput typoutput] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
@@ -194,11 +195,11 @@
         "typnotnull" (.writeBoolean col-wtr false)
         "typtypmod" (.writeInt col-wtr -1)
         "typrelid" (.writeInt col-wtr 0) ; zero for non composite types (or pg_class ref for composite types)
-        "typelem" (.writeInt col-wtr 0)
+        "typelem" (.writeInt col-wtr (or typelem 0))
         "typsend" (.writeObject col-wtr typsend)
         "typreceive" (.writeObject col-wtr typreceive)
-        "typinput" (.writeObject col-wtr "")
-        "typoutput" (.writeObject col-wtr "")))
+        "typinput" (.writeObject col-wtr (or typinput ""))
+        "typoutput" (.writeObject col-wtr (or typoutput ""))))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
   rel-wtr)
