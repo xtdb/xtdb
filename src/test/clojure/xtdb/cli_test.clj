@@ -4,7 +4,8 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.cli :as cli]
-            [xtdb.node :as xtn])
+            [xtdb.node :as xtn]
+            [xtdb.test-util :as tu])
   (:import (xtdb.indexer.live_index LiveIndex)))
 
 (def xtdb-cli-edn
@@ -70,22 +71,22 @@
 
     (t/testing "Explicitly provided YAML file will output specified file-location"
       (t/is (= (io/file xtdb-cli-yaml)
-               (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))])))) 
+               (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))))
 
     (t/testing "returns file location of xtdb.yaml if present"
       (with-file-override {"xtdb.yaml" (io/as-file xtdb-cli-yaml)}
         (fn []
           (t/is (= (io/file (io/resource "xtdb/cli-test.yaml"))
                    (->node-opts []))))))
-    
+
     (t/testing "also returns file location of xtdb.yaml if on the classpath"
       (with-resource-override {"xtdb.yaml" (io/as-file xtdb-cli-yaml)}
         (fn []
           (t/is (= (io/file (io/resource "xtdb/cli-test.yaml"))
                    (->node-opts []))))))
-    
+
     (t/testing "node opts passed to start-node passes through yaml file and starts node"
-      (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))] 
+      (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))]
         (let [index ^LiveIndex (get-in node [:system :xtdb.indexer/live-index])]
           (t/is (= 65 (.log-limit index))
                 "using provided config"))

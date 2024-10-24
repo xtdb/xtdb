@@ -8,7 +8,6 @@
             [xtdb.compactor :as c]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
-            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -27,6 +26,7 @@
            (xtdb.watermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)
+(t/use-fixtures :each tu/with-node)
 
 (def txs
   [[[:put-docs :device-info
@@ -165,9 +165,38 @@
                 (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))))))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
-  (with-open [node (xtn/start-node {})]
-    (let [tx (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
-          tt (.getSystemTime tx)]
+  (let [tx (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
+        tt (.getSystemTime tx)]
+    (t/is (= [{:xt/id :foo, :version 0,
+               :xt/valid-from (time/->zdt tt)
+               :xt/system-from (time/->zdt tt)}]
+             (tu/query-ra '[:scan {:table public/xt_docs}
+                            [_id version
+                             _valid_from, _valid_to
+                             _system_from, _system_to]]
+                          {:node tu/*node*})))
+
+    (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
+          tt2 (.getSystemTime tx1)]
+      (t/is (= #{{:xt/id :foo, :version 0,
+                  :xt/valid-from (time/->zdt tt2)
+                  :xt/system-from (time/->zdt tt)
+                  :xt/system-to (time/->zdt tt2)}
+                 {:xt/id :foo, :version 0,
+                  :xt/valid-from (time/->zdt tt)
+                  :xt/valid-to (time/->zdt tt2)
+                  :xt/system-from (time/->zdt tt)}
+                 {:xt/id :foo, :version 1,
+                  :xt/valid-from (time/->zdt tt2)
+                  :xt/system-from (time/->zdt tt2)}}
+               (set (tu/query-ra '[:scan {:table public/xt_docs,
+                                          :for-system-time :all-time,
+                                          :for-valid-time :all-time}
+                                   [_id version
+                                    _valid_from, _valid_to
+                                    _system_from, _system_to]]
+                                 {:node tu/*node*}))))
+
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
                  :xt/system-from (time/->zdt tt)}]
@@ -175,38 +204,8 @@
                               [_id version
                                _valid_from, _valid_to
                                _system_from, _system_to]]
-                            {:node node})))
-
-      (let [tx1 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
-            tt2 (.getSystemTime tx1)]
-        (t/is (= #{{:xt/id :foo, :version 0,
-                    :xt/valid-from (time/->zdt tt2)
-                    :xt/system-from (time/->zdt tt)
-                    :xt/system-to (time/->zdt tt2)}
-                   {:xt/id :foo, :version 0,
-                    :xt/valid-from (time/->zdt tt)
-                    :xt/valid-to (time/->zdt tt2)
-                    :xt/system-from (time/->zdt tt)}
-                   {:xt/id :foo, :version 1,
-                    :xt/valid-from (time/->zdt tt2)
-                    :xt/system-from (time/->zdt tt2)}}
-                 (set (tu/query-ra '[:scan {:table public/xt_docs,
-                                            :for-system-time :all-time,
-                                            :for-valid-time :all-time}
-                                     [_id version
-                                      _valid_from, _valid_to
-                                      _system_from, _system_to]]
-                                   {:node node}))))
-
-        (t/is (= [{:xt/id :foo, :version 0,
-                   :xt/valid-from (time/->zdt tt)
-                   :xt/system-from (time/->zdt tt)}]
-                 (tu/query-ra '[:scan {:table public/xt_docs}
-                                [_id version
-                                 _valid_from, _valid_to
-                                 _system_from, _system_to]]
-                              {:node node, :basis {:at-tx tx}}))
-              "re-using the original tx basis should see the same result")))))
+                            {:node tu/*node*, :basis {:at-tx tx}}))
+            "re-using the original tx basis should see the same result"))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (binding [c/*ignore-signal-block?* true]
@@ -285,12 +284,11 @@
                    (.columnField mm "public/xt_docs" "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
-  (with-open [node (xtn/start-node {})]
-    (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
-                        [:put-docs :xt_docs {:xt/id "no-bar", :foo "foo"}]])
-    (t/is (= [{:id "nil-bar", :foo "foo"}
-              {:id "no-bar", :foo "foo"}]
-             (xt/q node '(from :xt_docs [{:xt/id id} foo bar]))))))
+  (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
+                           [:put-docs :xt_docs {:xt/id "no-bar", :foo "foo"}]])
+  (t/is (= [{:id "nil-bar", :foo "foo"}
+            {:id "no-bar", :foo "foo"}]
+           (xt/q tu/*node* '(from :xt_docs [{:xt/id id} foo bar])))))
 
 (t/deftest round-trips-extensions-via-ipc
   (let [node-dir (util/->path "target/round-trips-extensions-via-ipc")
@@ -536,10 +534,9 @@
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
-      (with-open [node (xtn/start-node {})]
-        (t/is (thrown-with-msg? Exception #"oh no!"
-                                (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo", :count 42}]])
-                                    (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
+      (t/is (thrown-with-msg? Exception #"oh no!"
+                              (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :count 42}]])
+                                  (tu/then-await-tx tu/*node* (Duration/ofSeconds 1))))))))
 
 (t/deftest bug-catch-closed-by-interrupt-exception-740
   (let [e (ClosedByInterruptException.)]
@@ -549,10 +546,9 @@
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
-      (with-open [node (xtn/start-node {})]
-        (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
-                                (-> (xt/submit-tx node [[:sql "INSERT INTO foo(_id) VALUES (1)"]])
-                                    (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
+      (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
+                              (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(_id) VALUES (1)"]])
+                                  (tu/then-await-tx tu/*node* (Duration/ofSeconds 1))))))))
 
 (t/deftest test-indexes-sql-insert
   (binding [c/*ignore-signal-block?* true]
@@ -579,53 +575,48 @@
                          (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
-  (util/with-open [node (xtn/start-node)]
-    (t/is (= {:tx-id 0,
-              :committed? false,
-              :error #xt/illegal-arg [:xtdb.indexer/invalid-sql-tx-op
-                                      "Invalid SQL query sent as transaction operation"
-                                      {:query "SELECT _id, foo FROM docs"}]}
-             (-> (xt/execute-tx node [[:sql "SELECT _id, foo FROM docs"]])
-                 (dissoc :system-time))))))
+  (t/is (= {:tx-id 0,
+            :committed? false,
+            :error #xt/illegal-arg [:xtdb.indexer/invalid-sql-tx-op
+                                    "Invalid SQL query sent as transaction operation"
+                                    {:query "SELECT _id, foo FROM docs"}]}
+           (-> (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]])
+               (dissoc :system-time)))))
 
 (t/deftest above-max-long-halts-ingestion-3495
-  (util/with-open [node (xtn/start-node)]
-    (t/is (= (str/trim "
+  (t/is (= (str/trim "
 Errors planning SQL statement:
   - Cannot parse integer: 9223372036854775808")
-             (-> (xt/execute-tx node [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]])
-                 (:error)
-                 (ex-message))))))
+           (-> (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]])
+               (:error)
+               (ex-message)))))
 
 (t/deftest hyphen-in-struct-key-halts-ingestion-3388
-  (util/with-open [node (xtn/start-node)]
-    (xt/execute-tx node [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
-    (t/is (= [{:xt/id 1, :value {:hyphen-bug 1}}]
-             (xt/q node "SELECT * FROM docs")))))
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
+  (t/is (= [{:xt/id 1, :value {:hyphen-bug 1}}]
+           (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest different-tzs-halt-ingestion-3483
-  (with-open [node (xtn/start-node)]
-    (xt/execute-tx node [[:sql "
+  (xt/execute-tx tu/*node* [[:sql "
 INSERT INTO docs (_id, _valid_from, _valid_to)
   VALUES (0, TIMESTAMP '2023-03-26T00:50:00.000+00:00', TIMESTAMP '2023-03-26T00:55:00.000+00:00'),
          (0, TIMESTAMP '2023-03-26T02:00:00.000+01:00', TIMESTAMP '2023-03-26T02:05:00.000+01:00')"]])
 
-    (t/is (= [#:xt{:id 0,
-                   :valid-from #xt.time/zoned-date-time "2023-03-26T00:50Z[UTC]",
-                   :valid-to #xt.time/zoned-date-time "2023-03-26T00:55Z[UTC]"}
-              #:xt{:id 0,
-                   :valid-from #xt.time/zoned-date-time "2023-03-26T01:00Z[UTC]",
-                   :valid-to #xt.time/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
-             (xt/q node "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _valid_from")))))
+  (t/is (= [#:xt{:id 0,
+                 :valid-from #xt.time/zoned-date-time "2023-03-26T00:50Z[UTC]",
+                 :valid-to #xt.time/zoned-date-time "2023-03-26T00:55Z[UTC]"}
+            #:xt{:id 0,
+                 :valid-from #xt.time/zoned-date-time "2023-03-26T01:00Z[UTC]",
+                 :valid-to #xt.time/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _valid_from"))))
 
 (t/deftest test-wm-schema-is-updated-within-a-tx
-  (with-open [node (xtn/start-node)]
-    (xt/submit-tx node [[:sql "INSERT INTO t1(_id, foo) VALUES(1, 100)"]
-                        [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 2, 200, 2000)"]
-                        [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 3, x.foo, x.bar FROM (SELECT * FROM t1 WHERE bar = 2000) AS x)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(_id, foo) VALUES(1, 100)"]
+                           [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 2, 200, 2000)"]
+                           [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 3, x.foo, x.bar FROM (SELECT * FROM t1 WHERE bar = 2000) AS x)"]])
 
-    (t/is (=
-           [{:xt/id 2, :bar 2000, :foo 200}
-            {:xt/id 1, :foo 100}
-            {:xt/id 3, :bar 2000, :foo 200}]
-           (xt/q node "SELECT * FROM t1")))))
+  (t/is (=
+         [{:xt/id 2, :bar 2000, :foo 200}
+          {:xt/id 1, :foo 100}
+          {:xt/id 3, :bar 2000, :foo 200}]
+         (xt/q tu/*node* "SELECT * FROM t1"))))

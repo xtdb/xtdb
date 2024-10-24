@@ -12,6 +12,7 @@
            (xtdb.metadata IMetadataManager ITableMetadata)))
 
 (t/use-fixtures :once tu/with-allocator)
+(t/use-fixtures :each tu/with-node)
 
 (defn with-table-metadata [node meta-file-path f]
   (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
@@ -19,7 +20,7 @@
       (f table-metadata))))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 10}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}}))]
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])
         (tu/then-await-tx node))
 
@@ -72,7 +73,7 @@
                              tx2)))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 10}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}}))]
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
                             [:put-docs :xt_docs {:name "James", :xt/id :jms}]
                             [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
@@ -111,78 +112,77 @@
                                  {:node node, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
-  (with-open [node (xtn/start-node {})]
-    (let [tx1 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
-          tt1 (.getSystemTime tx1)
-          tx2 (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
-          tt2 (.getSystemTime tx2)]
-      (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan '{:table public/xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
-                                   (into '[last_updated] temporal-constraints)]
-                                  {:node node, :params {'?system-time1 tt1, '?system-time2 tt2}})
-                     (into #{} (map :last-updated))))]
-        (t/is (= #{"tx1" "tx2"}
-                 (q)))
+  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
+        tt1 (.getSystemTime tx1)
+        tx2 (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
+        tt2 (.getSystemTime tx2)]
+    (letfn [(q [& temporal-constraints]
+              (->> (tu/query-ra [:scan '{:table public/xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
+                                 (into '[last_updated] temporal-constraints)]
+                                {:node tu/*node*, :params {'?system-time1 tt1, '?system-time2 tt2}})
+                   (into #{} (map :last-updated))))]
+      (t/is (= #{"tx1" "tx2"}
+               (q)))
+
+      (t/is (= #{"tx1"}
+               (q '{_system_from (<= _system_from ?system-time1)})))
+
+      (t/is (= #{}
+               (q '{_system_from (< _system_from ?system-time1)})))
+
+      (t/is (= #{"tx1" "tx2"}
+               (q '{_system_from (<= _system_from ?system-time2)})))
+
+      ;; this test depends on how one cuts rectangles
+      (t/is (= #{"tx2"} #_#{"tx1" "tx2"}
+               (q '{_system_from (> _system_from ?system-time1)})))
+
+      (t/is (= #{}
+               (q '{_system_to (< _system_to ?system-time2)})))
+
+      (t/is (= #{"tx1"}
+               (q '{_system_to (<= _system_to ?system-time2)})))
+
+      (t/is (= #{"tx1" "tx2"}
+               (q '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system-time2)})))
+
+      (t/is (= #{"tx1" "tx2"}
+               (q '{_system_to (>= (coalesce _system_to xtdb/end-of-time) ?system-time2)})))
+
+      (t/testing "multiple constraints"
+        (t/is (= #{"tx1"}
+                 (q '{_system_from (and (<= _system_from ?system-time1)
+                                        (<= _system_from ?system-time2))})))
 
         (t/is (= #{"tx1"}
-                 (q '{_system_from (<= _system_from ?system-time1)})))
-
-        (t/is (= #{}
-                 (q '{_system_from (< _system_from ?system-time1)})))
+                 (q '{_system_from (and (<= _system_from ?system-time2)
+                                        (<= _system_from ?system-time1))})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_system_from (<= _system_from ?system-time2)})))
-
-        ;; this test depends on how one cuts rectangles
-        (t/is (= #{"tx2"} #_#{"tx1" "tx2"}
-                 (q '{_system_from (> _system_from ?system-time1)})))
-
-        (t/is (= #{}
-                 (q '{_system_to (< _system_to ?system-time2)})))
-
-        (t/is (= #{"tx1"}
-                 (q '{_system_to (<= _system_to ?system-time2)})))
+                 (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system-time2)
+                                      (> (coalesce _system_to xtdb/end-of-time) ?system-time1))})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system-time2)})))
+                 (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system-time1)
+                                      (> (coalesce _system_to xtdb/end-of-time) ?system-time2))}))))
 
-        (t/is (= #{"tx1" "tx2"}
-                 (q '{_system_to (>= (coalesce _system_to xtdb/end-of-time) ?system-time2)})))
+      (t/is (= #{}
+               (q '{_system_from (<= _system_from ?system-time1)}
+                  '{_system_to (< _system_to ?system-time2)})))
 
-        (t/testing "multiple constraints"
-          (t/is (= #{"tx1"}
-                   (q '{_system_from (and (<= _system_from ?system-time1)
-                                          (<= _system_from ?system-time2))})))
+      (t/is (= #{"tx1"}
+               (q '{_system_from (<= _system_from ?system-time1)}
+                  '{_system_to (<= _system_to ?system-time2)})))
 
-          (t/is (= #{"tx1"}
-                   (q '{_system_from (and (<= _system_from ?system-time2)
-                                          (<= _system_from ?system-time1))})))
+      (t/is (= #{"tx1"}
+               (q '{_system_from (<= _system_from ?system-time1)}
+                  '{_system_to (> _system_to ?system-time1)}))
+            "as of tt1")
 
-          (t/is (= #{"tx1" "tx2"}
-                   (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system-time2)
-                                        (> (coalesce _system_to xtdb/end-of-time) ?system-time1))})))
-
-          (t/is (= #{"tx1" "tx2"}
-                   (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system-time1)
-                                        (> (coalesce _system_to xtdb/end-of-time) ?system-time2))}))))
-
-        (t/is (= #{}
-                 (q '{_system_from (<= _system_from ?system-time1)}
-                    '{_system_to (< _system_to ?system-time2)})))
-
-        (t/is (= #{"tx1"}
-                 (q '{_system_from (<= _system_from ?system-time1)}
-                    '{_system_to (<= _system_to ?system-time2)})))
-
-        (t/is (= #{"tx1"}
-                 (q '{_system_from (<= _system_from ?system-time1)}
-                    '{_system_to (> _system_to ?system-time1)}))
-              "as of tt1")
-
-        (t/is (= #{"tx1" "tx2"}
-                 (q '{_system_from (<= _system_from ?system-time2)}
-                    '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system-time2)}))
-              "as of tt2")))))
+      (t/is (= #{"tx1" "tx2"}
+               (q '{_system_from (<= _system_from ?system-time2)}
+                  '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system-time2)}))
+            "as of tt2"))))
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"

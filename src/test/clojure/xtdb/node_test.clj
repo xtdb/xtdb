@@ -13,7 +13,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.time ZonedDateTime]
-           [xtdb.api Xtdb$Config]
+           [xtdb.api Xtdb$Config ServerConfig]
            [xtdb.api.tx TxOps]
            [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
@@ -440,11 +440,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (set (xt/q tu/*node* "SELECT * EXCLUDE (_id) FROM foo, bar"))))
 
   ;; Thrown due to duplicate column projection in the query on `_id`
-  (t/is (thrown-with-msg? 
+  (t/is (thrown-with-msg?
          IllegalArgumentException
          #"Duplicate column projection: _id"
          (xt/q tu/*node* "FROM foo, bar")))
-  
+
   (t/is (thrown-with-msg?
          IllegalArgumentException
          #"Duplicate column projection: _id"
@@ -458,15 +458,15 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
            (set (xt/q tu/*node* "FROM (SELECT * EXCLUDE (_id) FROM foo, bar) AS baz"))))
-  
+
   (t/is (= #{{:xt/id 1 :a 1 :c 3} {:xt/id 1 :b 2 :c 3} {:xt/id 2 :a 1 :d 4} {:xt/id 2 :b 2 :d 4}}
            (set (xt/q tu/*node* "SELECT bar.*, foo.a, foo.b FROM foo, bar"))))
-  
+
   (t/is (= #{{} {:b 2}}
            (set (xt/q tu/*node* "SELECT * EXCLUDE (_id, a) FROM foo"))))
-  
+
   (t/is (= #{{:xt/id 1 :new 1} {:xt/id 2 :b 2}}
-           (set (xt/q tu/*node* "SELECT * RENAME a AS new FROM foo")))) 
+           (set (xt/q tu/*node* "SELECT * RENAME a AS new FROM foo"))))
 
   (t/is (= #{{:xt/id 1 :new 1} {:xt/id 2 :new2 2}}
            (set (xt/q tu/*node* "SELECT * RENAME (a AS new, b AS new2)  FROM foo"))))
@@ -553,19 +553,18 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest large-xt-stars-2484
   (letfn [(rand-str [l]
             (apply str (repeatedly l #(rand-nth "abcdefghijklmnopqrstuvwxyz0123456789"))))]
-    (with-open [node (xtn/start-node {})]
-      (let [docs (for [id (range 100)]
-                   (let [data (repeatedly 10 #(rand-str 10))]
-                     (-> (zipmap (map keyword data) data)
-                         (assoc :xt/id id))))]
+    (let [docs (for [id (range 100)]
+                 (let [data (repeatedly 10 #(rand-str 10))]
+                   (-> (zipmap (map keyword data) data)
+                       (assoc :xt/id id))))]
 
-        (xt/submit-tx node (for [doc docs]
-                             [:put-docs :docs doc]))
+      (xt/submit-tx tu/*node* (for [doc docs]
+                                [:put-docs :docs doc]))
 
-        #_ ; FIXME #2923
-        (t/is (= (set docs)
-                 (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
-                      (into #{} (map :e)))))))))
+      #_ ; FIXME #2923
+      (t/is (= (set docs)
+               (->> (xt/q node '{:find [e] :where [(match :docs {:xt/* e})]})
+                    (into #{} (map :e))))))))
 
 (t/deftest non-existant-column-no-nil-rows-2898
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(_id, bar) VALUES (1, 2)"]])
@@ -645,7 +644,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest start-node-from-non-map-config
   (t/testing "directly using Xtdb$Config"
-    (let [config-object (Xtdb$Config.)]
+    (let [config-object (doto (Xtdb$Config.)
+                          (.setServer (ServerConfig. 0 42 nil)))]
       (with-open [node (xtn/start-node config-object)]
         (t/is node)
         (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])

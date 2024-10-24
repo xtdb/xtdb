@@ -5,10 +5,9 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.node :as xtn]))
+            [xtdb.vector.reader :as vr]))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-group-by
   (letfn [(run-test [group-by-spec blocks]
@@ -436,28 +435,27 @@
                                          [:table [{:a 32} {:a "foo"}]]]))))
 
 (t/deftest test-handles-absent-3057
-  (with-open [node (xtn/start-node)]
-    (let [data [{:id 1 :a 1}
-                {:id 1} ; NOTE: absent :a
-                {:id 2 :a 2}
-                {:id 2 :a 3}]]
+  (let [data [{:id 1 :a 1}
+              {:id 1} ; NOTE: absent :a
+              {:id 2 :a 2}
+              {:id 2 :a 3}]]
 
-      (t/is (= [{:id 1, :a 1} {:id 2, :a 5}]
-               (xt/q node '(-> (rel $data [id a])
-                               (aggregate id {:a (sum a)}))
-                     {:args {:data data}}))
-            "no default provided")
+    (t/is (= [{:id 1, :a 1} {:id 2, :a 5}]
+             (xt/q tu/*node* '(-> (rel $data [id a])
+                                  (aggregate id {:a (sum a)}))
+                   {:args {:data data}}))
+          "no default provided")
 
-      (t/is (= [{:id 1, :a 3} {:id 2, :a 5}]
-               (xt/q node '(-> (rel $data [id a])
-                               (with {:a (coalesce a 2)})
-                               (aggregate id {:a (sum a)}))
-                     {:args {:data data}}))
-            "default provided with `coalesce`")
+    (t/is (= [{:id 1, :a 3} {:id 2, :a 5}]
+             (xt/q tu/*node* '(-> (rel $data [id a])
+                                  (with {:a (coalesce a 2)})
+                                  (aggregate id {:a (sum a)}))
+                   {:args {:data data}}))
+          "default provided with `coalesce`")
 
-      (t/is (= [{:id 1, :a 6} {:id 2, :a 5}]
-               (xt/q node '(-> (rel $data [id a])
-                               (with {:a (if a a 5)})
-                               (aggregate id {:a (sum a)}))
-                     {:args {:data data}}))
-            "default provided with `if` (which mentions `absent` values)"))))
+    (t/is (= [{:id 1, :a 6} {:id 2, :a 5}]
+             (xt/q tu/*node* '(-> (rel $data [id a])
+                                  (with {:a (if a a 5)})
+                                  (aggregate id {:a (sum a)}))
+                   {:args {:data data}}))
+          "default provided with `if` (which mentions `absent` values)")))

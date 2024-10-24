@@ -5,3 +5,5 @@ indexer:
 storage: !InMemory
 metrics: !Prometheus
   port: 8282
+server:
+  port: 0

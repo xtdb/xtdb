@@ -921,12 +921,12 @@
 
 
 (t/deftest bug-non-string-table-names-599
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 1000}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1000}}))]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put-docs :t1 {:xt/id id,
-                                                   :data (str "data" id)
-                                                   }])
+                                                        :data (str "data" id)
+                                                        }])
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))
 
@@ -943,11 +943,11 @@
         (t/is (= 160 (count-table tx)))))))
 
 (t/deftest bug-dont-throw-on-non-existing-column-597
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 1000}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1000}}))]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put-docs :t1 {:xt/id id,
-                                                   :data (str "data" id)}])
+                                                        :data (str "data" id)}])
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))]
 
@@ -965,11 +965,11 @@
 
 
 (t/deftest add-better-metadata-support-for-keywords
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 1000}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1000}}))]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put-docs :t1 {:xt/id id,
-                                                   :data (str "data" id)}])
+                                                        :data (str "data" id)}])
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))]
       (xt/submit-tx node [[:put-docs :docs {:xt/id :some-doc}]])
@@ -1344,7 +1344,7 @@
                        tx1 nil)))
 
             "for all sys time")))
-  
+
   (t/testing "testing temporal fns with params"
     (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
@@ -1354,7 +1354,7 @@
                                       :for-valid-time (in $arg-from $arg-to)})
                         {:args {:arg-from #inst "2021"
                                 :arg-to #inst "2023"}}))))
-    
+
     (t/is (= #{{:id :matthew}}
              (set (xt/q tu/*node*
                         '(unify (from :docs {:bind [{:xt/id id}]
@@ -1363,7 +1363,7 @@
                                              :for-valid-time (at $arg-t2)}))
                         {:args {:arg-t1 #inst "2018"
                                 :arg-t2 #inst "2024"}}))))
-    
+
     (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
              (set (xt/q tu/*node*
@@ -1930,7 +1930,7 @@
                  '(from :foo [xt/id])))))
 
 (t/deftest test-metadata-filtering-for-time-data-607
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 1}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1}}))]
     (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :from-date #xt.time/date "2000-01-01"}]
                         [:put-docs :docs {:xt/id 2 :from-date #xt.time/date "3000-01-01"}]])
     (t/is (= [{:id 1}]
@@ -2064,8 +2064,8 @@
                              :d (= #xt.time/time "08:12:13.366" #xt.time/time "08:12:13.366")}))))))
 
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
-  (with-open [node (xtn/start-node {:indexer {:rows-per-chunk 10}
-                                    :log [:in-memory {:instant-src (tu/->mock-clock)}]})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}
+                                                          :log [:in-memory {:instant-src (tu/->mock-clock)}]}))]
     (doseq [i (range 10)]
       (xt/submit-tx node [[:put-docs :ints {:xt/id 0 :n i}]]))
 

@@ -1,7 +1,6 @@
 (ns xtdb.vector.writer-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
@@ -12,7 +11,7 @@
            (org.apache.arrow.vector.types Types$MinorType)
            (org.apache.arrow.vector.types.pojo FieldType Schema)))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (deftest adding-legs-to-dense-union
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)]
@@ -403,10 +402,9 @@
         (t/is (= maps (tu/vec->vals (vw/vec-wtr->rdr map-wtr))))))))
 
 (t/deftest throws-on-equivalent-ks
-  (with-open [node (xtn/start-node)]
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"key-already-set"
-                            (xt/submit-tx node [[:put-docs :foo {:xt/id :foo, :_id :bar}]])))))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"key-already-set"
+                          (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :foo, :_id :bar}]]))))
 
 (deftest test-extension-types-in-struct-transfer-pairs-3305
   (let [field #xt.arrow/field ["toplevel" #xt.arrow/field-type [#xt.arrow/type :struct false]

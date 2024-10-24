@@ -79,7 +79,7 @@
     (= (:tx (last (node-log node))) (.latestCompletedTx indexer))))
 
 (defn start-node ^xtdb.api.Xtdb [flush-duration]
-  (xtn/start-node {:indexer {:flush-duration flush-duration}}))
+  (xtn/start-node (merge tu/*node-opts* {:indexer {:flush-duration flush-duration}})))
 
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test
   (with-open [node (start-node #xt.time/duration "PT0.001S")]

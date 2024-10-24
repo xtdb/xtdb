@@ -108,7 +108,7 @@
                           {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
 
 (deftest test-min-max-on-xt-id
-  (with-open [node (xtn/start-node {:indexer {:page-limit 16}})]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
     (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
         (tu/then-await-tx node))
 

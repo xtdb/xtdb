@@ -21,16 +21,18 @@
            (xtdb.util RefCounter RowCounter)
            xtdb.watermark.ILiveTableWatermark))
 
+(t/use-fixtures :each tu/with-node)
+
 (defn uuid-equal-to-path? [uuid path]
   (Arrays/equals
-    (util/uuid->bytes uuid)
-    (byte-array
-      (map (fn [[p0 p1 p2 p3]]
-             (-> p3
-                 (bit-or (bit-shift-left p2 2))
-                 (bit-or (bit-shift-left p1 4))
-                 (bit-or (bit-shift-left p0 6))))
-           (partition-all 4 (vec path))))))
+   (util/uuid->bytes uuid)
+   (byte-array
+    (map (fn [[p0 p1 p2 p3]]
+           (-> p3
+               (bit-or (bit-shift-left p2 2))
+               (bit-or (bit-shift-left p1 4))
+               (bit-or (bit-shift-left p0 6))))
+         (partition-all 4 (vec path))))))
 
 (deftest test-live-trie-can-overflow-log-limit-at-max-depth
   (binding [*print-length* 100]
@@ -128,7 +130,7 @@
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         rc (RowCounter. 0)]
-    (with-open [node (xtn/start-node {:xtdb.compactor/no-op {}})
+    (with-open [node (xtn/start-node (merge tu/*node-opts* {:xtdb.compactor/no-op {}}))
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp rc "foo")]
@@ -162,10 +164,9 @@
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
-    (util/with-open [node (xtn/start-node {})
-                     allocator (RootAllocator.)]
-      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
-            mm (tu/component node ::meta/metadata-manager)
+    (util/with-open [allocator (RootAllocator.)]
+      (let [^IBufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
+            mm (tu/component tu/*node* ::meta/metadata-manager)
             live-index-allocator (util/->child-allocator allocator "live-index")]
         (util/with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm (c/->NoOp)
                                                                         nil nil (HashMap.)

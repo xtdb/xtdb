@@ -44,8 +44,8 @@
 
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
-    (util/with-open [node (xtn/start-node {:storage [:remote {:object-store [:in-memory {}]
-                                                              :local-disk-cache path}]})]
+    (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:storage [:remote {:object-store [:in-memory {}]
+                                                                                    :local-disk-cache path}]}))]
       (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
 
       (t/is (= [{:xt/id :foo}]
@@ -103,7 +103,7 @@
         (bp/evict-cached-buffer! bp k)
         ;; Evicted from map and deleted from disk (ie, replicating effects of 'eviction' here)
         (.remove (.asMap local-disk-cache-evictor) (.resolve local-disk-cache k))
-        (util/delete-file (.resolve local-disk-cache k)) 
+        (util/delete-file (.resolve local-disk-cache k))
         ;; Will fetch from object store again
         (util/with-open [buf (.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
@@ -216,16 +216,16 @@
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
-        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache)))) 
-      
+        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
+
       (t/testing "going above max size - all entries pinned (ie, in memory cache) - should return all elements"
         (insert-utf8-to-local-cache bp (util/->path "c") 4)
-        (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info local-disk-cache)))) 
-      
+        (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info local-disk-cache))))
+
       (t/testing "entries unpinned (cleared from memory cache by new entries) - should evict entries since above size limit"
-        (insert-utf8-to-local-cache bp (util/->path "d") 4) 
-        (Thread/sleep 100) 
-        (t/is (= 3 (:file-count (file-info local-disk-cache)))) 
+        (insert-utf8-to-local-cache bp (util/->path "d") 4)
+        (Thread/sleep 100)
+        (t/is (= 3 (:file-count (file-info local-disk-cache))))
 
         (insert-utf8-to-local-cache bp (util/->path "e") 4)
         (Thread/sleep 100)

@@ -20,7 +20,7 @@
            [xtdb.metadata IMetadataManager]
            [xtdb.trie HashTrie IDataRel LiveHashTrie$Leaf]))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-compaction-jobs
   (letfn [(f [tries & {:keys [l1-file-size-rows]}]
@@ -461,20 +461,19 @@
                        (.resolve node-dir (tables-key "public$docs")) #"log-(.+)\.arrow")))))
 
 (t/deftest test-compaction-promotion-bug-3673
-  (util/with-open [node (xtn/start-node)]
-    (xt/submit-tx node [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
-    (tu/finish-chunk! node)
-    (c/compact-all! node #xt.time/duration "PT0.5S")
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
+  (tu/finish-chunk! tu/*node*)
+  (c/compact-all! tu/*node* #xt.time/duration "PT0.5S")
 
-    (xt/submit-tx node [[:put-docs :foo {:xt/id 2, :foo 24} {:xt/id 3, :foo 28.1} {:xt/id 4}]])
-    (tu/finish-chunk! node)
-    (c/compact-all! node #xt.time/duration "PT0.5S")
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2, :foo 24} {:xt/id 3, :foo 28.1} {:xt/id 4}]])
+  (tu/finish-chunk! tu/*node*)
+  (c/compact-all! tu/*node* #xt.time/duration "PT0.5S")
 
-    (t/is (= #{12.0 nil 24 28.1}
-             (->> (xt/q node "SELECT foo FROM foo")
-                  (into #{} (map :foo))))))
+  (t/is (= #{12.0 nil 24 28.1}
+           (->> (xt/q tu/*node* "SELECT foo FROM foo")
+                (into #{} (map :foo)))))
 
-  (util/with-open [node (xtn/start-node)]
+  (util/with-open [node (xtn/start-node tu/*node-opts*)]
     (xt/submit-tx node [[:put-docs :foo {:xt/id 1} {:foo "foo", :xt/id 0} {:foo 3, :xt/id 2}]])
     (tu/finish-chunk! node)
     (c/compact-all! node #xt.time/duration "PT0.5S")

@@ -167,8 +167,7 @@
                       {:args ["James" "Matt"]})))))
 
 (t/deftest start-and-query-empty-node-re-231-test
-  (with-open [n (xtn/start-node {})]
-    (t/is (= [] (xt/q n "select a.a from a a" {})))))
+  (t/is (= [] (xt/q tu/*node* "select a.a from a a" {}))))
 
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [tx]

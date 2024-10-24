@@ -198,7 +198,7 @@
 (t/deftest handle-interrupted-exception-614
   (t/is (thrown-with-msg?
          Exception #"sleep interrupted"
-         @(with-open [node (xtn/start-node {})]
+         @(with-open [node (xtn/start-node tu/*node-opts*)]
             (xt/submit-tx node [[:put-fn :hello-world
                                  '(fn hello-world [id]
                                     (sleep 200)

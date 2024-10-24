@@ -15,7 +15,11 @@ public class XtdbHelloWorldTest {
 
     @Test
     public void testInMemory() throws Exception {
-        try (var node = Xtdb.openNode();
+        var serverConfig = new ServerConfig();
+        serverConfig.setPort(0);
+        var config = new Xtdb.Config();
+        config.setServer(serverConfig);
+        try (var node = Xtdb.openNode(config);
              var connection =
                      DriverManager.getConnection(
                              format("jdbc:postgresql://localhost:%d/xtdb", node.getServerPort()),
