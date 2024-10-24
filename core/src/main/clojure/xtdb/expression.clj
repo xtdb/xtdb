@@ -814,7 +814,7 @@
 
 (defn throw-div-0 []
   (throw (err/runtime-err ::division-by-zero
-                          {::err/message "data exception — division by zero"})))
+                          {::err/message "data exception - division by zero"})))
 
 (defmethod codegen-call [:/ :int :int] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)

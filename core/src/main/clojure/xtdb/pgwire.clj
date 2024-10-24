@@ -103,6 +103,14 @@
 
   (flush! [frontend]))
 
+(defn- cmd-write-msg
+  "Writes out a single message given a definition (msg-def) and optional data record."
+  ([{:keys [frontend]} msg-def]
+   (send-client-msg! frontend msg-def))
+
+  ([{:keys [frontend]} msg-def data]
+   (send-client-msg! frontend msg-def data)))
+
 (declare ->socket-frontend)
 
 (defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
@@ -222,6 +230,11 @@
    :localized-severity "ERROR"
    :sql-state "08P01"
    :message msg})
+
+(defn- client-err
+  ([client-msg] (client-err client-msg nil))
+  ([client-msg data]
+   (ex-info client-msg {::client-error (err-protocol-violation client-msg)})))
 
 ;;TODO parse errors should return a PSQL parse error
 ;;this code is generic, but there are specific ones a well
@@ -461,8 +474,9 @@
                                              [])]}))))
 
           (catch Exception e
-            (log/debug e "Error parsing SQL")
-            {:err (err-pg-exception e "error parsing sql")})))))
+            (throw (ex-info "error parsing sql"
+                            {::client-error (err-pg-exception e "error parsing sql")}
+                            e)))))))
 
 (defn- json-clj
   "This function is temporary, the long term goal will be to walk arrow directly to generate the json (and later monomorphic
@@ -860,14 +874,6 @@
 ;; for shared concerns (e.g 'what is a connection doing') and to allow for termination mid query
 ;; in certain scenarios
 
-(defn- cmd-write-msg
-  "Writes out a single message given a definition (msg-def) and optional data record."
-  ([{:keys [frontend]} msg-def]
-   (send-client-msg! frontend msg-def))
-
-  ([{:keys [frontend]} msg-def data]
-   (send-client-msg! frontend msg-def data)))
-
 (def time-zone-nf-param-name "timezone")
 
 (def pg-param-nf->display-format
@@ -910,6 +916,14 @@
   (swap! conn-state util/maybe-update :transaction assoc :failed true, :err err)
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
+
+(defn- send-ex [conn, ^Throwable e]
+  (if-let [client-err (::client-error (ex-data e))]
+    (do
+      (log/trace "Client error:" (ex-message e) (ex-data e))
+      (cmd-send-error conn client-err))
+
+    (log/error e "Uncaught exception processing message")))
 
 (defn cmd-send-notice
   "Sends an notice message back to the client (e.g (cmd-send-notice conn (warning \"You are doing this wrong!\"))."
@@ -1034,14 +1048,17 @@
      :version (version-messages version)}))
 
 (defn- read-typed-msg [{{:keys [^DataInputStream in]} :frontend :as conn}]
-  (let [type-char (char (.readUnsignedByte in))]
-    (if-let [msg-var (client-msgs type-char)]
-      (let [rdr (:read @msg-var)]
-        (try
-          (assoc (rdr (read-untyped-msg in)) :msg-name (:name @msg-var))
-          (catch Exception e
-            (cmd-send-error conn (err-protocol-violation (str "Error reading client message " (ex-message e)))))))
-      (cmd-send-error conn (err-protocol-violation (str "Unknown client message " type-char))))))
+  (let [type-char (char (.readUnsignedByte in))
+        msg-var (or (client-msgs type-char)
+                    (throw (client-err (str "Unknown client message " type-char))))
+        rdr (:read @msg-var)]
+    (try
+      (-> (rdr (read-untyped-msg in))
+          (assoc :msg-name (:name @msg-var)))
+      (catch Exception e
+        (throw (ex-info "error reading client message"
+                        {::client-error (err-protocol-violation (str "Error reading client message " (ex-message e)))}
+                        e))))))
 
 (defn- read-startup-parameters [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
@@ -1092,13 +1109,12 @@
 
 (defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
-    (when-not (nil? param)
+    (when (some? param)
       (let [param-oid (:oid (nth param-fields param-idx))
-            param-format (nth param-format param-idx nil)
-            param-format (or param-format (nth param-format param-idx :text))
-            mapping (get types/pg-types-by-oid param-oid)
-            _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
-            {:keys [read-binary, read-text]} mapping]
+            param-format (or (nth param-format param-idx nil)
+                             (nth param-format param-idx :text))
+            {:keys [read-binary, read-text]} (or (get types/pg-types-by-oid param-oid)
+                                                 (throw (Exception. "Unsupported param type provided for read")))]
         (if (= :binary param-format)
           (read-binary session param)
           (read-text session param))))))
@@ -1107,9 +1123,11 @@
   (try
     (vec (map-indexed (->xtify-param (:session @conn-state) stmt) params))
     (catch Exception e
-      (cmd-send-error conn (if (= param-format :binary)
-                             (invalid-binary-representation (ex-message e))
-                             (invalid-text-representation (ex-message e)))))))
+      (throw (ex-info "invalid param representation"
+                      {::client-error (if (= param-format :binary)
+                                        (invalid-binary-representation (ex-message e))
+                                        (invalid-text-representation (ex-message e)))}
+                      e)))))
 
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
@@ -1350,107 +1368,85 @@
 
 (defn resolve-defaulted-params [declared-params inferred-params]
   (let [declared-params (vec declared-params)]
-    (map-indexed
-     (fn [idx inf-param]
-       (if-let [dec-param (nth declared-params idx nil)]
-         (if (= :default (:col-type dec-param))
-           inf-param
-           dec-param)
-         inf-param))
-     inferred-params)))
+    (->> inferred-params
+         (map-indexed (fn [idx inf-param]
+                        (if-let [dec-param (nth declared-params idx nil)]
+                          (if (= :default (:col-type dec-param))
+                            inf-param
+                            dec-param)
+                          inf-param))))))
 
 (defn parse
   "Responds to a msg-parse message that creates a prepared-statement."
   [{:keys [conn-state cid server ^IXtdbInternal node] :as conn}
-   {:keys [stmt-name query param-oids]}]
-
-  (log/trace "Parsing" {:stmt-name stmt-name,
-                        :query query
-                        :port (:port server)
-                        :cid cid
-                        :param-oids param-oids})
+   {:keys [query param-oids]}]
 
   (let [{:keys [session latest-submitted-tx]} @conn-state
         {:keys [^Clock clock], {:strs [fallback_output_format] :as session-parameters} :parameters} session
-        {:keys [err statement-type] :as stmt} (-> (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
-                                                                        :latest-submitted-tx latest-submitted-tx
-                                                                        :session-parameters session-parameters})
-                                                  (assoc :param-oids param-oids))]
+        {:keys [statement-type] :as stmt} (-> (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
+                                                                    :latest-submitted-tx latest-submitted-tx
+                                                                    :session-parameters session-parameters})
+                                              (assoc :param-oids param-oids))]
 
-    (if-let [err (or err
-                     (permissibility-err conn stmt))]
-      (do
-        (log/debug "Error parsing query: " err)
-        (cmd-send-error conn err))
+    (when-let [err (permissibility-err conn stmt)]
+      (throw (ex-info "parsing error"
+                      {::client-error err})))
 
-      (-> (let [param-types (map types/pg-types-by-oid param-oids)]
-            (if (= :query statement-type)
-              (try
-                (let [param-col-types (mapv :col-type param-types)]
-                  (if (some nil? param-col-types)
-                    (cmd-send-error conn
-                                    (err-protocol-violation (str "Unsupported param-types in query: "
-                                                                 (pr-str (->> param-types
-                                                                              (into [] (comp (filter (comp nil? :col-type))
-                                                                                             (map :typname)
-                                                                                             (distinct))))))))
+    (let [param-types (map types/pg-types-by-oid param-oids)]
+      (if (= :query statement-type)
+        (let [param-col-types (mapv :col-type param-types)]
+          (when (some nil? param-col-types)
+            (throw (ex-info "unsupported param-types in query"
+                            {::client-error (err-protocol-violation (str "Unsupported param-types in query: "
+                                                                         (pr-str (->> param-types
+                                                                                      (into [] (comp (filter (comp nil? :col-type))
+                                                                                                     (map :typname)
+                                                                                                     (distinct)))))))})))
 
-                    (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
-                          query-opts {:after-tx latest-submitted-tx
-                                      :tx-timeout (Duration/ofSeconds 1)
-                                      :param-types param-col-types
-                                      :default-tz (.getZone clock)}
+          (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
+                query-opts {:after-tx latest-submitted-tx
+                            :tx-timeout (Duration/ofSeconds 1)
+                            :param-types param-col-types
+                            :default-tz (.getZone clock)}
 
-                          ^PreparedQuery pq (if ra-plan
-                                              (.prepareRaQuery node ra-plan query-opts)
-                                              (.prepareQuery node parsed-query query-opts))]
-                      (when-let [warnings (.warnings pq)]
-                        (doseq [warning warnings]
-                          (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
+                ^PreparedQuery pq (if ra-plan
+                                    (.prepareRaQuery node ra-plan query-opts)
+                                    (.prepareQuery node parsed-query query-opts))]
+            (when-let [warnings (.warnings pq)]
+              (doseq [warning warnings]
+                (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
 
-                      {:prepared-stmt (assoc stmt
-                                             :prepared-stmt pq
-                                             :fields (mapv (partial types/field->pg-type fallback_output_format) (.columnFields pq))
-                                             :param-fields (->> (.paramFields pq)
-                                                                (map types/field->pg-type)
-                                                                (map #(set/rename-keys % {:column-oid :oid}))
-                                                                (resolve-defaulted-params param-types)))
-                       :prep-outcome :success})))
+            (assoc stmt
+                   :prepared-query pq
+                   :fields (mapv (partial types/field->pg-type fallback_output_format) (.columnFields pq))
+                   :param-fields (->> (.paramFields pq)
+                                      (map types/field->pg-type)
+                                      (map #(set/rename-keys % {:column-oid :oid}))
+                                      (resolve-defaulted-params param-types)))))
 
-                (catch InterruptedException e
-                  (log/trace e "Interrupt thrown compiling query")
-                  (throw e))
-                (catch Throwable e
-                  (log/error e)
-                  (cmd-send-error conn (err-pg-exception e "unexpected server error compiling query"))))
+        ;; NOTE this means that for DML statments we assume the number and type of params is exactly
+        ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
+        ;; If a client subsequently binds a different number of params we will send an error msg
+        (assoc stmt :param-fields param-types)))))
 
-              {:prepared-stmt (assoc stmt :param-fields param-types)
-               ;; NOTE this means that for DML statments we assume the number and type of params is exactly
-               ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
-               ;; If a client subsequently binds a different number of params we will send an error msg
-               :prep-outcome :success}))
-
-          (assoc :stmt-name stmt-name
-                 :statement-type statement-type)))))
-
-(defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [param-oids] :as msg-data}]
+(defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [param-oids stmt-name] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
 
-  (if-let [unsupported-param-oids (not-empty (into #{} (remove supported-param-oids) param-oids))]
-    (err-protocol-violation (format "parameter type oids (%s) currently unsupported by xt" unsupported-param-oids))
+  (when-let [unsupported-param-oids (not-empty (into #{} (remove supported-param-oids) param-oids))]
+    (throw (client-err (format "parameter type oids (%s) currently unsupported by xt" unsupported-param-oids))))
 
-    (let [{:keys [prepared-stmt statement-type prep-outcome stmt-name]} (parse conn msg-data)]
-      (when (= :success prep-outcome)
-        (swap! conn-state (fn [{:keys [transaction] :as conn-state}]
-                            (let [access-mode (when transaction
-                                                (case statement-type
-                                                  :query :read-only
-                                                  :dml :read-write
-                                                  nil))]
-                              (-> conn-state
-                                  (assoc-in [:prepared-statements stmt-name] prepared-stmt)
-                                  (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode))))))
-        (cmd-write-msg conn msg-parse-complete)))))
+  (let [{:keys [statement-type] :as prepared-stmt} (parse conn msg-data)]
+    (swap! conn-state (fn [{:keys [transaction] :as conn-state}]
+                        (let [access-mode (when transaction
+                                            (case statement-type
+                                              :query :read-only
+                                              :dml :read-write
+                                              nil))]
+                          (-> conn-state
+                              (assoc-in [:prepared-statements stmt-name] prepared-stmt)
+                              (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode))))))
+
+    (cmd-write-msg conn msg-parse-complete)))
 
 (defn with-result-formats [pg-types result-format]
   (when-let [result-formats (let [type-count (count pg-types)]
@@ -1465,7 +1461,7 @@
 
 (defn bind-stmt [{:keys [conn-state] :as conn} {:keys [params result-format] :as bind-msg} {:keys [statement-type] :as stmt}]
   (let [;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during execute-tx.
-        {:keys [prepared-stmt] :as stmt-with-bind-msg} (merge stmt bind-msg)]
+        {:keys [prepared-query] :as stmt-with-bind-msg} (merge stmt bind-msg)]
 
     ;;if statement is a query, bind it, else use the statement as a portal
     (if (= :query statement-type)
@@ -1479,40 +1475,27 @@
                                                   (:current-time transaction)
                                                   (.instant clock))}
                         :default-tz (.getZone clock)
-                        :args xt-params}]
-        (when-not (skip-until-sync? conn)
-          (try
-            (let [^BoundQuery bound-query (.bind ^PreparedQuery prepared-stmt query-opts)]
-              (if-let [fields (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
-                                  (with-result-formats result-format))]
-                {:portal (assoc stmt-with-bind-msg
-                                :bound-query bound-query
-                                :fields fields)
-                 :bind-outcome :success}
+                        :args xt-params}
+            ^BoundQuery bound-query (.bind ^PreparedQuery prepared-query query-opts)
+            fields (or (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
+                           (with-result-formats result-format))
+                         (throw (client-err "invalid result format")))]
+        (-> stmt-with-bind-msg
+            (assoc :bound-query bound-query
+                   :fields fields)))
 
-                (cmd-send-error conn (err-protocol-violation "invalid result format"))))
-
-            (catch InterruptedException e (throw e))
-
-            (catch Throwable e
-              (log/error e)
-              (cmd-send-error conn (err-pg-exception (.getCause e) "unexpected server error binding prepared statement"))))))
-
-      {:portal stmt-with-bind-msg
-       :bind-outcome :success})))
+      stmt-with-bind-msg)))
 
 (defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn}
                                  {:keys [portal-name stmt-name params result-format] :as bind-msg}]
-  (if-let [stmt (get-in @conn-state [:prepared-statements stmt-name])]
-    (let [{:keys [portal bind-outcome]} (bind-stmt conn bind-msg stmt)]
-      (when (= :success bind-outcome)
-        (swap! conn-state assoc-in [:portals portal-name] portal)
-        (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
-        (cmd-write-msg conn msg-bind-complete)))
+  (let [stmt (or (get-in @conn-state [:prepared-statements stmt-name])
+                 (throw (client-err "no prepared statement")))
+        portal (bind-stmt conn bind-msg stmt)]
+    (swap! conn-state assoc-in [:portals portal-name] portal)
+    (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
+    (cmd-write-msg conn msg-bind-complete)))
 
-    (cmd-send-error conn (err-protocol-violation "no prepared statement"))))
-
-(defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
+(defn execute-portal [conn {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
   ;; TODO implement limit for queries that return rows
 
   (case statement-type
@@ -1534,30 +1517,33 @@
 
 (defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name _limit]}]
   ;; Handles a msg-execute to run a previously bound portal (via msg-bind).
-  (if-some [portal (get-in @conn-state [:portals portal-name])]
-    (execute-portal conn portal)
-
-    (cmd-send-error conn (err-protocol-violation "no such portal"))))
+  (let [portal (or (get-in @conn-state [:portals portal-name])
+                   (throw (ex-info "no such portal"
+                                   {::client-error (err-protocol-violation "no such portal")})))]
+    (execute-portal conn portal)))
 
 (defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)
 
-  (let [{:keys [prepared-stmt prep-outcome], {:keys [param-fields]} :prepared-stmt} (parse conn {:query query})]
+  (try
+    (let [{:keys [param-fields statement-type] :as prepared-stmt} (parse conn {:query query})]
+      (when (seq param-fields)
+        (throw (client-err "Parameters not allowed in simple queries")))
 
-    (cond
-      (seq param-fields)
-      (cmd-send-error conn (err-protocol-violation "Parameters not allowed in simple queries"))
-
-      (= :success prep-outcome)
-      (let [{:keys [portal bind-outcome]} (bind-stmt conn {} prepared-stmt)]
-        (when (= :success bind-outcome)
-          (when (#{:query :canned-response} (:statement-type prepared-stmt))
+      (let [portal (bind-stmt conn {} prepared-stmt)]
+        (try
+          (when (contains? #{:query :canned-response} statement-type)
             ;; Client only expects to see a RowDescription (result of cmd-descibe)
             ;; for certain statement types
             (cmd-describe-portal conn portal))
 
           (execute-portal conn portal)
-          (util/close (:bound-query portal))))))
+          (finally
+            (util/close (:bound-query portal))))))
+
+    ;; here we catch explicitly because we need to send the error, then a ready message
+    (catch InterruptedException e (throw e))
+    (catch Throwable e (send-ex conn e)))
 
   (cmd-send-ready conn))
 
@@ -1565,23 +1551,21 @@
 (defmethod handle-msg* :msg-password [_ _])
 
 (defmethod handle-msg* ::default [conn _]
-  (cmd-send-error conn (err-protocol-violation "unknown client message")))
+  (throw (client-err "unknown client message")))
 
 (defn handle-msg [{:keys [cid] :as conn} {:keys [msg-name] :as msg}]
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
-    (cond
-      (and (skip-until-sync? conn) (not= :msg-sync msg-name))
+    (if (and (skip-until-sync? conn) (not= :msg-sync msg-name))
       (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
 
-      (nil? msg)
-      (cmd-send-error conn (err-protocol-violation "unknown client message"))
-
-      :else (handle-msg* conn msg))
+      (handle-msg* conn msg))
 
     (catch InterruptedException e (throw e))
-    (catch Throwable e (log/error e "Uncaught exception in handle-msg"))))
+
+    (catch Throwable e
+      (send-ex conn e))))
 
 (defn- conn-loop [{:keys [cid, server, conn-state],
                    {:keys [^Socket socket]} :frontend,
@@ -1611,8 +1595,9 @@
 
         ;; go idle until we receive another msg from the client
         :else (do
-                (when-let [{:keys [msg-name] :as msg} (read-typed-msg conn)]
+                (when-let [msg (read-typed-msg conn)]
                   (handle-msg conn msg))
+
                 (recur))))))
 
 (defn- ->tmp-node [{:keys [^Map !tmp-nodes]} conn-state]
