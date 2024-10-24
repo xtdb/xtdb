@@ -504,7 +504,8 @@
                                 ^IVectorWriter acc-col
                                 ^:unsynchronized-mutable ^ListVector out-vec
                                 ^:unsynchronized-mutable ^long base-idx
-                                ^List group-idxmaps]
+                                ^List group-idxmaps
+                                zero-row?]
   IAggregateSpec
   (aggregate [this in-rel group-mapping]
     (let [in-vec (.readerForName in-rel (str from-name))
@@ -536,7 +537,10 @@
                         (.copyRow row-copier idx))))
           (.endList list-writer))
 
-        (.setValueCount out-vec (.size group-idxmaps))
+        (let [value-count (.size group-idxmaps)]
+          (.setValueCount out-vec (if (and zero-row? (zero? value-count))
+                                    1
+                                    value-count)))
         (vr/vec->reader out-vec))))
 
   Closeable
@@ -544,7 +548,7 @@
     (util/try-close acc-col)
     (util/try-close out-vec)))
 
-(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name]}]
+(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row?]}]
   (let [to-type [:list from-type]]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
@@ -553,7 +557,7 @@
       (build [_ al]
         (ArrayAggAggregateSpec. al from-name to-name to-type
                                 (vw/->vec-writer al (str to-name) (FieldType/notNullable #xt.arrow/type :union))
-                                nil 0 (ArrayList.))))))
+                                nil 0 (ArrayList.) zero-row?)))))
 
 (defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :array_agg))

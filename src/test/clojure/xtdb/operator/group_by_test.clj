@@ -336,6 +336,31 @@
         (finally
           (util/try-close agg-spec))))))
 
+(t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
+  (t/is (= [{}]
+           (tu/query-ra '[:group-by [{arr-out (array-agg a)}]
+                          [:table []]]))
+        "array agg empty returns null")
+
+  (t/is (= []
+           (tu/query-ra '[:group-by [b {arr-out (array-agg a)}]
+                          [:table []]]))
+        "array-agg empty returns empty when there are groups")
+
+  (t/is (= [{:arr [nil]}]
+           (tu/query-ra '[:group-by [{arr (array-agg a)}]
+                          [:table [{:a nil}]]]))
+        "array-agg preserves nulls")
+
+  (t/testing "array-agg group all null"
+    (t/is (= [{:a 42, :arr-out [nil]}]
+             (tu/query-ra '[:group-by [a {arr-out (array-agg b)}]
+                            [:table [{:a 42, :b nil}]]]))))
+
+  (t/is (= [{:a 42, :arr-out [nil]} {:a 45, :arr-out [1 nil]}]
+           (tu/query-ra '[:group-by [a {arr-out (array-agg b)}]
+                          [:table [{:a 42, :b nil} {:a 45, :b 1} {:a 45, :b nil}]]]))))
+
 (t/deftest test-bool-aggs
   (t/is (= {:res #{{:k "t", :all-vs true, :any-vs true}
                    {:k "f", :all-vs false, :any-vs false}
