@@ -69,7 +69,7 @@
   (-> (io/resource "xtdb/tpch/results-sf-01.edn") slurp read-string))
 
 (defn test-ra-query [n res]
-  (when (and (contains? *qs* (inc n)) (zero? n))
+  (when (contains? *qs* (inc n))
     (let [q @(nth tpch-ra/queries n)
           {::tpch-ra/keys [params table-args]} (meta q)]
       (tu/with-allocator
