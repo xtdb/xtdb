@@ -992,7 +992,10 @@
            (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42")))
 
   (t/is (= [{:xt/column-1 [42]}]
-           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))))
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42")))
+
+  (t/is (= [{:xt/column-1 []}]
+           (xt/q tu/*node* "SELECT ARRAY(select b.b1 from b where b.b2 = a.b and b.b2 = 43) FROM a where a.a = 42"))))
 
 (t/deftest test-expr-in-equi-join
   (t/is
