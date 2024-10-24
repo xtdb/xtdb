@@ -61,3 +61,22 @@ def test_integer_type():
         with conn.cursor() as cur:
             cur.execute('SELECT %b', [1])
             assert cur.fetchall() == [(1,)]
+
+def test_execute_many_3597():
+    with pg.connect(**conn_params(), prepare_threshold=0) as conn:
+
+        data_to_insert = [(1, 'Alice'), (2, 'Bob'), (3, 'Charlie')]
+        insert_query = "INSERT INTO docs (_id, name) VALUES (%s, %s)"
+
+        conn.adapters.register_dumper(str, pg.types.string.StrDumperVarchar)
+        with conn.cursor() as cur:
+            cur.executemany(insert_query, data_to_insert)
+        # without autoCommit this gets transacted as one single transaction
+        conn.commit()
+
+        with conn.cursor() as cur:
+            cur.execute('SELECT * FROM docs ORDER BY _id')
+            assert cur.fetchall() == [(1, 'Alice'), (2, 'Bob'), (3, 'Charlie')]
+
+            cur.execute('SELECT * FROM xt.txs ORDER BY _id')
+            assert len(cur.fetchall()) == 1
