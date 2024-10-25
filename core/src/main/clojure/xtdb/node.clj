@@ -36,11 +36,15 @@
   (apply-config! config :xtdb.buffer-pool/storage opts))
 
 (defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-chunk page-limit log-limit flush-duration]}]
-  (cond-> (.indexer config)
+  (cond-> (.getIndexer config)
     rows-per-chunk (.rowsPerChunk rows-per-chunk)
     page-limit (.pageLimit page-limit)
     log-limit (.logLimit log-limit)
     flush-duration (.flushDuration (time/->duration flush-duration))))
+
+(defmethod apply-config! :compactor [^Xtdb$Config config _ {:keys [enabled?]}]
+  (cond-> (.getCompactor config)
+    (some? enabled?) (.enabled enabled?)))
 
 (defmethod apply-config! :http-server [config _ opts]
   (apply-config! config :xtdb/server opts))

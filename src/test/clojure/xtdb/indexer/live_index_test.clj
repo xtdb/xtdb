@@ -16,7 +16,7 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           (xtdb.api IndexerConfig)
+           (xtdb.api CompactorConfig IndexerConfig)
            xtdb.api.storage.Storage$InMemoryStorageFactory
            xtdb.api.log.Logs
            (xtdb.arrow Relation VectorPosition)
@@ -31,7 +31,8 @@
                            :xtdb/log (Logs/inMemoryLog)
                            :xtdb/buffer-pool Storage$InMemoryStorageFactory/INSTANCE
                            ::meta/metadata-manager {}
-                           :xtdb.compactor/no-op {}}))
+                           :xtdb/compactor (doto (CompactorConfig.)
+                                             (.enabled false))}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 

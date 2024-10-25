@@ -17,6 +17,7 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb Compactor IBufferPool)
+           xtdb.api.CompactorConfig
            (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
            xtdb.bitemporal.IPolygonReader
            (xtdb.metadata IMetadataManager)
@@ -234,18 +235,25 @@
 
       (vec !compaction-jobs))))
 
-(defmethod ig/prep-key :xtdb/compactor [_ opts]
-  (into {:allocator (ig/ref :xtdb/allocator)
-         :buffer-pool (ig/ref :xtdb/buffer-pool)
-         :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
-         :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))
-         :metrics-registry (ig/ref :xtdb.metrics/registry)}
-        opts))
+(defrecord NoOp []
+  PCompactor
+  (signal-block! [_])
+
+  AutoCloseable
+  (close [_]))
+
+(defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
+  {:allocator (ig/ref :xtdb/allocator)
+   :buffer-pool (ig/ref :xtdb/buffer-pool)
+   :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
+   :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))
+   :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :enabled? (.getEnabled config)})
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
+(defn- open-compactor [{:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (metrics/add-allocator-gauge metrics-registry "compactor.allocator.allocated_memory" allocator)
     (let [page-size *page-size*
@@ -365,6 +373,11 @@
 
                   (util/close allocator))))))))))
 
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [enabled?] :as opts}]
+  (if enabled?
+    (open-compactor opts)
+    (->NoOp)))
+
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
 
@@ -373,14 +386,3 @@
   ([node] (compact-all! node nil))
   ([node timeout] (-compact-all! (util/component node :xtdb/compactor) timeout)))
 
-(derive ::no-op :xtdb/compactor)
-
-(defrecord NoOp []
-  PCompactor
-  (signal-block! [_])
-
-  AutoCloseable
-  (close [_]))
-
-(defmethod ig/init-key ::no-op [_ _]
-  (->NoOp))

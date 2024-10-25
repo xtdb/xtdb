@@ -317,12 +317,12 @@
                                            compactor?]
                                     :or {compactor? true buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
-    (xtn/start-node (cond-> {:server {:port 0}
-                             :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
-                             :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                             :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
-                                           (into {} (filter val)))}
-                      (not compactor?) (assoc :xtdb.compactor/no-op {})))))
+    (xtn/start-node {:server {:port 0}
+                     :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+                     :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                                   (into {} (filter val)))
+                     :compactor {:enabled? compactor?}})))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

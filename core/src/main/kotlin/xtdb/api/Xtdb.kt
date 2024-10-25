@@ -29,7 +29,8 @@ interface Xtdb : AutoCloseable {
         var storage: Storage.Factory = inMemoryStorage(),
         var metrics: Metrics.Factory? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
-        @JvmField val indexer: IndexerConfig = IndexerConfig()
+        val indexer: IndexerConfig = IndexerConfig(),
+        val compactor: CompactorConfig = CompactorConfig()
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
@@ -41,6 +42,9 @@ interface Xtdb : AutoCloseable {
 
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
+
+        @JvmSynthetic
+        fun compactor(configure: CompactorConfig.() -> Unit) = apply { compactor.configure() }
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 

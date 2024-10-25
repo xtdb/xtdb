@@ -212,15 +212,15 @@
          :xtdb.metadata/metadata-manager {}
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
-         :xtdb/compactor {}
+         :xtdb/compactor (.getCompactor opts)
 
          :xtdb/log (.getTxLog opts)
          :xtdb/buffer-pool (.getStorage opts)
          :xtdb.metrics/registry (.getMetrics opts)
-         :xtdb.indexer/live-index (.indexer opts)
+         :xtdb.indexer/live-index (.getIndexer opts)
          :xtdb/modules (.getModules opts)
          :xtdb/default-tz (.getDefaultTz opts)
-         :xtdb.stagnant-log-flusher/flusher (.indexer opts)}
+         :xtdb.stagnant-log-flusher/flusher (.getIndexer opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config))
         (doto ig/load-namespaces))))
 

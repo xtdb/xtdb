@@ -130,7 +130,7 @@
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         rc (RowCounter. 0)]
-    (with-open [node (xtn/start-node (merge tu/*node-opts* {:xtdb.compactor/no-op {}}))
+    (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:enabled? false}}))
                 ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp rc "foo")]
