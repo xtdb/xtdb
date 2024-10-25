@@ -290,9 +290,9 @@ DELETE FROM users WHERE email = 'james@example.com'
 +
 [source,clojure]
 ----
-[:delete {:table :users
-          :bind [{:email $email}]}
- {:email "james@example.com"}]
+[:delete {:from :users
+          :bind [{:email $james-email}]}
+ {:james-email "james@example.com"}]
 ----
 
 === `erase`
