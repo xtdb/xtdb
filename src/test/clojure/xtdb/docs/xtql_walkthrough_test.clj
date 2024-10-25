@@ -227,14 +227,14 @@
                 :content "My first blog",
                 :author-id "ivan",
                 :author {:last-name "Ivanov", :first-name "Ivan"},
-                :comments [{:created-at #xt.time/zoned-date-time "2021-01-01T00:00Z[UTC]", :comment "2"}
-                           {:created-at #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]", :comment "1"}],}
+                :comments [{:created-at #time/zoned-date-time "2021-01-01T00:00Z[UTC]", :comment "2"}
+                           {:created-at #time/zoned-date-time "2020-01-01T00:00Z[UTC]", :comment "1"}],}
                {:article-id 2
                 :title "Second",
                 :content "My second blog",
                 :author-id "ivan",
                 :author {:last-name "Ivanov", :first-name "Ivan"},
-                :comments [{:created-at #xt.time/zoned-date-time "2022-01-01T00:00Z[UTC]", :comment "1"}],}}
+                :comments [{:created-at #time/zoned-date-time "2022-01-01T00:00Z[UTC]", :comment "1"}],}}
              (set
                (xt/q tu/*node*
                  '
@@ -309,10 +309,10 @@
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
-              :xt/valid-from #xt.time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
              {:first-name "Petr"
               :last-name "Petrov"
-              :xt/valid-from #xt.time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
            (set
             (xt/q tu/*node*
                   '(from :users [first-name last-name
@@ -330,10 +330,10 @@
 
   (t/is (= #{{:first-name "Ivan"
               :last-name "Ivanov"
-              :xt/valid-from #xt.time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
+              :xt/valid-from #time/zoned-date-time "2017-01-01T00:00Z[UTC]"}
              {:first-name "Petr"
               :last-name "Petrov"
-              :xt/valid-from #xt.time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
+              :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
            (set
             (xt/q tu/*node*
                   '(from :users [first-name last-name

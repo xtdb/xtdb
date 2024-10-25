@@ -48,7 +48,7 @@
          (<=
           l_shipdate
           (-
-           #xt.time/date "1998-12-01"
+           #time/date "1998-12-01"
            (single-field-interval "90" "DAY" 2 6)))}
         l_discount
         l_quantity

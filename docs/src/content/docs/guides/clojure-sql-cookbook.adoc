@@ -45,7 +45,7 @@ e.g.
                       ["jms", "James"]
                       ["jdt", "Jeremy"]]])
 
-;; => {:tx-id 0, :system-time #xt.time/instant "...", :committed? true}
+;; => {:tx-id 0, :system-time #time/instant "...", :committed? true}
 ----
 
 [NOTE]

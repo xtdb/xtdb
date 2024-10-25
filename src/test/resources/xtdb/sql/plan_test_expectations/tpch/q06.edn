@@ -13,9 +13,9 @@
         (<
          l_shipdate
          (+
-          #xt.time/date "1994-01-01"
+          #time/date "1994-01-01"
           (single-field-interval "1" "YEAR" 2 6)))
-        (>= l_shipdate #xt.time/date "1994-01-01"))}
+        (>= l_shipdate #time/date "1994-01-01"))}
       {l_quantity (< l_quantity 24)}
       {l_discount (between l_discount 0.05 0.07)}
       l_extendedprice]]]]]]

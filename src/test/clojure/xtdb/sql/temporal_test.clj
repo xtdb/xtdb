@@ -227,8 +227,8 @@
 
 (t/deftest test-period-intersection-3493
   (t/is (= [{:intersection
-             #xt/tstz-range [#xt.time/zoned-date-time "2021-01-01T00:00Z"
-                             #xt.time/zoned-date-time "2022-01-01T00:00Z"]}]
+             #xt/tstz-range [#time/zoned-date-time "2021-01-01T00:00Z"
+                             #time/zoned-date-time "2022-01-01T00:00Z"]}]
            (xt/q tu/*node* "SELECT PERIOD(?, ?) * PERIOD(?, ?) AS intersection"
                  {:args [(time/->zdt #inst "2020-01-01")
                          (time/->zdt #inst "2022-01-01")
@@ -236,8 +236,8 @@
                          (time/->zdt #inst "2023-01-01")]})))
 
   (t/is (= [{:variadic
-             #xt/tstz-range [#xt.time/zoned-date-time "2022-01-01T00:00Z"
-                             #xt.time/zoned-date-time "2024-01-01T00:00Z"]}]
+             #xt/tstz-range [#time/zoned-date-time "2022-01-01T00:00Z"
+                             #time/zoned-date-time "2024-01-01T00:00Z"]}]
            (xt/q tu/*node* "SELECT PERIOD(?, ?) * PERIOD(?, ?) * PERIOD(?, ?) AS variadic"
                  {:args [(time/->zdt #inst "2020-01-01")
                          (time/->zdt #inst "2024-01-01")
@@ -252,18 +252,18 @@
   (xt/submit-tx tu/*node* [[:delete-docs :foo 1]])
 
   (t/is (= [{:xt/id 1,
-             :xt/valid-time #xt/tstz-range [#xt.time/zoned-date-time "2020-01-01T00:00Z"
-                                            #xt.time/zoned-date-time "2020-01-03T00:00Z"]}]
+             :xt/valid-time #xt/tstz-range [#time/zoned-date-time "2020-01-01T00:00Z"
+                                            #time/zoned-date-time "2020-01-03T00:00Z"]}]
            (xt/q tu/*node* "SELECT _id, _valid_time FROM foo FOR ALL VALID_TIME")))
 
   (t/is (= [{:xt/id 1,
-             :xt/valid-time #xt/tstz-range [#xt.time/zoned-date-time "2020-01-02T00:00Z" nil]}]
+             :xt/valid-time #xt/tstz-range [#time/zoned-date-time "2020-01-02T00:00Z" nil]}]
            (xt/q tu/*node* "SELECT _id, _valid_time FROM bar FOR ALL VALID_TIME")))
 
   (t/is (= [{:xt/id 1,
             :intersection
-            #xt/tstz-range [#xt.time/zoned-date-time "2020-01-02T00:00:00Z"
-                            #xt.time/zoned-date-time "2020-01-03T00:00:00Z"]}]
+            #xt/tstz-range [#time/zoned-date-time "2020-01-02T00:00:00Z"
+                            #time/zoned-date-time "2020-01-03T00:00:00Z"]}]
            (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT _id, foo._valid_time * bar._valid_time AS intersection
                             FROM foo JOIN bar USING (_id)

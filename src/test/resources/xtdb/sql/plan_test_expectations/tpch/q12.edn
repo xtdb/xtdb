@@ -48,9 +48,9 @@
                (<
                 l_receiptdate
                 (+
-                 #xt.time/date "1994-01-01"
+                 #time/date "1994-01-01"
                  (single-field-interval "1" "YEAR" 2 6)))
-               (>= l_receiptdate #xt.time/date "1994-01-01"))}
+               (>= l_receiptdate #time/date "1994-01-01"))}
              l_orderkey
              l_commitdate
              l_shipmode]]]]
