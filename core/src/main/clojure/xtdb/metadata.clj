@@ -387,12 +387,12 @@
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
   (openTableMetadata [_ file-path]
-    (let [{:keys [^AtomicInteger ref-count] :as table-metadata}
-          (.get table-metadata-cache file-path (reify Function
-                                                 (apply [_ _]
-                                                   (->table-metadata buffer-pool file-path))))]
-      (.incrementAndGet ref-count)
-      table-metadata))
+    (-> (.asMap table-metadata-cache)
+        (.compute file-path (fn [file-path table-metadata]
+                              (let [{:keys [^AtomicInteger ref-count] :as tm} (or table-metadata
+                                                                                  (->table-metadata buffer-pool file-path))]
+                                (.incrementAndGet ref-count)
+                                tm)))))
 
   (chunksMetadata [_] chunks-metadata)
   (columnField [_ table-name col-name]
