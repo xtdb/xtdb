@@ -1,9 +1,10 @@
-@file:UseSerializers(DurationSerde::class)
+@file:UseSerializers(DurationSerde::class, BooleanWithEnvVarSerde::class)
 
 package xtdb.api
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import xtdb.api.BooleanWithEnvVarSerde
 import xtdb.DurationSerde
 import java.time.Duration
 
