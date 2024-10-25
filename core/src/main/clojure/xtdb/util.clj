@@ -588,12 +588,14 @@
 
 (defn with-default-schema [table]
   (let [str? (string? table)
+        kw? (keyword? table)
         table (cond-> table
-                str? symbol)]
+                (or str? kw?) symbol)]
     (cond-> (if (namespace table)
               table
               (symbol "public" (name table)))
-      str? str)))
+      str? str
+      kw? keyword)))
 
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))

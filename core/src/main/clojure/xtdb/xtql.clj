@@ -4,10 +4,11 @@
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
+            xtdb.tx-ops
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs Queries TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
-           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update)
+           (xtdb.tx_ops AssertExists AssertNotExists Delete Erase Insert Update)
            (xtdb.util NormalForm)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -421,7 +422,7 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (NormalForm/normalTableName (keyword (.table from)))
+    (-> [:scan {:table (symbol (NormalForm/normalTableName (keyword (.table from))))
                 :for-valid-time (plan-temporal-filter (.forValidTime from))
                 :for-system-time (plan-temporal-filter (.forSystemTime from))}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
@@ -933,10 +934,10 @@
                                          (Exprs/val 'xtdb/end-of-time))])]))])
 
 (extend-protocol PlanDml
-  TxOp$Insert
-  (plan-dml [insert-query _tx-opts]
-    (let [{:keys [ra-plan provided-vars]} (plan-query (.query insert-query))]
-      [:insert {:table (.table insert-query)}
+  Insert
+  (plan-dml [{:keys [query table]} _tx-opts]
+    (let [{:keys [ra-plan provided-vars]} (plan-query query)]
+      [:insert {:table (symbol table)}
        [:project (vec (for [col provided-vars]
                         (let [col-sym (util/symbol->normal-form-symbol col)]
                           {col-sym (if (contains? '#{_valid_from _valid_to} col-sym)
@@ -944,29 +945,29 @@
                                      col)})))
         ra-plan]]))
 
-  TxOp$Delete
-  (plan-dml [delete-query tx-opts]
-    (let [table-name (-> (.table delete-query) (util/with-default-schema))
+  Delete
+  (plan-dml [{:keys [table for-valid-time bind-specs unify-clauses]} tx-opts]
+    (let [table-name (str (symbol (util/with-default-schema table)))
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
-                                                                         (doto (.setBindings (concat (.bindSpecs delete-query)
+                                                                         (doto (.setBindings (concat bind-specs
                                                                                                      extra-dml-bind-specs)))
                                                                          (.build))]
-                                                                    (.unifyClauses delete-query)))
+                                                                    unify-clauses))
 
-                                            [(XtqlQuery$Return. (dml-colspecs (.forValidTime delete-query)))])
+                                            [(XtqlQuery$Return. (dml-colspecs for-valid-time))])
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:delete {:table table-name}
        target-plan]))
 
-  TxOp$Erase
-  (plan-dml [erase-query _tx-opts]
-    (let [table-name (-> (.table erase-query) (util/with-default-schema))
+  Erase
+  (plan-dml [{:keys [table bind-specs unify-clauses]} _tx-opts]
+    (let [table-name (str (symbol (util/with-default-schema table)))
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
-                                                                         (doto (.setBindings (concat (.bindSpecs erase-query)
+                                                                         (doto (.setBindings (concat bind-specs
                                                                                                      [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])))
                                                                          (.build))]
-                                                                    (.unifyClauses erase-query)))
+                                                                    unify-clauses))
 
                                             [(XtqlQuery$Return. [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])])
 
@@ -974,10 +975,9 @@
       [:erase {:table table-name}
        target-plan]))
 
-  TxOp$Update
-  (plan-dml [update-query tx-opts]
-    (let [table-name (-> (.table update-query) (util/with-default-schema))
-          set-specs (.setSpecs update-query)
+  Update
+  (plan-dml [{:keys [table for-valid-time set-specs bind-specs unify-clauses]} tx-opts]
+    (let [table-name (str (symbol (util/with-default-schema table)))
           known-columns (set (get-in tx-opts [:table-info table-name]))
           unspecified-columns (-> (set/difference known-columns
                                                   (set (for [^Binding set-spec set-specs]
@@ -985,17 +985,17 @@
                                   (disj "_id"))
 
           target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
-                                                                         (.forValidTime (.forValidTime update-query))
+                                                                         (.forValidTime for-valid-time)
                                                                          (doto (.setBindings
-                                                                                (concat (.bindSpecs update-query)
+                                                                                (concat bind-specs
                                                                                         [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
                                                                                         (for [^String col unspecified-columns]
                                                                                           (Binding. col (Exprs/lVar (str "xt$update$" col))))
                                                                                         extra-dml-bind-specs)))
                                                                          (.build))]
-                                                                    (.unifyClauses update-query)))
+                                                                    unify-clauses))
 
-                                            [(XtqlQuery$Return. (concat (dml-colspecs (.forValidTime update-query))
+                                            [(XtqlQuery$Return. (concat (dml-colspecs for-valid-time)
                                                                         [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
                                                                         (for [^String col unspecified-columns]
                                                                           (Binding. col (Exprs/lVar (str "xt$update$" col))))
@@ -1005,19 +1005,19 @@
       [:update {:table table-name}
        target-plan]))
 
-  TxOp$AssertNotExists
-  (plan-dml [query _tx-opts]
+  AssertNotExists
+  (plan-dml [{:keys [query]} _tx-opts]
     [:assert {}
      [:anti-join []
       [:table [{}]]
-      (:ra-plan (plan-query (.query query)))]])
+      (:ra-plan (plan-query query))]])
 
-  TxOp$AssertExists
-  (plan-dml [query _tx-opts]
+  AssertExists
+  (plan-dml [{:keys [query]} _tx-opts]
     [:assert {}
      [:semi-join []
       [:table [{}]]
-      (:ra-plan (plan-query (.query query)))]]))
+      (:ra-plan (plan-query query))]]))
 
 (defn compile-dml [query {:keys [table-info] :as tx-opts}]
   (let [ra-plan (binding [*gensym* (util/seeded-gensym "_" 0)

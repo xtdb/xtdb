@@ -5,11 +5,11 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
-            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types])
   (:import xtdb.api.tx.TxOps
            (xtdb.types RegClass RegProc)))
@@ -2085,26 +2085,26 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
     (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO baz (bar) SELECT bar FROM foo" nil))
           "excludes insert-from-subquery"))
 
-  (t/is (= [(TxOps/putDocs "foo" [{"_id" 1, "v" 2}])]
+  (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1, "v" 2}]})]
            (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2)" nil)))
 
   (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2 + 3)" nil))
         "excludes expressions")
 
-  (t/is (= [(-> (TxOps/putDocs "foo" [{"_id" 1} {"_id" 2}])
-                (.startingFrom #time/instant "2020-07-31T23:00:00Z"))
-            (-> (TxOps/putDocs "foo" [{"_id" 3}])
-                (.startingFrom #time/instant "2021-01-01T00:00:00Z"))]
+  (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 2}]
+                                  :valid-from #time/instant "2020-07-31T23:00:00Z"})
+            (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 3}]
+                                  :valid-from #time/instant "2021-01-01T00:00:00Z"})]
 
            (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
                                    {:default-tz #time/zone "Europe/London"}))
         "groups by valid-from")
 
   (t/testing "with args"
-    (t/is (= [(-> (TxOps/putDocs "foo" [{"_id" 1} {"_id" 3}])
-                  (.startingFrom #time/instant "2020-01-01T00:00:00Z"))
-              (-> (TxOps/putDocs "foo" [{"_id" 2} {"_id" 4}])
-                  (.startingFrom #time/instant "2020-01-02T00:00:00Z"))]
+    (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 3}]
+                                    :valid-from #time/instant "2020-01-01T00:00:00Z"})
+              (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 2} {"_id" 4}]
+                                    :valid-from #time/instant "2020-01-02T00:00:00Z"})]
 
              (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                      '[[1 2] [3 4]])))))

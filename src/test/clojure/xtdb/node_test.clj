@@ -308,7 +308,7 @@ WHERE foo._id = 1"]])]
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])
 
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]
-                           TxOps/abort
+                           [:abort]
                            [:put-docs :docs {:xt/id :baz}]])
   (t/is (= [{:id :foo}]
            (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
@@ -361,7 +361,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 
     (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z" nil)
-             (xt/execute-tx tu/*node* [TxOps/abort])))
+             (xt/execute-tx tu/*node* [[:abort]])))
 
     (t/is (= (serde/->tx-committed 2 #time/instant "2020-01-03T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))

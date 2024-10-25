@@ -57,7 +57,7 @@
                                             (xform-doc doc)]
                                       :delete [:delete-docs {:from :xt_docs, :valid-from start-valid-time, :valid-to end-valid-time} eid]
                                       :evict [:erase-docs :xt_docs eid]))
-                          :abort [TxOps/abort])
+                          :abort [[:abort]])
                         {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))
 

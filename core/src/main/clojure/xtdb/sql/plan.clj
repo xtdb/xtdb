@@ -8,16 +8,16 @@
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
             [xtdb.time :as time]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap HashSet LinkedHashSet List Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
-           xtdb.api.tx.TxOps
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
@@ -2869,8 +2869,8 @@
                                (comp ->inst #(get % "_valid_to"))))
 
                (into [] (map (fn [[[vf vt] rows]]
-                               (-> (TxOps/putDocs (str table) ^List (mapv #(dissoc % "_valid_from" "_valid_to") rows))
-                                   (.during vf vt))))))))))
+                               (tx-ops/->PutDocs (str table) (mapv #(dissoc % "_valid_from" "_valid_to") rows)
+                                                 vf vt)))))))))
 
   (visitInsertFromSubquery [_ _])
 

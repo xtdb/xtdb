@@ -1,10 +1,15 @@
 (ns xtdb.tx-ops
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time]
             [xtdb.xtql.edn :as xtql.edn])
-  (:import [java.util List]
-           (xtdb.api.tx TxOp$AssertExists TxOp$AssertNotExists TxOp$Delete TxOp$Erase TxOp$Insert TxOp$Update TxOp$XtqlAndArgs TxOps)
+  (:import [java.io Writer]
+           [java.nio ByteBuffer]
+           [java.util List]
+           (xtdb.api.tx TxOp TxOps)
+           (xtdb.api.query Binding)
+           xtdb.types.ClojureForm
            xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
@@ -19,24 +24,130 @@
                                 {::err/message "expected keyword for op", :tx-op tx-op, :op op})))
 
       op))
+
   :default ::default)
+
+(defmethod parse-tx-op ::default [[op]]
+  (throw (err/illegal-arg :xtql/unknown-tx-op {:op op})))
 
 (defprotocol Unparse
   (unparse-tx-op [this]))
 
-(defmethod parse-tx-op ::default [[op]]
-  (throw (err/illegal-arg :xtql/unknown-tx-op {:op op})))
+(defmethod print-dup TxOp [op ^Writer w]
+  (.write w (format "#xt/tx-op %s" (pr-str (unparse-tx-op op)))))
+
+(defmethod print-method TxOp [op ^Writer w]
+  (print-dup op w))
+
+(doseq [m [print-dup print-method]
+        c [java.util.Map clojure.lang.IPersistentCollection clojure.lang.IRecord]]
+  (prefer-method m TxOp c))
+
+(defrecord PutDocs [table-name docs valid-from valid-to]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    (into [:put-docs (if (or valid-from valid-to)
+                       {:into table-name
+                        :valid-from valid-from
+                        :valid-to valid-to}
+                       table-name)]
+          docs)))
+
+(defrecord DeleteDocs [table-name doc-ids valid-from valid-to]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    (into [:delete-docs (if (or valid-from valid-to)
+                          {:from table-name
+                           :valid-from valid-from
+                           :valid-to valid-to}
+                          table-name)]
+          doc-ids)))
+
+(defrecord EraseDocs [table-name doc-ids]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    (into [:erase-docs table-name] doc-ids)))
+
+(defrecord XtqlAndArgs [op arg-rows]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    (into (unparse-tx-op op) arg-rows)))
+
+(defrecord Insert [table query]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    [:insert-into table (xtql.edn/unparse-query query)]))
+
+(defrecord Update [table for-valid-time bind-specs set-specs unify-clauses]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    [:update (cond-> {:table table
+                      :set (into {} (map xtql.edn/unparse-col-spec) set-specs)}
+               for-valid-time (assoc :for-valid-time (xtql.edn/unparse for-valid-time))
+               bind-specs (assoc :bind (mapv xtql.edn/unparse-out-spec bind-specs))
+               unify-clauses (assoc :unify (mapv xtql.edn/unparse-unify-clause unify-clauses)))]))
+
+(defrecord Delete [table for-valid-time bind-specs unify-clauses]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    [:delete (cond-> {:from table}
+               for-valid-time (assoc :for-valid-time (xtql.edn/unparse for-valid-time))
+               bind-specs (assoc :bind (mapv xtql.edn/unparse-out-spec bind-specs))
+               unify-clauses (assoc :unify (mapv xtql.edn/unparse-unify-clause unify-clauses)))]))
+
+(defrecord Erase [table bind-specs unify-clauses]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    [:erase (cond-> {:from table}
+              bind-specs (assoc :bind (mapv xtql.edn/unparse-out-spec bind-specs))
+              unify-clauses (assoc :unify (mapv xtql.edn/unparse-unify-clause unify-clauses)))]))
+
+(defrecord AssertExists [query]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    [:assert-exists (xtql.edn/unparse-query query)]))
+
+(defrecord AssertNotExists [query]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    [:assert-not-exists (xtql.edn/unparse-query query)]) )
+
+(defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]
+  TxOp)
+
+(defrecord Call [fn-id args]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    (into [:call fn-id] args)))
+
+(defrecord Abort []
+  TxOp
+  Unparse
+  (unparse-tx-op [_] [:abort]))
+
+(def abort (->Abort))
 
 (def ^:private eid? (some-fn uuid? integer? string? keyword?))
 
 (def ^:private table? keyword?)
 
-(defn- expect-table-name ^String [table-name]
+(defn- expect-table-name [table-name]
   (when-not (table? table-name)
     (throw (err/illegal-arg :xtdb.tx/invalid-table
                             {::err/message "expected table name" :table table-name})))
 
-  (str (NormalForm/normalTableName table-name)))
+  (NormalForm/normalTableName table-name))
 
 (defn- expect-eid [eid]
   (if-not (eid? eid)
@@ -48,6 +159,7 @@
   (when-not (map? doc)
     (throw (err/illegal-arg :xtdb.tx/expected-doc
                             {::err/message "expected doc map", :doc doc})))
+
   (expect-eid (or (:xt/id doc) (get doc "xt/id")))
 
   doc)
@@ -73,9 +185,10 @@
   (let [{table :into, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:into table-or-opts})]
-    (cond-> (TxOps/putDocs (expect-table-name table) ^List (mapv expect-doc docs))
-      valid-from (.startingFrom (expect-instant valid-from))
-      valid-to (.until (expect-instant valid-to)))))
+    (->PutDocs (expect-table-name table)
+               (mapv expect-doc docs)
+               (some-> valid-from expect-instant)
+               (some-> valid-to expect-instant))))
 
 (defn- expect-fn-id [fn-id]
   (if-not (eid? fn-id)
@@ -90,17 +203,16 @@
   (let [{:keys [fn-id valid-from valid-to]} (if (map? id-or-opts)
                                               id-or-opts
                                               {:fn-id id-or-opts})]
-    (cond-> (TxOps/putFn (expect-fn-id fn-id) (expect-tx-fn tx-fn))
-      valid-from (.startingFrom (expect-instant valid-from))
-      valid-to (.until (expect-instant valid-to)))))
+    (->PutDocs "xt/tx_fns"
+               [{"_id" (expect-fn-id fn-id)
+                 "fn" (ClojureForm. (expect-tx-fn tx-fn))}]
+               (some-> valid-from expect-instant)
+               (some-> valid-to expect-instant))))
 
 (defmethod parse-tx-op :insert-into [[_ table query & arg-rows :as this]]
-  (when-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table
-                            {::err/message "expected keyword", :table table, :insert this})))
-
-  (cond-> (TxOps/insert (str (symbol table)) (xtql.edn/parse-query query))
-    (seq arg-rows) (.argRows ^List arg-rows)))
+  (cond-> (->Insert (expect-table-name table)
+                    (xtql.edn/parse-query query))
+    (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :update [[_ opts & arg-rows :as this]]
   (when-not (map? opts)
@@ -108,11 +220,6 @@
                             {::err/message "expected map", :opts opts, :update this})))
 
   (let [{:keys [table for-valid-time bind unify], set-specs :set} opts]
-
-    (when-not (keyword? table)
-      (throw (err/illegal-arg :xtql/malformed-table
-                              {::err/message "expected keyword", :table table, :update this})))
-
     (when-not (map? set-specs)
       (throw (err/illegal-arg :xtql/malformed-set
                               {:err/message "expected map", :set set-specs, :update this})))
@@ -121,98 +228,56 @@
       (throw (err/illegal-arg :xtql/malformed-bind
                               {::err/message "expected nil or vector", :bind bind, :update this})))
 
-    (cond-> (TxOps/update (str (symbol table)) (xtql.edn/parse-col-specs set-specs this))
-      for-valid-time (.forValidTime (xtql.edn/parse-temporal-filter for-valid-time :for-valid-time this))
-      bind (.binding (xtql.edn/parse-out-specs bind this))
-      (seq unify) (.unify (mapv xtql.edn/parse-unify-clause unify))
-      (seq arg-rows) (.argRows ^List arg-rows))))
+    (let [set-specs (xtql.edn/parse-col-specs set-specs this)]
+      (when-let [forbidden-cols (not-empty (set (for [^Binding binding set-specs
+                                                      :let [binding-name (.getBinding binding)]
+                                                      :when (str/starts-with? (NormalForm/normalForm binding-name) "_")]
+                                                  binding-name)))]
+        (throw (err/illegal-arg :xtql/forbidden-set-cols
+                                {::err/message "Invalid set columns for update"
+                                 :cols forbidden-cols})))
+
+      (cond-> (->Update (expect-table-name table)
+                        (some-> for-valid-time (xtql.edn/parse-temporal-filter :for-valid-time this))
+                        (some-> bind (xtql.edn/parse-out-specs this))
+                        set-specs
+                        (some->> unify (mapv xtql.edn/parse-unify-clause)))
+        (seq arg-rows) (->XtqlAndArgs arg-rows)))))
 
 (defmethod parse-tx-op :delete [[_ {table :from, :keys [for-valid-time bind unify]} & arg-rows :as this]]
-  (when-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table
-                            {::err/message "expected keyword", :from table, :delete this})))
-
-  (cond-> (TxOps/delete (str (symbol table)))
-    for-valid-time (.forValidTime (xtql.edn/parse-temporal-filter for-valid-time :for-valid-time this))
-    bind (.binding (xtql.edn/parse-out-specs bind this))
-    unify (.unify (mapv xtql.edn/parse-unify-clause unify))
-    (seq arg-rows) (.argRows ^List arg-rows)))
+  (cond-> (->Delete (expect-table-name table)
+                    (some-> for-valid-time (xtql.edn/parse-temporal-filter :for-valid-time this))
+                    (some-> bind (xtql.edn/parse-out-specs this))
+                    (some->> unify (mapv xtql.edn/parse-unify-clause)))
+    (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :delete-docs [[_ table-or-opts & doc-ids]]
   (let [{table :from, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:from table-or-opts})]
-    (cond-> (TxOps/deleteDocs (expect-table-name table) ^List (mapv expect-eid doc-ids))
-      valid-from (.startingFrom (expect-instant valid-from))
-      valid-to (.until (expect-instant valid-to)))))
+    (->DeleteDocs (expect-table-name table) (mapv expect-eid doc-ids)
+                  (some-> valid-from expect-instant)
+                  (some-> valid-to expect-instant))))
 
 (defmethod parse-tx-op :erase [[_ {table :from, :keys [bind unify]} & arg-rows :as this]]
-  (when-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table
-                            {::err/message "expected keyword", :table table, :erase this})))
-
-  (cond-> (TxOps/erase (str (symbol table)))
-    bind (.binding (xtql.edn/parse-out-specs bind this))
-    unify (.unify (mapv xtql.edn/parse-unify-clause unify))
-    (seq arg-rows) (.argRows ^List arg-rows)))
+  (cond-> (->Erase (expect-table-name table)
+                   (some-> bind (xtql.edn/parse-out-specs this))
+                   (some->> unify (mapv xtql.edn/parse-unify-clause)))
+    (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :erase-docs [[_ table & doc-ids]]
-  (TxOps/eraseDocs (expect-table-name table) ^List (mapv expect-eid doc-ids)))
+  (->EraseDocs (expect-table-name table) (mapv expect-eid doc-ids)))
 
 (defmethod parse-tx-op :assert-exists [[_ query & arg-rows]]
-  (cond-> (TxOps/assertExists (xtql.edn/parse-query query))
-    (seq arg-rows) (TxOp$XtqlAndArgs. arg-rows)))
+  (cond-> (->AssertExists (xtql.edn/parse-query query))
+    (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :assert-not-exists [[_ query & arg-rows]]
-  (cond-> (TxOps/assertNotExists (xtql.edn/parse-query query))
-    (seq arg-rows) (TxOp$XtqlAndArgs. arg-rows)))
+  (cond-> (->AssertNotExists (xtql.edn/parse-query query))
+    (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :call [[_ f & args]]
-  (TxOps/call (expect-fn-id f) (or args [])))
+  (->Call (expect-fn-id f) (or args [])))
 
-(extend-protocol Unparse
-  TxOp$Insert
-  (unparse-tx-op [query]
-    [:insert-into (keyword (.table query)) (xtql.edn/unparse-query (.query query))])
+(defmethod parse-tx-op :abort [_] abort)
 
-  TxOp$Update
-  (unparse-tx-op [query]
-    (let [for-valid-time (some-> (.forValidTime query) xtql.edn/unparse)
-          bind (some->> (.bindSpecs query) (mapv xtql.edn/unparse-out-spec))
-          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse-unify-clause))]
-      [:update (cond-> {:table (keyword (.table query))
-                        :set (into {} (map xtql.edn/unparse-col-spec) (.setSpecs query))}
-                 for-valid-time (assoc :for-valid-time for-valid-time)
-                 bind (assoc :bind bind)
-                 unify (assoc :unify unify))]))
-
-  TxOp$Delete
-  (unparse-tx-op [query]
-    (let [for-valid-time (some-> (.forValidTime query) xtql.edn/unparse)
-          bind (some->> (.bindSpecs query) (mapv xtql.edn/unparse-out-spec))
-          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse-unify-clause))]
-      [:delete (cond-> {:from (keyword (.table query))}
-                 for-valid-time (assoc :for-valid-time for-valid-time)
-                 bind (assoc :bind bind)
-                 unify (assoc :unify unify))]))
-
-  TxOp$Erase
-  (unparse-tx-op [query]
-    (let [bind (some->> (.bindSpecs query) (mapv xtql.edn/unparse-out-spec))
-          unify (some->> (.unifyClauses query) (mapv xtql.edn/unparse-unify-clause))]
-      [:erase (cond-> {:from (keyword (.table query))}
-                bind (assoc :bind bind)
-                unify (assoc :unify unify))]))
-
-  TxOp$AssertExists
-  (unparse-tx-op [query]
-    [:assert-exists (xtql.edn/unparse-query (.query query))])
-
-  TxOp$AssertNotExists
-  (unparse-tx-op [query]
-    [:assert-not-exists (xtql.edn/unparse-query (.query query))])
-
-  TxOp$XtqlAndArgs
-  (unparse-tx-op [query+args]
-    (into (unparse-tx-op (.op query+args))
-          (.argRows query+args))))

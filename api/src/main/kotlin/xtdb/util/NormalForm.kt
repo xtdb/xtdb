@@ -42,8 +42,8 @@ fun normalForm(k: Keyword): Keyword = Keyword.intern(normalForm(k.sym))
 
 private val String.normalTableSegment get() = lowercase().replace('-', '_')
 
-fun Keyword.normalTableName(): Symbol =
-    Symbol.intern(namespace?.normalTableSegment ?: "public", name.normalTableSegment)
+fun Keyword.normalTableName(): Keyword =
+    Keyword.intern(namespace?.normalTableSegment ?: "public", name.normalTableSegment)
 
 /**
  * @suppress

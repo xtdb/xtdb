@@ -4,6 +4,7 @@
             [xtdb.indexer]
             [xtdb.node :as xtn]
             [xtdb.query]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -21,7 +22,6 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.api.module.XtdbModule
-           [xtdb.api.tx TxOps]
            xtdb.arrow.Relation
            [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IQuerySource PreparedQuery]))
@@ -138,7 +138,7 @@
         (fn []
           (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                              (throw (UnsupportedOperationException. "invalid ps-id")))
-                dml (TxOps/sql sql (flight-stream->bytes flight-stream))]
+                dml (tx-ops/->SqlByteArgs sql (flight-stream->bytes flight-stream))]
             (try
               (exec-dml dml fsql-tx-id)
               (send-do-put-update-res ack-stream allocator)

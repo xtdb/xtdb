@@ -6,7 +6,7 @@
            (java.util UUID)
            (xtdb JsonSerde)
            (xtdb.api.query Basis QueryOptions QueryRequest)
-           (xtdb.api.tx TxOp$Sql TxOptions TxRequest)))
+           (xtdb.api.tx TxOptions)))
 
 (defn- encode [v]
   (JsonSerde/encode v))
@@ -38,54 +38,6 @@
 
       (t/is (= (ex-data ex)
                (ex-data roundtripped-ex))))))
-
-
-(defn roundtrip-tx-op [v]
-  (-> v
-      (JsonSerde/encode TxOp$Sql)
-      (JsonSerde/decode TxOp$Sql)))
-
-(defn decode-tx-op [^String s]
-  (JsonSerde/decode s TxOp$Sql))
-
-(deftest deserialize-tx-op-test
-  (t/testing "sql"
-    (let [v #xt.tx/sql {:sql "INSERT INTO docs (_id, foo) VALUES (1, \"bar\")"}]
-      (t/is (= v (roundtrip-tx-op v))))
-
-    (let [v #xt.tx/sql {:sql "INSERT INTO docs (_id, foo) VALUES (?, ?)", :arg-rows [[1 "bar"] [2 "toto"]]}]
-      (t/is (= v (roundtrip-tx-op v))))
-
-    (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                            (-> {"sql" "INSERT INTO docs (_id, foo) VALUES (?, ?)"
-                                 "arg_rows" [1 "bar"]}
-                                encode
-                                decode-tx-op)))))
-
-(defn- roundtrip-tx [v]
-  (-> v (JsonSerde/encode TxRequest) (JsonSerde/decode TxRequest)))
-
-(defn- decode-tx [^String s]
-  (JsonSerde/decode s TxRequest))
-
-(deftest deserialize-tx-test
-  (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (_id) VALUES (1)"}],
-                      (TxOptions.))]
-    (t/is (= v (roundtrip-tx v))))
-
-  (let [v (TxRequest. [#xt.tx/sql {:sql "INSERT INTO docs (_id) VALUES (1)"}],
-                      (TxOptions. #time/instant "2020-01-01T12:34:56.789Z"
-                                  #time/zone "America/Los_Angeles"))]
-
-    (t/is (= v (roundtrip-tx v))
-          "transaction options"))
-
-  (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                          (-> {"tx_ops" {"put" "docs"
-                                         "doc" {"xt/id" "my-id"}}}
-                              encode
-                              decode-tx))
-        "put not wrapped throws"))
 
 (defn- roundtrip-query-request [v]
   (-> v (JsonSerde/encode QueryRequest) (JsonSerde/decode QueryRequest)))

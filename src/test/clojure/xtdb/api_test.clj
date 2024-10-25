@@ -702,13 +702,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
   (t/testing "update with xt/id in set"
     (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Invalid set column for update"
+                            #"Invalid set columns for update"
                             (xt/submit-tx tu/*node* [[:update {:table :docs
                                                                :binding [{:xt/id 1}]
                                                                :set {:xt/id 2}}]])))
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Invalid set column for update"
+                            #"Invalid set columns for update"
                             (xt/submit-tx tu/*node* '[[:update {:table :docs
                                                                 :binding [{:xt/id 1}]
                                                                 :set {:xt/valid-from #inst "2000"
