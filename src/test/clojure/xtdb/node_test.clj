@@ -357,16 +357,16 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-txs-table-485
   (logging/with-log-level 'xtdb.indexer :error
-    (t/is (= (serde/->tx-committed 0 #xt.time/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 
-    (t/is (= (serde/->tx-aborted 1 #xt.time/instant "2020-01-02T00:00:00Z" nil)
+    (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z" nil)
              (xt/execute-tx tu/*node* [TxOps/abort])))
 
-    (t/is (= (serde/->tx-committed 2 #xt.time/instant "2020-01-03T00:00:00Z")
+    (t/is (= (serde/->tx-committed 2 #time/instant "2020-01-03T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
 
-    (t/is (= (serde/->tx-aborted 3 #xt.time/instant "2020-01-04T00:00:00Z"
+    (t/is (= (serde/->tx-aborted 3 #time/instant "2020-01-04T00:00:00Z"
                                  #xt/runtime-err [:xtdb.call/error-evaluating-tx-fn
                                                   "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
                                                   {:fn-id :tx-fn-fail, :args []}])
@@ -399,11 +399,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
-    (t/is (= (serde/->tx-aborted 0 #xt.time/instant "2020-01-01T00:00:00Z"
+    (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/invalid-valid-times
                                                   "Runtime error: 'xtdb.indexer/invalid-valid-times'"
-                                                  {:valid-from #xt.time/instant "2030-01-01T00:00:00Z"
-                                                   :valid-to #xt.time/instant "2020-01-01T00:00:00Z"}])
+                                                  {:valid-from #time/instant "2030-01-01T00:00:00Z"
+                                                   :valid-to #time/instant "2020-01-01T00:00:00Z"}])
              (xt/execute-tx tu/*node*
                             [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to)
                                VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
@@ -661,7 +661,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                  (xt/q node '(from :docs [{:xt/id e} inst]))))))))
 
 (deftest assert-exists-on-empty-tables-3061
-  (t/is (= (serde/->tx-aborted 0 #xt.time/instant "2020-01-01T00:00:00Z"
+  (t/is (= (serde/->tx-aborted 0 #time/instant "2020-01-01T00:00:00Z"
                                  #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}])
            (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])))
 
@@ -672,7 +672,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
         "assert fails on empty table")
 
-  (t/is (= (serde/->tx-aborted 1 #xt.time/instant "2020-01-02T00:00:00Z"
+  (t/is (= (serde/->tx-aborted 1 #time/instant "2020-01-02T00:00:00Z"
                                #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}])
 
            (xt/execute-tx tu/*node* [[:put-docs :users {:xt/id :not-john}]
@@ -801,7 +801,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
-    (let [ptz #xt.time/zone "America/New_York"
+    (let [ptz #time/zone "America/New_York"
           pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
 
       (t/testing "and not at bind"
@@ -811,7 +811,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (t/is (= ptz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
       (t/testing "and and also at bind"
-        (let [tz #xt.time/zone "Asia/Bangkok"]
+        (let [tz #time/zone "Asia/Bangkok"]
           (with-open [bq (.bind pq {:default-tz tz})
                       cursor (.openCursor bq)]
 
@@ -824,10 +824,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         (with-open [bq (.bind pq {})
                     cursor (.openCursor bq)]
 
-          (t/is (= #xt.time/zone "Z" (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
+          (t/is (= #time/zone "Z" (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
       (t/testing "but at bind"
-        (let [tz #xt.time/zone "Asia/Bangkok"]
+        (let [tz #time/zone "Asia/Bangkok"]
           (with-open [bq (.bind pq {:default-tz tz})
                       cursor (.openCursor bq)]
 

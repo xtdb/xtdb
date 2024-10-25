@@ -10,28 +10,28 @@ See the link:/reference/main/data-types/temporal-types[Temporal Types] documenta
 
 [source,clojure]
 ----
-#xt.time/date "2023-03-15"
+#time/date "2023-03-15"
 ----
 
 == Timestamp [Without Time Zone]
 
 [source,clojure]
 ----
-#xt.time/date-time "2023-03-15T12:00:00"
+#time/date-time "2023-03-15T12:00:00"
 ----
 
 == Timestamp [With Time Zone]
 
 [source,clojure]
 ----
-#xt.time/zoned-date-time "2023-03-15T12:00:00+01:00"
+#time/zoned-date-time "2023-03-15T12:00:00+01:00"
 ----
 
 == Time [Without Time Zone]
 
 [source,clojure]
 ----
-#xt.time/time "14:30:00"
+#time/time "14:30:00"
 ----
 
 == Year-Month Interval
@@ -58,7 +58,7 @@ A Duration specified in ISO8601 format
 
 [source,clojure]
 ----
-#xt.time/duration "P20H3M11.1S"
+#time/duration "P20H3M11.1S"
 ----
 
 == Period
@@ -67,5 +67,5 @@ A Period specified with two dates.
 
 [source,clojure]
 ----
-(period #xt.time/date "1998-01-05" #xt.time/date "1998-01-12")
+(period #time/date "1998-01-05" #time/date "1998-01-12")
 ----

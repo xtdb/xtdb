@@ -198,7 +198,7 @@
                   :date (-> (time/->zdt #inst "2001-02-16T20:38:40Z")
                             (.withZoneSameInstant (ZoneId/of "America/New_York")))}]
 
-    (t/is (= #xt.time/zoned-date-time "2001-02-16T08:00-05:00[America/New_York]"
+    (t/is (= #time/zoned-date-time "2001-02-16T08:00-05:00[America/New_York]"
              (project1 (list 'date-trunc "DAY" 'date "Australia/Sydney") test-doc)))))
 
 (t/deftest test-date-trunc-interval
@@ -1228,11 +1228,11 @@
     (t/is (= nil (run-test '(greatest x y) 1.0 nil)))
 
     (t/testing "mixed temporal types"
-      (t/is (= #xt.time/date "2020-08-02"
-               (run-test '(least x y) #xt.time/date-time "2020-08-02T15:09:00" #xt.time/date "2020-08-02")))
+      (t/is (= #time/date "2020-08-02"
+               (run-test '(least x y) #time/date-time "2020-08-02T15:09:00" #time/date "2020-08-02")))
 
-      (t/is (= #xt.time/date-time "2020-08-01T15:09:00"
-               (run-test '(least x y) #xt.time/date-time "2020-08-01T15:09:00" #xt.time/date "2020-08-02"))))))
+      (t/is (= #time/date-time "2020-08-01T15:09:00"
+               (run-test '(least x y) #time/date-time "2020-08-01T15:09:00" #time/date "2020-08-02"))))))
 
 (t/deftest test-random
   (t/is (= [true] (project '(<= 0.0 (random)) [{}])))

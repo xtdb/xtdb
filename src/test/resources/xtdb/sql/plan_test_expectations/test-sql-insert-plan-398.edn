@@ -9,4 +9,4 @@
     xt.values.1
     [:table
      [_id _valid_from]
-     [{:_id "foo", :_valid_from #xt.time/date "2018-01-01"}]]]]]]
+     [{:_id "foo", :_valid_from #time/date "2018-01-01"}]]]]]]

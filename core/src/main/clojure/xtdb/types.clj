@@ -774,7 +774,7 @@
       (.parseStrict)
       (.toFormatter)))
 
-(def ^LocalDate pg-epoch #xt.time/date "2000-01-01")
+(def ^LocalDate pg-epoch #time/date "2000-01-01")
 ;;10957
 (def ^{:tag 'int} unix-pg-epoch-diff-in-days (int (.toEpochDay pg-epoch)))
 ;; 946684800000000

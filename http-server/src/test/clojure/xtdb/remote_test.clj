@@ -77,7 +77,7 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #xt.time/instant "2020-01-02T00:00:00Z"}}})))
+                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
 
   (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])]
     (t/is (=
@@ -171,7 +171,7 @@
 
 (deftest json-request-test
   (let [_tx1 (xt/submit-tx *node* [[:put-docs :docs {:xt/id 1}]])
-        {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #xt.time/instant "2020-01-02T00:00:00Z"}]
+        {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
 
     (t/is (= {"txId" 1, "systemTime" "2020-01-02T00:00:00Z"}
              (-> (http/request {:accept :json

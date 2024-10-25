@@ -4,5 +4,5 @@
   foo.1
   [:scan
    {:table public/foo,
-    :for-valid-time [:at #xt.time/date-time "2999-01-01T00:00"]}
+    :for-valid-time [:at #time/date-time "2999-01-01T00:00"]}
    [bar]]]]

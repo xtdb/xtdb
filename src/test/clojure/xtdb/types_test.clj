@@ -52,14 +52,14 @@
 
   (t/is (= {:vs [(time/->zdt #inst "1999")
                  (time/->zdt #inst "2021-09-02T13:54:35.809Z")
-                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt.time/zone "Europe/Stockholm")
-                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt.time/zone "+02:00")
-                 (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) #xt.time/zone "UTC")]
+                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "Europe/Stockholm")
+                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "+02:00")
+                 (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) #time/zone "UTC")]
             :vec-types (repeat 5 TimeStampMicroTZVector)}
            (test-round-trip [#inst "1999"
                              (time/->instant #inst "2021-09-02T13:54:35.809Z")
-                             (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt.time/zone "Europe/Stockholm")
-                             (OffsetDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt.time/zone "+02:00")
+                             (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "Europe/Stockholm")
+                             (OffsetDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #time/zone "+02:00")
                              (Instant/ofEpochSecond 3600 1234)]))
         "timestamp types")
 
@@ -359,9 +359,9 @@
                                  (types/col-type->field '[:struct {foo :utf8 bar :i64}]))))))
 
 (t/deftest test-pg-datetime-binary-roundtrip
-  (doseq [{:keys [type val]} [{:val #xt.time/date "2018-07-25" :type :date}
-                              {:val #xt.time/date-time "1441-07-25T18:00:11.888842" :type :timestamp}
-                              {:val #xt.time/offset-date-time "1441-07-25T18:00:11.211142Z" :type :timestamptz}]]
+  (doseq [{:keys [type val]} [{:val #time/date "2018-07-25" :type :date}
+                              {:val #time/date-time "1441-07-25T18:00:11.888842" :type :timestamp}
+                              {:val #time/offset-date-time "1441-07-25T18:00:11.211142Z" :type :timestamptz}]]
     (let [{:keys [write-binary read-binary]} (get types/pg-types type)]
 
       (with-open [rdr (vr/vec->reader (vw/open-vec tu/*allocator* "val" [val]))

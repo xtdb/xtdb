@@ -603,11 +603,11 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
          (0, TIMESTAMP '2023-03-26T02:00:00.000+01:00', TIMESTAMP '2023-03-26T02:05:00.000+01:00')"]])
 
   (t/is (= [#:xt{:id 0,
-                 :valid-from #xt.time/zoned-date-time "2023-03-26T00:50Z[UTC]",
-                 :valid-to #xt.time/zoned-date-time "2023-03-26T00:55Z[UTC]"}
+                 :valid-from #time/zoned-date-time "2023-03-26T00:50Z[UTC]",
+                 :valid-to #time/zoned-date-time "2023-03-26T00:55Z[UTC]"}
             #:xt{:id 0,
-                 :valid-from #xt.time/zoned-date-time "2023-03-26T01:00Z[UTC]",
-                 :valid-to #xt.time/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
+                 :valid-from #time/zoned-date-time "2023-03-26T01:00Z[UTC]",
+                 :valid-to #time/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _valid_from"))))
 
 (t/deftest test-wm-schema-is-updated-within-a-tx

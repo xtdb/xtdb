@@ -63,49 +63,49 @@
                           {:node tu/*node* :basis {:at-tx tx} :params {'?x (float 3)}})))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
-  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #xt.time/date "2010-01-01" :xt/id "a"}]
-                                        [:put-docs :xt_docs {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
-                                        [:put-docs :xt_docs {:timestamp #xt.time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
-                                        [:put-docs :xt_docs {:timestamp #xt.time/date "2020-01-01" :xt/id "d"}]]
-                             {:default-tz #xt.time/zone "Z"})
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
+                                        [:put-docs :xt_docs {:timestamp #time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
+                                        [:put-docs :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
+                                        [:put-docs :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "d"}]]
+                             {:default-tz #time/zone "Z"})
                (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
-    (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
-              {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
-              {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
+    (t/is (= [{:timestamp #time/date "2010-01-01"}
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
-                            [{timestamp (= timestamp #xt.time/zoned-date-time "2010-01-01T00:00:00Z")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))
+                            [{timestamp (= timestamp #time/zoned-date-time "2010-01-01T00:00:00Z")}]]
+                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))
 
-    (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
-              {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
-              {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
+    (t/is (= [{:timestamp #time/date "2010-01-01"}
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp ?x)}]]
                           {:node tu/*node* :basis {:at-tx tx}
-                           :default-tz  #xt.time/zone "Z" :params {'?x #xt.time/date "2010-01-01"}})))
+                           :default-tz  #time/zone "Z" :params {'?x #time/date "2010-01-01"}})))
 
-    (t/is (= [{:timestamp #xt.time/date "2010-01-01"}
-              {:timestamp #xt.time/zoned-date-time "2010-01-01T00:00Z"}
-              {:timestamp #xt.time/date-time "2010-01-01T00:00:00"}]
+    (t/is (= [{:timestamp #time/date "2010-01-01"}
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
-                            [{timestamp (= timestamp #xt.time/date-time "2010-01-01T00:00:00")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
+                            [{timestamp (= timestamp #time/date-time "2010-01-01T00:00:00")}]]
+                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
 
 (deftest test-bloom-filter-for-time-types
-  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:time #xt.time/time "01:02:03" :xt/id "a"}]
-                                        [:put-docs :xt_docs {:time #xt.time/time "04:05:06" :xt/id "b"}]]
-                             {:default-tz #xt.time/zone "Z"})
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:time #time/time "01:02:03" :xt/id "a"}]
+                                        [:put-docs :xt_docs {:time #time/time "04:05:06" :xt/id "b"}]]
+                             {:default-tz #time/zone "Z"})
                (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
-    (t/is (= [{:time #xt.time/time "04:05:06"}]
+    (t/is (= [{:time #time/time "04:05:06"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
-                            [{time (= time #xt.time/time "04:05:06")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #xt.time/zone "Z"})))))
+                            [{time (= time #time/time "04:05:06")}]]
+                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
 
 (deftest test-min-max-on-xt-id
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
@@ -149,7 +149,7 @@
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-      (let [sys-time-micros (time/instant->micros #xt.time/instant "2020-01-01T00:00:00.000000Z")
+      (let [sys-time-micros (time/instant->micros #time/instant "2020-01-01T00:00:00.000000Z")
             temporal-dimension (TemporalDimension. sys-time-micros Long/MAX_VALUE)
             metadata-bounds (TemporalBounds. temporal-dimension temporal-dimension)]
         (t/is (= metadata-bounds (.temporalBounds table-metadata 0)))))))

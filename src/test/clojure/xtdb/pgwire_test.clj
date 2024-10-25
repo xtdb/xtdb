@@ -1488,10 +1488,10 @@
           (t/is (nil? z)))))))
 
 (deftest test-datetime-types
-  (doseq [{:keys [^Class type val pg-type]} [{:type LocalDate :val #xt.time/date "2018-07-25" :pg-type "date"}
-                                             {:type LocalDate :val #xt.time/date "1239-01-24" :pg-type "date"}
-                                             {:type LocalDateTime :val #xt.time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
-                                             {:type LocalDateTime :val #xt.time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]
+  (doseq [{:keys [^Class type val pg-type]} [{:type LocalDate :val #time/date "2018-07-25" :pg-type "date"}
+                                             {:type LocalDate :val #time/date "1239-01-24" :pg-type "date"}
+                                             {:type LocalDateTime :val #time/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
+                                             {:type LocalDateTime :val #time/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]
           binary? [true false]]
 
     (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
@@ -1515,8 +1515,8 @@
 (deftest test-timestamptz
   (let [type OffsetDateTime
         pg-type "timestamptz"
-        val #xt.time/offset-date-time "2024-07-03T19:01:34-07:00"
-        val2 #xt.time/offset-date-time "2024-07-03T19:01:34.695959+03:00"]
+        val #time/offset-date-time "2024-07-03T19:01:34-07:00"
+        val2 #time/offset-date-time "2024-07-03T19:01:34.695959+03:00"]
     (doseq [binary? [true false]]
 
       (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
@@ -1539,7 +1539,7 @@
           (t/is (.isEqual val2 (.getObject rs 1 type)))
           (.next rs)
           (t/is (.isEqual
-                 #xt.time/offset-date-time "2099-04-15T11:40:31Z"
+                 #time/offset-date-time "2099-04-15T11:40:31Z"
                  (.getObject rs 1 type))
                 "ZonedDateTimes can be read even if not written"))))))
 
@@ -1699,7 +1699,7 @@
       (.setTimestamp
        stmt
        1
-       (Timestamp/from #xt.time/instant "2030-01-04T12:44:55Z")
+       (Timestamp/from #time/instant "2030-01-04T12:44:55Z")
        (Calendar/getInstance (TimeZone/getTimeZone "GMT")))
 
       (with-open [rs (.executeQuery stmt)]
@@ -1716,13 +1716,13 @@
 (deftest test-java-time-instant
   (with-open [conn (pg-conn {})]
 
-    (t/is (= [{:v #xt.time/date-time "2030-01-04T12:44:55"}]
-             (pg/execute conn "SELECT $1 v" {:params [#xt.time/instant "2030-01-04T12:44:55Z"]
+    (t/is (= [{:v #time/date-time "2030-01-04T12:44:55"}]
+             (pg/execute conn "SELECT $1 v" {:params [#time/instant "2030-01-04T12:44:55Z"]
                                              :oids [OID/TIMESTAMP]}))
           "when reading param, zone is ignored and instant is treated as a timestamp")
 
-    (t/is (= [{:v #xt.time/offset-date-time "2030-01-04T12:44:55Z"}]
-             (pg/execute conn "SELECT $1 v" {:params [#xt.time/instant "2030-01-04T12:44:55Z"]
+    (t/is (= [{:v #time/offset-date-time "2030-01-04T12:44:55Z"}]
+             (pg/execute conn "SELECT $1 v" {:params [#time/instant "2030-01-04T12:44:55Z"]
                                              :oids [OID/TIMESTAMPTZ]}))
           "when reading param, zone is honored (UTC) and instant is treated as a timestamptz")))
 
@@ -1879,7 +1879,7 @@ ORDER BY t.oid DESC LIMIT 1"
       (t/is (= [{"_id" "int8"} {"nest" "transit"}] (result-metadata stmt))))
 
     (t/is (= {:_id 1,
-              :nest {"ts" #xt.time/zoned-date-time "2020-01-01T00:00Z"}}
+              :nest {"ts" #time/zoned-date-time "2020-01-01T00:00Z"}}
 
              (-> (jdbc/execute-one! conn ["SELECT * FROM foo"])
                  (update :nest (fn [^PGobject nest]

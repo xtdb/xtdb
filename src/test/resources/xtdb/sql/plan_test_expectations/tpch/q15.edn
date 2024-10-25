@@ -40,9 +40,9 @@
                 (<
                  l_shipdate
                  (+
-                  #xt.time/date "1996-01-01"
+                  #time/date "1996-01-01"
                   (single-field-interval "3" "MONTH" 2 6)))
-                (>= l_shipdate #xt.time/date "1996-01-01"))}
+                (>= l_shipdate #time/date "1996-01-01"))}
               l_discount
               l_suppkey
               l_extendedprice]]]]]]]]]
@@ -67,9 +67,9 @@
                 (<
                  l_shipdate
                  (+
-                  #xt.time/date "1996-01-01"
+                  #time/date "1996-01-01"
                   (single-field-interval "3" "MONTH" 2 6)))
-                (>= l_shipdate #xt.time/date "1996-01-01"))}
+                (>= l_shipdate #time/date "1996-01-01"))}
               l_discount
               l_suppkey
               l_extendedprice]]]]]]]]]]]]]]

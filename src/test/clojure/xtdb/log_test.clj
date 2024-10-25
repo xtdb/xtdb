@@ -122,4 +122,4 @@
                          [[:sql "INSERT INTO foo (_id) VALUES (0)"]]
 
                          {:system-time (time/->instant #inst "2021")
-                          :default-tz #xt.time/zone "Europe/London"}))
+                          :default-tz #time/zone "Europe/London"}))

@@ -1451,15 +1451,15 @@
              {:x 1, :new-y "c", :xt/id 3}}
            (set (xt/q tu/*node* "SELECT docs.* RENAME y AS new_y FROM docs"))))
 
-  (t/is (= #{{:xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+  (t/is (= #{{:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 2,
               :y "b",
               :xt/id 2}
-             {:xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             {:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 3,
               :y "a",
               :xt/id 1}
-             {:xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+             {:xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
               :x 1,
               :y "c",
               :xt/id 3}}
@@ -1468,15 +1468,15 @@
   (t/is (= #{{:x 2,
               :y "b",
               :xt/id 2,
-              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
              {:x 3,
               :y "a",
               :xt/id 1,
-              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
              {:x 1,
               :y "c",
               :xt/id 3,
-              :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
+              :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}}
            (set (xt/q tu/*node* "SELECT *, _valid_from FROM docs WHERE _system_to = _valid_to OR (_system_to IS NULL AND _valid_to IS NULL)")))))
 
 (t/deftest able-to-select-star-from-two-tables-bug-3389
@@ -1497,8 +1497,8 @@
            (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1, :x 3, :y "a",
-             :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"
-             :xt/system-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
+             :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"
+             :xt/system-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT *, _system_from, _system_to, _valid_from, _valid_to FROM docs WHERE _id = 1")))
 
   (t/is (= [{:xt/id 1, :y "a"}]
@@ -1728,7 +1728,7 @@
 
 (t/deftest test-tx-ops-sql-params
   (t/testing "correct number of args"
-    (t/is (= (serde/->tx-committed 0 #xt.time/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->tx-committed 0 #time/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, u_name: ?}" [1 "dan"] [2 "james"]]])))
 
     (t/is (= [{:u-name "dan", :xt/id 1}
@@ -1737,13 +1737,13 @@
 
   (t/testing "no arg rows provided when args expected"
     (t/is (= (serde/->tx-aborted 1
-                                 #xt.time/instant "2020-01-02T00:00:00Z"
+                                 #time/instant "2020-01-02T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/missing-sql-args "Arguments list was expected but not provided" {:param-count 2}])
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]]))))
 
   (t/testing "incorrect number of args on all arg-row"
     (t/is (= (serde/->tx-aborted 2
-                                 #xt.time/instant "2020-01-03T00:00:00Z"
+                                 #time/instant "2020-01-03T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "Parameter error: 1 provided, 2 expected" {:param-count 2, :arg-count 1}])
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))))
 
@@ -2011,7 +2011,7 @@ VALUES
 (1, 580,  TIMESTAMP '2024-01-01T00:25:00', TIMESTAMP '2024-01-01T00:30:00')"]])
 
   (letfn [(zdt [mins]
-            (.plusMinutes #xt.time/zoned-date-time "2024-01-01T00:00Z[UTC]" mins))
+            (.plusMinutes #time/zoned-date-time "2024-01-01T00:00Z[UTC]" mins))
           (q []
             (set (xt/q tu/*node* "SELECT value, _valid_from, _valid_to
                                   FROM system_active_power FOR ALL VALID_TIME WHERE _id = 1")))
@@ -2092,19 +2092,19 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
         "excludes expressions")
 
   (t/is (= [(-> (TxOps/putDocs "foo" [{"_id" 1} {"_id" 2}])
-                (.startingFrom #xt.time/instant "2020-07-31T23:00:00Z"))
+                (.startingFrom #time/instant "2020-07-31T23:00:00Z"))
             (-> (TxOps/putDocs "foo" [{"_id" 3}])
-                (.startingFrom #xt.time/instant "2021-01-01T00:00:00Z"))]
+                (.startingFrom #time/instant "2021-01-01T00:00:00Z"))]
 
            (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
-                                   {:default-tz #xt.time/zone "Europe/London"}))
+                                   {:default-tz #time/zone "Europe/London"}))
         "groups by valid-from")
 
   (t/testing "with args"
     (t/is (= [(-> (TxOps/putDocs "foo" [{"_id" 1} {"_id" 3}])
-                  (.startingFrom #xt.time/instant "2020-01-01T00:00:00Z"))
+                  (.startingFrom #time/instant "2020-01-01T00:00:00Z"))
               (-> (TxOps/putDocs "foo" [{"_id" 2} {"_id" 4}])
-                  (.startingFrom #xt.time/instant "2020-01-02T00:00:00Z"))]
+                  (.startingFrom #time/instant "2020-01-02T00:00:00Z"))]
 
              (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                      '[[1 2] [3 4]])))))
@@ -2121,7 +2121,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
   (t/is (= [{:timezone "America/New_York"}]
            (xt/q tu/*node* "SHOW TIME ZONE"
-                 {:default-tz #xt.time/zone "America/New_York"}))))
+                 {:default-tz #time/zone "America/New_York"}))))
 
 (t/deftest test-regclass
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
@@ -2381,10 +2381,10 @@ UNION ALL
 
     (t/is (= [{:xt/id 1,
                :foo "bar",
-               :xt/valid-from #xt.time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+               :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
               {:xt/id 3,
                :foo "bar",
-               :xt/valid-from #xt.time/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
+               :xt/valid-from #time/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
 
              (xt/q tu/*node* "SELECT _id, foo, _valid_from FROM docs FOR ALL VALID_TIME"))))
 
@@ -2393,9 +2393,9 @@ UNION ALL
     (xt/submit-tx tu/*node* [[:sql "UPDATE docs2 SET bar = foo, foo = bar"]])
 
     (t/is (= [{:xt/id 1, :bar "bar", :foo 1,
-               :xt/valid-from #xt.time/zoned-date-time "2020-01-04T00:00Z[UTC]"}
+               :xt/valid-from #time/zoned-date-time "2020-01-04T00:00Z[UTC]"}
               {:xt/id 1, :bar 1, :foo "bar",
-               :xt/valid-from #xt.time/zoned-date-time "2020-01-03T00:00Z[UTC]"}]
+               :xt/valid-from #time/zoned-date-time "2020-01-03T00:00Z[UTC]"}]
              (xt/q tu/*node* "SELECT *, _valid_from FROM docs2 FOR ALL VALID_TIME")))))
 
 (t/deftest insert-with-bad-select-shouldnt-stop-ingestion-3797

@@ -90,7 +90,7 @@
 (extend-protocol jdbc.prep/SettableParameter
   java.util.Date
   (set-parameter [v ^PreparedStatement ps ^long i]
-    (.setObject ps i (-> (.toInstant v) (.atZone #xt.time/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
+    (.setObject ps i (-> (.toInstant v) (.atZone #time/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
 
 (def denormalize-kw
   (let [^IKeyFn key-fn #xt/key-fn :kebab-case-keyword]

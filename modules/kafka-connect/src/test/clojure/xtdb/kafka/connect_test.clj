@@ -49,8 +49,8 @@
          (= (xt/q tu/*node* "SELECT foo.*, _valid_from, _valid_to FROM pre_foo_post FOR VALID_TIME ALL AS foo")
             [{:xt/id 1
               :my-id-field 1
-              :xt/valid-from #xt.time/zoned-date-time "2021-01-01T00:00:00Z[UTC]"
-              :my-valid-from-field #xt.time/zoned-date-time "2021-01-01T00:00:00Z[UTC]"
-              :xt/valid-to #xt.time/zoned-date-time "2021-01-02T00:00:00Z[UTC]"
-              :my-valid-to-field #xt.time/zoned-date-time "2021-01-02T00:00:00Z[UTC]"
+              :xt/valid-from #time/zoned-date-time "2021-01-01T00:00:00Z[UTC]"
+              :my-valid-from-field #time/zoned-date-time "2021-01-01T00:00:00Z[UTC]"
+              :xt/valid-to #time/zoned-date-time "2021-01-02T00:00:00Z[UTC]"
+              :my-valid-to-field #time/zoned-date-time "2021-01-02T00:00:00Z[UTC]"
               :value {:a 1}}]))))))
