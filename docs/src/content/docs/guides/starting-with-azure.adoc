@@ -236,6 +236,8 @@ To view the logs of each individual StatefulSet member, run:
 kubectl logs -f xtdb-statefulset-n --namespace xtdb-deployment
 ```
 
+NOTE: We recommend using the templates provided as a starting point, modifying the configuration to suit the specific requirements of your environment. Of particular note is the options passed in via the ConfigMap, and the settings within the XTDB stateful set. It is also important to note that the load balanced service is exposed to the internet within the base configuration, so this should also be adjusted to suit security requirements.
+
 === Accessing the XTDB Cluster
 
 Once the XTDB cluster is up and running, you can access it via the LoadBalancer service that was created.
