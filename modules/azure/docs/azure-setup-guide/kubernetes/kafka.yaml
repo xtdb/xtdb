@@ -1,0 +1,95 @@
+
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "kafka-pvc"
+  namespace: "xtdb-deployment"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "100Gi"
+  storageClassName: "managed-csi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "kafka-app"
+  namespace: "xtdb-deployment"
+  labels:
+    app: "kafka-app"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "kafka-app"
+  template:
+    metadata:
+      labels:
+        app: "kafka-app"
+    spec:
+      nodeSelector:
+        nodepool: "xtdbpool"
+
+      containers:
+      - name: "kafka-app"
+        image: "confluentinc/cp-kafka:latest"
+        ports:
+        - containerPort: 9092
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        resources:
+          requests:
+            memory: "2Gi"
+          limits:
+            memory: "2Gi"
+        env:
+          - name: KAFKA_NODE_ID
+            value: "1"
+          - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+            value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+          - name: KAFKA_LISTENERS
+            value: "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+          - name: KAFKA_ADVERTISED_LISTENERS
+            value: "PLAINTEXT://kafka-service.xtdb-deployment.svc.cluster.local:29092,PLAINTEXT_HOST://kafka-service.xtdb-deployment.svc.cluster.local:9092"
+          - name: KAFKA_JMX_PORT
+            value: "9101"
+          - name: KAFKA_JMX_HOSTNAME
+            value: "localhost"
+          - name: KAFKA_PROCESS_ROLES
+            value: "broker,controller"
+          - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+            value: "1"
+          - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+            value: "1@localhost:29093"
+          - name: KAFKA_INTER_BROKER_LISTENER_NAME
+            value: "PLAINTEXT"
+          - name: KAFKA_CONTROLLER_LISTENER_NAMES
+            value: "CONTROLLER"
+          - name: CLUSTER_ID
+            value: "q1Sh-9_ISia_zwGINzRvyQ"
+        volumeMounts:
+          - name: "kafka-persistent-storage"
+            mountPath: "/var/lib/kafka"
+      volumes:
+        - name: "kafka-persistent-storage"
+          persistentVolumeClaim:
+            claimName: "kafka-pvc"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "kafka-service"
+  namespace: "xtdb-deployment"
+spec:
+  ports:
+    - port: 9092
+      targetPort: 9092
+      protocol: TCP
+      name: plaintext
+  selector:
+    app: "kafka-app"
+  type: ClusterIP
+---

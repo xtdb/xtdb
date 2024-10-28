@@ -11,13 +11,6 @@ resource "azurerm_user_assigned_identity" "xtdb_infra" {
   resource_group_name = azurerm_resource_group.xtdb_infra.name
 }
 
-# App container environment setup
-resource "azurerm_container_app_environment" "xtdb_infra" {
-  name                = "xtdb-infra-app-environment"
-  location            = azurerm_resource_group.xtdb_infra.location
-  resource_group_name = azurerm_resource_group.xtdb_infra.name
-}
-
 # Setup for remote storage module
 module "remote_storage" {
   source = "./modules/remote_storage"
@@ -33,40 +26,19 @@ module "remote_storage" {
   storage_account_replication_type = "LRS"
 }
 
-# Kafka Config
-module "kafka_app" {
-  source = "./modules/kafka_app"
+# AKS configuration
+module "aks" {
+  source = "./modules/aks"
 
-  resource_group_name                = azurerm_resource_group.xtdb_infra.name
-  resource_group_location            = azurerm_resource_group.xtdb_infra.location
-  container_app_environment_id       = azurerm_container_app_environment.xtdb_infra.id
-  storage_account_primary_access_key = module.remote_storage.storage_account_primary_access_key
-  storage_account_name               = module.remote_storage.storage_account_name
+  resource_group_name       = azurerm_resource_group.xtdb_infra.name
+  resource_group_location   = azurerm_resource_group.xtdb_infra.location
+  user_assigned_identity_id = azurerm_user_assigned_identity.xtdb_infra.id
 
-  # Kafka options
-  kafka_persisent_data_max_size_gb = var.kafka_persisent_data_max_size_gb
-}
+  # Kubernetes namespace & service account names
+  kubernetes_namespace            = var.kubernetes_namespace
+  kubernetes_service_account_name = var.kubernetes_service_account_name
 
-# XTDB Config
-
-module "xtdb_app" {
-  source = "./modules/xtdb_app"
-
-  resource_group_name                = azurerm_resource_group.xtdb_infra.name
-  container_app_environment_id       = azurerm_container_app_environment.xtdb_infra.id
-  storage_account_primary_access_key = module.remote_storage.storage_account_primary_access_key
-  user_assigned_identity_id          = azurerm_user_assigned_identity.xtdb_infra.id
-  user_assigned_identity_client_id   = azurerm_user_assigned_identity.xtdb_infra.client_id
-
-  # XTDB Config Options
-
-  # Remote Storage Options - using our created remote storage module
-  storage_account_name           = module.remote_storage.storage_account_name
-  storage_account_container_name = module.remote_storage.storage_account_container_name
-  local_disk_cache_max_size_gb   = var.local_disk_cache_max_size_gb
-
-  # Kafka Transaction Log options - using our created kafka module
-  kafka_bootstrap_servers = module.kafka_app.kafka_bootstrap_server
-  xtdb_tx_topic    = "xtdb-transaction-log"
-  xtdb_files_topic = "xtdb-file-notifs"
+  # Config options for AKS cluster
+  aks_system_pool_vm_size      = var.aks_system_pool_vm_size
+  aks_application_pool_vm_size = var.aks_application_pool_vm_size
 }
