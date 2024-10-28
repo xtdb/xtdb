@@ -311,5 +311,6 @@ With the Prometheus data source added, the XTDB metrics are now available to Gra
 ** Select the `xtdb` data source.
 ** Click `Import`.
 
-This will create a new dashboard with a number of useful metrics about the XTDB nodes.
+This will create a new dashboard with a number of useful metrics about the XTDB nodes. 
 
+image::/images/docs/grafana-dashboard.png["Grafana Dashboard"]
