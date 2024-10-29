@@ -8,6 +8,7 @@ All of the below commands should be run in the *root* of the XT2 repo.
 * https://github.com/orgs/xtdb/projects/13/views/1[Kanban board^]
 * https://github.com/xtdb/xtdb/actions[Github Actions (CI)^]
 * link:GIT.adoc[Git practices in XTDB]
+* link:./doc[Developer documentation]
 
 == Prerequisites
 
