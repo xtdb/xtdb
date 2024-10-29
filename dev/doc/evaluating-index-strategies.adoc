@@ -1,0 +1,66 @@
+= Evaluating index strategies
+
+:written: 2024-10-29
+:reviewed: 2024-10-29
+
+When evaluating indexing strategies, we consider a matrix of query categories for a range of data shapes.
+
+Given that we store the entire history of every table, we need to be able to rule out large proportions of that history quickly to achieve low-latency queries.
+This means that data on disk needs to be grouped in a way where a small amount of metadata about a group can be used to rule it out.
+Metadata, as a heuristic, has competing concerns: for correctness, it must err on the side of being pessimistic - if we cannot entirely rule a chunk/page out then we have to read it fully - but, for performance, should rule out as much as possible.
+
+== Query categories
+
+When categorising queries, we first differentiate between 'content' and 'temporal' filtering.
+
+Content selectivity (no particular order):
+
+* PK
+* ~Unique key (e.g. email)
+* 'Selective' attribute (e.g. town in the UK, 1/1000)
+* 'Unselective' attribute (e.g. region of the world, 1/6)
+* Scan
+
+Temporal selectivity (in order of priority):
+
+1. VT/ST as-of now
+2. VT as-of T, ST as-of now
+3. VT range/scan, ST as-of now
+4. ST as-of T
+5. ST range/scan
+
+== Data shapes and characteristics
+
+We also consider several different potential data shapes, based on their cardinality, update frequency (per entity) and bitemporal characteristics.
+
+First, some general assumptions:
+
+* We assume that the overwhelming majority of data is entered at VT ≈ ST.
+* We assume that data is rarely updated at the same VT for a given entity more than a couple of times - this tends to be to correct a mistake.
+
+We consider the following data shapes:
+
+User profiles, employee records::
+* Moderate and slow-growing cardinality, relatively low update frequency.
+* Updates tend to be at VT ≈ ST, with some exceptions for retroactive and scheduled updates.
+* Data is usually entered without valid-to - i.e. each update is valid until corrected and supersedes the previous version.
+* Most often queried as-of-now; old (but current) data is still relevant and may be read long after it was written.
+
+Trade/order data, social media posts::
+* High and fast-growing cardinality, relatively low update frequency per entity.
+* Updates biased towards new entities (e.g. as they progress through the state machine).
+* Once the entity has settled into a terminal state, it is rarely updated again.
+* Final states should remain valid indefinitely - the 'facts' about the entity remain true.
+* Queries skewed towards more recently added entities - rare to need to access older data.
+* Aggregates required for analytics - again, likely skewed towards more recent data (e.g. "what was my order volume for every month in the last quarter?")
+
+IoT readings::
+* Low/moderate and relatively static cardinality, high update frequency.
+* Data here should be entered with a short valid-time period - perhaps even instantaneous (valid-to = valid-from + 1µs, one 'chronon').
+* Updates here are still likely to be VT ≈ ST.
+* Historical readings are queried less frequently.
+* Frequent aggregates over the current state of all entities, and the history of individual entities.
+
+Static reference data::
+* Low and static cardinality, low update frequency
+* Often this is frequently accessed and, due to its size, is likely to be fully cached - not generally a significant concern.
