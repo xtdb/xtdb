@@ -2,24 +2,23 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.file-list-cache :as flc]
+            [xtdb.metrics :as metrics]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
-            [xtdb.util :as util]
-            [xtdb.metrics :as metrics])
+            [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
-           (com.github.benmanes.caffeine.cache AsyncCache Cache Caffeine Policy$Eviction RemovalListener Weigher)
-           [java.io ByteArrayOutputStream Closeable File]
+           [io.micrometer.core.instrument MeterRegistry]
+           [io.micrometer.core.instrument.simple SimpleMeterRegistry]
+           [java.io ByteArrayOutputStream Closeable]
            [java.lang AutoCloseable]
            (java.nio ByteBuffer)
            (java.nio.channels Channels ClosedByInterruptException)
            [java.nio.file FileVisitOption Files LinkOption Path]
-           [java.nio.file.attribute BasicFileAttributes FileAttribute]
+           [java.nio.file.attribute FileAttribute]
            [java.util NavigableMap SortedSet TreeMap]
            (java.util NavigableMap)
-           [java.util.concurrent CompletableFuture ConcurrentSkipListSet ForkJoinPool TimeUnit]
-           [java.util.function BiFunction]
-           [io.micrometer.core.instrument MeterRegistry]
-           [io.micrometer.core.instrument.simple SimpleMeterRegistry]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           kotlin.Pair
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
@@ -27,6 +26,7 @@
            (xtdb.api.log FileListCache FileListCache$Subscriber)
            (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
+           (xtdb.cache DiskCache DiskCache$Entry MemoryCache)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -42,25 +42,7 @@
 
 (def ^java.nio.file.Path storage-root (util/->path version))
 
-(defn- free-memory [^Cache memory-store]
-  ;; closing should happen via the remove method
-  (.invalidateAll memory-store)
-  ;; HACK - invalidate is all async; investigate whether we can hook into caffeine
-  (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
-
 (defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
-
-(defn- cache-get ^ArrowBuf [^Cache memory-store k]
-  (.. memory-store asMap (computeIfPresent k (reify BiFunction
-                                               (apply [_ _k v]
-                                                 (retain v))))))
-
-(defn- cache-compute
-  "Computing the cached ArrowBuf from (f) if needed."
-  [^Cache memory-store k f]
-  (.. memory-store asMap (compute k (reify BiFunction
-                                      (apply [_ _k v]
-                                        (retain (or v (f))))))))
 
 (defn ->buffer-pool-child-allocator [^BufferAllocator allocator, ^MeterRegistry metrics-registry]
   (let [child-allocator (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)]
@@ -113,9 +95,7 @@
               (.close write-ch)))))))
 
   EvictBufferTest
-  (evict-cached-buffer! [_ _k]
-    ;; no-op,
-    )
+  (evict-cached-buffer! [_ _k])
 
   Closeable
   (close [_]
@@ -133,19 +113,18 @@
                         "upload" ".arrow"
                         (make-array FileAttribute 0)))
 
-(defrecord LocalBufferPool [allocator, ^Cache memory-store, ^Path disk-store, ^long max-size]
+(defrecord LocalBufferPool [allocator, ^MemoryCache memory-cache, ^Path disk-store]
   IBufferPool
   (getBuffer [_ k]
     (when k
-      (or (cache-get memory-store k)
-          (locking disk-store
-            (let [buffer-cache-path (.resolve disk-store k)]
-              ;; TODO could this not race with eviction? e.g exists for this cond, but is evicted before we can map the file into the cache?
-              (when-not (util/path-exists buffer-cache-path)
-                (throw (os/obj-missing-exception k)))
+      (.get memory-cache k
+            (fn [^Path k]
+              (let [buffer-cache-path (.resolve disk-store k)]
+                (when-not (util/path-exists buffer-cache-path)
+                  (throw (os/obj-missing-exception k)))
 
-              (let [nio-buffer (util/->mmap-path buffer-cache-path)]
-                (cache-compute memory-store k #(util/->arrow-buf-view allocator nio-buffer))))))))
+                (CompletableFuture/completedFuture
+                 (Pair. buffer-cache-path nil)))))))
 
   (putObject [_ k buffer]
     (try
@@ -182,7 +161,7 @@
           (writeBatch [_]
             (try
               (.writeBatch unl)
-              (catch ClosedByInterruptException e
+              (catch ClosedByInterruptException _
                 (throw (InterruptedException.)))))
 
           (end [_]
@@ -200,31 +179,18 @@
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
-    (.invalidate memory-store k)
-    (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
+    (.invalidate memory-cache k))
 
   Closeable
   (close [_]
-    (free-memory memory-store)
+    (util/close memory-cache)
     (util/close allocator)))
-
-(defn ->memory-buffer-cache ^Cache [^long max-cache-bytes]
-  (-> (Caffeine/newBuilder)
-      (.maximumWeight max-cache-bytes)
-      (.weigher (reify Weigher
-                  (weigh [_ _k v]
-                    (.capacity ^ArrowBuf v))))
-      (.removalListener (reify RemovalListener
-                          (onRemoval [_ _k v _]
-                            (util/close v))))
-      (.build)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory, ^MeterRegistry metrics-registry]
   (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
-                     (->memory-buffer-cache (.getMaxCacheBytes factory))
-                     (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs)
-                     (.getMaxCacheBytes factory)))
+                     (MemoryCache. allocator (.getMaxCacheBytes factory))
+                     (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs)))
 
 (defn dir->buffer-pool
   "Creates a local storage buffer pool from the given directory."
@@ -312,61 +278,26 @@
         (upload-multipart-buffers object-store k (arrow-buf->parts arrow-buf))
         nil))))
 
-(defn update-evictor-key {:style/indent 2} [^AsyncCache local-disk-cache-evictor ^Path k update-fn]
-  (-> (.asMap local-disk-cache-evictor)
-      (.compute k (reify BiFunction
-                    (apply [_ _k fut] (update-fn fut))))))
-
 (defrecord RemoteBufferPool [allocator
-                             ^Cache memory-store
-                             ^Path local-disk-cache
-                             ^AsyncCache local-disk-cache-evictor
+                             ^MemoryCache memory-cache
+                             ^DiskCache disk-cache
                              ^FileListCache file-list-cache
                              ^ObjectStore object-store
                              ^SortedSet !os-file-names
-                             ^AutoCloseable !os-file-name-subscription
-                             !evictor-max-weight]
+                             ^AutoCloseable !os-file-name-subscription]
   IBufferPool
   (getBuffer [_ k]
     (when k
-      (or (cache-get memory-store k)
-          (let [buffer-cache-path (.resolve local-disk-cache k)
-                {:keys [file-size ctx]} @(update-evictor-key local-disk-cache-evictor k
-                                                             (fn [^CompletableFuture fut]
-                                                               (-> (if (util/path-exists buffer-cache-path)
-                                                                     (-> (or fut (CompletableFuture/completedFuture {:pinned? false}))
-                                                                         (.thenApply (fn [{:keys [pinned?]}]
-                                                                                       (log/tracef "Key %s found in local-disk-cache - returning buffer" k)
-                                                                                       {:path buffer-cache-path :previously-pinned? pinned?})))
-                                                                     (let [tmp-path (create-tmp-path local-disk-cache)]
-                                                                       (log/debugf "Key %s not found in local-disk-cache, loading from object store" k)
+      (.get memory-cache k
+            (fn [k]
+              (-> (.get disk-cache k
+                        (fn [^Path k, ^Path tmp-file]
+                          (.getObject object-store k tmp-file)))
 
-                                                                       (util/create-parents buffer-cache-path)
-                                                                       (-> (.getObject object-store k tmp-path)
-                                                                           (.thenApply (fn [tmp-path]
-                                                                                         (util/atomic-move tmp-path buffer-cache-path)
-                                                                                         {:path buffer-cache-path, :previously-pinned? false})))))
-
-                                                                   (.thenApply (fn [{:keys [path previously-pinned?]}]
-                                                                                 (let [file-size (util/size-on-disk path)
-                                                                                       nio-buffer (util/->mmap-path path)
-                                                                                       buffer-release-fn (fn []
-                                                                                                           (update-evictor-key local-disk-cache-evictor k
-                                                                                                             (fn [^CompletableFuture fut]
-                                                                                                               (some-> fut
-                                                                                                                       (.thenApply (fn [{:keys [pinned? file-size]}]
-                                                                                                                                     (when pinned?
-                                                                                                                                       (swap! !evictor-max-weight + file-size))
-                                                                                                                                     {:pinned? false :file-size file-size}))))))
-                                                                                       create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer buffer-release-fn)
-                                                                                       buf (cache-compute memory-store k create-arrow-buf)]
-                                                                                   {:pinned? true :file-size file-size :ctx {:buf buf :previously-pinned? previously-pinned?}}))))))
-                {:keys [previously-pinned? buf]} ctx]
-
-            (when-not previously-pinned?
-              (swap! !evictor-max-weight - file-size))
-
-            buf))))
+                  (.thenApply (fn [^DiskCache$Entry entry]
+                                ;; cleanup action - when the entry is evicted from the memory cache,
+                                ;; release one count on the disk-cache entry.
+                                (Pair. (.getPath entry) entry))))))))
 
   (listAllObjects [_]
     (vec !os-file-names))
@@ -375,7 +306,7 @@
     (list-files-under-prefix !os-file-names dir))
 
   (openArrowWriter [_ k rel]
-    (let [tmp-path (create-tmp-path local-disk-cache)]
+    (let [tmp-path (.createTempPath disk-cache)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  unl (.startUnload rel file-ch)]
 
@@ -390,16 +321,7 @@
 
             (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [k]}))
 
-            (let [buffer-cache-path (.resolve local-disk-cache k)]
-              (update-evictor-key local-disk-cache-evictor k
-                                  (fn [^CompletableFuture fut]
-                                    (-> (or fut (CompletableFuture/completedFuture {:pinned? false}))
-                                        (.thenApply (fn [{:keys [pinned?]}]
-                                                      (log/tracef "Writing arrow file, %s, to local disk cache" k)
-                                                      (util/create-parents buffer-cache-path)
-                                                      ;; see #2847
-                                                      (util/atomic-move tmp-path buffer-cache-path)
-                                                      {:pinned? pinned? :file-size (util/size-on-disk buffer-cache-path)})))))))
+            (.put disk-cache k tmp-path))
 
           (close [_]
             (util/close unl)
@@ -413,46 +335,15 @@
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
-    (.invalidate memory-store k)
-    (.awaitQuiescence (ForkJoinPool/commonPool) 100 TimeUnit/MILLISECONDS))
+    (.invalidate memory-cache k))
 
   (close [_] 
-    (free-memory memory-store)
-    (util/try-close @!os-file-name-subscription)
+    (util/close memory-cache)
+    (util/close @!os-file-name-subscription)
     (util/close object-store)
     (util/close allocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defn ->local-disk-cache-evictor ^com.github.benmanes.caffeine.cache.AsyncCache [size ^Path local-disk-cache]
-  (log/debugf "Creating local-disk-cache with size limit of %s bytes" size)
-  (let [cache (-> (Caffeine/newBuilder)
-                  (.maximumWeight size)
-                  (.weigher (reify Weigher
-                              (weigh [_ _k {:keys [pinned? file-size]}]
-                                (if pinned? 0 file-size))))
-                  (.evictionListener (reify RemovalListener
-                                       (onRemoval [_ k {:keys [file-size]} _]
-                                         (log/debugf "Removing file %s from local-disk-cache - exceeded size limit (freed %s bytes)" k file-size)
-                                         (util/delete-file (.resolve local-disk-cache ^Path k)))))
-                  (.buildAsync))
-        synced-cache (.synchronous cache)]
-    
-    ;; Load local disk cache into cache
-    (let [files (filter #(.isFile ^File %) (file-seq (.toFile local-disk-cache)))
-          file-infos (map (fn [^File file]
-                            (let [^BasicFileAttributes attrs (Files/readAttributes (.toPath file) BasicFileAttributes  ^"[Ljava.nio.file.LinkOption;" (make-array LinkOption 0))
-                                  last-accessed-ms (.toMillis (.lastAccessTime attrs))
-                                  last-modified-ms (.toMillis (.lastModifiedTime attrs))]
-                              {:file-path (util/->path file)
-                               :last-access-time (max last-accessed-ms last-modified-ms)}))
-                          files)
-          ordered-files (sort-by #(:last-access-time %) file-infos)]
-      (doseq [{:keys [file-path]} ordered-files]
-        (let [k (.relativize local-disk-cache file-path)]
-          (.put synced-cache k {:pinned? false
-                                :file-size (util/size-on-disk file-path)}))))
-    cache))
 
 (defn calculate-limit-from-percentage-of-disk [^Path local-disk-cache ^long percentage]
   ;; Creating the empty directory if it doesn't exist
@@ -469,11 +360,7 @@
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [!os-file-names (ConcurrentSkipListSet.)
           !os-file-name-subscription (promise)
-          ^Path local-disk-cache (.getLocalDiskCache factory)
-          local-disk-size-limit (or (.getMaxDiskCacheBytes factory)
-                                    (calculate-limit-from-percentage-of-disk local-disk-cache (.getMaxDiskCachePercentage factory)))
-          ^AsyncCache local-disk-cache-evictor (->local-disk-cache-evictor local-disk-size-limit local-disk-cache)
-          !evictor-max-weight (atom local-disk-size-limit)]
+          ^Path disk-cache-root (.getLocalDiskCache factory)]
 
       (.subscribeFileNotifications file-list-cache
                                    (reify FileListCache$Subscriber
@@ -485,19 +372,12 @@
 
       (.addAll !os-file-names (.listAllObjects object-store))
 
-      ;; Add watcher to max-weight atom - when it changes, update the cache max weight
-      (add-watch !evictor-max-weight :update-cache-max-weight
-                 (fn [_ _ _ ^long new-size]
-                   (let [sync-cache (.synchronous local-disk-cache-evictor)
-                         ^Policy$Eviction eviction-policy (.get (.eviction (.policy sync-cache)))]
-                     (.setMaximum eviction-policy (max 0 new-size)))))
-
-      
       (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
-                          (->memory-buffer-cache (.getMaxCacheBytes factory))
-                          local-disk-cache local-disk-cache-evictor
-                          file-list-cache object-store !os-file-names !os-file-name-subscription
-                          !evictor-max-weight))))
+                          (MemoryCache. allocator (.getMaxCacheBytes factory))
+                          (DiskCache. disk-cache-root
+                                      (or (.getMaxDiskCacheBytes factory)
+                                          (calculate-limit-from-percentage-of-disk disk-cache-root (.getMaxDiskCachePercentage factory))))
+                          file-list-cache object-store !os-file-names !os-file-name-subscription))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}

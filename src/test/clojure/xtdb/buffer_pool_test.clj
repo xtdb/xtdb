@@ -23,6 +23,7 @@
            (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
            xtdb.arrow.Relation
            xtdb.buffer_pool.RemoteBufferPool
+           xtdb.cache.DiskCache
            xtdb.IBufferPool
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
@@ -82,16 +83,17 @@
   (ByteBuffer/wrap (arrow-buf-bytes arrow-buf)))
 
 (defn test-get-object [^IBufferPool bp, ^Path k, ^ByteBuffer expected]
-  (let [{:keys [^Path disk-store, object-store, ^Path local-disk-cache, ^AsyncCache local-disk-cache-evictor]} bp]
+  (let [{:keys [^Path disk-store, object-store, ^DiskCache disk-cache]} bp
+        root-path (.getRootPath disk-cache)]
 
     (t/testing "immediate get from buffers map produces correct buffer"
       (util/with-open [buf (.getBuffer bp k)]
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf))))))
 
-    (when disk-store
+    (when root-path
       (t/testing "expect a file to exist under our :disk-store"
-        (t/is (util/path-exists (.resolve disk-store k)))
-        (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.resolve disk-store k))))))
+        (t/is (util/path-exists (.resolve root-path k)))
+        (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.resolve root-path k))))))
 
       (t/testing "if the buffer is evicted, it is loaded from disk"
         (bp/evict-cached-buffer! bp k)
@@ -102,8 +104,9 @@
       (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
         (bp/evict-cached-buffer! bp k)
         ;; Evicted from map and deleted from disk (ie, replicating effects of 'eviction' here)
-        (.remove (.asMap local-disk-cache-evictor) (.resolve local-disk-cache k))
-        (util/delete-file (.resolve local-disk-cache k))
+        (-> (.asMap (.getCache (.getPinningCache disk-cache)))
+            (.remove k))
+        (util/delete-file (.resolve root-path k))
         ;; Will fetch from object store again
         (util/with-open [buf (.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
@@ -147,7 +150,7 @@
             (swap! !calls conj :abort)
             (CompletableFuture/completedFuture nil)))))))
 
-(def simulated-obj-store-factory
+(defn simulated-obj-store-factory []
   (let [!buffers (atom {})]
     (reify ObjectStoreFactory
       (openObjectStore [_]
@@ -155,7 +158,7 @@
 
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
-                          (Storage/remoteStorage simulated-obj-store-factory (create-tmp-dir))
+                          (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
                           FileListCache/SOLO
                           (SimpleMeterRegistry.)))
 
@@ -208,7 +211,7 @@
   (util/with-tmp-dirs #{local-disk-cache}
     (with-open [bp (bp/open-remote-storage
                     tu/*allocator*
-                    (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
+                    (-> (Storage/remoteStorage (simulated-obj-store-factory) local-disk-cache)
                         (.maxDiskCacheBytes 10)
                         (.maxCacheBytes 12))
                     FileListCache/SOLO
@@ -218,7 +221,7 @@
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
 
-      (t/testing "going above max size - all entries pinned (ie, in memory cache) - should return all elements"
+      (t/testing "going above max size - all entries still present in memory cache (which isn't above limit) - should return all elements"
         (insert-utf8-to-local-cache bp (util/->path "c") 4)
         (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info local-disk-cache))))
 
@@ -232,32 +235,33 @@
         (t/is (= 3 (:file-count (file-info local-disk-cache))))))))
 
 (t/deftest local-disk-cache-with-previous-values
-  (util/with-tmp-dirs #{local-disk-cache}
-    ;; Writing files to buffer pool & local-disk-cache
-    (with-open [bp (bp/open-remote-storage
-                    tu/*allocator*
-                    (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
-                        (.maxDiskCacheBytes 10)
-                        (.maxCacheBytes 12))
-                    FileListCache/SOLO
-                    (SimpleMeterRegistry.))]
-      (insert-utf8-to-local-cache bp (util/->path "a") 4)
-      (insert-utf8-to-local-cache bp (util/->path "b") 4)
-      (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
+  (let [obj-store-factory (simulated-obj-store-factory)]
+    (util/with-tmp-dirs #{local-disk-cache}
+      ;; Writing files to buffer pool & local-disk-cache
+      (with-open [bp (bp/open-remote-storage
+                      tu/*allocator*
+                      (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
+                          (.maxDiskCacheBytes 10)
+                          (.maxCacheBytes 12))
+                      FileListCache/SOLO
+                      (SimpleMeterRegistry.))]
+        (insert-utf8-to-local-cache bp (util/->path "a") 4)
+        (insert-utf8-to-local-cache bp (util/->path "b") 4)
+        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
 
-    ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
-    (with-open [bp (bp/open-remote-storage
-                    tu/*allocator*
-                    (-> (Storage/remoteStorage simulated-obj-store-factory local-disk-cache)
-                        (.maxDiskCacheBytes 10)
-                        (.maxCacheBytes 12))
-                    FileListCache/SOLO
-                    (SimpleMeterRegistry.))]
-      (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "a"))]
-        (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf)))))
+      ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
+      (with-open [bp (bp/open-remote-storage
+                      tu/*allocator*
+                      (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
+                          (.maxDiskCacheBytes 10)
+                          (.maxCacheBytes 12))
+                      FileListCache/SOLO
+                      (SimpleMeterRegistry.))]
+        (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "a"))]
+          (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf)))))
 
-      (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "b"))]
-        (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf))))))))
+        (with-open [^ArrowBuf buf (.getBuffer bp (util/->path "b"))]
+          (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (arrow-buf->nio buf)))))))))
 
 (t/deftest local-buffer-pool
   (tu/with-tmp-dirs #{tmp-dir}
@@ -282,8 +286,7 @@
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     (.putObject buffer-pool k buf)))
 
-(defn test-list-objects
-  [^RemoteBufferPool buffer-pool]
+(defn test-list-objects [^RemoteBufferPool buffer-pool]
   (put-edn buffer-pool (util/->path "bar/alice") :alice)
   (put-edn buffer-pool (util/->path "foo/alan") :alan)
   (put-edn buffer-pool (util/->path "bar/bob") :bob)
