@@ -2699,7 +2699,7 @@
 (defn- xform-table-info [table-info]
   (into {}
         (for [[tn cns] (merge info-schema/table-info
-                              {'xt/txs #{"_id" "committed" "error" "system_time"}}
+                              '{xt/txs #{_id committed error system_time}}
                               table-info)]
           [(symbol tn) (->> cns
                             (map ->col-sym)

@@ -381,7 +381,7 @@
                       col-name (str col-name)]
                   ;; TODO move to fields here
                   (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                          (if-let [info-field (get-in info-schema/derived-tables [(symbol table) col-name])]
+                          (if-let [info-field (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])]
                             info-field
                             (types/merge-fields (.columnField metadata-mgr table col-name)
                                                 (some-> (.liveIndex wm)
@@ -397,7 +397,6 @@
                                             (case col-type
                                               :column arg
                                               :select (key (first arg)))))))
-
             fields (->> col-names
                         (into {} (map (juxt identity
                                             (fn [col-name]
@@ -437,6 +436,7 @@
          :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, schema, params]}]
                      (if-let [derived-table-schema (info-schema/derived-tables table)]
                        (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark)
+
                        (let [iid-bb (selects->iid-byte-buffer selects params)
                              col-preds (cond-> col-preds
                                          iid-bb (assoc "_iid" (iid-selector iid-bb)))
