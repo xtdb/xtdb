@@ -62,7 +62,8 @@
       pg_catalog/pg_settings {name :utf8, setting :utf8}
 
       pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
-                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}})
+                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
+      pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables)
@@ -211,6 +212,10 @@
     {:name setting-name
      :setting setting}))
 
+(defn pg-user []
+  [{:username "xtdb" :usesuper true :passwd "xtdb"}
+   {:username "anonymous" :usesuper false :passwd nil}])
+
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
   (tryAdvance [this c]
@@ -234,9 +239,9 @@
     ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
     ;;should be types/merge-fields as per scan-fields
     (let [schema-info (-> (merge-with merge
-                                        (.allColumnFields metadata-mgr)
-                                        (some-> (.liveIndex wm)
-                                                (.allColumnFields)))
+                                      (.allColumnFields metadata-mgr)
+                                      (some-> (.liveIndex wm)
+                                              (.allColumnFields)))
                           (update-keys symbol))
 
           out-rel-wtr (vw/root->writer root)
@@ -258,6 +263,7 @@
                                                    pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
                                                    pg_catalog/pg_settings (pg-settings)
                                                    pg_catalog/pg_range (pg-range)
+                                                   pg_catalog/pg_user (pg-user)
                                                    (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))
                                      (.syncRowCount)))]
 
