@@ -11,6 +11,9 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 import kotlin.math.max
+import org.slf4j.LoggerFactory
+
+private val LOGGER = LoggerFactory.getLogger(DiskCache::class.java)
 
 class DiskCache(
     val rootPath: Path,
@@ -30,7 +33,7 @@ class DiskCache(
 
         override fun onEvict(k: Path, reason: RemovalCause) {
             path.deleteIfExists()
-            println("Evicted $k due to $reason")
+            LOGGER.trace("Evicted $k due to $reason")
             super.onEvict(k, reason)
         }
 
