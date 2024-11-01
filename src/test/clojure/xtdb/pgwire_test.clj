@@ -15,7 +15,6 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)

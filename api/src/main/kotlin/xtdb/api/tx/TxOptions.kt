@@ -12,6 +12,7 @@ import java.time.ZoneId
 data class TxOptions(
     val systemTime: Instant? = null,
     val defaultTz: ZoneId? = null,
+    val user: String? = null
 ) {
 
     /**
@@ -25,6 +26,7 @@ data class TxOptions(
     class Builder internal constructor(){
         private var systemTime: Instant? = null
         private var defaultTz: ZoneId? = null
+        private var user: String? = null
 
         /**
          * Overrides the system time for the transaction.
@@ -42,7 +44,9 @@ data class TxOptions(
          */
         fun defaultTz(defaultTz: ZoneId?) = apply { this.defaultTz = defaultTz }
 
-        fun build() = TxOptions(systemTime, defaultTz)
+        fun user(user: String?) = apply { this.user = user}
+
+        fun build() = TxOptions(systemTime, defaultTz, user)
     }
 }
 

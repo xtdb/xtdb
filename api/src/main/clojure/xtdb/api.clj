@@ -143,9 +143,10 @@
   (cond
     (instance? TxOptions tx-opts) tx-opts
     (nil? tx-opts) (TxOptions.)
-    (map? tx-opts) (let [{:keys [system-time default-tz]} tx-opts]
+    (map? tx-opts) (let [{:keys [system-time default-tz user]} tx-opts]
                      (TxOptions. (some-> system-time expect-instant)
-                                 default-tz))))
+                                 default-tz
+                                 user))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
