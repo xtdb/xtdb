@@ -44,4 +44,7 @@ dependencies {
     testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
 
     devImplementation(sourceSets.main.get().output)
+
+    testImplementation(deps.arrow.adbc.core)
+    testImplementation(deps.arrow.adbc.fsql)
 }
