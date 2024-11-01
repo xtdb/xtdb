@@ -485,6 +485,11 @@
                  "SELECT data_type FROM information_schema.columns
                   WHERE column_name = 'set_column'"))))
 
+(deftest test-pg-user
+  (t/is (= [{:passwd "xtdb", :username "xtdb", :usesuper true}
+            {:username "anonymous", :usesuper false}]
+           (xt/q tu/*node* "SELECT * FROM pg_user"))))
+
 ; required for Postgrex
 (deftest test-pg-range-3737
   (let [types (set
