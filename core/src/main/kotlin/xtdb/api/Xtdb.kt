@@ -22,6 +22,8 @@ interface Xtdb : AutoCloseable {
 
     val serverPort: Int
 
+    fun <T: XtdbModule> module(type: Class<T>): T?
+
     @Serializable
     data class Config(
         var server : ServerConfig? = ServerConfig(),
@@ -90,3 +92,5 @@ interface Xtdb : AutoCloseable {
         fun openNode(configure: Config.() -> Unit) = openNode(Config().also(configure))
     }
 }
+
+inline fun <reified T: XtdbModule> Xtdb.module(): T? = module(T::class.java)

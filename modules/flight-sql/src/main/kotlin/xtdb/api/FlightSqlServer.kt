@@ -5,9 +5,9 @@ import kotlinx.serialization.Serializable
 import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
 
-object FlightSqlServer {
-    @JvmStatic
-    fun flightSqlServer() = Factory()
+interface FlightSqlServer : XtdbModule {
+
+    val port: Int
 
     @SerialName("!FlightSqlServer")
     @Serializable
@@ -21,7 +21,7 @@ object FlightSqlServer {
         fun port(port: Int) = apply { this.port = port }
 
         override fun openModule(xtdb: Xtdb) =
-            requiringResolve("xtdb.flight-sql/open-server")(xtdb, this) as XtdbModule
+            requiringResolve("xtdb.flight-sql/open-server")(xtdb, this) as FlightSqlServer
     }
 
     class Registration : XtdbModule.Registration {

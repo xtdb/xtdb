@@ -21,7 +21,6 @@
            [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
-           xtdb.api.module.XtdbModule
            xtdb.arrow.Relation
            [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IQuerySource PreparedQuery]))
@@ -263,7 +262,7 @@
                        (log/error e "FSQL server error")))))))
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [host port]}]
-  (.module config (cond-> (FlightSqlServer/flightSqlServer)
+  (.module config (cond-> (FlightSqlServer$Factory.)
                     (some? host) (.host host)
                     (some? port) (.port port))))
 
@@ -286,7 +285,9 @@
                                         (.start))]
 
       (log/infof "Flight SQL server started, port %d" port)
-      (reify XtdbModule
+      (reify FlightSqlServer
+        (getPort [_] (.getPort server))
+
         (close [_]
           (util/try-close server)
           (run! util/try-close (vals stmts))

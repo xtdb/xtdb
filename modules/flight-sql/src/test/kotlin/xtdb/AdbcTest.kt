@@ -1,0 +1,4 @@
+package xtdb
+
+class AdbcTest {
+}

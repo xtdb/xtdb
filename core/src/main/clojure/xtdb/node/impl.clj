@@ -81,6 +81,10 @@
                 (:port))
         (throw (IllegalStateException. "No Postgres wire server running."))))
 
+  (module [_ clazz]
+    (->> (vals (:xtdb/modules system))
+         (some #(when (instance? clazz %) %))))
+
   xtp/PNode
   (submit-tx [this tx-ops opts]
     (let [system-time (some-> ^TxOptions opts .getSystemTime)

@@ -8,30 +8,30 @@
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.arrow.Relation))
+           xtdb.arrow.Relation
+           xtdb.api.FlightSqlServer))
 
-(def ^:private ^:dynamic *port* nil)
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
 (def ^:private ^:dynamic *conn* nil)
 
 (t/use-fixtures :each
   tu/with-allocator
   (fn [f]
-    (binding [*port* (tu/free-port)]
-      (tu/with-opts {:flight-sql-server {:port *port*}}
-        f)))
+    (tu/with-opts {:flight-sql-server {:port 0}}
+      f))
 
   tu/with-node
 
   (fn [f]
-    (with-open [flight-client (-> (FlightClient/builder tu/*allocator* (Location/forGrpcInsecure "127.0.0.1" *port*))
-                                  (.build))
-                client (FlightSqlClient. flight-client)
+    (let [port (.getPort ^FlightSqlServer (.module tu/*node* FlightSqlServer))]
+      (with-open [flight-client (-> (FlightClient/builder tu/*allocator* (Location/forGrpcInsecure "127.0.0.1" port))
+                                    (.build))
+                  client (FlightSqlClient. flight-client)
 
-                conn (jdbc/get-connection {:jdbcUrl (format "jdbc:arrow-flight-sql://localhost:%d?useEncryption=false" *port*)})]
+                  conn (jdbc/get-connection {:jdbcUrl (format "jdbc:arrow-flight-sql://localhost:%d?useEncryption=false" port)})]
 
-      (binding [*client* client, *conn* conn]
-        (f)))))
+        (binding [*client* client, *conn* conn]
+          (f))))))
 
 (def ^:private ^"[Lorg.apache.arrow.flight.CallOption;"
   empty-call-opts

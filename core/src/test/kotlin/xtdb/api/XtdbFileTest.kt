@@ -30,7 +30,7 @@ internal class XtdbFileTest {
     @Test
     fun validConfigFile() {
         val resourcePath = XtdbFileTest::class.java.classLoader.getResource("node-config.yaml")!!.path
-        val node = assertDoesNotThrow { Xtdb.openNode(path = Path(resourcePath)) }.use { node ->
+        assertDoesNotThrow { Xtdb.openNode(path = Path(resourcePath)) }.use { node ->
             assertEquals(5433, node.serverPort)
         }
 
