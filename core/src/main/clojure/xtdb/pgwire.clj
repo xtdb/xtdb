@@ -1164,7 +1164,8 @@
           (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
         :else
-        (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
+        (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)
+                                                                  :user (-> session :parameters (get "user"))})]
           (when-not (skip-until-sync? conn)
             (if error
               (cmd-send-error conn (err-protocol-violation (ex-message error)))
@@ -1262,12 +1263,14 @@
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{{:keys [failed err dml-buf tx-system-time]} :transaction, {:keys [^Clock clock]} :session} @conn-state]
+  (let [{{:keys [failed err dml-buf tx-system-time]} :transaction, {:keys [^Clock clock parameters]} :session} @conn-state]
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
+
       (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                 :system-time tx-system-time})]
+                                                                 :system-time tx-system-time
+                                                                 :user (get parameters "user")})]
         (cond
           ;; skip - can't use skip-until-sync as we might be in a simple query
           (-> @conn-state :transaction :failed) nil
