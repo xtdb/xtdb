@@ -5,12 +5,12 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [clojure.tools.logging :as log])
   (:import (clojure.lang MapEntry)
            [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
-           [java.text ParseException]
            [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
            [java.util UUID]
@@ -785,6 +785,48 @@
 (defn trunc-duration-to-micros [^Duration dur]
   (.withNanos dur (* (quot (.getNano dur) 1000) 1000)))
 
+(def pg-ranges
+  ;; we only support one
+  {:tzts-range
+   {:rngtypid 3910
+    :rngsubtype 1184
+    :rngmultitypid 4534
+    :rngcollation 0
+    :rngsubopc 3127
+    :rngcanonical ""
+    :rngsubdiff "tstzrange_subdiff"}})
+
+(defn binary-list-header [length element-oid typlen]
+  ;; list: <<byte-length,dimensions=1,data-offset=0,oid,elem-count=(lenght-of-list),l-bound=1?,data>>
+  ;; https://github.com/postgres/postgres/blob/master/src/include/utils/array.h
+  (let [payload-size (+ (* 5 4) (* typlen length) (* 4 length))] ;; 5 integers describing array + data prefixed by their length
+    (doto
+     (ByteBuffer/allocate (+ 4 payload-size)) ;; 4 is for int4 - payload size
+      (.putInt payload-size)
+      (.putInt 1) ;; dimensions
+      (.putInt 0) ;; data offset
+      (.putInt element-oid)
+      (.putInt length)
+      ;; l-bound - MUST BE 1
+      (.putInt 1))))
+
+(defn read-binary-array [ba]
+  (let [bb (ByteBuffer/wrap ba)
+        ;; _payload-size (.getInt bb)
+        ;; _dimensions (.getInt bb 4)
+        data-offset (.getInt bb 8)
+        oid (.getInt bb 12)
+        length (.getInt bb 16)
+        [typlen get-elem] (case oid
+                            (23 1007) [4 (fn [bb idx] (.getInt bb idx))]
+                            (20 1016) [8 (fn [bb idx] (.getLong bb idx))])
+        start  (+ data-offset 20)]
+    (into []
+          (map
+           (fn [idx]
+             (get-elem bb (+ start (* idx typlen))))
+           (range length)))))
+
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
    ;;default oid is currently only used to describe a parameter without a known type
@@ -797,6 +839,8 @@
             :col-type :i64
             :oid 20
             :typlen typlen
+            :typsend "int8send"
+            :typreceive "int8recv"
             :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getLong))
             :read-text (fn [_env ba] (-> ba read-utf8 Long/parseLong))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -810,6 +854,8 @@
             :col-type :i32
             :oid 23
             :typlen typlen
+            :typsend "int4send"
+            :typreceive "int4recv"
             :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getInt))
             :read-text (fn [_env ba] (-> ba read-utf8 Integer/parseInt))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -823,6 +869,8 @@
             :col-type :i16
             :oid 21
             :typlen typlen
+            :typsend "int2send"
+            :typreceive "int2recv"
             :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getShort))
             :read-text (fn [_env ba] (-> ba read-utf8 Short/parseShort))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -852,6 +900,8 @@
               :col-type :f32
               :oid 700
               :typlen typlen
+              :typsend "float4send"
+              :typreceive "float4recv"
               :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getFloat))
               :read-text (fn [_env ba] (-> ba read-utf8 Float/parseFloat))
               :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -865,6 +915,8 @@
               :col-type :f64
               :oid 701
               :typlen typlen
+              :typsend "float8send"
+              :typreceive "float8recv"
               :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getDouble))
               :read-text (fn [_env ba] (-> ba read-utf8 Double/parseDouble))
               :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -878,6 +930,8 @@
             :col-type :uuid
             :oid 2950
             :typlen typlen
+            :typsend "uuid_send"
+            :typreceive "uuid_recv"
             :read-binary (fn [_env ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
             :read-text (fn [_env ba] (UUID/fromString (read-utf8 ba)))
             :write-binary (fn [_env ^IVectorReader rdr idx]
@@ -892,6 +946,8 @@
                  :col-type [:timestamp-local :micro]
                  :oid 1114
                  :typlen typlen
+                 :typsend "timestamp_send"
+                 :typreceive "timestamp_recv"
                  :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
                                 (let [micros (+ (-> ba ByteBuffer/wrap .getLong) unix-pg-epoch-diff-in-micros)]
                                   (LocalDateTime/ofInstant (time/micros->instant micros) (ZoneId/of "UTC"))))
@@ -922,6 +978,8 @@
                    ;;could try to emit expression for zone agnostic tstz
                    :oid 1184
                    :typlen typlen
+                   :typsend "timestamptz_send"
+                   :typreceive "timestamptz_recv"
                    :read-binary (fn [_env ba] ;; not sent via pgjdbc, reverse engineered
                                   ;;unsure how useful binary tstz inputs are and if therefore if any drivers actually send them, as AFAIK
                                   ;;the wire format for tstz contains no offset, unlike the text format. Therefore we have to
@@ -960,6 +1018,22 @@
 
    :tstz-range {:typname "tstz-range"
                 :oid 3910
+                :typsend "range_send"
+                :typreceive "range_recv"
+                :read-binary (fn [_env ba]
+                               (letfn [(parse-datetime [s]
+                                         (when s
+                                           (let [ts (time/parse-sql-timestamp-literal s)]
+                                             (cond
+                                               (instance? ZonedDateTime ts) ts
+                                               (instance? OffsetDateTime ts) (.toZonedDateTime ^OffsetDateTime ts)
+                                               :else ::malformed-date-time))))]
+                                 (when-let [[_ from to] (re-matches #"\[([^,]*),([^\)]*)\)" (read-utf8 ba))]
+                                   (let [from (parse-datetime from)
+                                         to (parse-datetime to)]
+                                     (when-not (or (= ::malformed-date-time from)
+                                                   (= ::malformed-date-time to))
+                                       (ZonedDateTimeRange. from to))))))
                 :read-text (fn [_env ba]
                              (letfn [(parse-datetime [s]
                                        (when s
@@ -980,13 +1054,22 @@
                                 (utf8
                                  (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                       "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
-                                      ")"))))}
+                                      ")"))))
+                :write-binary (fn [_env ^IVectorReader rdr idx]
+                                (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
+                                  (byte-array
+                                   (.getBytes
+                                    (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                         "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                         ")")))))}
 
    :date (let [typlen 4]
            {:typname "date"
             :col-type [:date :day]
             :oid 1082
             :typlen typlen
+            :typsend "date_send"
+            :typreceive "date_recv"
             :read-binary (fn [_env ba] ;;not sent via pgjdbc, reverse engineered
                            (let [days (+
                                        (-> ba ByteBuffer/wrap .getInt)
@@ -1006,38 +1089,65 @@
    :varchar {:typname "varchar"
              :col-type :utf8
              :oid 1043
+             :typsend "varcharsend"
+             :typreceive "varcharrecv"
              :read-text (fn [_env ba] (read-utf8 ba))
+             :read-binary (fn [_env ba] (read-utf8 ba))
              :write-text (fn [_env ^IVectorReader rdr idx]
                            (let [bb (.getBytes rdr idx)
                                  ba ^bytes (byte-array (.remaining bb))]
                              (.get bb ba)
-                             ba))}
+                             ba))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (let [bb (.getBytes rdr idx)
+                                   ba ^bytes (byte-array (.remaining bb))]
+                               (.get bb ba)
+                               ba))}
    ;;same as varchar which makes this technically lossy in roundtrip
    ;;text is arguably more correct for us than varchar
    :text {:typname "text"
           :col-type :utf8
           :oid 25
+          :typsend "textsend"
+          :typreceive "textrecv"
           :read-text (fn [_env ba] (read-utf8 ba))
+          :read-binary (fn [_env ba] (read-utf8 ba))
           :write-text (fn [_env ^IVectorReader rdr idx]
                         (let [bb (.getBytes rdr idx)
                               ba ^bytes (byte-array (.remaining bb))]
                           (.get bb ba)
-                          ba))}
+                          ba))
+          :write-binary (fn [_env ^IVectorReader rdr idx]
+                          (let [bb (.getBytes rdr idx)
+                                ba ^bytes (byte-array (.remaining bb))]
+                            (.get bb ba)
+                            ba))}
 
    :regclass {:typname "regclass"
               :col-type :regclass
               :oid 2205
+              :typsend "regclasssend"
+              :typreceive "regclassrecv"
               ;;skipping read impl, unsure if anything can/would send a regclass param
               :write-text (fn [_env ^IVectorReader rdr idx]
                             ;;postgres returns the table name rather than a string of the
                             ;;oid here, however regclass is usually not returned from queries
                             ;;could reimplement oid -> table name resolution here or in getObject
                             ;;if the user cannot adjust the query to cast to varchar/text
-                            (utf8 (Integer/toUnsignedString (.getInt rdr idx))))}
+                            (utf8 (Integer/toUnsignedString (.getInt rdr idx))))
+              :write-binary (fn [_env ^IVectorReader rdr idx]
+                            ;;postgres returns the table name rather than a string of the
+                            ;;oid here, however regclass is usually not returned from queries
+                            ;;could reimplement oid -> table name resolution here or in getObject
+                            ;;if the user cannot adjust the query to cast to varchar/text
+                              (byte-array
+                               (utf8 (Integer/toUnsignedString (.getInt rdr idx)))))}
    :boolean {:typname "boolean"
              :col-type :bool
              :typlen 1
              :oid 16
+             :typsend "boolsend"
+             :typreceive "boolrecv"
              :read-binary (fn [_env ba]
                             (case (-> ba ByteBuffer/wrap .get)
                               1 true
@@ -1062,36 +1172,141 @@
               :col-type [:interval :month-day-nano]
               :typlen 16
               :oid 1186
+              :typsend "interval_send"
+              :typreceive "interval_recv"
               :read-binary (fn [_env _ba]
                              (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
               :read-text (fn [_env _ba]
                            (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
               :write-binary (fn [_env ^IVectorReader rdr idx]
-                              (throw (IllegalArgumentException. "Interval binary encoding currently unsupported")))
+                            ;; Postgres only has month-day-micro intervals so we truncate the nanos
+                              (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
+                                    p (.period itvl)
+                                    d (trunc-duration-to-micros  (.duration itvl))]
+                                ;; we use the standard toString for encoding
+                                (byte-array
+                                 (utf8 (IntervalMonthDayNano. p d)))))
               :write-text (fn [_env ^IVectorReader rdr idx]
                             ;; Postgres only has month-day-micro intervals so we truncate the nanos
                             (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
                                   p (.period itvl)
                                   d (trunc-duration-to-micros  (.duration itvl))]
                               ;; we use the standard toString for encoding
-                              (utf8 (IntervalMonthDayNano. p d) )))}
+                              (utf8 (IntervalMonthDayNano. p d))))}
 
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
           :oid 114
+          :typsend "json_send"
+          :typreceive "json_recv"
           :read-text (fn [_env ba]
-                       (JsonSerde/decode (ByteArrayInputStream. ba)))}
+                       (JsonSerde/decode (ByteArrayInputStream. ba)))
+          :read-binary (fn [_env ba]
+                         (JsonSerde/decode (ByteArrayInputStream. ba)))}
 
    :jsonb {:typname "jsonb"
            :oid 3802
+           :typsend "jsonb_send"
+           :typreceive "jsonb_recv"
            :read-text (fn [_env ba]
-                        (JsonSerde/decode (ByteArrayInputStream. ba)))}
+                        (JsonSerde/decode (ByteArrayInputStream. ba)))
+           :read-binary (fn [_env ba]
+                          (JsonSerde/decode (ByteArrayInputStream. ba)))}
 
    :transit {:typname "transit"
              :oid transit-oid
+             :typsend "transit_send"
+             :typreceive "transit_recv"
              :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
+             :read-binary (fn [_env ^bytes ba] (serde/read-transit ba :json))
              :write-text (fn [_env ^IVectorReader rdr idx]
-                           (serde/write-transit (.getObject rdr idx) :json))}})
+                           (serde/write-transit (.getObject rdr idx) :json))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (serde/write-transit (.getObject rdr idx) :json))}
+
+   :_int4 (let [typlen 4
+                oid 1007
+                typelem 23]
+            {:typname "_int4"
+             :typlen typlen
+             :oid oid
+             :typelem typelem
+             :typsend "array_send"
+             :typreceive "array_recv"
+             :typinput "array_in"
+             :typoutput "array_out"
+             :read-text (fn [_env arr]
+                          (log/tracef "read-text_int4 %s" arr)
+                          (let [elems (when-not (empty? arr)
+                                        (let [sa (str/trim arr)]
+                                          (-> sa
+                                              (subs 1 (dec (count sa)))
+                                              (str/split #","))))]
+                            (mapv #(Integer/parseInt %) elems)))
+             :read-binary (fn [_env ba]
+                            (read-binary-array ba))
+             :write-text (fn [_env ^IVectorReader list-rdr idx]
+                           (let [list (.getObject list-rdr idx)
+                                 sb (StringBuilder. "{")]
+                             (doseq [elem list]
+                               (.append sb (or elem "NULL"))
+                               (.append sb ","))
+                             (if (seq list)
+                               (.setCharAt sb (dec (.length sb)) \})
+                               (.append sb "}"))
+                             (utf8 (.toString sb))))
+             :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                             (let [list (.getObject list-rdr idx)
+                                   ^ByteBuffer bb (binary-list-header (count list) typelem typlen)]
+                               (doseq [elem list]
+                                 ;; apparently each element has to be prefixed with its length
+                                 ;; https://stackoverflow.com/questions/4016412/postgresqls-libpq-encoding-for-binary-transport-of-array-data
+                                 ;; also the way vanilla postgres does it seems to confirm this
+                                 (.putInt bb typlen)
+                                 (.putInt bb elem))
+                               (.array bb)))})
+
+   :_int8 (let [typlen 8
+                oid 1016
+                typelem 20]
+            {:typname "_int8"
+             :typlen typlen
+             :oid oid
+             :typelem typelem
+             :typsend "array_send"
+             :typreceive "array_recv"
+             :typinput "array_in"
+             :typoutput "array_out"
+             :read-text (fn [_env arr]
+                          (log/tracef "read-text_int8 %s" arr)
+                          (let [elems (when-not (empty? arr)
+                                        (let [sa (str/trim arr)]
+                                          (-> sa
+                                              (subs 1 (dec (count sa)))
+                                              (str/split #","))))]
+                            (mapv #(Long/parseLong %) elems)))
+             :read-binary (fn [_env ba]
+                            (read-binary-array ba))
+             :write-text (fn [_env ^IVectorReader list-rdr idx]
+                           (let [list (.getObject list-rdr idx)
+                                 sb (StringBuilder. "{")]
+                             (doseq [elem list]
+                               (.append sb (or elem "NULL"))
+                               (.append sb ","))
+                             (if (seq list)
+                               (.setCharAt sb (dec (.length sb)) \})
+                               (.append sb "}"))
+                             (utf8 (.toString sb))))
+             :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                             (let [list (.getObject list-rdr idx)
+                                   ^ByteBuffer bb (binary-list-header (count list) typelem typlen)]
+                               (doseq [elem list]
+                                 ;; apparently each element has to be prefixed with its length
+                                 ;; https://stackoverflow.com/questions/4016412/postgresqls-libpq-encoding-for-binary-transport-of-array-data
+                                 ;; also the way vanilla postgres does it seems to confirm this
+                                 (.putInt bb typlen)
+                                 (.putLong bb elem))
+                               (.array bb)))})})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
@@ -1112,6 +1327,8 @@
    [:timestamp-tz :micro] :timestamptz
    :tstz-range :tstz-range
    [:interval :month-day-nano] :interval
+   [:list :i32] :_int4
+   [:list :i64] :_int8
 
    #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})
@@ -1130,7 +1347,22 @@
     (cond
       (= 1 (count col-types)) (first col-types)
       (set/subset? col-types #{:float4 :float8}) :float8
-      (set/subset? col-types #{:int2 :int4 :int8}) :int8)))
+      (set/subset? col-types #{:int2 :int4 :int8}) :int8
+      (set/subset? col-types #{:_int4 :_int8}) :_int8)))
+
+(defn remove-nulls
+  [typ]
+  (zmatch typ
+    [:union inner-types] (let [res (->> (disj inner-types :null)
+                                        (into #{} (map remove-nulls)))]
+                           (if (<= (count res) 1)
+                             (first res)
+                             [:union res]))
+    [:list inner-type] [:list (remove-nulls inner-type)]
+    [:set inner-type] [:set (remove-nulls inner-type)]
+    [:struct field-map] [:struct (zipmap (keys field-map)
+                                         (map remove-nulls (vals field-map)))]
+    typ))
 
 (defn field->pg-type
   ([field] (field->pg-type nil field))
@@ -1138,9 +1370,10 @@
   ([fallback-pg-type ^Field field]
    (let [field-name (.getName field)
          col-type (field->col-type field)
-         col-types (-> (flatten-union-types col-type)
-                       (disj :null)
+         col-types (-> (remove-nulls col-type)
+                       flatten-union-types
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
+     (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
      (-> (if-let [col-type (->unified-col-type col-types)]
            col-type
            (col-type->pg-type fallback-pg-type col-type))

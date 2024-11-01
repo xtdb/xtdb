@@ -1,13 +1,11 @@
 [:project
  [{customer_id c.1/_id} {name c.1/name} {orders _sq_2}]
- [:group-by
-  [c.1/name c.1/_id _row_number_0 {_sq_2 (array_agg _sq_2)}]
-  [:apply
-   :left-outer-join
-   {c.1/_id ?_sq__id_3}
-   [:map
-    [{_row_number_0 (row-number)}]
-    [:rename c.1 [:scan {:table public/customers} [name _id]]]]
+ [:apply
+  :single-join
+  {c.1/_id ?_sq__id_3}
+  [:rename c.1 [:scan {:table public/customers} [name _id]]]
+  [:group-by
+   [{_sq_2 (array_agg _sq_2)}]
    [:project
     [{_sq_2 {:order_id order_id, :value value}}]
     [:project

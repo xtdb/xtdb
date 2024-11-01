@@ -3,7 +3,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [clojure.tools.logging :as log])
   (:import (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
@@ -56,7 +57,13 @@
                         "typtype" (types/col-type->field "typtype" :utf8)
                         "typbasetype" (types/col-type->field "typbasetype" :i32)
                         "typnotnull" (types/col-type->field "typnotnull" :bool)
-                        "typtypmod" (types/col-type->field "typtypmod" :i32)}
+                        "typtypmod" (types/col-type->field "typtypmod" :i32)
+                        "typsend" (types/col-type->field "typsend" :utf8)
+                        "typreceive" (types/col-type->field "typreceive" :utf8)
+                        "typinput" (types/col-type->field "typinput" :utf8)
+                        "typoutput" (types/col-type->field "typoutput" :utf8)
+                        "typrelid" (types/col-type->field "typrelid" :i32)
+                        "typelem" (types/col-type->field "typelem" :i32)}
    'pg_catalog/pg_class {"oid" (types/col-type->field "oid" :i32)
                          "relname" (types/col-type->field "relname" :utf8)
                          "relnamespace" (types/col-type->field "relnamespace" :i32)
@@ -64,7 +71,7 @@
    'pg_catalog/pg_description {"objoid" (types/col-type->field "objoid" :i32)
                                "classoid" (types/col-type->field "classoid" :i32)
                                "objsubid" (types/col-type->field "objsubid" :i16)
-                               "description"(types/col-type->field "description" :utf8)}
+                               "description" (types/col-type->field "description" :utf8)}
    'pg_catalog/pg_views {"schemaname" (types/col-type->field "schemaname" :utf8)
                          "viewname" (types/col-type->field "viewname" :utf8)
                          "viewowner" (types/col-type->field "viewowner" :utf8)}
@@ -80,7 +87,7 @@
                              "attnotnull" (types/col-type->field "attnotnull" :bool)
                              "atttypmod" (types/col-type->field "atttypmod" :i32)
                              "attidentity" (types/col-type->field "attidentity" :utf8)
-                             "attgenerated"(types/col-type->field "attgenerated" :utf8)}
+                             "attgenerated" (types/col-type->field "attgenerated" :utf8)}
    'pg_catalog/pg_namespace {"oid" (types/col-type->field "oid" :i32)
                              "nspname" (types/col-type->field "nspname" :utf8)
                              "nspowner" (types/col-type->field "nspowner" :i32)
@@ -99,7 +106,14 @@
                                     "n_live_tup" (types/col-type->field "n_live_tup" :i64)}
 
    'pg_catalog/pg_settings {"name" (types/col-type->field "name" :utf8)
-                            "setting" (types/col-type->field "setting" :utf8)}})
+                            "setting" (types/col-type->field "setting" :utf8)}
+   'pg_catalog/pg_range {"rngtypid" (types/col-type->field "rngtypid" :i32)
+                         "rngsubtype" (types/col-type->field "rngsubtype" :i32)
+                         "rngmultitypid" (types/col-type->field "rngmultitypid" :i32)
+                         "rngcollation" (types/col-type->field "rngcollation" :i32)
+                         "rngsubopc" (types/col-type->field "rngsubopc" :i32)
+                         "rngcanonical" (types/col-type->field "rngcanonical" :utf8)
+                         "rngsubdiff" (types/col-type->field "rngsubdiff" :utf8)}})
 
 (def derived-tables (merge info-tables pg-catalog-tables))
 (def table-info (-> derived-tables (update-vals (comp set keys))))
@@ -167,7 +181,8 @@
   rel-wtr)
 
 (defn pg-type [^IRelationWriter rel-wtr]
-  (doseq [{:keys [oid typname] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
+  (doseq [{:keys [oid typname typsend typreceive
+                  typelem typinput typoutput] :as x} (remove #(= 0 (:oid %)) (vals types/pg-types))]
     (.startRow rel-wtr)
     (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
       (case col
@@ -178,7 +193,30 @@
         "typtype" (.writeObject col-wtr "b")
         "typbasetype" (.writeInt col-wtr 0)
         "typnotnull" (.writeBoolean col-wtr false)
-        "typtypmod" (.writeInt col-wtr -1)))
+        "typtypmod" (.writeInt col-wtr -1)
+        "typrelid" (.writeInt col-wtr 0) ; zero for non composite types (or pg_class ref for composite types)
+        "typelem" (.writeInt col-wtr (or typelem 0))
+        "typsend" (.writeObject col-wtr typsend)
+        "typreceive" (.writeObject col-wtr typreceive)
+        "typinput" (.writeObject col-wtr (or typinput ""))
+        "typoutput" (.writeObject col-wtr (or typoutput ""))))
+    (.endRow rel-wtr))
+  (.syncRowCount rel-wtr)
+  rel-wtr)
+
+(defn pg-range [^IRelationWriter rel-wtr]
+  (doseq [{:keys [rngtypid rngsubtype rngmultitypid rngcollation
+                  rngsubopc rngcanonical rngsubdiff]} (vals types/pg-ranges)]
+    (.startRow rel-wtr)
+    (doseq [[col ^IVectorWriter col-wtr] rel-wtr]
+      (case col
+        "rngtypid" (.writeInt col-wtr (int rngtypid))
+        "rngsubtype" (.writeInt col-wtr (int rngsubtype))
+        "rngmultitypid" (.writeInt col-wtr (int rngmultitypid))
+        "rngcollation" (.writeInt col-wtr (int rngcollation))
+        "rngsubopc" (.writeInt col-wtr (int rngsubopc))
+        "rngcanonical" (.writeObject col-wtr rngcanonical)
+        "rngsubdiff" (.writeObject col-wtr rngsubdiff)))
     (.endRow rel-wtr))
   (.syncRowCount rel-wtr)
   rel-wtr)
@@ -347,6 +385,7 @@
                                      pg_catalog/pg_database (pg-database out-rel-wtr)
                                      pg_catalog/pg_stat_user_tables (pg-stat-user-tables out-rel-wtr schema-info)
                                      pg_catalog/pg_settings (pg-settings out-rel-wtr)
+                                     pg_catalog/pg_range (pg-range out-rel-wtr)
                                      (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))]
 
       ;;TODO reuse relation selector code from tri cursor
