@@ -218,6 +218,7 @@
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
+         :xtdb/authn (.getAuthn opts)
 
          :xtdb/log (.getTxLog opts)
          :xtdb/buffer-pool (.getStorage opts)

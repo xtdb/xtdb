@@ -1,6 +1,7 @@
 (ns xtdb.information-schema-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.authn :as authn]
             [xtdb.information-schema :as i-s]
             [xtdb.test-util :as tu]))
 
@@ -486,9 +487,10 @@
                   WHERE column_name = 'set_column'"))))
 
 (deftest test-pg-user
-  (t/is (= [{:passwd "xtdb", :username "xtdb", :usesuper true}
-            {:username "anonymous", :usesuper false}]
-           (xt/q tu/*node* "SELECT * FROM pg_user"))))
+  (t/is (= [{:username "xtdb", :usesuper true}]
+           (xt/q tu/*node* "SELECT username, usesuper FROM pg_user")))
+
+  (t/is (= "xtdb" (authn/verify-pw tu/*node* "xtdb" "xtdb"))))
 
 ; required for Postgrex
 (deftest test-pg-range-3737

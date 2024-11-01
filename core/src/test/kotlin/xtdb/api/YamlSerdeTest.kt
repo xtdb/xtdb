@@ -289,4 +289,27 @@ class YamlSerdeTest {
 
         unmockkObject(EnvironmentVariableProvider)
     }
+
+    @Test
+    fun testAuthnConfigDecoding() {
+        val input = """
+        rules:
+            - user: admin
+              address: 127.0.0.42
+              method: TRUST  
+            - user: all
+              address: 127.0.0.1
+              method: PASSWORD  
+        """.trimIndent()
+
+        assertEquals(
+            AuthnConfig(
+                listOf(
+                    AuthnConfig.Rule("admin","127.0.0.42", AuthnConfig.Method.TRUST),
+                    AuthnConfig.Rule( "all", "127.0.0.1", AuthnConfig.Method.PASSWORD)
+                )
+            ),
+            YAML_SERDE.decodeFromString(AuthnConfig.serializer(), input)
+        )
+    }
 }

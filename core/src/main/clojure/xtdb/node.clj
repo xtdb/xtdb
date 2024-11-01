@@ -47,6 +47,9 @@
   (cond-> (.getCompactor config)
     (some? enabled?) (.enabled enabled?)))
 
+(defmethod apply-config! :authn [config _ opts]
+  (apply-config! config :xtdb/authn opts))
+
 (defmethod apply-config! :http-server [config _ opts]
   (apply-config! config :xtdb/server opts))
 

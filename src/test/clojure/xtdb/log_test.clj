@@ -123,4 +123,4 @@
 
                          {:system-time (time/->instant #inst "2021")
                           :default-tz #time/zone "Europe/London"
-                          :user "xtdb"}))
+                          :authn {:user "xtdb"}}))

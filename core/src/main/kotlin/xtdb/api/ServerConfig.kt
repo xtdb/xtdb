@@ -7,7 +7,7 @@ import java.nio.file.Path
 data class ServerConfig(
     var port: Int = 5432,
     var numThreads: Int = 42,
-    var ssl: SslSettings? = null
+    var ssl: SslSettings? = null,
 ) {
 
     @Serializable

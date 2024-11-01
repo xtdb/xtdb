@@ -48,6 +48,7 @@ dependencies {
     api("com.carrotsearch", "hppc", "0.9.1")
 
     api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
+    api("buddy", "buddy-hashers", "2.0.167")
 
     // healthz server
     api(libs.ring.core)
