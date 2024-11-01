@@ -17,3 +17,10 @@ services:
     environment:
       PG_HOST: xtdb
       PG_PORT: 5439
+
+  elixir:
+    build:
+      context: elixr
+    environment:
+      PG_HOST: xtdb
+      PG_PORT: 5439

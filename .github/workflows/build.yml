@@ -73,6 +73,11 @@ jobs:
         run: |
           docker compose run python
 
+      - name: Elixir test
+        working-directory: "lang"
+        run: |
+          docker compose run elixir
+
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
         uses: ravsamhq/notify-slack-action@v2
