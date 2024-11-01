@@ -11,7 +11,10 @@ set -e
   echo Done
   
   kubectl delete pvc xtdb-pvc-log --namespace cloud-benchmark || true
-  kubectl delete pvc xtdb-pvc-local-caches --namespace cloud-benchmark || true
+  kubectl delete pvc xtdb-pvc-local-cache-lp --namespace cloud-benchmark || true
+  kubectl delete pvc xtdb-pvc-local-cache-1 --namespace cloud-benchmark || true
+  kubectl delete pvc xtdb-pvc-local-cache-2 --namespace cloud-benchmark || true
+  kubectl delete pvc xtdb-pvc-local-cache-3 --namespace cloud-benchmark || true
   kubectl delete pvc kafka-pvc --namespace cloud-benchmark || true
 )
 

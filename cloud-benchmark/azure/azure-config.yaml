@@ -19,7 +19,7 @@ storage: !Remote
     prefix: "xtdb-object-store"
     userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
   localDiskCache: !Env XTDB_LOCAL_DISK_CACHE
-  maxDiskCachePercentage: !Env XTDB_MAX_DISK_CACHE_PERCENTAGE
+  maxDiskCachePercentage: 75
 
 metrics: !AzureMonitor
   instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
