@@ -422,3 +422,6 @@
     (.appendTx log (serialize-tx-ops allocator tx-ops
                                      {:default-tz (or (some-> opts .getDefaultTz) default-tz)
                                           :system-time system-time}))))
+
+(defn latest-submitted-tx& [{:keys [log]}]
+  (.latestSubmittedTx log))

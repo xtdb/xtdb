@@ -181,8 +181,9 @@
         0.0))))
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
-  (let [node (map->Node (-> deps
-                            (assoc :!latest-submitted-tx (atom nil)
+  (let [latest-submitted-tx (log/latest-submitted-tx& deps)
+        node (map->Node (-> deps
+                            (assoc :!latest-submitted-tx (atom latest-submitted-tx)
                                    :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]
     ;; TODO seems to create heap memory pressure, disabled for now

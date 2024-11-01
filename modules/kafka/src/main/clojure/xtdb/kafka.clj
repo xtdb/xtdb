@@ -98,6 +98,14 @@
                           (catch InterruptedException _)))))
     (.start)))
 
+(defn- get-last-submitted-tx [{:keys [^TopicPartition tp kafka-config]}] 
+  (with-open [consumer (->tx-consumer kafka-config)]
+    (.assign consumer #{tp}) 
+    (let [^long end-offset (get (.endOffsets consumer [tp]) tp)]
+      (.seek consumer tp (max (dec end-offset) 0))
+      (when-let [^ConsumerRecord record (first (poll-consumer consumer (Duration/ofMillis 100)))]
+        (serde/->TxKey (.offset record) (Instant/ofEpochMilli (.timestamp record)))))))
+
 (defrecord KafkaTxLog [kafka-config
                        ^KafkaProducer producer
                        ^KafkaConsumer consumer
@@ -123,6 +131,9 @@
 
   (subscribeTxs [this after-tx-id subscriber]
     (handle-tx-subscriber this after-tx-id subscriber))
+
+  (latestSubmittedTx [this]
+    (get-last-submitted-tx this))
 
   AutoCloseable
   (close [_]
@@ -181,6 +192,7 @@
   (appendTx [_ record] (.appendTx tx-log record))
   (readTxs [_ after-tx-id limit] (.readTxs tx-log after-tx-id limit))
   (subscribeTxs [_ after-tx-id subscriber] (.subscribeTxs tx-log after-tx-id subscriber))
+  (latestSubmittedTx [_] (.latestSubmittedTx tx-log))
 
   (appendFileNotification [_ n] (.appendFileNotification file-list-cache n))
   (subscribeFileNotifications [_ subscriber] (.subscribeFileNotifications file-list-cache subscriber))

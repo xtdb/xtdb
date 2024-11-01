@@ -8,6 +8,7 @@ interface TxLog {
     fun appendTx(record: ByteBuffer): CompletableFuture<TransactionKey>
     fun readTxs(afterTxId: Long?, limit: Int): List<Record>
     fun subscribeTxs(afterTxId: Long?, subscriber: Subscriber)
+    fun latestSubmittedTx(): TransactionKey
 
     class Record(val txKey: TransactionKey, val record: ByteBuffer)
 
