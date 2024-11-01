@@ -824,8 +824,10 @@
         oid (.getInt bb 12)
         length (.getInt bb 16)
         [typlen get-elem] (case oid
-                            (23 1007) [4 (fn [bb ^long start ^long typlen ^long idx] (.getInt bb (+ start (* idx typlen))))]
-                            (20 1016) [8 (fn [bb ^long start ^long typlen ^long idx] (.getLong bb (+ start (* idx typlen))))])
+                            (23 1007) [4 (fn [^ByteBuffer bb ^long start ^long typlen ^long idx]
+                                           (.getInt bb (+ start (* idx typlen))))]
+                            (20 1016) [8 (fn [^ByteBuffer bb ^long start ^long typlen ^long idx]
+                                           (.getLong bb (+ start (* idx typlen))))])
         get-start (fn ^long [^long header-length ^long data-offset] (+ header-length data-offset))
         start  (get-start 20 data-offset)]
     (into []
