@@ -796,13 +796,19 @@
     :rngcanonical ""
     :rngsubdiff "tstzrange_subdiff"}})
 
-(defn binary-list-header [length element-oid typlen]
-  ;; list: <<byte-length,dimensions=1,data-offset=0,oid,elem-count=(lenght-of-list),l-bound=1?,data>>
-  ;; https://github.com/postgres/postgres/blob/master/src/include/utils/array.h
-  (let [payload-size (+ (* 5 4) (* typlen length) (* 4 length))] ;; 5 integers describing array + data prefixed by their length
+(defn calculate-buffer-size
+  "list: <<byte-length,dimensions=1,data-offset=0,oid,elem-count=(lenght-of-list),l-bound=1?,data>>
+   https://github.com/postgres/postgres/blob/master/src/include/utils/array.h
+   except XT wire protocol adds the length of the payload as the first int32 - so we no longer need that
+   but need to allocate extra 4 bytes
+  "
+  ^long [^long length ^long typlen]
+  (+ 4 (* 4 4) (* typlen length) (* 4 length)))
+
+(defn binary-list-header [^long length element-oid ^long typlen]
+  (let [buffer-size (calculate-buffer-size length typlen)] ;; 4 integers describing array + [data - each prefixed by their length as int32]
     (doto
-     (ByteBuffer/allocate (+ 4 payload-size)) ;; 4 is for int4 - payload size
-      (.putInt payload-size)
+     (ByteBuffer/allocate buffer-size)
       (.putInt 1) ;; dimensions
       (.putInt 0) ;; data offset
       (.putInt element-oid)
@@ -811,20 +817,21 @@
       (.putInt 1))))
 
 (defn read-binary-array [ba]
-  (let [bb (ByteBuffer/wrap ba)
-        ;; _payload-size (.getInt bb)
+  (let [^ByteBuffer bb (ByteBuffer/wrap ba)
+        ;; _payload-size (.getInt bb 0)
         ;; _dimensions (.getInt bb 4)
         data-offset (.getInt bb 8)
         oid (.getInt bb 12)
         length (.getInt bb 16)
         [typlen get-elem] (case oid
-                            (23 1007) [4 (fn [bb idx] (.getInt bb idx))]
-                            (20 1016) [8 (fn [bb idx] (.getLong bb idx))])
-        start  (+ data-offset 20)]
+                            (23 1007) [4 (fn [bb ^long start ^long typlen ^long idx] (.getInt bb (+ start (* idx typlen))))]
+                            (20 1016) [8 (fn [bb ^long start ^long typlen ^long idx] (.getLong bb (+ start (* idx typlen))))])
+        get-start (fn ^long [^long header-length ^long data-offset] (+ header-length data-offset))
+        start  (get-start 20 data-offset)]
     (into []
           (map
            (fn [idx]
-             (get-elem bb (+ start (* idx typlen))))
+             (get-elem bb start typlen idx))
            (range length)))))
 
 (def pg-types
