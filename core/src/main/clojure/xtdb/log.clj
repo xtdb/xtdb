@@ -400,7 +400,8 @@
         Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz user] :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz]
+                                                                                {:keys [user]} :authn :as opts}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
@@ -442,5 +443,6 @@
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
   (.appendTx log (serialize-tx-ops allocator tx-ops
-                                   {:default-tz (:default-tz opts default-tz)
-                                    :system-time (some-> system-time time/expect-instant)})))
+                                   (-> (select-keys opts [:authn])
+                                       (assoc :default-tz (:default-tz opts default-tz)
+                                              :system-time (some-> system-time time/expect-instant))))))

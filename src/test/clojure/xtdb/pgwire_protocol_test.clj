@@ -19,45 +19,56 @@
 (defn bytes->str [^bytes arr]
   (String. arr StandardCharsets/UTF_8))
 
-(defrecord RecordingFrontend [!msgs]
+(defrecord RecordingFrontend [!in-msgs !out-msgs]
   pgwire/Frontend
   (send-client-msg! [_ msg-def]
-    (swap! !msgs conj [(:name msg-def)])
+    (swap! !in-msgs conj [(:name msg-def)])
     nil)
 
   (send-client-msg! [_ msg-def data]
     (let [data (case (:name msg-def)
                  :msg-data-row (update data :vals (partial mapv bytes->str))
                  data)]
-      (swap! !msgs conj [(:name msg-def) data]))
+      (swap! !in-msgs conj [(:name msg-def) data]))
     nil)
+
+  (read-client-msg! [_]
+    (let [msg (first @!out-msgs)]
+      (swap! !out-msgs rest)
+      (when-not msg (throw (Exception. "No more messages")))
+      msg))
+
+  (host-address [_] "127.0.0.1")
 
   AutoCloseable
   (close [_]))
 
-(defn ->recording-frontend []
-  (->RecordingFrontend (atom [])))
+(defn ->recording-frontend
+  ([] (->recording-frontend []))
+  ([out-msg] (->RecordingFrontend (atom []) (atom out-msg))))
 
 (defn ->conn
   (^java.lang.AutoCloseable [frontend] (->conn frontend {}))
-
   (^java.lang.AutoCloseable [frontend startup-params]
+   (->conn frontend startup-params {:rules [{:user nil, :method :trust :address nil}]}))
+  (^java.lang.AutoCloseable [frontend startup-params authn]
    (-> (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                            "client_encoding" "UTF8"
                                                                            "DateStyle" "ISO"
                                                                            "IntervalStyle" "ISO_8601"}})
-                                         :->node {"xtdb" tu/*node*}}
+                                         :->node {"xtdb" tu/*node*}
+                                         :authn authn}
                                 :frontend frontend
                                 :cid -1
-                                :!closing? (future false)
+                                :!closing? (atom false)
                                 :conn-state (atom {:session {:clock (Clock/systemUTC)}})})
        (pgwire/cmd-startup-pg30 startup-params))))
 
 (deftest test-startup
-  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
-    (with-open [_ (->conn frontend {"user" "xtdb"
-                                    "database" "xtdb"})]
-      (t/is (= [[:msg-auth {:result 0}]
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend [{:msg-name :msg-password :password "xtdb"}])]
+    (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]})]
+      (t/is (= [[:msg-auth {:result 3}]
+                [:msg-auth {:result 0}]
                 [:msg-parameter-status {:parameter "server_encoding", :value "UTF8"}]
                 [:msg-parameter-status {:parameter "client_encoding", :value "UTF8"}]
                 [:msg-parameter-status {:parameter "DateStyle", :value "ISO"}]
@@ -66,15 +77,30 @@
                 [:msg-parameter-status {:parameter "database", :value "xtdb"}]
                 [:msg-backend-key-data {:process-id -1, :secret-key 0}]
                 [:msg-ready {:status :idle}]]
-               @!msgs)))))
+               @!in-msgs))
+
+      (reset! !in-msgs []))))
+
+(deftest test-auth-failure
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend [{:msg-name :msg-simple-query, :query "SELECT 1"}])]
+    (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]})]
+
+      (t/is (= [[:msg-auth {:result 3}]
+                [:msg-error-response
+                 {:error-fields
+                  {:severity "ERROR",
+                   :localized-severity "ERROR",
+                   :sql-state "28000",
+                   :message "password authentication failed for user: xtdb"}}]]
+               @!in-msgs)))))
+
 
 (deftest test-simple-query
-  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
-    (with-open [conn (->conn frontend {"user" "xtdb"
-                                       "database" "xtdb"})]
-      (reset! !msgs [])
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend {})]
+    (with-open [conn (->conn frontend {"database" "xtdb"})]
+      (reset! !in-msgs [])
 
-      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT 1"})
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query, :query "SELECT 1"})
 
       (t/is (= [[:msg-row-description
                  {:columns
@@ -88,7 +114,7 @@
                 [:msg-data-row {:vals ["1"]}]
                 [:msg-command-complete {:command "SELECT 1"}]
                 [:msg-ready {:status :idle}]]
-               @!msgs)))))
+               @!in-msgs)))))
 
 (defn extended-query
   ([conn query] (extended-query conn query [] []))
@@ -112,10 +138,10 @@
         param-types [(-> types/pg-types :text :oid)]
         param-values ["alan"]
         query "SELECT * FROM docs"
-        {:keys [!msgs] :as frontend} (->recording-frontend)     ]
+        {:keys [!in-msgs] :as frontend} (->recording-frontend)]
     (with-open [conn (->conn frontend {"user" "xtdb"
                                        "database" "xtdb"})]
-      (reset! !msgs [])
+      (reset! !in-msgs [])
       (extended-query conn insert param-types param-values)
 
 
@@ -125,9 +151,9 @@
                 [:msg-no-data]
                 [:msg-command-complete {:command "INSERT 0 0"}]
                 [:msg-ready {:status :idle}]]
-               @!msgs))
+               @!in-msgs))
 
-      (reset! !msgs [])
+      (reset! !in-msgs [])
       (extended-query conn query)
 
       (t/is (= [[:msg-parse-complete]
@@ -152,16 +178,16 @@
                 [:msg-data-row {:vals ["aln" "alan"]}]
                 [:msg-command-complete {:command "SELECT 1"}]
                 [:msg-ready {:status :idle}]]
-               @!msgs)))))
+               @!in-msgs)))))
 
 (deftest test-wrong-param-encoding-3653
   (let [param-types [(-> types/pg-types :timestamp :oid)]
         param-values ["alan"]
         query "SELECT $1 as v"
-        {:keys [!msgs] :as frontend} (->recording-frontend)]
+        {:keys [!in-msgs] :as frontend} (->recording-frontend)]
     (with-open [conn (->conn frontend {"user" "xtdb"
                                        "database" "xtdb"})]
-      (reset! !msgs [])
+      (reset! !in-msgs [])
       (extended-query conn query param-types param-values)
 
       (t/is (= [[:msg-parse-complete]
@@ -172,15 +198,15 @@
                    :sql-state "22P02",
                    :message "Can not parse 'alan' as timestamp"}}]
                 [:msg-ready {:status :idle}]]
-               @!msgs)))))
+               @!in-msgs)))))
 
 (deftest test-simple-query-with-params-fails-3605
-  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend)]
     (with-open [conn (->conn frontend {"user" "xtdb"
                                        "database" "xtdb"})]
-      (reset! !msgs [])
+      (reset! !in-msgs [])
 
-      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT $1"})
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query, :query "SELECT $1"})
 
       (t/is (= [[:msg-error-response
                  {:error-fields
@@ -189,7 +215,7 @@
                    :sql-state "08P01",
                    :message "Parameters not allowed in simple queries"}}]
                 [:msg-ready {:status :idle}]]
-               @!msgs)))))
+               @!in-msgs)))))
 
 (defn ->utf8-col [col-name]
   {:column-name col-name,
@@ -204,12 +230,12 @@
   ;; all of the tools try to be too helpful here, so we have to go low-level
 
   (letfn [(test [q]
-            (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
+            (let [{:keys [!in-msgs] :as frontend} (->recording-frontend)]
               (with-open [conn (->conn frontend {"user" "xtdb"
                                                  "database" "xtdb"})]
-                (reset! !msgs [])
+                (reset! !in-msgs [])
                 (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query q})
-                @!msgs)))]
+                @!in-msgs)))]
 
     (t/testing "two selects"
       (t/is (= [[:msg-row-description {:columns [(->utf8-col "one")]}]

@@ -1,5 +1,6 @@
 (ns xtdb.information-schema
-  (:require xtdb.metadata
+  (:require [xtdb.authn :as authn]
+            xtdb.metadata
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -213,8 +214,7 @@
      :setting setting}))
 
 (defn pg-user []
-  [{:username "xtdb" :usesuper true :passwd "xtdb"}
-   {:username "anonymous" :usesuper false :passwd nil}])
+  [{:username "xtdb" :usesuper true :passwd (authn/encrypt-pw "xtdb")}])
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor

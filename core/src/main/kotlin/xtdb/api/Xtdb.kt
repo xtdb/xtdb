@@ -35,7 +35,8 @@ interface Xtdb : AutoCloseable {
         var healthz: HealthzConfig? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
         val indexer: IndexerConfig = IndexerConfig(),
-        val compactor: CompactorConfig = CompactorConfig()
+        val compactor: CompactorConfig = CompactorConfig(),
+        var authn: AuthnConfig = AuthnConfig(),
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
@@ -58,6 +59,8 @@ interface Xtdb : AutoCloseable {
             healthz(HealthzConfig().also(configure))
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
+
+        fun authn(authn: AuthnConfig) = apply { this.authn = authn }
 
         fun getModules(): List<XtdbModule.Factory> = modules
         fun module(module: XtdbModule.Factory) = apply { this.modules += module }
