@@ -25,7 +25,6 @@
            [java.time Clock Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
-           [java.util.function Consumer]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
@@ -33,7 +32,6 @@
            (xtdb.antlr SqlVisitor Sql$DirectlyExecutableStatementContext)
            [xtdb.api ServerConfig Xtdb$Config]
            xtdb.api.module.XtdbModule
-           xtdb.IResultCursor
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
@@ -233,7 +231,7 @@
 
 (defn- client-err
   ([client-msg] (client-err client-msg nil))
-  ([client-msg data]
+  ([client-msg _data]
    (ex-info client-msg {::client-error (err-protocol-violation client-msg)})))
 
 ;;TODO parse errors should return a PSQL parse error
@@ -1047,7 +1045,7 @@
     {:msg-in msg-in
      :version (version-messages version)}))
 
-(defn- read-typed-msg [{{:keys [^DataInputStream in]} :frontend :as conn}]
+(defn- read-typed-msg [{{:keys [^DataInputStream in]} :frontend :as _conn}]
   (let [type-char (char (.readUnsignedByte in))
         msg-var (or (client-msgs type-char)
                     (throw (client-err (str "Unknown client message " type-char))))
@@ -1119,7 +1117,7 @@
           (read-binary session param)
           (read-text session param))))))
 
-(defn- xtify-params [{:keys [conn-state] :as conn} params {:keys [param-format] :as stmt}]
+(defn- xtify-params [{:keys [conn-state] :as _conn} params {:keys [param-format] :as stmt}]
   (try
     (vec (map-indexed (->xtify-param (:session @conn-state) stmt) params))
     (catch Exception e
@@ -1173,7 +1171,7 @@
               (cmd-write-msg conn msg-command-complete cmd-complete-msg))
             (swap! conn-state assoc :latest-submitted-tx tx-res)))))))
 
-(defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [query bound-query fields] :as portal}]
+(defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [query bound-query fields] :as _portal}]
   (try
     (with-open [result-cursor (.openCursor ^BoundQuery bound-query)]
       (let [cancelled-by-client? #(:cancel @conn-state)
@@ -1378,7 +1376,7 @@
 
 (defn parse
   "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state cid server ^IXtdbInternal node] :as conn}
+  [{:keys [conn-state ^IXtdbInternal node] :as conn}
    {:keys [query param-oids]}]
 
   (let [{:keys [session latest-submitted-tx]} @conn-state
@@ -1479,15 +1477,14 @@
             ^BoundQuery bound-query (.bind ^PreparedQuery prepared-query query-opts)
             fields (or (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
                            (with-result-formats result-format))
-                         (throw (client-err "invalid result format")))]
+                       (throw (client-err "invalid result format")))]
         (-> stmt-with-bind-msg
             (assoc :bound-query bound-query
                    :fields fields)))
 
       stmt-with-bind-msg)))
 
-(defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn}
-                                 {:keys [portal-name stmt-name params result-format] :as bind-msg}]
+(defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
   (let [stmt (or (get-in @conn-state [:prepared-statements stmt-name])
                  (throw (client-err "no prepared statement")))
         portal (bind-stmt conn bind-msg stmt)]
@@ -1550,7 +1547,7 @@
 ;; ignored by xt
 (defmethod handle-msg* :msg-password [_ _])
 
-(defmethod handle-msg* ::default [conn _]
+(defmethod handle-msg* ::default [_conn _]
   (throw (client-err "unknown client message")))
 
 (defn handle-msg [{:keys [cid] :as conn} {:keys [msg-name] :as msg}]
