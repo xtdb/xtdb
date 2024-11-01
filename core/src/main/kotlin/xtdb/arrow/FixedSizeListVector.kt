@@ -48,6 +48,9 @@ class FixedSizeListVector(
         else -> TODO("unknown type")
     }
 
+    override fun elementReader() = elVector
+    override fun elementWriter() = elVector
+
     override fun getListCount(idx: Int) = listSize
     override fun getListStartIndex(idx: Int) = idx * listSize
 
