@@ -11,12 +11,17 @@
 
 (defprotocol PStatus
   (latest-submitted-tx [node])
-  (status [node]))
+  (status [node])
+  (tx-lag [node]))
 
 (def http-routes
   [["/status" {:name :status
                :summary "Status"
                :description "Get status information from the node"}]
+
+   ["/tx-lag" {:name :tx-lag
+               :summary "Transaction Lag"
+               :description "Get transaction id lag from the node"}]
 
    ["/tx" {:name :tx
            :summary "Transaction"

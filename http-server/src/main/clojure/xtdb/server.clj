@@ -98,6 +98,10 @@
    :get (fn [{:keys [node] :as _req}]
           {:status 200, :body (xtp/status node)})})
 
+(defmethod route-handler :tx-lag [_]
+  {:get (fn [{:keys [node] :as _req}]
+          {:status 200, :body (xtp/tx-lag node)})})
+
 (defn- json-tx-encoder []
   (reify
     mf/EncodeToBytes

@@ -123,6 +123,11 @@
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
+  (tx-lag [this]
+    (let [latest-completed-tx (.latestCompletedTx indexer)
+          latest-submitted-tx (xtp/latest-submitted-tx this)]
+      (when (and latest-completed-tx latest-submitted-tx)
+        (- (.getTxId latest-submitted-tx) (.getTxId latest-completed-tx)))))
 
   IXtdbInternal
   (^PreparedQuery prepareQuery [this ^String query, query-opts]

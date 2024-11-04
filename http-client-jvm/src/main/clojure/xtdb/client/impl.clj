@@ -110,9 +110,10 @@
 
   xtp/PStatus
   (latest-submitted-tx [_] @!latest-submitted-tx)
-
   (status [client]
     (:body (request client :get :status)))
+  (tx-lag [client]
+    (:body (request client :get :tx-lag)))
 
   AutoCloseable
   (close [_]
