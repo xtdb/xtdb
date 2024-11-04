@@ -13,7 +13,8 @@
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api Xtdb$Config)
-           (xtdb.api.metrics Metrics Metrics$Factory PrometheusMetrics$Factory)))
+           (xtdb.api.metrics Metrics Metrics$Factory PrometheusMetrics$Factory)
+           (xtdb.cache Stats)))
 
 (defn add-counter [reg name {:keys [description]}]
   (cond-> (Counter/builder name)
@@ -46,13 +47,13 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
-(defn add-cache-gauges [reg meter-name cache]
+(defn add-cache-gauges [reg meter-name ^Stats stats]
   (add-gauge reg (str meter-name ".pinnedBytes")
-             (fn [] (.pinnedBytes (.stats cache))) {:unit "bytes"})
+             (fn [] (.getPinnedBytes stats)) {:unit "bytes"})
   (add-gauge reg (str meter-name ".evictableBytes")
-             (fn [] (.evictableBytes (.stats cache))) {:unit "bytes"})
+             (fn [] (.getEvictableBytes stats)) {:unit "bytes"})
   (add-gauge reg (str meter-name ".freeBytes")
-             (fn [] (.freeBytes (.stats cache))) {:unit "bytes"}))
+             (fn [] (.getFreeBytes stats)) {:unit "bytes"}))
 
 (defmethod xtn/apply-config! :xtdb.metrics/prometheus [^Xtdb$Config config _ {:keys [port], :or {port 8080}}]
   (.setMetrics config (PrometheusMetrics$Factory. port)))
