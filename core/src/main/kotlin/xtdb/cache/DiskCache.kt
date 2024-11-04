@@ -1,6 +1,8 @@
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
@@ -19,7 +21,8 @@ class DiskCache(
     val rootPath: Path,
 
     @Suppress("MemberVisibilityCanBePrivate")
-    val maxSizeBytes: Long
+    val maxSizeBytes: Long,
+    val meterRegistry: MeterRegistry
 ) {
     val pinningCache = PinningCache<Entry>(maxSizeBytes)
 
@@ -57,6 +60,17 @@ class DiskCache(
                 val k = rootPath.relativize(path)
                 syncInnerCache.put(k, Entry(k, path))
             }
+        Gauge.builder("diskcache.pinnedBytes") { stats.pinnedBytes }
+            .description("Total bytes currently pinned in the cache")
+            .register(meterRegistry)
+
+        Gauge.builder("diskcache.evictableBytes") { stats.evictableBytes }
+            .description("Total bytes currently evictable in the cache")
+            .register(meterRegistry)
+
+        Gauge.builder("diskcache.freeBytes") { stats.freeBytes }
+            .description("Total free bytes in the cache")
+            .register(meterRegistry)
     }
 
     @Suppress("MemberVisibilityCanBePrivate")

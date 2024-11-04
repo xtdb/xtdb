@@ -3,6 +3,8 @@
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import io.netty.util.internal.PlatformDependent
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -25,6 +27,7 @@ class MemoryCache
 
     @Suppress("MemberVisibilityCanBePrivate")
     val maxSizeBytes: Long,
+    val meterRegistry: MeterRegistry,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
     private val pinningCache = PinningCache<Entry>(maxSizeBytes)
@@ -63,6 +66,20 @@ class MemoryCache
             pathLoader.tryFree(bbuf)
             onEvict?.close()
         }
+    }
+
+    init {
+        Gauge.builder("memorycache.pinnedBytes") { stats.pinnedBytes }
+            .description("Total bytes currently pinned in the cache")
+            .register(meterRegistry)
+
+        Gauge.builder("memorycache.evictableBytes") { stats.evictableBytes }
+            .description("Total bytes currently evictable in the cache")
+            .register(meterRegistry)
+
+        Gauge.builder("memorycache.freeBytes") { stats.freeBytes }
+            .description("Total free bytes in the cache")
+            .register(meterRegistry)
     }
 
     @FunctionalInterface
