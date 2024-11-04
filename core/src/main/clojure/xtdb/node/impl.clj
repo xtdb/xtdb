@@ -194,6 +194,7 @@
     ;; TODO seems to create heap memory pressure, disabled for now
     #_(metrics/add-gauge registry "node.tx.lag.seconds"
                          (gauge-lag-secs-fn node))
+    (metrics/add-gauge metrics-registry "node.tx.lag" (fn [] (or (xtp/tx-lag node) 0)))
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
