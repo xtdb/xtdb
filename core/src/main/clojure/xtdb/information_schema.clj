@@ -213,7 +213,7 @@
      :setting setting}))
 
 (defn pg-user []
-  [{:username "xtdb" :usesuper true :passwd "xtdb"}
+  [{:username "xtdb" :usesuper true :passwd (util/md5 "xtdb")}
    {:username "anonymous" :usesuper false :passwd nil}])
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]

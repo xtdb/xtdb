@@ -17,6 +17,7 @@
            java.nio.file.attribute.FileAttribute
            (java.util Collections LinkedHashMap Map UUID WeakHashMap)
            (java.util.concurrent ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
+           (java.security MessageDigest)
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
            (org.apache.arrow.memory ArrowBuf BufferAllocator ForeignAllocation)
@@ -674,3 +675,8 @@
     (catch Throwable _t
       ;; otherwise we use as much direct memory as there was heap specified
       (.maxMemory (Runtime/getRuntime)))))
+
+(defn md5 [^String s]
+  (let [algorithm (MessageDigest/getInstance "MD5")
+        raw (.digest algorithm (.getBytes s))]
+    (format "%032x" (BigInteger. 1 raw))))

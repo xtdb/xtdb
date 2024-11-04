@@ -2,7 +2,8 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.information-schema :as i-s]
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -486,7 +487,7 @@
                   WHERE column_name = 'set_column'"))))
 
 (deftest test-pg-user
-  (t/is (= [{:passwd "xtdb", :username "xtdb", :usesuper true}
+  (t/is (= [{:passwd (util/md5 "xtdb"), :username "xtdb", :usesuper true}
             {:username "anonymous", :usesuper false}]
            (xt/q tu/*node* "SELECT * FROM pg_user"))))
 
