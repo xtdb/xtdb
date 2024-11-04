@@ -46,6 +46,14 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
+(defn add-cache-gauges [reg meter-name cache]
+  (add-gauge reg (str meter-name ".pinnedBytes")
+             (fn [] (.pinnedBytes (.stats cache))) {:unit "bytes"})
+  (add-gauge reg (str meter-name ".evictableBytes")
+             (fn [] (.evictableBytes (.stats cache))) {:unit "bytes"})
+  (add-gauge reg (str meter-name ".freeBytes")
+             (fn [] (.freeBytes (.stats cache))) {:unit "bytes"}))
+
 (defmethod xtn/apply-config! :xtdb.metrics/prometheus [^Xtdb$Config config _ {:keys [port], :or {port 8080}}]
   (.setMetrics config (PrometheusMetrics$Factory. port)))
 

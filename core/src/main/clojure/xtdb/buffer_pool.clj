@@ -188,9 +188,11 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory, ^MeterRegistry metrics-registry]
-  (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
-                     (MemoryCache. allocator (.getMaxCacheBytes factory) metrics-registry)
-                     (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs)))
+  (let [memory-cache (MemoryCache. allocator (.getMaxCacheBytes factory))]
+    (metrics/add-cache-gauges metrics-registry "memorycache" memory-cache)
+    (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
+                       memory-cache
+                       (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs))))
 
 (defn dir->buffer-pool
   "Creates a local storage buffer pool from the given directory."
@@ -372,13 +374,16 @@
 
       (.addAll !os-file-names (.listAllObjects object-store))
 
-      (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
-                          (MemoryCache. allocator (.getMaxCacheBytes factory) metrics-registry)
-                          (DiskCache. disk-cache-root
-                                      (or (.getMaxDiskCacheBytes factory)
-                                          (calculate-limit-from-percentage-of-disk disk-cache-root (.getMaxDiskCachePercentage factory)))
-                                      metrics-registry)
-                          file-list-cache object-store !os-file-names !os-file-name-subscription))))
+      (let [memory-cache (MemoryCache. allocator (.getMaxCacheBytes factory))
+            disk-cache (DiskCache. disk-cache-root
+                                   (or (.getMaxDiskCacheBytes factory)
+                                       (calculate-limit-from-percentage-of-disk disk-cache-root (.getMaxDiskCachePercentage factory))))]
+        (metrics/add-cache-gauges metrics-registry "memorycache" memory-cache)
+        (metrics/add-cache-gauges metrics-registry "diskcache" disk-cache)
+        (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
+                            memory-cache
+                            disk-cache
+                            file-list-cache object-store !os-file-names !os-file-name-subscription)))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
