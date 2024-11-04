@@ -77,6 +77,7 @@ sealed class Vector : VectorReader, VectorWriter {
                         field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_"))
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
+                override fun visit(type: LargeListView) = TODO("Not yet implemented")
 
                 override fun visit(type: Union) = when (type.mode!!) {
                     UnionMode.Sparse -> TODO("Not yet implemented")
@@ -136,6 +137,8 @@ sealed class Vector : VectorReader, VectorWriter {
                 }
 
                 override fun visit(type: Duration) = DurationVector(al, name, isNullable, type.unit)
+
+                override fun visit(p0: RunEndEncoded?) = TODO("Not yet implemented")
 
                 override fun visit(type: ExtensionType) = when (type) {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))

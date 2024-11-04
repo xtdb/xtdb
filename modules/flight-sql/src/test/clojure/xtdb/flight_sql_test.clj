@@ -4,7 +4,9 @@
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
             [xtdb.types :as types])
-  (:import (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
+  (:import (org.apache.arrow.adbc.core AdbcConnection AdbcDatabase)
+           org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
+           (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
@@ -13,6 +15,7 @@
 
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
 (def ^:private ^:dynamic *conn* nil)
+(def ^:private ^:dynamic ^AdbcConnection *adbc-conn*)
 
 (t/use-fixtures :each
   tu/with-allocator
@@ -28,9 +31,12 @@
                                     (.build))
                   client (FlightSqlClient. flight-client)
 
-                  conn (jdbc/get-connection {:jdbcUrl (format "jdbc:arrow-flight-sql://localhost:%d?useEncryption=false" port)})]
+                  conn (jdbc/get-connection {:jdbcUrl (format "jdbc:arrow-flight-sql://localhost:%d?useEncryption=false" port)})
+                  adbc-db (-> (FlightSqlDriver. tu/*allocator*)
+                              (.open  {"uri" (str "grpc+tcp://127.0.0.1:" port)}))
+                  adbc-conn (.connect adbc-db)]
 
-        (binding [*client* client, *conn* conn]
+        (binding [*client* client, *conn* conn, *adbc-conn* adbc-conn]
           (f))))))
 
 (def ^:private ^"[Lorg.apache.arrow.flight.CallOption;"
@@ -161,3 +167,30 @@
 
       (t/is (= #{{:name "James"} {:name "Matt"} {:name "Håkan"} {:name "Dan"}}
                (q))))))
+
+(t/deftest test-adbc
+  (with-open [stmt (.createStatement *adbc-conn*)]
+    (.setSqlQuery stmt "
+       INSERT INTO foo RECORDS
+       {
+         -- https://xkcd.com/221/
+         _id: UUID 'b82ae7b2-13cf-4828-858d-cd992fec9aa7',
+
+         name: 'foo',
+         created_at: TIMESTAMP '2020-01-01T12:34:00Z'
+       }")
+    (.executeUpdate stmt)
+
+    (.setSqlQuery stmt "SELECT * FROM foo")
+
+    (with-open [rdr (.getReader (.executeQuery stmt))]
+      (with-open [root (.getVectorSchemaRoot rdr)]
+        (t/is (true? (.loadNextBatch rdr)))
+
+        (with-open [rel (Relation/fromRoot root)]
+          (t/is (= [{:xt/id #uuid "b82ae7b2-13cf-4828-858d-cd992fec9aa7"
+                     :name "foo"
+                     :created-at #time/zoned-date-time "2020-01-01T12:34Z"}]
+                   (.toMaps rel))))
+
+        (t/is (false? (.loadNextBatch rdr)))))))

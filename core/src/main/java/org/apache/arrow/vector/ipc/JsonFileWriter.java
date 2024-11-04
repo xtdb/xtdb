@@ -74,6 +74,8 @@ import org.apache.arrow.vector.UInt2Vector;
 import org.apache.arrow.vector.UInt4Vector;
 import org.apache.arrow.vector.UInt8Vector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.complex.BaseLargeRepeatedValueViewVector;
+import org.apache.arrow.vector.complex.BaseRepeatedValueViewVector;
 import org.apache.arrow.vector.dictionary.Dictionary;
 import org.apache.arrow.vector.dictionary.DictionaryProvider;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -236,7 +238,10 @@ public class JsonFileWriter implements AutoCloseable {
         // thus the values are only written to a single entity.
         generator.writeArrayFieldStart(bufferType.getName());
         final int bufferValueCount =
-            (bufferType.equals(OFFSET) && vector.getMinorType() != MinorType.DENSEUNION)
+            (bufferType.equals(OFFSET)
+                    && vector.getMinorType() != MinorType.DENSEUNION
+                    && vector.getMinorType() != MinorType.LISTVIEW
+                    && vector.getMinorType() != MinorType.LARGELISTVIEW)
                 ? valueCount + 1
                 : valueCount;
         for (int i = 0; i < bufferValueCount; i++) {
@@ -266,6 +271,7 @@ public class JsonFileWriter implements AutoCloseable {
           } else if (bufferType.equals(OFFSET)
               && vector.getValueCount() == 0
               && (vector.getMinorType() == MinorType.LIST
+                  || vector.getMinorType() == MinorType.LISTVIEW
                   || vector.getMinorType() == MinorType.MAP
                   || vector.getMinorType() == MinorType.VARBINARY
                   || vector.getMinorType() == MinorType.VARCHAR)) {
@@ -277,6 +283,7 @@ public class JsonFileWriter implements AutoCloseable {
           } else if (bufferType.equals(OFFSET)
               && vector.getValueCount() == 0
               && (vector.getMinorType() == MinorType.LARGELIST
+                  || vector.getMinorType() == MinorType.LARGELISTVIEW
                   || vector.getMinorType() == MinorType.LARGEVARBINARY
                   || vector.getMinorType() == MinorType.LARGEVARCHAR)) {
             // Empty vectors may not have allocated an offsets buffer
@@ -426,6 +433,14 @@ public class JsonFileWriter implements AutoCloseable {
         case MAP:
         case DENSEUNION:
           generator.writeNumber(buffer.getInt((long) index * BaseVariableWidthVector.OFFSET_WIDTH));
+          break;
+        case LISTVIEW:
+          generator.writeNumber(
+              buffer.getInt((long) index * BaseRepeatedValueViewVector.OFFSET_WIDTH));
+          break;
+        case LARGELISTVIEW:
+          generator.writeNumber(
+              buffer.getInt((long) index * BaseLargeRepeatedValueViewVector.OFFSET_WIDTH));
           break;
         case LARGELIST:
         case LARGEVARBINARY:
@@ -580,6 +595,13 @@ public class JsonFileWriter implements AutoCloseable {
 
         default:
           throw new UnsupportedOperationException("minor type: " + vector.getMinorType());
+      }
+    } else if (bufferType.equals(SIZE)) {
+      if (vector.getMinorType() == MinorType.LISTVIEW) {
+        generator.writeNumber(buffer.getInt((long) index * BaseRepeatedValueViewVector.SIZE_WIDTH));
+      } else {
+        generator.writeNumber(
+            buffer.getInt((long) index * BaseLargeRepeatedValueViewVector.SIZE_WIDTH));
       }
     }
   }

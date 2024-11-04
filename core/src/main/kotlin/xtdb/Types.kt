@@ -55,6 +55,7 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
     override fun visit(type: ArrowType.LargeList) = throw UnsupportedOperationException()
     override fun visit(type: ArrowType.FixedSizeList) = "fixed-size-list-${type.listSize}"
     override fun visit(type: ArrowType.ListView) = throw UnsupportedOperationException()
+    override fun visit(p0: ArrowType.LargeListView?) = throw UnsupportedOperationException()
     override fun visit(type: ArrowType.Union) = "union"
     override fun visit(type: ArrowType.Map) = if (type.keysSorted) "map-sorted" else "map-unsorted"
     override fun visit(type: ArrowType.Int) = "${if (type.isSigned) "i" else "u"}${type.bitWidth}"
@@ -78,6 +79,8 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
 
     override fun visit(type: ArrowType.Interval) = "interval-${type.unit.toLegPart()}"
     override fun visit(type: ArrowType.Duration) = "duration-${type.unit.toLegPart()}"
+
+    override fun visit(p0: ArrowType.RunEndEncoded?) = throw UnsupportedOperationException()
 
     override fun visit(type: ArrowType.ExtensionType) = when (type) {
         KeywordType -> "keyword"

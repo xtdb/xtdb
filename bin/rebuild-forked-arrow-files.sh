@@ -11,7 +11,6 @@ mkdir -p "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"{complex/impl,i
 
 (
     cd $1/java
-    mvn -pl maven clean package install
     mvn -pl vector package -am
 
     echo
@@ -24,7 +23,7 @@ mkdir -p "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"{complex/impl,i
     cp vector/target/generated-sources/fmpp/org/apache/arrow/vector/complex/impl/UnionWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
     cp vector/src/main/java/org/apache/arrow/vector/ipc/JsonFileWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/ipc/"
 
-    cp vector/src/main/java/org/apache/arrow/vector/complex/impl/PromotableWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
+    cp vector/target/generated-sources/fmpp/org/apache/arrow/vector/complex/impl/PromotableWriter.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/impl/"
     cp vector/src/main/java/org/apache/arrow/vector/BaseLargeVariableWidthVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"
     cp vector/src/main/java/org/apache/arrow/vector/BaseVariableWidthVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/"
     cp vector/src/main/java/org/apache/arrow/vector/complex/ListVector.java "$XTDB_PATH/core/src/main/java/org/apache/arrow/vector/complex/"

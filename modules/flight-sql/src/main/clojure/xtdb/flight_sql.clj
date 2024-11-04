@@ -206,8 +206,8 @@
                    (pack-result (-> (doto (FlightSql$ActionCreatePreparedStatementResult/newBuilder)
                                       (.setPreparedStatementHandle ps-id)
                                       (.setParameterSchema (-> (Schema. (for [idx (range param-count)]
-                                                                          (types/->field (str "?_" idx) #xt.arrow/type :union false)))
-                                                               (.toByteArray)
+                                                                          (types/->field (str "$" idx) #xt.arrow/type :union false)))
+                                                               (.serializeAsMessage)
                                                                (ByteString/copyFrom))))
                                     (.build))))
 
@@ -291,4 +291,3 @@
           (run! util/try-close (vals stmts))
           (util/close allocator)
           (log/info "Flight SQL server stopped"))))))
-
