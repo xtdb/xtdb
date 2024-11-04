@@ -252,16 +252,16 @@
    :sql-state "XX000"
    :message msg})
 
-(defn- err-admin-shutdown [msg]
+(defn- err-invalid-auth-spec [msg]
   {:severity "ERROR"
    :localized-severity "ERROR"
-   :sql-state "57P01"
+   :sql-state "28000"
    :message msg})
 
-(defn- err-cannot-connect-now [msg]
+(defn- err-invalid-passwd [msg]
   {:severity "ERROR"
    :localized-severity "ERROR"
-   :sql-state "57P03"
+   :sql-state "28P01"
    :message msg})
 
 (defn- err-query-cancelled [msg]
@@ -789,7 +789,8 @@
   :query io-string
   :param-oids (io-list io-uint16 io-uint32))
 
-(def-msg msg-password :client \p)
+(def-msg msg-password :client \p
+  :password io-string)
 
 (def-msg msg-simple-query :client \Q
   :query io-string)
@@ -972,12 +973,9 @@
                                                   (.withZone clock (ZoneId/of tz))))
   (set-session-parameter conn time-zone-nf-param-name tz))
 
-(defn cmd-startup-pg30 [conn startup-params]
+(defn startup-ok [conn startup-params]
   (let [{:keys [server]} conn
         {:keys [server-state]} server]
-
-    ;; send auth-ok to client
-    (cmd-write-msg conn msg-auth {:result 0})
 
     (let [default-server-params (-> (:parameters @server-state)
                                     (update-keys str/lower-case))
@@ -993,6 +991,46 @@
     ;; backend key data (used to identify conn for cancellation)
     (cmd-write-msg conn msg-backend-key-data {:process-id (:cid conn), :secret-key 0})
     (cmd-send-ready conn)))
+
+(defn user+password [node user]
+  (first (xt/q node "SELECT passwd AS password, username AS user FROM pg_user WHERE username = ?" {:args [user]})))
+
+(declare read-typed-msg)
+
+(defn cmd-startup-pg30 [conn startup-params]
+  (let [{:keys [node !closing?]} conn
+        user (or (get startup-params "user") "anonymous")]
+    (if node ;; the playground does not have a node yet
+      (let [{:keys [password] :as pw-res} (user+password node user)]
+        (if (or password (nil? pw-res))
+          (do
+            ;; asking for a password
+            (cmd-write-msg conn msg-auth {:result 3})
+
+            ;; we go idle until we receive a message
+            (when-let [{:keys [msg-name] :as msg} (read-typed-msg conn)]
+              ;; if we receive a password message and the user exists, check the password
+              (if (or (not= :msg-password msg-name) (nil? pw-res))
+                (do
+                  (reset! !closing? true)
+                  (cmd-send-error conn (err-invalid-auth-spec (str "password authentication failed for user: " user)))
+                  conn)
+
+                (if (= (util/md5 (:password msg)) password)
+                  (do
+                    (cmd-write-msg conn msg-auth {:result 0})
+                    (startup-ok conn startup-params))
+
+                  (do
+                    (reset! !closing? true)
+                    (cmd-send-error conn (err-invalid-passwd "Invalid password")))))))
+
+          (do
+            (cmd-write-msg conn msg-auth {:result 0})
+            (startup-ok conn startup-params))))
+      (do
+        (cmd-write-msg conn msg-auth {:result 0})
+        (startup-ok conn startup-params)))))
 
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
@@ -1547,11 +1585,12 @@
 
   (cmd-send-ready conn))
 
-;; ignored by xt
-(defmethod handle-msg* :msg-password [_ _])
+;; ignore password messages, we are authenticated when getting here
+(defmethod handle-msg* :msg-password [_conn _msg])
 
 (defmethod handle-msg* ::default [_conn _]
   (throw (client-err "unknown client message")))
+
 
 (defn handle-msg [{:keys [cid] :as conn} {:keys [msg-name] :as msg}]
   (try
@@ -1559,7 +1598,6 @@
 
     (if (and (skip-until-sync? conn) (not= :msg-sync msg-name))
       (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
-
       (handle-msg* conn msg))
 
     (catch InterruptedException e (throw e))
@@ -1615,29 +1653,31 @@
   See comment 'Connection lifecycle'."
   [{:keys [server-state, port, node] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
-        {:keys [cid] :as conn} (util/with-close-on-catch [_ conn-socket]
-                                 (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-                                       !conn-state (atom {:close-promise close-promise
-                                                          :session {:access-mode :read-only
-                                                                    :clock (:clock @server-state)}})]
-                                   (try
-                                     (-> (map->Connection {:cid cid,
-                                                           :server server,
-                                                           :frontend (->socket-frontend conn-socket),
-                                                           :node node
-                                                           :!closing? (atom false)
-                                                           :conn-state !conn-state})
-                                         (cmd-startup)
-                                         (cond-> (nil? node) (assoc :node (->tmp-node server @!conn-state))))
-                                     (catch Throwable t
-                                       (log/warn t "error on conn startup")
-                                       (throw t)))))]
+        {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
+                                           (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
+                                                 !conn-state (atom {:close-promise close-promise
+                                                                    :session {:access-mode :read-only
+                                                                              :clock (:clock @server-state)}})]
+                                             (try
+                                               (-> (map->Connection {:cid cid,
+                                                                     :server server,
+                                                                     :frontend (->socket-frontend conn-socket),
+                                                                     :node node
+                                                                     :!closing? (atom false)
+                                                                     :conn-state !conn-state})
+                                                   (cmd-startup)
+                                                   (cond-> (nil? node) (assoc :node (->tmp-node server @!conn-state))))
+                                               (catch Throwable t
+                                                 (log/warn t "error on conn startup")
+                                                 (throw t)))))]
 
     (try
-      (swap! server-state assoc-in [:connections cid] conn)
+      ;; the connection loop only gets initialized if we are not closing
+      (when (not @!closing?)
+        (swap! server-state assoc-in [:connections cid] conn)
 
-      (log/trace "Starting connection loop" {:port port, :cid cid})
-      (conn-loop conn)
+        (log/trace "Starting connection loop" {:port port, :cid cid})
+        (conn-loop conn))
       (catch SocketException e
         (when (= "Broken pipe (Write failed)" (.getMessage e))
           (log/trace "Client closed socket while we were writing" {:port port, :cid cid})

@@ -49,14 +49,20 @@
                                   :frontend frontend
                                   :node tu/*node*
                                   :cid -1
-                                  :!closing? (future false)
+                                  :!closing? (atom false)
                                   :conn-state (atom {:session {:clock (Clock/systemUTC)}})})
      (pgwire/cmd-startup-pg30 startup-params))))
 
 (deftest test-startup
   (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
-    (with-open [_ (->conn frontend {"user" "xtdb"
-                                    "database" "xtdb"})]
+    (with-open [conn (->conn frontend {"user" "xtdb"
+                                       "database" "xtdb"})]
+      (t/is (= [[:msg-auth {:result 3}]] @!msgs))
+
+      (reset! !msgs [])
+
+      (pgwire/handle-msg conn {:msg-name :msg-password, :password "xtdb"})
+
       (t/is (= [[:msg-auth {:result 0}]
                 [:msg-parameter-status {:parameter "server_encoding", :value "UTF8"}]
                 [:msg-parameter-status {:parameter "client_encoding", :value "UTF8"}]
@@ -68,13 +74,30 @@
                 [:msg-ready {:status :idle}]]
                @!msgs)))))
 
-(deftest test-simple-query
+(deftest test-auth-failure
   (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
     (with-open [conn (->conn frontend {"user" "xtdb"
                                        "database" "xtdb"})]
       (reset! !msgs [])
 
-      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT 1"})
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query, :query "SELECT 1"})
+
+      (t/is (= [[:msg-error-response
+                 {:error-fields
+                  {:severity "ERROR",
+                   :localized-severity "ERROR",
+                   :sql-state "28000",
+                   :message "Authorization required"}}]]
+               @!msgs)))))
+
+
+(deftest test-simple-query
+  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
+    (with-open [conn (->conn frontend {"user" "anonymous"
+                                       "database" "xtdb"})]
+      (reset! !msgs [])
+
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query, :query "SELECT 1"})
 
       (t/is (= [[:msg-row-description
                  {:columns
@@ -113,7 +136,7 @@
         param-values ["alan"]
         query "SELECT * FROM docs"
         {:keys [!msgs] :as frontend} (->recording-frontend)     ]
-    (with-open [conn (->conn frontend {"user" "xtdb"
+    (with-open [conn (->conn frontend {"user" "anonymous"
                                        "database" "xtdb"})]
       (reset! !msgs [])
       (extended-query conn insert param-types param-values)
@@ -159,7 +182,7 @@
         param-values ["alan"]
         query "SELECT $1 as v"
         {:keys [!msgs] :as frontend} (->recording-frontend)]
-    (with-open [conn (->conn frontend {"user" "xtdb"
+    (with-open [conn (->conn frontend {"user" "anonymous"
                                        "database" "xtdb"})]
       (reset! !msgs [])
       (extended-query conn query param-types param-values)
@@ -176,11 +199,11 @@
 
 (deftest test-simple-query-with-params-fails-3605
   (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
-    (with-open [conn (->conn frontend {"user" "xtdb"
+    (with-open [conn (->conn frontend {"user" "anonymous"
                                        "database" "xtdb"})]
       (reset! !msgs [])
 
-      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT $1"})
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query, :query "SELECT $1"})
 
       (t/is (= [[:msg-error-response
                  {:error-fields

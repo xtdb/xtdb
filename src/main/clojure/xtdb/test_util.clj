@@ -83,7 +83,8 @@
                                               :host "localhost"
                                               :port (.getServerPort node)
                                               :database "xtdb"
-                                              :options "-c fallback_output_format=transit"})]
+                                              :options "-c fallback_output_format=transit"
+                                              :user "anonymous"})]
     (binding [*node* node, *conn* conn]
       (f))))
 

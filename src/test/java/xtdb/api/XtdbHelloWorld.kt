@@ -10,7 +10,7 @@ class XtdbHelloWorld {
     @Test
     fun `hello world`() {
         Xtdb.openNode(Xtdb.Config(ServerConfig(0))).use { xtdb ->
-            DriverManager.getConnection("jdbc:postgresql://localhost:${xtdb.serverPort}/xtdb").use { conn ->
+            DriverManager.getConnection("jdbc:postgresql://localhost:${xtdb.serverPort}/xtdb?user=anonymous").use { conn ->
                 conn.createStatement().use { statement ->
                     statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}")
 

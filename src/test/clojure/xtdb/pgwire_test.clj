@@ -65,7 +65,7 @@
   (merge
    {:host "localhost"
     :port *port*
-    :user "xtdb"
+    :user "anonymous"
     :database "xtdb"}
    params))
 
@@ -74,7 +74,9 @@
   (pg/connect (pg-config params)))
 
 (defn- jdbc-url [& params]
-  (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
+  (let [params (-> (into {} (partitionv 2 params))
+                   (update "user" (fnil identity "anonymous")))
+        param-str (when (seq params) (str "?" (str/join "&" (for [[k v] params] (str k "=" v)))))]
     (format "jdbc:postgresql://localhost:%s/xtdb%s" *port* (or param-str ""))))
 
 (defn- jdbc-conn ^Connection [& params]
@@ -511,7 +513,7 @@
   Send puts a string in to psql stdin, reads the next string from psql stdout. You can use (read :err) if you wish to read from stderr instead."
   [f]
   ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
-  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv"]
+  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv" "-U" "anonymous"]
         pb (ProcessBuilder. argv)
         p (.start pb)
         in (.getInputStream p)
@@ -557,7 +559,7 @@
 ;; (will probably move to a selector)
 (when (psql-available?)
   (deftest psql-connect-test
-    (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select 'ping' ping")]
+    (let [{:keys [exit, out] :as res} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-U" "anonymous" "-c" "select 'ping' ping")]
       (is (= 0 exit))
       (is (str/includes? out " ping\n(1 row)")))))
 
@@ -582,7 +584,7 @@
                  (jdbc/execute! conn ["SELECT * FROM foo"]))))
 
       (when (psql-available?)
-        (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo")]
+        (let [{:keys [exit, out] :as res} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo" "-U" "anonymous")]
           (is (= 0 exit))
           (is (str/includes? out "You are connected"))
           (is (str/includes? out "SSL connection (protocol: TLSv1.3")))))))
@@ -2063,3 +2065,17 @@ ORDER BY t.oid DESC LIMIT 1"
 
       (with-open [rs (.executeQuery stmt)]
         (t/is (= [{"_id" 8, "arr" [1 2 3]} {"_id" 9, "arr" [4 5 6]}] (rs->maps rs)))))))
+
+
+(deftest pg-authentication
+  (t/is (thrown-with-msg? PSQLException #"The server requested password-based authentication"
+                          (with-open [_ (jdbc-conn "user" "fin")]))
+        "non existing user without password")
+
+  (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: fin"
+                          (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
+        "non existing user without password")
+
+  (t/is (thrown-with-msg? PSQLException #"ERROR: Invalid password"
+                          (with-open [_ (jdbc-conn "user" "xtdb" "password" "foobar")]))
+        "incorrect password"))
