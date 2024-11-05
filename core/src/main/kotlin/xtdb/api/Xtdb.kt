@@ -2,12 +2,13 @@
 
 package xtdb.api
 
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
-import xtdb.api.metrics.Metrics
+import xtdb.api.metrics.PrometheusMetrics
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.inMemoryStorage
@@ -22,14 +23,16 @@ interface Xtdb : AutoCloseable {
 
     val serverPort: Int
 
-    fun <T: XtdbModule> module(type: Class<T>): T?
+    fun <T : XtdbModule> module(type: Class<T>): T?
+
+    fun addMeterRegistry(meterRegistry: MeterRegistry)
 
     @Serializable
     data class Config(
-        var server : ServerConfig? = ServerConfig(),
+        var server: ServerConfig? = ServerConfig(),
         var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
-        var metrics: Metrics.Factory? = null,
+        var prometheus: PrometheusMetrics.Factory? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig()
@@ -48,10 +51,13 @@ interface Xtdb : AutoCloseable {
         @JvmSynthetic
         fun compactor(configure: CompactorConfig.() -> Unit) = apply { compactor.configure() }
 
-        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
+        fun prometheus(prometheus: PrometheusMetrics.Factory) = apply { this.prometheus = prometheus }
 
         @JvmSynthetic
-        fun metrics(metrics: Metrics.Factory) = apply { this.metrics = metrics }
+        fun prometheus(configure: PrometheusMetrics.Factory.() -> Unit) =
+            prometheus(PrometheusMetrics.Factory().also(configure))
+
+        fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
         fun getModules(): List<XtdbModule.Factory> = modules
         fun module(module: XtdbModule.Factory) = apply { this.modules += module }
@@ -93,4 +99,4 @@ interface Xtdb : AutoCloseable {
     }
 }
 
-inline fun <reified T: XtdbModule> Xtdb.module(): T? = module(T::class.java)
+inline fun <reified T : XtdbModule> Xtdb.module(): T? = module(T::class.java)

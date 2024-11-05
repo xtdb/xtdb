@@ -1,29 +1,25 @@
 package xtdb.api.metrics
 
 import com.sun.net.httpserver.HttpServer
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry
 import io.micrometer.prometheus.PrometheusConfig
 import io.micrometer.prometheus.PrometheusMeterRegistry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import xtdb.api.module.XtdbModule
 import java.io.IOException
-import java.lang.System.Logger.Level.INFO
-import java.lang.System.LoggerFinder
 import java.net.InetSocketAddress
 
 private val LOGGER = LoggerFactory.getLogger(PrometheusMetrics::class.java)
 
-class PrometheusMetrics(override val registry: PrometheusMeterRegistry, private val server: HttpServer) : Metrics {
+class PrometheusMetrics(private val server: HttpServer) : AutoCloseable {
 
     @Serializable
-    @SerialName("!Prometheus")
-    data class Factory(
-        @Serializable val port: Int = 8080
-    ): Metrics.Factory {
-        override fun openMetrics(): Metrics {
+    data class Factory(val port: Int = 8080) {
+        fun open(parentReg: CompositeMeterRegistry): PrometheusMetrics {
             val reg = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+            parentReg.add(reg)
+
             try {
                 val server = HttpServer.create(InetSocketAddress(port), 0).apply {
                     createContext("/metrics") { exchange ->
@@ -36,7 +32,7 @@ class PrometheusMetrics(override val registry: PrometheusMeterRegistry, private 
                     LOGGER.info("Prometheus server started on port $port")
                 }
 
-                return PrometheusMetrics(reg, server)
+                return PrometheusMetrics(server)
             } catch (e: IOException) {
                 throw RuntimeException("Failed to start Prometheus server on port $port", e)
             }
@@ -45,14 +41,5 @@ class PrometheusMetrics(override val registry: PrometheusMeterRegistry, private 
 
     override fun close() {
         server.stop(0)
-    }
-
-    /**
-     * @suppress
-     */
-    class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerMetricsFactory(Factory::class)
-        }
     }
 }

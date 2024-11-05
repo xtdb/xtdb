@@ -21,5 +21,6 @@ storage: !Remote
   localDiskCache: !Env XTDB_LOCAL_DISK_CACHE
   maxDiskCachePercentage: 75
 
-metrics: !AzureMonitor
-  instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
+modules:
+  - !AzureMonitor
+    instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY

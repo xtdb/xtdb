@@ -7,13 +7,12 @@
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
-           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
-           (java.util.function Supplier)
+           io.micrometer.core.instrument.composite.CompositeMeterRegistry
            java.util.List
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.api Xtdb$Config)
-           (xtdb.api.metrics Metrics Metrics$Factory PrometheusMetrics$Factory)
+           (xtdb.api.metrics PrometheusMetrics PrometheusMetrics$Factory)
+           xtdb.api.Xtdb$Config
            (xtdb.cache Stats)))
 
 (defn add-counter [reg name {:keys [description]}]
@@ -37,10 +36,7 @@
 (defn add-gauge
   ([reg meter-name f] (add-gauge reg meter-name f {}))
   ([^MeterRegistry reg meter-name f opts]
-   (-> (Gauge/builder
-        meter-name
-        (reify Supplier
-          (get [_] (f))))
+   (-> (Gauge/builder meter-name f)
        (cond-> (:unit opts) (.baseUnit (str (:unit opts))))
        (.register reg))))
 
@@ -48,36 +44,22 @@
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
 (defn add-cache-gauges [reg meter-name ^Stats stats]
-  (add-gauge reg (str meter-name ".pinnedBytes")
-             (fn [] (.getPinnedBytes stats)) {:unit "bytes"})
-  (add-gauge reg (str meter-name ".evictableBytes")
-             (fn [] (.getEvictableBytes stats)) {:unit "bytes"})
-  (add-gauge reg (str meter-name ".freeBytes")
-             (fn [] (.getFreeBytes stats)) {:unit "bytes"}))
-
-(defmethod xtn/apply-config! :xtdb.metrics/prometheus [^Xtdb$Config config _ {:keys [port], :or {port 8080}}]
-  (.setMetrics config (PrometheusMetrics$Factory. port)))
-
-(defmethod xtn/apply-config! :xtdb.metrics/registry [^Xtdb$Config config, _ [tag opts]]
-  (xtn/apply-config! config
-                     (case tag
-                       :prometheus :xtdb.metrics/prometheus
-                       :cloudwatch :xtdb.aws.cloudwatch/metrics
-                       :azure-monitor :xtdb.azure.monitor/metrics)
-                     opts))
+  (doto reg
+    (add-gauge (str meter-name ".pinnedBytes")
+               #(.getPinnedBytes stats)
+               {:unit "bytes"})
+    (add-gauge (str meter-name ".evictableBytes")
+               #(.getEvictableBytes stats)
+               {:unit "bytes"})
+    (add-gauge (str meter-name ".freeBytes")
+               #(.getFreeBytes stats)
+               {:unit "bytes"})))
 
 (defn random-node-id []
   (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
 
-(defmethod ig/init-key :xtdb.metrics/registry [_ ^Metrics$Factory factory]
-  (let [^Metrics metrics (if factory
-                           (.openMetrics factory)
-                           (reify Metrics
-                             (getRegistry [_]
-                               (SimpleMeterRegistry.))
-
-                             (close [_])))
-        reg (.getRegistry metrics)]
+(defmethod ig/init-key :xtdb.metrics/registry [_ _]
+  (let [reg (CompositeMeterRegistry.)]
     
     ;; Add common tag for the node
     (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
@@ -90,10 +72,24 @@
                                  (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]
       (.bindTo metric reg))
 
-    metrics))
+    reg))
 
-(defmethod ig/resolve-key :xtdb.metrics/registry [_ ^Metrics metrics]
-  (.getRegistry metrics))
+(defmethod xtn/apply-config! ::prometheus [^Xtdb$Config config _ {:keys [^long port]}]
+  (.prometheus config (PrometheusMetrics$Factory. port)))
 
-(defmethod ig/halt-key! :xtdb.metrics/registry [_ metrics]
-  (util/close metrics))
+(defmethod ig/prep-key ::prometheus [_ ^PrometheusMetrics$Factory factory]
+  {:factory factory
+   :metrics-registry (ig/ref :xtdb.metrics/registry)})
+
+(defmethod ig/init-key ::prometheus [_ {:keys [^PrometheusMetrics$Factory factory
+                                               ^CompositeMeterRegistry metrics-registry]}]
+  (.open factory metrics-registry))
+
+(defmethod ig/halt-key! ::prometheus [_ ^PrometheusMetrics srv]
+  (util/close srv))
+
+(defmethod xtn/apply-config! ::cloudwatch [config _k v]
+  (xtn/apply-config! config :xtdb.aws.cloudwatch/metrics v))
+
+(defmethod xtn/apply-config! ::azure-monitor [config _k v]
+  (xtn/apply-config! config :xtdb.azure.monitor/metrics v))

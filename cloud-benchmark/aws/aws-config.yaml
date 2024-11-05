@@ -10,4 +10,5 @@ storage: !Remote
     prefix: "xtdb-object-store"
   localDiskCache: /var/lib/xtdb/buffers
 
-metrics: !CloudWatch
+modules:
+  - !CloudWatch

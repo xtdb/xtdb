@@ -13,7 +13,8 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util]
             [xtdb.xtql.edn :as xtql.edn])
-  (:import (java.io Closeable Writer)
+  (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
+           (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -71,6 +72,7 @@
                  ^IIndexer indexer
                  ^Log log
                  ^IQuerySource q-src, wm-src, scan-emitter
+                 ^CompositeMeterRegistry metrics-registry
                  default-tz
                  !latest-submitted-tx
                  system, close-fn,
@@ -80,6 +82,9 @@
     (or (some-> (util/component this :xtdb.pgwire/server)
                 (:port))
         (throw (IllegalStateException. "No Postgres wire server running."))))
+
+  (addMeterRegistry [this reg]
+    (.add metrics-registry reg))
 
   (module [_ clazz]
     (->> (vals (:xtdb/modules system))
@@ -208,7 +213,8 @@
   (util/close modules))
 
 (defn node-system [^Xtdb$Config opts]
-  (let [srv-config (.getServer opts)]
+  (let [srv-config (.getServer opts)
+        prometheus (.getPrometheus opts)]
     (-> {:xtdb/node {}
          :xtdb/allocator {}
          :xtdb/indexer {}
@@ -217,15 +223,16 @@
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
+         :xtdb.metrics/registry {}
 
          :xtdb/log (.getTxLog opts)
          :xtdb/buffer-pool (.getStorage opts)
-         :xtdb.metrics/registry (.getMetrics opts)
          :xtdb.indexer/live-index (.getIndexer opts)
          :xtdb/modules (.getModules opts)
          :xtdb/default-tz (.getDefaultTz opts)
          :xtdb.stagnant-log-flusher/flusher (.getIndexer opts)}
-        (cond-> srv-config (assoc :xtdb.pgwire/server srv-config))
+        (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
+                prometheus (assoc :xtdb.metrics/prometheus prometheus))
         (doto ig/load-namespaces))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

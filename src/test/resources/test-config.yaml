@@ -3,7 +3,9 @@ indexer:
   logLimit: 64
   flushDuration: PT4H
 storage: !InMemory
-metrics: !Prometheus
-  port: 8282
+
 server:
   port: 0
+
+prometheus:
+  port: 8282

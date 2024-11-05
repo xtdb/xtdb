@@ -39,7 +39,7 @@
                                       :keystore-password "password123"}}
                        :log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
-                       :metrics [:prometheus {:port 8080}]
+                       :prometheus {:port 8080}
                        :http-server {}
                        :flight-sql-server {:port 52358}}}})
 
