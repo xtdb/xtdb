@@ -487,9 +487,11 @@
                   WHERE column_name = 'set_column'"))))
 
 (deftest test-pg-user
-  (t/is (= [{:passwd (util/md5 "xtdb"), :username "xtdb", :usesuper true}
-            {:username "anonymous", :usesuper false}]
-           (xt/q tu/*node* "SELECT * FROM pg_user"))))
+  (t/is (= [{:passwd (util/md5 "xtdb"), :username "xtdb", :usesuper true
+             :xt/valid-from #time/zoned-date-time "1970-01-01T00:00Z[UTC]"}
+            {:username "anonymous", :usesuper false
+             :xt/valid-from #time/zoned-date-time "1970-01-01T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM pg_user"))))
 
 ; required for Postgrex
 (deftest test-pg-range-3737

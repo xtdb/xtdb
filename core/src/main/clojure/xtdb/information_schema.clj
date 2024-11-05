@@ -1,5 +1,6 @@
 (ns xtdb.information-schema
   (:require xtdb.metadata
+            [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -10,6 +11,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.metadata IMetadataManager)
            xtdb.operator.SelectionSpec
+           (xtdb.trie MemoryHashTrie)
            (xtdb.vector IVectorReader RelationReader)
            (xtdb.watermark Watermark)))
 
@@ -62,8 +64,10 @@
       pg_catalog/pg_settings {name :utf8, setting :utf8}
 
       pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
-                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
-      pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
+                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}})
+
+  (def ^:private pg-catalog-template-tables
+    '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables)
@@ -72,12 +76,20 @@
                               [col-name (types/col-type->field col-name col-type)])
                             (into {}))))))
 
-  (def table-info (-> derived-tables (update-vals (comp set keys))))
+  (def template-tables
+    (-> pg-catalog-template-tables
+        (update-vals (fn [col-types]
+                       (->> (for [[col-name col-type] col-types]
+                              [col-name (types/col-type->field col-name col-type)])
+                            (into {}))))))
+
+  (def table-info (-> (merge derived-tables template-tables) (update-vals (comp set keys))))
 
   (def unq-pg-catalog
-    (-> pg-catalog-tables
+    (-> (merge pg-catalog-tables pg-catalog-template-tables)
         (update-vals keys)
         (update-keys (comp symbol name)))))
+
 
 (def schemas
   [{:catalog-name "xtdb"
@@ -212,9 +224,38 @@
     {:name setting-name
      :setting setting}))
 
-(defn pg-user []
-  [{:username "xtdb" :usesuper true :passwd (util/md5 "xtdb")}
-   {:username "anonymous" :usesuper false :passwd nil}])
+(def ^:private pg-user-field (types/col-type->field "put" [:struct {'_id :utf8
+                                                                    'username :utf8
+                                                                    'usesuper :bool
+                                                                    'passwd [:union #{:utf8 :null}]}]))
+
+(def ^:private initial-user-data
+  [{:_id "xtdb" :username "xtdb" :usesuper true :passwd (util/md5 "xtdb")}
+   {:_id "anonymous" :username "anonymous" :usesuper false :passwd nil}])
+
+(defn pg-user-template-page+trie [allocator]
+  (util/with-close-on-catch [root (VectorSchemaRoot/create (trie/data-rel-schema pg-user-field) allocator)]
+    (let [out-rel-writer (vw/root->writer root)
+          iid-wrt (.colWriter out-rel-writer "_iid")
+          sys-wrt (.colWriter out-rel-writer "_system_from")
+          vf-wrt (.colWriter out-rel-writer "_valid_from")
+          vt-wrt (.colWriter out-rel-writer "_valid_to")
+          put-wrt (.legWriter (.colWriter out-rel-writer "op") "put")]
+      (doseq [user initial-user-data]
+        (.startRow out-rel-writer)
+        (.writeObject iid-wrt (trie/->iid (:_id user)))
+        (.writeLong sys-wrt 0)
+        (.writeLong vf-wrt 0)
+        (.writeLong vt-wrt Long/MAX_VALUE)
+        (.writeObject put-wrt user)
+        (.endRow out-rel-writer))
+      (let [out-rel (vw/rel-wtr->rdr out-rel-writer)
+            iid-rdr (vw/vec-wtr->rdr iid-wrt)
+            dummy-trie (reduce #(.add ^MemoryHashTrie %1 %2) (trie/->live-trie 32 1024 iid-rdr) (range (count initial-user-data)))]
+        [out-rel dummy-trie]))))
+
+(defn table->template-rel+tries [allocator]
+  {'pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
@@ -263,7 +304,6 @@
                                                    pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
                                                    pg_catalog/pg_settings (pg-settings)
                                                    pg_catalog/pg_range (pg-range)
-                                                   pg_catalog/pg_user (pg-user)
                                                    (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))
                                      (.syncRowCount)))]
 

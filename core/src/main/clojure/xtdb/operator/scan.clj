@@ -1,6 +1,5 @@
 (ns xtdb.operator.scan
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
@@ -21,6 +20,7 @@
   (:import (clojure.lang MapEntry)
            (com.carrotsearch.hppc IntArrayList)
            (java.io Closeable)
+           [java.lang AutoCloseable]
            java.nio.ByteBuffer
            (java.nio.file Path)
            (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue Stack)
@@ -57,6 +57,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
+  (close [])
   (scanFields [^xtdb.watermark.Watermark wm, scan-cols])
   (emitScan [scan-expr scan-fields param-fields]))
 
@@ -370,130 +371,143 @@
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
-         {:metadata-mgr (ig/ref ::meta/metadata-manager)
+         {:allocator (ig/ref :xtdb/allocator)
+          :metadata-mgr (ig/ref ::meta/metadata-manager)
           :buffer-pool (ig/ref :xtdb/buffer-pool)}))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
-  (reify IScanEmitter
-    (scanFields [_ wm scan-cols]
-      (letfn [(->field [[table col-name]]
-                (let [table (str table)
-                      col-name (str col-name)]
-                  ;; TODO move to fields here
-                  (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                          (if-let [info-field (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])]
-                            info-field
-                            (types/merge-fields (.columnField metadata-mgr table col-name)
-                                                (some-> (.liveIndex wm)
-                                                        (.liveTable table)
-                                                        (.columnField col-name)))))
-                      (types/field-with-name col-name))))]
-        (->> scan-cols
-             (into {} (map (juxt identity ->field))))))
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^BufferAllocator allocator]}]
+  (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
+    (reify IScanEmitter
+      (close [_] (->> table->template-rel+trie vals (map first) util/close))
+      (scanFields [_ wm scan-cols]
+        (letfn [(->field [[table col-name]]
+                  (let [table (str table)
+                        col-name (str col-name)]
+                    ;; TODO move to fields here
+                    (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
+                            (or (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
+                                (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
+                                (types/merge-fields (.columnField metadata-mgr table col-name)
+                                                    (some-> (.liveIndex wm)
+                                                            (.liveTable table)
+                                                            (.columnField col-name)))))
+                        (types/field-with-name col-name))))]
+          (->> scan-cols
+               (into {} (map (juxt identity ->field))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
-      (let [col-names (->> columns
-                           (into #{} (map (fn [[col-type arg]]
-                                            (case col-type
-                                              :column arg
-                                              :select (key (first arg)))))))
-            fields (->> col-names
-                        (into {} (map (juxt identity
-                                            (fn [col-name]
-                                              (get scan-fields [table col-name]))))))
+      (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
+        (let [col-names (->> columns
+                             (into #{} (map (fn [[col-type arg]]
+                                              (case col-type
+                                                :column arg
+                                                :select (key (first arg)))))))
+              fields (->> col-names
+                          (into {} (map (juxt identity
+                                              (fn [col-name]
+                                                (get scan-fields [table col-name]))))))
 
-            col-names (into #{} (map str) col-names)
+              col-names (into #{} (map str) col-names)
 
-            table-name (str table)
+              table-name (str table)
 
-            selects (->> (for [[tag arg] columns
-                               :when (= tag :select)
-                               :let [[col-name pred] (first arg)]]
-                           (MapEntry/create (str col-name) pred))
-                         (into {}))
-
-            col-preds (->> (for [[col-name select-form] selects]
-                             ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (let [input-types {:col-types (update-vals fields types/field->col-type)
-                                                :param-types (update-vals param-fields types/field->col-type)}]
-                               (MapEntry/create col-name
-                                                (expr/->expression-selection-spec (expr/form->expr select-form input-types)
-                                                                                  input-types))))
+              selects (->> (for [[tag arg] columns
+                                 :when (= tag :select)
+                                 :let [[col-name pred] (first arg)]]
+                             (MapEntry/create (str col-name) pred))
                            (into {}))
 
-            metadata-args (vec (for [[col-name select] selects
-                                     :when (not (types/temporal-column? col-name))]
-                                 select))
+              col-preds (->> (for [[col-name select-form] selects]
+                               ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
+                               (let [input-types {:col-types (update-vals fields types/field->col-type)
+                                                  :param-types (update-vals param-fields types/field->col-type)}]
+                                 (MapEntry/create col-name
+                                                  (expr/->expression-selection-spec (expr/form->expr select-form input-types)
+                                                                                    input-types))))
+                             (into {}))
 
-            row-count (->> (for [{:keys [tables]} (vals (.chunksMetadata metadata-mgr))
-                                 :let [{:keys [row-count]} (get tables table-name)]
-                                 :when row-count]
-                             row-count)
-                           (reduce +))]
+              metadata-args (vec (for [[col-name select] selects
+                                       :when (not (types/temporal-column? col-name))]
+                                   select))
 
-        {:fields fields
-         :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, schema, params]}]
-                     (if-let [derived-table-schema (info-schema/derived-tables table)]
-                       (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark)
+              row-count (->> (for [{:keys [tables]} (vals (.chunksMetadata metadata-mgr))
+                                   :let [{:keys [row-count]} (get tables table-name)]
+                                   :when row-count]
+                               row-count)
+                             (reduce +))]
 
-                       (let [iid-bb (selects->iid-byte-buffer selects params)
-                             col-preds (cond-> col-preds
-                                         iid-bb (assoc "_iid" (iid-selector iid-bb)))
-                             metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
-                             scan-opts (-> scan-opts
-                                           (update :for-valid-time
-                                                   (fn [fvt]
-                                                     (or fvt [:at [:now :now]]))))
-                             ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
-                             table-path (util/table-name->table-path table-name)
-                             current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
-                                                     (trie/current-trie-files))
-                             temporal-bounds (->temporal-bounds params basis scan-opts)]
-                         (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
-                           (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
-                                               (let [segments (cond-> (mapv (fn [meta-file-path]
-                                                                              (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
-                                                                                (.add table-metadatas table-metadata)
-                                                                                (into (trie/->Segment trie)
-                                                                                      {:data-file-path (trie/->table-data-file-path table-path
-                                                                                                                                    (:trie-key (trie/parse-trie-file-path meta-file-path)))
-                                                                                       :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                                (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
-                                                                                                                  (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                                  page-idx-pred))
-                                                                                                              (.build metadata-pred table-metadata)
-                                                                                                              col-names)
-                                                                                       :table-metadata table-metadata})))
-                                                                            current-meta-files)
+          {:fields fields
+           :stats {:row-count row-count}
+           :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, schema, params]}]
 
-                                                                live-table-wm (conj (trie/->Segment (.liveTrie live-table-wm))))]
-                                                 (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf) temporal-bounds)
-                                                      (into [] (keep (fn [^MergePlanTask mpt]
-                                                                       (when-let [leaves (trie/->merge-task
-                                                                                          (for [^MergePlanNode mpn (.getMpNodes mpt)
-                                                                                                :let [{:keys [data-file-path table-metadata page-idx-pred]} (.getSegment mpn)
-                                                                                                      node (.getNode mpn)]]
-                                                                                            (if data-file-path
-                                                                                              (->ArrowMergePlanPage data-file-path
-                                                                                                                    page-idx-pred
-                                                                                                                    (.getDataPageIndex ^ArrowHashTrie$Leaf node)
-                                                                                                                    table-metadata)
-                                                                                              (->MemoryMergePlanPage (.liveRelation live-table-wm) (.liveTrie live-table-wm) node)))
-                                                                                          temporal-bounds)]
-                                                                         {:path (.getPath mpt)
-                                                                          :leaves leaves})))))))]
+                       (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
+                         (let [derived-table-schema (info-schema/derived-tables table)]
+                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark))
 
-                             (util/with-close-on-catch [out-rel (RelationWriter. allocator
-                                                                                 (for [^Field field (vals fields)]
-                                                                                   (vw/->writer (.createVector field allocator))))]
-                               (->TrieCursor allocator (.iterator ^Iterable merge-tasks) out-rel
-                                             col-names col-preds
-                                             temporal-bounds
-                                             schema
-                                             params
-                                             (->vsr-cache buffer-pool allocator)
-                                             buffer-pool)))))))}))))
+                         (let [template-table? (info-schema/template-tables table)
+                               iid-bb (selects->iid-byte-buffer selects params)
+                               col-preds (cond-> col-preds
+                                           iid-bb (assoc "_iid" (iid-selector iid-bb)))
+                               metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
+                               scan-opts (-> scan-opts
+                                             (update :for-valid-time
+                                                     (fn [fvt]
+                                                       (or fvt [:at [:now :now]]))))
+                               ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
+                               table-path (util/table-name->table-path table-name)
+                               current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
+                                                       (trie/current-trie-files))
+                               temporal-bounds (->temporal-bounds params basis scan-opts)]
+                           (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
+                             (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
+                                                 (let [segments (cond-> (mapv (fn [meta-file-path]
+                                                                                (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
+                                                                                  (.add table-metadatas table-metadata)
+                                                                                  (into (trie/->Segment trie)
+                                                                                        {:data-file-path (trie/->table-data-file-path table-path
+                                                                                                                                      (:trie-key (trie/parse-trie-file-path meta-file-path)))
+                                                                                         :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                                  (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                                    (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                                    page-idx-pred))
+                                                                                                                (.build metadata-pred table-metadata)
+                                                                                                                col-names)
+                                                                                         :table-metadata table-metadata})))
+                                                                              current-meta-files)
+
+                                                                  live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
+                                                                                          (assoc :memory-rel (.liveRelation live-table-wm))))
+                                                                  template-table? (conj (let [[memory-rel trie] (table->template-rel+trie (symbol table-name))]
+                                                                                          (-> (trie/->Segment trie)
+                                                                                              (assoc :memory-rel memory-rel)))))]
+                                                   (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf) temporal-bounds)
+                                                        (into [] (keep (fn [^MergePlanTask mpt]
+                                                                         (when-let [leaves (trie/->merge-task
+                                                                                            (for [^MergePlanNode mpn (.getMpNodes mpt)
+                                                                                                  :let [{:keys [data-file-path table-metadata page-idx-pred trie memory-rel]} (.getSegment mpn)
+                                                                                                        node (.getNode mpn)]]
+                                                                                              (if data-file-path
+                                                                                                (->ArrowMergePlanPage data-file-path
+                                                                                                                      page-idx-pred
+                                                                                                                      (.getDataPageIndex ^ArrowHashTrie$Leaf node)
+                                                                                                                      table-metadata)
+                                                                                                (->MemoryMergePlanPage memory-rel trie node)))
+                                                                                            temporal-bounds)]
+                                                                           {:path (.getPath mpt)
+                                                                            :leaves leaves})))))))]
+
+                               (util/with-close-on-catch [out-rel (RelationWriter. allocator
+                                                                                   (for [^Field field (vals fields)]
+                                                                                     (vw/->writer (.createVector field allocator))))]
+                                 (->TrieCursor allocator (.iterator ^Iterable merge-tasks) out-rel
+                                               col-names col-preds
+                                               temporal-bounds
+                                               schema
+                                               params
+                                               (->vsr-cache buffer-pool allocator)
+                                               buffer-pool)))))))})))))
+
+(defmethod ig/halt-key! ::scan-emitter [_ ^IScanEmitter scan-emmiter]
+  (.close scan-emmiter))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-fields, param-fields]}]
   (.emitScan scan-emitter scan-expr scan-fields param-fields))
