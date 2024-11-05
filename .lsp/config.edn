@@ -1,4 +1,5 @@
-{:clean {:automatically-after-ns-refactor true
+{:java {:download-jdk-source? true}
+ :clean {:automatically-after-ns-refactor true
          :ns-inner-blocks-indentation :same-line
          :ns-import-classes-indentation :same-line
          :sort {:ns true
