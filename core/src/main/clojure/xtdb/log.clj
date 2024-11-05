@@ -1,5 +1,6 @@
 (ns xtdb.log
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.error :as err]
@@ -164,6 +165,17 @@
             (types/col-type->field "system-time" types/nullable-temporal-type)
             (types/col-type->field "default-tz" :utf8)]))
 
+(def ^:private forbidden-tables #{"xt/" "information_schema/" "pg_catalog/"})
+
+(defn forbidden-table? [table-name]
+  (when-not (= table-name "xt/tx_fns")
+    (some (fn [s] (str/starts-with? table-name s)) forbidden-tables)))
+
+(defn forbidden-table-ex [table-name]
+  (err/illegal-arg :xtdb/forbidden-table
+                   {::err/message (format "Cannot write to table: %s" table-name)
+                    :table-name table-name}))
+
 (defn- ->xtql+args-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
   (let [xtql-writer (.legWriter op-writer "xtql" (FieldType/notNullable #xt.arrow/type :struct))
         xtql-op-writer (.structKeyWriter xtql-writer "op" (FieldType/notNullable #xt.arrow/type :transit))
@@ -180,10 +192,9 @@
           (.syncValueCount args-wtr)
 
           (.writeBytes args-writer
-                       (util/build-arrow-ipc-byte-buffer (VectorSchemaRoot. ^Iterable (seq (.getVector args-wtr)))
-                                                         :stream
-                                                         (fn [write-batch!]
-                                                           (write-batch!))))))
+                       (util/build-arrow-ipc-byte-buffer (VectorSchemaRoot. ^Iterable (seq (.getVector args-wtr))) :stream
+                         (fn [write-batch!]
+                           (write-batch!))))))
 
       (.endStruct xtql-writer))))
 
@@ -257,29 +268,31 @@
         valid-to-writer (.structKeyWriter put-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [table-name docs valid-from valid-to]}]
-      (.startStruct put-writer)
-      (let [^IVectorWriter table-doc-writer
-            (.computeIfAbsent table-doc-writers (util/with-default-schema table-name)
-                              (fn [table]
-                                (doto (.legWriter doc-writer (str (symbol table)) (FieldType/notNullable #xt.arrow/type :list))
-                                  (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))]
+      (let [table-name (str (symbol (util/with-default-schema table-name)))]
+        (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
+        (.startStruct put-writer)
+        (let [^IVectorWriter table-doc-writer
+              (.computeIfAbsent table-doc-writers table-name
+                                (fn [table]
+                                  (doto (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :list))
+                                    (.listElementWriter (FieldType/notNullable #xt.arrow/type :struct)))))]
 
-        (.writeObject table-doc-writer docs)
+          (.writeObject table-doc-writer docs)
 
-        (.startList iids-writer)
-        (doseq [doc docs
-                :let [eid (val (or (->> doc
-                                        (some (fn [e]
-                                                (when (.equals "_id" (util/->normal-form-str (key e)))
-                                                  e))))
-                                   (throw (err/illegal-arg :missing-id {:doc doc}))))]]
-          (.writeBytes iid-writer (trie/->iid eid)))
-        (.endList iids-writer))
+          (.startList iids-writer)
+          (doseq [doc docs
+                  :let [eid (val (or (->> doc
+                                          (some (fn [e]
+                                                  (when (.equals "_id" (util/->normal-form-str (key e)))
+                                                    e))))
+                                     (throw (err/illegal-arg :missing-id {:doc doc}))))]]
+            (.writeBytes iid-writer (trie/->iid eid)))
+          (.endList iids-writer))
 
-      (.writeObject valid-from-writer valid-from)
-      (.writeObject valid-to-writer valid-to)
+        (.writeObject valid-from-writer valid-from)
+        (.writeObject valid-to-writer valid-to)
 
-      (.endStruct put-writer))))
+        (.endStruct put-writer)))))
 
 (defn- ->delete-writer [^IVectorWriter op-writer]
   (let [delete-writer (.legWriter op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
@@ -290,20 +303,22 @@
         valid-from-writer (.structKeyWriter delete-writer "_valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.structKeyWriter delete-writer "_valid_to" types/nullable-temporal-field-type)]
     (fn write-delete! [{:keys [table-name doc-ids valid-from valid-to]}]
-      (when (seq doc-ids)
-        (.startStruct delete-writer)
+      (let [table-name (str (symbol (util/with-default-schema table-name)))]
+        (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
+        (when (seq doc-ids)
+          (.startStruct delete-writer)
 
-        (.writeObject table-writer (str (symbol (util/with-default-schema table-name))))
+          (.writeObject table-writer table-name)
 
-        (.startList iids-writer)
-        (doseq [doc-id doc-ids]
-          (.writeObject iid-writer (trie/->iid doc-id)))
-        (.endList iids-writer)
+          (.startList iids-writer)
+          (doseq [doc-id doc-ids]
+            (.writeObject iid-writer (trie/->iid doc-id)))
+          (.endList iids-writer)
 
-        (.writeObject valid-from-writer valid-from)
-        (.writeObject valid-to-writer valid-to)
+          (.writeObject valid-from-writer valid-from)
+          (.writeObject valid-to-writer valid-to)
 
-        (.endStruct delete-writer)))))
+          (.endStruct delete-writer))))))
 
 (defn- ->erase-writer [^IVectorWriter op-writer]
   (let [erase-writer (.legWriter op-writer "erase-docs" (FieldType/notNullable #xt.arrow/type :struct))
@@ -312,16 +327,18 @@
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
     (fn [{:keys [table-name doc-ids]}]
-      (when (seq doc-ids)
-        (.startStruct erase-writer)
-        (.writeObject table-writer (str (symbol (util/with-default-schema table-name))))
+      (let [table-name (str (symbol (util/with-default-schema table-name)))]
+        (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
+        (when (seq doc-ids)
+          (.startStruct erase-writer)
+          (.writeObject table-writer table-name)
 
-        (.startList iids-writer)
-        (doseq [doc-id doc-ids]
-          (.writeObject iid-writer (trie/->iid doc-id)))
-        (.endList iids-writer)
+          (.startList iids-writer)
+          (doseq [doc-id doc-ids]
+            (.writeObject iid-writer (trie/->iid doc-id)))
+          (.endList iids-writer)
 
-        (.endStruct erase-writer)))))
+          (.endStruct erase-writer))))))
 
 (defn- ->call-writer [^IVectorWriter op-writer]
   (let [call-writer (.legWriter op-writer "call" (FieldType/notNullable #xt.arrow/type :struct))

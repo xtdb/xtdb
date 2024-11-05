@@ -11,8 +11,7 @@
             [xtdb.test-util :as tu]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types])
-  (:import xtdb.api.tx.TxOps
-           (xtdb.types RegClass RegProc)))
+  (:import (xtdb.types RegClass RegProc)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -2431,3 +2430,18 @@ UNION ALL
         ex-msg (ex-message error)]
     (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
     (t/is (str/includes? ex-msg "Cannot INSERT _system_from column"))))
+
+(t/deftest can-not-write-to-reserved-tables
+  (t/testing "submit side"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: xt/txs"
+                            (xt/submit-tx tu/*node* [[:put-docs :xt/txs {:xt/id 1}]])))
+
+    (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: xt/txs"
+                            (xt/execute-tx tu/*node* [[:sql "INSERT INTO xt.txs(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]]))))
+
+  (t/testing "indexing side"
+    (let [{:keys [committed? error] :as _tx-res}
+          (xt/execute-tx tu/*node* [[:sql "INSERT INTO xt.txs(_id, system_time, committed, error) SELECT 1, 2, 3, 4"]])]
+      (t/is (false? committed?))
+      (t/is (= #xt/illegal-arg [:xtdb/forbidden-table "Cannot write to table: xt/txs" {:table-name "xt/txs"}]
+               error)))))
