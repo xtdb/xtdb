@@ -59,7 +59,7 @@ class YamlSerdeTest {
           port: 3000
         """.trimIndent()
 
-        assertEquals(3000, nodeConfig(input).prometheus?.port)
+        assertEquals(3000, nodeConfig(input).healthz?.port)
 
         val awsInput = """
         modules: 
