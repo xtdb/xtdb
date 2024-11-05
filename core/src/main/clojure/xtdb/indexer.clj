@@ -83,6 +83,7 @@
         system-time-µs (time/instant->micros system-time)
         tables (->> (.legs docs-rdr)
                     (into {} (map (fn [table-name]
+                                    (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
                                     (let [table-docs-rdr (.legReader docs-rdr table-name)
                                           doc-rdr (.listElementReader table-docs-rdr)
                                           ks (.structKeys doc-rdr)]
@@ -155,6 +156,9 @@
               valid-to (if (.isNull valid-to-rdr tx-op-idx)
                          Long/MAX_VALUE
                          (.getLong valid-to-rdr tx-op-idx))]
+
+          (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
+
           (when (> valid-from valid-to)
             (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                     {:valid-from (time/micros->instant valid-from)
@@ -176,8 +180,10 @@
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
               live-table (.liveTable live-idx-tx table)
-
               iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
+
+          (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
+
           (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
             (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx)))))
 
@@ -314,9 +320,11 @@
               valid-from-rdr (.readerForName in-rel "_valid_from")
               valid-to-rdr (.readerForName in-rel "_valid_to")
 
-              live-idx-table (.liveTable live-idx-tx (str table))
+              live-idx-table (.liveTable live-idx-tx table)
               live-idx-table-copier (-> (.docWriter live-idx-table)
                                         (.rowCopier content-rel))]
+
+          (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
           (when-not id-col
             (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
@@ -342,7 +350,8 @@
 (defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
-      (let [row-count (.rowCount in-rel)
+      (let [table (str table)
+            row-count (.rowCount in-rel)
             iid-rdr (.readerForName in-rel "_iid")
             valid-from-rdr (.readerForName in-rel "_valid_from")
             valid-to-rdr (.readerForName in-rel "_valid_to")]
@@ -357,17 +366,23 @@
                                       {:valid-from (time/micros->instant valid-from)
                                        :valid-to (time/micros->instant valid-to)})))
 
-            (-> (.liveTable live-idx-tx (str table))
+            (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
+
+            (-> (.liveTable live-idx-tx table)
                 (.logDelete iid valid-from valid-to))))))))
 
 (defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
-      (let [row-count (.rowCount in-rel)
+      (let [table (str table)
+            row-count (.rowCount in-rel)
             iid-rdr (.readerForName in-rel "_iid")]
+
+        (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
+
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)]
-            (-> (.liveTable live-idx-tx (str table))
+            (-> (.liveTable live-idx-tx table)
                 (.logErase iid))))))))
 
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src
@@ -544,8 +559,7 @@
 
         nil))))
 
-(def ^:private ^:const ^String txs-table
-  "xt/txs")
+(def ^:private ^:const ^String txs-table "xt/txs")
 
 (defn- add-tx-row! [^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.getTxId tx-key)

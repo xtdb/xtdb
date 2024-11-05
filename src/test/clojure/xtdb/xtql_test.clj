@@ -2028,12 +2028,12 @@
 
 (t/deftest test-table-normalisation
   (let [doc {:xt/id "doc" :foo "bar"}]
-    (xt/submit-tx tu/*node* [[:put-docs :xt/the-docs doc]])
+    (xt/submit-tx tu/*node* [[:put-docs :foo/the-docs doc]])
     (t/is (= [{:id "doc"}]
-             (xt/q tu/*node* '(from :xt/the-docs [{:xt/id id}]))))
-    (xt/submit-tx tu/*node* [[:put-docs :xt.docs/the-docs doc]])
+             (xt/q tu/*node* '(from :foo/the-docs [{:xt/id id}]))))
+    (xt/submit-tx tu/*node* [[:put-docs :foo.bar/the-docs doc]])
     (t/is (= [{:id "doc"}]
-             (xt/q tu/*node* '(from :xt.docs/the-docs [{:xt/id id}])))
+             (xt/q tu/*node* '(from :foo.bar/the-docs [{:xt/id id}])))
           "with dots in namespace")))
 
 (t/deftest test-inconsistent-valid-time-range-2494
