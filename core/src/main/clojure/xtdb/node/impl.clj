@@ -214,7 +214,7 @@
 
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
-        prometheus (.getPrometheus opts)]
+        healthz (.getHealthz opts)]
     (-> {:xtdb/node {}
          :xtdb/allocator {}
          :xtdb/indexer {}
@@ -232,7 +232,7 @@
          :xtdb/default-tz (.getDefaultTz opts)
          :xtdb.stagnant-log-flusher/flusher (.getIndexer opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
-                prometheus (assoc :xtdb/prometheus prometheus))
+                healthz (assoc :xtdb/healthz healthz))
         (doto ig/load-namespaces))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

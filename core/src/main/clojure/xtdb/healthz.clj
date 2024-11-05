@@ -1,4 +1,4 @@
-(ns xtdb.prometheus
+(ns xtdb.healthz
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [reitit.http :as http]
@@ -16,14 +16,14 @@
            [java.lang AutoCloseable]
            org.eclipse.jetty.server.Server
            (xtdb.api Xtdb$Config)
-           (xtdb.api.metrics PrometheusConfig)
-           xtdb.api.Xtdb$Config))
+           (xtdb.api.metrics HealthzConfig)
+           xtdb.api.Xtdb$Config
+           xtdb.indexer.IIndexer))
 
 (def router
   (http/router [["/metrics" {:name :metrics
-                             :get (fn [{:keys [^PrometheusMeterRegistry prometheus-registry] :as req}]
+                             :get (fn [{:keys [^PrometheusMeterRegistry prometheus-registry]}]
                                     {:status 200, :body (.scrape prometheus-registry)})}]]
-
                {:data {:interceptors [[ri.exception/exception-interceptor
                                        (merge ri.exception/default-handlers
                                               {::ri.exception/wrap (fn [handler e req]
@@ -43,26 +43,26 @@
                      {:executor r.sieppari/executor
                       :interceptors [[with-opts opts]]}))
 
-(defmethod xtn/apply-config! :xtdb/prometheus [^Xtdb$Config config _ {:keys [^long port]}]
-  (.prometheus config (PrometheusConfig. port)))
+(defmethod xtn/apply-config! :xtdb/healthz [^Xtdb$Config config _ {:keys [^long port]}]
+  (.healthz config (HealthzConfig. port)))
 
-(defmethod ig/prep-key :xtdb/prometheus [_ ^PrometheusConfig config]
-  {:port (.getPort config)
+(defmethod ig/prep-key :xtdb/healthz [_ ^HealthzConfig config]
+  {:port (.getPort config) 
    :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
-(defmethod ig/init-key :xtdb/prometheus [_ {:keys [^long port, ^CompositeMeterRegistry metrics-registry]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [^long port, ^CompositeMeterRegistry metrics-registry]}]
   (let [prometheus-registry (PrometheusMeterRegistry. io.micrometer.prometheus.PrometheusConfig/DEFAULT)
         ^Server server (j/run-jetty (handler {:prometheus-registry prometheus-registry})
                                     {:port port, :async? true, :join? false})]
 
     (.add metrics-registry prometheus-registry)
 
-    (log/info "Prometheus server started on port:" port)
+    (log/info "Healthz server started on port:" port)
 
     (reify AutoCloseable
       (close [_]
         (.stop server)
-        (log/info "Prometheus server stopped.")))))
+        (log/info "Healthz server stopped.")))))
 
-(defmethod ig/halt-key! :xtdb/prometheus [_ srv]
+(defmethod ig/halt-key! :xtdb/healthz [_ srv]
   (util/close srv))

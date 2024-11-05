@@ -15,7 +15,7 @@ storage: !Remote
     userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
   localDiskCache: !Env XTDB_LOCAL_DISK_CACHE
 
-prometheus:
+healthz:
   port: 8080
 
 modules:
