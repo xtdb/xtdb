@@ -3,7 +3,8 @@
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.information-schema :as i-s]
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu]
+            [xtdb.time :as time]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -487,12 +488,12 @@
                   WHERE column_name = 'set_column'"))))
 
 (deftest test-pg-user
-  (t/is (= [{:username "xtdb", :usesuper true}]
-           (xt/q tu/*node* "SELECT username, usesuper FROM pg_user")))
+  (t/is (= [{:username "xtdb", :usesuper true, :xt/valid-from (time/->zdt #inst "1970")}]
+           (xt/q tu/*node* "SELECT username, usesuper, _valid_from, _valid_to FROM pg_user")))
 
   (t/is (= "xtdb" (authn/verify-pw tu/*node* "xtdb" "xtdb"))))
 
-; required for Postgrex
+;; required for Postgrex
 (deftest test-pg-range-3737
   (let [types (set
                (map
