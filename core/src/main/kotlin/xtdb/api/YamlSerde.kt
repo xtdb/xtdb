@@ -18,7 +18,6 @@ import kotlinx.serialization.modules.subclass
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
-import xtdb.api.metrics.Metrics
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStoreFactory
 import java.nio.file.Path
@@ -154,13 +153,6 @@ val YAML_SERDE = Yaml(
                         serializer: KSerializer<F>,
                     ) {
                         polymorphic(ObjectStoreFactory::class) { subclass(factory, serializer) }
-                    }
-
-                    override fun <F : Metrics.Factory> registerMetricsFactory(
-                        factory: KClass<F>,
-                        serializer: KSerializer<F>,
-                    ) {
-                        polymorphic(Metrics.Factory::class) { subclass(factory, serializer) }
                     }
                 })
             }

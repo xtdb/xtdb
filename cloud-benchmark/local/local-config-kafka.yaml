@@ -10,5 +10,5 @@ txLog: !Kafka
 storage: !Local
   path: !Env XTDB_STORAGE_DIR
 
-metrics: !Prometheus
+prometheus:
   port: 0

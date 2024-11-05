@@ -9,9 +9,9 @@ storage: !Remote
     prefix: "xtdb-object-store"
   localDiskCache: /var/lib/xtdb/buffers
 
-metrics: !Prometheus
+prometheus:
   port: 8080
 
-modules: 
+modules:
 - !HttpServer
   port: 3000

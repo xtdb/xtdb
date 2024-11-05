@@ -15,7 +15,6 @@
   (:import (java.io File)
            (java.nio.file Path)
            (java.time Duration InstantSource)
-           (xtdb.api.metrics Metrics)
            (xtdb.indexer IIndexer)))
 
 (set! *warn-on-reflection* false)
@@ -41,7 +40,7 @@
   (let [node-dir (util/->path node-dir)]
     (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :metrics [:prometheus {:port 8080}]
+                     :prometheus {:port 8080}
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))
                      :server {:port 0}})))
@@ -77,9 +76,8 @@
 
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
     (with-open [node (->local-node node-opts)]
-      (let [^Metrics metrics (-> node :system :xtdb.metrics/registry)]
-        (binding [bm/*registry* (.getRegistry metrics)]
-          (benchmark-fn node))))))
+      (binding [bm/*registry* (util/component node :xtdb.metrics/registry)]
+        (benchmark-fn node)))))
 
 (defn node-dir->config [^File node-dir]
   (let [^Path path (.toPath node-dir)]

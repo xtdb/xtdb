@@ -10,6 +10,7 @@ import xtdb.api.log.Kafka
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
 import xtdb.api.metrics.PrometheusMetrics
+import xtdb.api.module.XtdbModule
 import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
 import xtdb.api.storage.GoogleCloudStorage
 import xtdb.api.storage.Storage.InMemoryStorageFactory
@@ -21,6 +22,13 @@ import xtdb.azure.AzureMonitorMetrics
 import java.nio.file.Paths
 
 class YamlSerdeTest {
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T : XtdbModule.Factory> Xtdb.Config.findModule(module: Class<out XtdbModule.Factory>): T? =
+        getModules().find { module.isAssignableFrom(it::class.java) } as T?
+
+    private inline fun <reified T : XtdbModule.Factory> Xtdb.Config.findModule(): T? = findModule(T::class.java)
+
     @Test
     fun testDecoder() {
         val input = """
@@ -37,7 +45,7 @@ class YamlSerdeTest {
         indexer:
             logLimit: 65
             flushDuration: PT4H
-        metrics: !Prometheus
+        prometheus:
             port: 3000
         defaultTz: "America/Los_Angeles"
         """.trimIndent()
@@ -48,25 +56,27 @@ class YamlSerdeTest {
     @Test
     fun testMetricsConfigDecoding() {
         val input = """
-        metrics: !Prometheus
-            port: 3000
+        prometheus: 
+          port: 3000
         """.trimIndent()
 
-        assertEquals(PrometheusMetrics.Factory(port = 3000), nodeConfig(input).metrics)
+        assertEquals(3000, nodeConfig(input).prometheus?.port)
 
         val awsInput = """
-        metrics: !CloudWatch
+        modules: 
+          - !CloudWatch
             namespace: "aws.namespace" 
         """.trimIndent()
 
-        assertEquals(CloudWatchMetrics.Factory("aws.namespace").namespace, (nodeConfig(awsInput).metrics as CloudWatchMetrics.Factory).namespace)
+        assertEquals("aws.namespace", nodeConfig(awsInput).findModule<CloudWatchMetrics>()?.namespace)
 
         val azureInput = """
-        metrics: !AzureMonitor
+        modules: 
+          - !AzureMonitor
             instrumentationKey: "azure.namespace" 
         """.trimIndent()
 
-        assertEquals(AzureMonitorMetrics.Factory("azure.namespace").instrumentationKey, (nodeConfig(azureInput).metrics as AzureMonitorMetrics.Factory).instrumentationKey)
+        assertEquals("azure.namespace", nodeConfig(azureInput).findModule<AzureMonitorMetrics>()?.instrumentationKey)
     }
 
     @Test

@@ -2,7 +2,8 @@
   "This namespace is for starting an in-process XTDB node.
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
-  (:require [xtdb.time :as time])
+  (:require [clojure.tools.logging :as log]
+            [xtdb.time :as time])
   (:import [java.io File]
            [java.nio.file Path]
            [java.time ZoneId]
@@ -55,10 +56,11 @@
 (defmethod apply-config! :server [config _ opts]
   (apply-config! config :xtdb.pgwire/server opts))
 
-(defmethod apply-config! :metrics [config _ opts]
-  (apply-config! config :xtdb.metrics/registry opts))
+(defmethod apply-config! :prometheus [config _ opts]
+  (apply-config! config :xtdb.metrics/prometheus opts))
 
-(defmethod apply-config! ::default [_ _ _])
+(defmethod apply-config! ::default [_ k _]
+  (log/warn "Unknown configuration key:" k))
 
 (defn start-node
   "Starts an in-process node with the given configuration.
