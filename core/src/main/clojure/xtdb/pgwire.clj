@@ -1627,7 +1627,8 @@
                                          (cmd-startup)
                                          (cond-> (nil? node) (assoc :node (->tmp-node server @!conn-state))))
                                      (catch Throwable t
-                                       (log/warn t "error on conn startup")))))]
+                                       (log/warn t "error on conn startup")
+                                       (throw t)))))]
 
     (try
       (swap! server-state assoc-in [:connections cid] conn)
