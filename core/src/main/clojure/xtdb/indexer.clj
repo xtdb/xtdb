@@ -691,6 +691,8 @@
                                  awaiters)
            (CompletableFuture/completedFuture (.latestCompletedTx this)))
          (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+  
+  (indexerError [this] (.indexer-error this))
 
   Closeable
   (close [_]

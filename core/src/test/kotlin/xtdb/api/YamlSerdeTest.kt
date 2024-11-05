@@ -44,7 +44,7 @@ class YamlSerdeTest {
         indexer:
             logLimit: 65
             flushDuration: PT4H
-        prometheus:
+        healthz:
             port: 3000
         defaultTz: "America/Los_Angeles"
         """.trimIndent()
@@ -55,11 +55,11 @@ class YamlSerdeTest {
     @Test
     fun testMetricsConfigDecoding() {
         val input = """
-        prometheus: 
+        healthz: 
           port: 3000
         """.trimIndent()
 
-        assertEquals(3000, nodeConfig(input).prometheus?.port)
+        assertEquals(3000, nodeConfig(input).healthz?.port)
 
         val awsInput = """
         modules: 

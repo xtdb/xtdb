@@ -9,7 +9,7 @@ storage: !Remote
     prefix: "xtdb-object-store"
   localDiskCache: /var/lib/xtdb/buffers
 
-prometheus:
+healthz:
   port: 8080
 
 modules:

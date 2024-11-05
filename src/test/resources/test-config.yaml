@@ -7,5 +7,5 @@ storage: !InMemory
 server:
   port: 0
 
-prometheus:
+healthz:
   port: 8282

@@ -40,7 +40,7 @@
   (let [node-dir (util/->path node-dir)]
     (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :prometheus {:port 8080}
+                     :healthz {:port 8080}
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))
                      :server {:port 0}})))

@@ -4,7 +4,7 @@ txLog: !Local
 storage: !Local
   path: "/var/lib/xtdb/buffers"
 
-prometheus:
+healthz:
   port: 8080
 
 modules: 
