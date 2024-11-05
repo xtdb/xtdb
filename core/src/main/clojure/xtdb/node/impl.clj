@@ -232,7 +232,7 @@
          :xtdb/default-tz (.getDefaultTz opts)
          :xtdb.stagnant-log-flusher/flusher (.getIndexer opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
-                prometheus (assoc :xtdb.metrics/prometheus prometheus))
+                prometheus (assoc :xtdb/prometheus prometheus))
         (doto ig/load-namespaces))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

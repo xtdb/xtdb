@@ -8,7 +8,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
-import xtdb.api.metrics.PrometheusMetrics
+import xtdb.api.metrics.PrometheusConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.inMemoryStorage
@@ -32,7 +32,7 @@ interface Xtdb : AutoCloseable {
         var server: ServerConfig? = ServerConfig(),
         var txLog: Log.Factory = inMemoryLog(),
         var storage: Storage.Factory = inMemoryStorage(),
-        var prometheus: PrometheusMetrics.Factory? = null,
+        var prometheus: PrometheusConfig? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig()
@@ -51,11 +51,11 @@ interface Xtdb : AutoCloseable {
         @JvmSynthetic
         fun compactor(configure: CompactorConfig.() -> Unit) = apply { compactor.configure() }
 
-        fun prometheus(prometheus: PrometheusMetrics.Factory) = apply { this.prometheus = prometheus }
+        fun prometheus(prometheus: PrometheusConfig) = apply { this.prometheus = prometheus }
 
         @JvmSynthetic
-        fun prometheus(configure: PrometheusMetrics.Factory.() -> Unit) =
-            prometheus(PrometheusMetrics.Factory().also(configure))
+        fun prometheus(configure: PrometheusConfig.() -> Unit) =
+            prometheus(PrometheusConfig().also(configure))
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 

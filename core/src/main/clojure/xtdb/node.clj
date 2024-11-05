@@ -57,7 +57,7 @@
   (apply-config! config :xtdb.pgwire/server opts))
 
 (defmethod apply-config! :prometheus [config _ opts]
-  (apply-config! config :xtdb.metrics/prometheus opts))
+  (apply-config! config :xtdb/prometheus opts))
 
 (defmethod apply-config! ::default [_ k _]
   (log/warn "Unknown configuration key:" k))

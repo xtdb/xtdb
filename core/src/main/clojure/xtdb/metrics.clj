@@ -1,8 +1,7 @@
 (ns xtdb.metrics
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.node :as xtn]
-            [xtdb.util :as util])
+            [xtdb.node :as xtn])
   (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
@@ -11,8 +10,6 @@
            java.util.List
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.api.metrics PrometheusMetrics PrometheusMetrics$Factory)
-           xtdb.api.Xtdb$Config
            (xtdb.cache Stats)))
 
 (defn add-counter [reg name {:keys [description]}]
@@ -73,20 +70,6 @@
       (.bindTo metric reg))
 
     reg))
-
-(defmethod xtn/apply-config! ::prometheus [^Xtdb$Config config _ {:keys [^long port]}]
-  (.prometheus config (PrometheusMetrics$Factory. port)))
-
-(defmethod ig/prep-key ::prometheus [_ ^PrometheusMetrics$Factory factory]
-  {:factory factory
-   :metrics-registry (ig/ref :xtdb.metrics/registry)})
-
-(defmethod ig/init-key ::prometheus [_ {:keys [^PrometheusMetrics$Factory factory
-                                               ^CompositeMeterRegistry metrics-registry]}]
-  (.open factory metrics-registry))
-
-(defmethod ig/halt-key! ::prometheus [_ ^PrometheusMetrics srv]
-  (util/close srv))
 
 (defmethod xtn/apply-config! ::cloudwatch [config _k v]
   (xtn/apply-config! config :xtdb.aws.cloudwatch/metrics v))

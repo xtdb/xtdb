@@ -360,7 +360,7 @@
                                     (merge {:port port, :h2c? true, :h2? true}
                                            #_jetty-opts
                                            {:async? true, :join? false}))]
-    (log/info "HTTP server started on port: " port)
+    (log/info "HTTP server started on port:" port)
     (reify XtdbModule
       (close [_]
         (.stop server)

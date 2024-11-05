@@ -49,6 +49,18 @@ dependencies {
 
     api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
 
+    // healthz server
+    api(libs.ring.core)
+    api(libs.ring.jetty9.adapter)
+    api(libs.jetty.alpn.server)
+
+    api(libs.muuntaja)
+    api(libs.reitit.core)
+    api(libs.reitit.interceptors)
+    api(libs.reitit.ring)
+    api(libs.reitit.http)
+    api(libs.reitit.sieppari)
+
     // monitoring
     api("io.micrometer", "micrometer-core", "1.12.2")
     api("io.micrometer", "micrometer-registry-prometheus", "1.12.2")

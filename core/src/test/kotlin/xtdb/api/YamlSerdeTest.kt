@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test
 import xtdb.api.log.Kafka
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
-import xtdb.api.metrics.PrometheusMetrics
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
 import xtdb.api.storage.GoogleCloudStorage
