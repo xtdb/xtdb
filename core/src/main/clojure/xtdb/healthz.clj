@@ -23,7 +23,17 @@
 (def router
   (http/router [["/metrics" {:name :metrics
                              :get (fn [{:keys [^PrometheusMeterRegistry prometheus-registry]}]
-                                    {:status 200, :body (.scrape prometheus-registry)})}]]
+                                    {:status 200, :body (.scrape prometheus-registry)})}]
+                ["/healthz/started" {:name :started
+                                     :get (fn [{:keys [_]}]
+                                            {:status 200, :body "Started."})}]
+                ["/healthz/alive" {:name :alive
+                                   :get (fn [{:keys [^IIndexer indexer]}]
+                                          (if-let [indexer-error (.indexerError indexer)]
+                                            {:status 500, :body (str "Indexer error - " indexer-error)}
+                                            {:status 200, :body "Alive."}))}]
+                ["/healthz/ready" {:name :ready
+                                   :get (fn [_] {:status 200, :body "Ready."})}]]
                {:data {:interceptors [[ri.exception/exception-interceptor
                                        (merge ri.exception/default-handlers
                                               {::ri.exception/wrap (fn [handler e req]
@@ -48,14 +58,17 @@
 
 (defmethod ig/prep-key :xtdb/healthz [_ ^HealthzConfig config]
   {:port (.getPort config) 
-   :metrics-registry (ig/ref :xtdb.metrics/registry)})
+   :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :indexer (ig/ref :xtdb/indexer)
+   :node (ig/ref :xtdb/node)
+   :pgwire-server (ig/ref :xtdb.pgwire/server)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [^long port, ^CompositeMeterRegistry metrics-registry]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [^long port, ^CompositeMeterRegistry metrics-registry, ^IIndexer indexer pgwire-server]}]
   (let [prometheus-registry (PrometheusMeterRegistry. io.micrometer.prometheus.PrometheusConfig/DEFAULT)
-        ^Server server (j/run-jetty (handler {:prometheus-registry prometheus-registry})
+        ^Server server (j/run-jetty (handler {:prometheus-registry prometheus-registry
+                                              :indexer indexer})
                                     {:port port, :async? true, :join? false})]
-
-    (.add metrics-registry prometheus-registry)
+    (.add metrics-registry prometheus-registry) 
 
     (log/info "Healthz server started on port:" port)
 
