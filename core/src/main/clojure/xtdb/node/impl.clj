@@ -128,6 +128,11 @@
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx (xtp/latest-submitted-tx this)})
+  (tx-lag [this]
+    (let [latest-completed-tx (.latestCompletedTx indexer)
+          latest-submitted-tx (xtp/latest-submitted-tx this)]
+      (when (and latest-completed-tx latest-submitted-tx)
+        (- (.getTxId latest-submitted-tx) (.getTxId latest-completed-tx)))))
 
   IXtdbInternal
   (^PreparedQuery prepareQuery [this ^String query, query-opts]
@@ -186,13 +191,15 @@
         0.0))))
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
-  (let [node (map->Node (-> deps
-                            (assoc :!latest-submitted-tx (atom nil)
+  (let [latest-submitted-tx (log/latest-submitted-tx& deps)
+        node (map->Node (-> deps
+                            (assoc :!latest-submitted-tx (atom latest-submitted-tx)
                                    :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]
     ;; TODO seems to create heap memory pressure, disabled for now
     #_(metrics/add-gauge registry "node.tx.lag.seconds"
                          (gauge-lag-secs-fn node))
+    (metrics/add-gauge metrics-registry "node.tx.lag" (fn [] (or (xtp/tx-lag node) 0)))
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]

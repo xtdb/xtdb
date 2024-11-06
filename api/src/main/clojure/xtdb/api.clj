@@ -216,6 +216,12 @@
   (xtp/status node))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn tx-lag
+  "Returns the Transaction ID lag of the node as a long"
+  [node]
+  (xtp/tx-lag node))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
 

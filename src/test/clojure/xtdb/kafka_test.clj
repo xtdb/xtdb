@@ -57,10 +57,29 @@
           (Thread/sleep 1000)
           (t/is (= #{(util/->path "foo1") (util/->path "foo2") (util/->path "foo3")}
                    (:!os-file-names buffer-pool)))))
-      
-        (t/testing "should be no 'xtdb-tx-subscription' threads remaining"
-          (let [all-threads (.keySet (Thread/getAllStackTraces))
-                tx-subscription-threads (filter (fn [^Thread thread]
-                                                  (re-find #"xtdb-tx-subscription" (.getName thread))) 
-                                                all-threads)]
-            (t/is (= 0 (count tx-subscription-threads))))))))
+
+      (t/testing "should be no 'xtdb-tx-subscription' threads remaining"
+        (let [all-threads (.keySet (Thread/getAllStackTraces))
+              tx-subscription-threads (filter (fn [^Thread thread]
+                                                (re-find #"xtdb-tx-subscription" (.getName thread)))
+                                              all-threads)]
+          (t/is (= 0 (count tx-subscription-threads))))))))
+
+
+(t/deftest ^:requires-docker ^:kafka test-kafka-latest-submitted-tx-startup
+  (let [test-uuid (random-uuid)]
+    (with-open [node (xtn/start-node {:log [:kafka {:bootstrap-servers "localhost:9092"
+                                                    :tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
+                                                    :files-topic (str "xtdb.kafka-test.files-" test-uuid)}]})]
+      (t/testing "Latest submitted tx on startup should be empty (empty topic)" 
+        (t/is (= nil (:latest-submitted-tx (xt/status node)))))
+
+      (t/testing "Send some transactions"
+        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
+        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])))
+    
+    (with-open [node (xtn/start-node {:log [:kafka {:bootstrap-servers "localhost:9092"
+                                                    :tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
+                                                    :files-topic (str "xtdb.kafka-test.files-" test-uuid)}]})]
+      (t/testing "Latest submitted tx on startup should exist"
+        (t/is (= 1 (:tx-id (:latest-submitted-tx (xt/status node)))))))))
