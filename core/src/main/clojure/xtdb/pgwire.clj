@@ -97,6 +97,8 @@
     [frontend msg-def]
     [frontend msg-def data])
 
+  (read-client-msg! [frontend])
+
   (upgrade-to-ssl [frontend ssl-ctx])
 
   (flush! [frontend]))
@@ -109,6 +111,35 @@
   ([{:keys [frontend]} msg-def data]
    (send-client-msg! frontend msg-def data)))
 
+(def ^:private version-messages
+  "Integer codes sent by the client to identify a startup msg"
+  {
+   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
+   196608 :30
+   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
+   80877102 :cancel
+   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
+   80877103 :ssl
+   ;; gssapi encoding is not supported by xt, and we tell the client that
+   80877104 :gssenc})
+
+;; all postgres client IO arrives as either an untyped (startup) or typed message
+
+(defn- read-untyped-msg [^DataInputStream in]
+  (let [size (- (.readInt in) 4)
+        barr (byte-array size)
+        _ (.readFully in barr)]
+    (DataInputStream. (ByteArrayInputStream. barr))))
+
+(defn- read-version [^DataInputStream in]
+  (let [^DataInputStream msg-in (read-untyped-msg in)
+        version (.readInt msg-in)]
+    {:msg-in msg-in
+     :version (version-messages version)}))
+
+(declare client-msgs)
+(declare client-err)
+(declare err-protocol-violation)
 (declare ->socket-frontend)
 
 (defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
@@ -128,6 +159,19 @@
       (.writeByte out (byte (:char8 msg-def)))
       (.writeInt out (+ 4 (alength arr)))
       (.write out arr)))
+
+  (read-client-msg! [_]
+    (let [type-char (char (.readUnsignedByte in))
+          msg-var (or (client-msgs type-char)
+                      (throw (client-err (str "Unknown client message " type-char))))
+          rdr (:read @msg-var)]
+      (try
+        (-> (rdr (read-untyped-msg in))
+            (assoc :msg-name (:name @msg-var)))
+        (catch Exception e
+          (throw (ex-info "error reading client message"
+                          {::client-error (err-protocol-violation (str "Error reading client message " (ex-message e)))}
+                          e))))))
 
   (upgrade-to-ssl [this ssl-ctx]
     (if (and ssl-ctx (not (instance? SSLSocket socket)))
@@ -995,9 +1039,7 @@
 (defn user+password [node user]
   (first (xt/q node "SELECT passwd AS password, username AS user FROM pg_user WHERE username = ?" {:args [user]})))
 
-(declare read-typed-msg)
-
-(defn cmd-startup-pg30 [conn startup-params]
+(defn cmd-startup-pg30 [{:keys [frontend] :as conn} startup-params]
   (let [{:keys [node !closing?]} conn
         user (or (get startup-params "user") "anonymous")]
     (if node ;; the playground does not have a node yet
@@ -1008,7 +1050,7 @@
             (cmd-write-msg conn msg-auth {:result 3})
 
             ;; we go idle until we receive a message
-            (when-let [{:keys [msg-name] :as msg} (read-typed-msg conn)]
+            (when-let [{:keys [msg-name] :as msg} (read-client-msg! frontend)]
               ;; if we receive a password message and the user exists, check the password
               (if (or (not= :msg-password msg-name) (nil? pw-res))
                 (do
@@ -1056,45 +1098,6 @@
 (defn cmd-startup-err [conn err]
   (cmd-send-error conn err)
   (handle-msg* conn {:msg-name :msg-terminate}))
-
-(def ^:private version-messages
-  "Integer codes sent by the client to identify a startup msg"
-  {
-   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
-   196608 :30
-   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
-   80877102 :cancel
-   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
-   80877103 :ssl
-   ;; gssapi encoding is not supported by xt, and we tell the client that
-   80877104 :gssenc})
-
-;; all postgres client IO arrives as either an untyped (startup) or typed message
-
-(defn- read-untyped-msg [^DataInputStream in]
-  (let [size (- (.readInt in) 4)
-        barr (byte-array size)
-        _ (.readFully in barr)]
-    (DataInputStream. (ByteArrayInputStream. barr))))
-
-(defn- read-version [^DataInputStream in]
-  (let [^DataInputStream msg-in (read-untyped-msg in)
-        version (.readInt msg-in)]
-    {:msg-in msg-in
-     :version (version-messages version)}))
-
-(defn- read-typed-msg [{{:keys [^DataInputStream in]} :frontend :as _conn}]
-  (let [type-char (char (.readUnsignedByte in))
-        msg-var (or (client-msgs type-char)
-                    (throw (client-err (str "Unknown client message " type-char))))
-        rdr (:read @msg-var)]
-    (try
-      (-> (rdr (read-untyped-msg in))
-          (assoc :msg-name (:name @msg-var)))
-      (catch Exception e
-        (throw (ex-info "error reading client message"
-                        {::client-error (err-protocol-violation (str "Error reading client message " (ex-message e)))}
-                        e))))))
 
 (defn- read-startup-parameters [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
@@ -1606,7 +1609,7 @@
       (send-ex conn e))))
 
 (defn- conn-loop [{:keys [cid, server, conn-state],
-                   {:keys [^Socket socket]} :frontend,
+                   {:keys [^Socket socket] :as frontend} :frontend,
                    !conn-closing? :!closing?,
                    :as conn}]
   (let [{:keys [port], !server-closing? :!closing?} server]
@@ -1633,7 +1636,7 @@
 
         ;; go idle until we receive another msg from the client
         :else (do
-                (when-let [msg (read-typed-msg conn)]
+                (when-let [msg (read-client-msg! frontend)]
                   (handle-msg conn msg))
 
                 (recur))))))
