@@ -1,4 +1,6 @@
 (ns xtdb.rewrite
+  ^{:clojure.tools.namespace.repl/load false
+    :clojure.tools.namespace.repl/unload false}
   (:require [clojure.walk :as w]
             [xtdb.error :as err])
   (:import [clojure.lang ILookup IObj IPersistentVector Indexed]
