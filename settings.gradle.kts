@@ -19,7 +19,7 @@ project(":http-client-jvm").name = "xtdb-http-client-jvm"
 include("lang:test-harness")
 project(":lang:test-harness").name = "test-harness"
 
-include("docker:standalone","docker:aws", "docker:azure")
+include("docker:standalone", "docker:aws", "docker:azure", "docker:google-cloud")
 include("cloud-benchmark", "cloud-benchmark:aws", "cloud-benchmark:azure", "cloud-benchmark:google-cloud", "cloud-benchmark:local")
 
 include("modules:kafka", "modules:kafka-connect", "modules:aws", "modules:azure", "modules:google-cloud")
