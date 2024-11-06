@@ -1211,7 +1211,10 @@
           :read-text (fn [_env ba]
                        (JsonSerde/decode (ByteArrayInputStream. ba)))
           :read-binary (fn [_env ba]
-                         (JsonSerde/decode (ByteArrayInputStream. ba)))}
+                         (JsonSerde/decode (ByteArrayInputStream. ba)))
+          :write-binary (fn [_env ^IVectorReader rdr idx]
+                          (let [json (-> (.getObject rdr idx) (JsonSerde/encode))]
+                            (.getBytes json)))}
 
    :jsonb {:typname "jsonb"
            :oid 3802
