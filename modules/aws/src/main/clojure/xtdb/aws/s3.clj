@@ -14,7 +14,7 @@
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedMultipartUpload CompletedPart CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object UploadPartRequest UploadPartResponse]
-           xtdb.api.storage.ObjectStore
+           (xtdb.api.storage ObjectStore ObjectStore$StoredObject)
            [xtdb.aws S3 S3$Factory]
            [xtdb.aws.s3 S3Configurator]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
@@ -29,22 +29,7 @@
         ^GetObjectRequest (.build))))
 
 (defn list-objects [{:keys [^S3AsyncClient client bucket ^Path prefix] :as s3-opts} continuation-token]
-  (vec
-   (let [^ListObjectsV2Request
-         req (-> (ListObjectsV2Request/builder)
-                 (.bucket bucket)
-                 (.prefix (some-> prefix str))
-                 (cond-> continuation-token (.continuationToken continuation-token))
-                 (.build))
-
-         ^ListObjectsV2Response
-         resp (.get (.listObjectsV2 ^S3AsyncClient client req))]
-
-     (concat (for [^S3Object object (.contents resp)]
-               (cond->> (util/->path (.key object))
-                 prefix (.relativize prefix)))
-             (when (.isTruncated resp)
-               (list-objects s3-opts (.nextContinuationToken resp)))))))
+  )
 
 (defn- with-exception-handler [^CompletableFuture fut ^Path k]
   (.exceptionally fut (reify Function
@@ -143,8 +128,27 @@
                             (CompletableFuture/completedFuture nil)
                             (single-object-upload this k buf)))))))
 
-  (listAllObjects [this]
-    (list-objects this nil))
+  (listAllObjects [_s]
+    (letfn [(list* [cont-token]
+              (lazy-seq
+               (let [^ListObjectsV2Request
+                     req (-> (ListObjectsV2Request/builder)
+                             (.bucket bucket)
+                             (.prefix (some-> prefix str))
+                             (.continuationToken cont-token)
+                             (.build))
+
+                     ^ListObjectsV2Response
+                     resp (.get (.listObjectsV2 ^S3AsyncClient client req))]
+
+                 (concat (for [^S3Object object (.contents resp)]
+                           (os/->StoredObject (cond->> (util/->path (.key object))
+                                                prefix (.relativize prefix))
+                                              (.size object)))
+
+                         (when (.isTruncated resp)
+                           (list* (.nextContinuationToken resp)))))))]
+      (list* nil)))
 
   (deleteObject [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]

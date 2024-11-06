@@ -11,7 +11,6 @@
            [java.nio.file.attribute FileAttribute]
            [java.util NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
-           [java.util.function Supplier]
            [xtdb.api.storage ObjectStore ObjectStore$Factory]))
 
 (defn- get-edn [^ObjectStore obj-store, ^Path k]
@@ -38,19 +37,18 @@
   ObjectStore
   (getObject [_this k]
     (CompletableFuture/completedFuture
-     (let [^ByteBuffer buf (or (.get os k)
-                               (throw (os/obj-missing-exception k)))]
+     (let [{:keys [^ByteBuffer buf]} (or (.get os k)
+                                         (throw (os/obj-missing-exception k)))]
        (.slice buf))))
 
   (getObject [_this k out-path]
     (CompletableFuture/supplyAsync
-     (reify Supplier
-       (get [_]
-         (let [^ByteBuffer buf (or (.get os k)
-                                   (throw (os/obj-missing-exception k)))]
-           (with-open [ch (util/->file-channel out-path util/write-truncate-open-opts)]
-             (.write ch buf)
-             out-path))))))
+     (fn []
+       (let [{:keys [^ByteBuffer buf]} (or (.get os k)
+                                           (throw (os/obj-missing-exception k)))]
+         (with-open [ch (util/->file-channel out-path util/write-truncate-open-opts)]
+           (.write ch buf)
+           out-path)))))
 
   (putObject [_this k buf]
     (.putIfAbsent os k (.slice buf))

@@ -129,7 +129,9 @@
     (CompletableFuture/completedFuture nil))
 
   (listAllObjects [_]
-    (vec (keys @!buffers)))
+    (->> @!buffers
+         (mapv (fn [[^Path k, ^ByteBuffer buf]]
+                 (os/->StoredObject k (.capacity buf))))))
 
   SupportsMultipart
   (startMultipart [_ k]
@@ -286,7 +288,7 @@
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     (.putObject buffer-pool k buf)))
 
-(defn test-list-objects [^RemoteBufferPool buffer-pool]
+(defn test-list-objects [^IBufferPool buffer-pool]
   (put-edn buffer-pool (util/->path "bar/alice") :alice)
   (put-edn buffer-pool (util/->path "foo/alan") :alan)
   (put-edn buffer-pool (util/->path "bar/bob") :bob)
@@ -310,4 +312,20 @@
 
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
     (t/is (= (mapv util/->path ["bar/baz/dan"])
-             (.listObjects buffer-pool (util/->path "bar/baz"))))))
+             (.listObjects buffer-pool (util/->path "bar/baz")))))
+
+  (t/testing "objectSize"
+    (t/is (= 6 (.objectSize buffer-pool (util/->path "bar/alice"))))
+    (t/is (= 5 (.objectSize buffer-pool (util/->path "foo/alan"))))
+    (t/is (= 4 (.objectSize buffer-pool (util/->path "bar/bob"))))
+    (t/is (= 4 (.objectSize buffer-pool (util/->path "bar/baz/dan"))))
+    (t/is (= 6 (.objectSize buffer-pool (util/->path "bar/baza/james"))))))
+
+(t/deftest test-memory-list-objs
+  (with-open [bp (bp/open-in-memory-storage tu/*allocator* (SimpleMeterRegistry.))]
+    (test-list-objects bp)))
+
+(t/deftest test-local-list-objs
+  (tu/with-tmp-dirs #{tmp-dir}
+    (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
+      (test-list-objects bp))))

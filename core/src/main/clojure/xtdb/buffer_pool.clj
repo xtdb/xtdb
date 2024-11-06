@@ -15,9 +15,9 @@
            (java.nio.channels Channels ClosedByInterruptException)
            [java.nio.file FileVisitOption Files LinkOption Path]
            [java.nio.file.attribute FileAttribute]
-           [java.util NavigableMap SortedSet TreeMap]
+           [java.util NavigableMap SortedMap TreeMap]
            (java.util NavigableMap)
-           [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            kotlin.Pair
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -76,6 +76,9 @@
              (distinct)
              (vec)))))
 
+  (objectSize [_ k]
+    (.capacity ^ArrowBuf (.get memory-store k)))
+
   (openArrowWriter [this k rel]
     (let [baos (ByteArrayOutputStream.)]
       (util/with-close-on-catch [write-ch (Channels/newChannel baos)
@@ -105,7 +108,7 @@
     (util/close allocator)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-in-memory-storage [^BufferAllocator allocator, ^MeterRegistry metrics-registry]
+(defn open-in-memory-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^MeterRegistry metrics-registry]
   (->MemoryBufferPool (->buffer-pool-child-allocator allocator metrics-registry) (TreeMap.)))
 
 (defn- create-tmp-path ^Path [^Path disk-store]
@@ -152,6 +155,8 @@
           (vec (sort (for [^Path path dir-stream]
                        (.relativize disk-store path)))))
         [])))
+
+  (objectSize [_ k] (Files/size (.resolve disk-store k)))
 
   (openArrowWriter [_ k rel]
     (let [tmp-path (create-tmp-path disk-store)]
@@ -207,9 +212,10 @@
                      max-cache-bytes (.maxCacheBytes max-cache-bytes)
                      max-cache-entries (.maxCacheEntries max-cache-entries))))
 
-(defn- list-files-under-prefix [^SortedSet !os-file-names ^Path prefix]
+(defn- list-files-under-prefix [^SortedMap !os-files, ^Path prefix]
   (let [prefix-depth (.getNameCount prefix)]
-    (->> (.tailSet ^SortedSet !os-file-names prefix)
+    (->> (.tailMap !os-files prefix)
+         (.sequencedKeySet)
          (take-while #(.startsWith ^Path % prefix))
          (keep (fn [^Path path]
                  (when (> (.getNameCount path) prefix-depth)
@@ -285,8 +291,8 @@
                              ^DiskCache disk-cache
                              ^FileListCache file-list-cache
                              ^ObjectStore object-store
-                             ^SortedSet !os-file-names
-                             ^AutoCloseable !os-file-name-subscription]
+                             ^SortedMap !os-files
+                             ^AutoCloseable !os-files-subscription]
   IBufferPool
   (getBuffer [_ k]
     (when k
@@ -302,10 +308,13 @@
                                 (Pair. (.getPath entry) entry))))))))
 
   (listAllObjects [_]
-    (vec !os-file-names))
+    (vec (.sequencedKeySet !os-files)))
 
   (listObjects [_ dir]
-    (list-files-under-prefix !os-file-names dir))
+    (list-files-under-prefix !os-files dir))
+
+  (objectSize [_ k]
+    (.get !os-files k))
 
   (openArrowWriter [_ k rel]
     (let [tmp-path (.createTempPath disk-cache)]
@@ -321,7 +330,7 @@
 
             (upload-arrow-file allocator object-store k tmp-path)
 
-            (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [k]}))
+            (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [{:k k, :size (Files/size tmp-path)}]}))
 
             (.put disk-cache k tmp-path))
 
@@ -333,7 +342,7 @@
   (putObject [_ k buffer]
     @(-> (.putObject object-store k buffer)
          (.thenApply (fn [_]
-                       (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [k]}))))))
+                       (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [{:k k, :size (.capacity buffer)}]}))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
@@ -341,7 +350,7 @@
 
   (close [_] 
     (util/close memory-cache)
-    (util/close @!os-file-name-subscription)
+    (util/close @!os-files-subscription)
     (util/close object-store)
     (util/close allocator)))
 
@@ -360,19 +369,21 @@
 
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileListCache file-list-cache, ^MeterRegistry metrics-registry]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
-    (let [!os-file-names (ConcurrentSkipListSet.)
+    (let [!os-files (ConcurrentSkipListMap.)
           !os-file-name-subscription (promise)
           ^Path disk-cache-root (.getLocalDiskCache factory)]
 
       (.subscribeFileNotifications file-list-cache
                                    (reify FileListCache$Subscriber
                                      (accept [_ {:keys [added]}]
-                                       (.addAll !os-file-names added))
+                                       (.putAll !os-files (->> added
+                                                               (into {} (comp (filter map?) (map (juxt :k :size)))))))
 
                                      (onSubscribe [_ subscription]
                                        (deliver !os-file-name-subscription subscription))))
 
-      (.addAll !os-file-names (.listAllObjects object-store))
+      (doseq [{:keys [k size]} (.listAllObjects object-store)]
+        (.put !os-files k size))
 
       (let [memory-cache (MemoryCache. allocator (.getMaxCacheBytes factory))
             disk-cache (DiskCache. disk-cache-root
@@ -383,7 +394,7 @@
         (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                             memory-cache
                             disk-cache
-                            file-list-cache object-store !os-file-names !os-file-name-subscription)))))
+                            file-list-cache object-store !os-files !os-file-name-subscription)))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}

@@ -4,10 +4,9 @@
             [xtdb.util :as util])
   (:import [com.azure.core.util BinaryData]
            [com.azure.storage.blob BlobContainerClient]
-           [com.azure.storage.blob.models BlobItem BlobRange BlobStorageException DownloadRetryOptions ListBlobsOptions]
+           [com.azure.storage.blob.models BlobItem BlobStorageException ListBlobsOptions]
            [com.azure.storage.blob.specialized BlockBlobClient]
-           [java.io ByteArrayOutputStream Closeable UncheckedIOException]
-           [java.nio ByteBuffer]
+           [java.io Closeable UncheckedIOException]
            [java.nio.file FileAlreadyExistsException Path]
            [java.util ArrayList Base64 Base64$Encoder List]
            [java.util.concurrent CompletableFuture]
@@ -173,9 +172,10 @@
       (->> (.listBlobs blob-container-client list-blob-opts nil)
            (.iterator)
            (iterator-seq)
-           (mapv (fn [^BlobItem blob-item]
-                   (cond->> (util/->path (.getName blob-item))
-                     prefix (.relativize prefix)))))))
+           (map (fn [^BlobItem blob-item]
+                  (os/->StoredObject (cond->> (util/->path (.getName blob-item))
+                                       prefix (.relativize prefix))
+                                     (.getContentLength (.getProperties blob-item))))))))
 
   (deleteObject [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]

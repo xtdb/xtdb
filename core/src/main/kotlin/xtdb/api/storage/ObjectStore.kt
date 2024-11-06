@@ -10,6 +10,11 @@ interface ObjectStore : AutoCloseable {
         fun openObjectStore(): ObjectStore
     }
 
+    interface StoredObject {
+        val key: Path
+        val size: Long
+    }
+
     /**
      * Asynchronously returns the given object in a ByteBuffer.
      *
@@ -34,7 +39,7 @@ interface ObjectStore : AutoCloseable {
      *
      * Objects are returned in lexicographic order of their path names.
      */
-    fun listAllObjects(): Iterable<Path>
+    fun listAllObjects(): Iterable<StoredObject>
 
     /**
      * Deletes the object with the given path from the object store.

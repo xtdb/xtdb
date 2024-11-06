@@ -84,9 +84,10 @@
                                        []))]
       (->> (.list storage-service bucket-name list-blob-opts)
            (.iterateAll)
-           (mapv (fn [^Blob blob]
-                   (cond->> (util/->path (.getName blob))
-                     prefix (.relativize prefix)))))))
+           (map (fn [^Blob blob]
+                  (os/->StoredObject (cond->> (util/->path (.getName blob))
+                                       prefix (.relativize prefix))
+                                     (.getSize blob)))))))
 
   (deleteObject [this k]
     (CompletableFuture/completedFuture 

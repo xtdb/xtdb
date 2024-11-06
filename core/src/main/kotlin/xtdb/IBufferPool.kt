@@ -24,5 +24,7 @@ interface IBufferPool : AutoCloseable {
      */
     fun listObjects(dir: Path): Iterable<Path>
 
+    fun objectSize(k: Path): Long
+
     fun openArrowWriter(k: Path, rel: Relation): ArrowWriter
 }

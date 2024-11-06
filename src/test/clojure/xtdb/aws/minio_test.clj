@@ -4,6 +4,7 @@
             [xtdb.aws.s3 :as s3]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.node :as xtn]
+            [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -126,7 +127,8 @@
           (t/is (= [] uploads) "uploads should be empty")))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
-        (t/is (= (mapv util/->path ["test-multi-put"])
+        (t/is (= [(os/->StoredObject (util/->path "test-multi-put")
+                                     (* 2 part-size))]
                  (.listAllObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
