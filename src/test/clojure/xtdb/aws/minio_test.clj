@@ -17,6 +17,9 @@
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 ;; To run these, run the MinIO and Kafka containers in the docker-compose file
+;; http://localhost:9001, minioadmin/minioadmin
+;; Identity -> Users -> Create: xtdb/test-password, policy: readwrite
+;; Bucket: xtdb, policy: readwrite
 
 (def ^:const bucket "xtdb")
 
@@ -43,6 +46,7 @@
                                            :credentials test-creds
                                            :endpoint "http://127.0.0.1:9000"}]
                        :local-disk-cache (.resolve node-dir "local-cache")}]
+    :server {:port 0}
     :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
                   :files-topic (str "xtdb.kafka-test.files-" prefix)
                   :bootstrap-servers "localhost:9092"}]}))
