@@ -36,10 +36,6 @@
   (with-open [os (object-store (random-uuid))]
     (os-test/test-put-delete os)))
 
-(t/deftest ^:minio range-test
-  (with-open [os (object-store (random-uuid))]
-    (os-test/test-range os)))
-
 (defn start-node [^Path node-dir prefix]
   (xtn/start-node
    {:storage [:remote {:object-store [:s3 {:bucket bucket

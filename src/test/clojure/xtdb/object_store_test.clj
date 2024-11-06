@@ -1,6 +1,5 @@
 (ns xtdb.object-store-test
   (:require [clojure.edn :as edn]
-            [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.buffer-pool :as bp]
             [xtdb.object-store :as os]
@@ -13,8 +12,7 @@
            [java.util NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            [java.util.function Supplier]
-           [xtdb.api.storage ObjectStore ObjectStore$Factory]
-           [xtdb.buffer_pool RemoteBufferPool]))
+           [xtdb.api.storage ObjectStore ObjectStore$Factory]))
 
 (defn- get-edn [^ObjectStore obj-store, ^Path k]
   (-> (let [^ByteBuffer buf @(.getObject obj-store k)]
@@ -24,19 +22,6 @@
 (defn put-edn [^ObjectStore obj-store ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     @(.putObject obj-store k buf)))
-
-(defn put-bytes [^ObjectStore obj-store ^Path k bytes]
-  @(.putObject obj-store k (ByteBuffer/wrap bytes)))
-
-(defn byte-buf->bytes [^ByteBuffer buf]
-  (let [arr (byte-array (.remaining buf))
-        pos (.position buf)]
-    (.get buf arr)
-    (.position buf pos)
-    arr))
-
-(defn get-bytes [^ObjectStore obj-store ^Path k start len]
-  (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
 ;; Generates a byte buffer of random characters
 (defn generate-random-byte-buffer ^ByteBuffer [buffer-size]
@@ -66,13 +51,6 @@
            (with-open [ch (util/->file-channel out-path util/write-truncate-open-opts)]
              (.write ch buf)
              out-path))))))
-
-  (getObjectRange [_this k start len]
-    (os/ensure-shared-range-oob-behaviour start len)
-    (CompletableFuture/completedFuture
-      (let [^ByteBuffer buf (or (.get os k) (throw (os/obj-missing-exception k)))
-            new-pos (+ (.position buf) (int start))]
-        (.slice buf new-pos (int (max 1 (min (- (.remaining buf) new-pos) len)))))))
 
   (putObject [_this k buf]
     (.putIfAbsent os k (.slice buf))
@@ -117,32 +95,3 @@
 
     (t/is (thrown? IllegalStateException (get-edn obj-store alice-key)))))
 
-(defn test-range [^ObjectStore obj-store]
-  (let [digits-key (util/->path "digits")]
-    (put-bytes obj-store digits-key (byte-array (range 10)))
-
-    (t/is (= [0] (vec (get-bytes obj-store digits-key 0 1))))
-    (t/is (= [4 5 6 7] (vec (get-bytes obj-store digits-key 4 4))))
-    (t/is (= [9] (vec (get-bytes obj-store digits-key 9 1))))
-
-    (t/is (= (vec (range 10)) (vec (get-bytes obj-store digits-key 0 20))))
-    (t/is (= [9] (vec (get-bytes obj-store digits-key 9 2))))
-
-    ;; OOB behaviour is 'any exception', just whatever is thrown by impl
-    (->> "len 0 is not permitted due to potential ambiguities that arise in the bounds behaviour for len 0 across impls"
-         (t/is (thrown? Exception (get-bytes obj-store digits-key 0 0))))
-
-    (->> "OOB for negative index"
-         (t/is (thrown? Exception (get-bytes obj-store digits-key -1 3))))
-
-    (->> "OOB for negative len"
-         (t/is (thrown? Exception (get-bytes obj-store digits-key 0 -1))))
-
-  (->> "OOB for negative len"
-       (t/is (thrown? Exception (get-bytes obj-store "digits" 0 -1))))
-
-  ;; Causes issues due to different error types being thrown
-  ;; (->> "IllegalStateException thrown if object does not exist"
-  ;;      (t/is (thrown? IllegalStateException (get-bytes obj-store "does-not-exist" 0 1))))
-
-  ))

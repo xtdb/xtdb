@@ -18,13 +18,6 @@ interface ObjectStore : AutoCloseable {
     fun getObject(k: Path): CompletableFuture<ByteBuffer>
 
     /**
-     * Asynchronously returns a specified range of bytes from the object in a ByteBuffer.
-     *
-     * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
-     */
-    fun getObjectRange(k: Path, start: Long, len: Long): CompletableFuture<ByteBuffer>
-
-    /**
      * Asynchronously writes the object to the given path.
      *
      * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
@@ -42,13 +35,6 @@ interface ObjectStore : AutoCloseable {
      * Objects are returned in lexicographic order of their path names.
      */
     fun listAllObjects(): Iterable<Path>
-
-    /**
-     * Lists objects directly within the specified directory in the object store.
-     *
-     * Objects are returned in lexicographic order of their path names.
-     */
-    fun listObjects(dir: Path): Iterable<Path>
 
     /**
      * Deletes the object with the given path from the object store.

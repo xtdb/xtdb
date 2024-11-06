@@ -64,33 +64,6 @@
        (log/errorf "Exception thrown when downloading blob %s to file - %s" blob-name e)
        (throw e)))))
 
-(defn- get-blob-range [^BlobContainerClient blob-container-client blob-name start len]
-  (os/ensure-shared-range-oob-behaviour start len)
-  (try
-    ;; todo use async-client, azure sdk then defines exception behaviour, no need to block before fut
-    (rethrowing-reactor-cause
-     (let [cl (.getBlobClient blob-container-client blob-name)
-           out (ByteArrayOutputStream.)
-           res (.downloadStreamWithResponse cl out (BlobRange. start len) (DownloadRetryOptions.)  nil false nil nil)
-           status-code (.getStatusCode res)]
-       (cond
-         (<= 200 status-code 299) nil
-         (= 404 status-code) (throw (os/obj-missing-exception blob-name))
-         :else (throw (ex-info "Blob range request failure" {:status status-code})))
-       (ByteBuffer/wrap (.toByteArray out))))
-    (catch BlobStorageException e
-      (if (= 404 (.getStatusCode e))
-        (throw (os/obj-missing-exception blob-name))
-        (throw e)))
-    (catch InterruptedException e
-      (log/infof "Downloading blob range interrupted for %s - terminating get operation" blob-name)
-      ;; Reactor (used under the hood by the Azure SDK) leaves the thread interrupted - we need to clear this 
-      (Thread/interrupted)
-      (throw e))
-    (catch Exception e
-      (log/errorf "Exception thrown when downloading blob range for %s - %s" blob-name e)
-      (throw e))))
-
 (defn- put-blob [^BlobContainerClient blob-container-client blob-name blob-buffer]
   (try
     (rethrowing-reactor-cause
@@ -188,11 +161,6 @@
        (fn []
          (get-blob blob-container-client (str prefixed-key) out-path)
          out-path))))
-
-  (getObjectRange [_ k start len]
-    (let [prefixed-key (util/prefix-key prefix k)]
-      (CompletableFuture/completedFuture
-       (get-blob-range blob-container-client (str prefixed-key) start len))))
 
   (putObject [_ k buf]
     (let [prefixed-key (util/prefix-key prefix k)]

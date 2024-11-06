@@ -63,10 +63,6 @@
     
     (os-test/test-put-delete os)))
 
-(t/deftest ^:google-cloud range-test
-  (let [os (object-store (random-uuid))]
-    (os-test/test-range os)))
-
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
    {:server {:port 0}

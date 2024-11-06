@@ -33,11 +33,7 @@
   (with-open [os (object-store (random-uuid))]
     (os-test/test-put-delete os)))
 
-(t/deftest ^:s3 range-test
-  (with-open [os (object-store (random-uuid))]
-    (os-test/test-range os)))
-
-(defn start-kafka-node [local-disk-cache prefix] 
+(defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
    {:server {:port 0}
     :storage [:remote

@@ -60,10 +60,6 @@
   (with-open [os (object-store (random-uuid))]
     (os-test/test-put-delete os)))
 
-(t/deftest ^:azure range-test
-  (with-open [os (object-store (random-uuid))]
-    (os-test/test-range os)))
-
 (t/deftest ^:azure get-object-to-file-twice-shouldnt-fail
   (util/with-tmp-dirs #{local-disk-cache}
     (with-open [^ObjectStore os (object-store (random-uuid))]

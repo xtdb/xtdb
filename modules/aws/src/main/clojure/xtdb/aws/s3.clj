@@ -28,17 +28,6 @@
         (doto (->> (.configureGet configurator)))
         ^GetObjectRequest (.build))))
 
-(defn- get-obj-range-req
-  ^GetObjectRequest [{:keys [^S3Configurator configurator bucket ^Path prefix]} ^Path k ^Long start ^long len]
-  (let [prefixed-key (util/prefix-key prefix k)
-        end-byte (+ start (dec len))]
-    (-> (GetObjectRequest/builder)
-        (.bucket bucket)
-        (.key (str prefixed-key))
-        (.range (format "bytes=%d-%d" start end-byte))
-        (doto (->> (.configureGet configurator)))
-        ^GetObjectRequest (.build))))
-
 (defn list-objects [{:keys [^S3AsyncClient client bucket ^Path prefix] :as s3-opts} continuation-token]
   (vec
    (let [^ListObjectsV2Request
@@ -134,17 +123,6 @@
                       (apply [_ _]
                         out-path)))
         (with-exception-handler k)))
-
-  (getObjectRange [this k start len]
-    (os/ensure-shared-range-oob-behaviour start len)
-    (try
-      (-> (.getObject client ^GetObjectRequest (get-obj-range-req this k start len) (AsyncResponseTransformer/toBytes))
-          (.thenApply (reify Function
-                        (apply [_ bs]
-                          (.asByteBuffer ^ResponseBytes bs))))
-          (with-exception-handler k))
-      (catch IndexOutOfBoundsException e
-        (CompletableFuture/failedFuture e))))
 
   (putObject [this k buf]
     (let [prefixed-key (util/prefix-key prefix k)]

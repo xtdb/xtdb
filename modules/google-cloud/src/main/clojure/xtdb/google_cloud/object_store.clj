@@ -23,24 +23,6 @@
 
 (def read-options (into-array Storage$BlobSourceOption []))
 
-(defn- get-blob-range [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name start len]
-  (os/ensure-shared-range-oob-behaviour start len)
-  (let [prefixed-key (util/prefix-key prefix blob-name)
-        blob-id (BlobId/of bucket-name (str prefixed-key))
-        blob (.get storage-service blob-id)
-        out (ByteBuffer/allocate len)]
-    (if blob
-      ;; Read contents of reader into the allocated ByteBuffer
-      (with-open [reader (.reader blob blob-source-opts)]
-        (.seek reader start)
-        ;; limit on google cloud readchannel starts from the beginning, so we need to add the start to the
-        ;; specified length for desired behaviour - see:
-        ;; https://cloud.google.com/java/docs/reference/google-cloud-core/latest/com.google.cloud.ReadChannel
-        (.limit reader (+ start len))
-        (.read reader out)
-        (.flip out))
-      (throw (os/obj-missing-exception blob-name)))))
-
 ;; Want to only put blob if a version doesn't already exist
 (def write-options (into-array Storage$BlobWriteOption [(Storage$BlobWriteOption/doesNotExist)]))
 
@@ -91,10 +73,6 @@
            (util/write-buffer-to-path blob-buffer out-path)
 
            out-path)))))
-
-  (getObjectRange [this k start len]
-    (CompletableFuture/completedFuture
-     (get-blob-range this k start len)))
 
   (putObject [this k buf]
     (CompletableFuture/completedFuture (put-blob this k buf)))
