@@ -13,7 +13,7 @@
            [java.util NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            [java.util.function Supplier]
-           [xtdb.api.storage ObjectStore ObjectStoreFactory]
+           [xtdb.api.storage ObjectStore ObjectStore$Factory]
            [xtdb.buffer_pool RemoteBufferPool]))
 
 (defn- get-edn [^ObjectStore obj-store, ^Path k]
@@ -90,7 +90,7 @@
     (.clear os)))
 
 (defmethod bp/->object-store-factory ::memory-object-store [_ _]
-  (reify ObjectStoreFactory
+  (reify ObjectStore$Factory
     (openObjectStore [_]
       (->InMemoryObjectStore (ConcurrentSkipListMap.)))))
 

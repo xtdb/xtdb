@@ -90,7 +90,7 @@ object GoogleCloudStorage {
         val projectId: String,
         val bucket: String,
         var prefix: Path? = null,
-    ) : ObjectStoreFactory {
+    ) : ObjectStore.Factory {
 
         /**
          * @param prefix A file path to prefix all of your files with - for example, if "foo" is provided all XTDB files will be located under a "foo" directory.

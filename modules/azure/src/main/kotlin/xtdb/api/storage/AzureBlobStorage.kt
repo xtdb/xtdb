@@ -90,7 +90,7 @@ object AzureBlobStorage {
         var prefix: Path? = null,
         var userManagedIdentityClientId: String? = null,
         var storageAccountEndpoint: String? = null,
-    ) : ObjectStoreFactory {
+    ) : ObjectStore.Factory {
         /**
          * @param prefix A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory.
          */

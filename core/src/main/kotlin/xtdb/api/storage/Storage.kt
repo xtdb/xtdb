@@ -82,7 +82,7 @@ object Storage {
      * Implementation for the storage module that persists data remotely within a specified [objectStore],
      * while maintaining a local cache of the working set cache under the [localDiskCache] directory.
      *
-     * Any implementer of [ObjectStoreFactory] can be used as the [objectStore]. We currently offer:
+     * Any implementer of [ObjectStore.Factory] can be used as the [objectStore]. We currently offer:
      * * AWS S3 (under **xtdb-aws**)
      * * Azure Blob Storage (under **xtdb-azure**)
      * * Google Cloud Storage (under **xtdb-google-cloud**)
@@ -109,7 +109,7 @@ object Storage {
     @Serializable
     @SerialName("!Remote")
     data class RemoteStorageFactory(
-        val objectStore: ObjectStoreFactory,
+        val objectStore: ObjectStore.Factory,
         val localDiskCache: Path,
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long = 536870912,
@@ -127,12 +127,12 @@ object Storage {
     }
 
     @JvmStatic
-    fun remoteStorage(objectStore: ObjectStoreFactory, localDiskCachePath: Path) =
+    fun remoteStorage(objectStore: ObjectStore.Factory, localDiskCachePath: Path) =
         RemoteStorageFactory(objectStore, localDiskCachePath)
 
     @JvmSynthetic
     fun Xtdb.Config.remoteStorage(
-        objectStore: ObjectStoreFactory,
+        objectStore: ObjectStore.Factory,
         localDiskCachePath: Path,
         configure: RemoteStorageFactory.() -> Unit,
     ) = storage(RemoteStorageFactory(objectStore, localDiskCachePath).also(configure))

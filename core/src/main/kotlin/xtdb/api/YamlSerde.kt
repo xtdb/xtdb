@@ -19,7 +19,8 @@ import xtdb.api.log.Log
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
 import xtdb.api.module.XtdbModule
-import xtdb.api.storage.ObjectStoreFactory
+import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.Factory
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.*
@@ -148,11 +149,11 @@ val YAML_SERDE = Yaml(
                         polymorphic(Log.Factory::class) { subclass(factory, serializer) }
                     }
 
-                    override fun <F : ObjectStoreFactory> registerObjectStore(
+                    override fun <F : ObjectStore.Factory> registerObjectStore(
                         factory: KClass<F>,
                         serializer: KSerializer<F>,
                     ) {
-                        polymorphic(ObjectStoreFactory::class) { subclass(factory, serializer) }
+                        polymorphic(ObjectStore.Factory::class) { subclass(factory, serializer) }
                     }
                 })
             }

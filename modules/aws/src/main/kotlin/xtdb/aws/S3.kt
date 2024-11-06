@@ -13,7 +13,7 @@ import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
-import xtdb.api.storage.ObjectStoreFactory
+import xtdb.api.storage.ObjectStore.Factory
 import xtdb.aws.s3.DefaultS3Configurator
 import xtdb.aws.s3.S3Configurator
 import xtdb.util.requiringResolve
@@ -86,7 +86,7 @@ object S3 {
         var credentials: BasicCredentials? = null,
         @Serializable(StringWithEnvVarSerde::class) var endpoint: String? = null,
         @Transient var s3Configurator: S3Configurator = DefaultS3Configurator,
-    ) : ObjectStoreFactory {
+    ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 

@@ -20,7 +20,7 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo Schema)
            xtdb.api.log.FileListCache
-           (xtdb.api.storage ObjectStore ObjectStoreFactory Storage)
+           (xtdb.api.storage ObjectStore ObjectStore$Factory Storage)
            xtdb.arrow.Relation
            xtdb.buffer_pool.RemoteBufferPool
            xtdb.cache.DiskCache
@@ -152,7 +152,7 @@
 
 (defn simulated-obj-store-factory []
   (let [!buffers (atom {})]
-    (reify ObjectStoreFactory
+    (reify ObjectStore$Factory
       (openObjectStore [_]
         (->SimulatedObjectStore (atom []) !buffers)))))
 

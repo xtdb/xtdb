@@ -5,6 +5,11 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
 interface ObjectStore : AutoCloseable {
+
+    interface Factory {
+        fun openObjectStore(): ObjectStore
+    }
+
     /**
      * Asynchronously returns the given object in a ByteBuffer.
      *
@@ -52,8 +57,4 @@ interface ObjectStore : AutoCloseable {
 
     override fun close() {
     }
-}
-
-interface ObjectStoreFactory {
-    fun openObjectStore(): ObjectStore
 }
