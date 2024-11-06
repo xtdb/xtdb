@@ -1,6 +1,7 @@
 (ns xtdb.information-schema-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.information-schema :as i-s]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -484,10 +485,20 @@
                  "SELECT data_type FROM information_schema.columns
                   WHERE column_name = 'set_column'"))))
 
-#_ ; required for Postgrex
+; required for Postgrex
 (deftest test-pg-range-3737
-  (t/is (= :bang
-           (xt/q tu/*node* "
+  (let [types (set
+               (map
+                (fn [typ]
+                  (-> typ
+                      (select-keys [:oid :typname :typoutput :typreceive :typsend :typinput])
+                      (assoc :xt/column-9 []
+                             :xt/column-7 (:typelem typ)
+                             ;; nasty hack to get this exception to work
+                             :xt/column-8 (if (= "tstz-range" (:typname typ)) 1184 0))))
+                (i-s/pg-type)))
+        results (set
+                 (xt/q tu/*node* "
    SELECT t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput,
           COALESCE(d.typelem, t.typelem), COALESCE(r.rngsubtype, 0),
           ARRAY (
@@ -501,5 +512,8 @@
    LEFT JOIN pg_type AS d ON t.typbasetype = d.oid
    LEFT JOIN pg_range AS r ON r.rngtypid = t.oid OR r.rngmultitypid = t.oid OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)
    WHERE (t.typrelid = 0)
-     AND (t.typelem = 0 OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type s WHERE s.typrelid != 0 AND s.oid = t.typelem))"))))
-
+     AND (t.typelem = 0 OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_type s WHERE s.typrelid != 0 AND s.oid = t.typelem))"))]
+    (t/is (= (count types)
+             (count results)))
+    (t/is (= types
+             results))))
