@@ -1,0 +1,18 @@
+txLog: !Kafka
+  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  txTopic: !Env XTDB_TX_TOPIC
+  filesTopic: !Env XTDB_FILES_TOPIC
+
+storage: !Remote
+  objectStore: !GoogleCloud
+    projectId: !Env XTDB_GCP_PROJECT_ID
+    bucket: !Env XTDB_GCP_BUCKET
+    prefix: "xtdb-object-store"
+  localDiskCache: !Env XTDB_GCP_LOCAL_DISK_CACHE_PATH
+
+healthz:
+  port: 8080
+
+modules:
+- !HttpServer
+  port: 3000

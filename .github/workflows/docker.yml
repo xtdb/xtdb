@@ -63,10 +63,22 @@ jobs:
             type=schedule
             type=edge,branch=main
 
+      - name: Google Cloud meta
+        id: google-cloud-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/xtdb/xtdb-google-cloud
+          tags: |
+            # temporarily use `match` so that it tags `latest` even on pre-releases
+            # type=semver,pattern={{version}}
+            type=match,pattern=v(.*),group=1
+            type=schedule
+            type=edge,branch=main
+
       - name: Build Uberjar
         uses: gradle/actions/setup-gradle@v3
         with:
-          arguments: :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar
+          arguments: :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 
       - name: Push Standalone
         uses: docker/build-push-action@v5
@@ -103,3 +115,15 @@ jobs:
           build-args: |
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.azure-meta.outputs.version }}
+
+      - name: Push Google Cloud
+        uses: docker/build-push-action@v5
+        with:
+          context: docker/google-cloud
+          platforms: linux/arm64/v8,linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.google-cloud-meta.outputs.tags }}
+          labels: ${{ steps.google-cloud-meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            XTDB_VERSION=${{ steps.google-cloud-meta.outputs.version }}
