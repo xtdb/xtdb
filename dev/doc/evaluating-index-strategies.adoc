@@ -59,7 +59,14 @@ IoT readings::
 * Data here should be entered with a short valid-time period - perhaps even instantaneous (valid-to = valid-from + 1µs, one 'chronon').
 * Updates here are still likely to be VT ≈ ST.
 * Historical readings are queried less frequently.
-* Frequent aggregates over the current state of all entities, and the history of individual entities.
+* Frequent aggregates over the state of all entities at any one time, and (less frequent) the history of individual entities.
+
+Pricing data::
+* Low/moderate and relatively static cardinality, high update frequency.
+* Data here is valid until corrected (valid-to = ∞), VT ≈ ST updates.
+* Even though they're entered as valid-until-corrected, versions are superseded quickly.
+* Historical prices queried less frequently than more recent/current.
+* Few aggregates between entities, queries for the history of an individual entity are more likely.
 
 Static reference data::
 * Low and static cardinality, low update frequency
