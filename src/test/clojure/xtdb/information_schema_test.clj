@@ -491,7 +491,18 @@
   (t/is (= [{:username "xtdb", :usesuper true, :xt/valid-from (time/->zdt #inst "1970")}]
            (xt/q tu/*node* "SELECT username, usesuper, _valid_from, _valid_to FROM pg_user")))
 
-  (t/is (= "xtdb" (authn/verify-pw tu/*node* "xtdb" "xtdb"))))
+  (t/is (= "xtdb" (authn/verify-pw tu/*node* "xtdb" "xtdb")))
+
+  (xt/execute-tx tu/*node* ["CREATE USER ada WITH PASSWORD 'lovelace'"])
+
+  (t/is (= [{:username "ada", :usesuper false}]
+           (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'ada'")))
+  (t/is (= "ada" (authn/verify-pw tu/*node* "ada" "lovelace")))
+
+  (xt/execute-tx tu/*node* ["ALTER USER anonymous WITH PASSWORD 'anonymous'"])
+
+  (t/is (= [{:username "anonymous", :usesuper false}] (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'anonymous'")))
+  (t/is (= "anonymous" (authn/verify-pw tu/*node* "anonymous" "anonymous"))))
 
 ;; required for Postgrex
 (deftest test-pg-range-3737

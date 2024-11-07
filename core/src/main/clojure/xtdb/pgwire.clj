@@ -498,6 +498,10 @@
                                       (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
                                            (transduce (keep (partial plan/accept-visitor this)) conj q))))
 
+                                  ;; could do pre-submit validation here
+                                  (visitCreateUserStatement [_ _])
+                                  (visitAlterUserStatement [_ _])
+
                                   ;; handled in plan
                                   (visitSettingDefaultValidTime [_ _])
                                   (visitSettingDefaultSystemTime [_ _])
