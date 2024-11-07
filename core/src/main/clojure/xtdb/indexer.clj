@@ -455,9 +455,34 @@
                                  (map-indexed (fn [idx ^IVectorReader col]
                                                 (.withName col (str "?_" idx))))))))))))
 
+(def ^:private ^:const ^String user-table "pg_catalog/pg_user")
+
+(defn- update-pg-user! [^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, user, password]
+  (let [system-time-µs (time/instant->micros (.getSystemTime tx-key))
+
+        live-table (.liveTable live-idx-tx user-table)
+        doc-writer (.docWriter live-table)]
+
+    (.logPut live-table (trie/->iid user) system-time-µs Long/MAX_VALUE
+             (fn write-doc! []
+               (.startStruct doc-writer)
+               (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
+                 (.writeObject user))
+
+               (doto (.structKeyWriter doc-writer "username" (FieldType/notNullable #xt.arrow/type :utf8))
+                 (.writeObject user))
+
+               (doto (.structKeyWriter doc-writer "usesuper" (FieldType/notNullable #xt.arrow/type :bool))
+                 (.writeObject false))
+
+               (doto (.structKeyWriter doc-writer "passwd" (FieldType/nullable #xt.arrow/type :utf8))
+                 (.writeObject (util/md5 password)))
+
+               (.endStruct doc-writer)))))
+
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
-                                              tx-opts]
+                                              {:keys [tx-key] :as tx-opts}]
   (let [sql-leg (.legReader tx-ops-rdr "sql")
         query-rdr (.structKeyReader sql-leg "query")
         args-rdr (.structKeyReader sql-leg "args")
@@ -499,6 +524,12 @@
                 (foreach-arg-row args-arrow-rdr
                                  (-> (->assert-idxer q-src wm-src inner-query tx-opts)
                                      (wrap-sql-args param-count)))
+
+                [:create-user user password]
+                (update-pg-user! live-idx-tx tx-key user password)
+
+                [:alter-user user password]
+                (update-pg-user! live-idx-tx tx-key user password)
 
                 (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
                                                              :query query-str})))
@@ -706,7 +737,7 @@
                                  awaiters)
            (CompletableFuture/completedFuture (.latestCompletedTx this)))
          (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
-  
+
   (indexerError [this] (.indexer-error this))
 
   Closeable

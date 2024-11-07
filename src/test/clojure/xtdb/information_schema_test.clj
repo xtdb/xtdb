@@ -491,7 +491,17 @@
              :xt/valid-from #time/zoned-date-time "1970-01-01T00:00Z[UTC]"}
             {:username "anonymous", :usesuper false
              :xt/valid-from #time/zoned-date-time "1970-01-01T00:00Z[UTC]"}]
-           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM pg_user"))))
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM pg_user")))
+
+  (xt/execute-tx tu/*node* [[:sql "CREATE USER ada WITH PASSWORD 'lovelace'"]])
+
+  (t/is (= [{:username "ada", :usesuper false, :passwd (util/md5 "lovelace")} ]
+           (xt/q tu/*node* "SELECT * FROM pg_user WHERE username = 'ada'")))
+
+  (xt/execute-tx tu/*node* [[:sql "ALTER USER anonymous WITH PASSWORD 'anonymous'"]])
+
+  (t/is (= [{:username "anonymous", :usesuper false, :passwd (util/md5 "anonymous")} ]
+           (xt/q tu/*node* "SELECT * FROM pg_user WHERE username = 'anonymous'"))))
 
 ; required for Postgrex
 (deftest test-pg-range-3737

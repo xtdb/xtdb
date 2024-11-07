@@ -489,6 +489,10 @@
                      (visitSettingDefaultValidTime [_ _])
                      (visitSettingDefaultSystemTime [_ _])
 
+                     ;; could do pre-submit validation here
+                     (visitCreateUserStatement [_ _])
+                     (visitAlterUserStatement [_ _])
+
                      (visitSettingCurrentTime [_ ctx]
                        [:current-time (time/->instant (.accept (.currentTime ctx) (plan/->ExprPlanVisitor nil nil)))])
 
@@ -1037,14 +1041,14 @@
     (cmd-send-ready conn)))
 
 (defn user+password [node user]
-  (first (xt/q node "SELECT passwd AS password, username AS user FROM pg_user WHERE username = ?" {:args [user]})))
+  (first (xt/q node "SELECT passwd AS pw, username AS usr FROM pg_user WHERE username = ?" {:args [user]})))
 
 (defn cmd-startup-pg30 [{:keys [frontend] :as conn} startup-params]
   (let [{:keys [node !closing?]} conn
         user (or (get startup-params "user") "anonymous")]
     (if node ;; the playground does not have a node yet
-      (let [{:keys [password] :as pw-res} (user+password node user)]
-        (if (or password (nil? pw-res))
+      (let [{:keys [pw] :as pw-res} (user+password node user)]
+        (if (or pw (nil? pw-res))
           (do
             ;; asking for a password
             (cmd-write-msg conn msg-auth {:result 3})
@@ -1058,7 +1062,7 @@
                   (cmd-send-error conn (err-invalid-auth-spec (str "password authentication failed for user: " user)))
                   conn)
 
-                (if (= (util/md5 (:password msg)) password)
+                (if (= (util/md5 (:password msg)) pw)
                   (do
                     (cmd-write-msg conn msg-auth {:result 0})
                     (startup-ok conn startup-params))

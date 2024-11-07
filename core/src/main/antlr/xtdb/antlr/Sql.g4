@@ -30,7 +30,10 @@ directlyExecutableStatement
     | 'SHOW' showVariable # ShowVariableStatement
     | 'SHOW' identifier # ShowSessionVariableStatement
     | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
+    | 'CREATE' 'USER' userName 'WITH' 'PASSWORD' password=characterString # CreateUserStatement
+    | 'ALTER' 'USER' userName 'WITH' 'PASSWORD' password=characterString # AlterUserStatement
     ;
+
 
 showVariable
    : 'TRANSACTION' 'ISOLATION' 'LEVEL' # ShowTransactionIsolationLevel
@@ -118,6 +121,7 @@ correlationName : identifier ;
 queryName : identifier ;
 fieldName : identifier ;
 windowName : identifier ;
+userName: identifier;
 
 // §6 Scalar Expressions
 
