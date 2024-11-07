@@ -10,11 +10,11 @@ private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
-data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReader) : HashTrie<LiveHashTrie.Node> {
+data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) : HashTrie<MemoryHashTrie.Node> {
     interface Node : HashTrie.Node<Node> {
-        fun add(trie: LiveHashTrie, newIdx: Int): Node
+        fun add(trie: MemoryHashTrie, newIdx: Int): Node
 
-        fun compactLogs(trie: LiveHashTrie): Node
+        fun compactLogs(trie: MemoryHashTrie): Node
     }
 
     @Suppress("unused")
@@ -26,7 +26,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         fun setLogLimit(logLimit: Int) = this.apply { this.logLimit = logLimit }
         fun setPageLimit(pageLimit: Int) = this.apply { this.pageLimit = pageLimit }
         fun setRootPath(path: ByteArray) = this.apply { this.rootPath = path }
-        fun build(): LiveHashTrie = LiveHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
+        fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
     }
 
     fun add(idx: Int) = copy(rootNode = rootNode.add(this, idx))
@@ -56,7 +56,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         override val recencies = null
         override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
 
-        override fun add(trie: LiveHashTrie, newIdx: Int): Node {
+        override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size)
 
             val newChildren = iidChildren.indices
@@ -72,7 +72,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             return Branch(logLimit, pageLimit, path, newChildren)
         }
 
-        override fun compactLogs(trie: LiveHashTrie) =
+        override fun compactLogs(trie: MemoryHashTrie) =
             Branch(logLimit, pageLimit, path, iidChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
     }
 
@@ -91,12 +91,12 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         override val recencies = null
         override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
 
-        fun mergeSort(trie: LiveHashTrie): IntArray {
+        fun mergeSort(trie: MemoryHashTrie): IntArray {
             if (log.isEmpty()) return data
             return sortedData ?: mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
         }
 
-        private fun mergeSort(trie: LiveHashTrie, data: IntArray, log: IntArray, logCount: Int): IntArray {
+        private fun mergeSort(trie: MemoryHashTrie, data: IntArray, log: IntArray, logCount: Int): IntArray {
             val leftPtr = ArrowBufPointer()
             val logPtr = ArrowBufPointer()
             val dataCount = data.size
@@ -131,7 +131,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             return res.toArray().also { sortedData = it }
         }
 
-        private fun sortLog(trie: LiveHashTrie, log: IntArray, logCount: Int): IntArray {
+        private fun sortLog(trie: MemoryHashTrie, log: IntArray, logCount: Int): IntArray {
             val leftPtr = ArrowBufPointer()
             val rightPtr = ArrowBufPointer()
             return log.take(logCount).sortedWith { leftKey: Int, rightKey: Int ->
@@ -140,7 +140,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
         }
 
 
-        private fun idxBuckets(trie: LiveHashTrie, idxs: IntArray, path: ByteArray): Array<IntArray?> {
+        private fun idxBuckets(trie: MemoryHashTrie, idxs: IntArray, path: ByteArray): Array<IntArray?> {
             val entryGroups = arrayOfNulls<IntArrayList>(LEVEL_WIDTH)
 
             for (i in idxs) {
@@ -152,7 +152,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             return entryGroups.map { b -> b?.toArray() }.toTypedArray()
         }
 
-        override fun compactLogs(trie: LiveHashTrie): Node {
+        override fun compactLogs(trie: MemoryHashTrie): Node {
             if (logCount == 0) return this
 
             val data = if (sortedData != null) sortedData as IntArray else mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
@@ -174,7 +174,7 @@ data class LiveHashTrie(override val rootNode: Node, val iidReader: IVectorReade
             } else Leaf(logLimit, pageLimit, path, data, log, logCount)
         }
 
-        override fun add(trie: LiveHashTrie, newIdx: Int): Node {
+        override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             var logCount = logCount
             log[logCount++] = newIdx
             val newLeaf = Leaf(logLimit, pageLimit, path, data, log, logCount)

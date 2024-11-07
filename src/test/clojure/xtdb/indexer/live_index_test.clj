@@ -22,7 +22,7 @@
            (xtdb.arrow Relation VectorPosition)
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie MemoryHashTrie$Leaf)))
 
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
@@ -64,11 +64,11 @@
               live-rel (li/live-rel live-table)
               iid-vec (.getVector (.colWriter live-rel "_iid"))
 
-              ^LiveHashTrie trie (li/live-trie live-table)]
+              ^MemoryHashTrie trie (li/live-trie live-table)]
 
           (t/is (= iid-bytes
                    (->> (.getLeaves (.compactLogs trie))
-                        (mapcat (fn [^LiveHashTrie$Leaf leaf]
+                        (mapcat (fn [^MemoryHashTrie$Leaf leaf]
                                   (mapv #(vec (.getObject iid-vec %)) (.getData leaf))))))))))
 
     (t/testing "finish chunk"

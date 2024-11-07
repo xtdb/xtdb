@@ -6,7 +6,6 @@ import xtdb.trie.ArrowHashTrie.IidBranch
 import xtdb.trie.ArrowHashTrie.RecencyBranch
 import xtdb.trie.HashTrie.Node
 import xtdb.util.TemporalBounds
-import java.time.Instant
 import java.util.*
 import java.util.function.Predicate
 import java.util.stream.Stream
@@ -121,7 +120,7 @@ fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, tempo
 
             pathPred != null && !pathPred.test(mergePlanTask.path) -> null
 
-            mpNodes.any { it.node is IidBranch || it.node is LiveHashTrie.Branch } -> {
+            mpNodes.any { it.node is IidBranch || it.node is MemoryHashTrie.Branch } -> {
                 val nodeChildren = mpNodes.map { it.node.iidChildren }
                 // do these in reverse order so that they're on the stack in path-prefix order
                 for (bucketIdx in HashTrie.LEVEL_WIDTH - 1 downTo 0) {

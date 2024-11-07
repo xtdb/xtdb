@@ -17,7 +17,7 @@
            xtdb.arrow.VectorPosition
            xtdb.IBufferPool
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
-           (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie MemoryHashTrie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -57,8 +57,8 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
-                  leaf ^LiveHashTrie$Leaf (first leaves)]
+            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (.live-trie ^TestLiveTable live-table)))
+                  leaf ^MemoryHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
 
@@ -94,8 +94,8 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
-                  leaf ^LiveHashTrie$Leaf (first leaves)]
+            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (.live-trie ^TestLiveTable live-table)))
+                  leaf ^MemoryHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
 
@@ -119,7 +119,7 @@
         live-trie (.compactLogs (.liveTrie live-table-wm))
         live-trie-leaf-data (->> live-trie
                                  (.getLeaves)
-                                 (mapcat #(.getData ^LiveHashTrie$Leaf %))
+                                 (mapcat #(.getData ^MemoryHashTrie$Leaf %))
                                  (vec))
         live-trie-iids (map #(util/byte-buffer->uuid (.getBytes (.getIidReader live-trie) %))
                             live-trie-leaf-data)]

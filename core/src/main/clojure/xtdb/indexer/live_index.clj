@@ -24,7 +24,7 @@
            (xtdb.api IndexerConfig TransactionKey)
            xtdb.IBufferPool
            xtdb.metadata.IMetadataManager
-           (xtdb.trie LiveHashTrie)
+           (xtdb.trie MemoryHashTrie)
            (xtdb.util RefCounter RowCounter)
            (xtdb.vector IRelationWriter IVectorWriter)
            (xtdb.watermark ILiveIndexWatermark ILiveTableWatermark Watermark)))
@@ -71,7 +71,7 @@
   (^void force-flush! [_ tx-key expected-last-chunk-tx-id]))
 
 (defprotocol TestLiveTable
-  (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
+  (^MemoryHashTrie live-trie [test-live-table])
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
 
 (defn- live-rel->fields [^IRelationWriter live-rel]
@@ -97,7 +97,7 @@
 (defn live-table-wm [^IRelationWriter live-rel, trie]
   (let [fields (live-rel->fields live-rel)
         wm-live-rel (open-wm-live-rel live-rel)
-        wm-live-trie (-> ^LiveHashTrie trie
+        wm-live-trie (-> ^MemoryHashTrie trie
                          (.withIidReader (.readerForName wm-live-rel "_iid")))]
     (reify ILiveTableWatermark
       (columnField [_ col-name]
@@ -111,7 +111,7 @@
       (close [_] (util/close wm-live-rel)))))
 
 (deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
-                    ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
+                    ^IRelationWriter live-rel, ^:unsynchronized-mutable ^MemoryHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr, ^IVectorWriter valid-from-wtr, ^IVectorWriter valid-to-wtr
                     ^IVectorWriter put-wtr, ^IVectorWriter delete-wtr, ^IVectorWriter erase-wtr]
   ILiveTable
@@ -134,7 +134,7 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
+          (swap! !transient-trie #(.add ^MemoryHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
           (.addRows row-counter 1))
 
         (logDelete [_ iid valid-from valid-to]
@@ -148,7 +148,7 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
+          (swap! !transient-trie #(.add ^MemoryHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
           (.addRows row-counter 1))
 
         (logErase [_ iid]
@@ -162,7 +162,7 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
+          (swap! !transient-trie #(.add ^MemoryHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
           (.addRows row-counter 1))
 
         (openWatermark [_] (live-table-wm live-rel @!transient-trie))
@@ -209,7 +209,7 @@
   (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool row-counter table-name
                                         {:keys [->live-trie]
                                          :or {->live-trie (fn [iid-rdr]
-                                                            (LiveHashTrie/emptyTrie iid-rdr))}}]
+                                                            (MemoryHashTrie/emptyTrie iid-rdr))}}]
    (util/with-close-on-catch [rel (trie/open-log-data-wtr allocator)]
      (let [iid-wtr (.colWriter rel "_iid")
            op-wtr (.colWriter rel "op")]
@@ -220,7 +220,7 @@
                     (.legWriter op-wtr "put") (.legWriter op-wtr "delete") (.legWriter op-wtr "erase"))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]
-  (-> (doto (LiveHashTrie/builder iid-rdr)
+  (-> (doto (MemoryHashTrie/builder iid-rdr)
         (.setLogLimit log-limit)
         (.setPageLimit page-limit))
       (.build)))

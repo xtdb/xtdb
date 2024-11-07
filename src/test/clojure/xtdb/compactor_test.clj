@@ -18,7 +18,7 @@
            [xtdb IBufferPool]
            (xtdb.arrow Relation RelationReader)
            [xtdb.metadata IMetadataManager]
-           [xtdb.trie HashTrie IDataRel LiveHashTrie$Leaf]))
+           [xtdb.trie HashTrie IDataRel MemoryHashTrie$Leaf]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -166,7 +166,7 @@
   (getSchema [_] (.getSchema live-rel))
 
   (loadPage [_ leaf]
-    (.select live-rel (.getData ^LiveHashTrie$Leaf leaf)))
+    (.select live-rel (.getData ^MemoryHashTrie$Leaf leaf)))
 
   AutoCloseable
   (close [_]))

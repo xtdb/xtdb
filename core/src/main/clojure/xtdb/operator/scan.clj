@@ -39,7 +39,7 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie
-                      HashTrieKt LiveHashTrie$Leaf MergePlanNode MergePlanTask)
+                      HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -359,7 +359,7 @@
 
 (def ^:private non-constraint-bounds (TemporalBounds.))
 
-(defrecord LiveMergePlanPage [^RelationReader live-rel trie ^LiveHashTrie$Leaf leaf]
+(defrecord MemoryMergePlanPage [^RelationReader live-rel trie ^MemoryHashTrie$Leaf leaf]
   MergePlanPage
   (load-page [_mpg _buffer-pool _vsr-cache]
     (.select live-rel (.mergeSort leaf trie)))
@@ -479,7 +479,7 @@
                                                                                                                     page-idx-pred
                                                                                                                     (.getDataPageIndex ^ArrowHashTrie$Leaf node)
                                                                                                                     table-metadata)
-                                                                                              (->LiveMergePlanPage (.liveRelation live-table-wm) (.liveTrie live-table-wm) node)))
+                                                                                              (->MemoryMergePlanPage (.liveRelation live-table-wm) (.liveTrie live-table-wm) node)))
                                                                                           temporal-bounds)]
                                                                          {:path (.getPath mpt)
                                                                           :leaves leaves})))))))]

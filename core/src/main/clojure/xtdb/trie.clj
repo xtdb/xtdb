@@ -19,7 +19,7 @@
            org.apache.arrow.vector.types.UnionMode
            (xtdb.arrow Relation Relation$Loader)
            xtdb.IBufferPool
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment LiveHashTrie LiveHashTrie$Leaf MergePlanNode TrieWriter)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (def ^:private ^java.lang.ThreadLocal !msg-digest
@@ -200,7 +200,7 @@
 
                   (.writeIidBranch trie-wtr !idxs))
 
-                (let [^LiveHashTrie$Leaf leaf node]
+                (let [^MemoryHashTrie$Leaf leaf node]
                   (-> (Arrays/stream (.getData leaf))
                       (.forEach (fn [idx]
                                   (.copyRow copier idx))))
@@ -211,7 +211,7 @@
 
 (defn write-live-trie! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                         ^Path table-path, trie-key,
-                        ^LiveHashTrie trie, ^Relation data-rel]
+                        ^MemoryHashTrie trie, ^Relation data-rel]
   (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-path trie-key)]
     (let [trie (.compactLogs trie)]
       (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)

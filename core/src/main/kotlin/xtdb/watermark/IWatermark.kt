@@ -2,7 +2,7 @@ package xtdb.watermark
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
-import xtdb.trie.LiveHashTrie
+import xtdb.trie.MemoryHashTrie
 import xtdb.vector.RelationReader
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -10,7 +10,7 @@ interface ILiveTableWatermark : AutoCloseable {
     fun columnField(col: String): Field
     fun columnFields(): Map<String, Field>
     fun liveRelation(): RelationReader
-    fun liveTrie(): LiveHashTrie
+    fun liveTrie(): MemoryHashTrie
 }
 
 interface ILiveIndexWatermark : AutoCloseable {
