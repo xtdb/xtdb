@@ -138,7 +138,8 @@
           (merge-segments-into data-rel recency-wtr segments path)
 
           (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
-                                                           schema table-path out-trie-key)]
+                                                           schema table-path out-trie-key
+                                                           true)]
 
             (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))))
 

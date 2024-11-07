@@ -127,6 +127,7 @@
 (def ^:private types-rdr-sym (gensym "types-rdr"))
 (def ^:private bloom-rdr-sym (gensym "bloom-rdr"))
 
+(def ^:private content-metadata-present-sym (gensym "content-metadata-present?"))
 
 (defmethod expr/codegen-expr :test-metadata [{:keys [f meta-value field value-expr col-type bloom-hash-sym]} opts]
   (let [field-name (str field)
@@ -139,8 +140,9 @@
                    (cont :bool
                          `(boolean
                            (let [~expr/idx-sym ~idx-code]
-                             (when (>= ~expr/idx-sym 0)
-                               (bloom/bloom-contains? ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym))))))}
+                             (if (>= ~expr/idx-sym 0)
+                               (bloom/bloom-contains? ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)
+                               (not ~content-metadata-present-sym))))))}
 
       (let [col-sym (gensym 'meta_col)
             col-field (types/col-type->field col-type)
@@ -162,10 +164,11 @@
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
-                           `(when ~col-sym
+                           `(if ~col-sym
                               (let [~expr/idx-sym ~idx-code]
                                 (when (>= ~expr/idx-sym 0)
-                                  ~(continue (fn [_ code] code)))))))}))))
+                                  ~(continue (fn [_ code] code))))
+                              (not ~content-metadata-present-sym))))}))))
 
 (defmethod ewalk/walk-expr :test-metadata [inner outer expr]
   (outer (-> expr (update :value-expr inner))))
@@ -186,11 +189,12 @@
                            ~col-rdr-sym (.elementReader ~cols-rdr-sym)
                            ~types-rdr-sym (.keyReader ~col-rdr-sym "types")
                            ~bloom-rdr-sym (.keyReader ~col-rdr-sym "bloom")
+                           ~content-metadata-present-sym (contains? (.columnNames ~table-metadata-sym) "_id")
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
                          (~'test [_ ~page-idx-sym]
-                          (boolean ~(continue (fn [_ code] code)))))))
+                          ~(continue (fn [_ code] code))))))
                   #_(doto clojure.pprint/pprint)
                   (eval))}))
 

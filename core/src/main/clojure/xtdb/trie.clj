@@ -103,7 +103,8 @@
      (vw/root->writer root))))
 
 (defn open-trie-writer ^TrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                                    ^Schema data-schema, ^Path table-path, trie-key]
+                                    ^Schema data-schema, ^Path table-path, trie-key
+                                    write-content-metadata?]
   (util/with-close-on-catch [data-rel (Relation. allocator data-schema)
                              data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-path trie-key) data-rel)
                              meta-rel (Relation. allocator meta-rel-schema)]
@@ -138,7 +139,8 @@
                                                  (.get data-rel "_valid_to")
                                                  (.get data-rel "_iid")]
                                                 (map #(.keyReader put-rdr %))
-                                                (.getKeys put-rdr)))
+                                                (when write-content-metadata?
+                                                  (.getKeys put-rdr))))
 
             (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
             (.endStruct leaf-wtr)
@@ -212,7 +214,8 @@
 (defn write-live-trie! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                         ^Path table-path, trie-key,
                         ^MemoryHashTrie trie, ^Relation data-rel]
-  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-path trie-key)]
+  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-path trie-key
+                                              false)]
     (let [trie (.compactLogs trie)]
       (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
 

@@ -11,7 +11,8 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.compactor :as c])
   (:import (clojure.lang MapEntry)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.metadata IMetadataManager)))
@@ -108,38 +109,55 @@
                           {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
 
 (deftest test-min-max-on-xt-id
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
-    (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
-        (tu/then-await-tx node))
+  (binding [c/*page-size* 16]
+    (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
+      (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
+          (tu/then-await-tx node))
 
-    (tu/finish-chunk! node)
+      (tu/finish-chunk! node)
+      (c/compact-all! node)
 
-    (let [first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
-          bucket->page-idx (->> (into (sorted-set) first-buckets)
-                                (map-indexed #(MapEntry/create %2 %1))
-                                (into {}))
-          min-max-by-bucket (-> (group-by :bucket (map-indexed (fn [index bucket] {:index index :bucket bucket}) first-buckets))
-                                (update-vals #(reduce (fn [res {:keys [index]}]
-                                                        (-> res
-                                                            (update :min min index)
-                                                            (update :max max index)))
-                                                      {:min Long/MAX_VALUE :max Long/MIN_VALUE}
-                                                      %)))
+      (let [first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
+            bucket->page-idx (->> (into (sorted-set) first-buckets)
+                                  (map-indexed #(MapEntry/create %2 %1))
+                                  (into {}))
+            min-max-by-bucket (-> (group-by :bucket (map-indexed (fn [index bucket] {:index index :bucket bucket}) first-buckets))
+                                  (update-vals #(reduce (fn [res {:keys [index]}]
+                                                          (-> res
+                                                              (update :min min index)
+                                                              (update :max max index)))
+                                                        {:min Long/MAX_VALUE :max Long/MIN_VALUE}
+                                                        %)))
 
-          relevant-pages (->> (filter (fn [[_ {:keys [min max]}]] (<= min 10 max)) min-max-by-bucket)
-                              (map (comp bucket->page-idx first)))
+            relevant-pages (->> min-max-by-bucket
+                                (filter (fn [[_ {:keys [min max]}]] (<= min 10 max)))
+                                (map (comp bucket->page-idx first)))
 
-          ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-params)
-          meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
-      (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-        (let [page-idx-pred (.build literal-selector table-metadata)]
+            ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+            literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-params)]
 
-          (t/is (= #{"_iid" "_valid_to" "_valid_from" "_id" "_system_from"}
-                   (.columnNames table-metadata)))
+        (t/testing "L0"
+          (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
+            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+              (let [page-idx-pred (.build literal-selector table-metadata)]
 
-          (doseq [page-idx relevant-pages]
-            (t/is (true? (.test page-idx-pred page-idx)))))))))
+                (t/is (= #{"_iid" "_valid_to" "_valid_from" "_system_from"}
+                         (.columnNames table-metadata)))
+
+                (doseq [page-idx relevant-pages]
+                  (t/is (true? (.test page-idx-pred page-idx))))))))
+
+        (t/testing "L1"
+          (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 21 20))]
+            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+              (let [page-idx-pred (.build literal-selector table-metadata)]
+
+                (t/is (= #{"_iid" "_valid_to" "_valid_from" "_id" "_system_from"}
+                         (.columnNames table-metadata)))
+
+                (doseq [page-idx relevant-pages]
+                  (t/is (true? (.test page-idx-pred page-idx))
+                        (str "page" page-idx)))))))))))
 
 (deftest test-temporal-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1}]])
@@ -159,15 +177,25 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-params)
-        meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-params)]
 
-    (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-      (let [page-idx-pred (.build true-selector table-metadata)]
-        (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "boolean_or_int"}
-                 (.columnNames table-metadata)))
+    (t/testing "L0"
+      (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+          (let [page-idx-pred (.build true-selector table-metadata)]
+            (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
+                     (.columnNames table-metadata)))
 
-        (t/is (true? (.test page-idx-pred 0)))))))
+            (t/is (true? (.test page-idx-pred 0)))))))
+
+    (t/testing "L1"
+      (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 2 1))]
+        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+          (let [page-idx-pred (.build true-selector table-metadata)]
+            (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "boolean_or_int"}
+                     (.columnNames table-metadata)))
+
+            (t/is (true? (.test page-idx-pred 0)))))))))
 
 (t/deftest test-set-metadata
   (let [node-dir (util/->path "target/test-set-metadata")]
@@ -177,14 +205,25 @@
       (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
 
       (tu/finish-chunk! node)
+      (c/compact-all! node)
 
-      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-            meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs/") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+        (t/testing "L0"
+          (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs/") (trie/->log-l0-l1-trie-key 0 0 2 1))]
+            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+              (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+                             (.resolve node-dir (str "objects/" bp/version "/tables/")))
 
-                         (.resolve node-dir (str "objects/" bp/version "/tables/")))
+              (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
+                       (.columnNames table-metadata))))))
 
-          (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "$data$"}
-                   (.columnNames table-metadata))))))))
+        (t/testing "L1"
+          (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs/") (trie/->log-l0-l1-trie-key 1 0 2 1))]
+            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+              (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+
+                             (.resolve node-dir (str "objects/" bp/version "/tables/")))
+
+              (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
+                       (.columnNames table-metadata))))))))))
