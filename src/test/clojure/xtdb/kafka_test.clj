@@ -53,10 +53,14 @@
           (t/is (= true (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])))))
 
         (t/testing "Send & receive file change notification"
-          (.appendFileNotification log (flc/map->FileNotification {:added [(util/->path "foo1") (util/->path "foo2") (util/->path "foo3")]}))
+          (.appendFileNotification log (flc/map->FileNotification {:added [{:k (util/->path "foo1"), :size 12}
+                                                                           {:k (util/->path "foo2"), :size 15}
+                                                                           {:k (util/->path "foo3"), :size 8}]}))
           (Thread/sleep 1000)
-          (t/is (= #{(util/->path "foo1") (util/->path "foo2") (util/->path "foo3")}
-                   (:!os-file-names buffer-pool)))))
+          (t/is (= {(util/->path "foo1") 12
+                    (util/->path "foo2") 15
+                    (util/->path "foo3") 8}
+                   (:!os-files buffer-pool)))))
       
         (t/testing "should be no 'xtdb-tx-subscription' threads remaining"
           (let [all-threads (.keySet (Thread/getAllStackTraces))

@@ -9,6 +9,7 @@
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
+            [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -144,7 +145,8 @@
                                                 (.prefix (util/->path (str prefix)))
                                                 (.storageAccountEndpoint "https://xtdbteststorageaccount.blob.core.windows.net")))]
         (os-test/put-edn os (util/->path "alice") :alice)
-        (t/is (= (mapv util/->path ["alice"]) (.listAllObjects ^ObjectStore os)))))))
+        (t/is (= [(os/->StoredObject (util/->path "alice") 6)]
+                 (.listAllObjects ^ObjectStore os)))))))
 
 (defn list-filenames [^BlobContainerClient blob-container-client ^Path prefix ^ListBlobsOptions list-opts]
   (->> (.listBlobs blob-container-client list-opts nil)
@@ -200,7 +202,7 @@
           (t/is (= #{} uncomitted-blobs))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
-        (t/is (= (mapv util/->path ["test-multi-put"])
+        (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
                  (.listAllObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
@@ -259,7 +261,7 @@
           (t/is (= #{} uncomitted-blobs))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
-        (t/is (= (mapv util/->path ["test-larger-multi-put"])
+        (t/is (= [(os/->StoredObject (util/->path "test-larger-multi-put") (* 20 part-size))]
                  (.listAllObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-larger-multi-put"))]
@@ -267,27 +269,27 @@
             (t/is (= (* 20 part-size) (.capacity uploaded-buffer)))))))))
 
 (t/deftest ^:azure multipart-object-already-exists
-  (with-open [os (object-store (random-uuid))]
+  (with-open [^SupportsMultipart os (object-store (random-uuid))]
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)
           part-size 500]
 
       (t/testing "Initial multipart works correctly"
-        (let [initial-multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multipart"))]
+        (let [initial-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))]
           (dotimes [_ 2]
             (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
               @(.uploadPart initial-multipart-upload (.flip file-part))))
 
           @(.complete initial-multipart-upload)
 
-          (t/is (= (mapv util/->path ["test-multipart"])
+          (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
                    (.listAllObjects ^ObjectStore os)))
 
           (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
             (t/is (= #{} uncomitted-blobs)))))
 
       (t/testing "Attempt to multipart upload to an existing object shouldn't throw, should abort and remove uncomitted blobs"
-        (let [second-multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multipart"))]
+        (let [second-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))]
           (dotimes [_ 3]
             (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
               (t/is @(.uploadPart second-multipart-upload (.flip file-part)))))
@@ -298,7 +300,7 @@
             (t/is (= #{} uncomitted-blobs)))))
 
       (t/testing "still has the original object"
-        (t/is (= (mapv util/->path ["test-multipart"])
+        (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
                  (.listAllObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multipart"))]
