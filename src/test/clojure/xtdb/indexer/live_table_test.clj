@@ -8,6 +8,7 @@
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
+            [xtdb.trie :as trie]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.nio ByteBuffer)
@@ -42,7 +43,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
                          ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
+                         live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial trie/->live-trie 2 4)})]
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.docWriter live-table-tx)]

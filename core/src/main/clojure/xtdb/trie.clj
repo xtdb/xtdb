@@ -347,6 +347,12 @@
   (test-metadata [msg])
   (temporal-bounds [msg]))
 
+(defn ->live-trie ^MemoryHashTrie [log-limit page-limit iid-rdr]
+  (-> (doto (MemoryHashTrie/builder iid-rdr)
+        (.setLogLimit log-limit)
+        (.setPageLimit page-limit))
+      (.build)))
+
 (defn max-valid-to ^long [^TemporalBounds tb]
   (.getUpper (.getValidTime tb)))
 
