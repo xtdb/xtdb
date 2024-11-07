@@ -343,6 +343,8 @@
     (let [chunk-idx (.getChunkIdx row-counter)
           next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))]
 
+      (log/debugf "finishing chunk 'rf%s-nr%s'..." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))
+
       (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
         (let [tasks (vec (for [^ILiveTable table (.values tables)]
                            (.fork scope (fn []

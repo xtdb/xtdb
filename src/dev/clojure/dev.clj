@@ -4,19 +4,20 @@
             [clojure.java.io :as io]
             [integrant.core :as i]
             [integrant.repl :as ir]
+            [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
+            [xtdb.pgwire :as pgw]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.compactor :as c]
             [xtdb.time :as time]
-            [xtdb.pgwire :as pgw])
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr])
   (:import [java.nio.file Path]
            java.time.Duration
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$RecencyBranch ArrowHashTrie$Node)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node ArrowHashTrie$RecencyBranch)))
 
 (require '[xtdb.logging :refer [set-log-level!]])
 
@@ -113,11 +114,12 @@
   #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
   (def !submit-tpch
     (future
-      (let [last-tx (time
-                     (tpch/submit-docs! node 0.05))]
-        (time (tu/then-await-tx last-tx node (Duration/ofHours 1)))
-        (time (tu/finish-chunk! node))
-        (time (c/compact-all! node (Duration/ofMinutes 5))))))
+      (time
+       (do
+         (time (tpch/submit-docs! node 0.5))
+         (time (tu/then-await-tx (tu/latest-submitted-tx node) node (Duration/ofHours 1)))
+         (tu/finish-chunk! node)
+         (time (c/compact-all! node (Duration/ofMinutes 5)))))))
 
   (do
     (newline)
