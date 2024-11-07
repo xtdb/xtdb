@@ -92,6 +92,7 @@ export default defineConfig({
                     items: [
                         { label: 'Overview', link: '/clients' },
                         { label: 'Clojure', link: '/clients/clojure' },
+                        { label: 'Elixir', link: '/clients/elixir' },
                         { label: 'Java', link: '/clients/java' },
                         { label: 'Kotlin', link: '/clients/kotlin' },
                         { label: 'Node.js', link: '/clients/nodejs' },
