@@ -2502,6 +2502,9 @@
 (defrecord AssertStmt [query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
+(defrecord UserStmt [stmt]
+  OptimiseStatement (optimise-stmt [this] this))
+
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitQueryExpr [this ctx]
@@ -2708,7 +2711,13 @@
 
   (visitShowTimeZone [_ _]
     (->QueryExpr [:table [{:timezone '(current-timezone)}]]
-                 [(->col-sym 'timezone)])))
+                 [(->col-sym 'timezone)]))
+
+  (visitCreateUserStatement [_ ctx]
+    (->UserStmt [:create-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)]))
+
+  (visitAlterUserStatement [_ ctx]
+    (->UserStmt [:alter-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)])))
 
 (defn- xform-table-info [table-info]
   (into {}
@@ -2786,7 +2795,10 @@
 
   AssertStmt
   (->logical-plan [{:keys [query-plan]}]
-    [:assert {} (->logical-plan query-plan)]))
+    [:assert {} (->logical-plan query-plan)])
+
+  UserStmt
+  (->logical-plan [{:keys [stmt]}] stmt))
 
 (defprotocol PlanStatement
   (-plan-statement [query opts]))
@@ -2846,6 +2858,8 @@
   (visitAssertStatement [_ _])
   (visitQueryExpr [_ _])
   (visitShowVariableStatement [_ _])
+  (visitCreateUserStatement [_ _])
+  (visitAlterUserStatement [_ _])
 
   (visitInsertStatement [this ctx]
     (let [table (-> (identifier-sym (.tableName ctx)) (util/with-default-schema))]
