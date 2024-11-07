@@ -2439,6 +2439,9 @@ UNION ALL
     (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: xt/txs"
                             (xt/execute-tx tu/*node* [[:sql "INSERT INTO xt.txs(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]]))))
 
+  ;; just to have something in tx.txs before the check below
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
   (t/testing "indexing side"
     (let [{:keys [committed? error] :as _tx-res}
           (xt/execute-tx tu/*node* [[:sql "INSERT INTO xt.txs(_id, system_time, committed, error) SELECT 1, 2, 3, 4"]])]

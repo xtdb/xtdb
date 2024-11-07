@@ -316,6 +316,9 @@
                                                               (remove (comp types/temporal-column? #(.getName ^IVectorReader %))))
                                                          (.rowCount in-rel))
               table (str table)
+
+              _ (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
+
               id-col (.readerForName in-rel "_id")
               valid-from-rdr (.readerForName in-rel "_valid_from")
               valid-to-rdr (.readerForName in-rel "_valid_to")
@@ -323,8 +326,6 @@
               live-idx-table (.liveTable live-idx-tx table)
               live-idx-table-copier (-> (.docWriter live-idx-table)
                                         (.rowCopier content-rel))]
-
-          (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
           (when-not id-col
             (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
