@@ -219,11 +219,6 @@
                     (.colWriter rel "_valid_from") (.colWriter rel "_valid_to")
                     (.legWriter op-wtr "put") (.legWriter op-wtr "delete") (.legWriter op-wtr "erase"))))))
 
-(defn ->live-trie [log-limit page-limit iid-rdr]
-  (-> (doto (MemoryHashTrie/builder iid-rdr)
-        (.setLogLimit log-limit)
-        (.setPageLimit page-limit))
-      (.build)))
 
 (defn open-live-idx-wm [^Map tables]
   (util/with-close-on-catch [wms (HashMap.)]
@@ -277,7 +272,7 @@
                                       new-live-table? (nil? live-table)
                                       ^ILiveTable live-table (or live-table
                                                                  (->live-table allocator buffer-pool row-counter table-name
-                                                                               {:->live-trie (partial ->live-trie log-limit page-limit)}))]
+                                                                               {:->live-trie (partial trie/->live-trie log-limit page-limit)}))]
 
                                   (.startTx live-table tx-key new-live-table?))))))
 
