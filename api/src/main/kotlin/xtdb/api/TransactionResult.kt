@@ -28,7 +28,7 @@ internal class Serde : JsonContentPolymorphicSerializer<TransactionResult>(Trans
 @Serializable(with = CommittedSerde::class)
 interface TransactionCommitted : TransactionResult
 
-internal fun txCommitted(txId: Long, systemTime: Instant) =
+fun txCommitted(txId: Long, systemTime: Instant) =
     requiringResolve("xtdb.serde/->tx-committed").invoke(txId, systemTime) as TransactionCommitted
 
 internal class CommittedSerde : KSerializer<TransactionCommitted> {
@@ -72,7 +72,7 @@ interface TransactionAborted : TransactionResult {
     val error: Throwable
 }
 
-internal fun txAborted(txId: Long, systemTime: Instant, error: Throwable) =
+fun txAborted(txId: Long, systemTime: Instant, error: Throwable) =
     requiringResolve("xtdb.serde/->tx-aborted").invoke(txId, systemTime, error) as TransactionAborted
 
 internal class AbortedSerde : KSerializer<TransactionAborted> {

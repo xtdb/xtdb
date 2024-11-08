@@ -7,11 +7,10 @@
             [xtdb.serde :as serde]
             [xtdb.time :as time])
   (:import [java.io EOFException InputStream]
-           java.net.http.HttpClient
            java.lang.AutoCloseable
+           java.net.http.HttpClient
            java.util.Spliterator
-           [java.util.stream StreamSupport]
-           (xtdb.api.query Basis)))
+           [java.util.stream StreamSupport]))
 
 (def transit-opts
   {:decode {:handlers serde/transit-read-handlers}
@@ -78,7 +77,6 @@
   (:body (request client :post :query
                   {:content-type :transit+json
                    :form-params (-> (into {:query query} query-opts)
-                                    (update :basis (fn [b] (cond->> b (instance? Basis b) (into {}))))
                                     (time/after-latest-submitted-tx client))
                    :as ::transit+json->result-or-error})))
 

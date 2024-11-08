@@ -1,6 +1,7 @@
-package xtdb.api.tx
+package xtdb.http
 
 import kotlinx.serialization.Serializable
+import xtdb.api.tx.TxOp
 
 /**
  * @suppress

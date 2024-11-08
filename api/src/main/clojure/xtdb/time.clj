@@ -1,5 +1,6 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
             [xtdb.protocols :as xtp])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
@@ -23,6 +24,16 @@
 (defprotocol TimeConversions
   (^java.time.Instant ->instant [v])
   (^java.time.ZonedDateTime ->zdt [v]))
+
+(defn expect-instant [instant]
+  (when-not (or (instance? Instant instant)
+                (instance? Date instant)
+                (instance? ZonedDateTime instant))
+    (throw (err/illegal-arg :xtdb/invalid-date-time
+                            {::err/message "expected date-time"
+                             :timestamp instant})))
+
+  (->instant instant))
 
 (def utc (ZoneId/of "UTC"))
 

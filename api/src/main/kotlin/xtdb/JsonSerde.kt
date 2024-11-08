@@ -176,7 +176,7 @@ val JSON_SERDE = Json {
 @JvmField
 val JSON_SERDE_PRETTY_PRINT = Json(JSON_SERDE) { prettyPrint = true }
 
-internal fun jsonIAE(errorType: String, element: JsonElement): IllegalArgumentException {
+fun jsonIAE(errorType: String, element: JsonElement): IllegalArgumentException {
     return IllegalArgumentException(
         Keyword.intern(errorType),
         data = mapOf(Keyword.intern("json") to JSON_SERDE_PRETTY_PRINT.encodeToString(element))

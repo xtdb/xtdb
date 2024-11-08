@@ -164,14 +164,6 @@
 
   doc)
 
-(defn- expect-instant ^java.time.Instant [instant]
-  (when-not (s/valid? ::time/datetime-value instant)
-    (throw (err/illegal-arg :xtdb/invalid-date-time
-                            {::err/message "expected date-time"
-                             :timestamp instant})))
-
-  (time/->instant instant))
-
 (defmethod parse-tx-op :sql [[_ sql & arg-rows]]
   (if-not (string? sql)
     (throw (err/illegal-arg :xtdb.tx/expected-sql
@@ -187,8 +179,8 @@
                                                      (keyword? table-or-opts) {:into table-or-opts})]
     (->PutDocs (expect-table-name table)
                (mapv expect-doc docs)
-               (some-> valid-from expect-instant)
-               (some-> valid-to expect-instant))))
+               (some-> valid-from time/expect-instant)
+               (some-> valid-to time/expect-instant))))
 
 (defn- expect-fn-id [fn-id]
   (if-not (eid? fn-id)
@@ -206,8 +198,8 @@
     (->PutDocs "xt/tx_fns"
                [{"_id" (expect-fn-id fn-id)
                  "fn" (ClojureForm. (expect-tx-fn tx-fn))}]
-               (some-> valid-from expect-instant)
-               (some-> valid-to expect-instant))))
+               (some-> valid-from time/expect-instant)
+               (some-> valid-to time/expect-instant))))
 
 (defmethod parse-tx-op :insert-into [[_ table query & arg-rows :as this]]
   (cond-> (->Insert (expect-table-name table)
@@ -256,8 +248,8 @@
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:from table-or-opts})]
     (->DeleteDocs (expect-table-name table) (mapv expect-eid doc-ids)
-                  (some-> valid-from expect-instant)
-                  (some-> valid-to expect-instant))))
+                  (some-> valid-from time/expect-instant)
+                  (some-> valid-to time/expect-instant))))
 
 (defmethod parse-tx-op :erase [[_ {table :from, :keys [bind unify]} & arg-rows :as this]]
   (cond-> (->Erase (expect-table-name table)

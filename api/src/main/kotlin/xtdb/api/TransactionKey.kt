@@ -17,9 +17,6 @@ import java.time.Instant
 
 /**
  * A key representing a single transaction on the log.
- *
- * @see xtdb.api.query.QueryOptions.basis
- * @see xtdb.api.query.QueryOptions.afterTx
  */
 @Serializable(with = Serde::class)
 interface TransactionKey : Comparable<TransactionKey> {
@@ -47,7 +44,7 @@ interface TransactionKey : Comparable<TransactionKey> {
                     }
                 }
             }
-            return txKey(
+            return TransactionKey(
                 txId ?: throw SerializationException("Missing txId"),
                 systemTime ?: throw SerializationException("Missing systemTime")
             )
@@ -74,7 +71,9 @@ interface TransactionKey : Comparable<TransactionKey> {
      * @suppress
      */
     override fun compareTo(other: TransactionKey) = txId.compareTo(other.txId)
-}
 
-internal fun txKey(txId: Long, systemTime: Instant) =
-    requiringResolve("xtdb.serde/->TxKey")(txId, systemTime) as TransactionKey
+    companion object {
+        operator fun invoke(txId: Long, systemTime: Instant) =
+            requiringResolve("xtdb.serde/->TxKey")(txId, systemTime) as TransactionKey
+    }
+}

@@ -1,4 +1,4 @@
-package xtdb.api.query
+package xtdb.http
 
 import kotlinx.serialization.Serializable
 

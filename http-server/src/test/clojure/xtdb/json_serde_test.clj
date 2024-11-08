@@ -1,20 +1,13 @@
 (ns xtdb.json-serde-test
-  (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.error :as err]
-            [xtdb.serde :as serde])
-  (:import (java.time Instant)
-           (java.util UUID)
-           (xtdb JsonSerde)
-           (xtdb.api.query Basis QueryOptions QueryRequest)
-           (xtdb.api.tx TxOptions)))
-
-(defn- encode [v]
-  (JsonSerde/encode v))
+  (:require [clojure.test :as t]
+            [xtdb.error :as err])
+  (:import (java.util UUID)
+           (xtdb JsonSerde)))
 
 (defn- roundtrip-json-ld [v]
   (-> v JsonSerde/encode JsonSerde/decode))
 
-(deftest test-json-ld-roundtripping
+(t/deftest test-json-ld-roundtripping
   (let [v {"keyword" :foo/bar
            "set-key" #{:foo :baz}
            "instant" #time/instant "2023-12-06T09:31:27.570827956Z"
@@ -38,34 +31,3 @@
 
       (t/is (= (ex-data ex)
                (ex-data roundtripped-ex))))))
-
-(defn- roundtrip-query-request [v]
-  (-> v (JsonSerde/encode QueryRequest) (JsonSerde/decode QueryRequest)))
-
-(defn- decode-query-request [^String v]
-  (JsonSerde/decode v QueryRequest))
-
-(deftest deserialize-query-map-test
-  (let [tx-key (serde/->TxKey 1 #time/instant "2023-12-06T09:31:27.570827956Z")
-        v (QueryRequest. "SELECT _id FROM docs"
-                         (-> (QueryOptions/queryOpts)
-                             (.args {"id" :foo})
-                             (.basis (Basis. tx-key Instant/EPOCH))
-                             (.afterTx tx-key)
-                             (.txTimeout #time/duration "PT3H")
-                             (.defaultTz #time/zone "America/Los_Angeles")
-                             (.explain true)
-                             (.keyFn #xt/key-fn :kebab-case-keyword)
-                             (.build)))]
-    (t/is (= v (roundtrip-query-request v))))
-
-  (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Error decoding JSON!"
-                          (-> {"explain" true} encode decode-query-request))
-        "query map without query"))
-
-(defn- decode-query-options [^String v]
-  (JsonSerde/decode v QueryOptions))
-
-(deftest deserialize-list-args-test
-  (t/is (= (-> (QueryOptions/queryOpts) (.args [1 2]) (.build))
-           (-> {"args" [1 2]} encode decode-query-options))))

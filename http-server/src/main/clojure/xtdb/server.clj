@@ -23,52 +23,48 @@
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.io InputStream OutputStream)
            (java.time Duration ZoneId)
-           (java.util Map)
+           (java.util List Map)
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
            (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.api.query Basis IKeyFn Query QueryRequest)
-           (xtdb.api.tx TxOptions TxRequest)))
-
-(defn decoder [_options]
-  (reify
-    mf/Decode
-    (decode [_ data _charset] ; TODO charset
-      (if (string? data)
-        (JsonSerde/decode ^String data)
-        (JsonSerde/decode ^InputStream data)))))
-
-(defn encoder [_options]
-  (reify
-    mf/EncodeToBytes
-    (encode-to-bytes [_ data charset]
-      (.getBytes ^String (JsonSerde/encode data) ^String charset))
-    mf/EncodeToOutputStream
-    (encode-to-output-stream [_ data _charset] ; TODO charset
-      (fn [^OutputStream output-stream]
-        (JsonSerde/encode data output-stream)))))
+           (xtdb.api.query IKeyFn Query)
+           (xtdb.http Basis QueryOptions QueryRequest TxOptions TxRequest)))
 
 (def json-format
   (mf/map->Format
    {:name "application/json"
-    :decoder [decoder]
-    :encoder [encoder]}))
+    :decoder [(fn decoder [_opts]
+                (reify
+                  mf/Decode
+                  (decode [_ data _charset] ; TODO charset
+                    (if (string? data)
+                      (JsonSerde/decode ^String data)
+                      (JsonSerde/decode ^InputStream data)))))]
+
+    :encoder [(fn encoder [_opts]
+                (reify
+                  mf/EncodeToBytes
+                  (encode-to-bytes [_ data charset]
+                    (.getBytes ^String (JsonSerde/encode data) ^String charset))
+                  mf/EncodeToOutputStream
+                  (encode-to-output-stream [_ data _charset] ; TODO charset
+                    (fn [^OutputStream output-stream]
+                      (JsonSerde/encode data output-stream)))))]}))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
       (m/select-formats #{"application/transit+json"})
       (assoc-in [:formats "application/json"] json-format)
       (assoc :default-format "application/json")
-      (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
-                serde/transit-read-handlers)
-      (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
-                serde/transit-write-handlers)
+      (assoc-in [:formats "application/transit+json" :decoder-opts :handlers] serde/transit-read-handlers)
+      (assoc-in [:formats "application/transit+json" :encoder-opts :handlers] serde/transit-write-handlers)
       (assoc-in [:http :encode-response-body?] (constantly true))))
 
 (defmulti ^:private route-handler :name, :default ::default)
@@ -80,14 +76,16 @@
 (s/def ::default-tz #(instance? ZoneId %))
 (s/def ::explain? boolean?)
 
-(s/def ::opts (s/nilable #(instance? TxOptions %)))
+(s/def ::system-time ::time/datetime-value)
+
+(s/def :xtdb.server.tx/opts (s/nilable (s/keys :opt-un [::system-time ::default-tz ::key-fn ::explain?])))
 
 (defn- json-status-encoder []
   (reify
     mf/EncodeToBytes
     (encode-to-bytes [_ data charset]
       (if-not (ex-data data)
-        (.getBytes ^String (JsonSerde/encodeStatus (update-keys data name)) ^String charset)
+        (.getBytes (JsonSerde/encodeStatus (update-keys data name)) ^String charset)
         (.getBytes (JsonSerde/encode data) ^String charset)))
     mf/EncodeToOutputStream))
 
@@ -98,27 +96,33 @@
    :get (fn [{:keys [node] :as _req}]
           {:status 200, :body (xtp/status node)})})
 
-(defn- json-tx-encoder []
+(def ^:private json-tx-encoder
   (reify
     mf/EncodeToBytes
     (encode-to-bytes [_ data charset]
       (if-not (ex-data data)
-        (.getBytes ^String (JsonSerde/encode data TransactionKey) ^String charset)
+        (.getBytes (JsonSerde/encode data TransactionKey) ^String charset)
         (.getBytes (JsonSerde/encode data) ^String charset)))
     mf/EncodeToOutputStream))
 
-(defn json-tx-decoder []
+(defn- <-TxOptions [^TxOptions opts]
+  (->> {:system-time (.getSystemTime opts)
+        :default-tz (.getDefaultTz opts)}
+       (into {} (remove (comp nil? val)))))
+
+(def ^:private json-tx-decoder
   (reify
     mf/Decode
     (decode [_ data _]
       (with-open [^InputStream data data]
         (let [^TxRequest tx (JsonSerde/decode data TxRequest)]
-          {:tx-ops (.getTxOps tx) :opts (.getOpts tx)})))))
+          {:tx-ops (.getTxOps tx)
+           :opts (some-> (.getOpts tx) <-TxOptions)})))))
 
 (defmethod route-handler :tx [_]
   {:muuntaja (m/create (-> muuntaja-opts
-                           (assoc-in [:formats "application/json" :encoder] (json-tx-encoder))
-                           (assoc-in [:formats "application/json" :decoder] (json-tx-decoder))))
+                           (assoc-in [:formats "application/json" :encoder] json-tx-encoder)
+                           (assoc-in [:formats "application/json" :decoder] json-tx-decoder)))
 
    :post {:handler (fn [{:keys [node] :as req}]
                      (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])]
@@ -127,10 +131,8 @@
                                 (xtp/execute-tx node tx-ops opts)
                                 (xtp/submit-tx node tx-ops opts))}))
 
-          ;; TODO spec-tools doesn't handle multi-spec with a vector,
-          ;; so we just check for vector and then conform later.
           :parameters {:body (s/keys :req-un [::tx-ops]
-                                     :opt-un [::opts ::await-tx?])}}})
+                                     :opt-un [:xtdb.server.tx/opts ::await-tx?])}}})
 
 (defn- throwable->ex-info [^Throwable t]
   (ex-info (.getMessage t) {::err/error-type :unknown-runtime-error
@@ -227,11 +229,31 @@
 
 (s/def ::query (some-fn string? seq? #(instance? Query %)))
 
-(s/def ::args (s/nilable #(instance? Map %)))
+(s/def ::args (s/nilable (some-fn #(instance? Map %)
+                                  #(instance? List %))))
 
 (s/def ::query-body
   (s/keys :req-un [::query],
           :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
+
+(defn- <-QueryOpts [^QueryOptions opts]
+  (->> {:args (.getArgs opts)
+
+        :after-tx (.getAfterTx opts)
+        :basis (->> (if-let [basis (.getBasis opts)]
+                      (if (instance? Basis basis)
+                        {:current-time (.getCurrentTime basis)
+                         :at-tx (.getAtTx basis)}
+                        basis)
+                      nil)
+                    (into {} (remove (comp nil? val))))
+
+        :tx-timeout (.getTxTimeout opts)
+
+        :default-tz (.getDefaultTz opts)
+        :explain? (.getExplain opts)
+        :key-fn (.getKeyFn opts)}
+       (into {} (remove (comp nil? val)))))
 
 (defn json-query-decoder []
   (reify
@@ -239,7 +261,7 @@
     (decode [_ data _]
       (with-open [^InputStream data data]
         (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)]
-          (-> (into {} (.queryOpts query-request))
+          (-> (<-QueryOpts (.queryOpts query-request))
               (assoc :query (.sql query-request))))))))
 
 (defmethod route-handler :query [_]
@@ -265,12 +287,12 @@
                        {:status 200
                         :body (cond
                                 (string? query) (xtp/open-sql-query node query
-                                                                    (xt/->QueryOptions (into {:key-fn :snake-case-string}
-                                                                                             (dissoc query-opts :query))))
+                                                                    (into {:key-fn #xt/key-fn :snake-case-string}
+                                                                          (dissoc query-opts :query)))
 
                                 (seq? query) (xtp/open-xtql-query node query
-                                                                  (xt/->QueryOptions (into {:key-fn :snake-case-string}
-                                                                                           (dissoc query-opts :query))))
+                                                                  (into {:key-fn #xt/key-fn :snake-case-string}
+                                                                        (dissoc query-opts :query)))
 
                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))}))
 
@@ -289,7 +311,7 @@
   {:status 400
    :body (err/illegal-arg :malformed-request
                           (merge (r.coercion/encode-error (ex-data ex))
-                                 {::err/message (str "Malformed request: " (ex-message ex))}))})
+                                 {::err/message "malformed request"}))})
 
 (defn- unroll-xt-iae [ex]
   (if (instance? xtdb.IllegalArgumentException ex)

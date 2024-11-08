@@ -12,14 +12,14 @@ class TransactionKeyTest {
     fun testTransactionKeySerialization() {
         assertEquals(
             """{"txId":1,"systemTime":"1970-01-01T00:00:00Z"}""",
-            JSON_SERDE.encodeToString<TransactionKey>(txKey(1, Instant.ofEpochMilli(0))).trimIndent()
+            JSON_SERDE.encodeToString<TransactionKey>(TransactionKey(1, Instant.ofEpochMilli(0))).trimIndent()
         )
     }
 
     @Test
     fun testTransactionKeyDeserialization() {
         assertEquals(
-            txKey(1L, Instant.ofEpochMilli(0)),
+            TransactionKey(1L, Instant.ofEpochMilli(0)),
             JSON_SERDE.decodeFromString<TransactionKey>("""{"txId":1,"systemTime":"1970-01-01T00:00:00Z"}""")
         )
     }

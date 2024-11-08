@@ -4,7 +4,6 @@
             [clojure.java.io :as io]
             [integrant.core :as i]
             [integrant.repl :as ir]
-            [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -19,6 +18,7 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node ArrowHashTrie$RecencyBranch)))
 
+#_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
 (require '[xtdb.logging :refer [set-log-level!]])
 
 (def dev-node-dir

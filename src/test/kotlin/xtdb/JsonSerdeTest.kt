@@ -5,9 +5,11 @@ import clojure.lang.Symbol
 import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.msgpack.util.json.JSON
-import xtdb.api.query.*
-import xtdb.api.txKey
+import xtdb.api.TransactionKey
+import xtdb.api.query.IKeyFn
+import xtdb.http.Basis
+import xtdb.http.QueryOptions
+import xtdb.http.QueryRequest
 import java.time.*
 import java.util.*
 
@@ -161,18 +163,18 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeQueryRequest() {
-        val txKey = txKey(1, Instant.EPOCH)
+        val txKey = TransactionKey(1, Instant.EPOCH)
         QueryRequest(
             "SELECT * FROM foo",
-            queryOpts()
-                .args(mapOf("foo" to "bar"))
-                .basis(Basis(txKey, Instant.EPOCH))
-                .afterTx(txKey)
-                .txTimeout(Duration.parse("PT3H"))
-                .defaultTz(ZoneId.of("America/Los_Angeles"))
-                .explain(true)
-                .keyFn(IKeyFn.KeyFn.KEBAB_CASE_KEYWORD)
-                .build()
+            QueryOptions(
+                args = mapOf("foo" to "bar"),
+                basis = Basis(txKey, Instant.EPOCH),
+                afterTx = txKey,
+                txTimeout = Duration.parse("PT3H"),
+                defaultTz = ZoneId.of("America/Los_Angeles"),
+                explain = true,
+                keyFn = IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+            )
         ).assertRoundTrip2(
             """{
                 "sql": "SELECT * FROM foo",

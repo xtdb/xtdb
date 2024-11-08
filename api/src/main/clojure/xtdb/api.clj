@@ -8,28 +8,17 @@
   * `xtdb.node`, for an in-process node.
   * `xtdb.client`, for a remote client."
 
-  (:require [clojure.spec.alpha :as s]
-            [xtdb.backtick :as backtick]
+  (:require [xtdb.backtick :as backtick]
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time])
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
-           (java.util List Map Iterator)
+           (java.util Iterator)
            [java.util.stream Stream]
            (xtdb.api TransactionKey)
-           (xtdb.api.query Basis QueryOptions)
-           (xtdb.api.tx TxOptions)
            xtdb.types.ClojureForm))
-
-(defn- expect-instant [instant]
-  (when-not (s/valid? ::time/datetime-value instant)
-    (throw (err/illegal-arg :xtdb/invalid-date-time
-                            {::err/message "expected date-time"
-                             :timestamp instant})))
-
-  (time/->instant instant))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->ClojureForm [form]
@@ -41,21 +30,6 @@
 
 (defmethod print-method ClojureForm [clj-form w]
   (print-dup clj-form w))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->QueryOptions [{:keys [args after-tx basis tx-timeout default-tz explain? key-fn], :or {key-fn :kebab-case-keyword}}]
-  (-> (QueryOptions/queryOpts)
-      (cond-> (instance? Map args) (.args ^Map args)
-              (sequential? args) (.args ^List args)
-              after-tx (.afterTx after-tx)
-              basis (.basis (Basis. (:at-tx basis) (:current-time basis)))
-              default-tz (.defaultTz default-tz)
-              tx-timeout (.txTimeout tx-timeout)
-              (some? explain?) (.explain explain?))
-
-      (.keyFn (serde/read-key-fn key-fn))
-
-      (.build)))
 
 (defn plan-q
   "General query execution function for controlling the realized result set.
@@ -73,8 +47,9 @@
 
   (^clojure.lang.IReduceInit [node query] (plan-q node query {}))
   (^clojure.lang.IReduceInit [node query opts]
-   (let [^QueryOptions query-opts (->QueryOptions (-> opts
-                                                      (time/after-latest-submitted-tx node)))]
+   (let [query-opts (-> opts
+                        (update :key-fn (comp serde/read-key-fn (fnil identity :kebab-case-keyword)))
+                        (time/after-latest-submitted-tx node))]
      (reify IReduceInit
        (reduce [_ f start]
          (with-open [^Stream res (cond
@@ -139,14 +114,6 @@
   ([node query opts]
    (into [] (plan-q node query opts))))
 
-(defn- ->TxOptions [tx-opts]
-  (cond
-    (instance? TxOptions tx-opts) tx-opts
-    (nil? tx-opts) (TxOptions.)
-    (map? tx-opts) (let [{:keys [system-time default-tz]} tx-opts]
-                     (TxOptions. (some-> system-time expect-instant)
-                                 default-tz))))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
   "Writes transactions to the log for processing
@@ -176,7 +143,7 @@
 
   (^TransactionKey [node, tx-ops] (submit-tx node tx-ops {}))
   (^TransactionKey [node, tx-ops tx-opts]
-   (xtp/submit-tx node (vec tx-ops) (->TxOptions tx-opts))))
+   (xtp/submit-tx node (vec tx-ops) tx-opts)))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
@@ -206,7 +173,7 @@
 
   (^TransactionKey [node, tx-ops] (execute-tx node tx-ops {}))
   (^TransactionKey [node, tx-ops tx-opts]
-   (xtp/execute-tx node (vec tx-ops) (->TxOptions tx-opts))))
+   (xtp/execute-tx node (vec tx-ops) tx-opts)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status

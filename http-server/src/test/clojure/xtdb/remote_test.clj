@@ -1,28 +1,17 @@
 (ns xtdb.remote-test
   (:require [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
-            [cognitect.transit :as transit]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as http]
             [xtdb.api :as xt]
             [xtdb.client.impl :as xtc]
             [xtdb.error :as err]
-            [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.tx-ops :as tx-ops])
-  (:import (java.io ByteArrayInputStream EOFException)
-           (xtdb JsonSerde)))
+  (:import (xtdb JsonSerde)))
 
 ;; ONLY put stuff here where remote DIFFERS to in-memory
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-http-client-node)
-
-#_ ; TODO accept arbitrary normalisation fns again
-(deftest normalisation-option
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Illegal argument: "
-                          (xt/q *node* '(from :docs [first-name last-name])
-                                {:key-fn identity}))
-        "remote can not serialize arbitrary fns"))
 
 (defn- http-url [endpoint] (str "http://localhost:" tu/*http-port* "/" endpoint))
 
@@ -224,8 +213,8 @@
                            :content-type :json
                            :form-params {:sql "SELECT _id FROM docs"
                                          :queryOpts {:basis {:atTx
-                                                             {"tx-id" tx-id
-                                                              "system-time" {"@type" "xt:instat" "@value" (str system-time)}}}}}
+                                                             {"txId" tx-id
+                                                              "systemTime" {"@type" "xt:instat" "@value" (str system-time)}}}}}
                            :url (http-url "query")
                            :throw-exceptions? false})
             body (decode-json body)]

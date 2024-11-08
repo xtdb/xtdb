@@ -13,7 +13,7 @@
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
-           (xtdb.api.tx TxOp$Sql TxOps TxOptions)
+           (xtdb.api.tx TxOp$Sql TxOps)
            (xtdb.tx_ops AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PutDocs Update XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)))
 
@@ -159,16 +159,6 @@
 (defmethod print-method TxAborted [tx-result ^Writer w]
   (print-dup tx-result w))
 
-(defn tx-opts-read-fn [{:keys [system-time default-tz]}]
-  (TxOptions. system-time default-tz))
-
-(defn tx-opts-write-fn [^TxOptions tx-opts]
-  {:system-time (.getSystemTime tx-opts), :default-tz (.getDefaultTz tx-opts)})
-
-(defmethod print-dup TxOptions [tx-opts ^Writer w]
-  (.write w "#xt/tx-opts ")
-  (print-method (tx-opts-write-fn tx-opts) w))
-
 (defn- render-iae [^xtdb.IllegalArgumentException e]
   [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
 
@@ -193,9 +183,6 @@
 (defn runex-reader [[k message data]]
   (xtdb.RuntimeException. k message data nil))
 
-(defmethod print-method TxOptions [tx-opts w]
-  (print-dup tx-opts w))
-
 (def transit-read-handlers
   (merge transit/default-read-handlers
          tl/transit-read-handlers
@@ -218,7 +205,6 @@
           "xtdb.tx/delete-docs" (transit/read-handler tx-ops/map->DeleteDocs)
           "xtdb.tx/erase-docs" (transit/read-handler tx-ops/map->EraseDocs)
           "xtdb.tx/call" (transit/read-handler tx-ops/map->Call)
-          "xtdb/tx-opts" (transit/read-handler tx-opts-read-fn)
           "f64" (transit/read-handler double)
           "f32" (transit/read-handler float)
           "i64" (transit/read-handler long)
@@ -236,7 +222,6 @@
          {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
           TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
           TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))
-          TxOptions (transit/write-handler "xtdb/tx-opts" tx-opts-write-fn)
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" (juxt ex-message ex-data))

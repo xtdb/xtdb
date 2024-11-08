@@ -367,10 +367,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt/q *node* "SELECT t1.body FROM t1 FOR ALL VALID_TIME"))))
 
 (deftest test-submit-tx-system-time-opt
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"expected date-time"
-                          (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]]
-                                        {:system-time "foo"}))))
+  (t/is (thrown? IllegalArgumentException
+                 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]]
+                               {:system-time "foo"}))))
 
 (t/deftest test-basic-xtql-dml
   (letfn [(all-users [tx]

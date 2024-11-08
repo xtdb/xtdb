@@ -22,7 +22,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log Log$Factory TxLog$Record TxLog$Subscriber)
-           (xtdb.api.tx TxOp$Sql TxOptions)
+           (xtdb.api.tx TxOp$Sql)
            (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PutDocs SqlByteArgs Update XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
@@ -433,9 +433,8 @@
   (util/close log))
 
 (defn submit-tx& ^java.util.concurrent.CompletableFuture
-  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops ^TxOptions opts]
+  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
-  (let [system-time (some-> opts .getSystemTime)]
-    (.appendTx log (serialize-tx-ops allocator tx-ops
-                                     {:default-tz (or (some-> opts .getDefaultTz) default-tz)
-                                          :system-time system-time}))))
+  (.appendTx log (serialize-tx-ops allocator tx-ops
+                                   {:default-tz (:default-tz opts default-tz)
+                                    :system-time system-time})))

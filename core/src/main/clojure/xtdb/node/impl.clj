@@ -22,8 +22,8 @@
            (xtdb.api TransactionKey Xtdb Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.api.query Basis XtqlQuery)
-           [xtdb.api.tx TxOp TxOptions]
+           (xtdb.api.query XtqlQuery)
+           [xtdb.api.tx TxOp]
            xtdb.indexer.IIndexer
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -48,7 +48,7 @@
 
 (defn- mapify-query-opts-with-defaults [{:keys [basis] :as query-opts} default-tz latest-submitted-tx default-key-fn]
   ;;not all callers care about all defaulted query opts returned here
-  (let [{:keys [at-tx] :as basis} (cond->> basis (instance? Basis basis) (into {}))]
+  (let [{:keys [at-tx]} basis]
     (-> (into {:default-tz default-tz,
                :after-tx (or at-tx latest-submitted-tx)
                :key-fn default-key-fn}
@@ -83,7 +83,7 @@
                 (:port))
         (throw (IllegalStateException. "No Postgres wire server running."))))
 
-  (addMeterRegistry [this reg]
+  (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
 
   (module [_ clazz]
@@ -91,8 +91,8 @@
          (some #(when (instance? clazz %) %))))
 
   xtp/PNode
-  (submit-tx [this tx-ops opts]
-    (let [system-time (some-> ^TxOptions opts .getSystemTime)
+  (submit-tx [this tx-ops {:keys [system-time] :as opts}]
+    (let [system-time (some-> system-time time/expect-instant)
           tx-key (try
                    @(log/submit-tx& this (->TxOps tx-ops) opts)
                    (catch ExecutionException e
