@@ -1,8 +1,28 @@
 [versions]
+arrow="17.0.0"
+arrow-adbc="0.14.0"
+clojure="1.12.0"
+netty="4.1.110.Final"
 reitit="0.5.15"
 muuntaja="0.6.8"
 
 [libraries]
+arrow-algorithm={ group="org.apache.arrow", name="arrow-algorithm", version.ref="arrow" }
+arrow-memory-netty={ group="org.apache.arrow", name="arrow-memory-netty", version.ref="arrow" }
+arrow-compression={ group="org.apache.arrow", name="arrow-compression", version.ref="arrow" }
+arrow-vector={ group="org.apache.arrow", name="arrow-vector", version.ref="arrow" }
+arrow-adbc={ group="org.apache.arrow.adbc", name="adbc-core", version.ref="arrow-adbc" }
+arrow-adbc-fsql={ group="org.apache.arrow.adbc", name="adbc-driver-flight-sql", version.ref="arrow-adbc" }
+netty-common={ group="io.netty", name="netty-common", version.ref="netty" }
+
+clojure={ group="org.clojure", name="clojure", version.ref="clojure" }
+clojure-tools-logging={ group="org.clojure", name="tools.logging", version="1.2.4" }
+clojure-spec={ group="org.clojure", name="spec.alpha", version="0.3.218" }
+clojure-data-json={ group="org.clojure", name="data.json", version="2.4.0" }
+clojure-data-csv={ group="org.clojure", name="data.csv", version="1.0.1" }
+clojure-tools-cli={ group="org.clojure", name="tools.cli", version="1.0.206" }
+transit-clj={ group="com.cognitect", name="transit-clj", version="1.0.329" }
+
 muuntaja={ group="metosin", name="muuntaja", version.ref="muuntaja" }
 reitit-core={ group="metosin", name="reitit-core", version.ref="reitit" }
 reitit-interceptors={ group="metosin", name="reitit-interceptors", version.ref="reitit" }

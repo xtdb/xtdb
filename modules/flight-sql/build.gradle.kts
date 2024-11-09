@@ -45,6 +45,6 @@ dependencies {
 
     devImplementation(sourceSets.main.get().output)
 
-    testImplementation(deps.arrow.adbc.core)
-    testImplementation(deps.arrow.adbc.fsql)
+    testImplementation(libs.arrow.adbc)
+    testImplementation(libs.arrow.adbc.fsql)
 }

@@ -33,21 +33,3 @@ include("modules:c1-import", "modules:flight-sql")
 project(":modules:flight-sql").name = "xtdb-flight-sql"
 
 include("modules:bench", "modules:datasets")
-
-dependencyResolutionManagement {
-    versionCatalogs {
-        create("deps") {
-            version("arrow", "17.0.0")
-            library("arrow-algorithm", "org.apache.arrow", "arrow-algorithm").versionRef("arrow")
-            library("arrow-compression", "org.apache.arrow", "arrow-compression").versionRef("arrow")
-            library("arrow-vector", "org.apache.arrow", "arrow-vector").versionRef("arrow")
-            library("arrow-memory-netty", "org.apache.arrow", "arrow-memory-netty").versionRef("arrow")
-
-            version("arrow-adbc", "0.14.0")
-            library("arrow-adbc-core", "org.apache.arrow.adbc", "adbc-core").versionRef("arrow-adbc")
-            library("arrow-adbc-fsql", "org.apache.arrow.adbc", "adbc-driver-flight-sql").versionRef("arrow-adbc")
-
-            library("clojure-lang", "org.clojure", "clojure").version("1.12.0-rc1")
-        }
-    }
-}

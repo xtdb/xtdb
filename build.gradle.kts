@@ -101,7 +101,7 @@ allprojects {
 
         if (plugins.hasPlugin("dev.clojurephant.clojure")) {
             dependencies {
-                implementation(deps.clojure.lang)
+                implementation(libs.clojure)
 
                 testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
                 nrepl("cider", "cider-nrepl", "0.50.1")
