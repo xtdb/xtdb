@@ -20,12 +20,14 @@
   (:import (java.io InputStream)
            (java.lang Thread$State)
            (java.net Socket)
+           (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            java.util.Calendar
            (java.util.concurrent CountDownLatch TimeUnit)
            java.util.List
            java.util.TimeZone
+           (org.pg.codec CodecParams)
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
            (org.postgresql.util PGInterval PGobject PSQLException)
@@ -1887,6 +1889,51 @@ ORDER BY t.oid DESC LIMIT 1"
              (-> (jdbc/execute-one! conn ["SELECT * FROM foo"])
                  (update :nest (fn [^PGobject nest]
                                  (serde/read-transit (.getBytes (.getValue nest)) :json))))))))
+
+(deftest test-pg2-transit-param
+  (with-open [conn (pg-conn {})]
+    (pg/execute conn
+      "INSERT INTO foo (_id, v) VALUES (1, $1)"
+      {:params [(String. (serde/write-transit {:a 1, :b 2} :json))]
+       :oids [(int 16384)]})
+    (t/is (= (pg/execute conn "SELECT v FROM foo")
+             [{:v {:a 1, :b 2}}]))))
+
+(defn ^bytes remaining-bytes [^ByteBuffer buf]
+  (let [res (byte-array (.remaining buf))]
+    (.get buf res)
+    res))
+
+(def pg2-transit-processor
+  (reify org.pg.processor.IProcessor
+    (^String encodeTxt [_this ^Object obj ^CodecParams _codecParams]
+      (String. (serde/write-transit obj :json)))
+    (^Object decodeTxt [_this ^String s ^CodecParams _codecParams]
+      (serde/read-transit (.getBytes s) :json))
+    (^ByteBuffer encodeBin [_this ^Object obj ^CodecParams _codecParams]
+      (ByteBuffer/wrap (serde/write-transit obj :json)))
+    (^Object decodeBin [_this ^ByteBuffer buf ^CodecParams _codecParams]
+      (serde/read-transit (remaining-bytes buf) :json))))
+
+(deftest test-pg2-transit-param-using-custom-type
+  (with-open [conn (pg-conn {:type-map {:pg_catalog/transit pg2-transit-processor}
+                             :pg-params {"fallback_output_format" "transit"}})]
+    (pg/execute conn
+      "INSERT INTO foo (_id, v) VALUES (1, $1)"
+      {:params [{:a 1, :b 2}]
+       :oids [(int 16384)]})
+    (t/is (= (pg/execute conn "SELECT v FROM foo")
+             [{:v {"a" 1, "b" 2}}])))
+  (with-open [conn (pg-conn {:binary-encode? true
+                             :binary-decode? true
+                             :type-map {:pg_catalog/transit pg2-transit-processor}
+                             :pg-params {"fallback_output_format" "transit"}})]
+    (pg/execute conn
+      "INSERT INTO foo (_id, v) VALUES (1, $1)"
+      {:params [{:a 1, :b 2}]
+       :oids [(int 16384)]})
+    (t/is (= (pg/execute conn "SELECT v FROM foo")
+             [{:v {"a" 1, "b" 2}}]))))
 
 (deftest insert-select-test-3684
   (with-open [conn (jdbc-conn)]
