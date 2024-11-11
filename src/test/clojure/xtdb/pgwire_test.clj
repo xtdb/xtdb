@@ -1650,7 +1650,7 @@
              treated as unspecified and therefore considered text")
 
       (t/is (thrown-with-msg?
-             PGError #"cannot text-encode a value: 1, OID: TEXT, type: java.lang.Long"
+             PGError #"cannot text-encode, oid: 25, type: java.lang.Long, value: 1"
              (pg/execute conn "SELECT $1 v" {:params [1]}))
             "non text params error"))
 
