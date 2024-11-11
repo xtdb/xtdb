@@ -172,7 +172,8 @@
           :default-tz (ig/ref :xtdb/default-tz)
           :q-src (ig/ref :xtdb.query/query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)}
+          :metrics-registry (ig/ref :xtdb.metrics/registry)
+          :authn (ig/ref :xtdb/authn)}
          opts))
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]

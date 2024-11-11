@@ -9,7 +9,7 @@
 
 (defprotocol PStatus
   (latest-submitted-tx-id [node])
-  (status [node]))
+  (status [node] [node opts]))
 
 (def http-routes
   [["/status" {:name :status
