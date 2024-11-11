@@ -30,7 +30,7 @@ data class QueryOptions(
     val txTimeout: Duration? = null,
     val defaultTz: ZoneId? = null,
     val explain: Boolean = false,
-    val keyFn: IKeyFn<*>? = null
+    val keyFn: IKeyFn<*>? = null,
 ) {
 
     internal object ArgsSerde: KSerializer<Map<String, *>> {

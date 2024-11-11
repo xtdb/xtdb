@@ -25,6 +25,9 @@ dependencies {
     api("pro.juxt.clojars-mirrors.metosin", "reitit-core", "0.5.15")
 
     api(kotlin("stdlib-jdk8"))
+
+    testImplementation(project(":"))
+    testImplementation(project(":xtdb-http-server"))
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

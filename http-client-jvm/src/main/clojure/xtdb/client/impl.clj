@@ -4,8 +4,7 @@
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
             [xtdb.protocols :as xtp]
-            [xtdb.serde :as serde]
-            [xtdb.time :as time])
+            [xtdb.serde :as serde])
   (:import [java.io EOFException InputStream]
            java.lang.AutoCloseable
            java.net.http.HttpClient
@@ -73,29 +72,32 @@
       (.close body)
       (throw t))))
 
-(defn- open-query [client query query-opts]
+(defn- open-query [client query {:keys [authn] :as query-opts}]
   (:body (request client :post :query
                   {:content-type :transit+json
+                   :basic-auth (zipmap [:user :pass] authn)
                    :form-params (into {:query query, :after-tx-id (xtp/latest-submitted-tx-id client)}
-                                      query-opts)
+                                      (dissoc query-opts :authn))
                    :as ::transit+json->result-or-error})))
 
 (defrecord XtdbClient [base-url, ^HttpClient http-client, !latest-submitted-tx-id]
   xtp/PNode
-  (submit-tx [client tx-ops opts]
+  (submit-tx [client tx-ops {:keys [authn] :as opts}]
     (let [{tx-id :body} (request client :post :tx
                                  {:content-type :transit+json
+                                  :basic-auth (zipmap [:user :pass] authn)
                                   :form-params {:tx-ops (vec tx-ops)
-                                                :opts opts}})]
+                                                :opts (dissoc opts :authn)}})]
 
       (swap! !latest-submitted-tx-id (fnil max tx-id) tx-id)
       tx-id))
 
-  (execute-tx [client tx-ops opts]
+  (execute-tx [client tx-ops {:keys [authn] :as opts}]
     (let [{tx-res :body} (request client :post :tx
                                   {:content-type :transit+json
+                                   :basic-auth (zipmap [:user :pass] authn)
                                    :form-params {:tx-ops (vec tx-ops)
-                                                 :opts opts
+                                                 :opts (dissoc opts :authn)
                                                  :await-tx? true}})
           tx-id (:tx-id tx-res)]
       (swap! !latest-submitted-tx-id (fnil max tx-id) tx-id)
@@ -111,7 +113,15 @@
   (latest-submitted-tx-id [_] @!latest-submitted-tx-id)
 
   (status [client]
-    (:body (request client :get :status)))
+    (:body (request client :post :status
+                    {:content-type :transit+json
+                     :form-params {}})))
+
+  (status [client {:keys [authn] :as opts}]
+    (:body (request client :post :status
+                    {:content-type :transit+json
+                     :basic-auth (zipmap [:user :pass] authn)
+                     :form-params {:opts (dissoc opts :authn)}})))
 
   AutoCloseable
   (close [_]

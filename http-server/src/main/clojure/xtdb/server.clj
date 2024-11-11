@@ -1,5 +1,6 @@
 (ns xtdb.server
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [jsonista.core :as json]
@@ -20,6 +21,7 @@
             [ring.util.response :as ring-response]
             [spec-tools.core :as st]
             [xtdb.api :as xt]
+            [xtdb.authn :as authn]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -27,8 +29,9 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.io InputStream OutputStream)
+           [java.nio.charset StandardCharsets]
            (java.time Duration ZoneId)
-           (java.util List Map)
+           (java.util Base64 Base64$Decoder List Map)
            [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
@@ -97,8 +100,8 @@
   {:muuntaja (m/create (-> muuntaja-opts
                            (assoc-in [:formats "application/json" :encoder] (json-status-encoder))))
 
-   :get (fn [{:keys [node] :as _req}]
-          {:status 200, :body (xtp/status node)})})
+   :post {:handler (fn [{:keys [node] :as _req}]
+                     {:status 200, :body (xtp/status node)})}})
 
 (def ^:private json-tx-encoder
   (reify
@@ -240,13 +243,10 @@
 
 (defn- <-QueryOpts [^QueryOptions opts]
   (->> {:args (.getArgs opts)
-
         :after-tx-id (.getAfterTxId opts)
         :snapshot-time (.getSnapshotTime opts)
         :current-time (.getCurrentTime opts)
-
         :tx-timeout (.getTxTimeout opts)
-
         :default-tz (.getDefaultTz opts)
         :explain? (.getExplain opts)
         :key-fn (.getKeyFn opts)}
@@ -258,7 +258,7 @@
     (decode [_ data _]
       (with-open [^InputStream data data]
         (let [^QueryRequest query-request (JsonSerde/decode data QueryRequest)]
-          (-> (<-QueryOpts (.queryOpts query-request))
+          (-> (some-> (.queryOpts query-request) <-QueryOpts)
               (assoc :query (.sql query-request))))))))
 
 (defmethod route-handler :query [_]
@@ -302,7 +302,7 @@
          :muuntaja (m/create m/default-options)}})
 
 (defn- handle-ex-info [ex _req]
-  {:status 400, :body ex})
+  {:status (::status (ex-data ex) 400), :body ex})
 
 (defn- handle-request-coercion-error [ex _req]
   {:status 400
@@ -325,45 +325,76 @@
                             (merge {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")}
                                    #_(ex-data ex)))}))
 
-(defn- default-handler
-  [^Exception e _]
-  {:status 500 :body (throwable->ex-info e)})
+(defn- default-handler [e _]
+  {:status 500, :body (throwable->ex-info e)})
+
+(def ^Base64$Decoder base-64-decoder (Base64/getDecoder))
+
+(defn- decode-basic-auth [auth-header]
+  (when-let [[_ ^String b64] (re-matches #"Basic (.*)" auth-header)]
+    (-> (String. (.decode base-64-decoder b64) StandardCharsets/UTF_8)
+        (str/split #":"))))
+
+(def authenticate-interceptor
+  {:name ::authenticate
+   :enter (fn [{:keys [request] :as ctx}]
+            (let [{:keys [node remote-addr]} request
+                  [user password] (some-> (get-in request [:headers "authorization"])
+                                          (decode-basic-auth))
+                  success-ctx (-> ctx
+                                  ;; to not leak a password in some logs somewhere
+                                  (update-in [:request :headers] dissoc "authorization"))]
+
+              (case (authn/first-matching-rule (:authn node) remote-addr user)
+                :trust success-ctx
+                :password (if (authn/verify-pw node user password)
+                            success-ctx
+                            (assoc ctx :error (ex-info (str "password authentication failed for user: " user)
+                                                       {:type :unauthenticated
+                                                        ::status 401})))
+
+                (assoc ctx :error (ex-info "authn failed" {:type :unauthenticated
+                                                           ::status 401})))))})
 
 (def router
-  (http/router xtp/http-routes
-               {:expand (fn [{route-name :name, :as route} opts]
-                          (r/expand (cond-> route
-                                      route-name (merge (route-handler route)))
-                                    opts))
+  (let [m (m/create muuntaja-opts)]
+    (http/router xtp/http-routes
+                 {:expand (fn [{route-name :name, :as route} opts]
+                            (r/expand (cond-> route
+                                        route-name (merge (route-handler route)))
+                                      opts))
 
-                :data {:muuntaja (m/create muuntaja-opts)
-                       :coercion rc.spec/coercion
-                       :interceptors [r.swagger/swagger-feature
-                                      [ri.parameters/parameters-interceptor]
-                                      [ri.muuntaja/format-negotiate-interceptor]
+                  :data {:muuntaja m
+                         :coercion rc.spec/coercion
+                         :interceptors [r.swagger/swagger-feature
+                                        [ri.parameters/parameters-interceptor]
+                                        [ri.muuntaja/format-negotiate-interceptor]
 
-                                      [ri.muuntaja/format-response-interceptor]
+                                        [ri.exception/exception-interceptor
+                                         (merge ri.exception/default-handlers
+                                                {::ri.exception/default default-handler
+                                                 xtdb.IllegalArgumentException handle-ex-info
+                                                 xtdb.RuntimeException handle-ex-info
+                                                 :unauthenticated handle-ex-info
+                                                 :muuntaja/decode handle-muuntaja-decode-error
+                                                 ::r.coercion/request-coercion handle-request-coercion-error
+                                                 ::ri.exception/wrap (fn [handler e req]
+                                                                       (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
+                                                                       (let [response-format (:raw-format (:muuntaja/response req))]
+                                                                         (m/format-response m req
+                                                                                            (cond-> (handler e req)
+                                                                                              (#{"application/jsonl"} response-format)
+                                                                                              (assoc :muuntaja/content-type "application/json")))))})]
 
-                                      [ri.exception/exception-interceptor
-                                       (merge ri.exception/default-handlers
-                                              {::ri.exception/default default-handler
-                                               xtdb.IllegalArgumentException handle-ex-info
-                                               xtdb.RuntimeException handle-ex-info
-                                               ::r.coercion/request-coercion handle-request-coercion-error
-                                               :muuntaja/decode handle-muuntaja-decode-error
-                                               ::ri.exception/wrap (fn [handler e req]
-                                                                     (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
-                                                                     (let [response-format (:raw-format (:muuntaja/response req))]
-                                                                       (cond-> (handler e req)
-                                                                         (#{"application/jsonl"} response-format)
-                                                                         (assoc :muuntaja/content-type "application/json"))))})]
+                                        authenticate-interceptor
 
-                                      [ri.muuntaja/format-request-interceptor]
-                                      [rh.coercion/coerce-request-interceptor]]}}))
+                                        [ri.muuntaja/format-response-interceptor]
+                                        [ri.muuntaja/format-request-interceptor]
+                                        [rh.coercion/coerce-request-interceptor]]}})))
 
 (defn- with-opts [opts]
   {:enter (fn [ctx]
-            (update ctx :request merge opts))})
+            (update ctx :request into opts))})
 
 (defn handler [node]
   (http/ring-handler router
@@ -377,7 +408,6 @@
   (let [port (.getPort module)
         ^Server server (j/run-jetty (handler node)
                                     (merge {:port port, :h2c? true, :h2? true}
-                                           #_jetty-opts
                                            {:async? true, :join? false}))]
     (log/info "HTTP server started on port:" port)
     (reify XtdbModule

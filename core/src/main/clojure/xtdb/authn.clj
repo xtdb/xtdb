@@ -9,9 +9,10 @@
   (hashers/derive pw {:alg :argon2id}))
 
 (defn verify-pw [node user password]
-  (when-let [{:keys [encrypted]} (first (xt/q node ["SELECT passwd AS encrypted FROM pg_user WHERE username = ?" user]))]
-    (when (:valid (hashers/verify password encrypted))
-      user)))
+  (when password
+    (when-let [{:keys [encrypted]} (first (xt/q node ["SELECT passwd AS encrypted FROM pg_user WHERE username = ?" user]))]
+      (when (:valid (hashers/verify password encrypted))
+        user))))
 
 (defn first-matching-rule [{:keys [rules]} address user]
   (some (fn [{rule-user :user, rule-address :address, :keys [method]}]

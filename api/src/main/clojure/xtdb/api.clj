@@ -186,8 +186,8 @@
 (defn status
   "Returns the status of this node as a map,
   including details of both the latest submitted and completed tx"
-  [node]
-  (xtp/status node))
+  ([node] (xtp/status node))
+  ([node opts] (xtp/status node opts)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro template
