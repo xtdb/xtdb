@@ -119,28 +119,6 @@
       (t/is (instance? xtdb.RuntimeException body))
       (t/is (= "data exception - division by zero" (ex-message body)))
       (t/is (= {:xtdb.error/error-key :xtdb.expression/division-by-zero}
-               (ex-data body)))))
-
-  ;; We shouldn't be able to produce deterministically an unknown runtime error.
-  #_
-  (t/testing "unknown runtime error"
-    (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
-          {:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
-                                                         :as :string
-                                                         :request-method :post
-                                                         :content-type :transit+json
-                                                         :form-params {:query "SELECT UPPER(docs.name) AS name FROM docs"
-                                                                       :basis {:at-tx tx}}
-                                                         :transit-opts xtc/transit-opts
-                                                         :url (http-url "query")
-                                                         :throw-exceptions? false})
-          body (decode-json body)]
-      (t/is (= 500 status))
-      (t/is (= "No method in multimethod 'codegen-call' for dispatch value: [:upper :i64]"
-               (ex-message body)))
-      (t/is (= {:xtdb.error/error-type :unknown-runtime-error,
-                :class "java.lang.IllegalArgumentException",
-                :stringified "java.lang.IllegalArgumentException: No method in multimethod 'codegen-call' for dispatch value: [:upper :i64]"}
                (ex-data body))))))
 
 (def json-tx-ops
