@@ -44,6 +44,7 @@ export default defineConfig({
                     items: [
                         {
                             label: 'Immutability Walkthrough',
+                            collapsed: true,
                             items: [
                                 'tutorials/immutability-walkthrough/part-1',
                                 'tutorials/immutability-walkthrough/part-2',
@@ -52,27 +53,27 @@ export default defineConfig({
                             ],
                         },
 
+                        {
+                            label: 'Industry Use-cases',
+                            collapsed: true,
+                            items: [
+                                {
+                                    label: 'Financial Services',
+                                    items: [
+                                        'tutorials/financial-usecase/time-in-finance',
+                                        'tutorials/financial-usecase/commodities-pnl',
+                                        'tutorials/financial-usecase/late-trade',
+                                        'tutorials/financial-usecase/auditing-change',
+                                        'tutorials/financial-usecase/counterparty-risk',
+                                        'tutorials/financial-usecase/backtesting',
+                                    ],
+                                },
+                            ],
+                        },
+
                         'tutorials/introducing-xtql',
 
                         { label: 'Learn XTQL Today (Clojure) ↗', link: '/static/learn-xtql-today-with-clojure.html', attrs: { target: '_blank' } },
-                    ],
-                },
-
-                {
-                    label: 'Industry Use-cases',
-                    collapsed: true,
-                    items: [
-                        {
-                            label: 'Financial Services',
-                            items: [
-                                'tutorials/financial-usecase/time-in-finance',
-                                'tutorials/financial-usecase/commodities-pnl',
-                                'tutorials/financial-usecase/late-trade',
-                                'tutorials/financial-usecase/auditing-change',
-                                'tutorials/financial-usecase/counterparty-risk',
-                                'tutorials/financial-usecase/backtesting',
-                            ],
-                        },
                     ],
                 },
 
