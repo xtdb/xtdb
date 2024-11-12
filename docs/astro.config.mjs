@@ -34,7 +34,11 @@ export default defineConfig({
                     label: 'Introduction',
                     collapsed: true,
                     items: [
-                        'index', 'quickstart/sql-overview', 'intro/installation-via-docker'
+                        'index',
+                        'intro/getting-started',
+
+                        'intro/support',
+                        { label: 'Roadmap', link: '/intro/roadmap' },
                     ],
                 },
 
@@ -42,6 +46,8 @@ export default defineConfig({
                     label: 'Tutorials',
                     collapsed: true,
                     items: [
+                        'tutorials/sql-overview',
+
                         {
                             label: 'Immutability Walkthrough',
                             collapsed: true,
@@ -172,21 +178,6 @@ export default defineConfig({
                             ]
                         }
                     ]
-                },
-                {
-                    label: 'Appendices',
-                    collapsed: true,
-                    items: [
-                        { label: 'Mission', link: '/intro/why-xtdb' },
-                        { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
-                        { label: 'How XTDB works', link: '/intro/data-model' },
-                        // { label: 'Architecture', link: '/intro/architecture' },
-                        // { label: 'Bitemporality', link: '/intro/bitemporality' }
-
-                        { label: 'Community', link: '/intro/community' },
-                        { label: 'Roadmap', link: '/intro/roadmap' },
-
-                    ],
                 },
             ],
 

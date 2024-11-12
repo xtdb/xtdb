@@ -1,0 +1,62 @@
+---
+title: Getting Started
+---
+
+This guide will help you run your first queries with XTDB - either locally, or through the online XTDB playground.
+
+Once you have an XTDB server running, you might:
+
+* run through the link:/tutorials/sql-overview[SQL Quickstart]
+* connect using your link:/drivers[language's existing PostgreSQL drivers]
+
+== Try XTDB in your browser
+
+You can play with inserting data and querying right now using the https://play.xtdb.com[XT Play^] web console.
+
+== Run locally with Docker
+
+Alternatively, you can run a 'standalone' (non-production, non-distributed) XTDB server locally using Docker:
+
+[source,bash]
+----
+# see https://github.com/xtdb/xtdb/pkgs/container/xtdb/versions for tags
+# `latest`: latest tagged release
+# `nightly`: built every night from `main` branch
+# `edge`: latest nightly plus urgent fixes
+
+docker run -it -p 5432:5432 ghcr.io/xtdb/xtdb
+----
+
+This command starts a PostgreSQL wire-compatible server on port 5432.
+
+After seeing a 'Node started' log message, you can connect to XTDB using your PostgreSQL tool of choice.
+
+Here, we use the 'psql' CLI tool, included as standard with PostgreSQL:
+
+[source,bash]
+----
+psql -U xtdb -h localhost xtdb
+----
+
+You can then run your first SQL queries against XTDB:
+
+[source,text]
+----
+psql (16.2, server 16)
+
+xtdb=> INSERT INTO messages RECORDS {_id: 1, message: 'Hello world!'};
+INSERT 0 0
+
+xtdb=> SELECT message FROM messages WHERE _id = 1;
+   message
+--------------
+ Hello world!
+(1 row)
+----
+
+Congratulations!
+
+From here, you can:
+
+* run through the link:/tutorials/sql-overview[SQL Quickstart]
+* connect using your link:/drivers[language's existing PostgreSQL drivers]

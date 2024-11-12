@@ -91,8 +91,24 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     @apply border-gray-500
 }
 
+.sl-markdown-content h2 {
+    @apply text-3xl
+}
+
+.sl-markdown-content h3 {
+    @apply text-2xl
+}
+
+.sl-markdown-content h4 {
+    @apply text-xl
+}
+
 .sl-markdown-content a {
     @apply hover:underline text-juxt-orange
+}
+
+.sl-markdown-content li > :last-child:not(li, ul, ol):not(a, strong, em, del, span, input, :where(.not-content *)) {
+    margin-bottom: initial
 }
 
 :root {

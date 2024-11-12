@@ -1,5 +1,5 @@
 ---
-title: XTDB community
+title: Support / Community
 ---
 
 XTDB is fundamentally free-to-use and open-source (under the https://opensource.org/license/mpl-2-0/[MPL license]).
