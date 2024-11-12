@@ -70,10 +70,6 @@ export default defineConfig({
                                 },
                             ],
                         },
-
-                        'tutorials/introducing-xtql',
-
-                        { label: 'Learn XTQL Today (Clojure) ↗', link: '/static/learn-xtql-today-with-clojure.html', attrs: { target: '_blank' } },
                     ],
                 },
 
@@ -97,23 +93,9 @@ export default defineConfig({
                     items: [
                         { label: 'Overview', link: '/reference/main' },
 
-                        {
-                            label: 'SQL',
-                            collapsed: true,
-                            items: [
-                                { label: 'Transactions', link: '/reference/main/sql/txs' },
-                                { label: 'Queries', link: '/reference/main/sql/queries' },
-                            ]
-                        },
+                        { label: 'SQL Transactions/DML', link: '/reference/main/sql/txs' },
+                        { label: 'SQL Queries', link: '/reference/main/sql/queries' },
 
-                        {
-                            label: 'XTQL (Clojure)',
-                            collapsed: true,
-                            items: [
-                                { label: 'Transactions', link: '/reference/main/xtql/txs' },
-                                { label: 'Queries', link: '/reference/main/xtql/queries' },
-                            ]
-                        },
                         {
                             label: 'Data Types',
                             collapsed: true,
@@ -175,6 +157,24 @@ export default defineConfig({
                                         { label: 'Google Cloud Storage', link: '/ops/config/storage/google-cloud' }
                                     ]
                                 }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    label: 'XTQL (Clojure)',
+                    collapsed: true,
+                    items: [
+                        'xtql/tutorials/introducing-xtql',
+
+                        { label: 'Learn XTQL Today ↗', link: '/static/learn-xtql-today-with-clojure.html', attrs: { target: '_blank' } },
+
+                        {
+                            label: 'Reference',
+                            collapsed: true,
+                            items: [
+                                { label: 'XTQL Transactions/DML', link: '/reference/main/xtql/txs' },
+                                { label: 'XTQL Queries', link: '/reference/main/xtql/queries' },
                             ]
                         }
                     ]
