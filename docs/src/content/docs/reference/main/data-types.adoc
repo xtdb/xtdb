@@ -2,160 +2,140 @@
 title: XTDB Data Types
 ---
 
-XTDB data types are implemented using Apache Arrow.
+The following types are available within XTDB:
 
-== Scalar Types
+== Numeric Types
 
-[cols="3,5,6,6"]
-|===
-|XTDB Type |Description |SQL Example |Clojure Example
+`SMALLINT`:: 16-bit signed integer
+`INT` | `INTEGER`:: 32-bit signed integer
+`BIGINT`:: 64-bit signed integer
+`FLOAT` | `REAL`:: 32-bit (IEEE single-precision) floating-point number
+`DOUBLE`:: 64-bit (IEEE double-precision) floating-point number
 
-|`BIGINT`
-|64-bit Signed Integer
-|`9223372036854775807`
-|`9223372036854775807`
+== Date/time types
 
-|`BOOLEAN`
-|3-Value Boolean: true, false, or null
-|`TRUE`
-|`true`
+`DATE`:: date without time.
++
+e.g. `DATE '2007-06-29'`
+`TIMESTAMP [WITHOUT TIMEZONE]`:: date and time, without a time-zone offset.
++
+* SQL standard: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01 00:00:00'`
+* ISO8601: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01T00:00:00'`
+`TIMESTAMP WITH TIMEZONE`:: date and time, with a time-zone offset.
++
+* SQL standard: `TIMESTAMP WITH TIMEZONE '2020-01-01 18:00:00+00:00'`
+* ISO8601 (`WITH TIMEZONE` optional):
+** `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00Z`
+** `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00+00:00'`
+** `TIMESTAMP [WITH TIMEZONE] '2020-08-01T18:00:00+01:00[Europe/London]'`
 
-|`DATE`
-|Date Without Time
-|`DATE '2007-06-29'`
-|`#time/date "2007-06-29"`
+`TIME [WITHOUT TIMEZONE]`::
+time-of-day, without a time-zone offset.
++
+e.g. `TIME '22:15:04.1237'`
 
-|`DOUBLE`
-|64-bit Floating Point Number
-|`1.0`
-|`1.0`
+`DURATION`:: (SQL extension) a fixed amount of time.
++
+Days are assumed to be 24 hours, months and years are not supported.
++
+* ISO8601: `DURATION 'PT1H3M5.533S'`
 
-|`FLOAT`
-|32-bit Floating Point Number
-|`1.0`
-|`1.0`
+`INTERVAL`:: a value representing the difference between two timestamps
++
+Intervals can either be expressed as years/months or days/hours/minutes/seconds (although these cannot overlap).
+Years are assumed to be 12 months, no other assumptions are either made or allowed.
++
+* SQL standard: `INTERVAL '1 3' YEAR TO MONTH`, `INTERVAL '163 12:00:00' DAY TO SECOND`
+* ISO8601: `INTERVAL 'P1Y3M'`, `INTERVAL 'P163DT12H'`
 
-|`INTEGER`
-|32-bit Signed Integer
-|`2147483647`
-|`2147483647`
+`PERIOD`:: a pair of timestamps representing a temporal range, with inclusive start and exclusive end ('closed-open').
++
+* `PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
+* `PERIOD(TIMESTAMP '1998-01-05T12:00:00Z', TIMESTAMP '1998-01-12T15:00:00Z')`
 
-|`INTERVAL`
-|Month-Day-Nano Interval
-|`INTERVAL '163 12:00:00' DAY TO SECOND`
-|`#xt/interval-mdn ["P163D" "PT12H"]`
 
-|`INTERVAL`
-|Year-Month Interval
-|`INTERVAL '12-11' YEAR TO MONTH`
-|`#xt/interval-ym "P12Y11M"`
+=== Conversions between temporal types
 
-|`PERIOD`
-| <a pair of TIMESTAMPs>
-|`PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
-|`(period #time/date "1998-01-05" #time/date "1998-01-12")`
+There are a number of considerations when casting between temporal types:
 
-|`SMALLINT`
-|16-bit Signed Integer
-|`32767`
-|`32767`
+* Casting from `DATE` to `TIMESTAMP` assumes the start of the day.
+* Casting to `TIMESTAMP WITH TIME ZONE` will use the system default time zone.
+* When explicitly casting to most temporal types, can specify an optional fractional precision to truncate the value to:
+** In SQL, the syntax for this would be `CAST(value AS TYPE(<precision>))`.
+* Casting to/from `VARCHAR` involves formatting or parsing as ISO8601 strings.
+* Intervals have specific casting behaviors, which are detailed in the next section.
 
-|`TIMESTAMP +
-[WITHOUT +
-TIMEZONE]`
-|Timestamp without a Timezone offset
-|`TIMESTAMP '16:00:00'`
-|`#time/date-time "2007-06-29T16:00:00"`
+=== Casting between Intervals
 
-|`TIMESTAMP +
-WITH +
-TIMEZONE`
-|Timestamp with a Timezone offset
-|`TIMESTAMP '16:00:00+04:00'`
-|`#time/zoned-date-time "2007-06-29T16:00:00+04:00"`
+Explicitly casting between intervals is supported, but only between **intervals of the same type**.
+When casting between intervals, it is required to specify an interval qualifier, otherwise the cast operation will not do anything.
 
-|`TIME +
-[WITHOUT +
-TIMEZONE]`
-|Time of day with nanosecond precision
-|`TIME '22:15:04.1237'`
-|`#time/time "22:15:04.1237"`
+Casting to an interval qualifier will:
 
-|`UUID`
-|Universally Unique Identifier
-|`'97a392d5-5e3f-406f-9651-a828ee79b156'`
-|`#uuid "97a392d5-5e3f-406f-9651-a828ee79b156"`
+* **Normalize** the interval to the new qualifier
++
+i.e. if an Interval of `25 hours` is cast to `DAY TO HOUR`, it will be normalized to `1 day 1 hour`.
+* **Truncate** the interval to the new qualifier
++
+i.e. if an Interval of `25 hours` is cast to `DAY`, it will be truncated to `1 day`.
 
-|`URI`
-|Universal Resource Identifier
-|`'https://xtdb.com'`
-|TBD
+=== Casting to/from Intervals
 
-|`VARBINARY`
-|Variable-Length Binary String (Byte Array)
-|`0x41424344`
-|TBD
+When casting to/from intervals from other types, the following rules apply:
 
-|`VARCHAR`
-|Variable-Length String with UTF8 character encoding
-|`'Hello'`
-|`"Hello"`
+* Casting from `VARCHAR` to an interval:
+** **Without** specifying an interval qualifier: will parse the string as an ISO8601 interval, and will return a day-time interval.
+** **With** an interval qualifier: will parse the string and output the type of interval based on the qualifier.
+* Casting from an `INTERVAL` to `VARCHAR` will format the interval as an ISO8601 string.
+* Casting from an `INTERVAL` to `DURATION`:
+** Will only work if the interval is a day-time interval.
+** Will return the entire interval as its ISO 8601 duration - any days will be converted to 24 hours.
+* Casting from a `DURATION` to `INTERVAL`:
+** Always returns a day-time interval.
+** **Without** specifying an interval qualifier: always returns with zero days and put the whole duration into the time part of the interval.
+** **With** an interval qualifier: will normalize and truncate the duration according to the interval qualifier (will normalize hours to days, with 1 day = 24 hours, if qualifier contains `DAY`).
 
-|`KEYWORD`
-|EDN Keyword
-|`-- TBD`
-|`:keyword`
+== Other scalar types
 
-|`DURATION`
-| Duration of time
-|`DURATION 'PT1H3M5S'`
-|`#time/duration "PT1H3M5S"`
+`BOOLEAN`:: 3-valued boolean: TRUE, FALSE or NULL
+`VARBINARY`:: a variable-length byte array
++
+e.g. `X('41af8e01')`
 
-|===
+`VARCHAR` | `TEXT`:: a variable-length character array
++
+e.g.:
++
+* `'hello world!'`
+* `+E'hello\n world!'+` - string containing C-style escape characters:
+** `\ooo`: octal
+** `\xXX`, `\uXXXX`, `\UXXXXXXXX`: 2, 4 or 8 hex digits
+** `\r`, `\n`, `\t`, `\\`, `\'`
+* `\$$dollar quoted string$$`: no need to escape single/double quotes etc in here.
+** dollars can also contain a tag, for nesting purposes: `$mytag$...$mytag$`
 
-////
-Undocumented / Unsupported:
-
-* Keyword / :keyword
-* TinyInt / :i8 -- the SQL Spec seems to have no direct support for TinyInt / Byte
-* Date/Time types with (seemingly?) no spec equivalent:
-** Instant
-** ZonedDateTime
-** OffsetDateTime
-** LocalDateTime
-** Duration
-** LocalDate
-
-Unsupported, but exists in spec:
-|`TIME WITH TIME ZONE`
-|`?`
-|Time of day with nanosecond precision
-|`TIME WITH TIME ZONE '22:15:04.1237'`
-
-////
+`URI`::
++
+e.g. `URI 'https://xtdb.com'`
+`UUID`::
++
+e.g. `UUID '97a392d5-5e3f-406f-9651-a828ee79b156'`
 
 == Collection Types
 
-XTDB supports arbitrarily nested data.
+XTDB supports arbitrarily nested data in a first-class way, without needing to store it as JSON:
 
-[cols="3,5,6,6"]
-|===
-|XTDB Type |Description |SQL Example |Clojure Example
+`ARRAY`:: an ordered list of values
++
+e.g.
++
+* `ARRAY[1, 2, 3]`
+* `[1, 2, 3]`
 
-|`ARRAY`
-|Array/List/Vector of Values
-|`[1, 2, 3]`
-|`[1 2 3]`
-
-|`OBJECT`
-|Object/Struct/Map of key-value pairs
-|`{'name':'Lucy', 'age':'38'}`
-|`{:name 'Lucy', :age '38'}`
-
-|`SET`
-|Set of distinct, unordered values
-|TBD
-|`#{"Lucy" "38"}`
-
-|===
-
+`OBJECT` | `RECORD`:: a mapping of keys to values:
++
+e.g.
++
+* `OBJECT(name: 'Lucy', age: 38)`
+* `RECORD(name: 'Lucy', age: 38)`
+* `{name: 'Lucy', age: 38}`

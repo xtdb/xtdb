@@ -96,14 +96,7 @@ export default defineConfig({
                         { label: 'SQL Transactions/DML', link: '/reference/main/sql/txs' },
                         { label: 'SQL Queries', link: '/reference/main/sql/queries' },
 
-                        {
-                            label: 'Data Types',
-                            collapsed: true,
-                            items: [
-                                { label: 'Overview', link: '/reference/main/data-types' },
-                                { label: 'Temporal Types', link: '/reference/main/data-types/temporal-types' },
-                            ]
-                        },
+                        { label: 'Data Types', link: '/reference/main/data-types' },
 
                         {
                             label: 'Standard Library',
