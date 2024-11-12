@@ -2,7 +2,7 @@
 title: SQL Transactions
 ---
 
-For examples on how to submit SQL transactions in each client library, see the link:/clients[individual driver documentation].
+For examples on how to submit SQL transactions in each client library, see the link:/drivers[individual driver documentation].
 
 [#tx-ops]
 == Transaction operations

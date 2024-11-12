@@ -2,7 +2,7 @@
 title: SQL Queries
 ---
 
-For examples on how to run SQL queries in each client library, see the link:/clients[individual driver documentation].
+For examples on how to run SQL queries in each client library, see the link:/drivers[individual driver documentation].
 
 == Top-level queries
 

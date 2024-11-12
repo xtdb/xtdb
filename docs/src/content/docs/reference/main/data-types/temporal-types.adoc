@@ -59,7 +59,7 @@ PERIOD(DATE '1998-01-05', DATE '1998-01-12') -- A Period specified with two date
 === XTQL / Client Library Examples
 
 The temporal types can also be constructed for use in XTQL queries and transactions within our various client libraries.
-For examples of these, see the link:/clients[individual client library documentation].
+For examples of these, see the link:/drivers[individual client library documentation].
 
 
 == Casting Between Temporal Types

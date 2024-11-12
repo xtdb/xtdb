@@ -2,7 +2,7 @@
 dist/
 
 # generated docs
-public/clients/clojure/codox
+public/drivers/clojure/codox
 
 # generated types
 .astro/
