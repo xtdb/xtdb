@@ -20,6 +20,6 @@ For details of how to connect to XTDB from your favourite language, see the foll
 
 XTDB is also compatible with many different PostgreSQL tools, including:
 
-* https://www.postgresql.org/docs/current/app-psql.html[psql] (PostgreSQL CLI) - connect with `psql -h localhost`
+* https://www.postgresql.org/docs/current/app-psql.html[psql^] (PostgreSQL CLI) - connect with `psql -h localhost`
 * link:https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools[SQLTools^] (VSCode extension)
 * link:https://www.metabase.com[Metabase^]
