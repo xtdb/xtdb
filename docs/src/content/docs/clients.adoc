@@ -12,6 +12,7 @@ That said, the advantage of embracing wire-protocol compatibility is that many P
 For details of how to connect to XTDB from your favourite language, see the following pages:
 
 * link:/clients/clojure[Clojure]
+* link:/clients/elixir[Elixir]
 * link:/clients/java[Java]
 * link:/clients/kotlin[Kotlin]
 * link:/clients/nodejs[Node.js]
