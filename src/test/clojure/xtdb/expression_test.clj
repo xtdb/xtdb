@@ -1,10 +1,11 @@
 (ns xtdb.expression-test
-  (:require [clojure.tools.logging :as log]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.test :as t]
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
+            [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.expression :as expr]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -2011,3 +2012,15 @@
   (t/is (thrown-with-msg? xtdb.IllegalArgumentException
                           #"\+ not applicable to types i64 and utf8"
                           (project1 '(+ 1 "2") {}))))
+
+(t/deftest test-kw-fns
+  (t/is (nil? (project1 '(namespace :bar) {})))
+  (t/is (= "foo" (project1 '(namespace :foo/bar) {})))
+  (t/is (= "bar" (project1 '(local-name :bar) {})))
+  (t/is (= "bar" (project1 '(local-name :foo/bar) {})))
+
+  (t/is (= :bar (project1 '(keyword "bar") {})))
+  (t/is (= :foo/bar (project1 '(keyword "foo/bar") {})))
+
+  (t/is (= ":bar" (project1 '(cast :bar :utf8) {})))
+  (t/is (= ":foo/bar" (project1 '(cast :foo/bar :utf8) {}))))

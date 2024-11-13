@@ -1085,12 +1085,36 @@
 (defmethod codegen-call [:upper :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[code]]
-                  `(ByteBuffer/wrap (.getBytes (.toUpperCase (resolve-string ~code)) StandardCharsets/UTF_8)))})
+                  `(str->buf (.toUpperCase (resolve-string ~code))))})
 
 (defmethod codegen-call [:lower :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[code]]
-                  `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))})
+                  `(str->buf (.toLowerCase (resolve-string ~code))))})
+
+(defmethod codegen-call [:namespace :keyword] [_]
+  {:return-type [:union #{:null :utf8}]
+   :continue-call (fn [f [kw]]
+                    (let [res (symbol 'ns)]
+                      `(if-let [~res (-> (buf->str ~kw)
+                                         (symbol) (namespace))]
+                         ~(f :utf8 `(str->buf ~res))
+                         ~(f :null nil))))})
+
+(defmethod codegen-call [:local_name :keyword] [_]
+  {:return-type :utf8
+   :->call-code (fn [[kw]]
+                  `(-> (buf->str ~kw) (symbol) (name) str->buf))})
+
+(defmethod codegen-call [:keyword :utf8] [_]
+  {:return-type :keyword
+   :->call-code first})
+
+(defmethod codegen-cast [:keyword :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[code]]
+                  `(-> (str ":" (buf->str ~code))
+                       str->buf))})
 
 (defmethod codegen-call [:random] [_]
   {:return-type :f64
@@ -1272,6 +1296,9 @@
     (.get buf bs)
     (.position buf pos)
     (String. bs)))
+
+(defn str->buf ^ByteBuffer [^String s]
+  (-> (.getBytes s StandardCharsets/UTF_8) (ByteBuffer/wrap)))
 
 (doseq [[col-type parse-sym] [[:i8 `Byte/parseByte]
                               [:i16 `Short/parseShort]
