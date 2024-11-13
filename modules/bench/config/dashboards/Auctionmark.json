@@ -30,7 +30,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -140,7 +140,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "get_item_seconds_count",
@@ -151,7 +151,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_user_seconds_count",
@@ -163,7 +163,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_bid_seconds_count",
@@ -175,7 +175,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_item_seconds_count",
@@ -187,7 +187,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_comment_seconds_count",
@@ -199,7 +199,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_comment_response_seconds_count",
@@ -211,7 +211,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_purchase_seconds_count",
@@ -223,7 +223,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_feedback_seconds_count",
@@ -235,7 +235,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "update_item_seconds_count",
@@ -247,7 +247,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "get_comment_seconds_count",
@@ -259,7 +259,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "get_user_info_seconds_count",
@@ -275,7 +275,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -381,7 +381,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "get_item_seconds",
@@ -396,7 +396,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -473,7 +473,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_bid_seconds",
@@ -488,7 +488,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -565,7 +565,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_item_seconds",
@@ -580,7 +580,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -657,7 +657,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "get_user_info_seconds",
@@ -672,7 +672,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -749,7 +749,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_user_seconds",
@@ -764,7 +764,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -841,7 +841,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_feedback_seconds",
@@ -856,7 +856,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -933,7 +933,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_comment_seconds",
@@ -948,7 +948,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1025,7 +1025,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_purchase_seconds",
@@ -1040,7 +1040,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1117,7 +1117,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "get_comment_seconds",
@@ -1132,7 +1132,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheusdatasource"
+        "uid": "DS_XTDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1209,7 +1209,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheusdatasource"
+            "uid": "DS_XTDB"
           },
           "editorMode": "builder",
           "expr": "new_comment_response_seconds",
