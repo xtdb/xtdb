@@ -40,16 +40,16 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
-(defn add-cache-gauges [reg meter-name ^Stats stats]
+(defn add-cache-gauges [reg meter-name get-stats]
   (doto reg
     (add-gauge (str meter-name ".pinnedBytes")
-               #(.getPinnedBytes stats)
+               #(.getPinnedBytes ^Stats (get-stats))
                {:unit "bytes"})
     (add-gauge (str meter-name ".evictableBytes")
-               #(.getEvictableBytes stats)
+               #(.getEvictableBytes ^Stats (get-stats))
                {:unit "bytes"})
     (add-gauge (str meter-name ".freeBytes")
-               #(.getFreeBytes stats)
+               #(.getFreeBytes ^Stats (get-stats))
                {:unit "bytes"})))
 
 (defn random-node-id []

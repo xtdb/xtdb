@@ -194,7 +194,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory, ^MeterRegistry metrics-registry]
   (let [memory-cache (MemoryCache. allocator (.getMaxCacheBytes factory))]
-    (metrics/add-cache-gauges metrics-registry "memorycache" (.getStats memory-cache))
+    (metrics/add-cache-gauges metrics-registry "memorycache" #(.getStats memory-cache))
     (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                        memory-cache
                        (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs))))
@@ -389,8 +389,8 @@
             disk-cache (DiskCache. disk-cache-root
                                    (or (.getMaxDiskCacheBytes factory)
                                        (calculate-limit-from-percentage-of-disk disk-cache-root (.getMaxDiskCachePercentage factory))))]
-        (metrics/add-cache-gauges metrics-registry "memorycache" (.getStats memory-cache))
-        (metrics/add-cache-gauges metrics-registry "diskcache" (.getStats disk-cache))
+        (metrics/add-cache-gauges metrics-registry "memorycache" #(.getStats memory-cache))
+        (metrics/add-cache-gauges metrics-registry "diskcache" #(.getStats disk-cache))
         (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                             memory-cache
                             disk-cache
