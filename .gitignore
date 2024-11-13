@@ -23,3 +23,6 @@ build
 # idea
 .idea/checkstyle-idea.xml
 .idea/codeStyles/*
+
+# This directory should only contain data not checked in
+src/test/resources/data/
