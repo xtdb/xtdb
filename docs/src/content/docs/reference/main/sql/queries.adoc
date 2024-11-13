@@ -288,15 +288,3 @@ ORDER BY o._id
 ]
 ----
 --
-
-
-[NOTE]
-====
-There is a table and column name mapping between SQL and XTQL: documents inserted with XTQL have their hyphens translated to underscores, and their namespace segments converted to `$` symbols, as hyphens, periods and slashes are not valid symbols in SQL identifiers.
-
-For example, `:foo.bar/baz-quux` in XTQL is referenced in SQL as `foo$bar$baz_quux`.
-
-The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `_id`, `_valid_from` and `_valid_to` respectively.
-
-This mapping is reversed when querying SQL documents from XTQL.
-====
