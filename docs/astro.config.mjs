@@ -149,7 +149,8 @@ export default defineConfig({
                                         { label: 'Azure Blob Storage', link: '/ops/config/storage/azure' },
                                         { label: 'Google Cloud Storage', link: '/ops/config/storage/google-cloud' }
                                     ]
-                                }
+                                },
+                               { label: 'Authentication', link: '/ops/config/authentication' }
                             ]
                         }
                     ]

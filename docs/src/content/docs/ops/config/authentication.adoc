@@ -1,0 +1,52 @@
+---
+title: Authentication
+---
+
+== Server-level settings
+
+XTDB lets you configure which users can connect to the database and which type of authentication method they need to use.
+An authentication rule consists of a `user`, a `method` and an ip `address` (in IPv4 or IPv6 format).
+[source,yaml]
+----
+- user: admin
+  address: 127.0.0.1
+  method: PASSWORD
+----
+The above authentication rule means that the `admin` user requires a password connecting from `localhost`.
+The authentication rules are passed to the server at startup and can be configured as below. The rules are considered in order
+until the first one matches. If none matches the connection is rejected.
+
+Below is a pgwire server configuration with 3 different rules.
+
+[source,yaml]
+----
+server:
+  port: 5432
+  authn:
+    authnRules:
+      # admin always requires a password
+      - user: admin
+        method: PASSWORD
+      # We trust local connections
+      - address: 127.0.0.1
+        method: TRUST
+      # Everything else requires a password.
+      - method: PASSWORD
+----
+
+A similar setup can be passed to the `http-server` module. Authentication (if required) needs to be passed to the http clients on every request as http is stateless.
+
+== Connection-level settings
+
+When a password is required for authentication it will be matched against the entries of the `pg_user` table. By default the `pg_user` table only contains the user "xtdb" with password "xtdb".
+
+You can add/alter users and their passwords with
+[source,sql]
+----
+CREATE USER alan WITH PASSWORD 'TURING'
+----
+and
+[source,sql]
+----
+ALTER USER ada WITH PASSWORD 'LOVELACE'
+----
