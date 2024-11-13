@@ -58,7 +58,6 @@ dateTimeLiteral
     | 'TIMESTAMP' withOrWithoutTimeZone? characterString #TimestampLiteral
     ;
 
-
 literal
     : ('+' | '-')? UNSIGNED_FLOAT #FloatLiteral
     | ('+' | '-')? UNSIGNED_INTEGER #IntegerLiteral
@@ -69,6 +68,7 @@ literal
     | intervalLiteral #IntervalLiteral0
     | 'DURATION' characterString #DurationLiteral
     | 'UUID' characterString #UUIDLiteral
+    | 'KEYWORD' characterString #KeywordLiteral
     | (TRUE | FALSE) #BooleanLiteral
     | NULL #NullLiteral
     ;
@@ -105,6 +105,7 @@ identifier
         | 'SETTING' | 'BASIS'
         | 'CARDINALITY'
         | 'ROLE'
+        | 'STR' | 'LOCAL_NAME' | 'NAMESPACE'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -140,6 +141,8 @@ dataType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'REGCLASS' #RegClassType
     | 'REGPROC' #RegProcType
+    | 'KEYWORD' #KeywordType
+    | 'UUID' #UuidType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
     ;
 
@@ -277,6 +280,9 @@ exprPrimary
     | 'UPPER' '(' expr ')' # UpperFunction
     | 'LOWER' '(' expr ')' # LowerFunction
     | 'TRIM' '(' trimSpecification? trimCharacter? 'FROM'? trimSource ')' # TrimFunction
+    | 'LOCAL_NAME' '(' expr ')' # LocalNameFunction
+    | 'NAMESPACE' '(' expr ')' # NamespaceFunction
+    | 'STR' '(' expr (',' expr)* ')' # StrFunction
 
     | 'OVERLAY' '('
         expr

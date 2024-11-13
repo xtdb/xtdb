@@ -37,6 +37,9 @@
 
 (declare ->ExprPlanVisitor map->ExprPlanVisitor ->QueryPlanVisitor)
 
+(defn accept-visitor [visitor ^ParserRuleContext ctx]
+  (.accept ctx visitor))
+
 (defn- ->col-sym
   ([n]
    (cond
@@ -963,6 +966,9 @@
       {:cast-type :interval
        :cast-opts (when interval-qualifier (iq-context->iq-map interval-qualifier))}))
 
+  (visitKeywordType [_ _] {:cast-type :keyword})
+  (visitUuidType [_ _] {:cast-type :uuid})
+
   (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
   (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
 
@@ -1044,6 +1050,10 @@
       "true" true
       "false" false
       "unknown" nil))
+
+  (visitKeywordLiteral [this ctx]
+    (let [s (.accept (.characterString ctx) this)]
+      (keyword (if (str/starts-with? s ":") (subs s 1) s))))
 
   (visitUUIDLiteral [this ctx] (parse-uuid-literal (.accept (.characterString ctx) this) env))
 
@@ -1158,6 +1168,10 @@
     (list 'concat
           (-> (.exprPrimary ctx 0) (.accept this))
           (-> (.exprPrimary ctx 1) (.accept this))))
+
+  (visitStrFunction [this ctx]
+    (xt/template (str ~@(->> (.expr ctx)
+                             (mapv (partial accept-visitor this))))))
 
   (visitIsBooleanValueExpr [this ctx]
     (let [boolean-value (-> (.booleanValue ctx) (.getText) (str/upper-case))
@@ -1546,6 +1560,9 @@
 
   (visitUpperFunction [this ctx] (list 'upper (-> (.expr ctx) (.accept this))))
   (visitUpperInfFunction [this ctx] (list 'upper_inf (-> (.expr ctx) (.accept this))))
+
+  (visitLocalNameFunction [this ctx] (list 'local_name (-> (.expr ctx) (.accept this))))
+  (visitNamespaceFunction [this ctx] (list 'namespace (-> (.expr ctx) (.accept this))))
 
   (visitTrimFunction [this ctx]
     (let [trim-fn (case (some-> (.trimSpecification ctx) (.getText) (str/upper-case))
@@ -1973,9 +1990,6 @@
 (defrecord InsertWithoutXtId []
   PlanError
   (error-string [_] "INSERT does not contain mandatory _id column"))
-
-(defn accept-visitor [visitor ^ParserRuleContext ctx]
-  (.accept ctx visitor))
 
 (defrecord InvalidParamIndex [arg-count param-idx]
   PlanError

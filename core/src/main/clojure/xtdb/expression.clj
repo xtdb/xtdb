@@ -1116,6 +1116,14 @@
                   `(-> (str ":" (buf->str ~code))
                        str->buf))})
 
+(defmethod codegen-cast [:utf8 :keyword] [_]
+  {:return-type :keyword
+   :->call-code (fn [[code]]
+                  `(let [kw# (buf->str ~code)]
+                     (if (= \: (first kw#))
+                       (str->buf (subs kw# 1))
+                       (str->buf kw#))))})
+
 (defmethod codegen-call [:str :utf8] [_]
   {:return-type :utf8
    :->call-code first})

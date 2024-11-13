@@ -2448,3 +2448,20 @@ UNION ALL
       (t/is (false? committed?))
       (t/is (= #xt/illegal-arg [:xtdb/forbidden-table "Cannot write to table: xt/txs" {:table-name "xt/txs"}]
                error)))))
+
+(t/deftest test-keyword
+  (t/is (= [{:unq :foo, :q :foo/bar}]
+           (xt/q tu/*node* "SELECT KEYWORD 'foo' AS unq, KEYWORD 'foo/bar' AS q")))
+
+  (t/is (= [{:unq :foo, :q :foo/bar}]
+           (xt/q tu/*node* "SELECT 'foo'::keyword AS unq, 'foo/bar'::keyword AS q")))
+
+  (t/is (= [{:ns "foo", :local-name "bar"}, {:local-name "bar"}]
+           (xt/q tu/*node* "SELECT NAMESPACE(kw) ns, LOCAL_NAME(kw) local_name FROM (VALUES (KEYWORD 'foo/bar'), (KEYWORD 'bar')) kw (kw)")))
+
+  (t/is (= [{:k1 :foo/bar, :k2 :bar, :s1 ":foo/bar", :s2 ":bar"}]
+           (xt/q tu/*node* "SELECT ':foo/bar'::keyword k1, 'bar'::keyword k2, (KEYWORD 'foo/bar')::text s1, (KEYWORD ':bar')::text s2"))))
+
+(t/deftest test-str
+  (t/is (= [{:str "hello, 42.0 at 2020-01-01"}]
+           (xt/q tu/*node* "SELECT STR('hello, ', NULL, 42.0, ' at ', DATE '2020-01-01') str"))))
