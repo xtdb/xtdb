@@ -45,13 +45,7 @@ All commands are run from the `docs` folder of the project, from a terminal:
 | `yarn run astro --help`
 | Get help using the Astro CLI
 
-| `yarn run build-javadoc`
-| Builds the full aggregate set of project JavaDocs via gradle to `dist/javadoc`
-
-| `yarn run build-kdoc`
-| Builds the full aggregate set of project KDocs via gradle to `dist/kdoc`
-
-| `yarn run build-clj-docs`
+| `yarn run build-api-docs`
 | Builds API docs for Clojure to `dist/clojure-docs`.
 |===
 
