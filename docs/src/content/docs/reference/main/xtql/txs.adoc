@@ -6,7 +6,7 @@ title: XTQL Transactions (Clojure)
 Transactions in XTDB are submitted to the link:/config/tx-log[transaction log], to be processed asynchronously.
 They each consist of an array of link:#tx-ops[operations].
 
-This document provides examples for EDN transaction operations, to be submitted to link:{codox}/xtdb.api.html#var-execute-tx[`xt/execute-tx`^] or link:{codox}/xtdb.api.html#var-submit-tx[`xt/submit-tx`^].
+This document provides examples for EDN transaction operations, to be submitted to link:/clients/clojure/codox/xtdb.api.html#var-execute-tx[`xt/execute-tx`] or link:/clients/clojure/codox/xtdb.api.html#var-submit-tx[`xt/submit-tx`].
 
 
 [#tx-ops]
