@@ -15,6 +15,10 @@
     (log/warn (str "`tx_time` column not in UTC format. "
                    "See https://github.com/xtdb/xtdb/releases/tag/20.09-1.12.1 for more details."))))
 
+(defn- is-replica? [conn]
+  (-> (jdbc/execute-one! conn ["SELECT pg_is_in_recovery()"])
+      :pg_is_in_recovery))
+
 (defn ->dialect {::sys/args {:drop-table? {:spec ::sys/boolean, :default false}}}
   [{:keys [drop-table?]}]
   (reify j/Dialect
@@ -24,12 +28,12 @@
       (jdbc/with-transaction [tx pool]
         (jdbc/execute! tx ["SELECT pg_advisory_xact_lock(-3455654)"])
 
-        (when drop-table?
-          (jdbc/execute! tx ["DROP TABLE IF EXISTS tx_events"]))
+        (when-not (is-replica? tx)
+          (when drop-table?
+            (jdbc/execute! tx ["DROP TABLE IF EXISTS tx_events"]))
 
-
-        (doto tx
-          (jdbc/execute! ["
+          (doto tx
+            (jdbc/execute! ["
 CREATE TABLE IF NOT EXISTS tx_events (
   event_offset BIGSERIAL PRIMARY KEY,
   event_key VARCHAR,
@@ -38,9 +42,9 @@ CREATE TABLE IF NOT EXISTS tx_events (
   v BYTEA NOT NULL,
   compacted INTEGER NOT NULL)"])
 
-          (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
-          (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
-          (check-tx-time-col))))
+            (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
+            (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
+            (check-tx-time-col))))
 
     (ensure-serializable-identity-seq! [_ tx table-name]
       ;; we have to take a table write lock in Postgres, because auto-increments aren't guaranteed to be increasing, even between transactions with 'serializable' isolation level
