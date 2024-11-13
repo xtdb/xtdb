@@ -1,6 +1,6 @@
 ;; Used by the "build-codox" gradle task - can see options here: 
 ;; https://github.com/weavejester/codox#project-options
-{:output-path "docs/public/clients/clojure/codox"
+{:output-path "docs/public/drivers/clojure/codox"
  :source-paths ["api/src/main"
                 "core/src/main"
                 "http-client-jvm/src/main"]

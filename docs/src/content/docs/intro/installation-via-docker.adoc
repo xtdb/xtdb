@@ -2,7 +2,7 @@
 title: Installation via Docker
 ---
 :icon: /images/icons
-:clojure: /clients/clojure.html
+:clojure: /drivers/clojure.html
 
 == Try Online
 
@@ -12,7 +12,7 @@ Otherwise, let's get XTDB downloaded and running on your own machine...
 
 == Docker Install
 
-XTDB supports production usage via the Postgres wire protocol (so that you can work with various Postgres-compatible tools, drivers etc.) and also has a link:/clients/clojure[Clojure API].
+XTDB supports production usage via the Postgres wire protocol (so that you can work with various Postgres-compatible tools, drivers etc.) and also has a link:/drivers/clojure[Clojure API].
 
 You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server using the following command:
 

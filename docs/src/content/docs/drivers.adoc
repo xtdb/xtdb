@@ -1,5 +1,5 @@
 ---
-title: XTDB Clients
+title: Language Drivers
 ---
 
 XTDB exposes a PostgreSQL wire-compatible server, and is therefore compatible with standard PostgreSQL tools and drivers.
@@ -11,12 +11,12 @@ That said, the advantage of embracing wire-protocol compatibility is that many P
 
 For details of how to connect to XTDB from your favourite language, see the following pages:
 
-* link:/clients/clojure[Clojure]
-* link:/clients/elixir[Elixir]
-* link:/clients/java[Java]
-* link:/clients/kotlin[Kotlin]
-* link:/clients/nodejs[Node.js]
-* link:/clients/python[Python]
+* link:/drivers/clojure[Clojure]
+* link:/drivers/elixir[Elixir]
+* link:/drivers/java[Java]
+* link:/drivers/kotlin[Kotlin]
+* link:/drivers/nodejs[Node.js]
+* link:/drivers/python[Python]
 
 XTDB is also compatible with many different PostgreSQL tools, including:
 

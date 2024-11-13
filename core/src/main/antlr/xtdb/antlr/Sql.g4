@@ -129,7 +129,7 @@ dataType
     | ('SMALLINT' | 'INTEGER' | 'INT' | 'BIGINT') # IntegerType
     | 'FLOAT' ('(' precision ')')? # FloatType
     | 'REAL' # RealType
-    | 'DOUBLE' 'PRECISION' # DoubleType
+    | 'DOUBLE' 'PRECISION'? # DoubleType
     | 'BOOLEAN' # BooleanType
     | 'DATE' # DateType
     | 'TIME' ('(' precision ')')? withOrWithoutTimeZone? # TimeType

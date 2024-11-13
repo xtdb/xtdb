@@ -75,7 +75,7 @@
 
   This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
 
-  For more information on the configuration options, see the relevant module pages in the [Clojure docs](https://docs.xtdb.com/clients/clojure/codox/index.html)"
+  For more information on the configuration options, see the relevant module pages in the [Clojure docs](https://docs.xtdb.com/drivers/clojure/codox/index.html)"
   (^xtdb.api.Xtdb [] (start-node {}))
 
   (^xtdb.api.Xtdb [opts]

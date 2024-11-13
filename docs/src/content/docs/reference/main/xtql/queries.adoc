@@ -1,5 +1,5 @@
 ---
-title: XTQL Queries (Clojure)
+title: XTQL Queries
 ---
 
 XTQL queries consist of composable operators, optionally combined with a pipeline.
@@ -672,7 +672,6 @@ Argument specs are used to fulfil parameters in a sub-query (exists, pull, pull-
 
 Where link:#_binding_specs[bindings] specify how to join the *output* of the sub-query/join to the outer query, arguments specify the *inputs* to the sub-query/join from the outer query.
 
-
 This is commonly used in 'pull' queries and all other link:#_subqueries[Subqueries]:
 
 [source]
@@ -717,14 +716,12 @@ Instead, we want to preserve them, albeit without values for the columns in the 
 
 XTQL query options are an optional map of the following keys:
 
-N.B.: options here are specified with `camelCase` - depending on your client library, these may be `snake_case` or `kebab-case`.
-
-`afterTx`::
+`after-tx`::
 requires that the node has indexed _at least_ the specified transaction.
 * If not provided, XTDB clients will default it to the latest transaction submitted through that client.
   This is so that, by default, transactions submitted to a client are guaranteed to be visible to any later query to that same client.
-* If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the transaction token returned from `submitTx` as the `afterTx` for subsequent queries to guarantee this same read-after-write consistency level.
-* If the requested transaction hasn't been indexed, the XTDB client will wait (see `txTimeout`) before evaluating the query.
+* If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the transaction token returned from `submit-tx` as the `after-tx` for subsequent queries to guarantee this same read-after-write consistency level.
+* If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
 `args`::
 a map of arguments to pass to the query. Parameters are prefixed with `$` in the query itself:
 +
@@ -739,16 +736,16 @@ a map of arguments to pass to the query. Parameters are prefixed with `$` in the
 +
 This allows for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
 +
-If the requested transaction hasn't been indexed, the XTDB client will wait (see `txTimeout`) before evaluating the query.
+If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
 +
-* `atTx` (overrides `afterTx`): specifies the _exact_ latest transaction that'll be visible to the query.
+* `at-tx` (overrides `after-tx`): specifies the _exact_ latest transaction that'll be visible to the query.
 ** If not provided, this will default to the latest available transaction on the node.
-* `currentTime` overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
+* `current-time` overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
 ** If not provided, defaults to the current wall-clock time of the executing node
 ** In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
-`defaultTz`:: (defaults to JVM timezone on the executing node): the default timezone to use in link:../stdlib/temporal[functions] that require it.
-`explain` (Clojure: `:explain?`)::
+`default-tz`:: (defaults to JVM timezone on the executing node): the default timezone to use in link:../stdlib/temporal[functions] that require it.
+`explain?`::
 rather than returning results, setting this flag to `true` returns the query plan for the query (default `false`).
-`keyFn`:: specifies how keys are returned in query results.
-* `clojure` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
-`txTimeout`:: duration to wait for the requested transactions (`atTx`, `afterTx`) to be indexed before timing out (default unlimited).
+`key-fn`:: specifies how keys are returned in query results.
+* `:kebab-case-keyword` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
+`tx-timeout`:: duration to wait for the requested transactions (`at-tx`, `after-tx`) to be indexed before timing out (default unlimited).

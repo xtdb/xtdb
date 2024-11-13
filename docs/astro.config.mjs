@@ -32,6 +32,7 @@ export default defineConfig({
 
                 {
                     label: 'Introduction',
+                    collapsed: true,
                     items: [
                         'index', 'quickstart/sql-overview', 'intro/installation-via-docker'
                     ],
@@ -43,7 +44,7 @@ export default defineConfig({
                     items: [
                         {
                             label: 'Immutability Walkthrough',
-                            collapsed: false,
+                            collapsed: true,
                             items: [
                                 'tutorials/immutability-walkthrough/part-1',
                                 'tutorials/immutability-walkthrough/part-2',
@@ -52,51 +53,37 @@ export default defineConfig({
                             ],
                         },
 
-                        'tutorials/introducing-xtql',
-
-                        { label: 'Learn XTQL Today (Clojure) ↗', link: '/static/learn-xtql-today-with-clojure.html', attrs: { target: '_blank' } },
-                    ],
-                },
-
-                {
-                    label: 'Industry Use-cases',
-                    collapsed: true,
-                    items: [
                         {
-                            label: 'Financial Services',
-                            collapsed: false,
+                            label: 'Industry Use-cases',
+                            collapsed: true,
                             items: [
-                                'tutorials/financial-usecase/time-in-finance',
-                                'tutorials/financial-usecase/commodities-pnl',
-                                'tutorials/financial-usecase/late-trade',
-                                'tutorials/financial-usecase/auditing-change',
-                                'tutorials/financial-usecase/counterparty-risk',
-                                'tutorials/financial-usecase/backtesting',
+                                {
+                                    label: 'Financial Services',
+                                    items: [
+                                        'tutorials/financial-usecase/time-in-finance',
+                                        'tutorials/financial-usecase/commodities-pnl',
+                                        'tutorials/financial-usecase/late-trade',
+                                        'tutorials/financial-usecase/auditing-change',
+                                        'tutorials/financial-usecase/counterparty-risk',
+                                        'tutorials/financial-usecase/backtesting',
+                                    ],
+                                },
                             ],
                         },
                     ],
                 },
 
                 {
-                    label: 'Guides',
+                    label: 'Drivers',
                     collapsed: true,
                     items: [
-                        'guides/starting-with-aws',
-                        'guides/starting-with-azure'
-                    ],
-                },
-
-                {
-                    label: 'Clients',
-                    collapsed: true,
-                    items: [
-                        { label: 'Overview', link: '/clients' },
-                        { label: 'Clojure', link: '/clients/clojure' },
-                        { label: 'Elixir', link: '/clients/elixir' },
-                        { label: 'Java', link: '/clients/java' },
-                        { label: 'Kotlin', link: '/clients/kotlin' },
-                        { label: 'Node.js', link: '/clients/nodejs' },
-                        { label: 'Python', link: '/clients/python' },
+                        { label: 'Overview', link: '/drivers' },
+                        { label: 'Clojure', link: '/drivers/clojure' },
+                        { label: 'Elixir', link: '/drivers/elixir' },
+                        { label: 'Java', link: '/drivers/java' },
+                        { label: 'Kotlin', link: '/drivers/kotlin' },
+                        { label: 'Node.js', link: '/drivers/nodejs' },
+                        { label: 'Python', link: '/drivers/python' },
                     ]
                 },
 
@@ -106,31 +93,10 @@ export default defineConfig({
                     items: [
                         { label: 'Overview', link: '/reference/main' },
 
-                        {
-                            label: 'SQL',
-                            collapsed: true,
-                            items: [
-                                { label: 'Transactions', link: '/reference/main/sql/txs' },
-                                { label: 'Queries', link: '/reference/main/sql/queries' },
-                            ]
-                        },
+                        { label: 'SQL Transactions/DML', link: '/reference/main/sql/txs' },
+                        { label: 'SQL Queries', link: '/reference/main/sql/queries' },
 
-                        {
-                            label: 'XTQL (Clojure)',
-                            collapsed: true,
-                            items: [
-                                { label: 'Transactions', link: '/reference/main/xtql/txs' },
-                                { label: 'Queries', link: '/reference/main/xtql/queries' },
-                            ]
-                        },
-                        {
-                            label: 'Data Types',
-                            collapsed: false,
-                            items: [
-                                { label: 'Overview', link: '/reference/main/data-types' },
-                                { label: 'Temporal Types', link: '/reference/main/data-types/temporal-types' },
-                            ]
-                        },
+                        { label: 'Data Types', link: '/reference/main/data-types' },
 
                         {
                             label: 'Standard Library',
@@ -149,27 +115,60 @@ export default defineConfig({
                 },
 
                 {
-                    label: 'Configuration',
+                    label: 'Operations',
                     collapsed: true,
                     items: [
-                        { label: 'Overview', link: '/config' },
-                        'config/clojure',
-
                         {
-                            label: 'Transaction Log',
+                            label: 'Guides',
+                            collapsed: true,
                             items: [
-                                { label: 'Overview', link: '/config/tx-log' },
-                                { label: 'Kafka', link: '/config/tx-log/kafka' },
+                                'ops/guides/starting-with-aws',
+                                'ops/guides/starting-with-azure'
                             ],
                         },
+                        {
+                            label: 'Configuration',
+                            collapsed: true,
+                            items: [
+                                { label: 'Overview', link: '/ops/config' },
+                                'ops/config/clojure',
+
+                                {
+                                    label: 'Transaction Log',
+                                    items: [
+                                        { label: 'Overview', link: '/ops/config/tx-log' },
+                                        { label: 'Kafka', link: '/ops/config/tx-log/kafka' },
+                                    ],
+                                },
+
+                                {
+                                    label: 'Storage',
+                                    items: [
+                                        { label: 'Overview', link: '/ops/config/storage' },
+                                        { label: 'AWS S3', link: '/ops/config/storage/s3' },
+                                        { label: 'Azure Blob Storage', link: '/ops/config/storage/azure' },
+                                        { label: 'Google Cloud Storage', link: '/ops/config/storage/google-cloud' }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    label: 'XTQL (Clojure)',
+                    collapsed: true,
+                    items: [
+                        'xtql/tutorials/introducing-xtql',
+
+                        { label: 'Learn XTQL Today ↗', link: '/static/learn-xtql-today-with-clojure.html', attrs: { target: '_blank' } },
 
                         {
-                            label: 'Storage',
+                            label: 'Reference',
+                            collapsed: true,
                             items: [
-                                { label: 'Overview', link: '/config/storage' },
-                                { label: 'AWS S3', link: '/config/storage/s3' },
-                                { label: 'Azure Blob Storage', link: '/config/storage/azure' },
-                                { label: 'Google Cloud Storage', link: '/config/storage/google-cloud' }
+                                { label: 'Transactions/DML', link: '/reference/main/xtql/txs' },
+                                { label: 'Queries', link: '/reference/main/xtql/queries' },
+                                { label: 'Standard library', link: '/reference/main/xtql/stdlib' },
                             ]
                         }
                     ]
