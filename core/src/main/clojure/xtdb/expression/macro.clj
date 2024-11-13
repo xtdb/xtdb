@@ -151,6 +151,15 @@
             :args [{:op :call, :f :between, :args [local-expr left right]}
                    {:op :call, :f :between, :args [local-expr right left]}]}}))
 
+(defmethod macroexpand1-call :str [{:keys [args] :as expr}]
+  (case (count args)
+    0 {:op :literal, :literal ""}
+    1 expr
+    {:op :call, :f :concat
+     :args (for [arg args]
+             {:op :call, :f :str
+              :args [arg]})}))
+
 (defn macroexpand-expr [expr]
   (loop [{:keys [op] :as expr} expr]
     (if-not (= :call op)

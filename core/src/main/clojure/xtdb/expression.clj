@@ -547,7 +547,7 @@
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
                       :null_eq :compare_nulls_first :compare_nulls_last
-                      :period}
+                      :period :str}
                     normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]
@@ -1115,6 +1115,19 @@
    :->call-code (fn [[code]]
                   `(-> (str ":" (buf->str ~code))
                        str->buf))})
+
+(defmethod codegen-call [:str :utf8] [_]
+  {:return-type :utf8
+   :->call-code first})
+
+(defmethod codegen-call [:str :null] [_]
+  {:return-type :utf8
+   :->call-code (constantly `(str->buf ""))})
+
+(defmethod codegen-call [:str :any] [{[src-type] :arg-types, :as expr}]
+  (codegen-cast (assoc expr
+                       :source-type src-type
+                       :target-type :utf8)))
 
 (defmethod codegen-call [:random] [_]
   {:return-type :f64

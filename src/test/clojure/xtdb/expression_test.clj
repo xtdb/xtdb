@@ -2024,3 +2024,15 @@
 
   (t/is (= ":bar" (project1 '(cast :bar :utf8) {})))
   (t/is (= ":foo/bar" (project1 '(cast :foo/bar :utf8) {}))))
+
+(t/deftest test-str
+  (t/is (= "" (project1 '(str) {})))
+
+  (t/is (= "hello" (project1 '(str "hello") {})))
+  (t/is (= "42" (project1 '(str 42) {})))
+
+  (t/is (= "hello world" (project1 '(str "hello" " " "world") {})))
+  (t/is (= "helloworld" (project1 '(str "hello" nil "world") {})))
+
+  (t/is (= "number: 42.0" (project1 '(str "number: " 42.0) {})))
+  (t/is (= "keyword: :foo/bar" (project1 '(str "keyword: " :foo/bar) {}))))
