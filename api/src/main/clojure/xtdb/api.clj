@@ -185,7 +185,12 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status
   "Returns the status of this node as a map,
-  including details of both the latest submitted and completed tx"
+  including details of both the latest submitted and completed tx
+
+  Optionally takes a map of options:
+  - :auth-opts
+    a map of user and password if the node requires authentication"
+
   ([node] (xtp/status node))
   ([node opts] (xtp/status node opts)))
 

@@ -2,9 +2,9 @@
 title: Configuration
 ---
 
-== Components 
+== Components
 
-An XTDB node consists of a number of components. 
+An XTDB node consists of a number of components.
 
 For information on how to configure these and switch out implementations, see their reference documents:
 
@@ -21,7 +21,7 @@ Within the drivers, we offer the ability to provide and configure the node by pa
 
 === Using `!Env`
 
-For certain keys, we allow the use of environment variables - typically, the keys where we allow this are things that may change *location* across environments. Generally, they are either "paths" or "strings". 
+For certain keys, we allow the use of environment variables - typically, the keys where we allow this are things that may change *location* across environments. Generally, they are either "paths" or "strings".
 
 When specifying a key, you can use the `!Env` tag to reference an environment variable. As an example:
 
@@ -32,3 +32,8 @@ storage: !Local
 ----
 
 Any key that we allow the use of `!Env` will be documented as such.
+
+=== Authentication
+
+The pg-wire server and the http-server both support authentication which can be configured via authentication rules.
+See * link:config/authentication[Authentication].
