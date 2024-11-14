@@ -189,15 +189,14 @@
 
         nil))))
 
-(defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx {:keys [basis default-tz] :as tx-opts} fn-iid]
+(defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx tx-opts fn-iid]
   (let [lp '[:scan {:table xt/tx_fns} [{_iid (= _iid ?iid)} _id fn]]
         ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src tx-opts)]
     (with-open [bq (.bind pq
-                          {:params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
-                                                       (vr/vec->reader))]
-                                                  1)
-                           :basis basis
-                           :default-tz default-tz})
+                          (-> (select-keys tx-opts [:at-tx :current-time :default-tz])
+                              (assoc :params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
+                                                                 (vr/vec->reader))]
+                                                              1))))
                 res (.openCursor bq)]
 
       (let [!fn-doc (object-array 1)]
@@ -306,7 +305,7 @@
   (^void indexOp [^xtdb.vector.RelationReader inRelation, queryOpts]))
 
 (defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx
-                                                           {{:keys [^Instant current-time]} :basis}]
+                                                           {:keys [^Instant current-time]}]
 
   (let [current-time-µs (time/instant->micros current-time)]
     (reify RelationIndexer
@@ -386,11 +385,11 @@
             (-> (.liveTable live-idx-tx table)
                 (.logErase iid))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src
-                                                     query, {:keys [basis default-tz] :as tx-opts}]
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, query, tx-opts]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz})
+      (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:at-tx :current-time :default-tz])
+                                        (assoc :params args)))
                           (.openCursor))]
 
         (letfn [(throw-assert-failed []
@@ -408,10 +407,11 @@
         (assert (not (.tryAdvance res nil))
                 "only expecting one batch in assert")))))
 
-(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz] :as tx-opts} query-opts]
+(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, tx-opts, query-opts]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq {:params args, :basis basis, :default-tz default-tz})
+      (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:at-tx :current-time :default-tz])
+                                        (assoc :params args)))
                           (.openCursor))]
 
         (.forEachRemaining res
@@ -626,7 +626,8 @@
                                (Watermark. nil live-index-wm
                                            (li/->schema live-index-wm metadata-mgr)))))
 
-                  tx-opts {:basis {:at-tx tx-key, :current-time system-time}
+                  tx-opts {:at-tx tx-key
+                           :current-time system-time
                            :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                            (.getObject 0))))
                            :tx-key tx-key}]

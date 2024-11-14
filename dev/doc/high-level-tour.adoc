@@ -77,7 +77,7 @@ The user submits a query to any XTDB node.
 
 They (optionally) provide system-time bounds to control what data is visible to the query, either:
 
-* a 'basis' - an upper-bound on the system-time.
+* an `at-tx` - an exact bound on the system-time.
   This is used to ensure query repeatability, to replay an earlier query.
 * an 'after-tx' - a lower-bound on the system-time.
 This is used to ensure that queries observe earlier-submitted transactions - indeed, this argument ensures the read-your-writes aspect of the 'strict serialisable' guarantee.

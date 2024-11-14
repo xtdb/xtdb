@@ -35,7 +35,7 @@
                   :cast-tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
                   :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
-               (set (xt/q tu/*node* q {:basis {:at-tx tx}}))))
+               (set (xt/q tu/*node* q {:at-tx tx}))))
 
       (t/is (= #{{:xt/id "foo", :dt #time/date "2020-08-01",
                   :cast-tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
@@ -45,12 +45,12 @@
                   :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
                (set (xt/q tu/*node* q
-                          {:basis {:at-tx tx}
+                          {:at-tx tx
                            :default-tz #time/zone "America/Los_Angeles"})))))))
 
 (t/deftest test-xtql-default-tz
   #_ ; FIXME #3020
   (t/is (= [{:time #time/time "16:00"}]
            (xt/q tu/*node* '(rel [{:time (local-time)}] [time])
-                 {:basis {:current-time (time/->instant #inst "2024-01-01")}
+                 {:current-time (time/->instant #inst "2024-01-01")
                   :default-tz #time/zone "America/Los_Angeles"}))))

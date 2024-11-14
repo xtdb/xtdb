@@ -90,9 +90,9 @@
     r
     l))
 
-(defn after-latest-submitted-tx [{:keys [basis] :as opts} node]
+(defn after-latest-submitted-tx [{:keys [at-tx after-tx] :as opts} node]
   (cond-> opts
-    (not (or (contains? basis :at-tx) (contains? opts :after-tx)))
+    (not (or at-tx after-tx))
     (assoc :after-tx (xtp/latest-submitted-tx node))))
 
 (defn seconds-fraction->nanos ^long [seconds-fraction]

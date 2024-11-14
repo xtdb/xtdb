@@ -29,12 +29,12 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [allocator node params preserve-blocks? with-col-types? key-fn] :as query-opts
+  ([query {:keys [allocator node params preserve-blocks? with-col-types? key-fn at-tx] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
                       node (-> (time/after-latest-submitted-tx node)
-                               (update :after-tx time/max-tx (get-in query-opts [:basis :at-tx]))
+                               (update :after-tx time/max-tx at-tx)
                                (doto (-> :after-tx (idx/await-tx node)))))
          allocator (or allocator (util/component node :xtdb/allocator) )]
 
@@ -45,15 +45,11 @@
        (let [^PreparedQuery pq (if node
                                  (let [^IQuerySource q-src (util/component node ::q/query-source)]
                                    (.prepareRaQuery q-src query indexer query-opts))
-                                 (q/prepare-ra
-                                  query
-                                  {:ref-ctr (RefCounter.)
-                                   :wm-src
-                                   (reify IWatermarkSource
-                                     (openWatermark [_]
-                                       (Watermark. nil nil {})))}
-                                  {}))
-             bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz])
+                                 (q/prepare-ra query {:ref-ctr (RefCounter.)
+                                                      :wm-src (reify IWatermarkSource
+                                                                (openWatermark [_]
+                                                                  (Watermark. nil nil {})))}))
+             bq (.bind pq (-> (select-keys query-opts [:at-tx :current-time :after-tx :table-args :default-tz])
                               (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))

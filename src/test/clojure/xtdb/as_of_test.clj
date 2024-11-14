@@ -21,11 +21,11 @@
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
                (set (tu/query-ra '[:scan {:table public/docs} [last_updated]]
-                                 {:node tu/*node*, :basis {:at-tx tx1}}))))
+                                 {:node tu/*node*, :at-tx tx1}))))
 
       (t/is (= #{{:last-updated "tx1"}}
                (set (xt/q tu/*node* '(from :docs [last-updated])
-                          {:basis {:at-tx tx1}})))))))
+                          {:at-tx tx1})))))))
 
 (t/deftest test-app-time
   (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]

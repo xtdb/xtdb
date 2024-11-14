@@ -69,7 +69,7 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- ->temporal-bounds [^RelationReader params, {:keys [^TransactionKey at-tx]}, {:keys [for-valid-time for-system-time]}]
+(defn- ->temporal-bounds [^RelationReader params, {:keys [for-valid-time for-system-time]}, ^TransactionKey at-tx]
   (letfn [(->time-μs [[tag arg]]
             (case tag
               :literal (-> arg
@@ -433,7 +433,7 @@
 
         {:fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^Watermark watermark, basis, schema, params]}]
+         :->cursor (fn [{:keys [allocator, ^Watermark watermark, at-tx, current-time, schema, params]}]
                      (if-let [derived-table-schema (info-schema/derived-tables table)]
                        (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark)
 
@@ -449,7 +449,7 @@
                              table-path (util/table-name->table-path table-name)
                              current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                      (trie/current-trie-files))
-                             temporal-bounds (->temporal-bounds params basis scan-opts)]
+                             temporal-bounds (->temporal-bounds params scan-opts at-tx)]
                          (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                            (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
                                                (let [segments (cond-> (mapv (fn [meta-file-path]

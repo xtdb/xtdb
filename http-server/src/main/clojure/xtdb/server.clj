@@ -35,7 +35,7 @@
            (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.api.query IKeyFn Query)
-           (xtdb.http Basis QueryOptions QueryRequest TxOptions TxRequest)))
+           (xtdb.http QueryOptions QueryRequest TxOptions TxRequest)))
 
 (def json-format
   (mf/map->Format
@@ -220,8 +220,6 @@
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
 (s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
-(s/def ::basis (s/nilable (s/or :class #(instance? Basis %)
-                                :map (s/keys :opt-un [::current-time ::at-tx]))))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))
@@ -234,19 +232,14 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::after-tx ::basis ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
+          :opt-un [::after-tx ::at-tx ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
 (defn- <-QueryOpts [^QueryOptions opts]
   (->> {:args (.getArgs opts)
 
         :after-tx (.getAfterTx opts)
-        :basis (->> (if-let [basis (.getBasis opts)]
-                      (if (instance? Basis basis)
-                        {:current-time (.getCurrentTime basis)
-                         :at-tx (.getAtTx basis)}
-                        basis)
-                      nil)
-                    (into {} (remove (comp nil? val))))
+        :at-tx (.getAtTx opts)
+        :current-time (.getCurrentTime opts)
 
         :tx-timeout (.getTxTimeout opts)
 

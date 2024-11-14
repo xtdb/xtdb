@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.TransactionKey
 import xtdb.api.query.IKeyFn
-import xtdb.http.Basis
 import xtdb.http.QueryOptions
 import xtdb.http.QueryRequest
 import java.time.*
@@ -168,7 +167,8 @@ class JsonSerdeTest {
             "SELECT * FROM foo",
             QueryOptions(
                 args = mapOf("foo" to "bar"),
-                basis = Basis(txKey, Instant.EPOCH),
+                atTx = txKey,
+                currentTime = Instant.EPOCH,
                 afterTx = txKey,
                 txTimeout = Duration.parse("PT3H"),
                 defaultTz = ZoneId.of("America/Los_Angeles"),
@@ -179,8 +179,8 @@ class JsonSerdeTest {
             """{
                 "sql": "SELECT * FROM foo",
                 "queryOpts": {"args":{"foo":"bar"},
-                              "basis":{"atTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
-                                       "currentTime": "1970-01-01T00:00:00Z"},
+                              "atTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
+                              "currentTime": "1970-01-01T00:00:00Z",
                               "afterTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
                               "txTimeout":"PT3H",
                               "defaultTz":"America/Los_Angeles",

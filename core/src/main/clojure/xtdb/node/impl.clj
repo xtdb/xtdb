@@ -37,7 +37,7 @@
 
 (defn- with-after-tx-default [opts]
   (-> opts
-      (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
+      (update :after-tx time/max-tx (:at-tx opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IXtdbInternal
@@ -46,15 +46,12 @@
   (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
-(defn- with-query-opts-defaults [{:keys [basis] :as query-opts} {:keys [default-tz !latest-submitted-tx]}]
-  ;;not all callers care about all defaulted query opts returned here
-  (let [{:keys [at-tx]} basis]
-    (-> (into {:default-tz default-tz,
-               :after-tx (or at-tx @!latest-submitted-tx)
-               :key-fn (serde/read-key-fn :snake-case-string)}
-              query-opts)
-        (assoc :basis basis)
-        (with-after-tx-default))))
+(defn- with-query-opts-defaults [{:keys [at-tx] :as query-opts} {:keys [default-tz !latest-submitted-tx]}]
+  (-> (into {:default-tz default-tz,
+             :after-tx (or at-tx @!latest-submitted-tx)
+             :key-fn (serde/read-key-fn :snake-case-string)}
+            query-opts)
+      (with-after-tx-default)))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
   (let [bound-query (.bind prepared-query query-opts)]

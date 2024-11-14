@@ -34,7 +34,7 @@
   (xt/execute-tx node
                  [[:sql sql-statement]]
                  (cond-> opts
-                   (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
+                   (get variables "CURRENT_TIMESTAMP") (assoc :current-time (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
 
   node)
 
@@ -56,7 +56,7 @@
       (let [res (xt/q node sql-statement
                       (-> opts
                           (assoc :key-fn :snake-case-string)
-                          (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
+                          (cond-> (get variables "CURRENT_TIMESTAMP") (assoc :current-time (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
 
             ;; we grab the projection afterwards so that xt/q has awaited the tx
             ;; TODO hoping that there'll be a better means of getting hold of this soon

@@ -66,7 +66,7 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
+                 {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}})))
 
   (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])]
     (t/is (=
@@ -79,7 +79,7 @@
                               :request-method :post
                               :content-type :transit+json
                               :form-params {:query '(from :docs [xt/id key])
-                                            :basis {:at-tx tx}
+                                            :at-tx tx
                                             :key-fn #xt/key-fn :kebab-case-keyword}
                               :transit-opts xtc/transit-opts
                               :url (http-url "query")})
@@ -161,7 +161,7 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:sql "SELECT docs._id FROM docs"
-                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
+                                              :queryOpts {:atTx (tx-key->json-tx-key tx2)
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
@@ -190,9 +190,8 @@
                            :request-method :post
                            :content-type :json
                            :form-params {:sql "SELECT _id FROM docs"
-                                         :queryOpts {:basis {:atTx
-                                                             {"txId" tx-id
-                                                              "systemTime" {"@type" "xt:instat" "@value" (str system-time)}}}}}
+                                         :queryOpts {:atTx {"txId" tx-id
+                                                            "systemTime" {"@type" "xt:instat" "@value" (str system-time)}}}}
                            :url (http-url "query")
                            :throw-exceptions? false})
             body (decode-json body)]

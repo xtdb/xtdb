@@ -1468,10 +1468,10 @@
 
             xt-params (xtify-params conn params stmt-with-bind-msg)
 
-            query-opts {:basis {:at-tx (or (:at-tx stmt) (:at-tx transaction))
-                                :current-time (or (:current-time stmt)
-                                                  (:current-time transaction)
-                                                  (.instant clock))}
+            query-opts {:at-tx (or (:at-tx stmt) (:at-tx transaction))
+                        :current-time (or (:current-time stmt)
+                                          (:current-time transaction)
+                                          (.instant clock))
                         :default-tz (.getZone clock)
                         :args xt-params}
             ^BoundQuery bound-query (.bind ^PreparedQuery prepared-query query-opts)

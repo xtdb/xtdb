@@ -197,7 +197,7 @@
 
         (t/is (= [{:ic_id ic_id}]
                  (xt/q *node* '(from :item-comment [ic_id])
-                       {:basis {:at-tx (am/get-tx-key worker)} :key-fn :snake-case-keyword})))
+                       {:at-tx (am/get-tx-key worker), :key-fn :snake-case-keyword})))
 
         (t/is (false? (-> (xt/q *node* '(from :item-comment [{:xt/id "ic_0"} ic_response])
                                 {:key-fn :snake-case-keyword})

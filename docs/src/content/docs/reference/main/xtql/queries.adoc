@@ -730,22 +730,21 @@ a map of arguments to pass to the query. Parameters are prefixed with `$` in the
 (xt/q node '(from :users [{:username $username}])
       {:args {:username "james"}})
 ----
+`at-tx`:: specifies the _exact_ latest transaction that'll be visible to the query. overrides after-tx
 +
-[#basis]
-`basis`:: a map specifying the 'basis' of the query.
+* If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
+* If not provided, this will default to the latest available transaction on the node.
+`current-time`:: overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
 +
-This allows for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
-+
-If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
-+
-* `at-tx` (overrides `after-tx`): specifies the _exact_ latest transaction that'll be visible to the query.
-** If not provided, this will default to the latest available transaction on the node.
-* `current-time` overrides the wall-clock time used in any link:../stdlib/temporal#_current_time[functions] that require it.
-** If not provided, defaults to the current wall-clock time of the executing node
-** In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
+* If not provided, defaults to the current wall-clock time of the executing node
+* In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
 `default-tz`:: (defaults to JVM timezone on the executing node): the default timezone to use in link:../stdlib/temporal[functions] that require it.
-`explain?`::
-rather than returning results, setting this flag to `true` returns the query plan for the query (default `false`).
+`explain?`:: rather than returning results, setting this flag to `true` returns the query plan for the query (default `false`).
 `key-fn`:: specifies how keys are returned in query results.
 * `:kebab-case-keyword` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
+
 `tx-timeout`:: duration to wait for the requested transactions (`at-tx`, `after-tx`) to be indexed before timing out (default unlimited).
+
+[#basis]
+These query options (in particular, `at-tx`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
+--

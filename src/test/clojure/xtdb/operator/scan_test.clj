@@ -173,25 +173,25 @@
              (frequencies (tu/query-ra '[:scan
                                          {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time nil}
                                          [_id v]]
-                                       {:node tu/*node* :basis {:at-tx tx1}}))))
+                                       {:node tu/*node*, :at-tx tx1}))))
 
     (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
              (frequencies (tu/query-ra '[:scan
                                          {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
                                          [_id v]]
-                                       {:node tu/*node* :basis {:at-tx tx1}}))))
+                                       {:node tu/*node*, :at-tx tx1}))))
 
     (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
              (frequencies (tu/query-ra '[:scan
                                          {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time nil}
                                          [_id v]]
-                                       {:node tu/*node* :basis {:at-tx tx2}}))))
+                                       {:node tu/*node*, :at-tx tx2}))))
 
     (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 2, :xt/id :doc2} 1}
              (frequencies (tu/query-ra '[:scan
                                          {:table public/xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
                                          [_id v]]
-                                       {:node tu/*node* :basis {:at-tx tx2}}))))))
+                                       {:node tu/*node*, :at-tx tx2}))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
   (let [tx1 (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
@@ -239,7 +239,7 @@
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2023"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node* :basis {:at-tx tx1}}))))
+                               {:node tu/*node*, :at-tx tx1}))))
 
     (t/is (= #{{:v 1, :xt/id :doc1,
                 :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
@@ -248,7 +248,7 @@
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2017"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node* :basis {:at-tx tx1}}))))
+                               {:node tu/*node*, :at-tx tx1}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1,
                 :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
@@ -258,7 +258,7 @@
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2023"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node* :basis {:at-tx tx2}}))))
+                               {:node tu/*node*, :at-tx tx2}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1,
                 :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
@@ -267,7 +267,7 @@
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2100"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node* :basis {:at-tx tx2}}))))))
+                               {:node tu/*node*, :at-tx tx2}))))))
 
 (t/deftest test-scanning-temporal-cols
   (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2021", :valid-to #inst "3000"}
@@ -702,7 +702,8 @@
         (c/compact-all! node)
 
         (let [query-opts {:node node
-                          :basis {:at-tx tx-key :current-time (:system-time tx-key)}}]
+                          :at-tx tx-key
+                          :current-time (:system-time tx-key)}]
 
           ;; no filter, we should still get the latest entry (2025)
           (t/is (= [{:xt/id 1,
@@ -714,7 +715,7 @@
                      :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
                      :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                    (tu/query-ra '[:scan {:table public/docs} [_id _valid_from _valid_to]]
-                                (update-in query-opts [:basis :current-time] (constantly #time/instant "2024-12-30T00:00:00Z")))))
+                                (assoc query-opts :current-time #time/instant "2024-12-30T00:00:00Z"))))
 
           ;; two entries 2024 and 2025
           (t/is (= [{:xt/id 1,
@@ -764,15 +765,14 @@
           ;; compaction happens in 2026
           (c/compact-all! node #time/duration "PT2S")
 
-          (let [query-opts {:node node
-                            :basis {:at-tx tx-key :current-time (:system-time tx-key)}}]
+          (let [query-opts {:node node, :at-tx tx-key, :current-time (:system-time tx-key)}]
 
             ;; at the end of 2024 we still get the 2024
             (t/is (= [{:xt/id 1,
                        :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
                        :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                      (tu/query-ra '[:scan {:table public/docs} [_id _valid_from _valid_to]]
-                                  (update-in query-opts [:basis :current-time] (constantly #time/instant "2024-12-30T00:00:00Z")))))
+                                  (assoc query-opts :current-time #time/instant "2024-12-30T00:00:00Z"))))
             ;; two entries 2024 and 2025
             (t/is (= [{:xt/id 1,
                        :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"
@@ -801,10 +801,10 @@
 
             (t/testing "adding something to the live-index"
               (let [;; versions 2026 and 2027
-                    tx-key2 (last (for [[i [start end]] (->> (partition 2 1 insts)
-                                                             (drop 6)
-                                                             (take 2)
-                                                             (map-indexed vector))]
+                    tx-key2 (last (for [[i [start _end]] (->> (partition 2 1 insts)
+                                                              (drop 6)
+                                                              (take 2)
+                                                              (map-indexed vector))]
                                     (xt/execute-tx node [[:put-docs {:into :docs
                                                                      :valid-from start}
                                                           ;; :valid-to end
@@ -819,8 +819,7 @@
                                                                      :valid-from start
                                                                      :valid-to end}
                                                           {:xt/id 1 :version (+ i 8)}]])))
-                    query-opts {:node node
-                                :basis {:at-tx tx-key2 :current-time (:system-time tx-key)}}]
+                    query-opts {:node node, :at-tx tx-key2, :current-time (:system-time tx-key)}]
 
                 (t/testing "temporal bounds from the live-index"
                   (t/is (= [{:xt/id 1,
@@ -853,4 +852,4 @@
                                  :id 1}]
                            (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2026" #inst "2027"]}
                                           [_id _valid_from _valid_to]]
-                                        (update-in query-opts [:basis :at-tx] (constantly tx-key3))))))))))))))
+                                        (assoc query-opts :at-tx tx-key3)))))))))))))

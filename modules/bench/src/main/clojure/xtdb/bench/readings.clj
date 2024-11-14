@@ -72,8 +72,8 @@
                                  max-valid-time (cond-> max-valid-time
                                                   offset (subtract-period offset len))]
                              (aggregate-query sut (subtract-period max-valid-time interval) max-valid-time
-                                              {:basis {:at-tx latest-completed-tx
-                                                       :current-time (:system-time latest-completed-tx)}})))}]}))
+                                              {:at-tx latest-completed-tx
+                                               :current-time (:system-time latest-completed-tx)})))}]}))
 
 (defn ->ingestion-stage
   ([size devices] (->ingestion-stage size devices {}))
@@ -104,7 +104,7 @@
 
            [{:t :call :f (fn [{:keys [sut ^AbstractMap custom-state]}]
                            (let [{:keys [latest-completed-tx]} (xt/status sut)
-                                 max-valid-time (-> (xt/q sut max-valid-time-q {:basis {:at-tx latest-completed-tx}})
+                                 max-valid-time (-> (xt/q sut max-valid-time-q {:at-tx latest-completed-tx})
                                                     first
                                                     :max-valid-time)]
                              (.putAll custom-state {:latest-completed-tx latest-completed-tx
@@ -128,7 +128,7 @@
              [])
            [{:t :call :f (fn [{:keys [sut ^AbstractMap custom-state]}]
                            (let [{:keys [latest-completed-tx]} (xt/status sut)
-                                 max-valid-time (-> (xt/q sut max-valid-time-q {:basis {:at-tx latest-completed-tx}})
+                                 max-valid-time (-> (xt/q sut max-valid-time-q {:at-tx latest-completed-tx})
                                                     first
                                                     :max-valid-time)]
                              (.putAll custom-state {:latest-completed-tx latest-completed-tx
@@ -144,8 +144,8 @@
   (def node (tu/->local-node {:node-dir node-dir}))
   (.close node)
   (def latest-completed-tx (:latest-completed-tx (xt/status node)))
-  (def max-valid-time (time (-> (xt/q node max-valid-time-q {:basis {:at-tx latest-completed-tx}}) first :max-valid-time)))
+  (def max-valid-time (time (-> (xt/q node max-valid-time-q {:at-tx latest-completed-tx}) first :max-valid-time)))
 
   (time (aggregate-query node (subtract-period max-valid-time :now) max-valid-time
-                         {:basis {:at-tx latest-completed-tx
-                                  :current-time (:system-time latest-completed-tx)}})))
+                         {:at-tx latest-completed-tx
+                          :current-time (:system-time latest-completed-tx)})))

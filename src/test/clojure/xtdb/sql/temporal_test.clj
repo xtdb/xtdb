@@ -7,7 +7,7 @@
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (defn query-at-tx [query tx]
-  (xt/q tu/*node* query {:basis {:at-tx tx}}))
+  (xt/q tu/*node* query {:at-tx tx}))
 
 (t/deftest all-system-time
   (let [_tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})

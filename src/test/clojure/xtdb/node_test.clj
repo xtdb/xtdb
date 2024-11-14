@@ -105,19 +105,19 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
     (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                   {:basis {:at-tx tx1}})))
+                   {:at-tx tx1})))
 
     (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                   {:basis {:at-tx tx2}})))
+                   {:at-tx tx2})))
 
     (t/is (= [{:xt/id "thing", :foo "t2-foo"}]
              (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:basis {:at-tx tx1}})))
+                   {:at-tx tx1})))
 
     (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
              (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:basis {:at-tx tx2}})))))
+                   {:at-tx tx2})))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -194,13 +194,13 @@ VALUES (1, 1)"]])
            (xt/q tu/*node* "
 SELECT foo._id, foo.v, foo._valid_from, foo._valid_to
 FROM foo FOR VALID_TIME AS OF DATE '1999-01-01'"
-                 {:basis {:current-time (time/->instant #inst "1999")}})))
+                 {:current-time (time/->instant #inst "1999")})))
 
   (t/is (= []
            (xt/q tu/*node* "
 SELECT foo._id, foo.v, foo._valid_from, foo._valid_to
 FROM foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP"
-                 {:basis {:current-time (time/->instant #inst "1999")}}))))
+                 {:current-time (time/->instant #inst "1999")}))))
 
 (t/deftest test-repeated-row-id-scan-bug-also-409
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, v) VALUES (1, 1)"]])
@@ -241,10 +241,10 @@ WHERE foo._id = 1"]])]
                 {:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2024")}]
 
-               (q1 {:basis {:at-tx tx1}})))
+               (q1 {:at-tx tx1})))
 
       (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:basis {:at-tx tx1}})))
+               (q2 {:at-tx tx1})))
 
       (t/is (= [{:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2020")
@@ -255,15 +255,15 @@ WHERE foo._id = 1"]])]
                 {:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1 {:basis {:at-tx tx2}})))
+               (q1 {:at-tx tx2})))
 
       (t/is (= [{:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1-now {:basis {:at-tx tx2, :current-time (time/->instant #inst "2026")}})))
+               (q1-now {:at-tx tx2, :current-time (time/->instant #inst "2026")})))
 
       (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:basis {:at-tx tx2}}))))))
+               (q2 {:at-tx tx2}))))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020-01-01")

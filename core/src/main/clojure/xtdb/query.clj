@@ -66,7 +66,7 @@
   (^java.util.List columnFields [])
   (^java.util.List warnings [])
   (^xtdb.query.BoundQuery bind [queryOpts]
-   "queryOpts :: {:params, :table-args, :basis, :default-tz}"))
+   "queryOpts :: {:params, :table-args, :at-tx, :current-time, :default-tz}"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IQuerySource
@@ -143,109 +143,109 @@
        (into {} (map (fn [^IVectorReader col]
                        (MapEntry/create (symbol (.getName col)) (.getField col)))))))
 
-(defn prepare-ra ^xtdb.query.PreparedQuery
-  [query
-   {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
-           ^RefCounter ref-ctr ^IWatermarkSource wm-src] :as deps}
-   {:keys [param-types default-tz table-info]}]
+(defn prepare-ra
+  (^xtdb.query.PreparedQuery [query deps] (prepare-ra query deps {}))
 
-  (let [conformed-query (s/conform ::lp/logical-plan query)]
-    (when (s/invalid? conformed-query)
-      (throw (err/illegal-arg :malformed-query
-                              {:plan query
-                               :explain (s/explain-data ::lp/logical-plan query)})))
+  (^xtdb.query.PreparedQuery [query
+                              {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
+                                      ^RefCounter ref-ctr ^IWatermarkSource wm-src] :as deps}
+                              {:keys [param-types default-tz table-info]}]
 
-    (let [{:keys [ordered-outer-projection param-count warnings], :or {param-count 0}} (meta query)
-          param-types-with-defaults (->> (concat
-                                          (mapv #(if (= :default %) :utf8 %) param-types)
-                                          (repeat :utf8))
-                                         (take param-count))
-          tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
-          scan-cols (->> tables
-                         (into #{} (mapcat scan/->scan-cols)))
+   (let [conformed-query (s/conform ::lp/logical-plan query)]
+     (when (s/invalid? conformed-query)
+       (throw (err/illegal-arg :malformed-query
+                               {:plan query
+                                :explain (s/explain-data ::lp/logical-plan query)})))
 
-          _ (assert (or scan-emitter (empty? scan-cols)))
+     (let [{:keys [ordered-outer-projection param-count warnings], :or {param-count 0}} (meta query)
+           param-types-with-defaults (->> (concat
+                                           (mapv #(if (= :default %) :utf8 %) param-types)
+                                           (repeat :utf8))
+                                          (take param-count))
+           tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
+           scan-cols (->> tables
+                          (into #{} (mapcat scan/->scan-cols)))
 
-          relevant-schema-at-prepare-time
-          (when (and table-info scan-emitter)
-            (with-open [wm (.openWatermark wm-src)]
-              (->> tables
-                   (map #(str (get-in % [:scan-opts :table])))
-                   (mapcat #(map (partial vector %) (get table-info %)))
-                   (.scanFields scan-emitter wm))))
+           _ (assert (or scan-emitter (empty? scan-cols)))
 
-          cache (ConcurrentHashMap.)
-          param-fields (->> param-types-with-defaults
-                            (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                           (map-indexed (fn [idx field]
-                                                          (types/field-with-name field (str "?_" idx)))))))
-          param-fields-by-name (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity)) param-fields)
-          default-tz (or default-tz (.getZone expr/*clock*))]
+           relevant-schema-at-prepare-time
+           (when (and table-info scan-emitter)
+             (with-open [wm (.openWatermark wm-src)]
+               (->> tables
+                    (map #(str (get-in % [:scan-opts :table])))
+                    (mapcat #(map (partial vector %) (get table-info %)))
+                    (.scanFields scan-emitter wm))))
 
-      (reify PreparedQuery
-        (paramFields [_] param-fields)
-        (columnFields [_]
-          (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
-            ;; could store column-fields in the cache/map too
-            (->column-fields ordered-outer-projection fields)))
-        (warnings [_] warnings)
+           cache (ConcurrentHashMap.)
+           param-fields (->> param-types-with-defaults
+                             (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                            (map-indexed (fn [idx field]
+                                                           (types/field-with-name field (str "?_" idx)))))))
+           param-fields-by-name (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity)) param-fields)
+           default-tz (or default-tz (.getZone expr/*clock*))]
 
-        (bind [_ {:keys [args params basis default-tz]
-                  :or {default-tz default-tz}}]
+       (reify PreparedQuery
+         (paramFields [_] param-fields)
+         (columnFields [_]
+           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
+             ;; could store column-fields in the cache/map too
+             (->column-fields ordered-outer-projection fields)))
+         (warnings [_] warnings)
 
-          ;; TODO throw if basis is in the future?
-          (util/with-close-on-catch [args (open-args allocator args)]
-            ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
-            (let [params (or params args)
-                  {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->param-fields params))
-                  {:keys [current-time]} basis
-                  current-time (or current-time (.instant expr/*clock*))
-                  clock (Clock/fixed current-time default-tz)]
+         (bind [_ {:keys [args params current-time at-tx default-tz]
+                   :or {default-tz default-tz}}]
 
-              (reify
-                BoundQuery
-                (columnFields [_]
-                  (->column-fields ordered-outer-projection fields))
+           ;; TODO throw if basis is in the future?
+           (util/with-close-on-catch [args (open-args allocator args)]
+             ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
+             (let [params (or params args)
+                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->param-fields params))
+                   current-time (or current-time (.instant expr/*clock*))
+                   clock (Clock/fixed current-time default-tz)]
 
-                (openCursor [_]
-                  (when relevant-schema-at-prepare-time
-                    (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
-                                                         (.scanFields scan-emitter wm
-                                                                      (mapcat #(map (partial vector (key %)) (val %))
-                                                                              (scan/tables-with-cols wm-src))))]
+               (reify
+                 BoundQuery
+                 (columnFields [_]
+                   (->column-fields ordered-outer-projection fields))
 
-                      ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
-                      ;;especially given our "per path schema" principal.
-                      (when-not (= relevant-schema-at-prepare-time
-                                   (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
-                        (throw (err/runtime-err :prepared-query-out-of-date
-                                                ;;TODO consider adding the schema diff to the error, potentially quite large.
-                                                {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
-                  (.acquire ref-ctr)
-                  (let [^BufferAllocator allocator
-                        (if allocator
-                          (util/->child-allocator allocator "BoundQuery/openCursor")
-                          (RootAllocator.))
-                        wm (.openWatermark wm-src)]
-                    (try
-                      (binding [expr/*clock* clock]
-                        (-> (->cursor {:allocator allocator, :watermark wm
-                                       :clock clock,
-                                       :basis (-> basis
-                                                  (update :at-tx (fnil identity (some-> wm .txBasis)))
-                                                  (assoc :current-time current-time))
-                                       :params params
-                                       :schema (scan/tables-with-cols wm-src)})
-                            (wrap-cursor wm allocator clock ref-ctr fields)))
+                 (openCursor [_]
+                   (when relevant-schema-at-prepare-time
+                     (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
+                                                          (.scanFields scan-emitter wm
+                                                                       (mapcat #(map (partial vector (key %)) (val %))
+                                                                               (scan/tables-with-cols wm-src))))]
 
-                      (catch Throwable t
-                        (.release ref-ctr)
-                        (util/try-close wm)
-                        (util/try-close allocator)
-                        (throw t)))))
+                       ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
+                       ;;especially given our "per path schema" principal.
+                       (when-not (= relevant-schema-at-prepare-time
+                                    (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
+                         (throw (err/runtime-err :prepared-query-out-of-date
+                                                 ;;TODO consider adding the schema diff to the error, potentially quite large.
+                                                 {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
+                   (.acquire ref-ctr)
+                   (let [^BufferAllocator allocator
+                         (if allocator
+                           (util/->child-allocator allocator "BoundQuery/openCursor")
+                           (RootAllocator.))
+                         wm (.openWatermark wm-src)]
+                     (try
+                       (binding [expr/*clock* clock]
+                         (-> (->cursor {:allocator allocator, :watermark wm
+                                        :clock clock,
+                                        :at-tx (or at-tx (some-> wm .txBasis))
+                                        :current-time current-time
+                                        :params params
+                                        :schema (scan/tables-with-cols wm-src)})
+                             (wrap-cursor wm allocator clock ref-ctr fields)))
 
-                AutoCloseable
-                (close [_] (util/try-close params))))))))))
+                       (catch Throwable t
+                         (.release ref-ctr)
+                         (util/try-close wm)
+                         (util/try-close allocator)
+                         (throw t)))))
+
+                 AutoCloseable
+                 (close [_] (util/try-close params)))))))))))
 
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts

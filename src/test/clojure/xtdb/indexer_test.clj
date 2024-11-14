@@ -144,7 +144,7 @@
                               [_id version
                                _valid_from, _valid_to
                                _system_from, _system_to]]
-                            {:node tu/*node*, :basis {:at-tx tx}}))
+                            {:node tu/*node*, :at-tx tx}))
             "re-using the original tx basis should see the same result"))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block

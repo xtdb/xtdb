@@ -117,7 +117,7 @@
                   (first (xt/q sut
                                "SELECT gag.gag_name, gav.gav_name, gag.gag_c_id FROM gag, gav
                                    WHERE gav._id = ? AND gag._id = ? AND gav.gav_gag_id = gag._id"
-                               {:basis {:at-tx tx-key} :args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
+                               {:at-tx tx-key, :args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
               (recur gag-ids gav-ids (into res [gag_name gav_name])))
             (str description " " (str/join " " res))))]
     (->> (concat
@@ -173,12 +173,12 @@
     (when (and i_id u_id)
       (let [{:keys [imb, imb_ib_id] :as _res}
             (-> (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb._id = ?"
-                      {:basis {:at-tx tx-key} :args [i_id], :key-fn :snake-case-keyword})
+                      {:at-tx tx-key, :args [i_id], :key-fn :snake-case-keyword})
                 first)
             {:keys [curr_bid, curr_max]}
             (-> (xt/q sut "SELECT ib.ib_bid AS curr_bid, ib.ib_max_bid AS curr_max FROM item_bid AS ib
                            WHERE ib._id = ?"
-                      {:basis {:at-tx tx-key} :args [imb_ib_id] :key-fn :snake-case-keyword})
+                      {:at-tx tx-key, :args [imb_ib_id], :key-fn :snake-case-keyword})
                 first)
             new_bid_win (or (nil? imb_ib_id) (< curr_max max_bid))
             new_bid (if (and new_bid_win curr_max (< bid curr_max)) curr_max bid)
@@ -274,7 +274,7 @@
         ;; TODO buyer_id should be used for validation
         {buyer_id :imb_ib_u_id bid_id :imb_ib_id}
         (-> (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
-                  {:basis {:at-tx tx-key} :args [i_id i_u_id] :key-fn :snake-case-keyword})
+                  {:at-tx tx-key, :args [i_id i_u_id] :key-fn :snake-case-keyword})
             first)
         ip_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-purchase-id))
         now (b/current-timestamp worker)]
@@ -294,7 +294,7 @@
         if_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-feedback-id))
         {buyer_id :imb_ib_u_id}
         (-> (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
-                  {:basis {:at-tx tx-key} :args [i_id i_u_id] :key-fn :snake-case-keyword})
+                  {:at-tx tx-key, :args [i_id i_u_id], :key-fn :snake-case-keyword})
             first)
 
         rating (b/random-nth worker [-1 0 1])
@@ -317,7 +317,7 @@
     (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price, item.i_num_bids,
                       item.i_end_date, item.i_status
                FROM item WHERE item._id = ?"
-          {:basis {:at-tx tx-key} :args [i_id] :key-fn :snake-case-keyword})))
+          {:at-tx tx-key, :args [i_id] :key-fn :snake-case-keyword})))
 
 ;; TODO aborted transactions
 (defn proc-update-item [{:keys [sut] :as worker}]
@@ -358,7 +358,7 @@
     (->> (xt/q sut "SELECT item.i_id AS item_id, item.i_u_id AS user_id, item.i_name, item.i_current_price, item.i_num_bids,
                            item.i_end_date, item.i_status AS item_status
                     FROM item WHERE (item.i_start_date BETWEEN ? AND ?) AND item.i_status = ? ORDER BY item.i_id ASC LIMIT 100"
-               {:basis {:at-tx tx-key}
+               {:at-tx tx-key
                 :args [now-minus-60s now :open]
                 :key-fn :snake-case-keyword})
 
@@ -380,13 +380,13 @@
         {:keys [i_u_id]} (random-item worker :status :open)]
     (xt/q sut "SELECT * FROM item_comment AS ic
                WHERE ic.ic_u_id = ? AND ic.ic_response IS NULL"
-          {:basis {:at-tx tx-key} :args [i_u_id]})))
+          {:at-tx tx-key, :args [i_u_id]})))
 
 (defn get-user-info [sut u_id seller-items? buyer-items? feedback? tx-key]
   (let [user-results (xt/q sut "SELECT user.u_id, user.u_rating, user.u_created, user.u_balance, user.u_sattr0,
                                        user.u_sattr1, user.u_sattr2, user.u_sattr3, user.u_sattr4, region.r_name FROM user, region
                                 WHERE user._id = ? AND user.u_r_id = region._id"
-                           {:basis {:at-tx tx-key} :args [u_id] :key-fn :snake-case-keyword})
+                           {:at-tx tx-key, :args [u_id] :key-fn :snake-case-keyword})
         item-results nil #_(cond seller-items?
                                  (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
@@ -402,7 +402,7 @@
                                       WHERE ui.ui_u_id = ? AND ui.ui_i_id = item._id AND ui.ui_i_u_id = item.i_u_id
                                       ORDER BY item.i_end_date DESC
                                       LIMIT 20"
-                                       {:basis {:at-tx tx-key} :args [u_id] :key-fn :snake-case-keyword}))
+                                       {:at-tx tx-key, :args [u_id] :key-fn :snake-case-keyword}))
         feedback-results nil #_(when feedback?
                                  (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
                                              item.i_name, item.i_end_date, item.i_status, user.u_id,
@@ -412,7 +412,7 @@
                                       AND if.if_u_id = item.i_u_id AND if.if_u_id = user._id
                                       ORDER BY if.if_date DESC
                                       LIMIT 10"
-                                       {:basis {:at-tx tx-key} :args [u_id] :key-fn :snake-case-keyword}))]
+                                       {:at-tx tx-key, :args [u_id] :key-fn :snake-case-keyword}))]
     [user-results item-results feedback-results]))
 
 (defn proc-get-user-info [{:keys [sut] :as worker}]

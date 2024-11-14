@@ -15,17 +15,6 @@ components:
         items:
           $ref: '#/components/schemas/TypedAny'
 
-    Basis:
-      type: object
-      nullable: true
-      properties:
-        currentTime:
-          description: wall clock time for functions that require it (i.e. `CURRENT_TIMESTAMP`)
-          $ref: '#/components/schemas/Instant'
-        atTx:
-          description: TransactionKey reference returned by any prior request to `/tx`, ensures that the node has indexed at least the specified transaction
-          $ref: '#/components/schemas/TransactionKey'
-
     DefaultTz:
       type: string
       example: "America/Los_Angeles"
@@ -87,12 +76,16 @@ components:
             - type: object
               additionalProperties:
                 $ref: '#/components/schemas/TypedAny'
-        basis:
-          $ref: '#/components/schemas/Basis'
         afterTx:
           description: requires that the node has indexed at least the specified transaction.
           $ref: '#/components/schemas/TransactionKey'
           nullable: true
+        atTx:
+          description: TransactionKey reference returned by any prior request to `/tx`, ensures that the node has indexed at least the specified transaction
+          $ref: '#/components/schemas/TransactionKey'
+        currentTime:
+          description: wall clock time for functions that require it (i.e. `CURRENT_TIMESTAMP`)
+          $ref: '#/components/schemas/Instant'
         defaultTz:
           description: the default timezone to use in functions that require it.
           $ref: '#/components/schemas/DefaultTz'
