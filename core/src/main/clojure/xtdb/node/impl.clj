@@ -46,12 +46,12 @@
   (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
-(defn- mapify-query-opts-with-defaults [{:keys [basis] :as query-opts} default-tz latest-submitted-tx default-key-fn]
+(defn- with-query-opts-defaults [{:keys [basis] :as query-opts} {:keys [default-tz !latest-submitted-tx]}]
   ;;not all callers care about all defaulted query opts returned here
   (let [{:keys [at-tx]} basis]
     (-> (into {:default-tz default-tz,
-               :after-tx (or at-tx latest-submitted-tx)
-               :key-fn default-key-fn}
+               :after-tx (or at-tx @!latest-submitted-tx)
+               :key-fn (serde/read-key-fn :snake-case-string)}
               query-opts)
         (assoc :basis basis)
         (with-after-tx-default))))
@@ -79,8 +79,7 @@
                  query-timer]
   Xtdb
   (getServerPort [this]
-    (or (some-> (util/component this :xtdb.pgwire/server)
-                (:port))
+    (or (:port (util/component this :xtdb.pgwire/server))
         (throw (IllegalStateException. "No Postgres wire server running."))))
 
   (addMeterRegistry [_ reg]
@@ -114,12 +113,12 @@
             (serde/->tx-aborted tx-key error))))))
 
   (open-sql-query [this query query-opts]
-    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
+    (let [query-opts (-> query-opts (with-query-opts-defaults this))]
       (-> (.prepareQuery this ^String query query-opts)
           (then-execute-prepared-query query-timer query-opts))))
 
   (open-xtql-query [this query query-opts]
-    (let [query-opts (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
+    (let [query-opts (-> query-opts (with-query-opts-defaults this))]
       (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
           (then-execute-prepared-query query-timer query-opts))) )
 
@@ -134,24 +133,21 @@
    (.prepareQuery this (antlr/parse-statement query)
                   query-opts))
 
-  (^PreparedQuery prepareQuery [_ ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
-   (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
+  (^PreparedQuery prepareQuery [this ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
+   (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
      (.awaitTx indexer after-tx tx-timeout)
      (let [plan (.planQuery q-src parsed-query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
-  (^PreparedQuery prepareQuery [_ ^XtqlQuery query, query-opts]
-   (let [{:keys [after-tx tx-timeout] :as query-opts}
-         (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
+  (^PreparedQuery prepareQuery [this ^XtqlQuery query, query-opts]
+   (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
      (.awaitTx indexer after-tx tx-timeout)
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
-  (prepareRaQuery [_ plan query-opts]
-    (let [{:keys [after-tx tx-timeout] :as query-opts}
-          (mapify-query-opts-with-defaults query-opts default-tz @!latest-submitted-tx (serde/read-key-fn :snake-case-string))]
+  (prepareRaQuery [this plan query-opts]
+    (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
      (.awaitTx indexer after-tx tx-timeout)
 
      (.prepareRaQuery q-src plan wm-src query-opts)))
