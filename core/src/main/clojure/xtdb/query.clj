@@ -223,11 +223,11 @@
                                                  ;;TODO consider adding the schema diff to the error, potentially quite large.
                                                  {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
                    (.acquire ref-ctr)
-                   (let [^BufferAllocator allocator
-                         (if allocator
-                           (util/->child-allocator allocator "BoundQuery/openCursor")
-                           (RootAllocator.))
-                         wm (.openWatermark wm-src)]
+                   (util/with-close-on-catch [^BufferAllocator allocator
+                                              (if allocator
+                                                (util/->child-allocator allocator "BoundQuery/openCursor")
+                                                (RootAllocator.))
+                                              wm (.openWatermark wm-src)]
                      (try
                        (binding [expr/*clock* clock]
                          (-> (->cursor {:allocator allocator, :watermark wm
