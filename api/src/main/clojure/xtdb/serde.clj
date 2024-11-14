@@ -22,6 +22,12 @@
   (getTxId [_] tx-id)
   (getSystemTime [_] system-time))
 
+(defmethod print-dup TxKey [^TxKey tx-key, ^Writer w]
+  (.write w (str "#xt/tx-key " (pr-str (into {} tx-key)))))
+
+(defmethod print-method TxKey [tx-key w]
+  (print-dup tx-key w))
+
 (defrecord TxCommitted [tx-id system-time committed?]
   TransactionCommitted
   (getTxId [_] tx-id)

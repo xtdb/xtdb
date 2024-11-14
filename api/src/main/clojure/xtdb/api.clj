@@ -49,7 +49,7 @@
   (^clojure.lang.IReduceInit [node query opts]
    (let [query-opts (-> opts
                         (update :key-fn (comp serde/read-key-fn (fnil identity :kebab-case-keyword)))
-                        (time/after-latest-submitted-tx node))]
+                        (update :after-tx (fnil identity (xtp/latest-submitted-tx node))))]
      (reify IReduceInit
        (reduce [_ f start]
          (with-open [^Stream res (cond

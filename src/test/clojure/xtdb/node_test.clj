@@ -13,8 +13,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.time ZonedDateTime]
-           [xtdb.api Xtdb$Config ServerConfig]
-           [xtdb.api.tx TxOps]
+           [xtdb.api ServerConfig Xtdb$Config]
            [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
            xtdb.types.RegClass))
@@ -118,6 +117,23 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
     (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
              (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
                    {:at-tx tx2})))))
+
+(t/deftest ensure-at-tx-has-been-indexed
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"at-tx \(.+?\) is after the latest completed tx \(nil\)"
+                          (xt/q tu/*node* "SELECT 1"
+                                {:at-tx (serde/->TxKey 0 (time/->instant #inst "2020"))})))
+
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* "SELECT * FROM foo"
+                 {:at-tx (serde/->TxKey 0 (time/->instant #inst "2020"))})))
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"at-tx \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"
+                          (xt/q tu/*node* "SELECT * FROM foo"
+                                {:at-tx (serde/->TxKey 1 (time/->instant #inst "2020"))}))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []

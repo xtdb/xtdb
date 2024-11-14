@@ -6,7 +6,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.protocols :as xtp])
   (:import (java.util.function Consumer)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor)
@@ -29,12 +30,11 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [allocator node params preserve-blocks? with-col-types? key-fn at-tx] :as query-opts
+  ([query {:keys [allocator node params preserve-blocks? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
-                      node (-> (time/after-latest-submitted-tx node)
-                               (update :after-tx time/max-tx at-tx)
+                      node (-> (update :after-tx (fnil identity (xtp/latest-submitted-tx node)))
                                (doto (-> :after-tx (idx/await-tx node)))))
          allocator (or allocator (util/component node :xtdb/allocator) )]
 

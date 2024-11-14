@@ -3,6 +3,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
+            [xtdb.error :as err]
             xtdb.indexer
             [xtdb.log :as log]
             [xtdb.metrics :as metrics]
@@ -35,10 +36,6 @@
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
-(defn- with-after-tx-default [opts]
-  (-> opts
-      (update :after-tx time/max-tx (:at-tx opts))))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IXtdbInternal
   (^xtdb.query.PreparedQuery prepareQuery [^java.lang.String query, query-opts])
@@ -46,12 +43,19 @@
   (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
-(defn- with-query-opts-defaults [{:keys [at-tx] :as query-opts} {:keys [default-tz !latest-submitted-tx]}]
-  (-> (into {:default-tz default-tz,
-             :after-tx (or at-tx @!latest-submitted-tx)
-             :key-fn (serde/read-key-fn :snake-case-string)}
-            query-opts)
-      (with-after-tx-default)))
+(defn- with-query-opts-defaults [query-opts {:keys [default-tz !latest-submitted-tx]}]
+  (into {:default-tz default-tz,
+         :after-tx @!latest-submitted-tx
+         :key-fn (serde/read-key-fn :snake-case-string)}
+        query-opts))
+
+(defn- validate-tx-not-before [latest-completed-tx at-tx]
+  (when (and at-tx (or (nil? latest-completed-tx) (neg? (compare latest-completed-tx at-tx))))
+    (throw (err/illegal-arg :xtdb/unindexed-tx
+                            {::err/message (format "at-tx (%s) is after the latest completed tx (%s)"
+                                                   (pr-str at-tx) (pr-str latest-completed-tx))
+                             :latest-completed-tx latest-completed-tx
+                             :at-tx at-tx}))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
   (let [bound-query (.bind prepared-query query-opts)]
@@ -131,21 +135,24 @@
                   query-opts))
 
   (^PreparedQuery prepareQuery [this ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
-   (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (.awaitTx indexer after-tx tx-timeout)
+   (let [{:keys [at-tx after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+     (doto (.awaitTx indexer after-tx tx-timeout)
+       (validate-tx-not-before at-tx))
      (let [plan (.planQuery q-src parsed-query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (^PreparedQuery prepareQuery [this ^XtqlQuery query, query-opts]
-   (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (.awaitTx indexer after-tx tx-timeout)
+   (let [{:keys [at-tx after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+     (doto (.awaitTx indexer after-tx tx-timeout)
+       (validate-tx-not-before at-tx))
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (prepareRaQuery [this plan query-opts]
-    (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (.awaitTx indexer after-tx tx-timeout)
+    (let [{:keys [at-tx after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+      (doto (.awaitTx indexer after-tx tx-timeout)
+        (validate-tx-not-before at-tx))
 
      (.prepareRaQuery q-src plan wm-src query-opts)))
 

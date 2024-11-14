@@ -76,8 +76,8 @@
 (defn- open-query [client query query-opts]
   (:body (request client :post :query
                   {:content-type :transit+json
-                   :form-params (-> (into {:query query} query-opts)
-                                    (time/after-latest-submitted-tx client))
+                   :form-params (into {:query query, :after-tx (xtp/latest-submitted-tx client)}
+                                      query-opts)
                    :as ::transit+json->result-or-error})))
 
 (defrecord XtdbClient [base-url, ^HttpClient http-client, !latest-submitted-tx]

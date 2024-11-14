@@ -743,7 +743,7 @@ a map of arguments to pass to the query. Parameters are prefixed with `$` in the
 `key-fn`:: specifies how keys are returned in query results.
 * `:kebab-case-keyword` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
 
-`tx-timeout`:: duration to wait for the requested transactions (`at-tx`, `after-tx`) to be indexed before timing out (default unlimited).
+`tx-timeout`:: duration to wait for the requested transaction (`after-tx`) to be indexed before timing out (default unlimited).
 
 [#basis]
 These query options (in particular, `at-tx`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
