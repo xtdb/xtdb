@@ -23,7 +23,7 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
-           [java.util List Map]
+           [java.util List Map Set]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
@@ -542,7 +542,8 @@
     ;; copies and we may encode the quoted json string straight out of the buffer
     (instance? org.apache.arrow.vector.util.Text obj) (str obj)
 
-    (instance? List obj) (mapv json-clj obj)
+    (or (instance? List obj) (instance? Set obj))
+    (mapv json-clj obj)
 
     ;; maps, cannot be created from SQL yet, but working playground requires them
     ;; we are not dealing with the possibility of non kw/string keys, xt shouldn't return maps like that right now.
@@ -554,6 +555,7 @@
                   (assoc :message (ex-message obj))))
 
     (instance? clojure.lang.Keyword obj) (json-clj (str (symbol obj)))
+    (instance? clojure.lang.Symbol obj) (json-clj (str (symbol obj)))
 
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
