@@ -21,7 +21,7 @@
                                 peek)
            tx-key (.getTxKey record)]
        (.notifyTx subscriber-handler tx-key)
-       tx-key)))
+       (.getTxId tx-key))))
 
   (readTxs [_ after-tx-id limit]
     (let [records @!records

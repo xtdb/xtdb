@@ -3,11 +3,11 @@
             [xtdb.api :as xt]
             [xtdb.log :as xt.log]
             [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            [xtdb.serde :as serde])
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
-           (java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException)
+           (java.io BufferedInputStream BufferedOutputStream DataInputStream DataOutputStream EOFException)
            java.nio.ByteBuffer
            (java.nio.channels Channels ClosedByInterruptException FileChannel)
            (java.nio.file Path)
@@ -16,7 +16,7 @@
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log FileListCache Log Logs TxLog$Record Logs$LocalLogFactory)
+           (xtdb.api.log FileListCache Log Logs Logs$LocalLogFactory TxLog$Record)
            (xtdb.log INotifyingSubscriberHandler)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -130,7 +130,7 @@
               (doseq [[^CompletableFuture f, ^TxLog$Record log-record] elements]
                 (let [tx-key (.getTxKey log-record)]
                   (.notifyTx subscriber-handler tx-key)
-                  (.complete f (.getTxKey log-record))))))
+                  (.complete f (.getTxId (.getTxKey log-record)))))))
           (catch ClosedByInterruptException e
             (log/warn e "channel interrupted while closing")
             (doseq [[^CompletableFuture f] elements

@@ -129,8 +129,8 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
 
-          (let [last-tx-key (last (for [tx-ops txs] (xt/execute-tx node tx-ops)))]
-            (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
+          (let [{:keys [tx-id]} (last (for [tx-ops txs] (xt/execute-tx node tx-ops)))]
+            (tu/then-await-tx tx-id node (Duration/ofSeconds 2)))
 
           (tu/finish-chunk! node)
 

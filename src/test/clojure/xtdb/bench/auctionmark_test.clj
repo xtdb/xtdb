@@ -1,9 +1,9 @@
 (ns xtdb.bench.auctionmark-test
   (:require [clojure.test :as t :refer [deftest]]
+            [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.auctionmark :as am]
             [xtdb.bench.xtdb2 :as bxt2]
-            [xtdb.api :as xt]
             [xtdb.test-util :as tu :refer [*node*]])
   (:import (java.time Clock)
            (java.util Random UUID)
@@ -197,7 +197,7 @@
 
         (t/is (= [{:ic_id ic_id}]
                  (xt/q *node* '(from :item-comment [ic_id])
-                       {:at-tx (am/get-tx-key worker), :key-fn :snake-case-keyword})))
+                       {:after-tx-id (am/get-last-tx-id worker), :key-fn :snake-case-keyword})))
 
         (t/is (false? (-> (xt/q *node* '(from :item-comment [{:xt/id "ic_0"} ic_response])
                                 {:key-fn :snake-case-keyword})
@@ -302,7 +302,7 @@
 
         ;; user 0 is a seller
         (let [[user-results item-results feedback-results] (am/get-user-info *node* (am/user-id 0) true true true
-                                                                             (am/get-tx-key worker))]
+                                                                             (am/get-last-tx-id worker))]
 
           (t/is (= 1 (count user-results)))
           #_(t/is (= 1 (count item-results)))
@@ -310,7 +310,7 @@
 
         ;; user 1 is a buyer
         (let [[user-results item-results _] (am/get-user-info *node* (am/user-id 1) false true true
-                                                              (am/get-tx-key worker))]
+                                                              (am/get-last-tx-id worker))]
 
           (t/is (= 1 (count user-results)))
           #_(t/is (= 1 (count item-results))))))))

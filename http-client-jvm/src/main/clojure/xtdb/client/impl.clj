@@ -76,28 +76,29 @@
 (defn- open-query [client query query-opts]
   (:body (request client :post :query
                   {:content-type :transit+json
-                   :form-params (into {:query query, :after-tx (xtp/latest-submitted-tx client)}
+                   :form-params (into {:query query, :after-tx-id (xtp/latest-submitted-tx-id client)}
                                       query-opts)
                    :as ::transit+json->result-or-error})))
 
-(defrecord XtdbClient [base-url, ^HttpClient http-client, !latest-submitted-tx]
+(defrecord XtdbClient [base-url, ^HttpClient http-client, !latest-submitted-tx-id]
   xtp/PNode
   (submit-tx [client tx-ops opts]
-    (let [{tx-key :body} (request client :post :tx
-                                  {:content-type :transit+json
-                                   :form-params {:tx-ops (vec tx-ops)
-                                                 :opts opts}})]
+    (let [{tx-id :body} (request client :post :tx
+                                 {:content-type :transit+json
+                                  :form-params {:tx-ops (vec tx-ops)
+                                                :opts opts}})]
 
-      (swap! !latest-submitted-tx time/max-tx tx-key)
-      tx-key))
+      (swap! !latest-submitted-tx-id (fnil max tx-id) tx-id)
+      tx-id))
 
   (execute-tx [client tx-ops opts]
     (let [{tx-res :body} (request client :post :tx
                                   {:content-type :transit+json
                                    :form-params {:tx-ops (vec tx-ops)
                                                  :opts opts
-                                                 :await-tx? true}})]
-      (swap! !latest-submitted-tx time/max-tx tx-res)
+                                                 :await-tx? true}})
+          tx-id (:tx-id tx-res)]
+      (swap! !latest-submitted-tx-id (fnil max tx-id) tx-id)
       tx-res))
 
   (open-sql-query [client query query-opts]
@@ -107,7 +108,7 @@
     (open-query client query (into {:key-fn #xt/key-fn :snake-case-string} query-opts)))
 
   xtp/PStatus
-  (latest-submitted-tx [_] @!latest-submitted-tx)
+  (latest-submitted-tx-id [_] @!latest-submitted-tx-id)
 
   (status [client]
     (:body (request client :get :status)))
@@ -117,4 +118,4 @@
     (.close http-client)))
 
 (defn start-client ^java.lang.AutoCloseable [url]
-  (->XtdbClient url (hato/build-http-client {}) (atom nil)))
+  (->XtdbClient url (hato/build-http-client {}) (atom -1)))

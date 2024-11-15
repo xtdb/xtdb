@@ -4,10 +4,12 @@ import xtdb.api.TransactionKey
 import java.nio.ByteBuffer
 import java.util.concurrent.CompletableFuture
 
+typealias TxId = Long
+
 interface TxLog {
-    fun appendTx(record: ByteBuffer): CompletableFuture<TransactionKey>
-    fun readTxs(afterTxId: Long?, limit: Int): List<Record>
-    fun subscribeTxs(afterTxId: Long?, subscriber: Subscriber)
+    fun appendTx(record: ByteBuffer): CompletableFuture<TxId>
+    fun readTxs(afterTxId: TxId?, limit: Int): List<Record>
+    fun subscribeTxs(afterTxId: TxId?, subscriber: Subscriber)
 
     class Record(val txKey: TransactionKey, val record: ByteBuffer)
 

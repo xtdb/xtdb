@@ -142,18 +142,18 @@
                           {:node tu/*node*})))))
 
 (t/deftest test-past-point-point-queries
-  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
-                                      {:xt/id :doc1 :v 1}]
-                                     [:put-docs {:into :xt_docs, :valid-from #inst "2015"}
-                                      {:xt/id :doc2 :v 1}]
-                                     [:put-docs {:into :xt_docs, :valid-from #inst "2018"}
-                                      {:xt/id :doc3 :v 1}]])
+  (let [tx1 (xt/execute-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
+                                       {:xt/id :doc1 :v 1}]
+                                      [:put-docs {:into :xt_docs, :valid-from #inst "2015"}
+                                       {:xt/id :doc2 :v 1}]
+                                      [:put-docs {:into :xt_docs, :valid-from #inst "2018"}
+                                       {:xt/id :doc3 :v 1}]])
 
-        tx2 (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2020"}
-                                      {:xt/id :doc1 :v 2}]
-                                     [:put-docs {:into :xt_docs, :valid-from #inst "2100"}
-                                      {:xt/id :doc2 :v 2}]
-                                     [:delete-docs :xt_docs :doc3]])]
+        tx2 (xt/execute-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2020"}
+                                       {:xt/id :doc1 :v 2}]
+                                      [:put-docs {:into :xt_docs, :valid-from #inst "2100"}
+                                       {:xt/id :doc2 :v 2}]
+                                      [:delete-docs :xt_docs :doc3]])]
 
     ;; valid-time
     (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
@@ -194,18 +194,18 @@
                                        {:node tu/*node*, :at-tx tx2}))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
-  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
-                                      {:xt/id :doc1 :v 1}]
-                                     [:put-docs {:into :xt_docs, :valid-from #inst "2015"}
-                                      {:xt/id :doc2 :v 1}]
-                                     [:put-docs {:into :xt_docs, :valid-from #inst "2018"}
-                                      {:xt/id :doc3 :v 1}]])
+  (let [tx1 (xt/execute-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
+                                       {:xt/id :doc1 :v 1}]
+                                      [:put-docs {:into :xt_docs, :valid-from #inst "2015"}
+                                       {:xt/id :doc2 :v 1}]
+                                      [:put-docs {:into :xt_docs, :valid-from #inst "2018"}
+                                       {:xt/id :doc3 :v 1}]])
 
-        tx2 (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2020"}
-                                      {:xt/id :doc1 :v 2}]
-                                     [:put-docs {:into :xt_docs, :valid-from #inst "2100"}
-                                      {:xt/id :doc2 :v 2}]
-                                     [:delete-docs :xt_docs :doc3]])]
+        tx2 (xt/execute-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2020"}
+                                       {:xt/id :doc1 :v 2}]
+                                      [:put-docs {:into :xt_docs, :valid-from #inst "2100"}
+                                       {:xt/id :doc2 :v 2}]
+                                      [:delete-docs :xt_docs :doc3]])]
 
     ;; valid-time
     (t/is (= #{{:v 1, :xt/id :doc1,
@@ -294,7 +294,7 @@
                (dissoc :xt/system-from :xt/system-to)))))
 
 (t/deftest test-only-scanning-temporal-cols-45
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
         tt (.getSystemTime tx)]
 
     (t/is (= #{{:xt/valid-from (time/->zdt tt)
@@ -694,7 +694,7 @@
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
       ;; 2020 - 2025
       (let [tx-key (last (for [i (range 6)]
-                           (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :col i}]])))]
+                           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :col i}]])))]
 
 
         (tu/finish-chunk! node)

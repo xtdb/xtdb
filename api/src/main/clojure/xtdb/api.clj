@@ -11,8 +11,7 @@
   (:require [xtdb.backtick :as backtick]
             [xtdb.error :as err]
             [xtdb.protocols :as xtp]
-            [xtdb.serde :as serde]
-            [xtdb.time :as time])
+            [xtdb.serde :as serde])
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
            (java.util Iterator)
@@ -49,7 +48,7 @@
   (^clojure.lang.IReduceInit [node query opts]
    (let [query-opts (-> opts
                         (update :key-fn (comp serde/read-key-fn (fnil identity :kebab-case-keyword)))
-                        (update :after-tx (fnil identity (xtp/latest-submitted-tx node))))]
+                        (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node))))]
      (reify IReduceInit
        (reduce [_ f start]
          (with-open [^Stream res (cond

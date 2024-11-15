@@ -96,10 +96,8 @@
       (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]])
       (t/is (spin (= 4 (count (node-log node)))))
       (let [[_ _ _ msg4] (node-log node)]
-        (let [flush-tx-id (:flush-tx-id msg4)]
-          (t/is flush-tx-id)
-          (t/is (= (some-> (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer)) (.getTxId))
-                   flush-tx-id))))))
+        (t/is (= (:flush-tx-id msg4)
+                 (some-> (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer)) (.getTxId)))))))
 
   (t/testing "test :duration actually does something"
     (with-open [node (start-node #time/duration "PT1H")]
@@ -109,11 +107,11 @@
 
   (t/testing "logs receiving messages will stop flushes"
     (let [control (Semaphore. 0)
-          control-close (reify Closeable (close [_] (.release control (- Integer/MAX_VALUE 1000))))
           heartbeat (fn [] (.release control))]
       (binding [slf/*on-heartbeat* (fn [_] (.acquire control))]
         (with-open [node (start-node #time/duration "PT0.001S")
-                    _ control-close]
+                    _ (reify Closeable
+                        (close [_] (.release control (- Integer/MAX_VALUE 1000))))]
           (let [send-msg (fn [] (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]]))
                 check-sync (fn [] (spin (log-indexed? node)))
                 check-count (fn [n] (spin (= n (count (node-log node)))))

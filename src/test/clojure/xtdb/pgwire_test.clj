@@ -15,7 +15,6 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
@@ -1757,12 +1756,12 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:tx_id 0, :system_time #inst "2020-01-01"}]
+    (t/is (= [{:tx_id 0}]
              (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:tx_id 1, :system_time #inst "2020-01-02"}]
+    (t/is (= [{:tx_id 1}]
              (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))
 
 (t/deftest test-show-session-variable-3804

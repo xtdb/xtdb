@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [jsonista.core :as json]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
             [reitit.coercion :as r.coercion]
@@ -83,10 +84,13 @@
 (defn- json-status-encoder []
   (reify
     mf/EncodeToBytes
-    (encode-to-bytes [_ data charset]
-      (if-not (ex-data data)
-        (.getBytes (JsonSerde/encodeStatus (update-keys data name)) ^String charset)
-        (.getBytes (JsonSerde/encode data) ^String charset)))
+    (encode-to-bytes [_ data _charset]
+      (let [{:keys [^TransactionKey latest-completed-tx latest-submitted-tx-id]} data]
+        (json/write-value-as-bytes {"latestCompletedTx" (when latest-completed-tx
+                                                          {"txId" (.getTxId latest-completed-tx)
+                                                           "systemTime" (.getSystemTime latest-completed-tx)})
+                                    "latestSubmittedTxId" (when-not (neg? latest-submitted-tx-id)
+                                                            latest-submitted-tx-id)})))
     mf/EncodeToOutputStream))
 
 (defmethod route-handler :status [_]
@@ -100,7 +104,7 @@
   (reify
     mf/EncodeToBytes
     (encode-to-bytes [_ data charset]
-      (if-not (ex-data data)
+      (if (instance? TransactionKey data)
         (.getBytes (JsonSerde/encode data TransactionKey) ^String charset)
         (.getBytes (JsonSerde/encode data) ^String charset)))
     mf/EncodeToOutputStream))
@@ -219,7 +223,7 @@
 
 (s/def ::current-time inst?)
 (s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
-(s/def ::after-tx (s/nilable #(instance? TransactionKey %)))
+(s/def ::after-tx-id (s/nilable int?))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))
@@ -232,12 +236,12 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::after-tx ::at-tx ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
+          :opt-un [::after-tx-id ::at-tx ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
 (defn- <-QueryOpts [^QueryOptions opts]
   (->> {:args (.getArgs opts)
 
-        :after-tx (.getAfterTx opts)
+        :after-tx-id (.getAfterTxId opts)
         :at-tx (.getAtTx opts)
         :current-time (.getCurrentTime opts)
 

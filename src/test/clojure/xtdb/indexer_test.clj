@@ -87,12 +87,12 @@
         (let [mm (tu/component node ::meta/metadata-manager)]
           (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-          (t/is (= last-tx-key
+          (t/is (= magic-last-tx-id
                    (last (for [tx-ops txs]
                            (xt/submit-tx node tx-ops)))))
 
           (t/is (= last-tx-key
-                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+                   (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))))
 
           (tu/finish-chunk! node)
 
@@ -105,7 +105,7 @@
                          (.resolve node-dir "objects")))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
         tt (.getSystemTime tx)]
     (t/is (= [{:xt/id :foo, :version 0,
                :xt/valid-from (time/->zdt tt)
@@ -116,7 +116,7 @@
                              _system_from, _system_to]]
                           {:node tu/*node*})))
 
-    (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
+    (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
           tt2 (.getSystemTime tx1)]
       (t/is (= #{{:xt/id :foo, :version 0,
                   :xt/valid-from (time/->zdt tt2)
@@ -280,17 +280,17 @@
 
         (util/mkdirs object-dir)
 
-        (t/is (= last-tx-key
+        (t/is (= magic-last-tx-id
                  (last (for [tx-ops txs]
                          (xt/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-key
-                 (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+                 (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))))
         (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
           (t/is (= last-tx-key
-                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+                   (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))))
 
           (t/is (= last-tx-key (tu/latest-completed-tx node))))
 
@@ -317,13 +317,14 @@
 
         (t/is (nil? (tu/latest-completed-tx node)))
 
-        (let [last-tx-key (reduce
+        (let [last-tx-id (reduce
                            (fn [_acc tx-ops]
                              (xt/submit-tx node tx-ops))
                            nil
-                           (partition-all 100 tx-ops))]
+                           (partition-all 100 tx-ops))
+              last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
-          (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 15))))
+          (t/is (= last-tx-key (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-chunk! node)
 
@@ -359,7 +360,7 @@
           (t/is (= 5500 (count first-half-tx-ops)))
           (t/is (= 5500 (count second-half-tx-ops)))
 
-          (let [first-half-tx-key (reduce
+          (let [first-half-tx-id (reduce
                                    (fn [_ tx-ops]
                                      (xt/submit-tx node1 tx-ops))
                                    nil
@@ -368,16 +369,17 @@
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
               (let [^IBufferPool bp (util/component node2 :xtdb/buffer-pool)
-                    ^IMetadataManager mm (util/component node2 ::meta/metadata-manager)]
-                (t/is (= first-half-tx-key
-                         (-> first-half-tx-key
-                             (tu/then-await-tx node2 (Duration/ofSeconds 10)))))
-                (t/is (= first-half-tx-key (tu/latest-completed-tx node2)))
+                    ^IMetadataManager mm (util/component node2 ::meta/metadata-manager)
+                    lc-tx (-> first-half-tx-id
+                              (tu/then-await-tx node2 (Duration/ofSeconds 10)))]
+                (t/is (= first-half-tx-id (:tx-id lc-tx)))
+                (t/is (= lc-tx (tu/latest-completed-tx node2)))
+
 
                 (let [{:keys [latest-completed-tx, next-chunk-idx]}
                       (meta/latest-chunk-metadata mm)]
 
-                  (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
+                  (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
                   (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                   (Thread/sleep 250)    ; wait for the chunk to finish writing to disk
@@ -393,31 +395,32 @@
                 (t/is (= :utf8
                          (types/field->col-type (.columnField mm "public/device_readings" "_id"))))
 
-                (let [second-half-tx-key (reduce
+                (let [second-half-tx-id (reduce
                                           (fn [_ tx-ops]
                                             (xt/submit-tx node2 tx-ops))
                                           nil
                                           (partition-all 100 second-half-tx-ops))]
 
-                  (t/is (<= (:tx-id first-half-tx-key)
+                  (t/is (<= first-half-tx-id
                             (:tx-id (tu/latest-completed-tx node2))
-                            (:tx-id second-half-tx-key)))
+                            second-half-tx-id))
 
                   (.close node2)
 
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                     (let [^IBufferPool bp (tu/component node3 :xtdb/buffer-pool)
                           ^IMetadataManager mm (tu/component node3 ::meta/metadata-manager)]
-                      (t/is (<= (:tx-id first-half-tx-key)
-                                (:tx-id (-> first-half-tx-key
+                      (t/is (<= first-half-tx-id
+                                (:tx-id (-> first-half-tx-id
                                             (tu/then-await-tx node3 (Duration/ofSeconds 10))))
-                                (:tx-id second-half-tx-key)))
+                                second-half-tx-id))
 
                       (t/is (= :utf8
                                (types/field->col-type (.columnField mm "public/device_info" "_id"))))
 
-                      (t/is (= second-half-tx-key (-> second-half-tx-key (tu/then-await-tx node3 (Duration/ofSeconds 15)))))
-                      (t/is (= second-half-tx-key (tu/latest-completed-tx node3)))
+                      (let [lc-tx (-> second-half-tx-id (tu/then-await-tx node3 (Duration/ofSeconds 15)))]
+                        (t/is (= second-half-tx-id (:tx-id lc-tx)))
+                        (t/is (= lc-tx (tu/latest-completed-tx node3))))
 
 
                       (Thread/sleep 250); wait for the chunk to finish writing to disk
@@ -500,14 +503,13 @@
         (let [mm (tu/component node ::meta/metadata-manager)]
           (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-          (let [last-tx-key (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]
-            (t/is (= last-tx-key
-                     (xt/submit-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
-                                          [0, 2, "hello", 12]
-                                          [1, 1, "world", 3.3]]])))
+          (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
+                   (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
+                                         [0, 2, "hello", 12]
+                                         [1, 1, "world", 3.3]]])))
 
-            (t/is (= last-tx-key
-                     (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))
+          (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
+                   (tu/then-await-tx 0 node (Duration/ofSeconds 1))))
 
           (tu/finish-chunk! node)
 

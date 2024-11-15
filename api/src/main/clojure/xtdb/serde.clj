@@ -33,9 +33,8 @@
   (getTxId [_] tx-id)
   (getSystemTime [_] system-time))
 
-(defn ->tx-committed
-  ([^TransactionKey tx-key] (->tx-committed (.getTxId tx-key) (.getSystemTime tx-key)))
-  ([tx-id system-time] (->TxCommitted tx-id system-time true)))
+(defn ->tx-committed [tx-id system-time]
+  (->TxCommitted tx-id system-time true))
 
 (defrecord TxAborted [tx-id system-time committed? error]
   TransactionAborted
@@ -43,9 +42,8 @@
   (getSystemTime [_] system-time)
   (getError [_] error))
 
-(defn ->tx-aborted
-  ([^TransactionKey tx-key error] (->tx-aborted (.getTxId tx-key) (.getSystemTime tx-key) error))
-  ([tx-id system-time error] (->TxAborted tx-id system-time false error)))
+(defn ->tx-aborted [tx-id system-time error]
+  (->TxAborted tx-id system-time false error))
 
 (defn period-duration-reader [[p d]]
   (PeriodDuration. (Period/parse p) (Duration/parse d)))

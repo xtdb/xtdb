@@ -25,7 +25,7 @@
 
   ([node ^Duration timeout]
    (.awaitTx ^IIndexer (util/component node :xtdb/indexer)
-             (xtp/latest-submitted-tx node)
+             (xtp/latest-submitted-tx-id node)
              timeout)))
 
 (defn finish-chunk! [node]
@@ -44,11 +44,6 @@
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))
                      :server {:port 0}})))
-
-(defn install-tx-fns [worker fns]
-  (->> (for [[id fn-def] fns]
-         [:put-fn id fn-def])
-       (xt/submit-tx (:sut worker))))
 
 (defn generate
   ([worker table f n]

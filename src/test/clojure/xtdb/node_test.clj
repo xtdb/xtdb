@@ -98,9 +98,9 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                 (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))))
 
 (t/deftest test-can-submit-same-id-into-multiple-tables-338
-  (let [tx1 (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1 (_id, foo) VALUES ('thing', 't1-foo')"]
+  (let [tx1 (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1 (_id, foo) VALUES ('thing', 't1-foo')"]
                                      [:sql "INSERT INTO t2 (_id, foo) VALUES ('thing', 't2-foo')"]])
-        tx2 (xt/submit-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2._id = 'thing'"]])]
+        tx2 (xt/execute-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2._id = 'thing'"]])]
 
     (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
@@ -237,13 +237,13 @@ ORDER BY foo._valid_from"
             (frequencies
              (xt/q tu/*node* "SELECT foo._id, foo.v FROM foo FOR ALL VALID_TIME" opts)))]
 
-    (let [tx1 (xt/submit-tx tu/*node* [[:sql "
+    (let [tx1 (xt/execute-tx tu/*node* [[:sql "
 UPDATE foo
 FOR PORTION OF VALID_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
 SET v = 2
 WHERE foo._id = 1"]])
 
-          tx2 (xt/submit-tx tu/*node* [[:sql "
+          tx2 (xt/execute-tx tu/*node* [[:sql "
 DELETE FROM foo
 FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
 WHERE foo._id = 1"]])]
@@ -734,11 +734,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (not (identical? pq1 pq2))
           "different relevant query options returns new query")
 
-     (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo 2}]])]
+     (let [tx-id (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo 2}]])]
 
-       (tu/then-await-tx tx tu/*node*)
+       (tu/then-await-tx tx-id tu/*node*)
 
-       (let [pq4 (.planQuery query-src "SELECT 1" wm-src {:after-tx tx})]
+       (let [pq4 (.planQuery query-src "SELECT 1" wm-src {:after-tx-id tx-id})]
 
          (t/is (not (identical? pq1 pq4))
                "changing table-info causes previous cache-hits to miss")))))

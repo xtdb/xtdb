@@ -169,19 +169,19 @@
 (defn latest-completed-tx ^TransactionKey [node]
   (:latest-completed-tx (xtp/status node)))
 
-(defn latest-submitted-tx ^TransactionKey [node]
-  (:latest-submitted-tx (xtp/status node)))
+(defn latest-submitted-tx-id ^TransactionKey [node]
+  (xtp/latest-submitted-tx-id node))
 
 ;; TODO inline this now that we have `idx/await-tx`
 (defn then-await-tx
   (^TransactionKey [node]
-   (then-await-tx (latest-submitted-tx node) node nil))
+   (then-await-tx (latest-submitted-tx-id node) node nil))
 
-  (^TransactionKey [tx node]
-   (then-await-tx tx node nil))
+  (^TransactionKey [tx-id node]
+   (then-await-tx tx-id node nil))
 
-  (^TransactionKey [tx node timeout]
-   (idx/await-tx tx node timeout)))
+  (^TransactionKey [tx-id node timeout]
+   (idx/await-tx tx-id node timeout)))
 
 (defn ->instants
   ([u] (->instants u 1))
@@ -432,7 +432,7 @@
       (doseq [recency-path recency-paths
               :let [recencies (butlast recency-path)
                     page-idx (last recency-path)
-                    [_min-vt max-vt _min-st max-st :as v] (get-bounds page-idx)
+                    [_min-vt max-vt _min-st max-st] (get-bounds page-idx)
                     max-st (or max-st Long/MAX_VALUE)]]
         (assert (apply >= recencies))
         (doseq [recency recencies]

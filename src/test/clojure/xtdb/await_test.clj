@@ -9,21 +9,21 @@
   (serde/->TxKey tx-id (time/->instant #inst "2020")))
 
 (t/deftest test-await
-  (t/is (= (->tx 2)
-           @(await/await-tx-async (->tx 2)
+  (t/is (= (->tx 3)
+           @(await/await-tx-async 2
                                   (constantly (->tx 3))
                                   (PriorityBlockingQueue.)))
         "ready already")
 
-  (t/is (= ::waiting (.getNow (await/await-tx-async (->tx 4)
+  (t/is (= ::waiting (.getNow (await/await-tx-async 4
                                                     (constantly (->tx 3))
                                                     (PriorityBlockingQueue.))
                               ::waiting))
         "waiting")
 
   (let [awaiters (PriorityBlockingQueue.)
-        fut5 (await/await-tx-async (->tx 5) (constantly (->tx 3)) awaiters)
-        fut4 (await/await-tx-async (->tx 4) (constantly (->tx 3)) awaiters)]
+        fut5 (await/await-tx-async 5 (constantly (->tx 3)) awaiters)
+        fut4 (await/await-tx-async 4 (constantly (->tx 3)) awaiters)]
     (t/is (= ::waiting (.getNow fut4 ::waiting)))
     (t/is (= ::waiting (.getNow fut5 ::waiting)))
 
@@ -41,8 +41,8 @@
     (t/is (thrown? RuntimeException (.getNow fut ::waiting))))
 
   (let [awaiters (PriorityBlockingQueue.)
-        fut5 (await/await-tx-async (->tx 5) (constantly (->tx 3)) awaiters)
-        fut4 (await/await-tx-async (->tx 4) (constantly (->tx 3)) awaiters)]
+        fut5 (await/await-tx-async 5 (constantly (->tx 3)) awaiters)
+        fut4 (await/await-tx-async 4 (constantly (->tx 3)) awaiters)]
     (t/is (= ::waiting (.getNow fut4 ::waiting)))
     (t/is (= ::waiting (.getNow fut5 ::waiting)))
 

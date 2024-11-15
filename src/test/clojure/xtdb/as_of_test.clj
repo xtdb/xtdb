@@ -8,7 +8,7 @@
 (t/use-fixtures :each tu/with-node)
 
 (t/deftest test-as-of-tx
-  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx1"}]])]
+  (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx1"}]])]
     (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
@@ -28,9 +28,9 @@
                           {:at-tx tx1})))))))
 
 (t/deftest test-app-time
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]
-                                    [:put-docs {:into :docs, :valid-from #inst "2021"}
-                                     {:xt/id :doc-with-app-time}]])
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]
+                                     [:put-docs {:into :docs, :valid-from #inst "2021"}
+                                      {:xt/id :doc-with-app-time}]])
         system-time (time/->zdt (.getSystemTime tx))]
 
     (t/is (= {:doc {:xt/id :doc,
@@ -47,10 +47,10 @@
                   (into {} (map (juxt :xt/id identity))))))))
 
 (t/deftest test-system-time
-  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 0}]])
+  (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 0}]])
         tt1 (time/->zdt (.getSystemTime tx1))
 
-        tx2 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]])
+        tx2 (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]])
         tt2 (time/->zdt (.getSystemTime tx2))
 
         original-v0-doc {:xt/id :doc, :version 0

@@ -111,8 +111,7 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (serde/->TxKey (.offset record-metadata)
-                                                 (Instant/ofEpochMilli (.timestamp record-metadata))))))))
+                   (.complete fut (.offset record-metadata))))))
       fut))
 
   (readTxs [_ after-tx-id limit]

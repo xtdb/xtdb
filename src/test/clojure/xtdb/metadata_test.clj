@@ -21,16 +21,15 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-param-metadata-error-310
-  (let [tx1 (xt/submit-tx tu/*node*
-                          [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
-                            ["dave", "Dave", #inst "2018"]
-                            ["claire", "Claire", #inst "2019"]]])]
+  (xt/submit-tx tu/*node*
+                [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
+                  ["dave", "Dave", #inst "2018"]
+                  ["claire", "Claire", #inst "2019"]]])
 
-    (t/is (= [{:name "Dave"}]
-             (xt/q tu/*node* "SELECT users.name FROM users WHERE users._id = ?"
-                   {:args ["dave"]
-                    :at-tx tx1}))
-          "#310")))
+  (t/is (= [{:name "Dave"}]
+           (xt/q tu/*node* "SELECT users.name FROM users WHERE users._id = ?"
+                 {:args ["dave"]}))
+        "#310"))
 
 (deftest test-bloom-filter-for-num-types-2133
   (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:num 0 :xt/id "a"}]

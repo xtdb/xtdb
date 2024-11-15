@@ -1,13 +1,12 @@
 (ns xtdb.query-ra
   (:require [xtdb.indexer :as idx]
+            [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.protocols :as xtp])
+            [xtdb.vector.writer :as vw])
   (:import (java.util.function Consumer)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor)
@@ -34,8 +33,8 @@
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
-                      node (-> (update :after-tx (fnil identity (xtp/latest-submitted-tx node)))
-                               (doto (-> :after-tx (idx/await-tx node)))))
+                      node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
+                               (doto (-> :after-tx-id (idx/await-tx node)))))
          allocator (or allocator (util/component node :xtdb/allocator) )]
 
      (with-open [^RelationReader
@@ -49,7 +48,7 @@
                                                       :wm-src (reify IWatermarkSource
                                                                 (openWatermark [_]
                                                                   (Watermark. nil nil {})))}))
-             bq (.bind pq (-> (select-keys query-opts [:at-tx :current-time :after-tx :table-args :default-tz])
+             bq (.bind pq (-> (select-keys query-opts [:at-tx :current-time :after-tx-id :table-args :default-tz])
                               (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))

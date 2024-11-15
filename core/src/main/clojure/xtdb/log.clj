@@ -10,7 +10,8 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.time :as time])
   (:import java.lang.AutoCloseable
            (java.nio.channels ClosedChannelException)
            (java.time Instant)
@@ -103,7 +104,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readTxs log after-tx-id 100)
-                                                              (take-while #(<= ^long (.getTxId (.getTxKey ^TxLog$Record %))
+                                                              (take-while #(<= (.getTxId (.getTxKey ^TxLog$Record %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live
@@ -437,4 +438,4 @@
 
   (.appendTx log (serialize-tx-ops allocator tx-ops
                                    {:default-tz (:default-tz opts default-tz)
-                                    :system-time system-time})))
+                                    :system-time (some-> system-time time/expect-instant)})))

@@ -56,7 +56,7 @@
   (^xtdb.api.TransactionKey latestCompletedTx [])
   (^xtdb.api.TransactionKey latestCompletedChunkTx [])
 
-  (^xtdb.api.TransactionKey awaitTx [^xtdb.api.TransactionKey tx, ^java.time.Duration timeout])
+  (^xtdb.api.TransactionKey awaitTx [^long txId, ^java.time.Duration timeout])
   (^void forceFlush [^xtdb.api.TransactionKey txKey ^long expected-last-chunk-tx-id])
   (^Throwable indexerError []))
 
@@ -699,9 +699,9 @@
   (latestCompletedTx [_] (.latestCompletedTx live-idx))
   (latestCompletedChunkTx [_] (.latestCompletedChunkTx live-idx))
 
-  (awaitTx [this tx timeout]
-    @(-> (if tx
-           (await/await-tx-async tx
+  (awaitTx [this tx-id timeout]
+    @(-> (if tx-id
+           (await/await-tx-async tx-id
                                  #(or (some-> (.indexer-error this) throw)
                                       (.latestCompletedTx this))
                                  awaiters)
@@ -737,6 +737,6 @@
   (util/close indexer))
 
 (defn await-tx
-  ([node] (await-tx (xtp/latest-submitted-tx node) node))
-  ([tx node] (await-tx tx node nil))
-  ([tx node timeout] (.awaitTx ^IIndexer (util/component node :xtdb/indexer) tx timeout)))
+  ([node] (await-tx (xtp/latest-submitted-tx-id node) node))
+  ([^long tx-id node] (await-tx tx-id node nil))
+  ([^long tx-id node timeout] (.awaitTx ^IIndexer (util/component node :xtdb/indexer) tx-id timeout)))
