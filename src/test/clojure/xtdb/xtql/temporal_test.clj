@@ -24,41 +24,41 @@
                    '{:find [foo]
                      :where [(match :xt_docs {:xt/id 1})
                              [1 :foo foo]]}
-                   {:basis {:at-tx tx2}})))
+                   {:at-tx tx2})))
     ;; app-time
     (t/is (= []
              (xt/q tu/*node* '{:find [foo]
                                :where [(match :xt_docs {:xt/id 1})
                                        [1 :foo foo]]}
-                   {:basis {:at-tx tx2, :current-time (.toInstant #inst "1999")}})))
+                   {:at-tx tx2, :current-time (.toInstant #inst "1999")})))
     (t/is (= [{:foo "2000-4000"}]
              (xt/q tu/*node* '{:find [foo]
                                :where [(match :xt_docs {:xt/id 1})
                                        [1 :foo foo]]}
-                   {:basis {:at-tx tx2, :current-time (.toInstant #inst "2000")}})))
+                   {:at-tx tx2, :current-time (.toInstant #inst "2000")})))
 
     (t/is (= [{:foo "3000-"}]
              (xt/q tu/*node* '{:find [foo]
                                :where [(match :xt_docs {:xt/id 1})
                                        [1 :foo foo]]}
-                   {:basis {:at-tx tx2
-                            :current-time (.toInstant #inst "3001")}})))
+                   {:at-tx tx2
+                    :current-time (.toInstant #inst "3001")})))
 
     (t/is (= []
              (xt/q tu/*node* '{:find [foo]
                                :where [(match :xt_docs {:xt/id 1})
                                        [1 :foo foo]]}
-                   {:basis {:at-tx tx1, :current-time (.toInstant #inst "4001")}})))
+                   {:at-tx tx1, :current-time (.toInstant #inst "4001")})))
 
     ;; system-time - eugh, TODO, we need to just be able to pass a system-time to basis
     (t/is (=  []
               (xt/q tu/*node* '{:find [foo]
                                 :where [(match :xt_docs {:xt/id 1})
                                         [1 :foo foo]]}
-                    {:basis {:at-tx (serde/->TxKey 0 (.toInstant #inst "2000"))}})))
+                    {:at-tx (serde/->TxKey 0 (.toInstant #inst "2000"))})))
 
     (t/is (=  [{:foo "2000-4000"}]
               (xt/q tu/*node* '{:find [foo]
                                 :where [(match :xt_docs {:xt/id 1})
                                         [1 :foo foo]]}
-                    {:basis {:at-tx (serde/->TxKey 0 (.toInstant (java.util.Date.)))}})))))
+                    {:at-tx (serde/->TxKey 0 (.toInstant (java.util.Date.)))})))))

@@ -16,15 +16,18 @@ import kotlinx.serialization.json.JsonObject
 import xtdb.*
 import xtdb.AnySerde.toValue
 import xtdb.api.TransactionKey
+import xtdb.api.log.TxId
 import xtdb.api.query.IKeyFn
 import java.time.Duration
+import java.time.Instant
 import java.time.ZoneId
 
 @Serializable
 data class QueryOptions(
     @Serializable(ArgsSerde::class) val args: Map<String, *>? = null,
-    val basis: Basis? = null,
-    val afterTx: TransactionKey? = null,
+    val atTx: TransactionKey? = null,
+    val currentTime: Instant? = null,
+    val afterTxId: TxId? = null,
     val txTimeout: Duration? = null,
     val defaultTz: ZoneId? = null,
     val explain: Boolean = false,

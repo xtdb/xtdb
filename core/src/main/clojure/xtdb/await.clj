@@ -1,32 +1,28 @@
 (ns xtdb.await
   (:require xtdb.api)
-  (:import xtdb.api.TransactionKey
-           [java.util.function Supplier]
-           [java.util.concurrent CompletableFuture PriorityBlockingQueue]))
+  (:import [java.util.concurrent CompletableFuture PriorityBlockingQueue]
+           xtdb.api.TransactionKey))
 
-(deftype AwaitingTx [^TransactionKey tx, ^CompletableFuture fut]
+(deftype AwaitingTx [^long tx-id, ^CompletableFuture fut]
   Comparable
   (compareTo [_ other]
-    (.compareTo tx (.tx ^AwaitingTx other))))
+    (Long/compare tx-id (.tx_id ^AwaitingTx other))))
 
-(defn- await-done? [^TransactionKey awaited-tx, ^TransactionKey completed-tx]
-  (or (nil? awaited-tx)
-      (when completed-tx
-        (not (pos? (.compareTo awaited-tx completed-tx))))))
+(defn- await-done? [^long awaited-tx-id, ^TransactionKey completed-tx-id]
+  (or (neg? awaited-tx-id)
+      (and completed-tx-id
+           (not (pos? (Long/compare awaited-tx-id (.getTxId completed-tx-id)))))))
 
 (defn- ->ingester-ex [^Throwable cause]
-  (ex-info (str "Ingestion stopped: " (.getMessage cause))
-           {}
-           cause))
+  (ex-info (str "Ingestion stopped: " (.getMessage cause)) {} cause))
 
-(defn await-tx-async
-  ^java.util.concurrent.CompletableFuture
-  [^TransactionKey awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
-
+(defn await-tx-async ^java.util.concurrent.CompletableFuture [awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
   (or (try
         ;; fast path - don't bother with the PBQ unless we need to
-        (when (await-done? awaited-tx (->latest-completed-tx))
-          (CompletableFuture/completedFuture awaited-tx))
+        (let [latest-completed-tx (->latest-completed-tx)]
+          (when (await-done? awaited-tx latest-completed-tx)
+            (CompletableFuture/completedFuture latest-completed-tx)))
+
         (catch Exception e
           (CompletableFuture/failedFuture (->ingester-ex e))))
 
@@ -35,22 +31,23 @@
         (.offer awaiters awaiting-tx)
 
         (try
-          (when (await-done? awaited-tx (->latest-completed-tx))
-            (.remove awaiters awaiting-tx)
-            (.complete fut awaited-tx))
+          (let [latest-completed-tx (->latest-completed-tx)]
+            (when (await-done? awaited-tx latest-completed-tx)
+              (.remove awaiters awaiting-tx)
+              (.complete fut latest-completed-tx)))
           (catch Exception e
             (.completeExceptionally fut (->ingester-ex e))
             true))
 
         fut)))
 
-(defn notify-tx [completed-tx ^PriorityBlockingQueue awaiters]
+(defn notify-tx [^TransactionKey completed-tx, ^PriorityBlockingQueue awaiters]
   (while (when-let [^AwaitingTx awaiting-tx (.peek awaiters)]
-           (let [awaited-tx (.tx awaiting-tx)]
-             (when (await-done? awaited-tx completed-tx)
+           (let [awaited-tx-id (.tx_id awaiting-tx)]
+             (when (await-done? awaited-tx-id completed-tx)
                (.remove awaiters awaiting-tx)
-               (.completeAsync ^CompletableFuture (.fut awaiting-tx) (reify Supplier
-                                                                       (get [_] awaited-tx)))
+               (.completeAsync ^CompletableFuture (.fut awaiting-tx)
+                               (fn [] completed-tx))
                true)))))
 
 (defn notify-ex [^Exception ex ^PriorityBlockingQueue awaiters]

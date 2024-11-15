@@ -4,11 +4,11 @@
 (defprotocol PNode
   (^java.util.stream.Stream open-sql-query [node ^String query opts])
   (^java.util.stream.Stream open-xtql-query [node query opts])
-  (^xtdb.api.TransactionKey submit-tx [node tx-ops tx-opts])
+  (^long submit-tx [node tx-ops tx-opts])
   (^xtdb.api.TransactionResult execute-tx [node tx-ops tx-opts]))
 
 (defprotocol PStatus
-  (latest-submitted-tx [node])
+  (latest-submitted-tx-id [node])
   (status [node]))
 
 (def http-routes

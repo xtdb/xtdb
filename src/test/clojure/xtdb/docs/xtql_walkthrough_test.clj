@@ -624,9 +624,9 @@
 
 (deftest DML-Assert-3110
   (let [node tu/*node*
-        {my-tx-id :tx-id} (xt/submit-tx node
-                                        [[:assert-exists '(from :users [{:xt/id :james}])]
-                                         [:put-docs :orders {:xt/id :james, :item "fewer bugs"}]])]
+        my-tx-id (xt/submit-tx node
+                               [[:assert-exists '(from :users [{:xt/id :james}])]
+                                [:put-docs :orders {:xt/id :james, :item "fewer bugs"}]])]
     (t/is (= [{:committed? false
                :error (err/runtime-err :xtdb/assert-failed {::err/message "Assert failed"})}]
              (-> (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
@@ -637,7 +637,7 @@
   (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :james, :email "james@example.com"}]])
 
   (let [node tu/*node*
-        {my-tx-id :tx-id}
+        my-tx-id
         ;; tag::DML-Assert-xtql[]
         (xt/submit-tx node
                       [[:assert-not-exists '(from :users [{:email $email}])
@@ -656,9 +656,8 @@
             ;; end::DML-Assert-query[]
             ))))
 
-  (let [{:keys [tx-id]}
-        (xt/submit-tx tu/*node*
-                      [[:sql (sql-example "DML-Assert-Not-sql")]])]
+  (let [tx-id (xt/submit-tx tu/*node*
+                            [[:sql (sql-example "DML-Assert-Not-sql")]])]
     (t/is (= [{:committed? false}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
                    {:args {:tx-id tx-id}})))))

@@ -31,62 +31,60 @@
     (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan}]
                         [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
 
-    (let [tx1 (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms}]
-                                      [:put-docs :xt_docs {:name "Jon", :xt/id :jon}]])
-                  (tu/then-await-tx node))]
+    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms}]
+                            [:put-docs :xt_docs {:name "Jon", :xt/id :jon}]])
+        (tu/then-await-tx node))
 
-      (tu/finish-chunk! node)
-      (c/compact-all! node)
+    (tu/finish-chunk! node)
+    (c/compact-all! node)
 
-      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-        (letfn [(test-query-ivan [expected tx]
-                  (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name "Ivan")}]]
-                                             {:node node, :basis {:at-tx tx}}))))
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+      (letfn [(test-query-ivan [expected]
+                (t/is (= expected
+                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name "Ivan")}]]
+                                           {:node node}))))
 
-                  (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
-                                             {:node node, :basis {:at-tx tx}, :params {'?name "Ivan"}})))))]
+                (t/is (= expected
+                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
+                                           {:node node, :params {'?name "Ivan"}})))))]
 
-          (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
+        (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-          (util/with-open [params (tu/open-params {'?name "Ivan"})]
-            (t/testing "only needs to scan chunk 1, page 1"
-              (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-params)
-                    param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
-                (t/testing "L0 files don't have content metadata, so we have to match them"
-                  (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))
-                    (fn [^ITableMetadata table-metadata]
-                      (t/is (true? (.test (.build lit-sel table-metadata) 0)))
-                      (t/is (true? (.test (.build param-sel table-metadata) 0)))))
+        (util/with-open [params (tu/open-params {'?name "Ivan"})]
+          (t/testing "only needs to scan chunk 1, page 1"
+            (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-params)
+                  param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
+              (t/testing "L0 files don't have content metadata, so we have to match them"
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))
+                  (fn [^ITableMetadata table-metadata]
+                    (t/is (true? (.test (.build lit-sel table-metadata) 0)))
+                    (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-                  (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 2 8 4))
-                    (fn [^ITableMetadata table-metadata]
-                      (t/is (true? (.test (.build lit-sel table-metadata) 0)))
-                      (t/is (true? (.test (.build param-sel table-metadata) 0))))))
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 2 8 4))
+                  (fn [^ITableMetadata table-metadata]
+                    (t/is (true? (.test (.build lit-sel table-metadata) 0)))
+                    (t/is (true? (.test (.build param-sel table-metadata) 0))))))
 
-                (t/testing "first L1 file has content metadata, doesn't match"
-                  (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 2 1))
-                    (fn [^ITableMetadata table-metadata]
-                      (t/is (false? (.test (.build lit-sel table-metadata) 0)))
-                      (t/is (false? (.test (.build param-sel table-metadata) 0))))))
+              (t/testing "first L1 file has content metadata, doesn't match"
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 2 1))
+                  (fn [^ITableMetadata table-metadata]
+                    (t/is (false? (.test (.build lit-sel table-metadata) 0)))
+                    (t/is (false? (.test (.build param-sel table-metadata) 0))))))
 
-                (t/testing "combined L1 file matches"
-                  (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 8 5))
-                    (fn [^ITableMetadata table-metadata]
-                      (t/is (true? (.test (.build lit-sel table-metadata) 0)))
-                      (t/is (true? (.test (.build param-sel table-metadata) 0)))))))))
+              (t/testing "combined L1 file matches"
+                (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 8 5))
+                  (fn [^ITableMetadata table-metadata]
+                    (t/is (true? (.test (.build lit-sel table-metadata) 0)))
+                    (t/is (true? (.test (.build param-sel table-metadata) 0)))))))))
 
-          (let [tx2 (xt/submit-tx node [[:put-docs :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
+        (test-query-ivan #{{:xt/id :jms, :name "James"}
+                           {:xt/id :jon, :name "Jon"}})
 
-            (test-query-ivan #{{:xt/id :jms, :name "James"}
-                               {:xt/id :jon, :name "Jon"}}
-                             tx1)
+        (xt/submit-tx node [[:put-docs :xt_docs {:name "Jeremy", :xt/id :jdt}]])
 
-            (test-query-ivan #{{:xt/id :jms, :name "James"}
-                               {:xt/id :jon, :name "Jon"}
-                               {:xt/id :jdt, :name "Jeremy"}}
-                             tx2)))))))
+        (test-query-ivan #{{:xt/id :jms, :name "James"}
+                           {:xt/id :jon, :name "Jon"}
+                           {:xt/id :jdt, :name "Jeremy"}})))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}}))]
@@ -143,9 +141,9 @@
                                  {:node node, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
-  (let [tx1 (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
+  (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
         tt1 (.getSystemTime tx1)
-        tx2 (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
+        tx2 (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
         tt2 (.getSystemTime tx2)]
     (letfn [(q [& temporal-constraints]
               (->> (tu/query-ra [:scan '{:table public/xt_docs, :for-system-time :all-time, :for-valid-time :all-time}

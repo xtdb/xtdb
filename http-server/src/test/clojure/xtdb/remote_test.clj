@@ -42,7 +42,7 @@
   (xt/submit-tx *node* [[:put-docs :foo {:xt/id 1}]])
   (Thread/sleep 100)
 
-  (t/is (= {"latestSubmittedTx" {"txId" 0, "systemTime" "2020-01-01T00:00:00Z"},
+  (t/is (= {"latestSubmittedTxId" 0,
             "latestCompletedTx" {"txId" 0, "systemTime" "2020-01-01T00:00:00Z"}}
            (-> (http/request {:accept :json
                               :as :string
@@ -52,7 +52,7 @@
                decode-json))
         "testing status")
 
-  (t/is (= {"txId" 1, "systemTime" "2020-01-02T00:00:00Z"}
+  (t/is (= 1
            (-> (http/request {:accept :json
                               :as :string
                               :request-method :post
@@ -66,9 +66,10 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}}})))
+                 {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}
+                  :after-tx-id 1})))
 
-  (let [tx (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])]
+  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])]
     (t/is (=
            ;; TODO figure out clojure bug
            #_#{{"xt/id" 1} {"xt/id" 2 "key" :some-keyword}}
@@ -79,7 +80,8 @@
                               :request-method :post
                               :content-type :transit+json
                               :form-params {:query '(from :docs [xt/id key])
-                                            :basis {:at-tx tx}
+                                            :at-tx tx
+                                            :after-tx-id 2
                                             :key-fn #xt/key-fn :kebab-case-keyword}
                               :transit-opts xtc/transit-opts
                               :url (http-url "query")})
@@ -140,7 +142,7 @@
   (let [_tx1 (xt/submit-tx *node* [[:put-docs :docs {:xt/id 1}]])
         {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
 
-    (t/is (= {"txId" 1, "systemTime" "2020-01-02T00:00:00Z"}
+    (t/is (= 1
              (-> (http/request {:accept :json
                                 :as :string
                                 :request-method :post
@@ -153,7 +155,7 @@
 
     (t/is (= [{:xt/id 2}]
              (xt/q *node* '(from :docs [xt/id])
-                   {:after-tx tx2})))
+                   {:after-tx-id tx-id})))
 
     (t/is (= [{"xt/id" 2}]
              (-> (http/request {:accept :json
@@ -161,7 +163,7 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:sql "SELECT docs._id FROM docs"
-                                              :queryOpts {:basis {:atTx (tx-key->json-tx-key tx2)}
+                                              :queryOpts {:atTx (tx-key->json-tx-key tx2)
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
@@ -190,9 +192,8 @@
                            :request-method :post
                            :content-type :json
                            :form-params {:sql "SELECT _id FROM docs"
-                                         :queryOpts {:basis {:atTx
-                                                             {"txId" tx-id
-                                                              "systemTime" {"@type" "xt:instat" "@value" (str system-time)}}}}}
+                                         :queryOpts {:atTx {"txId" tx-id
+                                                            "systemTime" {"@type" "xt:instat" "@value" (str system-time)}}}}
                            :url (http-url "query")
                            :throw-exceptions? false})
             body (decode-json body)]

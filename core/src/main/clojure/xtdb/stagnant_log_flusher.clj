@@ -34,36 +34,33 @@
         ;; the tx-key of the last flush msg sent by me
         !last-flush-tx-id (atom nil)
 
-        ^Runnable f
-        (bound-fn heartbeat []
-          (*on-heartbeat* {:last-flush @!last-flush-tx-id, :last-seen @previously-seen-chunk-tx-id})
-          (when-some [latest-tx-id (some-> (.latestCompletedTx indexer) (.getTxId))]
-            (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx indexer) (.getTxId))]
-              (try
-                (when (and (= @previously-seen-chunk-tx-id latest-chunk-tx-id)
-                           (or (nil? @!last-flush-tx-id)
-                               (< (long @!last-flush-tx-id) (long latest-tx-id))))
-                  (log/infof "last chunk tx-id %s, flushing any pending writes" latest-chunk-tx-id)
+        f (bound-fn heartbeat []
+            (*on-heartbeat* {:last-flush @!last-flush-tx-id, :last-seen @previously-seen-chunk-tx-id})
+            (when-some [latest-tx-id (some-> (.latestCompletedTx indexer) (.getTxId))]
+              (let [latest-chunk-tx-id (some-> (.latestCompletedChunkTx indexer) (.getTxId))]
+                (try
+                  (when (and (= @previously-seen-chunk-tx-id latest-chunk-tx-id)
+                             (or (nil? @!last-flush-tx-id)
+                                 (< (long @!last-flush-tx-id) (long latest-tx-id))))
+                    (log/debugf "last chunk tx-id %s, flushing any pending writes" latest-chunk-tx-id)
 
-                  (let [record-buf (-> (ByteBuffer/allocate 9)
-                                       (.put (byte xt-log/hb-flush-chunk))
-                                       (.putLong (or latest-chunk-tx-id -1))
-                                       .flip)
-                        ^TransactionKey tx-key @(.appendTx log record-buf)]
-                    (reset! !last-flush-tx-id (.getTxId tx-key))))
-                (catch InterruptedException _)
-                (catch ClosedByInterruptException _)
-                (catch Throwable e
-                  (log/error e "exception caught submitting flush record"))
-                (finally
-                  (reset! previously-seen-chunk-tx-id latest-chunk-tx-id))))))]
+                    (let [record-buf (-> (ByteBuffer/allocate 9)
+                                         (.put (byte xt-log/hb-flush-chunk))
+                                         (.putLong (or latest-chunk-tx-id -1))
+                                         .flip)]
+                      (reset! !last-flush-tx-id @(.appendTx log record-buf))))
+                  (catch InterruptedException _)
+                  (catch ClosedByInterruptException _)
+                  (catch Throwable e
+                    (log/error e "exception caught submitting flush record"))
+                  (finally
+                    (reset! previously-seen-chunk-tx-id latest-chunk-tx-id))))))]
     {:executor exr
-     :task (.scheduleAtFixedRate exr f (.toMillis ^Duration duration) (.toMillis ^Duration duration) TimeUnit/MILLISECONDS)}))
+     :task (.scheduleAtFixedRate exr f (.toMillis duration) (.toMillis duration) TimeUnit/MILLISECONDS)}))
 
 (defmethod ig/halt-key! ::flusher [_ {:keys [^ExecutorService executor, task]}]
   (future-cancel task)
-  (.shutdown executor)
-  (let [timeout-secs 10]
-    (when-not (.awaitTermination executor timeout-secs TimeUnit/SECONDS)
-      (log/warnf "flusher did not shutdown within %d seconds" timeout-secs))))
+  (.shutdownNow executor)
 
+  (when-not (.awaitTermination executor 10 TimeUnit/SECONDS)
+    (log/warnf "flusher did not shutdown within %d seconds" 10)))

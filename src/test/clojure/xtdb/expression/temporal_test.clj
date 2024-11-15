@@ -22,7 +22,7 @@
       (= expected (-> (tu/query-ra [:project [{'res '(= ?a ?b)}]
                                     [:table [{}]]]
                                    {:params {'?a a, '?b b}
-                                    :basis {:current-time Instant/EPOCH}
+                                    :current-time Instant/EPOCH
                                     :default-tz (ZoneOffset/of zone-id)})
                       first :res))
     ;; identity
@@ -53,7 +53,7 @@
               ([src-value tgt-type {:keys [default-tz], :or {default-tz ZoneOffset/UTC}}]
                (-> (tu/query-ra [:project [{'res `(~'cast ~'arg ~tgt-type)}]
                                  [:table [{}]]]
-                                {:basis {:current-time current-time}
+                                {:current-time current-time
                                  :default-tz default-tz
                                  :params {'arg src-value}})
                    first :res)))]
@@ -195,7 +195,7 @@
               ([src-value tgt-type cast-opts]
                (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
                                  [:table [{}]]]
-                                {:basis {:current-time current-time}})
+                                {:current-time current-time})
                    first :res)))]
 
       (t/testing "string ->"
@@ -274,8 +274,7 @@
             ([src-value tgt-type] (test-cast src-value tgt-type nil))
             ([src-value tgt-type cast-opts]
              (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
-                               [:table [{}]]]
-                              {:basis {}})
+                               [:table [{}]]])
                  first :res)))]
 
     (t/testing "cannot cast year-month interval to duration"
@@ -314,8 +313,7 @@
     (letfn [(test-cast
               [src-value tgt-type]
               (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
-                                [:table [{}]]]
-                               {:basis {}})
+                                [:table [{}]]])
                   first :res))]
 
       (t/is (= #xt/interval-mdn ["P0D" "PT3H1.11S"] (test-cast #time/duration "PT3H1.11S" :interval)))
@@ -327,8 +325,7 @@
     (letfn [(test-cast
               [src-value tgt-type iq]
               (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~iq)}]
-                                [:table [{}]]]
-                               {:basis {}})
+                                [:table [{}]]])
                   first :res))]
 
       (t/is (= #xt/interval-mdn ["P0D" "PT36H"] (test-cast #time/duration "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
@@ -353,22 +350,20 @@
            UnsupportedOperationException
            #"Cannot cast a duration to a year-month interval"
            (tu/query-ra [:project [{'res `(~'cast #time/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
-                         [:table [{}]]]
-                        {:basis {}})))
+                         [:table [{}]]])))
 
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"The maximum fractional seconds precision is 9."
            (tu/query-ra [:project [{'res `(~'cast #time/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
-                         [:table [{}]]]
-                        {:basis {}})))))
+                         [:table [{}]]])))))
 
 (t/deftest cast-int-to-interval
   (letfn [(test-cast
             [src-value tgt-type cast-opts]
             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
                               [:table [{}]]]
-                             {:basis {}})
+                             )
                 first :res))]
 
     (t/is (= #xt/interval-ym "P12M" (test-cast 1 :interval {:start-field "YEAR"})))
@@ -387,8 +382,7 @@
   (letfn [(test-cast
             [src-value tgt-type]
             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
-                              [:table [{}]]]
-                             {:basis {}})
+                              [:table [{}]]])
                 first :res))]
     
     (t/are [expected src-value] (= expected (test-cast src-value :interval))
@@ -405,8 +399,7 @@
   (letfn [(test-cast
             [src-value tgt-type cast-opts]
             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
-                              [:table [{}]]]
-                             {:basis {}})
+                              [:table [{}]]])
                 first :res))]
 
     (t/is (= #xt/interval-ym "P12M"
@@ -436,8 +429,7 @@
   (letfn [(test-cast
             [src-value tgt-type]
             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
-                              [:table [{}]]]
-                             {:basis {}})
+                              [:table [{}]]])
                 first :res))]
     (t/testing "year-month interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value :utf8))
@@ -475,8 +467,7 @@
   (letfn [(test-cast
             [src-value tgt-type iq]
             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~iq)}]
-                              [:table [{}]]]
-                             {:basis {}})
+                              [:table [{}]]])
                 first :res))]
     (t/testing "casting interval to interval without qualifier is a no-op"
       (t/is (= #xt/interval-ym "P12M" (test-cast #xt/interval-ym "P12M" :interval {})))
@@ -533,8 +524,7 @@
 
 (defn age [dt1 dt2]
   (-> (tu/query-ra [:project [{'res `(~'age ~dt1 ~dt2)}]
-                    [:table [{}]]]
-                   {:basis {}})
+                    [:table [{}]]])
       first :res))
 
 ;; Keeping in mind - age(dt1, dt2) is dt1 - dt2.
@@ -714,7 +704,7 @@
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-local :micro])}]
                           [:table [{}]]]
                          {:params {'?t1 t1}
-                          :basis {:current-time now}
+                          :current-time now
                           :default-tz default-tz})
             first :res))))
 
@@ -727,7 +717,7 @@
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-tz :micro (str zdt-tz)])}]
                           [:table [{}]]]
                          {:params {'?t1 t1}
-                          :basis {:current-time now}
+                          :current-time now
                           :default-tz default-tz})
             first :res))))
 

@@ -1261,7 +1261,7 @@
   (letfn [(q [query tx current-time]
             (xt/q tu/*node*
                   query
-                  {:basis {:at-tx tx, :current-time (time/->instant current-time)}}))]
+                  {:at-tx tx, :current-time (time/->instant current-time)}))]
 
     ;; Matthew 2015+
 
@@ -1277,18 +1277,18 @@
     ;; 2023: Matthew, Mark (again)
     ;; 2024+: Matthew
 
-    (let [tx0 (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
-                                        {:xt/id :matthew}]
-                                       [:put-docs {:into :docs, :valid-from #inst "2018", :valid-to #inst "2020"}
-                                        {:xt/id :mark}]
-                                       [:put-docs {:into :docs, :valid-from #inst "2021"}
-                                        {:xt/id :luke}]])
+    (let [tx0 (xt/execute-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
+                                         {:xt/id :matthew}]
+                                        [:put-docs {:into :docs, :valid-from #inst "2018", :valid-to #inst "2020"}
+                                         {:xt/id :mark}]
+                                        [:put-docs {:into :docs, :valid-from #inst "2021"}
+                                         {:xt/id :luke}]])
 
-          tx1 (xt/submit-tx tu/*node* [[:delete-docs {:from :docs, :valid-from #inst "2022"} :luke]
-                                       [:put-docs {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
-                                        {:xt/id :mark}]
-                                       [:put-docs {:into :docs, :valid-from #inst "2016", :valid-to #inst "2020"}
-                                        {:xt/id :john}]])]
+          tx1 (xt/execute-tx tu/*node* [[:delete-docs {:from :docs, :valid-from #inst "2022"} :luke]
+                                        [:put-docs {:into :docs, :valid-from #inst "2023", :valid-to #inst "2024"}
+                                         {:xt/id :mark}]
+                                        [:put-docs {:into :docs, :valid-from #inst "2016", :valid-to #inst "2020"}
+                                         {:xt/id :john}]])]
 
       (t/is (= #{{:id :matthew}, {:id :mark}}
                (set (q '(from :docs [{:xt/id id}]), tx1, #inst "2023"))))
@@ -1389,12 +1389,12 @@
                                             :xt/valid-from vt-from
                                             :xt/valid-to vt-to}]
                                     :for-valid-time (in nil #inst "2040")})
-                      {:basis {:current-time (time/->instant #inst "2023")}})))))
+                      {:current-time (time/->instant #inst "2023")})))))
 
 (t/deftest test-temporal-opts-from-and-to
   (letfn [(q [query tx current-time]
             (xt/q tu/*node* query
-                  {:basis {:at-tx tx, :current-time (time/->instant current-time)}}))]
+                  {:at-tx tx, :current-time (time/->instant current-time)}))]
 
     ;; tx0
     ;; 2015 - eof : Matthew
@@ -1403,12 +1403,12 @@
     ;; tx1
     ;; now - 2040 : Matthew
 
-    (let [tx0 (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
-                                        {:xt/id :matthew}]
-                                       [:put-docs {:into :docs, :valid-to #inst "2050"}
-                                        {:xt/id :mark}]])
-          tx1 (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-to #inst "2040"}
-                                        {:xt/id :matthew}]])]
+    (let [tx0 (xt/execute-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
+                                         {:xt/id :matthew}]
+                                        [:put-docs {:into :docs, :valid-to #inst "2050"}
+                                         {:xt/id :mark}]])
+          tx1 (xt/execute-tx tu/*node* [[:put-docs {:into :docs, :valid-to #inst "2040"}
+                                         {:xt/id :matthew}]])]
       (t/is (= #{{:id :matthew,
                   :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                  {:id :mark,
@@ -1442,60 +1442,60 @@
 (deftest test-snodgrass-99-tutorial
   (letfn [(q [q tx current-time]
             (xt/q tu/*node* q
-                  {:basis {:at-tx tx, :current-time (time/->instant current-time)}}))
+                  {:at-tx tx, :current-time (time/->instant current-time)}))
           (q-with-args [q args tx current-time]
             (xt/q tu/*node* q
-                  {:args args :basis {:at-tx tx, :current-time (time/->instant current-time)}}))]
+                  {:args args, :at-tx tx, :current-time (time/->instant current-time)}))]
 
-    (let [tx0 (xt/submit-tx tu/*node*
-                            [[:put-docs {:into :docs, :valid-from #inst "1998-01-10"}
-                              {:xt/id 1 :customer-number 145 :property-number 7797}]]
-                            {:system-time #inst "1998-01-10"})
-
-          tx1 (xt/submit-tx tu/*node*
-                            [[:put-docs {:into :docs, :valid-from #inst "1998-01-15"}
-                              {:xt/id 1 :customer-number 827 :property-number 7797}]]
-                            {:system-time #inst "1998-01-15"})
-
-          _tx2 (xt/submit-tx tu/*node*
-                             [[:delete-docs {:from :docs, :valid-from #inst "1998-01-20"} 1]]
-                             {:system-time #inst "1998-01-20"})
-
-          _tx3 (xt/submit-tx tu/*node*
-                             [[:put-docs {:into :docs, :valid-from #inst "1998-01-03", :valid-to #inst "1998-01-10"}
+    (let [tx0 (xt/execute-tx tu/*node*
+                             [[:put-docs {:into :docs, :valid-from #inst "1998-01-10"}
                                {:xt/id 1 :customer-number 145 :property-number 7797}]]
-                             {:system-time #inst "1998-01-23"})
+                             {:system-time #inst "1998-01-10"})
 
-          _tx4 (xt/submit-tx tu/*node*
-                             [[:delete-docs {:from :docs, :valid-from #inst "1998-01-03", :valid-to #inst "1998-01-05"} 1]]
-                             {:system-time #inst "1998-01-26"})
+          tx1 (xt/execute-tx tu/*node*
+                             [[:put-docs {:into :docs, :valid-from #inst "1998-01-15"}
+                               {:xt/id 1 :customer-number 827 :property-number 7797}]]
+                             {:system-time #inst "1998-01-15"})
 
-          tx5 (xt/submit-tx tu/*node*
-                            [[:put-docs {:into :docs, :valid-from #inst "1998-01-05", :valid-to #inst "1998-01-12"}
-                              {:xt/id 1 :customer-number 145 :property-number 7797}]
-                             [:put-docs {:into :docs, :valid-from #inst "1998-01-12", :valid-to #inst "1998-01-20"}
-                              {:xt/id 1 :customer-number 827 :property-number 7797}]]
-                            {:system-time #inst "1998-01-28"})
+          _tx2 (xt/execute-tx tu/*node*
+                              [[:delete-docs {:from :docs, :valid-from #inst "1998-01-20"} 1]]
+                              {:system-time #inst "1998-01-20"})
 
-          tx6 (xt/submit-tx tu/*node*
-                            [[:put-fn :delete-1-week-records,
-                              '(fn delete-1-weeks-records []
-                                 (->> (q '(-> (from :docs {:bind [{:xt/id id
-                                                                   :xt/valid-from app-from
-                                                                   :xt/valid-to app-to}]
-                                                           :for-valid-time :all-time})
-                                              (where (= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                        (- app-to app-from)))))
-                                      (map (fn [{:keys [id app-from app-to]}]
-                                             [:delete-docs {:from :docs, :valid-from app-from, :valid-to app-to}
-                                              id]))))]
-                             [:call :delete-1-week-records]]
-                            {:system-time #inst "1998-01-30"})
+          _tx3 (xt/execute-tx tu/*node*
+                              [[:put-docs {:into :docs, :valid-from #inst "1998-01-03", :valid-to #inst "1998-01-10"}
+                                {:xt/id 1 :customer-number 145 :property-number 7797}]]
+                              {:system-time #inst "1998-01-23"})
 
-          tx7 (xt/submit-tx tu/*node*
-                            [[:put-docs {:into :docs, :valid-from #inst "1998-01-15"}
-                              {:xt/id 2 :customer-number 827 :property-number 3621}]]
-                            {:system-time #inst "1998-01-31"})]
+          _tx4 (xt/execute-tx tu/*node*
+                              [[:delete-docs {:from :docs, :valid-from #inst "1998-01-03", :valid-to #inst "1998-01-05"} 1]]
+                              {:system-time #inst "1998-01-26"})
+
+          tx5 (xt/execute-tx tu/*node*
+                             [[:put-docs {:into :docs, :valid-from #inst "1998-01-05", :valid-to #inst "1998-01-12"}
+                               {:xt/id 1 :customer-number 145 :property-number 7797}]
+                              [:put-docs {:into :docs, :valid-from #inst "1998-01-12", :valid-to #inst "1998-01-20"}
+                               {:xt/id 1 :customer-number 827 :property-number 7797}]]
+                             {:system-time #inst "1998-01-28"})
+
+          tx6 (xt/execute-tx tu/*node*
+                             [[:put-fn :delete-1-week-records,
+                               '(fn delete-1-weeks-records []
+                                  (->> (q '(-> (from :docs {:bind [{:xt/id id
+                                                                    :xt/valid-from app-from
+                                                                    :xt/valid-to app-to}]
+                                                            :for-valid-time :all-time})
+                                               (where (= (- #inst "1970-01-08" #inst "1970-01-01")
+                                                         (- app-to app-from)))))
+                                       (map (fn [{:keys [id app-from app-to]}]
+                                              [:delete-docs {:from :docs, :valid-from app-from, :valid-to app-to}
+                                               id]))))]
+                              [:call :delete-1-week-records]]
+                             {:system-time #inst "1998-01-30"})
+
+          tx7 (xt/execute-tx tu/*node*
+                             [[:put-docs {:into :docs, :valid-from #inst "1998-01-15"}
+                               {:xt/id 2 :customer-number 827 :property-number 3621}]]
+                             {:system-time #inst "1998-01-31"})]
 
       (t/is (= [{:cust 145 :app-from (time/->zdt #inst "1998-01-10")}]
                (q '(from :docs {:bind [{:customer-number cust, :xt/valid-from app-from}]
@@ -1985,12 +1985,12 @@
     (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:basis {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
+                {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}})))
 
     (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:basis {:at-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
+                {:at-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}})))))
 
 #_
 (t/deftest test-row-alias-app-time-key-set ;TODO from-star

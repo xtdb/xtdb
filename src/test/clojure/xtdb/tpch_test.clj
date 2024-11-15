@@ -24,16 +24,17 @@
     (do
       (util/delete-dir node-dir)
       (with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [last-tx (case method
-                        :docs (tpch/submit-docs! node scale-factor)
-                        :dml (tpch/submit-dml! node scale-factor))]
-          (tu/then-await-tx last-tx node)
-          (tu/finish-chunk! node)
+        (case method
+          :docs (tpch/submit-docs! node scale-factor)
+          :dml (tpch/submit-dml! node scale-factor))
 
-          (c/compact-all! node (Duration/ofMinutes 5))
+        (tu/then-await-tx node)
+        (tu/finish-chunk! node)
 
-          (binding [*node* node]
-            (f)))))))
+        (c/compact-all! node (Duration/ofMinutes 5))
+
+        (binding [*node* node]
+          (f))))))
 
 (defn is-equal?
   [expected actual]

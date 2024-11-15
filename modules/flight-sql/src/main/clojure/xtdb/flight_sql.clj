@@ -125,7 +125,7 @@
                                                                                  (vr/rel-reader 1))]
                                          (doto ps
                                            (some-> (.put :bound-query
-                                                         (.bind prepd-query {:params new-params, :basis {:at-tx (.latestCompletedTx idxer)}}))
+                                                         (.bind prepd-query {:params new-params, :at-tx (.latestCompletedTx idxer)}))
                                                    util/try-close))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 
@@ -148,11 +148,11 @@
       (getFlightInfoStatement [_ cmd _ctx descriptor]
         (let [sql (.toStringUtf8 (.getQueryBytes cmd))
               ticket-handle (new-id)
-              basis {:at-tx (.latestCompletedTx idxer)}
-              plan (.planQuery q-src sql wm-src {:basis basis})
+              at-tx (.latestCompletedTx idxer)
+              plan (.planQuery q-src sql wm-src {:at-tx at-tx})
               bq (-> (.prepareRaQuery q-src plan wm-src {})
                      ;; HACK need to get the basis from somewhere...
-                     (.bind {:basis basis}))
+                     (.bind {:at-tx at-tx}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)
@@ -196,7 +196,7 @@
       (createPreparedStatement [_ req _ctx listener]
         (let [ps-id (new-id)
               sql (.toStringUtf8 (.getQueryBytes req))
-              plan (.planQuery q-src sql wm-src {:basis {:at-tx (.latestCompletedTx idxer)}})
+              plan (.planQuery q-src sql wm-src {:at-tx (.latestCompletedTx idxer)})
               {:keys [param-count]} (meta plan)
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)

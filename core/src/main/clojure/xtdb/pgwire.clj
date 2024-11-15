@@ -339,7 +339,7 @@
                          (subs di-str 1 (dec (count di-str)))))))
           (str/lower-case)))
 
-(defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx session-parameters]}]
+(defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx-id session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
@@ -457,9 +457,9 @@
 
                      (visitShowLatestSubmittedTransactionStatement [_ _]
                        {:statement-type :query, :query sql
-                        :ra-plan [:table '[tx_id system_time]
-                                  (if-let [{:keys [tx-id system-time]} latest-submitted-tx]
-                                    [{:tx_id tx-id, :system_time system-time}]
+                        :ra-plan [:table '[tx_id]
+                                  (if latest-submitted-tx-id
+                                    [{:tx_id latest-submitted-tx-id}]
                                     [])]})
 
                      ;; HACK: these values are fixed at prepare-time - if they were to change,
@@ -1164,12 +1164,12 @@
           (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
         :else
-        (let [{:keys [error] :as tx-res} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
+        (let [{:keys [tx-id error]} (execute-tx conn [stmt] {:default-tz (.getZone clock)})]
           (when-not (skip-until-sync? conn)
             (if error
               (cmd-send-error conn (err-protocol-violation (ex-message error)))
               (cmd-write-msg conn msg-command-complete cmd-complete-msg))
-            (swap! conn-state assoc :latest-submitted-tx tx-res)))))))
+            (swap! conn-state assoc :latest-submitted-tx-id tx-id)))))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [query bound-query fields] :as _portal}]
   (try
@@ -1246,13 +1246,13 @@
 
 (defn cmd-begin [{:keys [node conn-state] :as conn} tx-opts]
   (swap! conn-state
-         (fn [{:keys [session latest-submitted-tx] :as st}]
+         (fn [{:keys [session latest-submitted-tx-id] :as st}]
            (let [{:keys [^Clock clock]} session]
              (-> st
                  (assoc :transaction
                         (-> {:current-time (.instant clock)
-                             :at-tx (time/max-tx (:latest-completed-tx (xt/status node))
-                                                 latest-submitted-tx)}
+                             :at-tx (:latest-completed-tx (xt/status node))
+                             :after-tx-id (or latest-submitted-tx-id -1)}
                             (into (:characteristics session))
                             (into (:next-transaction session))
                             (into tx-opts)))
@@ -1266,8 +1266,8 @@
     (if failed
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (let [{:keys [error] :as tx-res} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                 :system-time tx-system-time})]
+      (let [{:keys [tx-id error]} (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                            :system-time tx-system-time})]
         (cond
           ;; skip - can't use skip-until-sync as we might be in a simple query
           (-> @conn-state :transaction :failed) nil
@@ -1276,13 +1276,13 @@
                   (swap! conn-state (fn [conn-state]
                                       (-> conn-state
                                           (update :transaction assoc :failed true, :err error)
-                                          (assoc :latest-submitted-tx tx-res))))
+                                          (assoc :latest-submitted-tx-id tx-id))))
                   (cmd-send-error conn (err-protocol-violation (ex-message error))))
           :else (do
                   (swap! conn-state (fn [conn-state]
                                       (-> conn-state
                                           (dissoc :transaction)
-                                          (assoc :latest-submitted-tx tx-res))))
+                                          (assoc :latest-submitted-tx-id tx-id))))
                   (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
@@ -1379,10 +1379,10 @@
   [{:keys [conn-state ^IXtdbInternal node] :as conn}
    {:keys [query param-oids]}]
 
-  (let [{:keys [session latest-submitted-tx]} @conn-state
+  (let [{:keys [session latest-submitted-tx-id]} @conn-state
         {:keys [^Clock clock], {:strs [fallback_output_format] :as session-parameters} :parameters} session
         {:keys [statement-type] :as stmt} (-> (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
-                                                                    :latest-submitted-tx latest-submitted-tx
+                                                                    :latest-submitted-tx-id latest-submitted-tx-id
                                                                     :session-parameters session-parameters})
                                               (assoc :param-oids param-oids))]
 
@@ -1402,7 +1402,7 @@
                                                                                                      (distinct)))))))})))
 
           (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
-                query-opts {:after-tx latest-submitted-tx
+                query-opts {:after-tx-id (or latest-submitted-tx-id -1)
                             :tx-timeout (Duration/ofSeconds 1)
                             :param-types param-col-types
                             :default-tz (.getZone clock)}
@@ -1468,10 +1468,10 @@
 
             xt-params (xtify-params conn params stmt-with-bind-msg)
 
-            query-opts {:basis {:at-tx (or (:at-tx stmt) (:at-tx transaction))
-                                :current-time (or (:current-time stmt)
-                                                  (:current-time transaction)
-                                                  (.instant clock))}
+            query-opts {:at-tx (or (:at-tx stmt) (:at-tx transaction))
+                        :current-time (or (:current-time stmt)
+                                          (:current-time transaction)
+                                          (.instant clock))
                         :default-tz (.getZone clock)
                         :args xt-params}
             ^BoundQuery bound-query (.bind ^PreparedQuery prepared-query query-opts)

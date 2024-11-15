@@ -21,16 +21,15 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-param-metadata-error-310
-  (let [tx1 (xt/submit-tx tu/*node*
-                          [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
-                            ["dave", "Dave", #inst "2018"]
-                            ["claire", "Claire", #inst "2019"]]])]
+  (xt/submit-tx tu/*node*
+                [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
+                  ["dave", "Dave", #inst "2018"]
+                  ["claire", "Claire", #inst "2019"]]])
 
-    (t/is (= [{:name "Dave"}]
-             (xt/q tu/*node* "SELECT users.name FROM users WHERE users._id = ?"
-                   {:args ["dave"]
-                    :basis {:at-tx tx1}}))
-          "#310")))
+  (t/is (= [{:name "Dave"}]
+           (xt/q tu/*node* "SELECT users.name FROM users WHERE users._id = ?"
+                 {:args ["dave"]}))
+        "#310"))
 
 (deftest test-bloom-filter-for-num-types-2133
   (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:num 0 :xt/id "a"}]
@@ -46,22 +45,22 @@
     (t/is (= [{:num 1} {:num 1.0}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num 1)}]]
-                          {:node tu/*node* :basis {:at-tx tx}})))
+                          {:node tu/*node*, :at-tx tx})))
 
     (t/is (= [{:num 2.0}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num 2)}]]
-                          {:node tu/*node* :basis {:at-tx tx}})))
+                          {:node tu/*node*, :at-tx tx})))
 
     (t/is (= [{:num 4}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num ?x)}]]
-                          {:node tu/*node* :basis {:at-tx tx} :params {'?x (byte 4)}})))
+                          {:node tu/*node*, :at-tx tx, :params {'?x (byte 4)}})))
 
     (t/is (= [{:num 3}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{num (= num ?x)}]]
-                          {:node tu/*node* :basis {:at-tx tx} :params {'?x (float 3)}})))))
+                          {:node tu/*node*, :at-tx tx, :params {'?x (float 3)}})))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
   (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
@@ -78,14 +77,14 @@
               {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp #time/zoned-date-time "2010-01-01T00:00:00Z")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))
+                          {:node tu/*node*, :at-tx tx, :default-tz #time/zone "Z"})))
 
     (t/is (= [{:timestamp #time/date "2010-01-01"}
               {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
               {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp ?x)}]]
-                          {:node tu/*node* :basis {:at-tx tx}
+                          {:node tu/*node*, :at-tx tx
                            :default-tz  #time/zone "Z" :params {'?x #time/date "2010-01-01"}})))
 
     (t/is (= [{:timestamp #time/date "2010-01-01"}
@@ -93,7 +92,7 @@
               {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{timestamp (= timestamp #time/date-time "2010-01-01T00:00:00")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
+                          {:node tu/*node*, :at-tx tx, :default-tz #time/zone "Z"})))))
 
 (deftest test-bloom-filter-for-time-types
   (let [tx (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:time #time/time "01:02:03" :xt/id "a"}]
@@ -106,7 +105,7 @@
     (t/is (= [{:time #time/time "04:05:06"}]
              (tu/query-ra '[:scan {:table public/xt_docs}
                             [{time (= time #time/time "04:05:06")}]]
-                          {:node tu/*node* :basis {:at-tx tx} :default-tz #time/zone "Z"})))))
+                          {:node tu/*node*, :at-tx tx, :default-tz #time/zone "Z"})))))
 
 (deftest test-min-max-on-xt-id
   (binding [c/*page-size* 16]

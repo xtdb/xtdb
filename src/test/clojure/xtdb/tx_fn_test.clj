@@ -70,23 +70,23 @@
            (xt/q tu/*node*
                  '(from :foo [xt/id doc-count]))))
 
-  (let [tx2 (xt/submit-tx tu/*node* [[:put-docs :accounts {:xt/id :petr :balance 100}]
-                                     [:put-docs :accounts {:xt/id :ivan :balance 200}]
-                                     [:put-fn :update-balance
-                                      '(fn [id]
-                                         (let [[account] (q '(from :accounts [balance xt/id {:xt/id $id}])
-                                                            {:args {:id id}})]
-                                           (if account
-                                             [[:put-docs :accounts (update account :balance inc)]]
-                                             [])))]
-                                     [:call :update-balance :petr]
-                                     [:call :update-balance :undefined]])]
-    (t/is (= #{{:xt/id :petr, :balance 101}
-               {:xt/id :ivan, :balance 200}}
-             (set (xt/q tu/*node*
-                        '(from :accounts [xt/id balance])
-                        {:basis {:at-tx tx2}})))
-          "query in tx-fn with in-args")))
+  (xt/submit-tx tu/*node* [[:put-docs :accounts {:xt/id :petr :balance 100}]
+                           [:put-docs :accounts {:xt/id :ivan :balance 200}]
+                           [:put-fn :update-balance
+                            '(fn [id]
+                               (let [[account] (q '(from :accounts [balance xt/id {:xt/id $id}])
+                                                  {:args {:id id}})]
+                                 (if account
+                                   [[:put-docs :accounts (update account :balance inc)]]
+                                   [])))]
+                           [:call :update-balance :petr]
+                           [:call :update-balance :undefined]])
+
+  (t/is (= #{{:xt/id :petr, :balance 101}
+             {:xt/id :ivan, :balance 200}}
+           (set (xt/q tu/*node*
+                      '(from :accounts [xt/id balance]))))
+        "query in tx-fn with in-args"))
 
 (t/deftest test-tx-fn-sql-q
   (xt/submit-tx tu/*node* [[:put-fn :doc-counter
@@ -102,13 +102,13 @@
                  '(from :docs [xt/id doc-count])))))
 
 (t/deftest test-tx-fn-current-tx
-  (let [tx0 (xt/submit-tx tu/*node* [[:put-fn :with-tx
-                                      '(fn [id]
-                                         [[:put-docs :docs (into {:xt/id id} *current-tx*)]])]
-                                     [:call :with-tx :foo]
-                                     [:call :with-tx :bar]])
+  (let [tx0 (xt/execute-tx tu/*node* [[:put-fn :with-tx
+                                       '(fn [id]
+                                          [[:put-docs :docs (into {:xt/id id} *current-tx*)]])]
+                                      [:call :with-tx :foo]
+                                      [:call :with-tx :bar]])
         tt0 (.getSystemTime tx0)
-        tx1 (xt/submit-tx tu/*node* [[:call :with-tx :baz]])
+        tx1 (xt/execute-tx tu/*node* [[:call :with-tx :baz]])
         tt1 (.getSystemTime tx1)]
 
     (t/is (= #{{:xt/id :foo, :tx-id 0, :system-time (time/->zdt tt0)}

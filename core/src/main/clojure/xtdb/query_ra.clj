@@ -1,8 +1,8 @@
 (ns xtdb.query-ra
   (:require [xtdb.indexer :as idx]
+            [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -33,9 +33,8 @@
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
-                      node (-> (time/after-latest-submitted-tx node)
-                               (update :after-tx time/max-tx (get-in query-opts [:basis :at-tx]))
-                               (doto (-> :after-tx (idx/await-tx node)))))
+                      node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
+                               (doto (-> :after-tx-id (idx/await-tx node)))))
          allocator (or allocator (util/component node :xtdb/allocator) )]
 
      (with-open [^RelationReader
@@ -45,15 +44,11 @@
        (let [^PreparedQuery pq (if node
                                  (let [^IQuerySource q-src (util/component node ::q/query-source)]
                                    (.prepareRaQuery q-src query indexer query-opts))
-                                 (q/prepare-ra
-                                  query
-                                  {:ref-ctr (RefCounter.)
-                                   :wm-src
-                                   (reify IWatermarkSource
-                                     (openWatermark [_]
-                                       (Watermark. nil nil {})))}
-                                  {}))
-             bq (.bind pq (-> (select-keys query-opts [:basis :after-tx :table-args :default-tz])
+                                 (q/prepare-ra query {:ref-ctr (RefCounter.)
+                                                      :wm-src (reify IWatermarkSource
+                                                                (openWatermark [_]
+                                                                  (Watermark. nil nil {})))}))
+             bq (.bind pq (-> (select-keys query-opts [:at-tx :current-time :after-tx-id :table-args :default-tz])
                               (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))

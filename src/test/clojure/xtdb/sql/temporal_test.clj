@@ -7,30 +7,25 @@
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (defn query-at-tx [query tx]
-  (xt/q tu/*node* query {:basis {:at-tx tx}}))
+  (xt/q tu/*node* query {:at-tx tx}))
 
 (t/deftest all-system-time
-  (let [_tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})
 
-    (t/is (= {{:last-updated "tx1"} 1, {:last-updated "tx2"}, 1}
-             (frequencies (query-at-tx "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME" tx2))))
+  (t/is (= {{:last-updated "tx1"} 1, {:last-updated "tx2"}, 1}
+           (frequencies (xt/q tu/*node* "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME"))))
 
-    (t/is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
-             (frequencies
-              (query-at-tx
-               "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME FOR ALL VALID_TIME"
-               tx2))))
+  (t/is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
+           (frequencies
+            (xt/q tu/*node* "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME FOR ALL VALID_TIME"))))
 
-    (t/is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
-             (frequencies
-              (query-at-tx
-               "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME ALL FOR VALID_TIME ALL"
-               tx2))))))
+  (t/is (= {{:last-updated "tx1"} 2, {:last-updated "tx2"} 1}
+           (frequencies (xt/q tu/*node* "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME ALL FOR VALID_TIME ALL")))))
 
 (t/deftest system-time-as-of
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
 
     (t/is (= []
              (query-at-tx
@@ -48,8 +43,8 @@
                    tx2))))))
 
 (t/deftest system-time-from-a-to-b
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
 
     (t/is (= []
              (query-at-tx
@@ -76,8 +71,8 @@
                    tx2))))))
 
 (t/deftest system-time-between-a-to-b
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
     (t/is (= []
              (query-at-tx
               "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2998-01-01' AND TIMESTAMP '2999-01-01 00:00:00+00:00'"
@@ -111,14 +106,14 @@
 
 (t/deftest app-time-period-predicates
   (t/testing "OVERLAPS"
-    (let [tx (xt/submit-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2000"}
-                                       {:xt/id :my-doc, :last-updated "2000"}]
+    (let [tx (xt/execute-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2000"}
+                                        {:xt/id :my-doc, :last-updated "2000"}]
 
-                                      [:put-docs {:into :foo, :valid-from #inst "3000"}
-                                       {:xt/id :my-doc, :last-updated "3000"}]
+                                       [:put-docs {:into :foo, :valid-from #inst "3000"}
+                                        {:xt/id :my-doc, :last-updated "3000"}]
 
-                                      [:put-docs {:into :foo, :valid-from #inst "4000", :valid-to #inst "4001"}
-                                       {:xt/id :some-other-doc, :last-updated "4000"}]])]
+                                       [:put-docs {:into :foo, :valid-from #inst "4000", :valid-to #inst "4001"}
+                                        {:xt/id :some-other-doc, :last-updated "4000"}]])]
 
       (t/is (= [{:last-updated "2000"} {:last-updated "3000"} {:last-updated "4000"}]
                (query-at-tx
@@ -146,11 +141,11 @@
                 tx))))))
 
 (t/deftest app-time-multiple-tables
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2000", :valid-to #inst "2001"}
-                                     {:xt/id :foo-doc, :last-updated "2001" }]
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2000", :valid-to #inst "2001"}
+                                      {:xt/id :foo-doc, :last-updated "2001" }]
 
-                                    [:put-docs {:into :bar, :valid-from #inst "2002", :valid-to #inst "2003"}
-                                     {:xt/id :bar-doc, :l_updated "2003" :name "test"}]])]
+                                     [:put-docs {:into :bar, :valid-from #inst "2002", :valid-to #inst "2003"}
+                                      {:xt/id :bar-doc, :l_updated "2003" :name "test"}]])]
 
     (t/is (= [{:last-updated "2001"}]
              (query-at-tx
@@ -186,10 +181,10 @@
              WHERE foo._VALID_TIME OVERLAPS bar._VALID_TIME" tx)))))
 
 (t/deftest app-time-joins
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2016", :valid-to #inst "2019"}
-                                     {:xt/id :bill, :name "Bill"}]
-                                    [:put-docs {:into :bar, :valid-from #inst "2018", :valid-to #inst "2020"}
-                                     {:xt/id :jeff, :also_name "Jeff"}]])]
+  (let [tx (xt/execute-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2016", :valid-to #inst "2019"}
+                                      {:xt/id :bill, :name "Bill"}]
+                                     [:put-docs {:into :bar, :valid-from #inst "2018", :valid-to #inst "2020"}
+                                      {:xt/id :jeff, :also_name "Jeff"}]])]
 
     (t/is (= []
              (query-at-tx

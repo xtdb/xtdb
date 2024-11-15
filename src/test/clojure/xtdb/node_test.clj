@@ -13,8 +13,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.time ZonedDateTime]
-           [xtdb.api Xtdb$Config ServerConfig]
-           [xtdb.api.tx TxOps]
+           [xtdb.api ServerConfig Xtdb$Config]
            [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
            xtdb.types.RegClass))
@@ -99,25 +98,42 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                 (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))))
 
 (t/deftest test-can-submit-same-id-into-multiple-tables-338
-  (let [tx1 (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1 (_id, foo) VALUES ('thing', 't1-foo')"]
+  (let [tx1 (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1 (_id, foo) VALUES ('thing', 't1-foo')"]
                                      [:sql "INSERT INTO t2 (_id, foo) VALUES ('thing', 't2-foo')"]])
-        tx2 (xt/submit-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2._id = 'thing'"]])]
+        tx2 (xt/execute-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2._id = 'thing'"]])]
 
     (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                   {:basis {:at-tx tx1}})))
+                   {:at-tx tx1})))
 
     (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
              (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                   {:basis {:at-tx tx2}})))
+                   {:at-tx tx2})))
 
     (t/is (= [{:xt/id "thing", :foo "t2-foo"}]
              (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:basis {:at-tx tx1}})))
+                   {:at-tx tx1})))
 
     (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
              (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:basis {:at-tx tx2}})))))
+                   {:at-tx tx2})))))
+
+(t/deftest ensure-at-tx-has-been-indexed
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"at-tx \(.+?\) is after the latest completed tx \(nil\)"
+                          (xt/q tu/*node* "SELECT 1"
+                                {:at-tx (serde/->TxKey 0 (time/->instant #inst "2020"))})))
+
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* "SELECT * FROM foo"
+                 {:at-tx (serde/->TxKey 0 (time/->instant #inst "2020"))})))
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"at-tx \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"
+                          (xt/q tu/*node* "SELECT * FROM foo"
+                                {:at-tx (serde/->TxKey 1 (time/->instant #inst "2020"))}))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -194,13 +210,13 @@ VALUES (1, 1)"]])
            (xt/q tu/*node* "
 SELECT foo._id, foo.v, foo._valid_from, foo._valid_to
 FROM foo FOR VALID_TIME AS OF DATE '1999-01-01'"
-                 {:basis {:current-time (time/->instant #inst "1999")}})))
+                 {:current-time (time/->instant #inst "1999")})))
 
   (t/is (= []
            (xt/q tu/*node* "
 SELECT foo._id, foo.v, foo._valid_from, foo._valid_to
 FROM foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP"
-                 {:basis {:current-time (time/->instant #inst "1999")}}))))
+                 {:current-time (time/->instant #inst "1999")}))))
 
 (t/deftest test-repeated-row-id-scan-bug-also-409
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, v) VALUES (1, 1)"]])
@@ -221,13 +237,13 @@ ORDER BY foo._valid_from"
             (frequencies
              (xt/q tu/*node* "SELECT foo._id, foo.v FROM foo FOR ALL VALID_TIME" opts)))]
 
-    (let [tx1 (xt/submit-tx tu/*node* [[:sql "
+    (let [tx1 (xt/execute-tx tu/*node* [[:sql "
 UPDATE foo
 FOR PORTION OF VALID_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
 SET v = 2
 WHERE foo._id = 1"]])
 
-          tx2 (xt/submit-tx tu/*node* [[:sql "
+          tx2 (xt/execute-tx tu/*node* [[:sql "
 DELETE FROM foo
 FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
 WHERE foo._id = 1"]])]
@@ -241,10 +257,10 @@ WHERE foo._id = 1"]])]
                 {:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2024")}]
 
-               (q1 {:basis {:at-tx tx1}})))
+               (q1 {:at-tx tx1})))
 
       (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:basis {:at-tx tx1}})))
+               (q2 {:at-tx tx1})))
 
       (t/is (= [{:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2020")
@@ -255,15 +271,15 @@ WHERE foo._id = 1"]])]
                 {:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1 {:basis {:at-tx tx2}})))
+               (q1 {:at-tx tx2})))
 
       (t/is (= [{:xt/id 1, :v 1
                  :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1-now {:basis {:at-tx tx2, :current-time (time/->instant #inst "2026")}})))
+               (q1-now {:at-tx tx2, :current-time (time/->instant #inst "2026")})))
 
       (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:basis {:at-tx tx2}}))))))
+               (q2 {:at-tx tx2}))))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020-01-01")
@@ -718,11 +734,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (not (identical? pq1 pq2))
           "different relevant query options returns new query")
 
-     (let [tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo 2}]])]
+     (let [tx-id (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo 2}]])]
 
-       (tu/then-await-tx tx tu/*node*)
+       (tu/then-await-tx tx-id tu/*node*)
 
-       (let [pq4 (.planQuery query-src "SELECT 1" wm-src {:after-tx tx})]
+       (let [pq4 (.planQuery query-src "SELECT 1" wm-src {:after-tx-id tx-id})]
 
          (t/is (not (identical? pq1 pq4))
                "changing table-info causes previous cache-hits to miss")))))
@@ -882,3 +898,14 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               [{col (= col (cast "bar" :regclass))}]]
             {:node tu/*node*}))
         "scan pred"))
+
+(t/deftest copes-with-log-time-going-backwards-3864
+  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]
+    (t/is (= 0 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]])))
+    (t/is (= 1 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
+    (t/is (= 2 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))
+
+    (t/is (= [{:xt/id 0, :system-time #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              {:xt/id 1, :system-time #time/zoned-date-time "2020-01-01T00:00:00.000001Z[UTC]"}
+              {:xt/id 2, :system-time #time/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
+             (xt/q node "SELECT _id, system_time FROM xt.txs ORDER BY _id")))))

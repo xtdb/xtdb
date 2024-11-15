@@ -3,6 +3,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
+            [xtdb.error :as err]
             xtdb.indexer
             [xtdb.log :as log]
             [xtdb.metrics :as metrics]
@@ -19,7 +20,7 @@
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api TransactionKey Xtdb Xtdb$Config)
+           (xtdb.api Xtdb Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
@@ -35,10 +36,6 @@
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
-(defn- with-after-tx-default [opts]
-  (-> opts
-      (update :after-tx time/max-tx (get-in opts [:basis :at-tx]))))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IXtdbInternal
   (^xtdb.query.PreparedQuery prepareQuery [^java.lang.String query, query-opts])
@@ -46,15 +43,19 @@
   (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
-(defn- with-query-opts-defaults [{:keys [basis] :as query-opts} {:keys [default-tz !latest-submitted-tx]}]
-  ;;not all callers care about all defaulted query opts returned here
-  (let [{:keys [at-tx]} basis]
-    (-> (into {:default-tz default-tz,
-               :after-tx (or at-tx @!latest-submitted-tx)
-               :key-fn (serde/read-key-fn :snake-case-string)}
-              query-opts)
-        (assoc :basis basis)
-        (with-after-tx-default))))
+(defn- with-query-opts-defaults [query-opts {:keys [default-tz !latest-submitted-tx-id]}]
+  (into {:default-tz default-tz,
+         :after-tx-id @!latest-submitted-tx-id
+         :key-fn (serde/read-key-fn :snake-case-string)}
+        query-opts))
+
+(defn- validate-tx-not-before [latest-completed-tx at-tx]
+  (when (and at-tx (or (nil? latest-completed-tx) (neg? (compare latest-completed-tx at-tx))))
+    (throw (err/illegal-arg :xtdb/unindexed-tx
+                            {::err/message (format "at-tx (%s) is after the latest completed tx (%s)"
+                                                   (pr-str at-tx) (pr-str latest-completed-tx))
+                             :latest-completed-tx latest-completed-tx
+                             :at-tx at-tx}))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
   (let [bound-query (.bind prepared-query query-opts)]
@@ -74,7 +75,7 @@
                  ^IQuerySource q-src, wm-src, scan-emitter
                  ^CompositeMeterRegistry metrics-registry
                  default-tz
-                 !latest-submitted-tx
+                 !latest-submitted-tx-id
                  system, close-fn,
                  query-timer]
   Xtdb
@@ -90,27 +91,25 @@
          (some #(when (instance? clazz %) %))))
 
   xtp/PNode
-  (submit-tx [this tx-ops {:keys [system-time] :as opts}]
-    (let [system-time (some-> system-time time/expect-instant)
-          tx-key (try
-                   @(log/submit-tx& this (->TxOps tx-ops) opts)
-                   (catch ExecutionException e
-                     (throw (ex-cause e))))
-          tx-key (cond-> tx-key
-                   system-time (assoc :system-time system-time))]
+  (submit-tx [this tx-ops opts]
+    (let [^long tx-id (try
+                        @(log/submit-tx& this (->TxOps tx-ops) opts)
+                        (catch ExecutionException e
+                          (throw (ex-cause e))))]
 
-      (swap! !latest-submitted-tx time/max-tx tx-key)
-      tx-key))
+      (swap! !latest-submitted-tx-id (fnil max tx-id) tx-id)
+      tx-id))
 
   (execute-tx [this tx-ops opts]
-    (let [{:keys [tx-id] :as tx-key} (xtp/submit-tx this tx-ops opts)]
-      (with-open [res (xtp/open-sql-query this "SELECT committed AS \"committed?\", error FROM xt.txs WHERE _id = ?"
+    (let [tx-id (xtp/submit-tx this tx-ops opts)]
+      (with-open [res (xtp/open-sql-query this "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
                                           {:args [tx-id]
                                            :key-fn (serde/read-key-fn :kebab-case-keyword)})]
-        (let [{:keys [committed? error]} (-> (.findFirst res) (.orElse nil))]
+        (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
+              system-time (time/->instant system-time)]
           (if committed?
-            (serde/->tx-committed tx-key)
-            (serde/->tx-aborted tx-key error))))))
+            (serde/->tx-committed tx-id system-time)
+            (serde/->tx-aborted tx-id system-time error))))))
 
   (open-sql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
@@ -123,10 +122,10 @@
           (then-execute-prepared-query query-timer query-opts))) )
 
   xtp/PStatus
-  (latest-submitted-tx [_] @!latest-submitted-tx)
+  (latest-submitted-tx-id [_] @!latest-submitted-tx-id)
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
-     :latest-submitted-tx (xtp/latest-submitted-tx this)})
+     :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
 
   IXtdbInternal
   (^PreparedQuery prepareQuery [this ^String query, query-opts]
@@ -134,21 +133,24 @@
                   query-opts))
 
   (^PreparedQuery prepareQuery [this ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
-   (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (.awaitTx indexer after-tx tx-timeout)
+   (let [{:keys [at-tx ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+     (doto (.awaitTx indexer after-tx-id tx-timeout)
+       (validate-tx-not-before at-tx))
      (let [plan (.planQuery q-src parsed-query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (^PreparedQuery prepareQuery [this ^XtqlQuery query, query-opts]
-   (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (.awaitTx indexer after-tx tx-timeout)
+   (let [{:keys [at-tx ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+     (doto (.awaitTx indexer after-tx-id tx-timeout)
+       (validate-tx-not-before at-tx))
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (prepareRaQuery [this plan query-opts]
-    (let [{:keys [after-tx tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (.awaitTx indexer after-tx tx-timeout)
+    (let [{:keys [at-tx ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+      (doto (.awaitTx indexer after-tx-id tx-timeout)
+        (validate-tx-not-before at-tx))
 
      (.prepareRaQuery q-src plan wm-src query-opts)))
 
@@ -171,25 +173,11 @@
           :metrics-registry (ig/ref :xtdb.metrics/registry)}
          opts))
 
-(defn gauge-lag-secs-fn [node]
-  (fn []
-    (let [{:keys [^TransactionKey latest-completed-tx
-                  ^TransactionKey latest-submitted-tx]} (xtp/status node)]
-      (if (and latest-completed-tx latest-submitted-tx)
-        (let [completed-tx-time (.getSystemTime latest-completed-tx)
-              submitted-tx-time (.getSystemTime latest-submitted-tx)]
-          (/ (- ^long (inst-ms submitted-tx-time) ^long (inst-ms completed-tx-time)) (long 1e3)))
-        0.0))))
-
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
-  (let [node (map->Node (-> deps
-                            (assoc :!latest-submitted-tx (atom nil)
-                                   :query-timer (metrics/add-timer metrics-registry "query.timer"
-                                                                   {:description "indicates the timings for queries"}))))]
-    ;; TODO seems to create heap memory pressure, disabled for now
-    #_(metrics/add-gauge registry "node.tx.lag.seconds"
-                         (gauge-lag-secs-fn node))
-    node))
+  (map->Node (-> deps
+                 (assoc :!latest-submitted-tx-id (atom -1)
+                        :query-timer (metrics/add-timer metrics-registry "query.timer"
+                                                        {:description "indicates the timings for queries"})))))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
