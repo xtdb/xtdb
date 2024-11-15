@@ -22,7 +22,7 @@ class PinningCache<V : PinningCache.IEntry>(
 
     val stats: Stats
         get() {
-            val pinnedBytes = maxSizeBytes - eviction.maximum
+            val pinnedBytes =  pinnedBytes
             val evictableBytes = eviction.weightedSize().asLong
             return Stats(pinnedBytes, evictableBytes, maxSizeBytes - pinnedBytes - evictableBytes)
         }
