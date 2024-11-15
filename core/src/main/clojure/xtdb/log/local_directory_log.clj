@@ -50,13 +50,13 @@
                               (when-not (= record-separator (.read log-in))
                                 (throw (IllegalStateException. "invalid record")))
                               (let [size (.readInt log-in)
-                                    system-time (time/micros->instant (.readLong log-in))
+                                    msg-ts (time/micros->instant (.readLong log-in))
                                     record (byte-array size)
                                     read-bytes (.read log-in record)
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (TxLog$Record. (serde/->TxKey offset system-time) (ByteBuffer/wrap record))))
+                                  (TxLog$Record. offset msg-ts (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -109,18 +109,18 @@
                        offset previous-offset]
                   (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
-                          system-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))
+                          msg-ts (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))
                           size (.remaining record)
                           written-record (.duplicate record)]
                       (.write log-out ^byte record-separator)
                       (.writeInt log-out size)
-                      (.writeLong log-out (time/instant->micros system-time))
+                      (.writeLong log-out (time/instant->micros msg-ts))
                       (while (>= (.remaining written-record) Long/BYTES)
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (TxLog$Record. (serde/->TxKey offset system-time) record)))
+                      (.set elements n (MapEntry/create f (TxLog$Record. offset msg-ts record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
@@ -128,9 +128,9 @@
               (.flush log-out)
               (.force log-channel true)
               (doseq [[^CompletableFuture f, ^TxLog$Record log-record] elements]
-                (let [tx-key (.getTxKey log-record)]
-                  (.notifyTx subscriber-handler tx-key)
-                  (.complete f (.getTxId (.getTxKey log-record)))))))
+                (let [tx-id (.getTxId log-record)]
+                  (.notifyTx subscriber-handler tx-id)
+                  (.complete f tx-id)))))
           (catch ClosedByInterruptException e
             (log/warn e "channel interrupted while closing")
             (doseq [[^CompletableFuture f] elements

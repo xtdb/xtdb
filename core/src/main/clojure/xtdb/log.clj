@@ -40,7 +40,7 @@
 
     (.accept subscriber record)
 
-    (.getTxId (.getTxKey record))))
+    (.getTxId record)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^TxLog$Subscriber subscriber]
@@ -73,13 +73,13 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
-  (notifyTx [^xtdb.api.TransactionKey tx])
+  (notifyTx [^long txId])
   (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.TxLog$Subscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]
   INotifyingSubscriberHandler
-  (notifyTx [_ tx]
-    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (.getTxId tx))]
+  (notifyTx [_ tx-id]
+    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id tx-id)]
       (doseq [^Semaphore semaphore semaphores]
         (.release semaphore))))
 
@@ -104,7 +104,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readTxs log after-tx-id 100)
-                                                              (take-while #(<= (.getTxId (.getTxKey ^TxLog$Record %))
+                                                              (take-while #(<= (.getTxId ^TxLog$Record %)
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live

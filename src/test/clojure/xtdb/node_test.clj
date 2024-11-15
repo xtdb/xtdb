@@ -898,3 +898,14 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               [{col (= col (cast "bar" :regclass))}]]
             {:node tu/*node*}))
         "scan pred"))
+
+(t/deftest copes-with-log-time-going-backwards-3864
+  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]
+    (t/is (= 0 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]])))
+    (t/is (= 1 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
+    (t/is (= 2 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))
+
+    (t/is (= [{:xt/id 0, :system-time #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+              {:xt/id 1, :system-time #time/zoned-date-time "2020-01-01T00:00:00.000001Z[UTC]"}
+              {:xt/id 2, :system-time #time/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
+             (xt/q node "SELECT _id, system_time FROM xt.txs ORDER BY _id")))))

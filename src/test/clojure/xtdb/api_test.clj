@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.error :as err]
+            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time]
@@ -130,7 +131,7 @@
                 :committed? true,
                 :error [nil nil]}
                {:tx-id 1,
-                :system-time #time/zoned-date-time "2011-01-01T00:00Z[UTC]",
+                :system-time #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
                 :committed? false,
                 :error ["specified system-time older than current tx"
                         {::err/error-key :invalid-system-time

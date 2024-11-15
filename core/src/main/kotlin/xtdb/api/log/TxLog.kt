@@ -1,7 +1,7 @@
 package xtdb.api.log
 
-import xtdb.api.TransactionKey
 import java.nio.ByteBuffer
+import java.time.Instant
 import java.util.concurrent.CompletableFuture
 
 typealias TxId = Long
@@ -11,7 +11,7 @@ interface TxLog {
     fun readTxs(afterTxId: TxId?, limit: Int): List<Record>
     fun subscribeTxs(afterTxId: TxId?, subscriber: Subscriber)
 
-    class Record(val txKey: TransactionKey, val record: ByteBuffer)
+    class Record(val txId: TxId, val timestamp: Instant, val record: ByteBuffer)
 
     interface Subscriber {
         fun onSubscribe(closeHook: AutoCloseable)

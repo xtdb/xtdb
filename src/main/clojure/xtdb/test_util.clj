@@ -213,7 +213,7 @@
      (reify InstantSource
        (instant [_]
          (assert (.hasNext it) "out of insts!")
-         (.next it))))))
+         (time/->instant (.next it)))))))
 
 (defn with-mock-clock [f]
   (with-opts {:log [:in-memory {:instant-src (->mock-clock)}]} f))

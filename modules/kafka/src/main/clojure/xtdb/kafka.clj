@@ -70,8 +70,7 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (TxLog$Record. (serde/->TxKey (.offset record) (Instant/ofEpochMilli (.timestamp record)))
-                 (.value record)))
+  (TxLog$Record. (.offset record) (Instant/ofEpochMilli (.timestamp record)) (.value record)))
 
 (defn- handle-tx-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^TxLog$Subscriber subscriber]
   (doto (.newThread log/subscription-thread-factory

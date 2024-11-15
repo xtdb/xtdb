@@ -4,10 +4,12 @@
             xtdb.api
             xtdb.indexer
             [xtdb.log :as xt-log]
-            xtdb.operator.scan
             [xtdb.metrics :as metrics]
+            xtdb.operator.scan
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr])
   (:import java.lang.AutoCloseable
            (java.nio ByteBuffer)
            org.apache.arrow.memory.BufferAllocator
@@ -47,17 +49,12 @@
                                        tx-root (.getVectorSchemaRoot sr)]
                              (.loadNextBatch sr)
 
-                             (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
-                                   record-tx (.getTxKey record)
-                                   tx-key (cond-> record-tx (not (.isNull system-time-vec 0))
-                                                  (assoc :system-time (-> (.get system-time-vec 0) (time/micros->instant))))]
-
-                               (.indexTx indexer tx-key tx-root)))
+                             (.indexTx indexer (.getTxId record) (.getTimestamp record) tx-root))
 
                            xt-log/hb-flush-chunk
                            (let [expected-chunk-tx-id (get-bb-long (.getRecord record) 1 -1)]
                              (log/debugf "received flush-chunk signal: %d" expected-chunk-tx-id)
-                             (.forceFlush indexer (.getTxKey record) expected-chunk-tx-id))
+                             (.forceFlush indexer (serde/->TxKey (.getTxId record) (.getTimestamp record)) expected-chunk-tx-id))
 
                            (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get (.getRecord record) 0))))))))))
     !cancel-hook))

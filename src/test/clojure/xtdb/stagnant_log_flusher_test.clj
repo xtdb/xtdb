@@ -50,7 +50,7 @@
               xt-log/hb-flush-chunk
               {:header-byte xt-log/hb-flush-chunk
                :flush-tx-id (.getLong (.getRecord record) 1)
-               :tx (.getTxKey record)}
+               :tx-id (.getTxId record)}
 
               xt-log/hb-user-arrow-transaction
               (with-open [tx-ops-ch (util/->seekable-byte-channel (.getRecord record))
@@ -58,7 +58,7 @@
                           tx-root (.getVectorSchemaRoot sr)]
                 (.loadNextBatch sr)
                 {:header-byte xt-log/hb-user-arrow-transaction
-                 :tx (.getTxKey record)
+                 :tx-id (.getTxId record)
                  :record (first (ivr/rel->rows (ivr/<-root tx-root)))})
               (throw (Exception. "Unrecognized record header"))))]
     ((fn ! [offset]
@@ -66,7 +66,7 @@
          (when-some [records (seq (.readTxs log (long offset) 100))]
            (concat
              (map clj-record records)
-             (! (.getTxId (.getTxKey ^TxLog$Record (last records))))))))
+             (! (.getTxId ^TxLog$Record (last records)))))))
      -1)))
 
 (defn node-log [node]
@@ -76,7 +76,7 @@
 
 (defn log-indexed? [node]
   (let [^IIndexer indexer (tu/component node :xtdb/indexer)]
-    (= (:tx (last (node-log node))) (.latestCompletedTx indexer))))
+    (= (:tx-id (last (node-log node))) (some-> (.latestCompletedTx indexer) .getTxId))))
 
 (defn start-node ^xtdb.api.Xtdb [flush-duration]
   (xtn/start-node (merge tu/*node-opts* {:indexer {:flush-duration flush-duration}})))
