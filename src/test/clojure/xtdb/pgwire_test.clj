@@ -1304,6 +1304,14 @@
                             (jdbc/execute! conn ["SELECT * FROM foo WHERE json = ?"
                                                  (as-json-param {:a 2, :c {:d 3}})])))))
 
+(deftest txs-error-as-json-3866
+  (with-open [conn (pg-conn {})]
+    (is (thrown-with-msg? PGErrorResponse
+                          #"code=08P01, message=Cannot put documents with columns: #\{\"_system_time\"\}"
+                          (pg/execute conn "INSERT INTO docs (_id, _system_time) VALUES (1, DATE '2020-01-01')")))
+    (testing "xt.txs.error column renders as json without errors"
+      (pg/execute conn "SELECT * FROM xt.txs"))))
+
 (deftest test-odbc-queries
   (with-open [conn (jdbc-conn)]
 
