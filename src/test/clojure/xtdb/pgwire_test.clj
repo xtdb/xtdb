@@ -661,7 +661,7 @@
           (is (= "ping" (ping db))))))))
 
 ;; right now all isolation levels have the same defined behaviour
-(deftest transaction-by-default-pins-the-basis-to-last-tx-test
+(deftest transaction-by-default-pins-the-snapshot-to-last-tx-test
   (let [insert #(xt/submit-tx tu/*node* [[:put-docs %1 %2]])]
     (-> (insert :a {:xt/id :fred, :name "Fred"})
         (tu/then-await-tx tu/*node*))
@@ -1061,10 +1061,10 @@
              :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
              :_valid_to nil
              :ts #inst "2024-01-01"}]
-           (q conn ["SETTING BASIS = TIMESTAMP '2020-01-01T00:00:00Z',
+           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z',
                              CURRENT_TIME = TIMESTAMP '2024-01-01T00:00:00Z'
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
-        "both basis and current time")
+        "both snapshot and current time")
 
     (q conn ["UPDATE foo SET version = 2 WHERE _id = 'foo'"])
 
@@ -1072,13 +1072,13 @@
            (q conn ["SELECT version FROM foo"])))
 
     (is (= [{:version 0}]
-           (q conn ["SETTING BASIS = TIMESTAMP '2020-01-01T00:00:00Z'
+           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
                      SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
-        "for system-time cannot override basis")
+        "for system-time cannot override snapshot")
 
     (is (= [{:version 1}]
            (q conn ["SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
-        "version would have been 1 if basis was not set")))
+        "version would have been 1 if snapshot was not set")))
 
 (t/deftest test-setting-import-system-time-3616
   (with-open [conn (jdbc-conn)]

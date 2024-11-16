@@ -48,7 +48,7 @@
                                                       :wm-src (reify IWatermarkSource
                                                                 (openWatermark [_]
                                                                   (Watermark. nil nil {})))}))
-             bq (.bind pq (-> (select-keys query-opts [:at-tx :current-time :after-tx-id :table-args :default-tz])
+             bq (.bind pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
                               (assoc :params params-rel)))]
          (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))

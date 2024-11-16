@@ -5,27 +5,27 @@
             [xtdb.time :as time]))
 
 (t/use-fixtures :once tu/with-allocator)
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (t/deftest test-as-of-tx
-  (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx1"}]])]
-    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx2"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx1"}]])
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
-    (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (tu/query-ra '[:scan {:table public/docs, :for-valid-time :all-time} [last_updated]]
-                               {:node tu/*node*}))))
+  (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
+           (set (tu/query-ra '[:scan {:table public/docs, :for-valid-time :all-time} [last_updated]]
+                             {:node tu/*node*}))))
 
-    (t/is (= #{{:last-updated "tx2"}}
-             (set (xt/q tu/*node* '(from :docs [last-updated])))))
+  (t/is (= #{{:last-updated "tx2"}}
+           (set (xt/q tu/*node* '(from :docs [last-updated])))))
 
-    (t/testing "at tx1"
-      (t/is (= #{{:last-updated "tx1"}}
-               (set (tu/query-ra '[:scan {:table public/docs} [last_updated]]
-                                 {:node tu/*node*, :at-tx tx1}))))
+  (t/testing "at tx1"
+    (t/is (= #{{:last-updated "tx1"}}
+             (set (tu/query-ra '[:scan {:table public/docs} [last_updated]]
+                               {:node tu/*node*, :snapshot-time (time/->instant #inst "2020")}))))
 
-      (t/is (= #{{:last-updated "tx1"}}
-               (set (xt/q tu/*node* '(from :docs [last-updated])
-                          {:at-tx tx1})))))))
+    (t/is (= #{{:last-updated "tx1"}}
+             (set (xt/q tu/*node* '(from :docs [last-updated])
+                        {:snapshot-time #inst "2020"}))))))
 
 (t/deftest test-app-time
   (let [tx (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]

@@ -2524,7 +2524,7 @@
               (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope)))])
 
   ;; dealt with earlier
-  (visitSettingBasis [_ _ctx])
+  (visitSettingSnapshotTime [_ _ctx])
   (visitSettingCurrentTime [_ _ctx])
 
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))

@@ -162,12 +162,11 @@ class JsonSerdeTest {
 
     @Test
     fun shouldDeserializeQueryRequest() {
-        val txKey = TransactionKey(1, Instant.EPOCH)
         QueryRequest(
             "SELECT * FROM foo",
             QueryOptions(
                 args = mapOf("foo" to "bar"),
-                atTx = txKey,
+                snapshotTime = Instant.EPOCH + Duration.ofHours(1),
                 currentTime = Instant.EPOCH,
                 afterTxId = 1,
                 txTimeout = Duration.parse("PT3H"),
@@ -179,7 +178,7 @@ class JsonSerdeTest {
             """{
                 "sql": "SELECT * FROM foo",
                 "queryOpts": {"args":{"foo":"bar"},
-                              "atTx":{"txId":1,"systemTime":"1970-01-01T00:00:00Z"},
+                              "snapshotTime":"1970-01-01T01:00:00Z",
                               "currentTime": "1970-01-01T00:00:00Z",
                               "afterTxId":1,
                               "txTimeout":"PT3H",

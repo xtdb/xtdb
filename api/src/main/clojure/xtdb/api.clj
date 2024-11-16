@@ -69,7 +69,7 @@
 
   - query: either an XTQL or SQL query.
   - opts:
-    - `:at-tx`: see 'Transaction Basis'
+    - `:snapshot-time`: see 'Transaction Basis'
     - `:current-time`: override wall-clock time to use in functions that require it
     - `:args`: arguments to pass to the query.
     - `:default-tz`: overrides the default time zone for the query
@@ -91,24 +91,16 @@
   Transaction Basis:
 
   In XTDB there are a number of ways to control at what point in time a query is run -
-  this is done via an at-tx basis optionally supplied as part of the query map.
+  this is done via a snapshot-time basis optionally supplied as part of the query map.
 
   In the case a basis is not provided the query is guaranteed to run sometime after
   the latest transaction submitted by this connection/node.
 
-  Alternatively a basis of a specific transaction can be supplied,
-  in this case the query will be run exactly at that transaction, ensuring the repeatability of queries.
-
-  This tx reference (known as a TransactionKey) is the same map returned by submit-tx
+  Alternatively a specific snapshot-time can be supplied,
+  in this case the query will be run exactly at that system-time, ensuring the repeatability of queries.
 
   (q node '(from ...)
-     {:at-tx tx})
-
-  Additionally a tx-timeout can be supplied to the query map, which if after the specified duration
-  the query's requested basis is not complete the query will be cancelled.
-
-  (q node '(from ...)
-     {:tx-timeout (Duration/ofSeconds 1)})"
+     {:snapshot-time #inst \"2020-01-02\"})"
   ([node query] (q node query {}))
 
   ([node query opts]

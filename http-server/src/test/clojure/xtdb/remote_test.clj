@@ -66,29 +66,29 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}
+                 {:snapshot-time #inst "2020-01-02"
                   :after-tx-id 1})))
 
-  (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])]
-    (t/is (=
-           ;; TODO figure out clojure bug
-           #_#{{"xt/id" 1} {"xt/id" 2 "key" :some-keyword}}
-           (java.util.Set/of (java.util.Map/of "xt/id" 1)
-                             (java.util.Map/of "xt/id" 2 "key" :some-keyword))
-           (-> (http/request {:accept "application/jsonl"
-                              :as :string
-                              :request-method :post
-                              :content-type :transit+json
-                              :form-params {:query '(from :docs [xt/id key])
-                                            :at-tx tx
-                                            :after-tx-id 2
-                                            :key-fn #xt/key-fn :kebab-case-keyword}
-                              :transit-opts xtc/transit-opts
-                              :url (http-url "query")})
-               :body
-               decode-json*
-               set))
-          "testing query"))
+  (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])
+
+  (t/is (=
+         ;; TODO figure out clojure bug
+         #_#{{"xt/id" 1} {"xt/id" 2 "key" :some-keyword}}
+         (java.util.Set/of (java.util.Map/of "xt/id" 1)
+                           (java.util.Map/of "xt/id" 2 "key" :some-keyword))
+         (-> (http/request {:accept "application/jsonl"
+                            :as :string
+                            :request-method :post
+                            :content-type :transit+json
+                            :form-params {:query '(from :docs [xt/id key])
+                                          :after-tx-id 2
+                                          :key-fn #xt/key-fn :kebab-case-keyword}
+                            :transit-opts xtc/transit-opts
+                            :url (http-url "query")})
+             :body
+             decode-json*
+             set))
+        "testing query")
 
   (t/testing "illegal argument error"
     (let [{:keys [status body] :as _resp} (http/request {:accept "application/jsonl"
@@ -135,12 +135,9 @@
    {"sql" "DELETE FROM docs WHERE docs.bar = 2"}
    {"sql" "ERASE FROM docs WHERE docs._id = 4"}])
 
-(defn- tx-key->json-tx-key [{:keys [tx-id system-time] :as _tx-key}]
-  {"txId" tx-id "systemTime" (str system-time)})
-
 (deftest json-request-test
   (let [_tx1 (xt/submit-tx *node* [[:put-docs :docs {:xt/id 1}]])
-        {:keys [tx-id system-time] :as tx2} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
+        {:keys [tx-id system-time]} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
 
     (t/is (= 1
              (-> (http/request {:accept :json
@@ -163,7 +160,7 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:sql "SELECT docs._id FROM docs"
-                                              :queryOpts {:atTx (tx-key->json-tx-key tx2)
+                                              :queryOpts {:snapshotTime (str system-time)
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body

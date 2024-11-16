@@ -20,7 +20,7 @@
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api Xtdb Xtdb$Config)
+           (xtdb.api TransactionKey Xtdb Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
@@ -44,18 +44,20 @@
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz !latest-submitted-tx-id]}]
-  (into {:default-tz default-tz,
-         :after-tx-id @!latest-submitted-tx-id
-         :key-fn (serde/read-key-fn :snake-case-string)}
-        query-opts))
+  (-> (into {:default-tz default-tz,
+             :after-tx-id @!latest-submitted-tx-id
+             :key-fn (serde/read-key-fn :snake-case-string)}
+            query-opts)
+      (update :snapshot-time #(some-> % (time/->instant)))
+      (update :current-time #(some-> % (time/->instant)))))
 
-(defn- validate-tx-not-before [latest-completed-tx at-tx]
-  (when (and at-tx (or (nil? latest-completed-tx) (neg? (compare latest-completed-tx at-tx))))
+(defn- validate-snapshot-not-before [^TransactionKey latest-completed-tx snapshot-time]
+  (when (and snapshot-time (or (nil? latest-completed-tx) (neg? (compare (.getSystemTime latest-completed-tx) snapshot-time))))
     (throw (err/illegal-arg :xtdb/unindexed-tx
-                            {::err/message (format "at-tx (%s) is after the latest completed tx (%s)"
-                                                   (pr-str at-tx) (pr-str latest-completed-tx))
+                            {::err/message (format "snapshot-time (%s) is after the latest completed tx (%s)"
+                                                   (pr-str snapshot-time) (pr-str latest-completed-tx))
                              :latest-completed-tx latest-completed-tx
-                             :at-tx at-tx}))))
+                             :snapshot-time snapshot-time}))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
   (let [bound-query (.bind prepared-query query-opts)]
@@ -133,24 +135,24 @@
                   query-opts))
 
   (^PreparedQuery prepareQuery [this ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
-   (let [{:keys [at-tx ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+   (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
      (doto (.awaitTx indexer after-tx-id tx-timeout)
-       (validate-tx-not-before at-tx))
+       (validate-snapshot-not-before snapshot-time))
      (let [plan (.planQuery q-src parsed-query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (^PreparedQuery prepareQuery [this ^XtqlQuery query, query-opts]
-   (let [{:keys [at-tx ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+   (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
      (doto (.awaitTx indexer after-tx-id tx-timeout)
-       (validate-tx-not-before at-tx))
+       (validate-snapshot-not-before snapshot-time))
 
      (let [plan (.planQuery q-src query wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (prepareRaQuery [this plan query-opts]
-    (let [{:keys [at-tx ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+    (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (doto (.awaitTx indexer after-tx-id tx-timeout)
-        (validate-tx-not-before at-tx))
+        (validate-snapshot-not-before snapshot-time))
 
      (.prepareRaQuery q-src plan wm-src query-opts)))
 

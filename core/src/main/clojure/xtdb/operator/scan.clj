@@ -1,6 +1,5 @@
 (ns xtdb.operator.scan
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
@@ -21,6 +20,7 @@
   (:import (clojure.lang MapEntry)
            (com.carrotsearch.hppc IntArrayList)
            (java.io Closeable)
+           java.time.Instant
            java.nio.ByteBuffer
            (java.nio.file Path)
            (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue Stack)
@@ -31,15 +31,13 @@
            (org.apache.arrow.vector VectorLoader)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           xtdb.api.TransactionKey
            (xtdb.arrow VectorIndirection VectorReader)
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie
-                      HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
            (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
@@ -69,7 +67,7 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- ->temporal-bounds [^RelationReader params, {:keys [for-valid-time for-system-time]}, ^TransactionKey at-tx]
+(defn- ->temporal-bounds [^RelationReader params, {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
   (letfn [(->time-μs [[tag arg]]
             (case tag
               :literal (-> arg
@@ -101,7 +99,7 @@
     (let [^TemporalDimension sys-dim (apply-constraint for-system-time)
           bounds (TemporalBounds. (apply-constraint for-valid-time) sys-dim)]
       ;; we further constrain bases on tx
-      (when-let [system-time (some-> at-tx (.getSystemTime) time/instant->micros)]
+      (when-let [system-time (some-> snapshot-time time/instant->micros)]
         (.setUpper sys-dim (min (inc system-time) (.getUpper sys-dim)))
 
         (when-not for-system-time
@@ -433,7 +431,7 @@
 
         {:fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^Watermark watermark, at-tx, current-time, schema, params]}]
+         :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, params]}]
                      (if-let [derived-table-schema (info-schema/derived-tables table)]
                        (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark)
 
@@ -449,7 +447,7 @@
                              table-path (util/table-name->table-path table-name)
                              current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                      (trie/current-trie-files))
-                             temporal-bounds (->temporal-bounds params scan-opts at-tx)]
+                             temporal-bounds (->temporal-bounds params scan-opts snapshot-time)]
                          (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                            (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
                                                (let [segments (cond-> (mapv (fn [meta-file-path]
