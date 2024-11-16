@@ -117,9 +117,8 @@
              tx1))
 
     (letfn [(q-at [tx]
-              (->> (xt/q *node*
-                         '(from :docs [{:xt/id id}])
-                         {:at-tx tx
+              (->> (xt/q *node* '(from :docs [{:xt/id id}])
+                         {:snapshot-time (:system-time tx)
                           :tx-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
 
@@ -170,9 +169,9 @@
   (t/is (= [] (xt/q tu/*node* "select a.a from a a" {}))))
 
 (t/deftest test-basic-sql-dml
-  (letfn [(all-users [tx]
+  (letfn [(all-users [{:keys [system-time]}]
             (->> (xt/q *node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users FOR ALL VALID_TIME u"
-                       {:at-tx tx})
+                       {:snapshot-time system-time})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
 
     (let [tx1 (xt/execute-tx *node* [[:sql "INSERT INTO users (_id, first_name, last_name, _valid_from) VALUES (?, ?, ?, ?)"
@@ -278,10 +277,10 @@
                         "SELECT foo.version, foo._valid_from, foo._valid_to FROM foo FOR ALL VALID_TIME"))))))
 
 (t/deftest test-erase
-  (letfn [(q [tx]
+  (letfn [(q [{:keys [system-time]}]
             (set (xt/q *node*
                        "SELECT foo._id, foo.version, foo._valid_from, foo._valid_to FROM foo FOR ALL VALID_TIME"
-                       {:at-tx tx})))]
+                       {:snapshot-time system-time})))]
     (let [tx1 (xt/execute-tx *node*
                              [[:sql "INSERT INTO foo (_id, version) VALUES (?, ?)"
                                ["foo", 0]
@@ -372,10 +371,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                                {:system-time "foo"}))))
 
 (t/deftest test-basic-xtql-dml
-  (letfn [(all-users [tx]
+  (letfn [(all-users [{:keys [system-time]}]
             (->> (xt/q *node* '(from :users {:for-valid-time :all-time
                                              :bind [first-name last-name xt/valid-from xt/valid-to]})
-                       {:at-tx tx})
+                       {:snapshot-time system-time})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
 
     (let [tx1 (xt/execute-tx *node* [[:put-docs {:into :users, :valid-from #inst "2018"}
@@ -437,10 +436,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
           (t/is (= tx1-expected (all-users tx1))))))))
 
 (t/deftest test-erase-xtql
-  (letfn [(q [tx]
+  (letfn [(q [{:keys [system-time]}]
             (set (xt/q *node* '(from :foo {:bind [xt/id version xt/valid-from xt/valid-to]
                                            :for-valid-time :all-time})
-                       {:at-tx tx})))]
+                       {:snapshot-time system-time})))]
     (let [tx1 (xt/execute-tx *node*
                              [[:put-docs :foo {:xt/id "foo", :version 0}]
                               [:put-docs :foo {:xt/id "bar", :version 0}]])

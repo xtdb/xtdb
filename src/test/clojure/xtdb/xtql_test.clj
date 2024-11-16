@@ -1258,10 +1258,8 @@
 
 
 (t/deftest test-temporal-opts
-  (letfn [(q [query tx current-time]
-            (xt/q tu/*node*
-                  query
-                  {:at-tx tx, :current-time (time/->instant current-time)}))]
+  (letfn [(q [query {:keys [system-time]} current-time]
+            (xt/q tu/*node* query {:snapshot-time system-time, :current-time current-time}))]
 
     ;; Matthew 2015+
 
@@ -1392,9 +1390,9 @@
                       {:current-time (time/->instant #inst "2023")})))))
 
 (t/deftest test-temporal-opts-from-and-to
-  (letfn [(q [query tx current-time]
+  (letfn [(q [query {:keys [system-time]} current-time]
             (xt/q tu/*node* query
-                  {:at-tx tx, :current-time (time/->instant current-time)}))]
+                  {:snapshot-time system-time, :current-time current-time}))]
 
     ;; tx0
     ;; 2015 - eof : Matthew
@@ -1440,12 +1438,12 @@
                   tx1, #inst "2023"))))))
 
 (deftest test-snodgrass-99-tutorial
-  (letfn [(q [q tx current-time]
+  (letfn [(q [q {:keys [system-time]} current-time]
             (xt/q tu/*node* q
-                  {:at-tx tx, :current-time (time/->instant current-time)}))
-          (q-with-args [q args tx current-time]
+                  {:snapshot-time system-time, :current-time current-time}))
+          (q-with-args [q args {:keys [system-time]} current-time]
             (xt/q tu/*node* q
-                  {:args args, :at-tx tx, :current-time (time/->instant current-time)}))]
+                  {:args args, :snapshot-time system-time, :current-time current-time}))]
 
     (let [tx0 (xt/execute-tx tu/*node*
                              [[:put-docs {:into :docs, :valid-from #inst "1998-01-10"}
@@ -1985,12 +1983,12 @@
     (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:at-tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}})))
+                {:snapshot-time #inst "2023-01-18"})))
 
     (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:at-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}})))))
+                {:snapshot-time #inst "2023-01-17"})))))
 
 #_
 (t/deftest test-row-alias-app-time-key-set ;TODO from-star

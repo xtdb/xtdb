@@ -157,41 +157,37 @@
 
     ;; valid-time
     (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
-             (frequencies (tu/query-ra '[:scan
-                                         {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+             (frequencies (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
                                          [_id v]]
                                        {:node tu/*node*}))))
 
     (t/is (= {{:v 1, :xt/id :doc2} 1 {:v 2, :xt/id :doc1} 1}
-             (frequencies (tu/query-ra '[:scan
-                                         {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+             (frequencies (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time nil}
                                          [_id v]]
                                        {:node tu/*node*}))))
 
     ;; system-time
     (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1 {:v 1, :xt/id :doc3} 1}
-             (frequencies (tu/query-ra '[:scan
-                                         {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+             (frequencies (tu/query-ra '[:scan {:table public/xt_docs, :for-system-time [:at #inst "2020-01-01"]}
                                          [_id v]]
-                                       {:node tu/*node*, :at-tx tx1}))))
+                                       {:node tu/*node*}))))
 
     (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
-             (frequencies (tu/query-ra '[:scan
-                                         {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+             (frequencies (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time [:at #inst "2020-01-01"]}
                                          [_id v]]
-                                       {:node tu/*node*, :at-tx tx1}))))
+                                       {:node tu/*node*}))))
 
     (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
-             (frequencies (tu/query-ra '[:scan
-                                         {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+             (frequencies (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at :now], :for-system-time [:at #inst "2020-01-02"]}
                                          [_id v]]
-                                       {:node tu/*node*, :at-tx tx2}))))
+                                       {:node tu/*node*}))))
 
     (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 2, :xt/id :doc2} 1}
-             (frequencies (tu/query-ra '[:scan
-                                         {:table public/xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
+             (frequencies (tu/query-ra '[:scan {:table public/xt_docs
+                                                :for-valid-time [:at #inst "2100"]
+                                                :for-system-time [:at #inst "2020-01-02"]}
                                          [_id v]]
-                                       {:node tu/*node*, :at-tx tx2}))))))
+                                       {:node tu/*node*}))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
   (let [tx1 (xt/execute-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2015"}
@@ -236,19 +232,17 @@
                 :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc3,
                 :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
-             (set (tu/query-ra '[:scan
-                                 {:table public/xt_docs, :for-valid-time [:at #inst "2023"]}
+             (set (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at #inst "2023"], :for-system-time [:at #inst "2020"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node*, :at-tx tx1}))))
+                               {:node tu/*node*}))))
 
     (t/is (= #{{:v 1, :xt/id :doc1,
                 :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc2,
                 :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}}
-             (set (tu/query-ra '[:scan
-                                 {:table public/xt_docs, :for-valid-time [:at #inst "2017"]}
+             (set (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time [:at #inst "2020"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node*, :at-tx tx1}))))
+                               {:node tu/*node*}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1,
                 :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
@@ -256,18 +250,18 @@
                 :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                 :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]",}}
              (set (tu/query-ra '[:scan
-                                 {:table public/xt_docs, :for-valid-time [:at #inst "2023"]}
+                                 {:table public/xt_docs, :for-valid-time [:at #inst "2023"], :for-system-time [:at #inst "2020-01-02"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node*, :at-tx tx2}))))
+                               {:node tu/*node*}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1,
                 :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
                {:v 2, :xt/id :doc2,
                 :xt/valid-from #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan
-                                 {:table public/xt_docs, :for-valid-time [:at #inst "2100"]}
+                                 {:table public/xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time [:at #inst "2020-01-02"]}
                                  [_id v _valid_from _valid_to]]
-                               {:node tu/*node*, :at-tx tx2}))))))
+                               {:node tu/*node*}))))))
 
 (t/deftest test-scanning-temporal-cols
   (xt/submit-tx tu/*node* [[:put-docs {:into :xt_docs, :valid-from #inst "2021", :valid-to #inst "3000"}
@@ -702,7 +696,6 @@
         (c/compact-all! node)
 
         (let [query-opts {:node node
-                          :at-tx tx-key
                           :current-time (:system-time tx-key)}]
 
           ;; no filter, we should still get the latest entry (2025)
@@ -765,7 +758,7 @@
           ;; compaction happens in 2026
           (c/compact-all! node #time/duration "PT2S")
 
-          (let [query-opts {:node node, :at-tx tx-key, :current-time (:system-time tx-key)}]
+          (let [query-opts {:node node, :current-time (:system-time tx-key)}]
 
             ;; at the end of 2024 we still get the 2024
             (t/is (= [{:xt/id 1,
@@ -819,7 +812,7 @@
                                                                      :valid-from start
                                                                      :valid-to end}
                                                           {:xt/id 1 :version (+ i 8)}]])))
-                    query-opts {:node node, :at-tx tx-key2, :current-time (:system-time tx-key)}]
+                    query-opts {:node node, :snapshot-time (:system-time tx-key2), :current-time (:system-time tx-key)}]
 
                 (t/testing "temporal bounds from the live-index"
                   (t/is (= [{:xt/id 1,
@@ -852,4 +845,4 @@
                                  :id 1}]
                            (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2026" #inst "2027"]}
                                           [_id _valid_from _valid_to]]
-                                        (assoc query-opts :at-tx tx-key3)))))))))))))
+                                        (assoc query-opts :snapshot-time (:system-time tx-key3))))))))))))))

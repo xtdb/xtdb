@@ -98,42 +98,42 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                 (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))))
 
 (t/deftest test-can-submit-same-id-into-multiple-tables-338
-  (let [tx1 (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1 (_id, foo) VALUES ('thing', 't1-foo')"]
-                                     [:sql "INSERT INTO t2 (_id, foo) VALUES ('thing', 't2-foo')"]])
-        tx2 (xt/execute-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2._id = 'thing'"]])]
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1 (_id, foo) VALUES ('thing', 't1-foo')"]
+                           [:sql "INSERT INTO t2 (_id, foo) VALUES ('thing', 't2-foo')"]])
+  (xt/submit-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2._id = 'thing'"]])
 
-    (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
-             (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                   {:at-tx tx1})))
+  (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
+           (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
+                 {:snapshot-time #inst "2020"})))
 
-    (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
-             (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                   {:at-tx tx2})))
+  (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
+           (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
+                 {:snapshot-time #inst "2020-01-02"})))
 
-    (t/is (= [{:xt/id "thing", :foo "t2-foo"}]
-             (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:at-tx tx1})))
+  (t/is (= [{:xt/id "thing", :foo "t2-foo"}]
+           (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
+                 {:snapshot-time #inst "2020"})))
 
-    (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
-             (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                   {:at-tx tx2})))))
+  (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
+           (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
+                 {:snapshot-time #inst "2020-01-02"}))))
 
-(t/deftest ensure-at-tx-has-been-indexed
+(t/deftest ensure-snapshot-time-has-been-indexed
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"at-tx \(.+?\) is after the latest completed tx \(nil\)"
+                          #"snapshot-time \(.+?\) is after the latest completed tx \(nil\)"
                           (xt/q tu/*node* "SELECT 1"
-                                {:at-tx (serde/->TxKey 0 (time/->instant #inst "2020"))})))
+                                {:snapshot-time #inst "2020"})))
 
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM foo"
-                 {:at-tx (serde/->TxKey 0 (time/->instant #inst "2020"))})))
+                 {:snapshot-time #inst "2020"})))
 
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"at-tx \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"
+                          #"snapshot-time \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"
                           (xt/q tu/*node* "SELECT * FROM foo"
-                                {:at-tx (serde/->TxKey 1 (time/->instant #inst "2020"))}))))
+                                {:snapshot-time #inst "2021"}))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -237,49 +237,49 @@ ORDER BY foo._valid_from"
             (frequencies
              (xt/q tu/*node* "SELECT foo._id, foo.v FROM foo FOR ALL VALID_TIME" opts)))]
 
-    (let [tx1 (xt/execute-tx tu/*node* [[:sql "
+    (xt/submit-tx tu/*node* [[:sql "
 UPDATE foo
 FOR PORTION OF VALID_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
 SET v = 2
 WHERE foo._id = 1"]])
 
-          tx2 (xt/execute-tx tu/*node* [[:sql "
+    (xt/submit-tx tu/*node* [[:sql "
 DELETE FROM foo
 FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
-WHERE foo._id = 1"]])]
+WHERE foo._id = 1"]])
 
-      (t/is (= [{:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2020")
-                 :xt/valid-to (time/->zdt #inst "2022")}
-                {:xt/id 1, :v 2
-                 :xt/valid-from (time/->zdt #inst "2022")
-                 :xt/valid-to (time/->zdt #inst "2024")}
-                {:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2024")}]
+    (t/is (= [{:xt/id 1, :v 1
+               :xt/valid-from (time/->zdt #inst "2020")
+               :xt/valid-to (time/->zdt #inst "2022")}
+              {:xt/id 1, :v 2
+               :xt/valid-from (time/->zdt #inst "2022")
+               :xt/valid-to (time/->zdt #inst "2024")}
+              {:xt/id 1, :v 1
+               :xt/valid-from (time/->zdt #inst "2024")}]
 
-               (q1 {:at-tx tx1})))
+             (q1 {:snapshot-time #inst "2020-01-02"})))
 
-      (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:at-tx tx1})))
+    (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
+             (q2 {:snapshot-time #inst "2020-01-02"})))
 
-      (t/is (= [{:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2020")
-                 :xt/valid-to (time/->zdt #inst "2022")}
-                {:xt/id 1, :v 2
-                 :xt/valid-from (time/->zdt #inst "2022")
-                 :xt/valid-to (time/->zdt #inst "2023")}
-                {:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2025")}]
+    (t/is (= [{:xt/id 1, :v 1
+               :xt/valid-from (time/->zdt #inst "2020")
+               :xt/valid-to (time/->zdt #inst "2022")}
+              {:xt/id 1, :v 2
+               :xt/valid-from (time/->zdt #inst "2022")
+               :xt/valid-to (time/->zdt #inst "2023")}
+              {:xt/id 1, :v 1
+               :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1 {:at-tx tx2})))
+             (q1 {:snapshot-time #inst "2020-01-03"})))
 
-      (t/is (= [{:xt/id 1, :v 1
-                 :xt/valid-from (time/->zdt #inst "2025")}]
+    (t/is (= [{:xt/id 1, :v 1
+               :xt/valid-from (time/->zdt #inst "2025")}]
 
-               (q1-now {:at-tx tx2, :current-time (time/->instant #inst "2026")})))
+             (q1-now {:snapshot-time #inst "2020-01-03", :current-time (time/->instant #inst "2026")})))
 
-      (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-               (q2 {:at-tx tx2}))))))
+    (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
+             (q2 {:snapshot-time #inst "2020-01-03"})))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   (t/is (= (serde/->tx-aborted 0 (time/->instant #inst "2020-01-01")

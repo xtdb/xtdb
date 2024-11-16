@@ -66,7 +66,7 @@
   (^java.util.List columnFields [])
   (^java.util.List warnings [])
   (^xtdb.query.BoundQuery bind [queryOpts]
-   "queryOpts :: {:params, :table-args, :at-tx, :current-time, :default-tz}"))
+   "queryOpts :: {:params, :table-args, :snapshot-time, :current-time, :default-tz}"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IQuerySource
@@ -192,7 +192,7 @@
              (->column-fields ordered-outer-projection fields)))
          (warnings [_] warnings)
 
-         (bind [_ {:keys [args params current-time at-tx default-tz]
+         (bind [_ {:keys [args params current-time snapshot-time default-tz]
                    :or {default-tz default-tz}}]
 
            ;; TODO throw if basis is in the future?
@@ -232,7 +232,7 @@
                        (binding [expr/*clock* clock]
                          (-> (->cursor {:allocator allocator, :watermark wm
                                         :clock clock,
-                                        :at-tx (or at-tx (some-> wm .txBasis))
+                                        :snapshot-time (or snapshot-time (some-> wm .txBasis .getSystemTime))
                                         :current-time current-time
                                         :params params
                                         :schema (scan/tables-with-cols wm-src)})

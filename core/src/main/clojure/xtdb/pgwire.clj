@@ -448,9 +448,10 @@
                      (visitSettingCurrentTime [_ ctx]
                        [:current-time (time/->instant (.accept (.currentTime ctx) (plan/->ExprPlanVisitor nil nil)))])
 
-                     (visitSettingBasis [_ ctx]
-                       (let [at-tx (.accept (.basis ctx) (plan/->ExprPlanVisitor nil nil))]
-                         [:at-tx (serde/map->TxKey {:system-time (time/->instant at-tx)})]))
+                     (visitSettingSnapshotTime [_ ctx]
+                       [:snapshot-time (-> (.snapshotTime ctx)
+                                           (.accept (plan/->ExprPlanVisitor nil nil))
+                                           time/->instant)])
 
                      (visitShowVariableStatement [_ ctx]
                        {:statement-type :query, :query sql, :parsed-query ctx})
@@ -1251,7 +1252,7 @@
              (-> st
                  (assoc :transaction
                         (-> {:current-time (.instant clock)
-                             :at-tx (:latest-completed-tx (xt/status node))
+                             :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
                              :after-tx-id (or latest-submitted-tx-id -1)}
                             (into (:characteristics session))
                             (into (:next-transaction session))
@@ -1468,7 +1469,7 @@
 
             xt-params (xtify-params conn params stmt-with-bind-msg)
 
-            query-opts {:at-tx (or (:at-tx stmt) (:at-tx transaction))
+            query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
                         :current-time (or (:current-time stmt)
                                           (:current-time transaction)
                                           (.instant clock))

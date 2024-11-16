@@ -43,7 +43,7 @@ settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable
 settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
-    | 'BASIS' ('TO' | '=') basis=literal # SettingBasis
+    | 'SNAPSHOT_TIME' ('TO' | '=') snapshotTime=literal # SettingSnapshotTime
     | 'CURRENT_TIME' ('TO' | '=') currentTime=literal # SettingCurrentTime
     ;
 
@@ -102,7 +102,7 @@ identifier
         | 'LATEST' | 'SUBMITTED'
         | 'SYSTEM_TIME' | 'VALID_TIME'
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
-        | 'SETTING' | 'BASIS'
+        | 'SETTING'
         | 'CARDINALITY'
         | 'ROLE'
         | 'STR' | 'LOCAL_NAME' | 'NAMESPACE'

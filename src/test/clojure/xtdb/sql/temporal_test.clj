@@ -6,8 +6,8 @@
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
-(defn query-at-tx [query tx]
-  (xt/q tu/*node* query {:at-tx tx}))
+(defn query-at [query {:keys [system-time]}]
+  (xt/q tu/*node* query {:snapshot-time system-time}))
 
 (t/deftest all-system-time
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
@@ -28,17 +28,17 @@
         tx2 (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
 
     (t/is (= []
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00+00:00'"
               tx)))
 
     (t/is (= [{:last-updated "tx1"}]
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME FOR SYSTEM_TIME AS OF TIMESTAMP '3000-01-01 00:00:00+00:00'"
               tx)))
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (query-at-tx
+             (set (query-at
                    "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME FOR SYSTEM_TIME AS OF TIMESTAMP '3002-01-01 00:00:00+00:00'"
                    tx2))))))
 
@@ -47,25 +47,25 @@
         tx2 (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
 
     (t/is (= []
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"
               tx)))
 
     (t/is (= [{:last-updated "tx1"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3001-01-01 00:00:00+00:00'"
               tx)))
 
     (t/is (= [{:last-updated "tx1"} {:last-updated "tx1"} {:last-updated "tx2"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'
              ORDER BY last_updated"
               tx2)))
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (query-at-tx
+             (set (query-at
                    "SETTING DEFAULT VALID_TIME ALL
                   SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'"
                    tx2))))))
@@ -74,32 +74,32 @@
   (let [tx (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})
         tx2 (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx2"}]] {:system-time #inst "3001"})]
     (t/is (= []
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2998-01-01' AND TIMESTAMP '2999-01-01 00:00:00+00:00'"
               tx)))
 
     (t/is (= [{:last-updated "tx1"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"
               tx))
           "second point in time is inclusive for between")
 
     (t/is (= [{:last-updated "tx1"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3001-01-01 00:00:00+00:00'"
               tx)))
 
     (t/is (= [{:last-updated "tx1"} {:last-updated "tx1"} {:last-updated "tx2"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'
              ORDER BY last_updated"
               tx2)))
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (query-at-tx
+             (set (query-at
                    "SETTING DEFAULT VALID_TIME ALL
                   SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
                    tx2))))))
@@ -116,27 +116,27 @@
                                         {:xt/id :some-other-doc, :last-updated "4000"}]])]
 
       (t/is (= [{:last-updated "2000"} {:last-updated "3000"} {:last-updated "4000"}]
-               (query-at-tx
+               (query-at
                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME ORDER BY last_updated"
                 tx)))
 
       (t/is (= [{:last-updated "2000"}]
-               (query-at-tx
+               (query-at
                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
                 tx)))
 
       (t/is (= [{:last-updated "3000"}]
-               (query-at-tx
+               (query-at
                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
                 tx)))
 
       (t/is (= [{:last-updated "3000"} {:last-updated "4000"}]
-               (query-at-tx
+               (query-at
                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
                 tx)))
 
       (t/is (= [{:last-updated "3000"}]
-               (query-at-tx
+               (query-at
                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
                 tx))))))
 
@@ -148,19 +148,19 @@
                                       {:xt/id :bar-doc, :l_updated "2003" :name "test"}]])]
 
     (t/is (= [{:last-updated "2001"}]
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME
              WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00Z', TIMESTAMP '2002-01-01 00:00:00Z')"
               tx)))
 
     (t/is (= [{:l-updated "2003"}]
-             (query-at-tx
+             (query-at
               "SELECT bar.l_updated FROM bar FOR ALL VALID_TIME
              WHERE bar._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00Z', TIMESTAMP '2003-01-01 00:00:00Z')"
               tx)))
 
     (t/is (= []
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated, bar.l_updated FROM foo, bar
              WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00Z', TIMESTAMP '2001-01-01 00:00:00Z')
              AND
@@ -168,7 +168,7 @@
               tx)))
 
     (t/is (= [{:last-updated "2001", :l-updated "2003"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.last_updated, bar.l_updated FROM foo, bar
              WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00Z', TIMESTAMP '2001-01-01 00:00:00Z')
@@ -176,7 +176,7 @@
               tx)))
 
     (t/is (= []
-             (query-at-tx
+             (query-at
               "SELECT foo.last_updated, bar.name FROM foo, bar
              WHERE foo._VALID_TIME OVERLAPS bar._VALID_TIME" tx)))))
 
@@ -187,14 +187,14 @@
                                       {:xt/id :jeff, :also_name "Jeff"}]])]
 
     (t/is (= []
-             (query-at-tx
+             (query-at
               "SELECT foo.name, bar.also_name
              FROM foo, bar
              WHERE foo._VALID_TIME SUCCEEDS bar._VALID_TIME"
               tx)))
 
     (t/is (= [{:name "Bill" :also-name "Jeff"}]
-             (query-at-tx
+             (query-at
               "SETTING DEFAULT VALID_TIME ALL
              SELECT foo.name, bar.also_name
              FROM foo, bar

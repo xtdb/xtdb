@@ -222,7 +222,7 @@
               (util/close out))))))))
 
 (s/def ::current-time inst?)
-(s/def ::at-tx (s/nilable #(instance? TransactionKey %)))
+(s/def ::snapshot-time (s/nilable ::time/datetime-value))
 (s/def ::after-tx-id (s/nilable int?))
 
 (s/def ::tx-timeout
@@ -236,13 +236,13 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::after-tx-id ::at-tx ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
+          :opt-un [::after-tx-id ::snapshot-time ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
 (defn- <-QueryOpts [^QueryOptions opts]
   (->> {:args (.getArgs opts)
 
         :after-tx-id (.getAfterTxId opts)
-        :at-tx (.getAtTx opts)
+        :snapshot-time (.getSnapshotTime opts)
         :current-time (.getCurrentTime opts)
 
         :tx-timeout (.getTxTimeout opts)

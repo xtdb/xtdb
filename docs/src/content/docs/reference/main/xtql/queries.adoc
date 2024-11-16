@@ -730,7 +730,7 @@ a map of arguments to pass to the query. Parameters are prefixed with `$` in the
 (xt/q node '(from :users [{:username $username}])
       {:args {:username "james"}})
 ----
-`at-tx`:: specifies the _exact_ latest transaction that'll be visible to the query. overrides after-tx
+`snapshot-time`:: specifies the latest system-time that'll be visible to the query.
 +
 * If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
 * If not provided, this will default to the latest available transaction on the node.
@@ -746,5 +746,5 @@ a map of arguments to pass to the query. Parameters are prefixed with `$` in the
 `tx-timeout`:: duration to wait for the requested transaction (`after-tx-id`) to be indexed before timing out (default unlimited).
 
 [#basis]
-These query options (in particular, `at-tx`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
+These query options (in particular, `snapshot-time`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
 --
