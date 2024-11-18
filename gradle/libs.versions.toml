@@ -5,6 +5,7 @@ clojure="1.12.0"
 netty="4.1.110.Final"
 reitit="0.5.15"
 muuntaja="0.6.8"
+testcontainers="1.20.3"
 
 [libraries]
 arrow-algorithm={ group="org.apache.arrow", name="arrow-algorithm", version.ref="arrow" }
@@ -35,3 +36,7 @@ reitit-spec={ group="metosin", name="reitit-spec", version.ref="reitit" }
 ring-core={ group="ring", name="ring-core", version="1.10.0" }
 ring-jetty9-adapter={ group="info.sunng", name="ring-jetty9-adapter", version="0.22.4" }
 jetty-alpn-server={ group="org.eclipse.jetty", name="jetty-alpn-server", version="10.0.15" }
+
+testcontainers={ group="org.testcontainers", name="testcontainers", version.ref="testcontainers" }
+testcontainers-kafka={ group="org.testcontainers", name="kafka", version.ref="testcontainers" }
+testcontainers-minio={ group="org.testcontainers", name="minio", version.ref="testcontainers" }

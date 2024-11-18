@@ -81,14 +81,14 @@ allprojects {
         tasks.create("integration-test", Test::class) {
             jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
             useJUnitPlatform {
-                includeTags("integration")
+                includeTags("integration", "kafka")
             }
         }
 
         tasks.create("nightly-test", Test::class) {
             jvmArgs(defaultJvmArgs + sixGBJvmArgs)
             useJUnitPlatform {
-                includeTags("s3", "google-cloud", "azure", "kafka")
+                includeTags("s3", "google-cloud", "azure")
             }
         }
 
@@ -97,6 +97,9 @@ allprojects {
 
             testImplementation("org.junit.jupiter", "junit-jupiter-api", "5.8.1")
             testRuntimeOnly("org.junit.jupiter", "junit-jupiter-engine", "5.8.1")
+            testImplementation(libs.testcontainers)
+            testImplementation(libs.testcontainers.kafka)
+            testImplementation(libs.testcontainers.minio)
         }
 
         if (plugins.hasPlugin("dev.clojurephant.clojure")) {

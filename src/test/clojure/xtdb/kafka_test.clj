@@ -1,4 +1,4 @@
-(ns xtdb.kafka-test
+(ns ^:kafka xtdb.kafka-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.buffer-pool-test :as bp-test]
@@ -7,12 +7,43 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [xtdb.api.log Log]
+  (:import org.testcontainers.containers.GenericContainer
+           org.testcontainers.kafka.ConfluentKafkaContainer
+           org.testcontainers.utility.DockerImageName
+           [xtdb.api.log Log]
            xtdb.buffer_pool.RemoteBufferPool))
 
-(t/deftest ^:requires-docker ^:kafka test-kafka
+(def ^:private ^:dynamic *bootstrap-servers* nil)
+
+(defonce ^ConfluentKafkaContainer container
+  (ConfluentKafkaContainer. (DockerImageName/parse "confluentinc/cp-kafka:latest")))
+
+(comment
+  ;; start these once when you're developing,
+  ;; save the time of starting the container for each run
+  (.start container)
+
+  (.stop container))
+
+(defn with-container [^GenericContainer c, f]
+  (if (.getContainerId c)
+    (f c)
+    (try
+      (.start c)
+      (f c)
+      (finally
+        (.stop c)))))
+
+(t/use-fixtures :once
+  (fn [f]
+    (with-container container
+      (fn [^ConfluentKafkaContainer c]
+        (binding [*bootstrap-servers* (.getBootstrapServers c)]
+          (f))))))
+
+(t/deftest ^:kafka test-kafka
   (let [test-uuid (random-uuid)]
-    (with-open [node (xtn/start-node {:log [:kafka {:bootstrap-servers "localhost:9092"
+    (with-open [node (xtn/start-node {:log [:kafka {:bootstrap-servers *bootstrap-servers*
                                                     :tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
                                                     :files-topic (str "xtdb.kafka-test.files-" test-uuid)}]})]
       (t/is (= true
@@ -22,11 +53,11 @@
                (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
                             {:node node}))))))
 
-(t/deftest ^:requires-docker ^:kafka test-kafka-setup-with-provided-opts
+(t/deftest ^:kafka test-kafka-setup-with-provided-opts
   (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
                                                     :files-topic (str "xtdb.kafka-test.files-" test-uuid)
-                                                    :bootstrap-servers "localhost:9092"
+                                                    :bootstrap-servers *bootstrap-servers*
                                                     :create-topics? true
                                                     :tx-poll-duration "PT2S"
                                                     :properties-map {}
@@ -35,12 +66,12 @@
         (let [log (get-in node [:system :xtdb/log])]
           (t/is (instance? Log log)))))))
 
-(t/deftest ^:requires-docker ^:kafka test-kafka-closes-properly-with-messages-sent
+(t/deftest ^:kafka test-kafka-closes-properly-with-messages-sent
   (let [test-uuid (random-uuid)]
     (util/with-tmp-dirs #{path}
       (with-open [node (xtn/start-node {:log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" test-uuid)
                                                       :files-topic (str "xtdb.kafka-test.files-" test-uuid)
-                                                      :bootstrap-servers "localhost:9092"
+                                                      :bootstrap-servers *bootstrap-servers*
                                                       :create-topics? true
                                                       :tx-poll-duration "PT2S"
                                                       :properties-map {}
