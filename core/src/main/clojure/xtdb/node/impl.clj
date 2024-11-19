@@ -181,7 +181,7 @@
                                    :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]
     (metrics/add-gauge metrics-registry "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
-    (metrics/add-gauge metrics-registry "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] 0)))
+    (metrics/add-gauge metrics-registry "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] -1)))
     (metrics/add-gauge metrics-registry "node.tx.lag.TxId" (fn []
                                                             (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
                                                               (if (and latest-completed-tx (pos? latest-submitted-tx-id))
