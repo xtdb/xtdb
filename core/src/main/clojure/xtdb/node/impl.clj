@@ -176,10 +176,18 @@
          opts))
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
-  (map->Node (-> deps
-                 (assoc :!latest-submitted-tx-id (atom -1)
-                        :query-timer (metrics/add-timer metrics-registry "query.timer"
-                                                        {:description "indicates the timings for queries"})))))
+  (let [node (map->Node (-> deps
+                            (assoc :!latest-submitted-tx-id (atom -1)
+                                   :query-timer (metrics/add-timer metrics-registry "query.timer"
+                                                                   {:description "indicates the timings for queries"}))))]
+    (metrics/add-gauge metrics-registry "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
+    (metrics/add-gauge metrics-registry "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] -1)))
+    (metrics/add-gauge metrics-registry "node.tx.lag.TxId" (fn []
+                                                             (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
+                                                               (if (and latest-completed-tx (pos? latest-submitted-tx-id))
+                                                                 (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
+                                                                 0))))
+    node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
