@@ -7,3 +7,5 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:8080']
     metrics_path: /metrics
+    # not yet released
+    # fallback_scrape_protocol: http

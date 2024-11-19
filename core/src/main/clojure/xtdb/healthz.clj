@@ -23,7 +23,9 @@
 (def router
   (http/router [["/metrics" {:name :metrics
                              :get (fn [{:keys [^PrometheusMeterRegistry prometheus-registry]}]
-                                    {:status 200, :body (.scrape prometheus-registry)})}]
+                                    {:status 200,
+                                     :headers {"Content-Type" "text/plain; version=0.0.4"}
+                                     :body (.scrape prometheus-registry)})}]
                 ["/healthz/started" {:name :started
                                      :get (fn [{:keys [_]}]
                                             {:status 200, :body "Started."})}]
