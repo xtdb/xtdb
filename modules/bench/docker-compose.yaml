@@ -17,7 +17,7 @@ services:
     restart: always
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.0.0
     container_name: prometheus
     ports:
       - "9090:9090"
