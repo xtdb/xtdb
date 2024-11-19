@@ -45,7 +45,8 @@ defmodule XTDBExample do
   end
 end
 
-""" Example output:
+"""
+Example output:
 
 iex(1)> XTDBExample.connect_and_query()
 Users:
