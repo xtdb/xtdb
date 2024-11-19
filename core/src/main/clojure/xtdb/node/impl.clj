@@ -183,10 +183,10 @@
     (metrics/add-gauge metrics-registry "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
     (metrics/add-gauge metrics-registry "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] -1)))
     (metrics/add-gauge metrics-registry "node.tx.lag.TxId" (fn []
-                                                            (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
-                                                              (if (and latest-completed-tx (pos? latest-submitted-tx-id))
-                                                                (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
-                                                                0))))
+                                                             (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
+                                                               (if (and latest-completed-tx (pos? latest-submitted-tx-id))
+                                                                 (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
+                                                                 0))))
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
