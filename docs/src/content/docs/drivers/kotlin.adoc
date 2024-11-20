@@ -6,11 +6,13 @@ In Kotlin, you can talk to a running XTDB node using standard https://docs.oracl
 
 == Install
 
-To install the Postgres driver, add the following dependency to your Gradle `build.gradle.kts`:
+To install the XTDB JDBC driver, add the following dependency to your Gradle `build.gradle.kts`:
 
 [source,kotlin]
 ----
-implementation("org.postgresql:postgresql:42.7.4")
+// https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
+
+implementation("com.xtdb:xtdbjdbc:$XTDB_VERSION")
 ----
 
 Or, for Maven:
@@ -18,9 +20,9 @@ Or, for Maven:
 [source,xml]
 ----
 <dependency>
-    <groupId>org.postgresql</groupId>
-    <artifactId>postgresql</artifactId>
-    <version>42.7.4</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdbjdbc</artifactId>
+    <version>$XTDB_VERSION</version>
 </dependency>
 ----
 
@@ -37,7 +39,7 @@ import java.sql.DriverManager
 // and JDBC abstraction libraries.
 
 fun main() {
-    DriverManager.getConnection("jdbc:postgresql://localhost:5432/xtdb").use { connection ->
+    DriverManager.getConnection("jdbc:xtdb://localhost:5432/xtdb").use { connection ->
         connection.createStatement().use { statement ->
             statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}")
 

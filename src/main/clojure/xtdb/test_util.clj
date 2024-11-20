@@ -79,10 +79,8 @@
 
 (defn with-node [f]
   (util/with-open [node (xtn/start-node *node-opts*)
-                   conn (jdbc/get-connection {:dbtype "postgresql"
-                                              :host "localhost"
-                                              :port (.getServerPort node)
-                                              :database "xtdb"
+                   conn (jdbc/get-connection {:jdbcUrl (format "jdbc:xtdb://localhost:%d/xtdb"
+                                                               (.getServerPort node))
                                               :options "-c fallback_output_format=transit"})]
     (binding [*node* node, *conn* conn]
       (f))))

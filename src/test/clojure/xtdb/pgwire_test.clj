@@ -77,7 +77,7 @@
 
 (defn- jdbc-url [& params]
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
-    (format "jdbc:postgresql://localhost:%s/xtdb%s" *port* (or param-str ""))))
+    (format "jdbc:xtdb://localhost:%s/xtdb%s" *port* (or param-str ""))))
 
 (defn- jdbc-conn ^Connection [& params]
   (jdbc/get-connection (apply jdbc-url params)))
