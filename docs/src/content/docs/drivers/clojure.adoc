@@ -11,8 +11,6 @@ SQL queries can be executed using the XTDB JDBC driver:
 
 [source,clojure]
 ----
-
-
 {:deps {;; https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
         com.xtdb/xtdb-jdbc {:mvn/version "XTDB_VERSION"}
 
@@ -25,18 +23,34 @@ Then, once you've link:/intro/installation-via-docker[started the XTDB node], fo
 
 [source,clojure]
 ----
-(require '[next.jdbc :as jdbc])
+(require '[next.jdbc :as jdbc]
+         '[next.jdbc.result-set :as jdbc-rs]
+         '[xtdb.next.jdbc :as xt-jdbc])
 
 ;; this is relatively low-level code - the usual connection pooling
 ;; and SQL abstraction libraries can be used too.
 
 (with-open [conn (jdbc/get-connection "jdbc:xtdb://localhost/xtdb")]
-  (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}"])
+  (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jms', first_name: 'James'}"])
+  (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
+                       (xt-jdbc/->pg-obj {:xt/id "joe", :first-name "Joe"})])
 
-  (prn (jdbc/execute! conn ["SELECT * FROM users"])))
+  (prn (jdbc/execute! conn ["SELECT * FROM users"]))
+  ;; => [{:_id "joe", :first_name "Joe"}
+  ;;     {:_id "jms", :first_name "James"}]
 
-;; => [{:_id "joe", :name "Joe"}
-;;     {:_id "jms", :name "James"}]
+  ;; optional: use the XT col-reader to transform nested values too
+  (prn (jdbc/execute! conn ["SELECT * FROM users"]
+         {:builder-fn (jdbc-rs/as-maps-adapter
+                        (fn [rs opts]
+                          (jdbc-rs/as-unqualified-modified-maps rs
+                            (-> opts (assoc :label-fn xt-jdbc/label-fn))))
+                        xt-jdbc/col-reader)}))
+
+  ;; => [{:xt/id "joe", :first-name "Joe"}
+  ;;     {:xt/id "jms", :first-name "James"}]
+  )
+
 ----
 
 == Clojure API

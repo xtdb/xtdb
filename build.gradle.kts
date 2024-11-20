@@ -245,14 +245,15 @@ dependencies {
     api("ch.qos.logback", "logback-classic", "1.4.5")
 
     api("org.clojure", "tools.logging", "1.2.4")
-    api("com.github.seancorfield", "next.jdbc", "1.3.939")
+    api(libs.next.jdbc)
+    testImplementation(libs.honeysql)
     api("org.postgresql", "postgresql", "42.7.3")
     api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
     api(project(":xtdb-core"))
     api(project(":xtdb-jdbc"))
 
-    testImplementation("org.clojure", "data.csv", "1.0.1")
-    testImplementation("org.clojure", "tools.cli", "1.0.206")
+    testImplementation(libs.clojure.`data`.csv)
+    testImplementation(libs.clojure.tools.cli)
 
     devImplementation("integrant", "repl", "0.3.2")
     devImplementation("com.azure", "azure-identity", "1.9.0")

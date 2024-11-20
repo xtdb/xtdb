@@ -18,9 +18,13 @@ publishing {
 }
 
 dependencies {
+    api(project(":xtdb-api"))
+
     compileOnlyApi(files("src/main/resources"))
     api(kotlin("stdlib-jdk8"))
     implementation("org.postgresql:postgresql:42.2.23")
+
+    testImplementation(libs.next.jdbc)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

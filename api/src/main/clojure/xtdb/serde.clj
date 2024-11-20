@@ -125,7 +125,7 @@
   (->> (IKeyFn$KeyFn/values)
        (into {} (map (juxt write-key-fn identity)))))
 
-(defn read-key-fn [k]
+(defn read-key-fn ^xtdb.api.query.IKeyFn [k]
   (if (instance? IKeyFn k)
     k
     (or (get key-fns k)

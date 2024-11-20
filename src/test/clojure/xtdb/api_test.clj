@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.error :as err]
-            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time]
