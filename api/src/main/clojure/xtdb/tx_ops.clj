@@ -1,29 +1,34 @@
 (ns xtdb.tx-ops
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time]
             [xtdb.xtql.edn :as xtql.edn])
   (:import [java.io Writer]
            [java.nio ByteBuffer]
            [java.util List]
-           (xtdb.api.tx TxOp TxOps)
            (xtdb.api.query Binding)
+           (xtdb.api.tx TxOp TxOps)
            xtdb.types.ClojureForm
            xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
   (fn [tx-op]
-    (when-not (vector? tx-op)
+    (cond
+      (string? tx-op) :sql-str
+
+      (not (vector? tx-op))
       (throw (err/illegal-arg :xtql/malformed-tx-op
-                              {::err/message "expected vector for tx-op", :tx-op tx-op})))
+                              {::err/message "expected SQL string/vector", :tx-op tx-op}))
 
-    (let [[op] tx-op]
-      (when-not (keyword? op)
-        (throw (err/illegal-arg :xtql/malformed-tx-op
-                                {::err/message "expected keyword for op", :tx-op tx-op, :op op})))
+      :else (let [[op] tx-op]
+              (cond
+                (string? op) :sql+args
 
-      op))
+                (not (keyword? op))
+                (throw (err/illegal-arg :xtql/malformed-tx-op
+                                        {::err/message "expected SQL string/keyword", :tx-op tx-op, :op op}))
+
+                :else op))))
 
   :default ::default)
 
@@ -172,6 +177,12 @@
 
     (cond-> (TxOps/sql sql)
       (seq arg-rows) (.argRows ^List (vec arg-rows)))))
+
+(defmethod parse-tx-op :sql-str [sql]
+  (parse-tx-op [:sql sql]))
+
+(defmethod parse-tx-op :sql+args [[sql & args]]
+  (parse-tx-op [:sql sql (vec args)]))
 
 (defmethod parse-tx-op :put-docs [[_ table-or-opts & docs]]
   (let [{table :into, :keys [valid-from valid-to]} (cond
