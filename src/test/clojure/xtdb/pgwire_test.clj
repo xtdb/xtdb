@@ -1,16 +1,17 @@
 (ns xtdb.pgwire-test
   (:require [clojure.data.csv :as csv]
-            [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
+            [honey.sql :as hsql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [pg.core :as pg]
             [xtdb.api :as xt]
             [xtdb.logging :as logging]
+            [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
@@ -311,20 +312,8 @@
       (close-method server)
       (check-server-resources-freed server))))
 
-(defn <-pgobject [v]
-  (if (instance? PGobject v)
-    (let [^PGobject v v
-          type (.getType v)
-          value (.getValue v)]
-      (if (#{"jsonb" "json"} type)
-        (some-> value json/read-str)
-        value))
-    v))
-
 (defn q [conn sql]
-  (->> (jdbc/execute! conn sql)
-       (mapv (fn [row]
-               (update-vals row <-pgobject)))))
+  (jdbc/execute! conn sql tu/jdbc-qopts))
 
 (defn q-seq [conn sql]
   (->> (jdbc/execute! conn sql {:builder-fn result-set/as-arrays})
@@ -580,8 +569,8 @@
     (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
         (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
-        (t/is (= [{:_id 1}]
-                 (jdbc/execute! conn ["SELECT * FROM foo"]))))
+        (t/is (= [{:xt/id 1}]
+                 (q conn ["SELECT * FROM foo"]))))
 
       (when (psql-available?)
         (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo")]
@@ -629,14 +618,13 @@
            (is (= [["_column_1"] ["ping"]] (read)))))))))
 
 
-;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
     (-> (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id "map-test", :a {:b 42}}]])
         (tu/then-await-tx tu/*node*))
 
     (let [rs (q conn ["select a.a from a a"])]
-      (is (= [{:a {"b" 42}}] rs)))))
+      (is (= [{:a {:b 42}}] rs)))))
 
 (deftest open-close-transaction-does-not-crash-test
   (with-open [conn (jdbc-conn)]
@@ -687,7 +675,7 @@
   (with-open [conn (jdbc-conn)]
     (jdbc/with-transaction [db conn]
       (q db ["insert into foo(_id) values (42)"]))
-    (is (= [{:_id 42}] (q conn ["SELECT * FROM foo"])))))
+    (is (= [{:xt/id 42}] (q conn ["SELECT * FROM foo"])))))
 
 (defn- session-variables [server-conn ks]
   (-> server-conn :conn-state deref :session (select-keys ks)))
@@ -894,7 +882,7 @@
       (q conn ["BEGIN READ WRITE"])
       (q conn ["INSERT INTO foo (_id) VALUES (42)"])
       (q conn ["COMMIT"])
-      (is (= [{:_id 42}] (q conn ["SELECT _id from foo"]))))
+      (is (= [{:xt/id 42}] (q conn ["SELECT _id from foo"]))))
 
     (testing "BEGIN access mode overrides SET TRANSACTION"
       (q conn ["SET TRANSACTION READ WRITE"])
@@ -918,7 +906,7 @@
         (sql "START TRANSACTION")
         (sql "INSERT INTO foo (_id) VALUES (42)")
         (sql "COMMIT")
-        (is (= [{:_id 42}] (q conn ["SELECT _id from foo"]))))
+        (is (= [{:xt/id 42}] (q conn ["SELECT _id from foo"]))))
 
       (t/testing "we can't mix modes"
         (t/testing "w -> r"
@@ -930,7 +918,7 @@
 
         (t/testing "r -> w"
           (sql "START TRANSACTION")
-          (is (= [{:_id 42}] (q conn ["SELECT _id from foo"])))
+          (is (= [{:xt/id 42}] (q conn ["SELECT _id from foo"])))
           (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction"
                                 (sql "INSERT INTO foo (_id) VALUES (42)")))
           (sql "ROLLBACK")))
@@ -939,7 +927,7 @@
         (sql "START TRANSACTION READ WRITE")
         (sql "INSERT INTO foo (_id) VALUES (43)")
         (sql "COMMIT")
-        (is (= #{{:_id 42} {:_id 43}} (set (q conn ["SELECT _id from foo"])))))
+        (is (= #{{:xt/id 42} {:xt/id 43}} (set (q conn ["SELECT _id from foo"])))))
 
       (testing "access mode overrides SET TRANSACTION"
         (sql "SET TRANSACTION READ WRITE")
@@ -958,7 +946,7 @@
           (sql "START TRANSACTION")
           (is (sql "INSERT INTO foo (_id) VALUES (44)"))
           (sql "COMMIT")
-          (is (= #{{:_id 42} {:_id 43} {:_id 44}} (set (q conn ["SELECT _id from foo"])))))))))
+          (is (= #{{:xt/id 42} {:xt/id 43} {:xt/id 44}} (set (q conn ["SELECT _id from foo"])))))))))
 
 (deftest set-session-characteristics-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
@@ -969,7 +957,7 @@
       (sql "COMMIT")
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (= [{:_id 42}] (q conn ["SELECT _id from foo"])))
+      (is (= [{:xt/id 42}] (q conn ["SELECT _id from foo"])))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
       (sql "START TRANSACTION")
@@ -977,7 +965,7 @@
       (sql "COMMIT")
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (= #{{:_id 42}, {:_id 43}} (set (q conn ["SELECT _id from foo"])))))))
+      (is (= #{{:xt/id 42}, {:xt/id 43}} (set (q conn ["SELECT _id from foo"])))))))
 
 (deftest set-valid-time-defaults-test
   (with-open [conn (jdbc-conn)]
@@ -987,8 +975,7 @@
       (sql "COMMIT")
 
       (is (= [{:version 0,
-               :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
@@ -996,22 +983,19 @@
       (sql "COMMIT")
 
       (is (= [{:version 1,
-               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 0,
-               :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
-               :_valid_to #inst "2020-01-02T00:00:00.000000000-00:00"}
+               :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00",
+               :xt/valid-to #inst "2020-01-02T00:00:00.000000000-00:00"}
               {:version 1,
-               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
                        SELECT version, _valid_from, _valid_to FROM foo ORDER BY version"])))
 
       (is (= [{:version 1,
-               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
@@ -1019,22 +1003,19 @@
       (sql "COMMIT")
 
       (is (= [{:version 2,
-               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 2,
-               :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
-               :_valid_to #inst "2020-01-02T00:00:00.000000000-00:00"}
+               :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00",
+               :xt/valid-to #inst "2020-01-02T00:00:00.000000000-00:00"}
               {:version 2,
-               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
                        SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 2,
-               :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-               :_valid_to nil}]
+               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
              (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))
 
 (t/deftest test-setting-basis-current-time-3505
@@ -1046,20 +1027,17 @@
     (q conn ["INSERT INTO foo (_id, version) VALUES ('foo', 0)"])
 
     (is (= [{:version 0,
-             :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
-             :_valid_to nil}]
+             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"}]
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
     (q conn ["UPDATE foo SET version = 1 WHERE _id = 'foo'"])
 
-    (is (= [{:version 1,
-             :_valid_from #inst "2020-01-02T00:00:00.000000000-00:00",
-             :_valid_to nil}]
+    (is (= [{:version 1
+             :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
-    (is (= [{:version 0,
-             :_valid_from #inst "2020-01-01T00:00:00.000000000-00:00",
-             :_valid_to nil
+    (is (= [{:version 0
+             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
              :ts #inst "2024-01-01"}]
            (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z',
                              CURRENT_TIME = TIMESTAMP '2024-01-01T00:00:00Z'
@@ -1090,7 +1068,7 @@
         (sql "COMMIT")
 
         (is (= [{:version 0,
-                 :_system_from #inst "2021-07-31T23:00:00.000000000-00:00"}]
+                 :xt/system-from #inst "2021-07-31T23:00:00.000000000-00:00"}]
                (q conn ["SELECT version, _system_from FROM foo"]))))
 
       (t/testing "with SET TRANSACTION"
@@ -1100,9 +1078,9 @@
         (sql "COMMIT")
 
         (is (= [{:version 0,
-                 :_system_from #inst "2021-07-31T23:00:00.000000000-00:00"}
+                 :xt/system-from #inst "2021-07-31T23:00:00.000000000-00:00"}
                 {:version 1,
-                 :_system_from #inst "2021-08-02T23:00:00.000000000-00:00"}]
+                 :xt/system-from #inst "2021-08-02T23:00:00.000000000-00:00"}]
                (q conn ["SELECT version, _system_from FROM foo FOR ALL VALID_TIME ORDER BY version"]))))
 
       (t/testing "past system time"
@@ -1132,20 +1110,20 @@
         (sql "INSERT INTO foo (_id) values (42)")
         (sql "COMMIT")
         (testing "despite read write setting read remains available outside tx"
-          (is (= [{:_id 42}] (sql "select _id from foo")))))
+          (is (= [{:xt/id 42}] (sql "select _id from foo")))))
 
       (testing "override session to start a read only transaction"
         (sql "BEGIN READ ONLY")
         (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) values (43)")))
         (sql "ROLLBACK")
         (testing "despite read write setting read remains available outside tx"
-          (is (= [{:_id 42}] (sql "select _id from foo")))))
+          (is (= [{:xt/id 42}] (sql "select _id from foo")))))
 
       (testing "set transaction is not cleared by read/autocommit DML, as they don't start a transaction"
         (sql "SET TRANSACTION READ WRITE")
-        (is (= [{:_id 42}] (sql "select _id from foo")))
+        (is (= [{:xt/id 42}] (sql "select _id from foo")))
         (sql "INSERT INTO foo (_id) values (43)")
-        (is (= #{{:_id 42} {:_id 43}} (set (sql "select _id from foo"))))
+        (is (= #{{:xt/id 42} {:xt/id 43}} (set (sql "select _id from foo"))))
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
 
 (deftest analyzer-error-returned-test
@@ -1235,22 +1213,21 @@
                  #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6" Long/MAX_VALUE Integer/MIN_VALUE Short/MAX_VALUE Double/MIN_VALUE Float/MAX_VALUE "bb" false])
     ;;binary format is only requested for server side preparedStatements in pgjdbc
     ;;threshold one should mean we test the text and binary format for each type
-    (let [sql #(jdbc/execute! conn [%])
+    (let [sql #(q conn [%])
           res [{:float8 Double/MIN_VALUE,
                 :float4 Float/MAX_VALUE,
                 :int2 Short/MAX_VALUE,
-                :var_char "bb",
+                :var-char "bb",
                 :int4 Integer/MIN_VALUE,
                 :int8 Long/MAX_VALUE,
-                :_id #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6",
+                :xt/id #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6",
                 :bool false}
                {:float8 Double/MAX_VALUE,
-                :float4 nil,
                 :int2 Short/MIN_VALUE,
-                :var_char "aa",
+                :var-char "aa",
                 :int4 Integer/MAX_VALUE,
                 :int8 Long/MIN_VALUE,
-                :_id #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2",
+                :xt/id #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2",
                 :bool true}]]
 
 
@@ -1272,13 +1249,6 @@
                                            (.setType "json")
                                            (.setValue (JsonSerde/encode (v))))))})))
 
-(extend-protocol result-set/ReadableColumn
-  PGobject
-  (read-column-by-index [^PGobject obj _rs-meta _idx]
-    (if (= "json" (.getType obj))
-      (JsonSerde/decode (.getValue obj))
-      obj)))
-
 (deftest test-json-type
   (with-open [conn (jdbc-conn)]
     (jdbc/execute! conn ["INSERT INTO foo (_id, json, scalar) VALUES (0, ?, ?)"
@@ -1288,20 +1258,20 @@
     (jdbc/execute! conn ["INSERT INTO foo (_id, json) VALUES (1, ?)"
                          (as-json-param {:a 2, :c {:d 3}})])
 
-    (t/is (= [{:_id 1, :json {"a" 2, "c" {"d" 3}}, :scalar nil}
-              {:_id 0, :json {"a" 1, "b" 2}, :scalar 42}]
-             (jdbc/execute! conn ["SELECT * FROM foo"])))
+    (t/is (= [{:xt/id 1, :json {:a 2, :c {:d 3}}}
+              {:xt/id 0, :json {:a 1, :b 2}, :scalar 42}]
+             (q conn ["SELECT * FROM foo"])))
 
-    (t/is (= [{:_id 1, :a 2, :b nil, :c {"d" 3}, :d 3}
-              {:_id 0, :a 1, :b 2, :c nil, :d nil}]
-             (jdbc/execute! conn ["SELECT _id, (json).a, (json).b, (json).c, (json).c.d FROM foo"])))
+    (t/is (= [{:xt/id 1, :a 2, :c {:d 3}, :d 3}
+              {:xt/id 0, :a 1, :b 2}]
+             (q conn ["SELECT _id, (json).a, (json).b, (json).c, (json).c.d FROM foo"])))
 
     ;; we don't currently support JSON as a _query_ param-type, because we have to prepare the statement
     ;; without the dynamic arg values, and we can't know the type of the JSON arg until we see the value
     (t/is (thrown-with-msg? PSQLException
                             #"ERROR: Unsupported param-types in query: \[\"json\"\]"
-                            (jdbc/execute! conn ["SELECT * FROM foo WHERE json = ?"
-                                                 (as-json-param {:a 2, :c {:d 3}})])))))
+                            (q conn ["SELECT * FROM foo WHERE json = ?"
+                                     (as-json-param {:a 2, :c {:d 3}})])))))
 
 (deftest txs-error-as-json-3866
   (with-open [conn (pg-conn {})]
@@ -1342,13 +1312,13 @@
                               (jdbc/execute! tx ["ASSERT 1 = (SELECT COUNT(*) FROM foo)"])
                               (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (2)"]))))
 
-    (t/is (= [{:row_count 2}]
+    (t/is (= [{:row-count 2}]
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
-    (t/is (= [{:_id 2, :committed false,
-               :error {"error-key" "xtdb/assert-failed", "message" "Assert failed"}}
-              {:_id 1, :committed true, :error nil}
-              {:_id 0, :committed true, :error nil}]
+    (t/is (= [{:xt/id 2, :committed false,
+               :error {:error-key "xtdb/assert-failed", :message "Assert failed"}}
+              {:xt/id 1, :committed true}
+              {:xt/id 0, :committed true}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
 
 (deftest test-untyped-null-type
@@ -1560,14 +1530,14 @@
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, v: 1}"])
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, v: 2}"])
 
-    (t/is (= [{:_id 1, :v 2,
-               :_valid_time {:type "tstz-range", :value "[2020-01-02 00:00:00+00:00,)"}}
-              {:_id 1, :v 1,
-               :_valid_time {:type "tstz-range", :value "[2020-01-01 00:00:00+00:00,2020-01-02 00:00:00+00:00)"}}]
-             (->> (jdbc/execute! conn ["SELECT *, _valid_time FROM foo FOR ALL VALID_TIME"])
-                  (mapv #(update % :_valid_time (fn [^PGobject vt]
-                                                  {:type (.getType vt)
-                                                   :value (.getValue vt)})))))))
+    (t/is (= [{:xt/id 1, :v 2,
+               :xt/valid-time {:type "tstz-range", :value "[2020-01-02 00:00:00+00:00,)"}}
+              {:xt/id 1, :v 1,
+               :xt/valid-time {:type "tstz-range", :value "[2020-01-01 00:00:00+00:00,2020-01-02 00:00:00+00:00)"}}]
+             (->> (jdbc/execute! conn ["SELECT *, _valid_time FROM foo FOR ALL VALID_TIME"] tu/jdbc-qopts)
+                  (mapv #(update % :xt/valid-time (fn [^PGobject vt]
+                                                    {:type (.getType vt)
+                                                     :value (.getValue vt)})))))))
 
   (when (psql-available?)
     (psql-session
@@ -1764,12 +1734,12 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:tx_id 0}]
+    (t/is (= [{:tx-id 0}]
              (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:tx_id 1}]
+    (t/is (= [{:tx-id 1}]
              (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))
 
 (t/deftest test-show-session-variable-3804
@@ -1780,7 +1750,7 @@
     (t/is (= [{:intervalstyle "ISO_8601"}]
              (q conn ["SHOW IntervalStyle"])))
 
-    (t/is (= [{:search_path "public"}]
+    (t/is (= [{:search-path "public"}]
              (q conn ["SHOW search_path"]))
           "#3782")))
 
@@ -1861,16 +1831,16 @@
   (with-open [node (xtn/start-node {:server {:port 0}})]
     (t/testing "pgwire metadata query"
       (t/is (= [{:oid 16384, :typname "transit"}]
-               (xt/q node "
+               (xt/q node ["
 SELECT t.oid, t.typname
 FROM pg_catalog.pg_type t
   JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 WHERE t.typname = $1 AND (n.nspname = $2 OR $3 AND n.nspname = ANY (current_schemas(true)))
 ORDER BY t.oid DESC LIMIT 1"
-                     {:args ["transit" nil true]})))))
+                           "transit" nil true])))))
 
   (with-open [conn (jdbc-conn "prepareThreshold" -1)]
-    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (pgwire/transit->pgobject {:a 1, :b 2})])
+    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (xt-jdbc/->pg-obj {:a 1, :b 2})])
 
     (with-open [stmt (.prepareStatement conn "SELECT v FROM foo")
                 rs (.executeQuery stmt)]
@@ -1881,7 +1851,29 @@ ORDER BY t.oid DESC LIMIT 1"
 
       (.next rs)
       (t/is (= "{\"a\":1,\"b\":2}"
-               (.getValue ^PGobject (.getObject rs 1)))))))
+               (.getValue ^PGobject (.getObject rs 1)))))
+
+    (t/testing "qualified names"
+      (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
+                           (xt-jdbc/->pg-obj {:xt/id "jms",
+                                              :user/first-name "James"})])
+
+      (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
+                           (xt-jdbc/->pg-obj {:_id "jdt",
+                                              :user$first_name "Jeremy"})])
+
+      (t/is (= #{{:_id "jdt", :user$first_name "Jeremy"}
+                 {:_id "jms", :user$first_name "James"}}
+               (set (jdbc/execute! conn (hsql/format {:select [:_id :user$first_name]
+                                                      :from :users}))))
+            "no transformers")
+
+      (t/is (= #{{:xt/id "jdt", :user/first-name "Jeremy"}
+                 {:xt/id "jms", :user/first-name "James"}}
+               (set (q conn (hsql/format {:select (->> [:xt/id :user/first-name]
+                                                       (mapv xt-jdbc/->sql-col))
+                                          :from :users}))))
+            "using our transformers"))))
 
 (deftest test-fallback-transit
   (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
@@ -1890,12 +1882,10 @@ ORDER BY t.oid DESC LIMIT 1"
     (with-open [stmt (.prepareStatement conn "SELECT * FROM foo")]
       (t/is (= [{"_id" "int8"} {"nest" "transit"}] (result-metadata stmt))))
 
-    (t/is (= {:_id 1,
-              :nest {"ts" #time/zoned-date-time "2020-01-01T00:00Z"}}
+    (t/is (= [{:xt/id 1,
+               :nest {:ts #time/zoned-date-time "2020-01-01T00:00Z"}}]
 
-             (-> (jdbc/execute-one! conn ["SELECT * FROM foo"])
-                 (update :nest (fn [^PGobject nest]
-                                 (serde/read-transit (.getBytes (.getValue nest)) :json))))))))
+             (q conn ["SELECT * FROM foo"])))))
 
 (deftest test-pg2-transit-param
   (with-open [conn (pg-conn {})]
@@ -1906,7 +1896,7 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (= (pg/execute conn "SELECT v FROM foo")
              [{:v {:a 1, :b 2}}]))))
 
-(defn ^bytes remaining-bytes [^ByteBuffer buf]
+(defn remaining-bytes ^bytes [^ByteBuffer buf]
   (let [res (byte-array (.remaining buf))]
     (.get buf res)
     res))
@@ -1947,7 +1937,7 @@ ORDER BY t.oid DESC LIMIT 1"
     (jdbc/execute! conn ["INSERT INTO docs (_id) VALUES (1), (2)"])
     (jdbc/execute! conn ["INSERT INTO docs (SELECT *, 'hi' AS foo FROM docs WHERE _id = 1)"])
 
-    (t/is (= #{{:_id 1, :foo "hi"} {:_id 2, :foo nil}}
+    (t/is (= #{{:xt/id 1, :foo "hi"} {:xt/id 2}}
              (set (q conn ["SELECT * FROM docs"]))))))
 
 (deftest test-startup-params
@@ -2018,9 +2008,9 @@ ORDER BY t.oid DESC LIMIT 1"
           (jdbc/execute! conn1b ["INSERT INTO bar RECORDS {_id: 1}"])
           (jdbc/execute! conn2 ["INSERT INTO foo RECORDS {_id: 2}"])
 
-          (t/is (= [{:_id 1}] (jdbc/execute! conn1a ["SELECT * FROM bar"])))
-          (t/is (= [{:_id 1}] (jdbc/execute! conn1b ["SELECT * FROM foo"])))
-          (t/is (= [{:_id 2}] (jdbc/execute! conn2 ["SELECT * FROM foo"]))))))))
+          (t/is (= [{:xt/id 1}] (q conn1a ["SELECT * FROM bar"])))
+          (t/is (= [{:xt/id 1}] (q conn1b ["SELECT * FROM foo"])))
+          (t/is (= [{:xt/id 2}] (q conn2 ["SELECT * FROM foo"]))))))))
 
 (deftest test-time
   (with-open [conn (pg-conn {})]

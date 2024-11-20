@@ -23,6 +23,8 @@ clojure-data-json={ group="org.clojure", name="data.json", version="2.4.0" }
 clojure-data-csv={ group="org.clojure", name="data.csv", version="1.0.1" }
 clojure-tools-cli={ group="org.clojure", name="tools.cli", version="1.0.206" }
 transit-clj={ group="com.cognitect", name="transit-clj", version="1.0.329" }
+next-jdbc={ group="com.github.seancorfield", name="next.jdbc", version="1.3.955" }
+honeysql={ group="com.github.seancorfield", name="honeysql", version="2.6.1203" }
 
 muuntaja={ group="metosin", name="muuntaja", version.ref="muuntaja" }
 reitit-core={ group="metosin", name="reitit-core", version.ref="reitit" }

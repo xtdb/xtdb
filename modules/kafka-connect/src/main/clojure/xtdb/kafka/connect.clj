@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
             [xtdb.error :as err]
-            [xtdb.pgwire :as pgwire])
+            [xtdb.next.jdbc :as xt-jdbc])
   (:import [java.util List Map]
            [org.apache.kafka.connect.data Field Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
@@ -122,7 +122,7 @@
                   valid-from (get doc (keyword (.getValidFromField conf)))
                   valid-to (get doc (keyword (.getValidToField conf)))]
               [(format "INSERT INTO %s RECORDS ?" table)
-               (pgwire/transit->pgobject (assoc doc :_id id, :_valid_from valid-from, :_valid_to valid-to))])
+               (xt-jdbc/->pg-obj (assoc doc :_id id, :_valid_from valid-from, :_valid_to valid-to))])
 
             (= "record_key" (.getIdMode conf))
             (let [id (find-record-key-eid conf record)]

@@ -10,7 +10,6 @@
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.query]
-            [xtdb.serde :as serde]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -28,8 +27,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
-           org.postgresql.util.PGobject
-           (xtdb.antlr SqlVisitor Sql$DirectlyExecutableStatementContext)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            [xtdb.api ServerConfig Xtdb$Config]
            xtdb.api.module.XtdbModule
            xtdb.node.impl.IXtdbInternal
@@ -1789,8 +1787,3 @@
   (^xtdb.pgwire.Server [{:keys [port], :or {port 0}}]
    (ig/init-key ::server (<-config (doto (ServerConfig.)
                                      (.port port))))))
-
-(defn transit->pgobject [v]
-  (doto (PGobject.)
-    (.setType "transit")
-    (.setValue (String. (serde/write-transit v :json)))))
