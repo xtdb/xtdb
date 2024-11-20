@@ -34,3 +34,5 @@ include("modules:c1-import", "modules:flight-sql")
 project(":modules:flight-sql").name = "xtdb-flight-sql"
 
 include("modules:bench", "modules:datasets")
+
+include("monitoring", "monitoring:docker-image")
