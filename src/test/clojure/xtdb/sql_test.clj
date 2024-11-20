@@ -283,11 +283,10 @@
                     (plan-sql "SELECT * FROM foo OFFSET ? LIMIT ?"
                               {:table-info {"public/foo" #{"a"}}})))
 
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo SELECT _id FROM generate_series(1, 100) ids (_id)"]])
+  (xt/submit-tx tu/*node* ["INSERT INTO foo SELECT _id FROM generate_series(1, 100) ids (_id)"])
 
   (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
-           (xt/q tu/*node* "SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?"
-                 {:args [20 5]})))
+           (xt/q tu/*node* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5])))
 
   (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
            (jdbc/execute! tu/*conn* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5]
@@ -737,7 +736,7 @@
                              [:put-docs {:into :docs, :valid-from #inst "2018"}
                               {:xt/id :mark}]])
     (t/is (= [{:xt/id :matthew}]
-             (xt/q tu/*node* "SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" {:args [#inst "2016"]})))
+             (xt/q tu/*node* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"])))
 
     (t/is (= [{:xt/id :matthew}]
              (jdbc/execute! tu/*conn* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"]
@@ -1729,7 +1728,7 @@
 (t/deftest test-invalid-xt-id-in-query-3324
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0 :name "bob"}]])
   (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo._id = NULL")))
-  (t/is (= [] (xt/q tu/*node* "SELECT foo.name FROM foo WHERE foo._id = ?" {:args [nil]}))))
+  (t/is (= [] (xt/q tu/*node* ["SELECT foo.name FROM foo WHERE foo._id = ?" nil]))))
 
 #_ ; TODO Add this?
 (t/deftest test-random-fn
@@ -2409,24 +2408,24 @@ UNION ALL
              (xt/q tu/*node* "SELECT *, _valid_from FROM docs2 FOR ALL VALID_TIME")))))
 
 (t/deftest insert-with-bad-select-shouldnt-stop-ingestion-3797
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 1"]])
+  (xt/submit-tx tu/*node* ["INSERT INTO docs (_id, foo) SELECT 1"])
   (t/is (= 1 (count (xt/q tu/*node* '(from :xt/txs [error])))))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest test-boolean-cast
-  (t/is (= [{:v true}] (xt/q tu/*node* "SELECT ?::boolean v" {:args [1]}))))
+  (t/is (= [{:v true}] (xt/q tu/*node* ["SELECT ?::boolean v" 1]))))
 
 (t/deftest disallow-slashes-in-delimited-identifiers-3799
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"token recognition error at: '\"zip/'"
-                          (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]]))))))
+                          (throw (:error (xt/execute-tx tu/*node* ["INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]))))))
 
 (t/deftest disallow-inserting-to-system-time-cols-3748
   (t/is (thrown-with-msg?
          IllegalArgumentException #"Cannot put documents with columns: #\{\"_system_from\" \"_valid_time\"\}"
-         (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, TIMESTAMP '2024-01-01T00:00:00Z', 'foo')"]])))))
+         (throw (:error (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, TIMESTAMP '2024-01-01T00:00:00Z', 'foo')"])))))
 
-  (let [{:keys [error]} (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, CURRENT_TIME - INTERVAL 'P1D', 'foo')"]])
+  (let [{:keys [error]} (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, CURRENT_TIME - INTERVAL 'P1D', 'foo')"])
         ex-msg (ex-message error)]
     (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
     (t/is (str/includes? ex-msg "Cannot INSERT _system_from column"))))
@@ -2437,14 +2436,14 @@ UNION ALL
                             (xt/submit-tx tu/*node* [[:put-docs :xt/txs {:xt/id 1}]])))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: xt/txs"
-                            (xt/execute-tx tu/*node* [[:sql "INSERT INTO xt.txs(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]]))))
+                            (xt/execute-tx tu/*node* ["INSERT INTO xt.txs (_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]))))
 
   ;; just to have something in tx.txs before the check below
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
   (t/testing "indexing side"
     (let [{:keys [committed? error] :as _tx-res}
-          (xt/execute-tx tu/*node* [[:sql "INSERT INTO xt.txs(_id, system_time, committed, error) SELECT 1, 2, 3, 4"]])]
+          (xt/execute-tx tu/*node* ["INSERT INTO xt.txs (_id, system_time, committed, error) SELECT 1, 2, 3, 4"])]
       (t/is (false? committed?))
       (t/is (= #xt/illegal-arg [:xtdb/forbidden-table "Cannot write to table: xt/txs" {:table-name "xt/txs"}]
                error)))))

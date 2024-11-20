@@ -53,6 +53,8 @@
        (reduce [_ f start]
          (with-open [^Stream res (cond
                                    (string? query) (xtp/open-sql-query node query query-opts)
+                                   (vector? query) (let [[sql & args] query]
+                                                     (xtp/open-sql-query node sql (assoc query-opts :args args)))
                                    (seq? query) (xtp/open-xtql-query node query query-opts)
                                    :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
            (let [^Iterator itr (.iterator res)]
@@ -82,7 +84,7 @@
       {:a a-value, :b b-value})
 
   (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
-  (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" {:args [foo-id]})
+  (q node [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])
 
   Please see XTQL/SQL query language docs for more details.
 
@@ -114,13 +116,13 @@
     [[:put-docs :table {:xt/id \"my-id\", ...}]
      [:delete-docs :table \"my-id\"]
 
-     [:sql \"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\"
-      [0 1]]
+     [\"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\" 0 1]
 
+     ;; batches
      [:sql \"INSERT INTO foo (_id, a, b) VALUES ('foo', ?, ?)\"
       [2 3] [4 5] [6 7]]
 
-     [:sql \"UPDATE foo SET b = 1\"]]
+     \"UPDATE foo SET b = 1\"]
 
   Returns a map with details about the submitted transaction, including system-time and tx-id.
 
