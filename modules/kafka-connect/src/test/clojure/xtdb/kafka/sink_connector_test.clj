@@ -9,21 +9,21 @@
                    (->config {}))))
   (t/testing "Missing id.mode"
     (t/is (thrown? ConfigException
-                   (->config {"jdbcUrl" "jdbc:postgresql://localhost:5432/xtdb"}))))
+                   (->config {"jdbcUrl" "jdbc:xtdb://localhost:5432/xtdb"}))))
   (t/testing "Invalid id.mode"
     (t/is (thrown? ConfigException
-                   (->config {"jdbcUrl" "jdbc:postgresql://localhost:5432/xtdb"
+                   (->config {"jdbcUrl" "jdbc:xtdb://localhost:5432/xtdb"
                               "id.mode" "invalid"}))))
   (t/testing "record_key"
     (t/testing "Valid config"
-      (->config {"jdbcUrl" "jdbc:postgresql://localhost:5432/xtdb"
+      (->config {"jdbcUrl" "jdbc:xtdb://localhost:5432/xtdb"
                  "id.mode" "record_key"})))
   (t/testing "record_value"
     (t/testing "Missing id.field"
       (t/is (thrown? ConfigException
-                     (->config {"jdbcUrl" "jdbc:postgresql://localhost:5432/xtdb"
+                     (->config {"jdbcUrl" "jdbc:xtdb://localhost:5432/xtdb"
                                 "id.mode" "record_value"}))))
     (t/testing "Valid config"
-      (->config {"jdbcUrl" "jdbc:postgresql://localhost:5432/xtdb"
+      (->config {"jdbcUrl" "jdbc:xtdb://localhost:5432/xtdb"
                  "id.mode" "record_value"
                  "id.field" "xt/id"}))))

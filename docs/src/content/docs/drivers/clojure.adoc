@@ -7,14 +7,18 @@ Additionally, there is an XTDB Clojure API for both SQL and XTQL queries.
 
 == JDBC
 
-SQL queries can be executed using the PostgreSQL JDBC driver:
+SQL queries can be executed using the XTDB JDBC driver:
 
 [source,clojure]
 ----
-{:deps {org.postgresql/postgresql {:mvn/version "42.7.4"}
 
-        ;; other JDBC/Postgres libraries are available
-        com.github.seancorfield/next.jdbc {:mvn/version "1.3.939"}}}
+
+{:deps {;; https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
+        com.xtdb/xtdb-jdbc {:mvn/version "XTDB_VERSION"}
+
+        ;; https://mvnrepository.com/artifact/com/github/seancorfield/next.jdbc
+        ;; other JDBC libraries are available
+        com.github.seancorfield/next.jdbc {:mvn/version "1.3.955"}}}
 ----
 
 Then, once you've link:/intro/installation-via-docker[started the XTDB node], follow the usual Clojure JDBC process for connecting to a PostgreSQL database:
@@ -23,18 +27,10 @@ Then, once you've link:/intro/installation-via-docker[started the XTDB node], fo
 ----
 (require '[next.jdbc :as jdbc])
 
-(def db
-  {:dbtype "postgresql"
-   :dbname "xtdb"
-   :user "xtdb"
-   :password "xtdb"
-   :host "localhost"
-   :port 5432})
-
 ;; this is relatively low-level code - the usual connection pooling
 ;; and SQL abstraction libraries can be used too.
 
-(with-open [conn (jdbc/get-connection db)]
+(with-open [conn (jdbc/get-connection "jdbc:xtdb://localhost/xtdb")]
   (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}"])
 
   (prn (jdbc/execute! conn ["SELECT * FROM users"])))

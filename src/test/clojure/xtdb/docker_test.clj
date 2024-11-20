@@ -168,7 +168,7 @@
           (.destroy p))))))
 
 (defn- q [sql]
-  (->> (jdbc/execute! (format "jdbc:postgresql://:%s/xtdb" *pgwire-port*) [sql])
+  (->> (jdbc/execute! (format "jdbc:xtdb://:%s/xtdb" *pgwire-port*) [sql])
        (mapv (fn [r] (update-vals r (fn [o] (if (instance? PGobject o) (json/read-str (str o)) o)))))))
 
 (deftest run-and-connect-test

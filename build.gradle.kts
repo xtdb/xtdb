@@ -225,6 +225,7 @@ dependencies {
 
     projectDep(":xtdb-api")
     projectDep(":xtdb-core")
+    projectDep(":xtdb-jdbc")
 
     projectDep(":xtdb-http-server")
     projectDep(":xtdb-http-client-jvm")
@@ -248,6 +249,7 @@ dependencies {
     api("org.postgresql", "postgresql", "42.7.3")
     api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
     api(project(":xtdb-core"))
+    api(project(":xtdb-jdbc"))
 
     testImplementation("org.clojure", "data.csv", "1.0.1")
     testImplementation("org.clojure", "tools.cli", "1.0.206")

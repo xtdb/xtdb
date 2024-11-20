@@ -6,16 +6,16 @@ In Java, you can talk to a running XTDB node using standard https://docs.oracle.
 
 == Install
 
-To install the Postgres driver, add the following dependency to your Maven `pom.xml`:
+To install the XTDB JDBC driver, add the following dependency to your Maven `pom.xml`:
 
 [source,xml]
 ----
-<!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+<!-- https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc -->
 
 <dependency>
-    <groupId>org.postgresql</groupId>
-    <artifactId>postgresql</artifactId>
-    <version>42.7.4</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-jdbc</artifactId>
+    <version>$XTDB_VERSION</version>
 </dependency>
 ----
 
@@ -23,7 +23,7 @@ Or, for Gradle:
 
 [source,kotlin]
 ----
-implementation("org.postgresql:postgresql:42.7.4")
+implementation("com.xtdb:xtdb-jdbc:$XTDB_VERSION")
 ----
 
 == Connect
@@ -42,7 +42,7 @@ public class XtdbHelloWorld {
 
   public static void main(String[] args) throws SqlException {
     try (var connection =
-           DriverManager.getConnection("jdbc:postgresql://localhost:5432/xtdb", "xtdb", "xtdb");
+           DriverManager.getConnection("jdbc:xtdb://localhost:5432/xtdb", "xtdb", "xtdb");
          var statement = connection.createStatement()) {
 
       statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}");

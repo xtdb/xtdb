@@ -22,7 +22,7 @@ public class XtdbHelloWorldTest {
         try (var node = Xtdb.openNode(config);
              var connection =
                      DriverManager.getConnection(
-                             format("jdbc:postgresql://localhost:%d/xtdb", node.getServerPort()),
+                             format("jdbc:xtdb://localhost:%d/xtdb", node.getServerPort()),
                              "xtdb", "xtdb"
                      );
              var statement = connection.createStatement()) {
