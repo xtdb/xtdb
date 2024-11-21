@@ -1395,10 +1395,6 @@
         fallback-output-format (get-in session [:parameters "fallback_output_format"])
         param-types (map types/pg-types-by-oid param-oids)]
 
-    (when-let [err (permissibility-err conn stmt)]
-      (throw (ex-info "parsing error"
-                      {::client-error err})))
-
     (if (= :query statement-type)
       (let [param-col-types (mapv :col-type param-types)]
         (when (some nil? param-col-types)
@@ -1456,16 +1452,10 @@
   (let [[stmt & more-stmts] (parse conn msg-data)]
     (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
 
-    (let [{:keys [statement-type] :as prepared-stmt} (prep-stmt conn stmt {:param-oids param-oids})]
-      (swap! conn-state (fn [{:keys [transaction] :as conn-state}]
-                          (let [access-mode (when transaction
-                                              (case statement-type
-                                                :query :read-only
-                                                :dml :read-write
-                                                nil))]
-                            (-> conn-state
-                                (assoc-in [:prepared-statements stmt-name] prepared-stmt)
-                                (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode)))))))
+    (let [prepared-stmt (prep-stmt conn stmt {:param-oids param-oids})]
+      (swap! conn-state (fn [conn-state]
+                          (-> conn-state
+                              (assoc-in [:prepared-statements stmt-name] prepared-stmt)))))
 
     (cmd-write-msg conn msg-parse-complete)))
 
@@ -1515,8 +1505,21 @@
     (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
     (cmd-write-msg conn msg-bind-complete)))
 
-(defn execute-portal [conn {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
+(defn execute-portal [{:keys [conn-state] :as conn}, {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
   ;; TODO implement limit for queries that return rows
+
+  (when-let [err (permissibility-err conn portal)]
+    (throw (ex-info "parsing error"
+                    {::client-error err})))
+
+  (swap! conn-state (fn [{:keys [transaction] :as cs}]
+                      (cond-> cs
+                        transaction (update-in [:transaction :access-mode]
+                                               (fnil identity
+                                                     (case statement-type
+                                                       :query :read-only
+                                                       :dml :read-write
+                                                       nil))))))
 
   (case statement-type
     :empty-query (cmd-write-msg conn msg-empty-query)
