@@ -19,6 +19,8 @@ directlyExecutableStatement
     | updateStatementSearched #UpdateStmt
     | deleteStatementSearched #DeleteStmt
     | eraseStatementSearched #EraseStmt
+    | prepareStatement #PrepareStmt
+    | executeStatement #ExecuteStmt
     | 'ASSERT' searchCondition #AssertStatement
     | ('START' 'TRANSACTION' | 'BEGIN') transactionCharacteristics? # StartTransactionStatement
     | 'SET' 'TRANSACTION' 'ISOLATION' 'LEVEL' levelOfIsolation # SetTransactionStatement
@@ -35,6 +37,11 @@ directlyExecutableStatement
     | 'ALTER' 'USER' userName 'WITH' 'PASSWORD' password=characterString # AlterUserStatement
     ;
 
+executeStatement : EXECUTE statementName=identifier executeArgs ;
+
+executeArgs : ('(' expr (',' expr)* ')')? ;
+
+prepareStatement : PREPARE statementName=identifier AS directlyExecutableStatement ;
 
 showVariable
    : 'TRANSACTION' 'ISOLATION' 'LEVEL' # ShowTransactionIsolationLevel
