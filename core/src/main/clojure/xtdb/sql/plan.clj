@@ -2717,7 +2717,19 @@
     (->UserStmt [:create-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)]))
 
   (visitAlterUserStatement [_ ctx]
-    (->UserStmt [:alter-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)])))
+    (->UserStmt [:alter-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)]))
+
+  (visitExecuteStatement [_ ctx]
+    ;; this is only planning a SQL query for the _args_ of the execute statement
+    (let [arg-row (->> (.executeArgs ctx) (.expr)
+                       (into [] (comp (map (partial accept-visitor (->ExprPlanVisitor env nil)))
+                                      (map-indexed (fn [idx expr]
+                                                     (MapEntry/create (symbol (str "?_" idx)) expr))))))]
+      (->QueryExpr [:table [(into {} arg-row)]]
+                   (vec (keys arg-row)))))
+
+  (visitExecuteStmt [this ctx]
+    (.accept (.executeStatement ctx) this)))
 
 (defn- xform-table-info [table-info]
   (into {}

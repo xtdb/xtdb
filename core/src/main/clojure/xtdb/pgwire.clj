@@ -31,6 +31,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector PeriodDuration]
+           org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
@@ -476,7 +477,7 @@
                                     ;; might be cleaner to handle it like any other session param
                                     {:statement-type :set-time-zone
                                      :tz (let [v (.getText (.characterString ctx))]
-                                           (subs v 1 (dec (count v)))) })
+                                           (subs v 1 (dec (count v))))})
 
                                   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
@@ -510,6 +511,20 @@
                                   (visitCreateUserStatement [_ _])
                                   (visitAlterUserStatement [_ _])
 
+                                  (visitPrepareStmt [this ctx] (-> (.prepareStatement ctx) (.accept this)))
+
+                                  (visitPrepareStatement [this ctx]
+                                    (let [inner-ctx (.directlyExecutableStatement ctx)]
+                                      {:statement-type :prepare
+                                       :statement-name (str (plan/identifier-sym (.statementName ctx)))
+                                       :inner (.accept inner-ctx this)}))
+
+                                  (visitExecuteStmt [_ ctx]
+                                    {:statement-type :execute,
+                                     :statement-name (str (plan/identifier-sym (.statementName (.executeStatement ctx)))),
+                                     :query (subsql ctx)
+                                     :parsed-query ctx})
+
                                   ;; handled in plan
                                   (visitSettingDefaultValidTime [_ _])
                                   (visitSettingDefaultSystemTime [_ _])
@@ -542,6 +557,7 @@
                                                           [])]})))))))
 
           (catch Exception e
+            (log/error e "Error parsing SQL")
             (throw (ex-info "error parsing sql"
                             {::client-error (err-pg-exception e "error parsing sql")}
                             e)))))))
@@ -1163,18 +1179,15 @@
 (def supported-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node]} dml-buf tx-opts]
-  (let [tx-ops (mapv (fn [{:keys [query args]}]
-                       [:sql query args])
-                     dml-buf)]
-    (try
-      (xt/execute-tx node tx-ops tx-opts)
-      (catch xtdb.IllegalArgumentException e
-        (throw (client-err (ex-message e))))
-      (catch Throwable e
-        (log/debug e "Error on execute-tx")
-        (let [msg "unexpected error on tx submit (report as a bug)"]
-          (throw (ex-info msg {::client-error (err-pg-exception e msg)} e)))))))
+(defn- execute-tx [{:keys [node]} dml-ops tx-opts]
+  (try
+    (xt/execute-tx node dml-ops tx-opts)
+    (catch xtdb.IllegalArgumentException e
+      (throw (client-err (ex-message e))))
+    (catch Throwable e
+      (log/debug e "Error on execute-tx")
+      (let [msg "unexpected error on tx submit (report as a bug)"]
+        (throw (ex-info msg {::client-error (err-pg-exception e msg)} e))))))
 
 (defn- ->xtify-arg [session {:keys [arg-format param-fields]}]
   (fn xtify-arg [arg-idx arg]
@@ -1201,7 +1214,7 @@
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
 
-(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query args param-fields] :as stmt}]
+(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query args param-fields]}]
   (if (or (not= (count param-fields) (count args))
           (some #(= 0 (:oid %)) param-fields))
     (do (log/error "Missing types for params in DML statement")
@@ -1211,8 +1224,7 @@
 
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
-          xt-args (xtify-args conn args stmt)
-          stmt {:query query, :args xt-args}
+          dml-op [:sql query args]
           cmd-complete-msg {:command (case dml-type
                                        ;; insert <oid> <rows>
                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
@@ -1230,12 +1242,13 @@
         transaction
         ;; we buffer the statement in the transaction (to be flushed with COMMIT)
         (do
-          (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
+          (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) dml-op)
           (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
         :else
-        (let [{:keys [tx-id error]} (execute-tx conn [stmt] {:default-tz (.getZone clock)
-                                                             :authn {:user (-> session :parameters (get "user"))}})]
+        (let [{:keys [tx-id error]} (execute-tx conn [dml-op]
+                                                {:default-tz (.getZone clock)
+                                                 :authn {:user (-> session :parameters (get "user"))}})]
           (when-not (skip-until-sync? conn)
             (if error
               (cmd-send-error conn (err-protocol-violation (ex-message error)))
@@ -1305,15 +1318,13 @@
     (cmd-send-row-description conn cols)))
 
 (defn cmd-describe-portal [conn {:keys [fields]}]
-  (cmd-send-row-description conn fields))
+  (if fields
+    (cmd-send-row-description conn fields)
+    (cmd-write-msg conn msg-no-data)))
 
 (defn cmd-send-parameter-description [conn {:keys [param-fields]}]
   (log/trace "sending parameter description - " {:param-fields param-fields})
   (cmd-write-msg conn msg-parameter-description {:parameter-oids (mapv :oid param-fields)}))
-
-(defn cmd-describe-prepared-stmt [conn {:keys [fields] :as stmt}]
-  (cmd-send-parameter-description conn stmt)
-  (cmd-send-row-description conn fields))
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts]
   (swap! conn-state
@@ -1362,16 +1373,23 @@
                  (Object.))
         {:keys [statement-type canned-response] :as describe-target} (get-in @conn-state [coll-k describe-name])]
 
-    (case statement-type
-      :empty-query (cmd-write-msg conn msg-no-data)
-      :canned-response (cmd-describe-canned-response conn canned-response)
-      :dml (do (when (= :prepared-stmt describe-type)
-                 (cmd-send-parameter-description conn describe-target))
-               (cmd-write-msg conn msg-no-data))
-      :query (if (= :prepared-stmt describe-type)
-               (cmd-describe-prepared-stmt conn describe-target)
-               (cmd-describe-portal conn describe-target))
-      (cmd-write-msg conn msg-no-data))))
+    (letfn [(describe* [{:keys [fields] :as describe-target}]
+              (when (= :prepared-stmt describe-type)
+                (cmd-send-parameter-description conn describe-target))
+
+              (if fields
+                (cmd-send-row-description conn fields)
+                (cmd-write-msg conn msg-no-data)))]
+
+      (case statement-type
+        :canned-response (cmd-describe-canned-response conn canned-response)
+        (:query :dml) (describe* describe-target)
+
+        :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
+                   (describe* {:param-fields (:param-fields describe-target)
+                               :fields (:fields inner)}))
+
+        (cmd-write-msg conn msg-no-data)))))
 
 (defn cmd-set-session-parameter [conn parameter value]
   (set-session-parameter conn parameter value)
@@ -1429,13 +1447,26 @@
                             dec-param)
                           inf-param))))))
 
+(defn parse
+  "Responds to a msg-parse message that creates a prepared-statement."
+  [{:keys [conn-state]} {:keys [query]}]
+
+  (let [{:keys [session latest-submitted-tx-id]} @conn-state
+        {:keys [^Clock clock], session-parameters :parameters} session]
+
+    (interpret-sql query {:default-tz (.getZone clock)
+                          :latest-submitted-tx-id latest-submitted-tx-id
+                          :session-parameters session-parameters})))
+
 (defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]
   (let [{:keys [session latest-submitted-tx-id]} @conn-state
         {:keys [^Clock clock]} session
         fallback-output-format (get-in session [:parameters "fallback_output_format"])
         param-types (map types/pg-types-by-oid param-oids)]
 
-    (if (= :query statement-type)
+    (if (or (contains? #{:query :execute} statement-type)
+            (and (= :prepare statement-type)
+                 (= :query (:inner-statement-type stmt))))
       (let [param-col-types (mapv :col-type param-types)]
         (when (some nil? param-col-types)
           (throw (ex-info "unsupported param-types in query"
@@ -1472,18 +1503,7 @@
       ;; If a client subsequently binds a different number of args we will send an error msg
       (assoc stmt :param-fields param-types))))
 
-(defn parse
-  "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state]} {:keys [query]}]
-
-  (let [{:keys [session latest-submitted-tx-id]} @conn-state
-        {:keys [^Clock clock], session-parameters :parameters} session]
-
-    (interpret-sql query {:default-tz (.getZone clock)
-                          :latest-submitted-tx-id latest-submitted-tx-id
-                          :session-parameters session-parameters})))
-
-(defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [param-oids stmt-name] :as msg-data}]
+(defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [stmt-name param-oids] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
 
   (when-let [unsupported-param-oids (not-empty (into #{} (remove supported-oids) param-oids))]
@@ -1499,6 +1519,19 @@
 
     (cmd-write-msg conn msg-parse-complete)))
 
+(defn cmd-prepare [{:keys [conn-state] :as conn} {:keys [statement-name inner] :as _portal}]
+  (let [{:keys [query]} inner
+        [prepared-stmt & more-stmts] (parse conn {:query query})]
+    (when (seq more-stmts)
+      (throw (UnsupportedOperationException. "Multiple statements in a single PREPARE are not supported")))
+
+    (let [prepared-stmt (prep-stmt conn prepared-stmt {})]
+      (swap! conn-state assoc-in [:prepared-statements statement-name]
+             (assoc prepared-stmt
+                    :statement-name statement-name))
+
+      (cmd-write-msg conn msg-command-complete {:command "PREPARE"}))))
+
 (defn with-result-formats [pg-types result-format]
   (when-let [result-formats (let [type-count (count pg-types)]
                               (cond
@@ -1510,47 +1543,77 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [args result-format] :as bind-msg} {:keys [statement-type] :as stmt}]
-  (let [;; add data from bind-msg to stmt, for queries args are bound now, for dml this happens later during execute-tx.
-        {:keys [prepared-query] :as stmt-with-bind-msg} (merge stmt bind-msg)]
+(defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [statement-type prepared-query query args result-format] :as stmt}]
+  (let [{:keys [session transaction]} @conn-state
+        {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
-    ;;if statement is a query, bind it, else use the statement as a portal
-    (if (= :query statement-type)
-      (let [{:keys [session transaction]} @conn-state
-            {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
+        query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
+                    :current-time (or (:current-time stmt)
+                                      (:current-time transaction)
+                                      (.instant clock))
+                    :default-tz (.getZone clock)}
 
-            xt-args (xtify-args conn args stmt-with-bind-msg)
+        xt-args (xtify-args conn args stmt)]
 
-            query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
-                        :current-time (or (:current-time stmt)
-                                          (:current-time transaction)
-                                          (.instant clock))
-                        :default-tz (.getZone clock)}
+    (letfn [(->bq []
+              (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
+                (.bind ^PreparedQuery prepared-query (assoc query-opts :args args-rel))))
 
-            ^BoundQuery
-            bound-query (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                          (.bind ^PreparedQuery prepared-query (assoc query-opts :args args-rel)))
+            (->fields [^BoundQuery bq]
+              (or (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bq))
+                      (with-result-formats result-format))
+                  (throw (client-err "invalid result format"))))]
 
-            fields (or (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
-                           (with-result-formats result-format))
-                       (throw (client-err "invalid result format")))]
-        (-> stmt-with-bind-msg
-            (assoc :bound-query bound-query
-                   :fields fields)))
+      (case statement-type
+        :query (let [bq (->bq)]
+                 (-> stmt
+                     (assoc :bound-query bq,
+                            :fields (->fields bq))))
 
-      stmt-with-bind-msg)))
+        :dml (-> stmt
+                 (assoc :args xt-args))
+
+        :execute (let [^BoundQuery bq (->bq)]
+                   ;; in the case of execute, we've just bound the args query rather than the inner query.
+                   ;; so now we bind the inner query and pretend this was the one we were running all along
+                   (try
+                     (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (:statement-name stmt)])
+                           !args (object-array 1)]
+                       (with-open [args-cursor (.openCursor bq)]
+                         (.forEachRemaining args-cursor
+                                            (fn [^RelationReader args-rel]
+                                              (aset !args 0 (.copy args-rel allocator))))
+                         (let [^RelationReader args-rel (aget !args 0)]
+                           (case (:statement-type inner)
+                             :query (let [inner-bq (.bind inner-pq (assoc query-opts :args args-rel))]
+                                      (-> inner
+                                          (assoc :bound-query inner-bq
+                                                 :fields (->fields inner-bq))))
+                             :dml (let [arg-fields (.columnFields bq)]
+                                    (try
+                                      (-> inner
+                                          (assoc :args (vec (for [^Field field arg-fields]
+                                                              (-> (.readerForName args-rel (.getName field))
+                                                                  (.getObject 0))))
+                                                 :param-fields arg-fields))
+                                      (finally
+                                        (util/close args-rel))))))))
+                     (finally
+                       (util/close bq))))
+
+        stmt))))
 
 (defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
-  (let [stmt (or (get-in @conn-state [:prepared-statements stmt-name])
-                 (throw (client-err "no prepared statement")))
-        portal (bind-stmt conn bind-msg stmt)]
+  (let [stmt (into (or (get-in @conn-state [:prepared-statements stmt-name])
+                       (throw (client-err "no prepared statement")))
+                   bind-msg)
+        portal (bind-stmt conn stmt)]
     (swap! conn-state assoc-in [:portals portal-name] portal)
     (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
     (cmd-write-msg conn msg-bind-complete)))
 
-(defn execute-portal [{:keys [conn-state] :as conn}, {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
+(defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
   ;; TODO implement limit for queries that return rows
-
   (when-let [err (permissibility-err conn portal)]
     (throw (ex-info "parsing error"
                     {::client-error err})))
@@ -1587,6 +1650,7 @@
               (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))
 
     :query (cmd-exec-query conn portal)
+    :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
@@ -1614,9 +1678,11 @@
           (when (seq param-fields)
             (throw (client-err "Parameters not allowed in simple queries")))
 
-          (let [portal (bind-stmt conn {} prepared-stmt)]
+          (let [portal (bind-stmt conn prepared-stmt)]
             (try
-              (when (contains? #{:query :canned-response} statement-type)
+              (when (or (contains? #{:query :canned-response} statement-type)
+                        (and (= :execute statement-type)
+                             (= :query (get-in @conn-state [:prepared-statements (:statement-name prepared-stmt) :statement-type]))))
                 ;; Client only expects to see a RowDescription (result of cmd-descibe)
                 ;; for certain statement types
                 (cmd-describe-portal conn portal))
