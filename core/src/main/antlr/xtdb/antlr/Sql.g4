@@ -11,6 +11,7 @@ options {
 /// §22.1 <direct SQL statement>
 
 directSqlStatement : directlyExecutableStatement ';'? EOF ;
+multiSqlStatement : directlyExecutableStatement ( ';' directlyExecutableStatement )* ';'? EOF ;
 
 directlyExecutableStatement
     : settingQueryVariables? queryExpression #QueryExpr

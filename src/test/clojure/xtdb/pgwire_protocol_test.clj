@@ -190,3 +190,22 @@
                    :message "Parameters not allowed in simple queries"}}]
                 [:msg-ready {:status :idle}]]
                @!msgs)))))
+
+(deftest test-multi-stmts
+  ;; all of the tools try to be too helpful here.
+
+  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
+    (with-open [conn (->conn frontend {"user" "xtdb"
+                                       "database" "xtdb"})]
+      (reset! !msgs [])
+
+      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT 1 one; SELECT 2 two;"})
+
+      (t/is (= [[:msg-error-response
+                 {:error-fields
+                  {:severity "ERROR",
+                   :localized-severity "ERROR",
+                   :sql-state "08P01",
+                   :message "multi-queries not supported yet"}}]
+                [:msg-ready {:status :idle}]]
+               @!msgs)))))
