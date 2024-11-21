@@ -687,44 +687,19 @@
   (with-open [_ (jdbc-conn)]
     (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode])))))
 
-(deftest set-transaction-test
-  (with-open [conn (jdbc-conn)]
-    (testing "SET TRANSACTION overwrites variables for the next transaction"
-      (q conn ["SET TRANSACTION READ ONLY"])
-      (is (= {:access-mode :read-only} (next-transaction-variables (get-last-conn) [:access-mode])))
-      (q conn ["SET TRANSACTION READ WRITE"])
-      (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode]))))
-
-    (testing "opening and closing a transaction clears this state"
-      (q conn ["SET TRANSACTION READ ONLY"])
-      (jdbc/with-transaction [tx conn] (ping tx))
-      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode])))
-      (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode]))))
-
-    (testing "rolling back a transaction clears this state"
-      (q conn ["SET TRANSACTION READ WRITE"])
-      (.setAutoCommit conn false)
-      ;; explicitly send rollback .rollback doesn't necessarily do it if you haven't issued a query
-      (q conn ["ROLLBACK"])
-      (.setAutoCommit conn true)
-      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))))
-
 (defn tx! [conn & sql]
-  (q conn ["SET TRANSACTION READ WRITE"])
   (jdbc/with-transaction [tx conn]
     (run! #(q tx %) sql)))
 
 (deftest dml-test
   (with-open [conn (jdbc-conn)]
     (testing "mixing a read causes rollback"
-      (q conn ["SET TRANSACTION READ WRITE"])
       (is (thrown-with-msg? PSQLException #"Queries are unsupported in a DML transaction"
                             (jdbc/with-transaction [tx conn]
                               (q tx ["INSERT INTO foo(_id, a) values(42, 42)"])
                               (q conn ["SELECT a FROM foo"])))))
 
     (testing "insert it"
-      (q conn ["SET TRANSACTION READ WRITE"])
       (jdbc/with-transaction [tx conn]
         (q tx ["INSERT INTO foo(_id, a) values(42, 42)"]))
       (testing "read after write"
@@ -742,10 +717,6 @@
   (deftest psql-dml-test
     (psql-session
      (fn [send read]
-       (testing "set transaction"
-         (send "SET TRANSACTION READ WRITE;\n")
-         (is (= [["SET TRANSACTION"]] (read))))
-
        (testing "begin"
          (send "BEGIN;\n")
          (is (= [["BEGIN"]] (read))))
@@ -785,15 +756,6 @@
     (tx! conn ["INSERT INTO foo (_id, a) VALUES (?, ?)" 42 "hello, world"])
     (is (= [{:a "hello, world"}] (q conn ["SELECT a FROM foo where _id = 42"])))))
 
-;; SQL:2011 p1037 1,a,i
-(deftest set-transaction-in-transaction-error-test
-  (with-open [conn (jdbc-conn)]
-    (q conn ["BEGIN"])
-    (is (thrown-with-msg?
-         PSQLException
-         #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
-         (q conn ["SET TRANSACTION READ WRITE"])))))
-
 (deftest begin-in-a-transaction-error-test
   (with-open [conn (jdbc-conn)]
     (q conn ["BEGIN"])
@@ -832,7 +794,6 @@
 
 (deftest test-timezone
   (with-open [conn (jdbc-conn)]
-
     (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "timezone")
           exec #(.execute (.createStatement %1) %2)
           default-tz (str (.getZone (Clock/systemDefaultZone)))]
@@ -884,12 +845,8 @@
       (q conn ["COMMIT"])
       (is (= [{:xt/id 42}] (q conn ["SELECT _id from foo"]))))
 
-    (testing "BEGIN access mode overrides SET TRANSACTION"
-      (q conn ["SET TRANSACTION READ WRITE"])
-      (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))
+    (testing "no DML in BEGIN READ ONLY"
       (q conn ["BEGIN READ ONLY"])
-      (testing "next-transaction cleared on begin"
-        (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
       (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (q conn ["INSERT INTO foo (_id) VALUES (43)"])))
       (q conn ["ROLLBACK"]))))
 
@@ -927,26 +884,7 @@
         (sql "START TRANSACTION READ WRITE")
         (sql "INSERT INTO foo (_id) VALUES (43)")
         (sql "COMMIT")
-        (is (= #{{:xt/id 42} {:xt/id 43}} (set (q conn ["SELECT _id from foo"])))))
-
-      (testing "access mode overrides SET TRANSACTION"
-        (sql "SET TRANSACTION READ WRITE")
-        (sql "START TRANSACTION READ ONLY")
-        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) VALUES (42)")))
-        (sql "ROLLBACK"))
-
-      (testing "set transaction overrides inference"
-        (testing "set transaction cleared"
-          (sql "SET TRANSACTION READ ONLY")
-          (sql "START TRANSACTION")
-          (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) VALUES (42)")))
-          (sql "ROLLBACK"))
-
-        (testing "set transaction cleared"
-          (sql "START TRANSACTION")
-          (is (sql "INSERT INTO foo (_id) VALUES (44)"))
-          (sql "COMMIT")
-          (is (= #{{:xt/id 42} {:xt/id 43} {:xt/id 44}} (set (q conn ["SELECT _id from foo"])))))))))
+        (is (= #{{:xt/id 42} {:xt/id 43}} (set (q conn ["SELECT _id from foo"]))))))))
 
 (deftest set-session-characteristics-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
@@ -1071,9 +1009,8 @@
                  :xt/system-from #inst "2021-07-31T23:00:00.000000000-00:00"}]
                (q conn ["SELECT version, _system_from FROM foo"]))))
 
-      (t/testing "with SET TRANSACTION"
-        (sql "SET TRANSACTION READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00'")
-        (sql "BEGIN")
+      (t/testing "with BEGIN"
+        (sql "BEGIN READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00'")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 1)")
         (sql "COMMIT")
 
@@ -1084,8 +1021,7 @@
                (q conn ["SELECT version, _system_from FROM foo FOR ALL VALID_TIME ORDER BY version"]))))
 
       (t/testing "past system time"
-        (sql "SET TRANSACTION READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-02T00:00:00Z'")
-        (sql "BEGIN")
+        (sql "BEGIN READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-02T00:00:00Z'")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 2)")
         (t/is (thrown-with-msg? PSQLException #"specified system-time older than current tx"
                                 (sql "COMMIT")))))))
@@ -1117,14 +1053,7 @@
         (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (_id) values (43)")))
         (sql "ROLLBACK")
         (testing "despite read write setting read remains available outside tx"
-          (is (= [{:xt/id 42}] (sql "select _id from foo")))))
-
-      (testing "set transaction is not cleared by read/autocommit DML, as they don't start a transaction"
-        (sql "SET TRANSACTION READ WRITE")
-        (is (= [{:xt/id 42}] (sql "select _id from foo")))
-        (sql "INSERT INTO foo (_id) values (43)")
-        (is (= #{{:xt/id 42} {:xt/id 43}} (set (sql "select _id from foo"))))
-        (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
+          (is (= [{:xt/id 42}] (sql "select _id from foo"))))))))
 
 (deftest analyzer-error-returned-test
   (testing "Query"
@@ -1296,16 +1225,13 @@
 
 (t/deftest test-assert-3445
   (with-open [conn (jdbc-conn)]
-    (q conn ["SET TRANSACTION READ WRITE"])
     (jdbc/with-transaction [tx conn]
       (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (1)"]))
 
-    (q conn ["SET TRANSACTION READ WRITE"])
     (jdbc/with-transaction [tx conn]
       (jdbc/execute! tx ["ASSERT 1 = (SELECT COUNT(*) FROM foo)"])
       (jdbc/execute! tx ["INSERT INTO foo (_id) VALUES (2)"]))
 
-    (q conn ["SET TRANSACTION READ WRITE"])
     (t/is (thrown-with-msg? Exception
                             #"ERROR: Assert failed"
                             (jdbc/with-transaction [tx conn]

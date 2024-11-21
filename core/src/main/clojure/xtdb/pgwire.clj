@@ -371,9 +371,10 @@
                                     (assert (nil? more-modes) "pgwire only supports one for now")
                                     (.accept session-mode this)))
 
-                                (visitSetTransactionStatement [this ctx]
+                                (visitSetTransactionStatement [_ _]
+                                  ;; no-op for us
                                   {:statement-type :set-transaction
-                                   :tx-characteristics (.accept (.transactionCharacteristics ctx) this)})
+                                   :tx-characteristics {}})
 
                                 (visitStartTransactionStatement [this ctx]
                                   {:statement-type :begin
@@ -1269,10 +1270,7 @@
                              :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
                              :after-tx-id (or latest-submitted-tx-id -1)}
                             (into (:characteristics session))
-                            (into (:next-transaction session))
-                            (into tx-opts)))
-
-                 (update :session dissoc :next-transaction)))))
+                            (into tx-opts)))))))
 
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
@@ -1327,12 +1325,9 @@
   (set-session-parameter conn parameter value)
   (cmd-write-msg conn msg-command-complete {:command "SET"}))
 
-(defn cmd-set-transaction [{:keys [conn-state] :as conn} tx-opts]
-  ;; set the access mode for the next transaction
-  ;; intention is BEGIN then can take these parameters as a preference to those in the session
-  (when tx-opts
-    (swap! conn-state update-in [:session :next-transaction] (fnil into {}) tx-opts))
-
+(defn cmd-set-transaction [conn _tx-opts]
+  ;; no-op - can only set transaction isolation, and that
+  ;; doesn't mean anything to us because we're always serializable
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
 (defn cmd-set-time-zone [conn tz]
@@ -1349,9 +1344,6 @@
   (let [{:keys [transaction]} @conn-state
         {:keys [access-mode]} transaction]
     (cond
-      (and (= :set-transaction statement-type) transaction)
-      (err-protocol-violation "invalid transaction state -- active SQL-transaction")
-
       (and (= :begin statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
 

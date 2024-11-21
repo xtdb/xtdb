@@ -21,7 +21,7 @@ directlyExecutableStatement
     | eraseStatementSearched #EraseStmt
     | 'ASSERT' searchCondition #AssertStatement
     | ('START' 'TRANSACTION' | 'BEGIN') transactionCharacteristics? # StartTransactionStatement
-    | 'SET' 'LOCAL'? 'TRANSACTION' transactionCharacteristics # SetTransactionStatement
+    | 'SET' 'TRANSACTION' 'ISOLATION' 'LEVEL' levelOfIsolation # SetTransactionStatement
     | 'COMMIT' # CommitStatement
     | 'ROLLBACK' # RollbackStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
