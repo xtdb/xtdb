@@ -29,9 +29,17 @@
       (add-throwing-error-listener)))
 
 (defn parse-statement ^xtdb.antlr.Sql$DirectlyExecutableStatementContext [sql]
-  (.get parser-cache sql
-        (fn [sql]
+  (.get parser-cache [sql :single]
+        (fn [[sql _]]
           (let [parser (->parser sql)]
             (-> (.directSqlStatement parser)
-                (.directlyExecutableStatement)
-                #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint)))))))) ; <<no-commit>>
+                #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
+                (.directlyExecutableStatement))))))
+
+(defn parse-multi-statement [sql]
+  (.get parser-cache [sql :multi]
+        (fn [[sql _]]
+          (let [parser (->parser sql)]
+            (-> (.multiSqlStatement parser)
+                #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
+                (.directlyExecutableStatement))))))

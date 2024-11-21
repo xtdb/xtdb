@@ -218,7 +218,6 @@
 (def ^:private oid-varchar (get-in types/pg-types [:varchar :oid]))
 (def ^:private oid-json (get-in types/pg-types [:json :oid]))
 
-
 ;;; errors
 
 (defn- err-protocol-violation [msg]
@@ -347,134 +346,138 @@
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
-          {:statement-type :empty-query})
+          [{:statement-type :empty-query}])
 
         (when-some [canned-response (get-canned-response sql-trimmed)]
-          {:statement-type :canned-response, :canned-response canned-response})
+          [{:statement-type :canned-response, :canned-response canned-response}])
 
         (try
-          (.accept (antlr/parse-statement sql-trimmed)
-                   (reify SqlVisitor
-                     (visitSetSessionVariableStatement [_ ctx]
-                       {:statement-type :set-session-parameter
-                        :parameter (session-param-name (.identifier ctx))
-                        :value (-> (.literal ctx)
-                                   (.accept (plan/->ExprPlanVisitor nil nil)))})
+          (letfn [(subsql [^ParserRuleContext ctx]
+                    (subs sql (.getStartIndex (.getStart ctx)) (inc (.getStopIndex (.getStop ctx)))))]
+            (->> (antlr/parse-multi-statement sql-trimmed)
+                 (mapv (partial plan/accept-visitor
+                                (reify SqlVisitor
+                                  (visitSetSessionVariableStatement [_ ctx]
+                                    {:statement-type :set-session-parameter
+                                     :parameter (session-param-name (.identifier ctx))
+                                     :value (-> (.literal ctx)
+                                                (.accept (plan/->ExprPlanVisitor nil nil)))})
 
-                     (visitSetSessionCharacteristicsStatement [this ctx]
-                       {:statement-type :set-session-characteristics
-                        :session-characteristics
-                        (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.sessionCharacteristic ctx))})
+                                  (visitSetSessionCharacteristicsStatement [this ctx]
+                                    {:statement-type :set-session-characteristics
+                                     :session-characteristics
+                                     (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.sessionCharacteristic ctx))})
 
-                     (visitSessionTxCharacteristics [this ctx]
-                       (let [[^ParserRuleContext session-mode & more-modes] (.sessionTxMode ctx)]
-                         (assert (nil? more-modes) "pgwire only supports one for now")
-                         (.accept session-mode this)))
+                                  (visitSessionTxCharacteristics [this ctx]
+                                    (let [[^ParserRuleContext session-mode & more-modes] (.sessionTxMode ctx)]
+                                      (assert (nil? more-modes) "pgwire only supports one for now")
+                                      (.accept session-mode this)))
 
-                     (visitSetTransactionStatement [this ctx]
-                       {:statement-type :set-transaction
-                        :tx-characteristics (.accept (.transactionCharacteristics ctx) this)})
+                                  (visitSetTransactionStatement [_ _]
+                                    ;; no-op for us
+                                    {:statement-type :set-transaction
+                                     :tx-characteristics {}})
 
-                     (visitStartTransactionStatement [this ctx]
-                       {:statement-type :begin
-                        :tx-characteristics (some-> (.transactionCharacteristics ctx) (.accept this))})
+                                  (visitStartTransactionStatement [this ctx]
+                                    {:statement-type :begin
+                                     :tx-characteristics (some-> (.transactionCharacteristics ctx) (.accept this))})
 
-                     (visitTransactionCharacteristics [this ctx]
-                       (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.transactionMode ctx)))
+                                  (visitTransactionCharacteristics [this ctx]
+                                    (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.transactionMode ctx)))
 
-                     (visitIsolationLevel [_ _] {})
-                     (visitSessionIsolationLevel [_ _] {})
+                                  (visitIsolationLevel [_ _] {})
+                                  (visitSessionIsolationLevel [_ _] {})
 
-                     (visitReadWriteTransaction [_ _] {:access-mode :read-write})
-                     (visitReadOnlyTransaction [_ _] {:access-mode :read-only})
+                                  (visitReadWriteTransaction [_ _] {:access-mode :read-write})
+                                  (visitReadOnlyTransaction [_ _] {:access-mode :read-only})
 
-                     (visitReadWriteSession [_ _] {:access-mode :read-write})
-                     (visitReadOnlySession [_ _] {:access-mode :read-only})
+                                  (visitReadWriteSession [_ _] {:access-mode :read-write})
+                                  (visitReadOnlySession [_ _] {:access-mode :read-only})
 
-                     (visitTransactionSystemTime [_ ctx]
-                       {:tx-system-time (.accept (.dateTimeLiteral ctx)
-                                                 (reify SqlVisitor
-                                                   (visitDateLiteral [_ ctx]
-                                                     (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
-                                                         (.atStartOfDay)
-                                                         (.atZone ^ZoneId default-tz)))
+                                  (visitTransactionSystemTime [_ ctx]
+                                    {:tx-system-time (.accept (.dateTimeLiteral ctx)
+                                                              (reify SqlVisitor
+                                                                (visitDateLiteral [_ ctx]
+                                                                  (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
+                                                                      (.atStartOfDay)
+                                                                      (.atZone ^ZoneId default-tz)))
 
-                                                   (visitTimestampLiteral [_ ctx]
-                                                     (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
-                                                       (cond
-                                                         (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
-                                                         (instance? ZonedDateTime ts) ts)))))})
+                                                                (visitTimestampLiteral [_ ctx]
+                                                                  (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
+                                                                    (cond
+                                                                      (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
+                                                                      (instance? ZonedDateTime ts) ts)))))})
 
-                     (visitCommitStatement [_ _] {:statement-type :commit})
-                     (visitRollbackStatement [_ _] {:statement-type :rollback})
+                                  (visitCommitStatement [_ _] {:statement-type :commit})
+                                  (visitRollbackStatement [_ _] {:statement-type :rollback})
 
-                     (visitSetRoleStatement [_ _] {:statement-type :set-role})
+                                  (visitSetRoleStatement [_ _] {:statement-type :set-role})
 
-                     (visitSetTimeZoneStatement [_ ctx]
-                       ;; not sure if handlling time zone explicitly is the right approach
-                       ;; might be cleaner to handle it like any other session param
-                       {:statement-type :set-time-zone
-                        :tz (let [v (.getText (.characterString ctx))]
-                              (subs v 1 (dec (count v)))) })
+                                  (visitSetTimeZoneStatement [_ ctx]
+                                    ;; not sure if handlling time zone explicitly is the right approach
+                                    ;; might be cleaner to handle it like any other session param
+                                    {:statement-type :set-time-zone
+                                     :tz (let [v (.getText (.characterString ctx))]
+                                           (subs v 1 (dec (count v)))) })
 
-                     (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
+                                  (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
-                     (visitInsertStatement [_ _]
-                       {:statement-type :dml, :dml-type :insert, :query sql})
+                                  (visitInsertStatement [_ ctx]
+                                    {:statement-type :dml, :dml-type :insert, :query (subsql ctx)})
 
-                     (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
+                                  (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
-                     (visitUpdateStatementSearched [_ _]
-                       {:statement-type :dml, :dml-type :update, :query sql})
+                                  (visitUpdateStatementSearched [_ ctx]
+                                    {:statement-type :dml, :dml-type :update, :query (subsql ctx)})
 
-                     (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
+                                  (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
 
-                     (visitDeleteStatementSearched [_ _]
-                       {:statement-type :dml, :dml-type :delete, :query sql})
+                                  (visitDeleteStatementSearched [_ ctx]
+                                    {:statement-type :dml, :dml-type :delete, :query (subsql ctx)})
 
-                     (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
+                                  (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
-                     (visitEraseStatementSearched [_ _]
-                       {:statement-type :dml, :dml-type :erase, :query sql})
+                                  (visitEraseStatementSearched [_ ctx]
+                                    {:statement-type :dml, :dml-type :erase, :query (subsql ctx)})
 
-                     (visitAssertStatement [_ _]
-                       {:statement-type :dml, :dml-type :assert, :query sql})
+                                  (visitAssertStatement [_ ctx]
+                                    {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
 
-                     (visitQueryExpr [this ctx]
-                       (let [q {:statement-type :query, :query sql, :parsed-query ctx}]
-                         (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
-                              (transduce (keep (partial plan/accept-visitor this)) conj q))))
+                                  (visitQueryExpr [this ctx]
+                                    (let [q {:statement-type :query, :query (subsql ctx), :parsed-query ctx}]
+                                      (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
+                                           (transduce (keep (partial plan/accept-visitor this)) conj q))))
 
-                     ;; handled in plan
-                     (visitSettingDefaultValidTime [_ _])
-                     (visitSettingDefaultSystemTime [_ _])
+                                  ;; handled in plan
+                                  (visitSettingDefaultValidTime [_ _])
+                                  (visitSettingDefaultSystemTime [_ _])
 
-                     (visitSettingCurrentTime [_ ctx]
-                       [:current-time (time/->instant (.accept (.currentTime ctx) (plan/->ExprPlanVisitor nil nil)))])
+                                  (visitSettingCurrentTime [_ ctx]
+                                    [:current-time (time/->instant (.accept (.currentTime ctx) (plan/->ExprPlanVisitor nil nil)))])
 
-                     (visitSettingSnapshotTime [_ ctx]
-                       [:snapshot-time (-> (.snapshotTime ctx)
-                                           (.accept (plan/->ExprPlanVisitor nil nil))
-                                           time/->instant)])
+                                  (visitSettingSnapshotTime [_ ctx]
+                                    [:snapshot-time (-> (.snapshotTime ctx)
+                                                        (.accept (plan/->ExprPlanVisitor nil nil))
+                                                        time/->instant)])
 
-                     (visitShowVariableStatement [_ ctx]
-                       {:statement-type :query, :query sql, :parsed-query ctx})
+                                  (visitShowVariableStatement [_ ctx]
+                                    {:statement-type :query, :query sql, :parsed-query ctx})
 
-                     (visitShowLatestSubmittedTransactionStatement [_ _]
-                       {:statement-type :query, :query sql
-                        :ra-plan [:table '[tx_id]
-                                  (if latest-submitted-tx-id
-                                    [{:tx_id latest-submitted-tx-id}]
-                                    [])]})
+                                  (visitShowLatestSubmittedTransactionStatement [_ _]
+                                    {:statement-type :query, :query sql
+                                     :ra-plan [:table '[tx_id]
+                                               (if latest-submitted-tx-id
+                                                 [{:tx_id latest-submitted-tx-id}]
+                                                 [])]})
 
-                     ;; HACK: these values are fixed at prepare-time - if they were to change,
-                     ;; and the same prepared statement re-evaluated, the value would be stale.
-                     (visitShowSessionVariableStatement [_ ctx]
-                       (let [k (session-param-name (.identifier ctx))]
-                         {:statement-type :query, :query sql
-                          :ra-plan [:table (if-let [v (get session-parameters k)]
-                                             [{(keyword k) v}]
-                                             [])]}))))
+                                  ;; HACK: these values are fixed at prepare-time - if they were to change,
+                                  ;; and the same prepared statement re-evaluated, the value would be stale.
+                                  (visitShowSessionVariableStatement [_ ctx]
+                                    (let [k (session-param-name (.identifier ctx))]
+                                      {:statement-type :query, :query sql
+                                       :ra-plan [:table (if-let [v (get session-parameters k)]
+                                                          [{(keyword k) v}]
+                                                          [])]})))))))
 
           (catch Exception e
             (throw (ex-info "error parsing sql"
@@ -1116,9 +1119,12 @@
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
+      (catch xtdb.IllegalArgumentException e
+        (throw (client-err (ex-message e))))
       (catch Throwable e
         (log/debug e "Error on execute-tx")
-        (cmd-send-error conn (err-pg-exception e "unexpected error on tx submit (report as a bug)"))))))
+        (let [msg "unexpected error on tx submit (report as a bug)"]
+          (throw (ex-info msg {::client-error (err-pg-exception e msg)} e)))))))
 
 (defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
@@ -1259,50 +1265,43 @@
   (cmd-send-parameter-description conn stmt)
   (cmd-send-row-description conn fields))
 
-(defn cmd-begin [{:keys [node conn-state] :as conn} tx-opts]
+(defn cmd-begin [{:keys [node conn-state]} tx-opts]
   (swap! conn-state
          (fn [{:keys [session latest-submitted-tx-id] :as st}]
            (let [{:keys [^Clock clock]} session]
              (-> st
-                 (assoc :transaction
-                        (-> {:current-time (.instant clock)
-                             :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                             :after-tx-id (or latest-submitted-tx-id -1)}
-                            (into (:characteristics session))
-                            (into (:next-transaction session))
-                            (into tx-opts)))
+                 (update :transaction
+                         (fn [{:keys [access-mode]}]
+                           (if access-mode
+                             (throw (client-err "transaction already started"))
 
-                 (update :session dissoc :next-transaction)))))
-
-  (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
+                             (-> {:current-time (.instant clock)
+                                  :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
+                                  :after-tx-id (or latest-submitted-tx-id -1)
+                                  :implicit? false}
+                                 (into (:characteristics session))
+                                 (into tx-opts))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{{:keys [failed err dml-buf tx-system-time]} :transaction, {:keys [^Clock clock]} :session} @conn-state]
+  (let [{:keys [transaction session]} @conn-state
+        {:keys [failed dml-buf tx-system-time]} transaction
+        {:keys [^Clock clock]} session]
+
     (if failed
-      (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
+      (throw (client-err "transaction failed"))
 
       (let [{:keys [tx-id error]} (execute-tx conn dml-buf {:default-tz (.getZone clock)
                                                             :system-time tx-system-time})]
-        (cond
-          ;; skip - can't use skip-until-sync as we might be in a simple query
-          (-> @conn-state :transaction :failed) nil
+        (swap! conn-state (fn [conn-state]
+                            (-> conn-state
+                                (dissoc :transaction)
+                                (assoc :latest-submitted-tx-id tx-id))))
 
-          error (do
-                  (swap! conn-state (fn [conn-state]
-                                      (-> conn-state
-                                          (update :transaction assoc :failed true, :err error)
-                                          (assoc :latest-submitted-tx-id tx-id))))
-                  (cmd-send-error conn (err-protocol-violation (ex-message error))))
-          :else (do
-                  (swap! conn-state (fn [conn-state]
-                                      (-> conn-state
-                                          (dissoc :transaction)
-                                          (assoc :latest-submitted-tx-id tx-id))))
-                  (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
+        (when error
+          (throw (client-err (ex-message error))))))))
 
-(defn cmd-rollback [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :transaction)
-  (cmd-write-msg conn msg-command-complete {:command "ROLLBACK"}))
+(defn cmd-rollback [{:keys [conn-state]}]
+  (swap! conn-state dissoc :transaction))
 
 ;;; Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal.
 (defmethod handle-msg* :msg-describe [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name]}]
@@ -1327,12 +1326,9 @@
   (set-session-parameter conn parameter value)
   (cmd-write-msg conn msg-command-complete {:command "SET"}))
 
-(defn cmd-set-transaction [{:keys [conn-state] :as conn} tx-opts]
-  ;; set the access mode for the next transaction
-  ;; intention is BEGIN then can take these parameters as a preference to those in the session
-  (when tx-opts
-    (swap! conn-state update-in [:session :next-transaction] (fnil into {}) tx-opts))
-
+(defn cmd-set-transaction [conn _tx-opts]
+  ;; no-op - can only set transaction isolation, and that
+  ;; doesn't mean anything to us because we're always serializable
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
 (defn cmd-set-time-zone [conn tz]
@@ -1346,15 +1342,8 @@
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
   [{:keys [conn-state]} {:keys [statement-type]}]
-  (let [{:keys [transaction]} @conn-state
-        {:keys [access-mode]} transaction]
+  (let [{:keys [access-mode]} (:transaction @conn-state)]
     (cond
-      (and (= :set-transaction statement-type) transaction)
-      (err-protocol-violation "invalid transaction state -- active SQL-transaction")
-
-      (and (= :begin statement-type) transaction)
-      (err-protocol-violation "invalid transaction state -- active SQL-transaction")
-
       (and (= :dml statement-type) (= :read-only access-mode))
       (err-protocol-violation "DML is not allowed in a READ ONLY transaction")
 
@@ -1389,58 +1378,59 @@
                             dec-param)
                           inf-param))))))
 
+(defn- prep-stmt [{:keys [^IXtdbInternal node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]
+  (let [{:keys [session latest-submitted-tx-id]} @conn-state
+        {:keys [^Clock clock]} session
+        fallback-output-format (get-in session [:parameters "fallback_output_format"])
+        param-types (map types/pg-types-by-oid param-oids)]
+
+    (if (= :query statement-type)
+      (let [param-col-types (mapv :col-type param-types)]
+        (when (some nil? param-col-types)
+          (throw (ex-info "unsupported param-types in query"
+                          {::client-error (err-protocol-violation (str "Unsupported param-types in query: "
+                                                                       (pr-str (->> param-types
+                                                                                    (into [] (comp (filter (comp nil? :col-type))
+                                                                                                   (map :typname)
+                                                                                                   (distinct)))))))})))
+
+        (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
+              query-opts {:after-tx-id (or latest-submitted-tx-id -1)
+                          :tx-timeout (Duration/ofSeconds 1)
+                          :param-types param-col-types
+                          :default-tz (.getZone clock)}
+
+              ^PreparedQuery pq (if ra-plan
+                                  (.prepareRaQuery node ra-plan query-opts)
+                                  (.prepareQuery node parsed-query query-opts))]
+
+          (when-let [warnings (.warnings pq)]
+            (doseq [warning warnings]
+              (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
+
+          (assoc stmt
+                 :prepared-query pq
+                 :fields (mapv (partial types/field->pg-type fallback-output-format) (.columnFields pq))
+                 :param-fields (->> (.paramFields pq)
+                                    (map types/field->pg-type)
+                                    (map #(set/rename-keys % {:column-oid :oid}))
+                                    (resolve-defaulted-params param-types)))))
+
+      ;; NOTE this means that for DML statments we assume the number and type of params is exactly
+      ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
+      ;; If a client subsequently binds a different number of params we will send an error msg
+      (assoc stmt :param-fields param-types))))
+
 (defn parse
   "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state ^IXtdbInternal node] :as conn}
-   {:keys [query param-oids]}]
+  [{:keys [conn-state]} {:keys [query]}]
 
   (let [{:keys [session latest-submitted-tx-id]} @conn-state
-        {:keys [^Clock clock], {:strs [fallback_output_format] :as session-parameters} :parameters} session
-        {:keys [statement-type] :as stmt} (-> (interpret-sql query {:default-tz (.getZone ^Clock (get-in @conn-state [:session :clock]))
-                                                                    :latest-submitted-tx-id latest-submitted-tx-id
-                                                                    :session-parameters session-parameters})
-                                              (assoc :param-oids param-oids))]
+        {:keys [^Clock clock], session-parameters :parameters} session]
 
-    (when-let [err (permissibility-err conn stmt)]
-      (throw (ex-info "parsing error"
-                      {::client-error err})))
-
-    (let [param-types (map types/pg-types-by-oid param-oids)]
-      (if (= :query statement-type)
-        (let [param-col-types (mapv :col-type param-types)]
-          (when (some nil? param-col-types)
-            (throw (ex-info "unsupported param-types in query"
-                            {::client-error (err-protocol-violation (str "Unsupported param-types in query: "
-                                                                         (pr-str (->> param-types
-                                                                                      (into [] (comp (filter (comp nil? :col-type))
-                                                                                                     (map :typname)
-                                                                                                     (distinct)))))))})))
-
-          (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
-                query-opts {:after-tx-id (or latest-submitted-tx-id -1)
-                            :tx-timeout (Duration/ofSeconds 1)
-                            :param-types param-col-types
-                            :default-tz (.getZone clock)}
-
-                ^PreparedQuery pq (if ra-plan
-                                    (.prepareRaQuery node ra-plan query-opts)
-                                    (.prepareQuery node parsed-query query-opts))]
-            (when-let [warnings (.warnings pq)]
-              (doseq [warning warnings]
-                (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
-
-            (assoc stmt
-                   :prepared-query pq
-                   :fields (mapv (partial types/field->pg-type fallback_output_format) (.columnFields pq))
-                   :param-fields (->> (.paramFields pq)
-                                      (map types/field->pg-type)
-                                      (map #(set/rename-keys % {:column-oid :oid}))
-                                      (resolve-defaulted-params param-types)))))
-
-        ;; NOTE this means that for DML statments we assume the number and type of params is exactly
-        ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
-        ;; If a client subsequently binds a different number of params we will send an error msg
-        (assoc stmt :param-fields param-types)))))
+    (interpret-sql query {:default-tz (.getZone clock)
+                          :latest-submitted-tx-id latest-submitted-tx-id
+                          :session-parameters session-parameters})))
 
 (defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [param-oids stmt-name] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
@@ -1448,16 +1438,13 @@
   (when-let [unsupported-param-oids (not-empty (into #{} (remove supported-param-oids) param-oids))]
     (throw (client-err (format "parameter type oids (%s) currently unsupported by xt" unsupported-param-oids))))
 
-  (let [{:keys [statement-type] :as prepared-stmt} (parse conn msg-data)]
-    (swap! conn-state (fn [{:keys [transaction] :as conn-state}]
-                        (let [access-mode (when transaction
-                                            (case statement-type
-                                              :query :read-only
-                                              :dml :read-write
-                                              nil))]
+  (let [[stmt & more-stmts] (parse conn msg-data)]
+    (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
+
+    (let [prepared-stmt (prep-stmt conn stmt {:param-oids param-oids})]
+      (swap! conn-state (fn [conn-state]
                           (-> conn-state
-                              (assoc-in [:prepared-statements stmt-name] prepared-stmt)
-                              (cond-> access-mode (assoc-in [:transaction :access-mode] access-mode))))))
+                              (assoc-in [:prepared-statements stmt-name] prepared-stmt)))))
 
     (cmd-write-msg conn msg-parse-complete)))
 
@@ -1507,8 +1494,21 @@
     (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
     (cmd-write-msg conn msg-bind-complete)))
 
-(defn execute-portal [conn {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
+(defn execute-portal [{:keys [conn-state] :as conn}, {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
   ;; TODO implement limit for queries that return rows
+
+  (when-let [err (permissibility-err conn portal)]
+    (throw (ex-info "parsing error"
+                    {::client-error err})))
+
+  (swap! conn-state (fn [{:keys [transaction] :as cs}]
+                      (cond-> cs
+                        transaction (update-in [:transaction :access-mode]
+                                               (fnil identity
+                                                     (case statement-type
+                                                       :query :read-only
+                                                       :dml :read-write
+                                                       nil))))))
 
   (case statement-type
     :empty-query (cmd-write-msg conn msg-empty-query)
@@ -1519,9 +1519,19 @@
     :set-transaction (cmd-set-transaction conn tx-characteristics)
     :set-time-zone (cmd-set-time-zone conn tz)
     :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
-    :begin (cmd-begin conn tx-characteristics)
-    :rollback (cmd-rollback conn)
-    :commit (cmd-commit conn)
+
+    :begin (do
+             (cmd-begin conn tx-characteristics)
+             (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
+
+    :rollback (do
+                (cmd-rollback conn)
+                (cmd-write-msg conn msg-command-complete {:command "ROLLBACK"}))
+
+    :commit (do
+              (cmd-commit conn)
+              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))
+
     :query (cmd-exec-query conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1538,24 +1548,44 @@
   (swap! conn-state assoc :protocol :simple)
 
   (try
-    (let [{:keys [param-fields statement-type] :as prepared-stmt} (parse conn {:query query})]
-      (when (seq param-fields)
-        (throw (client-err "Parameters not allowed in simple queries")))
+    (when-not (boolean (:transaction @conn-state))
+      (cmd-begin conn {:implicit? true}))
 
-      (let [portal (bind-stmt conn {} prepared-stmt)]
-        (try
-          (when (contains? #{:query :canned-response} statement-type)
-            ;; Client only expects to see a RowDescription (result of cmd-descibe)
-            ;; for certain statement types
-            (cmd-describe-portal conn portal))
+    (doseq [stmt (parse conn {:query query})]
+      (when-not (boolean (:transaction @conn-state))
+        (cmd-begin conn {:implicit? true}))
 
-          (execute-portal conn portal)
-          (finally
-            (util/close (:bound-query portal))))))
+      (try
+        (let [{:keys [param-fields statement-type] :as prepared-stmt} (prep-stmt conn stmt {})]
+          (when (seq param-fields)
+            (throw (client-err "Parameters not allowed in simple queries")))
+
+          (let [portal (bind-stmt conn {} prepared-stmt)]
+            (try
+              (when (contains? #{:query :canned-response} statement-type)
+                ;; Client only expects to see a RowDescription (result of cmd-descibe)
+                ;; for certain statement types
+                (cmd-describe-portal conn portal))
+
+              (execute-portal conn portal)
+              (finally
+                (util/close (:bound-query portal))))))
+
+        (catch InterruptedException e (throw e))
+        (catch Exception e
+          (when (get-in @conn-state [:transaction :implicit?])
+            (cmd-rollback conn))
+          (send-ex conn e))))
 
     ;; here we catch explicitly because we need to send the error, then a ready message
     (catch InterruptedException e (throw e))
-    (catch Throwable e (send-ex conn e)))
+    (catch Exception e (send-ex conn e)))
+
+  (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+    (when implicit?
+      (if failed
+        (cmd-rollback conn)
+        (cmd-commit conn))))
 
   (cmd-send-ready conn))
 

@@ -11,6 +11,7 @@ options {
 /// §22.1 <direct SQL statement>
 
 directSqlStatement : directlyExecutableStatement ';'? EOF ;
+multiSqlStatement : directlyExecutableStatement ( ';' directlyExecutableStatement )* ';'? EOF ;
 
 directlyExecutableStatement
     : settingQueryVariables? queryExpression #QueryExpr
@@ -20,7 +21,7 @@ directlyExecutableStatement
     | eraseStatementSearched #EraseStmt
     | 'ASSERT' searchCondition #AssertStatement
     | ('START' 'TRANSACTION' | 'BEGIN') transactionCharacteristics? # StartTransactionStatement
-    | 'SET' 'LOCAL'? 'TRANSACTION' transactionCharacteristics # SetTransactionStatement
+    | 'SET' 'TRANSACTION' 'ISOLATION' 'LEVEL' levelOfIsolation # SetTransactionStatement
     | 'COMMIT' # CommitStatement
     | 'ROLLBACK' # RollbackStatement
     | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
