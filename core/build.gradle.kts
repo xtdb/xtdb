@@ -62,8 +62,8 @@ dependencies {
     api(libs.reitit.sieppari)
 
     // monitoring
-    api("io.micrometer", "micrometer-core", "1.12.2")
-    api("io.micrometer", "micrometer-registry-prometheus", "1.12.2")
+    api(libs.micrometer.core)
+    api(libs.micrometer.registry.prometheus)
 
     api(kotlin("stdlib-jdk8"))
     api("com.charleskorn.kaml", "kaml", "0.56.0")

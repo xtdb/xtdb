@@ -12,7 +12,7 @@
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
-           (io.micrometer.prometheus PrometheusMeterRegistry)
+           (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
            [java.lang AutoCloseable]
            org.eclipse.jetty.server.Server
            (xtdb.api Xtdb$Config)
@@ -66,7 +66,7 @@
    :pgwire-server (ig/ref :xtdb.pgwire/server)})
 
 (defmethod ig/init-key :xtdb/healthz [_ {:keys [^long port, ^CompositeMeterRegistry metrics-registry, ^IIndexer indexer pgwire-server]}]
-  (let [prometheus-registry (PrometheusMeterRegistry. io.micrometer.prometheus.PrometheusConfig/DEFAULT)
+  (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
         ^Server server (j/run-jetty (handler {:prometheus-registry prometheus-registry
                                               :indexer indexer})
                                     {:port port, :async? true, :join? false})]
