@@ -34,7 +34,7 @@ dependencies {
     api("com.azure", "azure-core-management", "1.15.1")
 
     // metrics
-    api("io.micrometer", "micrometer-registry-azure-monitor", "1.12.2")
+    api(libs.micrometer.registry.azuremonitor)
 
     api(kotlin("stdlib-jdk8"))
 }

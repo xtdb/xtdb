@@ -6,6 +6,7 @@ netty="4.1.110.Final"
 reitit="0.5.15"
 muuntaja="0.6.8"
 testcontainers="1.20.3"
+micrometer="1.14.1"
 
 [libraries]
 arrow-algorithm={ group="org.apache.arrow", name="arrow-algorithm", version.ref="arrow" }
@@ -42,3 +43,8 @@ jetty-alpn-server={ group="org.eclipse.jetty", name="jetty-alpn-server", version
 testcontainers={ group="org.testcontainers", name="testcontainers", version.ref="testcontainers" }
 testcontainers-kafka={ group="org.testcontainers", name="kafka", version.ref="testcontainers" }
 testcontainers-minio={ group="org.testcontainers", name="minio", version.ref="testcontainers" }
+
+micrometer-core={ group="io.micrometer", name="micrometer-core", version.ref="micrometer" }
+micrometer-registry-prometheus={ group="io.micrometer", name="micrometer-registry-prometheus", version.ref="micrometer" }
+micrometer-registry-cloudwatch2={ group="io.micrometer", name="micrometer-registry-cloudwatch2", version.ref="micrometer" }
+micrometer-registry-azuremonitor={ group="io.micrometer", name="micrometer-registry-azure-monitor", version.ref="micrometer" }
