@@ -2446,6 +2446,14 @@ UNION ALL
           (xt/execute-tx tu/*node* ["INSERT INTO xt.txs (_id, system_time, committed, error) SELECT 1, 2, 3, 4"])]
       (t/is (false? committed?))
       (t/is (= #xt/illegal-arg [:xtdb/forbidden-table "Cannot write to table: xt/txs" {:table-name "xt/txs"}]
+               error)))
+
+    (xt/submit-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, field: 'foo'}"])
+
+    ;; was stopping ingestion, trying to delete from an info-schema table
+    (let [{:keys [committed? error]} (xt/execute-tx tu/*node* ["DELETE FROM information_schema.columns WHERE column_name = 'field'"])]
+      (t/is (false? committed?))
+      (t/is (= #xt/illegal-arg [:xtdb/forbidden-table "Cannot write to table: information_schema/columns" {:table-name "information_schema/columns"}]
                error)))))
 
 (t/deftest test-keyword

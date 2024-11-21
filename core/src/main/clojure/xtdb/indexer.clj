@@ -355,6 +355,10 @@
             iid-rdr (.readerForName in-rel "_iid")
             valid-from-rdr (.readerForName in-rel "_valid_from")
             valid-to-rdr (.readerForName in-rel "_valid_to")]
+
+        (when (xt-log/forbidden-table? table)
+          (throw (xt-log/forbidden-table-ex table)))
+
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)
                 valid-from (.getLong valid-from-rdr idx)
@@ -365,8 +369,6 @@
               (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                       {:valid-from (time/micros->instant valid-from)
                                        :valid-to (time/micros->instant valid-to)})))
-
-            (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
             (-> (.liveTable live-idx-tx table)
                 (.logDelete iid valid-from valid-to))))))))
