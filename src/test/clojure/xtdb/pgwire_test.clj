@@ -756,14 +756,6 @@
     (tx! conn ["INSERT INTO foo (_id, a) VALUES (?, ?)" 42 "hello, world"])
     (is (= [{:a "hello, world"}] (q conn ["SELECT a FROM foo where _id = 42"])))))
 
-(deftest begin-in-a-transaction-error-test
-  (with-open [conn (jdbc-conn)]
-    (q conn ["BEGIN"])
-    (is (thrown-with-msg?
-         PSQLException
-         #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
-         (q conn ["BEGIN"])))))
-
 (deftest test-current-time
   ;; no support for setting current-time so need to interact with clock directly
   (let [custom-clock (Clock/fixed (Instant/parse "2000-08-16T11:08:03Z") (ZoneId/of "GMT"))]
@@ -1078,7 +1070,8 @@
 
        (send "BEGIN READ WRITE;\n")
        (read)
-       ;; no-id
+
+       ;; no id
        (send "INSERT INTO foo (x) values (42);\n")
        (read)
 

@@ -1117,9 +1117,12 @@
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
+      (catch xtdb.IllegalArgumentException e
+        (throw (client-err (ex-message e))))
       (catch Throwable e
         (log/debug e "Error on execute-tx")
-        (cmd-send-error conn (err-pg-exception e "unexpected error on tx submit (report as a bug)"))))))
+        (let [msg "unexpected error on tx submit (report as a bug)"]
+          (throw (ex-info msg {::client-error (err-pg-exception e msg)} e)))))))
 
 (defn- ->xtify-param [session {:keys [param-format param-fields]}]
   (fn xtify-param [param-idx param]
@@ -1260,47 +1263,44 @@
   (cmd-send-parameter-description conn stmt)
   (cmd-send-row-description conn fields))
 
-(defn cmd-begin [{:keys [node conn-state] :as conn} tx-opts]
+(defn cmd-begin [{:keys [node conn-state]} {:keys [access-mode] :as tx-opts}]
   (swap! conn-state
          (fn [{:keys [session latest-submitted-tx-id] :as st}]
            (let [{:keys [^Clock clock]} session]
              (-> st
-                 (assoc :transaction
-                        (-> {:current-time (.instant clock)
-                             :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                             :after-tx-id (or latest-submitted-tx-id -1)}
-                            (into (:characteristics session))
-                            (into tx-opts)))))))
+                 (update :transaction
+                         (fn [transaction]
+                           (cond
+                             transaction (-> transaction
+                                             (assoc :implicit? false)
+                                             (update :access-mode (fnil identity access-mode)))
 
-  (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
+                             :else (-> {:current-time (.instant clock)
+                                        :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
+                                        :after-tx-id (or latest-submitted-tx-id -1)}
+                                       (into (:characteristics session))
+                                       (into tx-opts))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{{:keys [failed err dml-buf tx-system-time]} :transaction, {:keys [^Clock clock]} :session} @conn-state]
+  (let [{:keys [transaction session]} @conn-state
+        {:keys [failed dml-buf tx-system-time]} transaction
+        {:keys [^Clock clock]} session]
+
     (if failed
-      (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
+      (throw (client-err "transaction failed"))
 
       (let [{:keys [tx-id error]} (execute-tx conn dml-buf {:default-tz (.getZone clock)
                                                             :system-time tx-system-time})]
-        (cond
-          ;; skip - can't use skip-until-sync as we might be in a simple query
-          (-> @conn-state :transaction :failed) nil
+        (swap! conn-state (fn [conn-state]
+                            (-> conn-state
+                                (dissoc :transaction)
+                                (assoc :latest-submitted-tx-id tx-id))))
 
-          error (do
-                  (swap! conn-state (fn [conn-state]
-                                      (-> conn-state
-                                          (update :transaction assoc :failed true, :err error)
-                                          (assoc :latest-submitted-tx-id tx-id))))
-                  (cmd-send-error conn (err-protocol-violation (ex-message error))))
-          :else (do
-                  (swap! conn-state (fn [conn-state]
-                                      (-> conn-state
-                                          (dissoc :transaction)
-                                          (assoc :latest-submitted-tx-id tx-id))))
-                  (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
+        (when error
+          (throw (client-err (ex-message error))))))))
 
-(defn cmd-rollback [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :transaction)
-  (cmd-write-msg conn msg-command-complete {:command "ROLLBACK"}))
+(defn cmd-rollback [{:keys [conn-state]}]
+  (swap! conn-state dissoc :transaction))
 
 ;;; Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal.
 (defmethod handle-msg* :msg-describe [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name]}]
@@ -1341,12 +1341,8 @@
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
   [{:keys [conn-state]} {:keys [statement-type]}]
-  (let [{:keys [transaction]} @conn-state
-        {:keys [access-mode]} transaction]
+  (let [{:keys [access-mode]} (:transaction @conn-state)]
     (cond
-      (and (= :begin statement-type) transaction)
-      (err-protocol-violation "invalid transaction state -- active SQL-transaction")
-
       (and (= :dml statement-type) (= :read-only access-mode))
       (err-protocol-violation "DML is not allowed in a READ ONLY transaction")
 
@@ -1522,9 +1518,19 @@
     :set-transaction (cmd-set-transaction conn tx-characteristics)
     :set-time-zone (cmd-set-time-zone conn tz)
     :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
-    :begin (cmd-begin conn tx-characteristics)
-    :rollback (cmd-rollback conn)
-    :commit (cmd-commit conn)
+
+    :begin (do
+             (cmd-begin conn tx-characteristics)
+             (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
+
+    :rollback (do
+                (cmd-rollback conn)
+                (cmd-write-msg conn msg-command-complete {:command "ROLLBACK"}))
+
+    :commit (do
+              (cmd-commit conn)
+              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))
+
     :query (cmd-exec-query conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1545,20 +1551,36 @@
       (when more-stmts
         (throw (client-err "multi-queries not supported yet")))
 
-      (let [{:keys [param-fields statement-type] :as prepared-stmt} (prep-stmt conn stmt {})]
-        (when (seq param-fields)
-          (throw (client-err "Parameters not allowed in simple queries")))
+      (when-not (boolean (:transaction @conn-state))
+        (cmd-begin conn {:implicit? true}))
 
-        (let [portal (bind-stmt conn {} prepared-stmt)]
-          (try
-            (when (contains? #{:query :canned-response} statement-type)
-              ;; Client only expects to see a RowDescription (result of cmd-descibe)
-              ;; for certain statement types
-              (cmd-describe-portal conn portal))
+      (try
+        (let [{:keys [param-fields statement-type] :as prepared-stmt} (prep-stmt conn stmt {})]
+          (when (seq param-fields)
+            (throw (client-err "Parameters not allowed in simple queries")))
 
-            (execute-portal conn portal)
-            (finally
-              (util/close (:bound-query portal)))))))
+          (let [portal (bind-stmt conn {} prepared-stmt)]
+            (try
+              (when (contains? #{:query :canned-response} statement-type)
+                ;; Client only expects to see a RowDescription (result of cmd-descibe)
+                ;; for certain statement types
+                (cmd-describe-portal conn portal))
+
+              (execute-portal conn portal)
+              (finally
+                (util/close (:bound-query portal)))))
+
+          (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+            (when implicit?
+              (if failed
+                (cmd-rollback conn)
+                (cmd-commit conn)))))
+
+        (catch InterruptedException e (throw e))
+        (catch Throwable e
+          (when (get-in @conn-state [:transaction :implicit?])
+            (cmd-rollback conn))
+          (send-ex conn e))))
 
     ;; here we catch explicitly because we need to send the error, then a ready message
     (catch InterruptedException e (throw e))
