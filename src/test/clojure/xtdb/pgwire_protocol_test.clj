@@ -42,16 +42,16 @@
   (^java.lang.AutoCloseable [frontend] (->conn frontend {}))
 
   (^java.lang.AutoCloseable [frontend startup-params]
-   (doto (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
-                                                                             "client_encoding" "UTF8"
-                                                                             "DateStyle" "ISO"
-                                                                             "IntervalStyle" "ISO_8601"}})}
-                                  :frontend frontend
-                                  :node tu/*node*
-                                  :cid -1
-                                  :!closing? (future false)
-                                  :conn-state (atom {:session {:clock (Clock/systemUTC)}})})
-     (pgwire/cmd-startup-pg30 startup-params))))
+   (-> (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
+                                                                           "client_encoding" "UTF8"
+                                                                           "DateStyle" "ISO"
+                                                                           "IntervalStyle" "ISO_8601"}})
+                                         :->node {"xtdb" tu/*node*}}
+                                :frontend frontend
+                                :cid -1
+                                :!closing? (future false)
+                                :conn-state (atom {:session {:clock (Clock/systemUTC)}})})
+       (pgwire/cmd-startup-pg30 startup-params))))
 
 (deftest test-startup
   (let [{:keys [!msgs] :as frontend} (->recording-frontend)]

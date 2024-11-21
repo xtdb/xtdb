@@ -71,6 +71,6 @@ Users:
 
 == Notes:
 
-* XTDB currently ignores the database, username and password arguments.
+* XTDB currently ignores the username and password arguments.
 
 // TODO local testing

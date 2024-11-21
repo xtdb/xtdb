@@ -502,7 +502,7 @@
   Send puts a string in to psql stdin, reads the next string from psql stdout. You can use (read :err) if you wish to read from stderr instead."
   [f]
   ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
-  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv"]
+  (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv" "xtdb"]
         pb (ProcessBuilder. argv)
         p (.start pb)
         in (.getInputStream p)
@@ -548,7 +548,7 @@
 ;; (will probably move to a selector)
 (when (psql-available?)
   (deftest psql-connect-test
-    (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select 'ping' ping")]
+    (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "xtdb" "-c" "select 'ping' ping")]
       (is (= 0 exit))
       (is (str/includes? out " ping\n(1 row)")))))
 
@@ -573,7 +573,7 @@
                  (q conn ["SELECT * FROM foo"]))))
 
       (when (psql-available?)
-        (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo")]
+        (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo" "xtdb")]
           (is (= 0 exit))
           (is (str/includes? out "You are connected"))
           (is (str/includes? out "SSL connection (protocol: TLSv1.3")))))))
@@ -1980,25 +1980,21 @@ ORDER BY t.oid DESC LIMIT 1"
       (t/is (= [] (rs->maps rs))))))
 
 (deftest test-interval-encoding-3697
-  (t/testing "Intervals"
-    (with-open [conn (jdbc-conn)]
-      (t/is (= [{:i (PGInterval. "P1DT1H1M1.111111S")}]
-               (jdbc/execute! conn ["SELECT INTERVAL 'P1DT1H1M1.111111111S' AS i"])))
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [{:i (PGInterval. "P1DT1H1M1.111111S")}]
+             (jdbc/execute! conn ["SELECT INTERVAL 'P1DT1H1M1.111111111S' AS i"])))
 
-      (t/is (= [{:i (PGInterval. "P12MT0S")}]
-               (jdbc/execute! conn ["SELECT INTERVAL 'P12MT0S' AS i"])))
+    (t/is (= [{:i (PGInterval. "P12MT0S")}]
+             (jdbc/execute! conn ["SELECT INTERVAL 'P12MT0S' AS i"])))
 
-      (t/is (= [{:i (PGInterval. "P-22MT0S")}]
-               (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"]))))))
+    (t/is (= [{:i (PGInterval. "P-22MT0S")}]
+             (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"])))))
 
 (deftest test-playground
   (with-open [srv (pgwire/open-playground)]
     (let [{:keys [port]} srv]
       (letfn [(pg-conn [db]
-                {:dbtype "postgresql"
-                 :host "localhost"
-                 :port port
-                 :dbname db
+                {:jdbcUrl (format "jdbc:xtdb://localhost:%d/%s" port db)
                  :options "-c fallback_output_format=transit"})]
         (with-open [conn1a (jdbc/get-connection (pg-conn "foo1"))
                     conn1b (jdbc/get-connection (pg-conn "foo1"))
@@ -2011,6 +2007,15 @@ ORDER BY t.oid DESC LIMIT 1"
           (t/is (= [{:xt/id 1}] (q conn1a ["SELECT * FROM bar"])))
           (t/is (= [{:xt/id 1}] (q conn1b ["SELECT * FROM foo"])))
           (t/is (= [{:xt/id 2}] (q conn2 ["SELECT * FROM foo"]))))))))
+
+(deftest test-closes-connection-to-unknown-db-3863
+  (with-open [xtdb-conn (jdbc/get-connection (format "jdbc:xtdb://localhost:%d/xtdb" *port*))]
+    (t/is (= [{:one 1}] (q xtdb-conn ["SELECT 1 one"]))))
+
+  (t/is (thrown-with-msg?
+         PSQLException
+         #"FATAL: database 'nope' does not exist"
+         (jdbc/get-connection (format "jdbc:xtdb://localhost:%d/nope" *port*)))))
 
 (deftest test-time
   (with-open [conn (pg-conn {})]

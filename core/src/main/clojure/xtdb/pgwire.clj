@@ -250,6 +250,12 @@
    :sql-state "XX000"
    :message msg})
 
+(defn- err-invalid-catalog [db-name]
+  {:severity "FATAL"
+   :localized-severity "FATAL"
+   :sql-state "3D000"
+   :message (format "database '%s' does not exist" db-name)})
+
 (defn- err-admin-shutdown [msg]
   {:severity "ERROR"
    :localized-severity "ERROR"
@@ -974,8 +980,8 @@
   (set-session-parameter conn time-zone-nf-param-name tz))
 
 (defn cmd-startup-pg30 [conn startup-params]
-  (let [{:keys [server]} conn
-        {:keys [server-state]} server]
+  (let [{:keys [server conn-state]} conn
+        {:keys [server-state ->node]} server]
 
     ;; send auth-ok to client
     (cmd-write-msg conn msg-auth {:result 0})
@@ -991,9 +997,17 @@
           (set-time-zone conn v)
           (set-session-parameter conn k v))))
 
-    ;; backend key data (used to identify conn for cancellation)
-    (cmd-write-msg conn msg-backend-key-data {:process-id (:cid conn), :secret-key 0})
-    (cmd-send-ready conn)))
+    (let [db-name (get-in @conn-state [:session :parameters "database"])]
+      (if-let [node (->node db-name)]
+        (-> conn
+            ;; backend key data (used to identify conn for cancellation)
+            (doto (cmd-write-msg msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
+            (doto (cmd-send-ready))
+            (assoc :node node))
+
+        (doto conn
+          (cmd-send-error (err-invalid-catalog db-name))
+          (handle-msg* {:msg-name :msg-terminate}))))))
 
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
@@ -1082,8 +1096,8 @@
         :cancel (doto conn
                   (cmd-startup-cancel msg-in))
 
-        :30 (doto conn
-              (cmd-startup-pg30 (read-startup-parameters msg-in)))
+        :30 (-> conn
+                (cmd-startup-pg30 (read-startup-parameters msg-in)))
 
         (doto conn
           (cmd-startup-err (err-protocol-violation "Unknown protocol version")))))))
@@ -1598,10 +1612,10 @@
 
                 (recur))))))
 
-(defn- ->tmp-node [{:keys [^Map !tmp-nodes]} conn-state]
-  (.computeIfAbsent !tmp-nodes (get-in conn-state [:session :parameters "database"] "xtdb")
-                    (fn [db]
-                      (log/debug "starting tmp-node" (pr-str db))
+(defn- ->tmp-node [^Map !tmp-nodes, db-name]
+  (.computeIfAbsent !tmp-nodes db-name
+                    (fn [db-name]
+                      (log/debug "starting tmp-node" (pr-str db-name))
                       (xtn/start-node {:server nil}))))
 
 (defn- connect
@@ -1622,11 +1636,9 @@
                                      (-> (map->Connection {:cid cid,
                                                            :server server,
                                                            :frontend (->socket-frontend conn-socket),
-                                                           :node node
                                                            :!closing? (atom false)
                                                            :conn-state !conn-state})
-                                         (cmd-startup)
-                                         (cond-> (nil? node) (assoc :node (->tmp-node server @!conn-state))))
+                                         (cmd-startup))
                                      (catch Throwable t
                                        (log/warn t "error on conn startup")
                                        (throw t)))))]
@@ -1712,8 +1724,9 @@
                drain-wait 5000}}]
    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
      (let [port (.getLocalPort accept-socket)
-           server (map->Server {:node node
-                                :port port
+           !tmp-nodes (when-not node
+                        (ConcurrentHashMap.))
+           server (map->Server {:port port
                                 :accept-socket accept-socket
                                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                                 :!closing? (atom false)
@@ -1729,9 +1742,14 @@
                                                                     "IntervalStyle" "ISO_8601"
                                                                     "TimeZone" (str (.getZone ^Clock default-clock))
                                                                     "integer_datetimes" "on"}}))
+
                                 :ssl-ctx ssl-ctx
-                                :!tmp-nodes (when-not node
-                                              (ConcurrentHashMap.))})
+
+                                :!tmp-nodes !tmp-nodes
+                                :->node (fn [db-name]
+                                          (cond
+                                            (nil? node) (->tmp-node !tmp-nodes db-name)
+                                            (= db-name "xtdb") node))})
 
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
