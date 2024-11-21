@@ -191,21 +191,92 @@
                 [:msg-ready {:status :idle}]]
                @!msgs)))))
 
+(defn ->utf8-col [col-name]
+  {:column-name col-name,
+   :table-oid 0,
+   :column-attribute-number 0,
+   :column-oid 20,
+   :typlen 8,
+   :type-modifier -1,
+   :result-format :text})
+
 (deftest test-multi-stmts
-  ;; all of the tools try to be too helpful here.
+  ;; all of the tools try to be too helpful here, so we have to go low-level
 
-  (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
-    (with-open [conn (->conn frontend {"user" "xtdb"
-                                       "database" "xtdb"})]
-      (reset! !msgs [])
+  (letfn [(test [q]
+            (let [{:keys [!msgs] :as frontend} (->recording-frontend)]
+              (with-open [conn (->conn frontend {"user" "xtdb"
+                                                 "database" "xtdb"})]
+                (reset! !msgs [])
+                (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query q})
+                @!msgs)))]
 
-      (pgwire/handle-msg* conn {:msg-name :msg-simple-query, :query "SELECT 1 one; SELECT 2 two;"})
+    (t/testing "two selects"
+      (t/is (= [[:msg-row-description {:columns [(->utf8-col "one")]}]
+                [:msg-data-row {:vals ["1"]}]
+                [:msg-command-complete {:command "SELECT 1"}]
 
-      (t/is (= [[:msg-error-response
-                 {:error-fields
-                  {:severity "ERROR",
-                   :localized-severity "ERROR",
-                   :sql-state "08P01",
-                   :message "multi-queries not supported yet"}}]
+                [:msg-row-description {:columns [(->utf8-col "two")]}]
+                [:msg-data-row {:vals ["2"]}]
+                [:msg-command-complete {:command "SELECT 1"}]
                 [:msg-ready {:status :idle}]]
-               @!msgs)))))
+
+               (test "SELECT 1 one; SELECT 2 two;"))))
+
+    (t/testing "with COMMIT"
+      (t/is (= [[:msg-command-complete {:command "INSERT 0 0"}]
+                [:msg-command-complete {:command "COMMIT"}]
+                [:msg-row-description {:columns [(->utf8-col "_id")]}]
+                [:msg-data-row {:vals ["1"]}]
+                [:msg-command-complete {:command "SELECT 1"}]
+                [:msg-ready {:status :idle}]]
+
+               (test "INSERT INTO foo RECORDS {_id: 1}; COMMIT; SELECT * FROM foo;"))))
+
+    (t/testing "query then DML fails"
+      (t/is (= [[:msg-row-description {:columns [(->utf8-col "one")]}]
+                [:msg-data-row {:vals ["1"]}]
+                [:msg-command-complete {:command "SELECT 1"}]
+                [:msg-error-response {:error-fields
+                                      {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
+                                       :message "DML is not allowed in a READ ONLY transaction"}}]
+                [:msg-ready {:status :idle}]]
+
+               (test "SELECT 1 one; INSERT INTO foo RECORDS {_id: 1}"))))
+
+    (t/testing "DML then query fails"
+      (t/is (= [[:msg-command-complete {:command "INSERT 0 0"}]
+                [:msg-row-description {:columns [(->utf8-col "one")]}]
+                [:msg-error-response {:error-fields
+                                      {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
+                                       :message "Queries are unsupported in a DML transaction"}}]
+                [:msg-ready {:status :idle}]]
+
+               (test "INSERT INTO foo RECORDS {_id: 1}; SELECT 1 one"))))
+
+    (t/testing "leaves an explicit transaction open"
+      (t/is (= [[:msg-command-complete {:command "BEGIN"}]
+                [:msg-row-description {:columns [(->utf8-col "one")]}]
+                [:msg-data-row {:vals ["1"]}]
+                [:msg-command-complete {:command "SELECT 1"}]
+                [:msg-ready {:status :transaction}]]
+               (test "BEGIN; SELECT 1 one;"))))
+
+    (t/testing "leaves an explicit transaction open even on failure"
+      (t/is (= [[:msg-command-complete {:command "BEGIN"}]
+                [:msg-row-description {:columns [(->utf8-col "boom")]}]
+                [:msg-error-response {:error-fields
+                                      {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01"
+                                       :message "data exception - division by zero"}}]
+                [:msg-ready {:status :failed-transaction}]]
+               (test "BEGIN; SELECT 1/0 boom;"))))
+
+    (t/testing "can't BEGIN after a query"
+      (t/is (= [[:msg-row-description {:columns [(->utf8-col "one")]}]
+                [:msg-data-row {:vals ["1"]}]
+                [:msg-command-complete {:command "SELECT 1"}]
+                [:msg-error-response {:error-fields
+                                      {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
+                                       :message "transaction already started"}}]
+                [:msg-ready {:status :idle}]]
+               (test "SELECT 1 one; BEGIN"))))))
