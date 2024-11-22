@@ -75,6 +75,7 @@
     - `:current-time`: override wall-clock time to use in functions that require it
     - `:args`: arguments to pass to the query.
     - `:default-tz`: overrides the default time zone for the query
+    - `:authn`: authentication options
 
   For example:
 
@@ -102,7 +103,12 @@
   in this case the query will be run exactly at that system-time, ensuring the repeatability of queries.
 
   (q node '(from ...)
-     {:snapshot-time #inst \"2020-01-02\"})"
+     {:snapshot-time #inst \"2020-01-02\"}))
+
+  If your node requires authentication you can supply authentication options.
+
+  (q node '(from ...)
+     {:authn {:user \"xtdb\" :password \"xtdb\"}})"
   ([node query] (q node query {}))
 
   ([node query opts]
@@ -133,7 +139,11 @@
 
    - :default-tz
      overrides the default time zone for the transaction,
-     should be an instance of java.time.ZoneId"
+     should be an instance of java.time.ZoneId
+
+   - :authn
+     a map of user and password if the node requires authentication"
+
 
   (^TransactionKey [node, tx-ops] (submit-tx node tx-ops {}))
   (^TransactionKey [node, tx-ops tx-opts]
@@ -163,7 +173,10 @@
 
    - :default-tz
      overrides the default time zone for the transaction,
-     should be an instance of java.time.ZoneId"
+     should be an instance of java.time.ZoneId
+
+   - :authn
+     a map of user and password if the node requires authentication"
 
   (^TransactionKey [node, tx-ops] (execute-tx node tx-ops {}))
   (^TransactionKey [node, tx-ops tx-opts]
@@ -172,9 +185,14 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status
   "Returns the status of this node as a map,
-  including details of both the latest submitted and completed tx"
-  [node]
-  (xtp/status node))
+  including details of both the latest submitted and completed tx
+
+  Optionally takes a map of options:
+  - :auth-opts
+    a map of user and password if the node requires authentication"
+
+  ([node] (xtp/status node))
+  ([node opts] (xtp/status node opts)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro template

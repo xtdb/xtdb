@@ -1,8 +1,10 @@
 (ns xtdb.information-schema-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.authn :as authn]
             [xtdb.information-schema :as i-s]
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu]
+            [xtdb.time :as time]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -485,7 +487,24 @@
                  "SELECT data_type FROM information_schema.columns
                   WHERE column_name = 'set_column'"))))
 
-; required for Postgrex
+(deftest test-pg-user
+  (t/is (= [{:username "xtdb", :usesuper true, :xt/valid-from (time/->zdt #inst "1970")}]
+           (xt/q tu/*node* "SELECT username, usesuper, _valid_from, _valid_to FROM pg_user")))
+
+  (t/is (= "xtdb" (authn/verify-pw tu/*node* "xtdb" "xtdb")))
+
+  (xt/execute-tx tu/*node* ["CREATE USER ada WITH PASSWORD 'lovelace'"])
+
+  (t/is (= [{:username "ada", :usesuper false}]
+           (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'ada'")))
+  (t/is (= "ada" (authn/verify-pw tu/*node* "ada" "lovelace")))
+
+  (xt/execute-tx tu/*node* ["ALTER USER anonymous WITH PASSWORD 'anonymous'"])
+
+  (t/is (= [{:username "anonymous", :usesuper false}] (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'anonymous'")))
+  (t/is (= "anonymous" (authn/verify-pw tu/*node* "anonymous" "anonymous"))))
+
+;; required for Postgrex
 (deftest test-pg-range-3737
   (let [types (set
                (map

@@ -252,6 +252,13 @@
         "name" : "utf8"
       },
       "children" : [ ]
+    },{
+      "name" : "user",
+      "nullable" : true,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
     }]
   },
   "batches" : [{
@@ -436,6 +443,12 @@
       "name" : "default-tz",
       "count" : 1,
       "VALIDITY" : [1],
+      "OFFSET" : [0,0],
+      "DATA" : [""]
+    },{
+      "name" : "user",
+      "count" : 1,
+      "VALIDITY" : [0],
       "OFFSET" : [0,0],
       "DATA" : [""]
     }]

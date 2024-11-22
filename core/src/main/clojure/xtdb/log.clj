@@ -164,7 +164,8 @@
   (Schema. [(types/->field "tx-ops" #xt.arrow/type :list false tx-ops-field)
 
             (types/col-type->field "system-time" types/nullable-temporal-type)
-            (types/col-type->field "default-tz" :utf8)]))
+            (types/col-type->field "default-tz" :utf8)
+            (types/->field "user" #xt.arrow/type :utf8 true)]))
 
 (def ^:private forbidden-tables #{"xt/" "information_schema/" "pg_catalog/"})
 
@@ -399,14 +400,19 @@
         Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz] :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz]
+                                                                                {:keys [user]} :authn :as opts}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
-          default-tz-writer (vw/->writer (.getVector root "default-tz"))]
+          default-tz-writer (vw/->writer (.getVector root "default-tz"))
+          user-writer (vw/->writer (.getVector root "user"))]
 
       (when system-time
         (.writeObject (vw/->writer (.getVector root "system-time")) system-time))
+
+      (when user
+        (.writeObject user-writer user))
 
       (.writeObject default-tz-writer (str default-tz))
 
@@ -437,5 +443,6 @@
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
   (.appendTx log (serialize-tx-ops allocator tx-ops
-                                   {:default-tz (:default-tz opts default-tz)
-                                    :system-time (some-> system-time time/expect-instant)})))
+                                   (-> (select-keys opts [:authn])
+                                       (assoc :default-tz (:default-tz opts default-tz)
+                                              :system-time (some-> system-time time/expect-instant))))))

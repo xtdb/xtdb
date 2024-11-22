@@ -7,6 +7,14 @@ servers:
 components:
   schemas:
     # Please keep this sorted
+    AuthOpts:
+      description: Authentication options
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
     ArgRows:
       description: rows to be passed to a prepared SQL statement
       type: array
@@ -102,6 +110,8 @@ components:
         txTimeout:
           description: duration to wait for the requested transactions (atTx, afterTx) to be indexed before timing out (default unlimited).
           $ref: '#/components/schemas/Duration'
+        authOpts:
+          $ref: '#/components/schemas/AuthOpts'
 
     SqlOp:
       description: sql transaction operation
@@ -157,6 +167,8 @@ components:
           $ref: '#/components/schemas/Instant'
         defaultTz:
           $ref: '#/components/schemas/DefaultTz'
+        authOpts:
+          $ref: '#/components/schemas/AuthOpts'
 
     TxRequest:
       type: object
@@ -370,9 +382,15 @@ components:
 
 paths:
   /status:
-    get:
+    post:
       summary: Status
       description: Get status information from the node
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthOpts'
+        required: false
       responses:
         '200':
           description: Ok
