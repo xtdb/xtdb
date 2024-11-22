@@ -983,7 +983,7 @@
   (set-session-parameter conn time-zone-nf-param-name tz))
 
 (defn cmd-startup-pg30 [conn startup-params]
-  (let [{:keys [server conn-state]} conn
+  (let [{:keys [server]} conn
         {:keys [server-state ->node]} server]
 
     ;; send auth-ok to client
@@ -992,21 +992,23 @@
     (let [default-server-params (-> (:parameters @server-state)
                                     (update-keys str/lower-case))
           startup-parameters-from-client (-> startup-params
-                                             (update-keys str/lower-case))]
+                                             (update-keys str/lower-case))
+          params (merge default-server-params
+                        startup-parameters-from-client)
+          db-name (get params "database")]
 
-      (doseq [[k v] (merge default-server-params
-                           startup-parameters-from-client)]
-        (if (= time-zone-nf-param-name k)
-          (set-time-zone conn v)
-          (set-session-parameter conn k v))))
-
-    (let [db-name (get-in @conn-state [:session :parameters "database"])]
       (if-let [node (->node db-name)]
-        (-> conn
-            ;; backend key data (used to identify conn for cancellation)
-            (doto (cmd-write-msg msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
-            (doto (cmd-send-ready))
-            (assoc :node node))
+        (do
+          (doseq [[k v] params]
+            (if (= time-zone-nf-param-name k)
+              (set-time-zone conn v)
+              (set-session-parameter conn k v)))
+
+          (-> conn
+              ;; backend key data (used to identify conn for cancellation)
+              (doto (cmd-write-msg msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
+              (doto (cmd-send-ready))
+              (assoc :node node)))
 
         (doto conn
           (cmd-send-error (err-invalid-catalog db-name))
