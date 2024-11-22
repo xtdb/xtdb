@@ -326,3 +326,5 @@ These are located under the shared `grafana/dashboards` directory on the link:ht
 ** Click `Import`.
 
 These will create  useful dashboards for monitoring the XTDB cluster and the nodes.
+
+image::/images/docs/cluster-monitoring.png["Cluster Monitoring Dashboard"]
