@@ -258,6 +258,13 @@ If the above command succeeds, you now have a load-balanced XTDB cluster accessi
 
 == Extension: Monitoring with Grafana
 
+Below we give an example for setting up a basic version of Grafana & Prometheus - and then setup our XTDB monitoring dashboards.
+
+For this you will require: 
+
+* The Kubernetes config for these - found under the `azure-setup-guide/kubernetes` directory. 
+* The Grafana dashboards - found under our shared `grafana/dashboards` directory on the link:https://github.com/xtdb/xtdb/tree/main/monitoring/grafana/dashboards[**XTDB Repo**].
+
 === Deploying Prometheus & Grafana to AKS
 
 The XTDB nodes each run a link:https://prometheus.io/[**Prometheus**^] exporter, which exposes metrics about the Java process, node resource usage and performance. 
@@ -298,19 +305,26 @@ To add the Prometheus data source:
 * Go to `Connections -> Add new connection`.
 * Search for `Prometheus` in the data source list.
 * Click `Add new data source`.
-* Set the `Name` to `xtdb`.
+* Set the `Name` to `prometheus`. 
 * Set the `Prometheus server URL` to `http://prometheus:9090`, then `Save & test`.
 
 === Adding the XTDB Dashboard to Grafana
 
-With the Prometheus data source added, the XTDB metrics are now available to Grafana. We provide a pre-configured Grafana dashboard for various useful XTDB metrics. To add this:
+With the Prometheus data source added, the XTDB metrics are now being scraped by Grafana. We provide pre-configured Grafana dashboards for:
+
+* XTDB Cluster Monitoring
+* XTDB Node Debugging
+
+These are located under the shared `grafana/dashboards` directory on the link:https://github.com/xtdb/xtdb/tree/main/monitoring/grafana/dashboards[**XTDB Repo**].
+
+ To add these dashboards:
 
 * Navigate to the `Dashboards -> New -> New dashboard`.
 * Click `Import dashboard`.
-* `Upload dashboard JSON file` -> Upload the `grafana/dashboard.json` file from the example directory.
-** Select the `xtdb` data source.
+* `Upload dashboard JSON file` -> Upload the dashboard file from the example directory.
+** Select the Prometheus data source.
 ** Click `Import`.
 
-This will create a new dashboard with a number of useful metrics about the XTDB nodes. 
+These will create  useful dashboards for monitoring the XTDB cluster and the nodes.
 
-image::/images/docs/grafana-dashboard.png["Grafana Dashboard"]
+image::/images/docs/cluster-monitoring.png["Cluster Monitoring Dashboard"]
