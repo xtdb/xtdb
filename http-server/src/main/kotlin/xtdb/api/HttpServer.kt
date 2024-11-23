@@ -26,13 +26,10 @@ object HttpServer {
     @SerialName("!HttpServer")
     data class Factory(
         var port: Int = 3000,
-        var authnConfig: AuthnConfig = AuthnConfig()
     ) : XtdbModule.Factory {
         override val moduleKey = "xtdb.http-server"
 
         fun port(port: Int) = apply { this.port = port }
-
-        fun authn(authn: AuthnConfig) = apply { this.authnConfig = authn }
 
         override fun openModule(xtdb: Xtdb) =
             requiringResolve("xtdb.server/open-server")(xtdb, this) as XtdbModule

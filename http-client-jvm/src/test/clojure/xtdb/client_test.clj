@@ -4,8 +4,8 @@
             [xtdb.test-util :as tu])
   (:import [clojure.lang ExceptionInfo]))
 
-(t/use-fixtures :each (tu/with-opts {:authn {:rules [{:user "xtdb" :method :password :address "127.0.0.1"}
-                                                     {:user "ada" :method :trust :address "127.0.0.1"}]}})
+(t/use-fixtures :each (tu/with-opts {:authn [:user-table {:rules [{:user "xtdb" :method :password :address "127.0.0.1"}
+                                                                  {:user "ada" :method :trust :address "127.0.0.1"}]}]})
   tu/with-mock-clock tu/with-http-client-node)
 
 (deftest authentication

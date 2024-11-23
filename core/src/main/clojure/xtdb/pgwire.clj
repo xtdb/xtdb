@@ -29,7 +29,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api ServerConfig Xtdb$Config)
+           (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
@@ -1056,7 +1056,7 @@
         (doto (cmd-send-ready)))))
 
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-params]
-  (let [{:keys [->node]} server
+  (let [{:keys [->node, ^Authenticator authn]} server
         user (get startup-params "user")
         db-name (get startup-params "database")
         {:keys [node] :as conn} (assoc conn :node (->node db-name))]
@@ -1066,26 +1066,28 @@
                 (handle-msg* {:msg-name :msg-terminate})))]
 
       (if node
-        (case (authn/first-matching-rule (:authn server) (host-address frontend) user)
-          :trust (do
-                   (cmd-write-msg conn msg-auth {:result 0})
-                   (startup-ok conn startup-params))
+        (condp = (.methodFor authn user (host-address frontend))
+          #xt.authn/method :trust
+          (do
+            (cmd-write-msg conn msg-auth {:result 0})
+            (startup-ok conn startup-params))
 
-          :password (do
-                      ;; asking for a password, we only have :trust and :password for now
-                      (cmd-write-msg conn msg-auth {:result 3})
+          #xt.authn/method :password
+          (do
+            ;; asking for a password, we only have :trust and :password for now
+            (cmd-write-msg conn msg-auth {:result 3})
 
-                      ;; we go idle until we receive a message
-                      (when-let [{:keys [msg-name] :as msg} (read-client-msg! frontend)]
-                        (if (not= :msg-password msg-name)
-                          (killed-conn (err-invalid-auth-spec (str "password authentication failed for user: " user)))
+            ;; we go idle until we receive a message
+            (when-let [{:keys [msg-name] :as msg} (read-client-msg! frontend)]
+              (if (not= :msg-password msg-name)
+                (killed-conn (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-                          (if (authn/verify-pw node user (:password msg))
-                            (do
-                              (cmd-write-msg conn msg-auth {:result 0})
-                              (startup-ok conn startup-params))
+                (if (.verifyPassword authn node user (:password msg))
+                  (do
+                    (cmd-write-msg conn msg-auth {:result 0})
+                    (startup-ok conn startup-params))
 
-                            (killed-conn (err-invalid-passwd (str "password authentication failed for user: " user)))))))
+                  (killed-conn (err-invalid-passwd (str "password authentication failed for user: " user)))))))
 
           (killed-conn (err-invalid-auth-spec (str "no authentication record found for user: " user))))
 

@@ -2041,7 +2041,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest pg-authentication
   (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}})]
+                                    :authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
     (binding [*port* (:port (tu/node->server node))]
       (t/is (thrown-with-msg? PSQLException #"ERROR: no authentication record found for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
@@ -2056,12 +2056,12 @@ ORDER BY t.oid DESC LIMIT 1"
 
   (t/testing "users with a trusted record are allowed"
     (with-open [node (xtn/start-node {:server {:port 0}
-                                      :authn {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}})]
+                                      :authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
       (binding [*port* (:port (tu/node->server node))]
         (with-open [_ (jdbc-conn "user" "fin")]))))
 
   (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn {:rules [{:user "fin", :method :password, :address "127.0.0.1"}]}})]
+                                    :authn [:user-table {:rules [{:user "fin", :method :password, :address "127.0.0.1"}]}]})]
     (binding [*port* (:port (tu/node->server node))]
       (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))

@@ -36,7 +36,7 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
+           (xtdb.api Authenticator HttpServer$Factory TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.api.query IKeyFn Query)
            (xtdb.http QueryOptions QueryRequest TxOptions TxRequest)))
@@ -339,19 +339,23 @@
   {:name ::authenticate
    :enter (fn [{:keys [request] :as ctx}]
             (let [{:keys [node remote-addr]} request
+                  {:keys [^Authenticator authn]} node
                   [user password] (some-> (get-in request [:headers "authorization"])
                                           (decode-basic-auth))
                   success-ctx (-> ctx
                                   ;; to not leak a password in some logs somewhere
                                   (update-in [:request :headers] dissoc "authorization"))]
 
-              (case (authn/first-matching-rule (:authn node) remote-addr user)
-                :trust success-ctx
-                :password (if (authn/verify-pw node user password)
-                            success-ctx
-                            (assoc ctx :error (ex-info (str "password authentication failed for user: " user)
-                                                       {:type :unauthenticated
-                                                        ::status 401})))
+              (condp = (.methodFor authn user remote-addr)
+                #xt.authn/method :trust
+                success-ctx
+
+                #xt.authn/method :password
+                (if (.verifyPassword authn node user password)
+                  success-ctx
+                  (assoc ctx :error (ex-info (str "password authentication failed for user: " user)
+                                             {:type :unauthenticated
+                                              ::status 401})))
 
                 (assoc ctx :error (ex-info "authn failed" {:type :unauthenticated
                                                            ::status 401})))))})

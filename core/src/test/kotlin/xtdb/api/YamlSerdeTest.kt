@@ -6,6 +6,10 @@ import io.mockk.unmockkObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import xtdb.api.Authenticator.Factory.UserTable
+import xtdb.api.Authenticator.Method.PASSWORD
+import xtdb.api.Authenticator.Method.TRUST
+import xtdb.api.Authenticator.MethodRule
 import xtdb.api.log.Kafka
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
@@ -293,23 +297,23 @@ class YamlSerdeTest {
     @Test
     fun testAuthnConfigDecoding() {
         val input = """
-        rules:
-            - user: admin
-              address: 127.0.0.42
-              method: TRUST  
-            - user: all
-              address: 127.0.0.1
-              method: PASSWORD  
+        authn: !UserTable
+          rules:
+              - user: admin
+                remoteAddress: 127.0.0.42
+                method: TRUST  
+              - remoteAddress: 127.0.0.1
+                method: PASSWORD  
         """.trimIndent()
 
         assertEquals(
-            AuthnConfig(
+            UserTable(
                 listOf(
-                    AuthnConfig.Rule("admin","127.0.0.42", AuthnConfig.Method.TRUST),
-                    AuthnConfig.Rule( "all", "127.0.0.1", AuthnConfig.Method.PASSWORD)
+                    MethodRule(TRUST, user = "admin", remoteAddress = "127.0.0.42"),
+                    MethodRule(PASSWORD, remoteAddress = "127.0.0.1")
                 )
             ),
-            YAML_SERDE.decodeFromString(AuthnConfig.serializer(), input)
+            nodeConfig(input).authn
         )
     }
 }

@@ -130,6 +130,10 @@ val YAML_SERDE = Yaml(
             subclass(LocalLogFactory::class)
         }
 
+        polymorphic(Authenticator.Factory::class) {
+            subclass(Authenticator.Factory.UserTable::class)
+        }
+
         ServiceLoader.load(XtdbModule.Registration::class.java)
             .stream()
             .map(Provider<XtdbModule.Registration>::get)

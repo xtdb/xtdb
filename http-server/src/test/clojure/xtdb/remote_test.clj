@@ -233,7 +233,7 @@
   (binding [tu/*http-port* (tu/free-port)]
     (util/with-open [_ (xtn/start-node (assoc tu/*node-opts*
                                               :http-server {:port tu/*http-port*}
-                                              :authn {:rules [{:user "xtdb" :method :password :address "127.0.0.1"}]}))]
+                                              :authn [:user-table {:rules [{:user "xtdb" :method :password :address "127.0.0.1"}]}]))]
       (binding [*node* (xtc/start-client (str "http://localhost:" tu/*http-port*))]
         (t/testing "no authentication record"
           (let [{:keys [status]} (-> (http/post (http-url "status")
@@ -294,7 +294,7 @@
     (binding [tu/*http-port* (tu/free-port)]
       (util/with-open [_ (xtn/start-node (assoc tu/*node-opts*
                                                 :http-server {:port tu/*http-port*}
-                                                :authn {:rules [{:user "fin", :method :password, :address "127.0.0.1"}]}))]
+                                                :authn [:user-table {:rules [{:user "fin", :method :password, :address "127.0.0.1"}]}]))]
         (binding [*node* (xtc/start-client (str "http://localhost:" tu/*http-port*))]
           (let [{:keys [status body]} (-> (http/post  (http-url "status")
                                                       {:accept :json

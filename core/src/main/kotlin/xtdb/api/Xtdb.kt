@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
+import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
 import xtdb.api.log.Logs.inMemoryLog
 import xtdb.api.metrics.HealthzConfig
@@ -36,7 +37,7 @@ interface Xtdb : AutoCloseable {
         var defaultTz: ZoneId = ZoneOffset.UTC,
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig(),
-        var authn: AuthnConfig = AuthnConfig(),
+        var authn: Authenticator.Factory = UserTable(),
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
@@ -60,7 +61,7 @@ interface Xtdb : AutoCloseable {
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
-        fun authn(authn: AuthnConfig) = apply { this.authn = authn }
+        fun authn(authn: Authenticator.Factory) = apply { this.authn = authn }
 
         fun getModules(): List<XtdbModule.Factory> = modules
         fun module(module: XtdbModule.Factory) = apply { this.modules += module }

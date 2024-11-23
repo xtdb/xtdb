@@ -13,7 +13,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.time ZonedDateTime]
-           [xtdb.api AuthnConfig ServerConfig Xtdb$Config]
+           [xtdb.api ServerConfig Xtdb$Config]
            [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
            xtdb.types.RegClass))

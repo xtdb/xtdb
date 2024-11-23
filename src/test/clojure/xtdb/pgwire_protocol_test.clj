@@ -2,7 +2,8 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.authn :as authn])
   (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
            [java.time Clock]))
@@ -50,14 +51,14 @@
 (defn ->conn
   (^java.lang.AutoCloseable [frontend] (->conn frontend {}))
   (^java.lang.AutoCloseable [frontend startup-params]
-   (->conn frontend startup-params {:rules [{:user nil, :method :trust :address nil}]}))
-  (^java.lang.AutoCloseable [frontend startup-params authn]
+   (->conn frontend startup-params [{:user nil, :method #xt.authn/method :trust, :address nil}]))
+  (^java.lang.AutoCloseable [frontend startup-params authn-rules]
    (-> (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                            "client_encoding" "UTF8"
                                                                            "DateStyle" "ISO"
                                                                            "IntervalStyle" "ISO_8601"}})
                                          :->node {"xtdb" tu/*node*}
-                                         :authn authn}
+                                         :authn (authn/->UserTableAuthn authn-rules)}
                                 :frontend frontend
                                 :cid -1
                                 :!closing? (atom false)
@@ -66,7 +67,7 @@
 
 (deftest test-startup
   (let [{:keys [!in-msgs] :as frontend} (->recording-frontend [{:msg-name :msg-password :password "xtdb"}])]
-    (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]})]
+    (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} [{:user "xtdb", :method #xt.authn/method :password, :address "127.0.0.1"}])]
       (t/is (= [[:msg-auth {:result 3}]
                 [:msg-auth {:result 0}]
                 [:msg-parameter-status {:parameter "server_encoding", :value "UTF8"}]
@@ -83,7 +84,7 @@
 
 (deftest test-auth-failure
   (let [{:keys [!in-msgs] :as frontend} (->recording-frontend [{:msg-name :msg-simple-query, :query "SELECT 1"}])]
-    (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]})]
+    (with-open [_ (->conn frontend {"user" "xtdb", "database" "xtdb"} [{:user "xtdb", :method #xt.authn/method :password, :address "127.0.0.1"}])]
 
       (t/is (= [[:msg-auth {:result 3}]
                 [:msg-error-response
