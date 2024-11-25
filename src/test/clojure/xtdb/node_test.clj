@@ -7,6 +7,7 @@
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
+            [xtdb.protocols :as xtp]
             [xtdb.query :as query]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
@@ -14,7 +15,6 @@
             [xtdb.util :as util])
   (:import [java.time ZonedDateTime]
            [xtdb.api ServerConfig Xtdb$Config]
-           [xtdb.node.impl IXtdbInternal]
            [xtdb.query IQuerySource]
            xtdb.types.RegClass))
 
@@ -748,7 +748,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                     [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])]
     (tu/then-await-tx tx tu/*node*))
 
-  (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
+  (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
         column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]
                        #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]
                        #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
@@ -818,7 +818,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
     (let [ptz #time/zone "America/New_York"
-          pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
+          pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
 
       (t/testing "and not at bind"
         (with-open [bq (.bind pq {})
@@ -834,7 +834,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
 
   (t/testing "default-tz not supplied at prepare"
-    (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT CURRENT_TIMESTAMP x" {})]
+    (let [pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {})]
 
       (t/testing "and not at bind"
         (with-open [bq (.bind pq {})
@@ -850,7 +850,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
-  (let [pq (.prepareQuery ^IXtdbInternal tu/*node* "SELECT ? v" {:param-types nil})]
+  (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil})]
     (t/is (= [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]]
              (.paramFields pq))
           "unspecified param-types are assumed to be utf8")

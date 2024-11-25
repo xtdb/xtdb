@@ -7,6 +7,11 @@
   (^long submit-tx [node tx-ops tx-opts])
   (^xtdb.api.TransactionResult execute-tx [node tx-ops tx-opts]))
 
+(defprotocol PLocalNode
+  (^xtdb.query.PreparedQuery prepare-sql [node query query-opts])
+  (^xtdb.query.PreparedQuery prepare-xtql [node query query-opts])
+  (^xtdb.query.PreparedQuery prepare-ra [node ra-plan query-opts]))
+
 (defprotocol PStatus
   (latest-submitted-tx-id [node])
   (status [node] [node opts]))

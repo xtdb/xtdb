@@ -10,6 +10,7 @@
             [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
+            [xtdb.protocols :as xtp]
             [xtdb.query]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
@@ -31,7 +32,6 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
-           xtdb.node.impl.IXtdbInternal
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
            [xtdb.vector IVectorReader RelationReader]))
@@ -1422,7 +1422,7 @@
                             dec-param)
                           inf-param))))))
 
-(defn- prep-stmt [{:keys [^IXtdbInternal node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]
+(defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]
   (let [{:keys [session latest-submitted-tx-id]} @conn-state
         {:keys [^Clock clock]} session
         fallback-output-format (get-in session [:parameters "fallback_output_format"])
@@ -1445,8 +1445,8 @@
                           :default-tz (.getZone clock)}
 
               ^PreparedQuery pq (if ra-plan
-                                  (.prepareRaQuery node ra-plan query-opts)
-                                  (.prepareQuery node parsed-query query-opts))]
+                                  (xtp/prepare-ra node ra-plan query-opts)
+                                  (xtp/prepare-sql node parsed-query query-opts))]
 
           (when-let [warnings (.warnings pq)]
             (doseq [warning warnings]

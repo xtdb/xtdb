@@ -36,13 +36,6 @@
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface IXtdbInternal
-  (^xtdb.query.PreparedQuery prepareQuery [^java.lang.String query, query-opts])
-  (^xtdb.query.PreparedQuery prepareQuery [^xtdb.antlr.Sql$DirectlyExecutableStatementContext parsed-query, query-opts])
-  (^xtdb.query.PreparedQuery prepareQuery [^xtdb.api.query.XtqlQuery query, query-opts])
-  (^xtdb.query.PreparedQuery prepareRaQuery [ra-plan query-opts]))
-
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz !latest-submitted-tx-id]}]
   (-> (into {:default-tz default-tz,
              :after-tx-id @!latest-submitted-tx-id
@@ -115,12 +108,12 @@
 
   (open-sql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
-      (-> (.prepareQuery this ^String query query-opts)
+      (-> (xtp/prepare-sql this query query-opts)
           (then-execute-prepared-query query-timer query-opts))))
 
   (open-xtql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
-      (-> (.prepareQuery this (xtql.edn/parse-query query) query-opts)
+      (-> (xtp/prepare-xtql this query query-opts)
           (then-execute-prepared-query query-timer query-opts))) )
 
   xtp/PStatus
@@ -129,27 +122,34 @@
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
 
-  IXtdbInternal
-  (^PreparedQuery prepareQuery [this ^String query, query-opts]
-   (.prepareQuery this (antlr/parse-statement query)
-                  query-opts))
+  xtp/PLocalNode
+  (prepare-sql [this query query-opts]
+    (let [ast (cond
+                (instance? Sql$DirectlyExecutableStatementContext query) query
+                (string? query) (antlr/parse-statement query)
+                :else (throw (err/illegal-arg :xtdb/unsupported-query-type
+                                              {::err/message (format "Unsupported SQL query type: %s" (type query))})))
 
-  (^PreparedQuery prepareQuery [this ^Sql$DirectlyExecutableStatementContext parsed-query, query-opts]
-   (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+          {:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+      (doto (.awaitTx indexer after-tx-id tx-timeout)
+        (validate-snapshot-not-before snapshot-time))
+      (let [plan (.planQuery q-src ast wm-src query-opts)]
+        (.prepareRaQuery q-src plan wm-src query-opts))))
+
+  (prepare-xtql [this query query-opts]
+   (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+         ast (cond
+               (sequential? query) (xtql.edn/parse-query query)
+               (instance? XtqlQuery query) query
+               :else (throw (err/illegal-arg :xtdb/unsupported-query-type
+                             {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
      (doto (.awaitTx indexer after-tx-id tx-timeout)
        (validate-snapshot-not-before snapshot-time))
-     (let [plan (.planQuery q-src parsed-query wm-src query-opts)]
+
+     (let [plan (.planQuery q-src ast wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
-  (^PreparedQuery prepareQuery [this ^XtqlQuery query, query-opts]
-   (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-     (doto (.awaitTx indexer after-tx-id tx-timeout)
-       (validate-snapshot-not-before snapshot-time))
-
-     (let [plan (.planQuery q-src query wm-src query-opts)]
-       (.prepareRaQuery q-src plan wm-src query-opts))))
-
-  (prepareRaQuery [this plan query-opts]
+  (prepare-ra [this plan query-opts]
     (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (doto (.awaitTx indexer after-tx-id tx-timeout)
         (validate-snapshot-not-before snapshot-time))
