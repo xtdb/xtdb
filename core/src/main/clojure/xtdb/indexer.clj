@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [next.jdbc]
             [sci.core :as sci]
             [xtdb.api :as xt]
             [xtdb.await :as await]
@@ -10,6 +11,7 @@
             [xtdb.log :as xt-log]
             [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
+            [xtdb.multi-tenant]
             [xtdb.operator.scan :as scan]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
@@ -245,6 +247,8 @@
       (select-keys ['put 'put-fn
                     'during 'starting-at 'until])))
 
+(def ^:private xt-jdbc-ns (sci/copy-ns next.jdbc (sci/create-ns 'next.jdbc)))
+
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, q-src, wm-src
                                                ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
   (let [call-leg (.legReader tx-ops-rdr "call")
@@ -255,8 +259,12 @@
         ;; TODO confirm/expand API that we expose to tx-fns
         sci-ctx (sci/init {:bindings {'q (tx-fn-q q-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
-                                      '*current-tx* tx-key}
-                           :namespaces {'xt xt-sci-ns}})]
+                                      '*current-tx* tx-key
+                                      'tmp-db xtdb.multi-tenant/tmp-db
+                                      'spit-db xtdb.multi-tenant/spit-db
+                                      'slurp-db xtdb.multi-tenant/slurp-db}
+                           :namespaces {'xt xt-sci-ns
+                                        'jdbc xt-jdbc-ns}})]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]

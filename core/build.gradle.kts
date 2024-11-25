@@ -70,6 +70,9 @@ dependencies {
     api("com.charleskorn.kaml", "kaml", "0.56.0")
 
     api("org.postgresql", "postgresql", "42.7.3")
+    api("com.github.seancorfield", "next.jdbc", "1.3.955")
+    api("org.xerial", "sqlite-jdbc", "3.47.0.0")
+
 
     antlr("org.antlr:antlr4:4.13.1")
     implementation("org.antlr:antlr4-runtime:4.13.1")
