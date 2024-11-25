@@ -80,9 +80,7 @@
 
 (defn with-node [f]
   (util/with-open [node (xtn/start-node *node-opts*)
-                   conn (jdbc/get-connection {:jdbcUrl (format "jdbc:xtdb://localhost:%d/xtdb"
-                                                               (.getServerPort node))
-                                              :options "-c fallback_output_format=transit"})]
+                   conn (jdbc/get-connection node)]
     (binding [*node* node, *conn* conn]
       (f))))
 

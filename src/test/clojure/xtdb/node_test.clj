@@ -588,7 +588,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
 
 (t/deftest test-nested-field-normalisation
-  (jdbc/execute! tu/*conn* ["INSERT INTO t1(_id, data)
+  (jdbc/execute! tu/*node* ["INSERT INTO t1(_id, data)
                              VALUES(1, {field_name1: {field_name2: true},
                                         field_name3: {baz: -4113466}})"])
 
