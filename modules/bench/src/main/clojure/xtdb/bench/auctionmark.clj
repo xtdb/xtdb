@@ -614,9 +614,9 @@
         (when-not (= last-tx latest-completed-tx)
           (recur latest-completed-tx))))))
 
-(defn then-await-tx ^TransactionKey [node]
-  (let [{:keys [latest-submitted-tx]} (xt/status node)]
-    (idx/await-tx latest-submitted-tx node nil)))
+(defn then-await-tx [node]
+  (let [{:keys [latest-submitted-tx-id]} (xt/status node)] 
+    (idx/await-tx latest-submitted-tx-id node nil)))
 
 (defn load-phase-submit-tasks [sf]
   [{:t :call, :f (fn [_] (log/info "start submitting load stage"))}
