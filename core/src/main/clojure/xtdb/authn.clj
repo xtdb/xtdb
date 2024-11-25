@@ -1,6 +1,6 @@
 (ns xtdb.authn
   (:require [buddy.hashers :as hashers]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.node :as xtn])
   (:import [java.io Writer]

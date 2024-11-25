@@ -1,11 +1,10 @@
 (ns xtdb.cli-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.cli :as cli]
-            [xtdb.node :as xtn]
-            [xtdb.test-util :as tu])
+            [xtdb.node :as xtn])
   (:import (xtdb.indexer.live_index LiveIndex)))
 
 (def xtdb-cli-edn

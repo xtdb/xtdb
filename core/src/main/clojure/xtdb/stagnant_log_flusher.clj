@@ -1,14 +1,13 @@
 (ns xtdb.stagnant-log-flusher
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             xtdb.indexer
             [xtdb.log :as xt-log]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.nio.channels ClosedByInterruptException)
-           (java.time Duration)
            (java.util.concurrent ExecutorService Executors TimeUnit)
-           (xtdb.api IndexerConfig TransactionKey)
+           (xtdb.api IndexerConfig)
            (xtdb.api.log Log)
            (xtdb.indexer IIndexer)))
 

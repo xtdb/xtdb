@@ -1,7 +1,7 @@
 (ns xtdb.indexer.live-index
   (:require [clojure.set :as set]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
             [xtdb.metadata :as meta]

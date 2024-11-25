@@ -248,7 +248,7 @@ dependencies {
     api(libs.next.jdbc)
     testImplementation(libs.honeysql)
     api("org.postgresql", "postgresql", "42.7.3")
-    api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
+    api(libs.integrant)
     api(project(":xtdb-core"))
     api(project(":xtdb-jdbc"))
 

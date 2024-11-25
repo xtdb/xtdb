@@ -1,7 +1,7 @@
 (ns xtdb.log
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.node :as xtn]

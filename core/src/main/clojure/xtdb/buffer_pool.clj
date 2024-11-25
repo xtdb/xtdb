@@ -1,6 +1,6 @@
 (ns xtdb.buffer-pool
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.file-list-cache :as flc]
             [xtdb.metrics :as metrics]
             [xtdb.node :as xtn]

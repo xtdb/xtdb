@@ -2,7 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [next.jdbc :as jdbc]
             [next.jdbc.optional :as jdbc.optional]
             [next.jdbc.prepare :as jdbc.prep]

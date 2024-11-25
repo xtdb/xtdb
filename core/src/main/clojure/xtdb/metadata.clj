@@ -1,6 +1,6 @@
 (ns xtdb.metadata
   (:require [cognitect.transit :as transit]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.bloom :as bloom]
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]

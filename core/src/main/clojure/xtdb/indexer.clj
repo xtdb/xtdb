@@ -1,7 +1,7 @@
 (ns xtdb.indexer
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [sci.core :as sci]
             [xtdb.api :as xt]
             [xtdb.await :as await]

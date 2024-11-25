@@ -3,7 +3,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]

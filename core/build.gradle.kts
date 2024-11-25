@@ -40,7 +40,7 @@ dependencies {
 
     api("org.roaringbitmap", "RoaringBitmap", "1.0.1")
 
-    api("pro.juxt.clojars-mirrors.integrant", "integrant", "0.8.0")
+    api(libs.integrant)
     api("clj-commons", "clj-yaml", "1.0.27")
 
     api("org.babashka", "sci", "0.6.37")

@@ -3,7 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.cli :as cli]
             [xtdb.node :as xtn]
@@ -12,7 +12,6 @@
            java.lang.AutoCloseable
            (java.nio.file ClosedWatchServiceException Files OpenOption Path StandardOpenOption StandardWatchEventKinds WatchEvent WatchEvent$Kind)
            java.util.HashSet
-           [xtdb.api.tx TxOps]
            xtdb.types.ClojureForm))
 
 (defmethod ig/prep-key :xtdb/c1-import [_ opts]

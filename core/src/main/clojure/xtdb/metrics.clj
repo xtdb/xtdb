@@ -1,6 +1,6 @@
 (ns xtdb.metrics
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.node :as xtn])
   (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)

@@ -1,7 +1,7 @@
 (ns xtdb.buffer-pool-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
             [xtdb.node :as xtn]

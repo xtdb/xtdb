@@ -1,6 +1,6 @@
 (ns xtdb.compactor
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.bitemporal :as bitemp]
             [xtdb.trie :as trie]
             [xtdb.types :as types]

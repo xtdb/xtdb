@@ -1,6 +1,6 @@
 (ns xtdb.operator.scan
   (:require [clojure.spec.alpha :as s]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
@@ -20,10 +20,9 @@
   (:import (clojure.lang MapEntry)
            (com.carrotsearch.hppc IntArrayList)
            (java.io Closeable)
-           java.time.Instant
-           [java.lang AutoCloseable]
            java.nio.ByteBuffer
            (java.nio.file Path)
+           java.time.Instant
            (java.util ArrayList Comparator HashMap Iterator LinkedList Map PriorityQueue Stack)
            (java.util.function BiFunction IntPredicate Predicate)
            (java.util.stream IntStream)

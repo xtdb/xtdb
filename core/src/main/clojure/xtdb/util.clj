@@ -4,7 +4,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
            (java.io ByteArrayOutputStream File)

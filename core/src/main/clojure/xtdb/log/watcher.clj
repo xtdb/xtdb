@@ -1,20 +1,17 @@
 (ns xtdb.log.watcher
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             xtdb.api
             xtdb.indexer
             [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             xtdb.operator.scan
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            (java.nio ByteBuffer)
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.ipc.ArrowStreamReader
-           org.apache.arrow.vector.TimeStampMicroTZVector
            [xtdb.api.log Log TxLog$Subscriber]
            xtdb.indexer.IIndexer))
 

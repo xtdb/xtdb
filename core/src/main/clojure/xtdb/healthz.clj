@@ -1,6 +1,6 @@
 (ns xtdb.healthz
   (:require [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [reitit.http :as http]
             [reitit.http.coercion :as rh.coercion]
             [reitit.http.interceptors.exception :as ri.exception]

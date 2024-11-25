@@ -2,7 +2,7 @@
   (:require [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+            [integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             xtdb.expression.pg
