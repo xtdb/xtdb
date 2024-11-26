@@ -941,6 +941,8 @@
             :typlen typlen
             :typsend "uuid_send"
             :typreceive "uuid_recv"
+            :typinput "uuid_in"
+            :typoutput "uuid_out"
             :read-binary (fn [_env ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
             :read-text (fn [_env ba] (UUID/fromString (read-utf8 ba)))
             :write-binary (fn [_env ^IVectorReader rdr idx]

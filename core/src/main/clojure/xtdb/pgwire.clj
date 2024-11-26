@@ -24,7 +24,7 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
-           [java.util List Map Set]
+           [java.util List Map Set UUID]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
@@ -617,6 +617,7 @@
 
     (instance? clojure.lang.Keyword obj) (json-clj (str (symbol obj)))
     (instance? clojure.lang.Symbol obj) (json-clj (str (symbol obj)))
+    (instance? UUID obj) (str obj)
 
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))

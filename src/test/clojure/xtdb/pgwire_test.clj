@@ -24,10 +24,8 @@
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           java.util.Calendar
+           (java.util Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
-           java.util.List
-           java.util.TimeZone
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
@@ -1632,6 +1630,27 @@
              (pg/execute conn "SELECT $1 v" {:params [#time/instant "2030-01-04T12:44:55Z"]
                                              :oids [OID/TIMESTAMPTZ]}))
           "when reading param, zone is honored (UTC) and instant is treated as a timestamptz")))
+
+(deftest test-java-uuid
+  (let [uuid (UUID/randomUUID)]
+    (with-open [conn (pg-conn {})]
+      (t/is (= [{:v #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6"}]
+               (pg/execute conn "SELECT $1 v" {:params [#uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6"]
+                                               :oids [OID/UUID]})))
+      (t/is (= [{:v uuid}]
+               (pg/execute conn "SELECT $1 v" {:params [uuid]
+                                               :oids [OID/UUID]})))
+      (testing "insert uuid as id and select by it"
+        (pg/execute conn "INSERT INTO foouuid (_id, v) values ($1, $2)" {:params [uuid "foo"]
+                                                                         :oids [OID/UUID OID/VARCHAR]})
+        (t/is (= [{:_id uuid, :v "foo"}]
+                 (pg/query conn (str "SELECT * FROM foouuid WHERE _id = UUID '" uuid "'"))))
+        (with-open [conn (jdbc-conn)]
+          (t/is (= [{:xt/id uuid, :v "foo"}]
+                   (q conn ["SELECT * FROM foouuid WHERE _id = ?", uuid])))))
+      (testing "cast text to UUID"
+        (t/is (= [{:v uuid}]
+                 (pg/execute conn (str "SELECT '" uuid "'::uuid v"))))))))
 
 (deftest test-declared-param-types-are-honored
   (t/testing "Declared param type VARCHAR is honored, even though it maps to utf8 which XTDB maps to text"

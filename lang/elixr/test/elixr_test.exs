@@ -70,19 +70,28 @@ defmodule ElixrTest do
     assert [[1, [1, 2, 3]]] == result.rows
   end
 
-  # test "should be able to insert a date and read it back", state do
-  #   pid = state[:xt]
-  #   Postgrex.query!(pid, "INSERT INTO foo7 (_id, dt) VALUES (1, '2020-01-01'::date)", [])
-  #   [[id, dat]] = Postgrex.query!(pid, "SELECT * FROM foo7 where _id = 1", []).rows
-  #   assert 1 == id
-  #   assert ~D[2020-01-01] == JSON.LD.expand(dat)
-  # end
+  test "should be able to insert and read back a UUID", state do
+    pid = state[:xt]
+    uuid = UUID.uuid4()
+    Postgrex.query!(pid, "INSERT INTO foo7 (_id, u) VALUES (1, '#{uuid}')", [])
+    [[id, u]] = Postgrex.query!(pid, "SELECT * FROM foo7 where _id = 1", []).rows
+    assert 1 == id
+    assert uuid == u
+  end
+
+  test "should be able to insert a date and read it back", state do
+    pid = state[:xt]
+    Postgrex.query!(pid, "INSERT INTO foo8 (_id, dt) VALUES (1, DATE '2020-01-01')", [])
+    [[id, dat]] = Postgrex.query!(pid, "SELECT * FROM foo8 where _id = 1", []).rows
+    assert 1 == id
+    assert ~D[2020-01-01] == dat
+  end
 
   # test "should be able to insert a JSON field and read it back", state do
   #   pid = state[:xt]
   #   json_field = %{"foo" => "bar"}
-  #   Postgrex.query!(pid, "INSERT INTO foo8 (_id, json) VALUES (1, '{\"foo\": \"bar\"}'::JSON)", [])
-  #   result = Postgrex.query!(pid, "SELECT * FROM foo8", [])
+  #   Postgrex.query!(pid, "INSERT INTO foo9 (_id, json) VALUES (1, '{\"foo\": \"bar\"}'::JSON)", [])
+  #   result = Postgrex.query!(pid, "SELECT * FROM foo9", [])
   #   assert [[1, %{"foo" => "bar"}]] == result.rows
   # end
 
