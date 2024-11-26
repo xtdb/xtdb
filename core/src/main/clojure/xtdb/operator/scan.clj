@@ -345,11 +345,12 @@
 (defrecord ArrowMergePlanPage [data-file-path ^IntPredicate page-idx-pred ^long page-idx ^ITableMetadata table-metadata]
   MergePlanPage
   (load-page [_mpg buffer-pool vsr-cache]
-    (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
-      (let [vsr (cache-vsr vsr-cache data-file-path)
-            loader (VectorLoader. vsr)]
-        (.load loader rb)
-        (vr/<-root vsr))))
+    (let [^IBufferPool bp buffer-pool]
+      (util/with-open [rb (.getRecordBatch bp data-file-path page-idx)]
+        (let [vsr (cache-vsr vsr-cache data-file-path)
+              loader (VectorLoader. vsr)]
+          (.load loader rb)
+          (vr/<-root vsr)))))
 
   (test-metadata [_mpg]
     (.test page-idx-pred page-idx))

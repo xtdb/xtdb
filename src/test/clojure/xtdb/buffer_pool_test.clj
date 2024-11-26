@@ -196,9 +196,10 @@
 
         (t/is @multipart-branch-taken true)
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (util/with-open [buf (.getBuffer bp (util/->path "aw"))]
-          (let [{:keys [root]} (util/read-arrow-buf buf)]
-            (util/close root)))))))
+        (util/with-open [rb (.getRecordBatch bp path 0)]
+          (let [footer (.getFooter bp path)
+                rel (Relation/fromRecordBatch tu/*allocator* (.getSchema footer) rb)]
+            (util/close rel)))))))
 
 (defn file-info [^Path dir]
   (let [files (filter #(.isFile ^File %) (file-seq (.toFile dir)))]
