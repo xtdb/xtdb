@@ -6,6 +6,7 @@ plugins {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 dependencies {
+    api(project(":"))
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 

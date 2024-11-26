@@ -14,7 +14,8 @@
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.query-ra :as ra]
+            [xtdb.query :as q]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -36,15 +37,17 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
-           (org.apache.arrow.vector.types.pojo Schema)
+           (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
            xtdb.indexer.live_index.ILiveTable
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader)))
+           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
+           (xtdb.vector IVectorReader RelationReader)
+           (xtdb.watermark IWatermarkSource Watermark)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -269,7 +272,35 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query opts] (ra/query-ra query (assoc opts :allocator *allocator*))))
+  ([query {:keys [allocator node params preserve-blocks? with-col-types? key-fn] :as query-opts
+           :or {key-fn (serde/read-key-fn :kebab-case-keyword)
+                allocator *allocator*}}]
+   (let [indexer (util/component node :xtdb/indexer)
+         query-opts (-> query-opts
+                        (assoc :allocator allocator)
+                        (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
+                                         (doto (-> :after-tx-id (idx/await-tx node))))))]
+
+     (with-open [^RelationReader
+                 params-rel (if params
+                              (vw/open-params allocator params)
+                              vw/empty-params)]
+       (let [^PreparedQuery pq (if node
+                                 (let [^IQuerySource q-src (util/component node ::q/query-source)]
+                                   (.prepareRaQuery q-src query indexer query-opts))
+                                 (q/prepare-ra query {:ref-ctr (RefCounter.)
+                                                      :wm-src (reify IWatermarkSource
+                                                                (openWatermark [_]
+                                                                  (Watermark. nil nil {})))}))
+             bq (.bind pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
+                              (assoc :params params-rel)))]
+         (util/with-open [res (.openCursor bq)]
+           (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
+                          (cond->> (not preserve-blocks?) (into [] cat)))]
+             (if with-col-types?
+               {:res rows, :col-types (->> (.columnFields bq)
+                                           (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))}
+               rows))))))))
 
 (t/deftest round-trip-cursor
   (with-allocator

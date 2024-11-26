@@ -134,9 +134,9 @@
                                      (= model "focus"))}]]]]]]])
 
 (comment
-  (require 'dev '[xtdb.query-ra :as ra])
+  (require 'dev '[xtdb.test-util :as tu])
 
   (submit-ts-devices dev/node :small)
 
   (time
-   (ra/query-ra query-recent-battery-temperatures {:node dev/node})))
+   (tu/query-ra query-recent-battery-temperatures {:node dev/node})))

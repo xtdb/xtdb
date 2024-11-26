@@ -10,7 +10,7 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
-            [xtdb.query-ra :as ra]
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.io File)
            (java.nio.file Path)
@@ -128,9 +128,9 @@
   (def open-ids (->> (xt/q node '(from :item [{:xt/id i :i_status :open}]))
                      (map :i)))
 
-  (def q  (fn [open-id]
-            (ra/query-ra ra-query {:node node
-                                   :params {'?i_id open-id}})))
+  (defn q [open-id]
+    (tu/query-ra ra-query {:node node
+                           :params {'?i_id open-id}}))
   ;; ra query
   (time
    #(doseq [id (take 1000 (shuffle open-ids))]

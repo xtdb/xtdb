@@ -5,7 +5,6 @@
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
             [clojure.tools.logging :as log]
-            [xtdb.api :as xt]
             [xtdb.expression :as expr]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]

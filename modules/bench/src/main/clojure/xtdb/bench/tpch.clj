@@ -4,7 +4,7 @@
             [xtdb.bench.xtdb2 :as bxt]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
-            [xtdb.query-ra :as query-ra])
+            [xtdb.test-util :as tu])
   (:import (java.time Duration)
            (java.util AbstractMap)))
 
@@ -18,9 +18,9 @@
      :tasks [{:t :call
               :f (fn [{:keys [sut]}]
                    (try
-                     (count (query-ra/query-ra q {:node sut
-                                                  :params params
-                                                  :table-args table-args}))
+                     (count (tu/query-ra q {:node sut
+                                            :params params
+                                            :table-args table-args}))
                      (catch Exception e
                        (.printStackTrace e))))}]}))
 
