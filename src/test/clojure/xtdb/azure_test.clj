@@ -250,7 +250,6 @@
           prefix (:prefix os)
           multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-larger-multi-put"))
           part-size 500]
-submit-docs!
       (dotimes [_ 20]
         (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
           @(.uploadPart multipart-upload (.flip file-part))))
