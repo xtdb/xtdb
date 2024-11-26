@@ -120,6 +120,18 @@ object BooleanWithEnvVarSerde : KSerializer<Boolean> {
     }
 }
 
+object IntWithEnvVarSerde : KSerializer<Int> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("BooleanWithEnvVars", PrimitiveKind.BOOLEAN)
+
+    override fun serialize(encoder: Encoder, value: Int) {
+        throw UnsupportedOperationException("YAML serialization of config is not supported.")
+    }
+    override fun deserialize(decoder: Decoder): Int {
+        val yamlInput: YamlInput = decoder as YamlInput
+        return handleEnvTag(yamlInput).toInt()
+    }
+}
+
 /**
  * @suppress
  */

@@ -1,7 +1,11 @@
+@file:UseSerializers(IntWithEnvVarSerde::class)
+
 package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.api.IntWithEnvVarSerde
 import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
 

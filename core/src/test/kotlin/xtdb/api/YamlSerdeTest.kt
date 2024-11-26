@@ -295,6 +295,21 @@ class YamlSerdeTest {
     }
 
     @Test
+    fun testPortSetWithEnvVar() {
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("HEALTHZ_PORT") } returns "8081"
+
+        val input = """
+        healthz: 
+          port: !Env HEALTHZ_PORT
+        """.trimIndent()
+
+        assertEquals(8081, nodeConfig(input).healthz?.port)
+
+        unmockkObject(EnvironmentVariableProvider)
+    }
+
+    @Test
     fun testAuthnConfigDecoding() {
         val input = """
         authn: !UserTable
