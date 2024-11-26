@@ -319,7 +319,6 @@
 
 (defrecord TableMetadata [^HashTrie trie
                           ^Relation meta-rel
-                          ^ArrowBuf buf
                           ^IVectorReader metadata-leaf-rdr
                           col-names
                           ^Map page-idx-cache
@@ -350,19 +349,17 @@
   AutoCloseable
   (close [_]
     (when (zero? (.decrementAndGet ref-count))
-      (util/close meta-rel)
-      (util/close buf))))
+      (util/close meta-rel))))
 
 (def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
-  (util/with-close-on-catch [buf (.getBuffer buffer-pool file-path)]
-    (util/with-open [loader (Relation/loader buf)]
-      (util/with-close-on-catch [rel (Relation. (.getAllocator (.getReferenceManager buf))
-                                                (.getSchema loader))]
-        (let [nodes-vec (.get rel "nodes")]
-          (.loadBatch loader 0 rel)
-          (let [rdr (.getOldRelReader rel)
+  (let [footer (.getFooter buffer-pool file-path)]
+    (util/with-open [rb (.getRecordBatch buffer-pool file-path 0)]
+      (let [alloc (.getAllocator (.getReferenceManager ^ArrowBuf (first (.getBuffers rb))))]
+        (util/with-close-on-catch [rel (Relation/fromRecordBatch alloc (.getSchema footer) rb)]
+          (let [nodes-vec (.get rel "nodes")
+                rdr (.getOldRelReader rel)
                 ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
                                                    (.legReader "leaf"))
                 {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)
@@ -373,7 +370,7 @@
 
                 min-rdr (some-> temporal-col-types-rdr (.structKeyReader "min"))
                 max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
-            (->TableMetadata (ArrowHashTrie. nodes-vec) rel buf metadata-reader col-names page-idx-cache (AtomicInteger. 1)
+            (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache (AtomicInteger. 1)
                              min-rdr max-rdr)))))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool
@@ -411,17 +408,10 @@
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
           (.getValue)))
 
-(defn- get-bytes ^bytes [^IBufferPool buffer-pool, ^Path obj-key]
-  (util/with-open [buffer (.getBuffer buffer-pool obj-key)]
-    (let [bb (.nioBuffer buffer 0 (.capacity buffer))
-          ba (byte-array (.remaining bb))]
-      (.get bb ba)
-      ba)))
-
 (defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
-      (with-open [is (ByteArrayInputStream. (get-bytes buffer-pool cm-obj-key))]
+      (with-open [is (ByteArrayInputStream. (.array (.getByteBuffer buffer-pool cm-obj-key)))]
         (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
                                                              arrow-read-handlers)})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))

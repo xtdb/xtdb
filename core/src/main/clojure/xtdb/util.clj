@@ -455,7 +455,7 @@
      (.wrapForeignAllocation allocator
                              (proxy [ForeignAllocation] [(.remaining nio-buffer) (MemoryUtil/getByteBufferAddress nio-buffer)]
                                (release0 []
-                                (try-free-direct-buffer nio-buffer)
+                                 (try-free-direct-buffer nio-buffer)
                                  (when release-fn
                                    (release-fn))))))))
 

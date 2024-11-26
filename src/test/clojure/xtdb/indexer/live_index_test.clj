@@ -74,21 +74,21 @@
     (t/testing "finish chunk"
       (li/finish-chunk! live-index)
 
-      (util/with-open [trie-buf (.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
-                       leaf-buf (.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
-                       trie-loader (Relation/loader allocator (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))))
-                       trie-rel (Relation. allocator (.getSchema trie-loader))
-                       leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
-        (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "_iid")]
-          (.loadBatch trie-loader 0 trie-rel)
-          (t/is (= iid-bytes
-                   (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
-                        (mapcat (fn [^ArrowHashTrie$Leaf leaf]
-                                  ;; would be good if ArrowFileReader accepted a page-idx...
-                                  (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
+      (let [trie-buf (.getByteBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
+            leaf-buf (.getByteBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))]
+        (util/with-open [trie-loader (Relation/loader allocator (util/->seekable-byte-channel trie-buf))
+                         trie-rel (Relation. allocator (.getSchema trie-loader))
+                         leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
+          (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "_iid")]
+            (.loadBatch trie-loader 0 trie-rel)
+            (t/is (= iid-bytes
+                     (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
+                          (mapcat (fn [^ArrowHashTrie$Leaf leaf]
+                                    ;; would be good if ArrowFileReader accepted a page-idx...
+                                    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
 
-                                  (->> (range 0 (.getValueCount iid-vec))
-                                       (mapv #(vec (.getObject iid-vec %))))))))))))))
+                                    (->> (range 0 (.getValueCount iid-vec))
+                                         (mapv #(vec (.getObject iid-vec %)))))))))))))))
 
 (deftest test-bucket-for
   (let [uuid1 #uuid "ce33e4b8-ec2f-4b80-8e9c-a4314005adbf"]

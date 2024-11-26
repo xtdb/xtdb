@@ -202,7 +202,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     }
 
     companion object {
-        private fun readFooter(ch: SeekableReadChannel): ArrowFooter {
+        @JvmStatic
+        fun readFooter(ch: SeekableReadChannel): ArrowFooter {
             val buf = ByteBuffer.allocate(Int.SIZE_BYTES + MAGIC.size)
             val footerLengthOffset = ch.size() - buf.remaining()
             ch.setPosition(footerLengthOffset)
@@ -234,7 +235,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             return ChannelLoader(al, readCh, readFooter(readCh))
         }
 
-        private fun readFooter(buf: ArrowBuf): ArrowFooter {
+        @JvmStatic
+        fun readFooter(buf: ArrowBuf): ArrowFooter {
             val magicBytes = ByteArray(Int.SIZE_BYTES + MAGIC.size)
             val footerLengthOffset = buf.capacity() - magicBytes.size
             buf.getBytes(footerLengthOffset, magicBytes)
@@ -272,6 +274,14 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
         @JvmStatic
         fun fromRoot(vsr: VectorSchemaRoot) = Relation(vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
+
+        @JvmStatic
+        fun fromRecordBatch (allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch) : Relation {
+            val rel = Relation(allocator, schema)
+            // this load retains the buffers
+            rel.load(recordBatch)
+            return rel
+        }
     }
 
     /**

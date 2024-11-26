@@ -1,5 +1,6 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
@@ -531,3 +532,8 @@
    (->> (for [i (range (.valueCount rdr))]
           (.getObject rdr i key-fn))
         (into []))))
+
+(defn get-extension [^Path path]
+  (let [name (str (.getFileName path))]
+    (when-let [idx (str/last-index-of name ".")]
+      (subs name (inc idx)))))

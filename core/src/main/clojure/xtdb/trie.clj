@@ -343,7 +343,7 @@
   (getTrie [_] trie))
 
 (defprotocol MergePlanPage
-  (load-page [mpg buffer-pool vsr-cache])
+  (load-page [mpg ^IBufferPool buffer-pool vsr-cache])
   (test-metadata [msg])
   (temporal-bounds [msg]))
 
@@ -406,30 +406,30 @@
   (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
   (^xtdb.arrow.RelationReader loadPage [trie-leaf]))
 
-(deftype ArrowDataRel [^ArrowBuf buf
-                       ^Relation$Loader loader
+(deftype ArrowDataRel [^IBufferPool buffer-pool
+                       ^Path data-file
+                       ^Schema schema
                        ^List rels-to-close]
   IDataRel
-  (getSchema [_] (.getSchema loader))
+  (getSchema [_] schema)
 
   (loadPage [_ trie-leaf]
-    (let [rel (Relation. (.getAllocator (.getReferenceManager buf)) (.getSchema loader))]
-      (.add rels-to-close rel)
-      (.loadBatch loader (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf) rel)
-      rel))
+    (util/with-open [rb (.getRecordBatch buffer-pool data-file (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf))]
+      (let [alloc (.getAllocator (.getReferenceManager ^ArrowBuf (first (.getBuffers rb))))
+            rel (Relation/fromRecordBatch alloc schema rb)]
+        (.add rels-to-close rel)
+        rel)))
 
   AutoCloseable
   (close [_]
-    (util/close rels-to-close)
-    (util/close loader)
-    (util/close buf)))
+    (util/close rels-to-close)))
 
 (defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys]
   (util/with-close-on-catch [data-rels (ArrayList.)]
     (doseq [trie-key trie-keys]
-      (util/with-close-on-catch [data-buf (.getBuffer buffer-pool (->table-data-file-path table-path trie-key))]
-        (.add data-rels (ArrowDataRel. data-buf (Relation/loader data-buf) (ArrayList.)))))
-
+      (let [data-file (->table-data-file-path table-path trie-key)
+            footer (.getFooter buffer-pool data-file)]
+        (.add data-rels (ArrowDataRel. buffer-pool data-file (.getSchema footer) (ArrayList.)))))
     (vec data-rels)))
 
 (defn load-data-page [^MergePlanNode merge-plan-node]
