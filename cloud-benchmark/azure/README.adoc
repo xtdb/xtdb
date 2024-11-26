@@ -216,7 +216,7 @@ There is a helper script to do _all_ of the above, which can be run by:
 ./scripts/clear-azure-bench.sh
 ```
 
-== Monitoring
+== Monitoring With Azure Monitor
 
 === Setup
 
@@ -257,3 +257,39 @@ To setup the dashboard itself, there's a few steps we must take:
 ** We can upload this from a template - you can use the template found within the `cloud-benchmark/azure` directory, `application-insights/dashboard.json`. 
 
 We already have a shared dashboard setup, under "Monitoring Dashboard"
+
+== Monitoring with Grafana
+
+Within here are also some provided templates for setting up a Grafana-Otel deployment which shall scrape the pods from the XTDB benchmark Job.
+
+To deploy grafana, simply run:
+```
+kubectl apply -f kubernetes/grafana.yaml
+```
+
+To access the Grafana instance, you can use the external IP of the LoadBalancer service created for Grafana:
+```bash
+kubectl get svc grafana-service --namespace cloud-benchmark
+```
+
+The Grafana dashboard can be accessed via the external IP of the LoadBalancer service, on port `3001`. The default credentials are `admin`/`admin`.
+
+With this up and runing, you can then import the XTDB dashboards (the cluster monitoring dashboard and node debugging dashboard) from `monitoring/grafana/dashboards`, and use these to monitor the benchmark pods.
+
+== Trailing the Logs
+
+You can trail the logs of each node within the job by running:
+
+```
+kubectl logs job.batch/xtdb-multi-node-auctionmark --namespace cloud-benchmark -c <container-name> -f
+```
+
+For example, to see the logs from the load-phase, run:
+```
+kubectl logs job.batch/xtdb-multi-node-auctionmark --namespace cloud-benchmark -c load-phase -f
+```
+
+To see the logs of one of the nodes, run:
+```
+kubectl logs job.batch/xtdb-multi-node-auctionmark --namespace cloud-benchmark -c xtdb-bench-1 -f
+```
