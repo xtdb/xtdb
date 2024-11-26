@@ -157,9 +157,9 @@
 (t/deftest ^:google-cloud tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      ;; Submit tpch docs
-      (-> (tpch/submit-docs! node 0.05)
-          (tu/then-await-tx node (Duration/ofHours 1)))
+      ;; Submit tpch docs 
+      (tpch/submit-docs! node 0.05)
+      (tu/then-await-tx (:latest-submitted-tx-id (xt/status node)) node (Duration/ofHours 1))
 
       ;; Ensure finish-chunk! works
       (t/is (nil? (tu/finish-chunk! node)))
