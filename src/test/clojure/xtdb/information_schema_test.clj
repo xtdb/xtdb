@@ -440,7 +440,7 @@
 
   (t/is (= #{{:table-name "beanie", :table-schema "public"}}
            (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name ?tn)}]]
-                             {:node tu/*node* :params {'?tn "beanie"}})))
+                             {:node tu/*node*, :args {:tn "beanie"}})))
         "col-preds with params work")
 
 

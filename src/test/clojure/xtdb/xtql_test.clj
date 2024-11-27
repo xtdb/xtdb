@@ -548,13 +548,13 @@
            (xt/q tu/*node* '(from :docs [xt/id {:set #{1 2 3}}]))))
 
   (t/is (= [{:xt/id 1}]
-           (xt/q tu/*node* '(from :docs [xt/id {:map {:foo $param}}])
-                 {:args {:param 1}})))
+           (xt/q tu/*node* '(from :docs [xt/id {:map {:foo $arg}}])
+                 {:args {:arg 1}})))
 
   #_ ; TODO `=` on sets
   (t/is (= [{:xt/id 1}]
-           (xt/q tu/*node* '(from :docs [xt/id {:set $param}])
-                 {:args {:param #{1 2 3}}}))))
+           (xt/q tu/*node* '(from :docs [xt/id {:set $arg}])
+                 {:args {:arg #{1 2 3}}}))))
 
 (deftest test-query-args
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]

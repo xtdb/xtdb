@@ -52,8 +52,8 @@
   (close [_]
     (.close in-cursor)))
 
-(defn- read-param [^RelationReader params param]
-  (let [v (some-> params (.readerForName (str param)) (.getObject 0))]
+(defn- read-param [^RelationReader args param]
+  (let [v (some-> args (.readerForName (str param)) (.getObject 0))]
     (if (nat-int? v)
       v
       (throw (err/illegal-arg :xtdb/expected-number
@@ -64,14 +64,14 @@
   (lp/unary-expr (lp/emit-expr relation args)
     (fn [fields]
       {:fields fields
-       :->cursor (fn [{:keys [params]} in-cursor]
+       :->cursor (fn [{:keys [args]} in-cursor]
                    (TopCursor. in-cursor
                                (case skip-tag
                                  :literal skip-arg
-                                 :param (read-param params skip-arg)
+                                 :param (read-param args skip-arg)
                                  nil 0)
                                (case limit-tag
                                  :literal limit-arg
-                                 :param (read-param params limit-arg)
+                                 :param (read-param args limit-arg)
                                  nil Long/MAX_VALUE)
                                0))})))

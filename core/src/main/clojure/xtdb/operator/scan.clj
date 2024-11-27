@@ -68,12 +68,12 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- ->temporal-bounds [^RelationReader params, {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
+(defn- ->temporal-bounds [^RelationReader args, {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
   (letfn [(->time-μs [[tag arg]]
             (case tag
               :literal (-> arg
                            (time/sql-temporal->micros (.getZone expr/*clock*)))
-              :param (some-> (-> (.readerForName params (name arg))
+              :param (some-> (-> (.readerForName args (name arg))
                                  (.getObject 0))
                              (time/sql-temporal->micros (.getZone expr/*clock*)))
               :now (-> (.instant expr/*clock*)
@@ -174,7 +174,7 @@
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify SelectionSpec
-    (select [_ allocator rel-rdr _schema _params]
+    (select [_ allocator rel-rdr _schema _args]
       (with-open [arrow-buf (util/->arrow-buf-view allocator iid-bb)]
         (let [iid-ptr (ArrowBufPointer. arrow-buf 0 (.capacity iid-bb))
               ptr (ArrowBufPointer.)
@@ -231,7 +231,7 @@
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks, ^IRelationWriter out-rel
                      col-names, ^Map col-preds,
                      ^TemporalBounds temporal-bounds
-                     schema, params, vsr-cache, buffer-pool]
+                     schema, args, vsr-cache, buffer-pool]
   ICursor
   (tryAdvance [_ c]
     (let [!advanced? (boolean-array 1)]
@@ -248,7 +248,7 @@
                   leaf-rdrs (for [leaf leaves
                                   :let [^RelationReader data-rdr (trie/load-page leaf buffer-pool vsr-cache)]]
                               (cond-> data-rdr
-                                iid-pred (.select (.select iid-pred allocator data-rdr {} params))))
+                                iid-pred (.select (.select iid-pred allocator data-rdr {} args))))
                   [temporal-cols content-cols] ((juxt filter remove) temporal-column? col-names)
                   content-rel-factory (->content-rel-factory leaf-rdrs allocator content-cols)]
 
@@ -285,7 +285,7 @@
                                           (or (empty? (seq content-cols)) (seq temporal-cols))
                                           (vr/concat-rels (vw/rel-wtr->rdr out-rel)))
                     ^RelationReader rel (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                                  (.select rel (.select col-pred allocator rel schema params)))
+                                                  (.select rel (.select col-pred allocator rel schema args)))
                                                 rel
                                                 (vals (dissoc col-preds "_iid")))]
                 (when (pos? (.rowCount rel))
@@ -305,7 +305,7 @@
         (= '_id (nth eid-select 2))
         (second eid-select)))
 
-(defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
+(defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader args-rel]
   (when-let [eid-select (get selects "_id")]
     (when (= '= (first eid-select))
       (when-let [eid (eid-select->eid eid-select)]
@@ -314,7 +314,7 @@
           (trie/->iid eid)
 
           (s/valid? ::lp/param eid)
-          (let [eid-rdr (.readerForName params-rel (name eid))]
+          (let [eid-rdr (.readerForName args-rel (name eid))]
             (when (= 1 (.valueCount eid-rdr))
               (let [eid (.getObject eid-rdr 0)]
                 (when (trie/valid-iid? eid)
@@ -435,17 +435,17 @@
 
           {:fields fields
            :stats {:row-count row-count}
-           :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, params]}]
+           :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
 
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema params metadata-mgr watermark))
+                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args metadata-mgr watermark))
 
                          (let [template-table? (info-schema/template-tables table)
-                               iid-bb (selects->iid-byte-buffer selects params)
+                               iid-bb (selects->iid-byte-buffer selects args)
                                col-preds (cond-> col-preds
                                            iid-bb (assoc "_iid" (iid-selector iid-bb)))
-                               metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
+                               metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
                                scan-opts (-> scan-opts
                                              (update :for-valid-time
                                                      (fn [fvt]
@@ -454,7 +454,7 @@
                                table-path (util/table-name->table-path table-name)
                                current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                        (trie/current-trie-files))
-                               temporal-bounds (->temporal-bounds params scan-opts snapshot-time)]
+                               temporal-bounds (->temporal-bounds args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [meta-file-path]
@@ -500,7 +500,7 @@
                                                col-names col-preds
                                                temporal-bounds
                                                schema
-                                               params
+                                               args
                                                (->vsr-cache buffer-pool allocator)
                                                buffer-pool)))))))})))))
 

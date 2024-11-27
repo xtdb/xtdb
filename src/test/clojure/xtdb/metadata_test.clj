@@ -55,12 +55,12 @@
   (t/is (= [{:num 4}]
            (tu/query-ra '[:scan {:table public/xt_docs}
                           [{num (= num ?x)}]]
-                        {:node tu/*node*, :params {'?x (byte 4)}})))
+                        {:node tu/*node*, :args {:x (byte 4)}})))
 
   (t/is (= [{:num 3}]
            (tu/query-ra '[:scan {:table public/xt_docs}
                           [{num (= num ?x)}]]
-                        {:node tu/*node*, :params {'?x (float 3)}}))))
+                        {:node tu/*node*, :args {:x (float 3)}}))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
   (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
@@ -84,7 +84,7 @@
             {:timestamp #time/date-time "2010-01-01T00:00:00"}]
            (tu/query-ra '[:scan {:table public/xt_docs}
                           [{timestamp (= timestamp ?x)}]]
-                        {:node tu/*node*, :default-tz #time/zone "Z", :params {'?x #time/date "2010-01-01"}})))
+                        {:node tu/*node*, :default-tz #time/zone "Z", :args {:x #time/date "2010-01-01"}})))
 
   (t/is (= [{:timestamp #time/date "2010-01-01"}
             {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
@@ -132,7 +132,7 @@
                                 (map (comp bucket->page-idx first)))
 
             ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-            literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-params)]
+            literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
 
         (t/testing "L0"
           (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 21 20))]
@@ -175,7 +175,7 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-params)]
+        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
 
     (t/testing "L0"
       (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))]

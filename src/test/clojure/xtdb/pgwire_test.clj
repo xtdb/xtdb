@@ -60,14 +60,15 @@
               *port* (:port server)]
       (f))))
 
-(defn serve
-  ([] (serve {}))
-  ([opts] (pgwire/serve tu/*node* (merge {:num-threads 1
-                                          :authn authn/default-authn}
-                                         opts
-                                         {:port 0, :drain-wait 250}))))
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node with-server-and-port)
 
-(t/use-fixtures :each tu/with-mock-clock tu/with-node with-server-and-port)
+(defn serve
+  (^xtdb.pgwire.Server [] (serve {}))
+  (^xtdb.pgwire.Server [opts] (pgwire/serve tu/*node* (merge {:num-threads 1
+                                                              :authn authn/default-authn
+                                                              :allocator tu/*allocator*}
+                                                             opts
+                                                             {:port 0, :drain-wait 250}))))
 
 (defn- pg-config [params]
   (merge {:host "localhost"
@@ -80,10 +81,10 @@
 (defn- pg-conn ^org.pg.Connection [params]
   (pg/connect (pg-config params)))
 
-(defn- jdbc-url [& params]
-  (let [params (-> (into {} (partitionv 2 params))
-                   (update "user" (fnil identity "xtdb")))
-        param-str (when (seq params) (str "?" (str/join "&" (for [[k v] params] (str k "=" v)))))]
+(defn- jdbc-url [& opts]
+  (let [opts (-> (into {} (partitionv 2 opts))
+                 (update "user" (fnil identity "xtdb")))
+        param-str (when (seq opts) (str "?" (str/join "&" (for [[k v] opts] (str k "=" v)))))]
     (format "jdbc:xtdb://localhost:%s/xtdb%s" *port* (or param-str ""))))
 
 (defn- jdbc-conn ^Connection [& params]
@@ -1574,7 +1575,7 @@
 
       (t/is (thrown-with-msg?
              PGErrorResponse
-             #"Missing types for params - client must specify types for all params in DML statements"
+             #"Missing types for args - client must specify types for all params in DML statements"
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
                                                                         :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are

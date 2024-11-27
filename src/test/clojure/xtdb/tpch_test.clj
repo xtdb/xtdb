@@ -72,11 +72,10 @@
 (defn test-ra-query [n res]
   (when (contains? *qs* (inc n))
     (let [q @(nth tpch-ra/queries n)
-          {::tpch-ra/keys [params table-args]} (meta q)]
+          {::tpch-ra/keys [args]} (meta q)]
       (tu/with-allocator
         (fn []
-          (t/is (is-equal? res (tu/query-ra q {:node *node*, :params params, :table-args table-args
-                                               :key-fn :snake-case-keyword}))
+          (t/is (is-equal? res (tu/query-ra q {:node *node*, :args args, :key-fn :snake-case-keyword}))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra

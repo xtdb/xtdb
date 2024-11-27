@@ -15,7 +15,8 @@
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang AutoCloseable Thread$State]
@@ -28,6 +29,7 @@
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
+           (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector PeriodDuration]
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
@@ -40,7 +42,8 @@
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
-(defrecord Server [port
+(defrecord Server [^BufferAllocator allocator
+                   port
 
                    ^ServerSocket accept-socket
                    ^Thread accept-thread
@@ -90,6 +93,8 @@
         (when !tmp-nodes
           (log/debug "closing tmp nodes")
           (util/close !tmp-nodes))
+
+        (util/close allocator)
 
         (log/info "Server stopped.")))))
 
@@ -219,7 +224,8 @@
                     (DataInputStream. (.getInputStream socket))
                     (DataOutputStream. (.getOutputStream socket))))
 
-(defrecord Connection [^Server server, frontend, node
+(defrecord Connection [^BufferAllocator allocator
+                       ^Server server, frontend, node
 
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
@@ -233,6 +239,8 @@
 
     (let [{:keys [server-state]} server]
       (swap! server-state update :connections dissoc cid))
+
+    (util/close allocator)
 
     (log/debug "Connection ended" {:cid cid})))
 
@@ -826,8 +834,8 @@
 (def-msg msg-bind :client \B
   :portal-name io-string
   :stmt-name io-string
-  :param-format io-format-codes
-  :params (io-list io-uint16 (io-bytes-or-null io-uint32))
+  :arg-format io-format-codes
+  :args (io-list io-uint16 (io-bytes-or-null io-uint32))
   :result-format io-format-codes)
 
 (def-msg msg-close :client \C
@@ -1037,15 +1045,15 @@
                                                   (.withZone clock (ZoneId/of tz))))
   (set-session-parameter conn time-zone-nf-param-name tz))
 
-(defn startup-ok [{:keys [server] :as conn} startup-params]
+(defn startup-ok [{:keys [server] :as conn} startup-opts]
   (let [{:keys [server-state]} server]
 
     (let [default-server-params (-> (:parameters @server-state)
                                     (update-keys str/lower-case))
-          startup-parameters-from-client (-> startup-params
+          startup-opts-from-client (-> startup-opts
                                              (update-keys str/lower-case))]
 
-      (doseq [[k v] (merge default-server-params startup-parameters-from-client)]
+      (doseq [[k v] (merge default-server-params startup-opts-from-client)]
         (if (= time-zone-nf-param-name k)
           (set-time-zone conn v)
           (set-session-parameter conn k v))))
@@ -1055,10 +1063,10 @@
         (doto (cmd-write-msg msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
         (doto (cmd-send-ready)))))
 
-(defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-params]
+(defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
   (let [{:keys [->node, ^Authenticator authn]} server
-        user (get startup-params "user")
-        db-name (get startup-params "database")
+        user (get startup-opts "user")
+        db-name (get startup-opts "database")
         {:keys [node] :as conn} (assoc conn :node (->node db-name))]
     (letfn [(killed-conn [err]
               (doto conn
@@ -1070,7 +1078,7 @@
           #xt.authn/method :trust
           (do
             (cmd-write-msg conn msg-auth {:result 0})
-            (startup-ok conn startup-params))
+            (startup-ok conn startup-opts))
 
           #xt.authn/method :password
           (do
@@ -1085,7 +1093,7 @@
                 (if (.verifyPassword authn node user (:password msg))
                   (do
                     (cmd-write-msg conn msg-auth {:result 0})
-                    (startup-ok conn startup-params))
+                    (startup-ok conn startup-opts))
 
                   (killed-conn (err-invalid-passwd (str "password authentication failed for user: " user)))))))
 
@@ -1118,12 +1126,12 @@
   (cmd-send-error conn err)
   (handle-msg* conn {:msg-name :msg-terminate}))
 
-(defn- read-startup-parameters [^DataInputStream in]
+(defn- read-startup-opts [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
          acc {}]
     (let [x (.read in)]
       (cond
-        (neg? x) (throw (EOFException. "EOF in read-startup-parameters"))
+        (neg? x) (throw (EOFException. "EOF in read-startup-opts"))
         (zero? x) acc
         :else (do (.unread in (byte x))
                   (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
@@ -1142,7 +1150,7 @@
                   (cmd-startup-cancel msg-in))
 
         :30 (-> conn
-                (cmd-startup-pg30 (read-startup-parameters msg-in)))
+                (cmd-startup-pg30 (read-startup-opts msg-in)))
 
         (doto conn
           (cmd-startup-err (err-protocol-violation "Unknown protocol version")))))))
@@ -1152,12 +1160,12 @@
 (defn write-json [_env ^IVectorReader rdr idx]
   (json-bytes (.getObject rdr idx)))
 
-(def supported-param-oids
+(def supported-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node] :as conn} dml-buf tx-opts]
-  (let [tx-ops (mapv (fn [{:keys [query params]}]
-                       [:sql query params])
+(defn- execute-tx [{:keys [node]} dml-buf tx-opts]
+  (let [tx-ops (mapv (fn [{:keys [query args]}]
+                       [:sql query args])
                      dml-buf)]
     (try
       (xt/execute-tx node tx-ops tx-opts)
@@ -1168,24 +1176,24 @@
         (let [msg "unexpected error on tx submit (report as a bug)"]
           (throw (ex-info msg {::client-error (err-pg-exception e msg)} e)))))))
 
-(defn- ->xtify-param [session {:keys [param-format param-fields]}]
-  (fn xtify-param [param-idx param]
-    (when (some? param)
-      (let [param-oid (:oid (nth param-fields param-idx))
-            param-format (or (nth param-format param-idx nil)
-                             (nth param-format param-idx :text))
+(defn- ->xtify-arg [session {:keys [arg-format param-fields]}]
+  (fn xtify-arg [arg-idx arg]
+    (when (some? arg)
+      (let [param-oid (:oid (nth param-fields arg-idx))
+            arg-format (or (nth arg-format arg-idx nil)
+                             (nth arg-format arg-idx :text))
             {:keys [read-binary, read-text]} (or (get types/pg-types-by-oid param-oid)
                                                  (throw (Exception. "Unsupported param type provided for read")))]
-        (if (= :binary param-format)
-          (read-binary session param)
-          (read-text session param))))))
+        (if (= :binary arg-format)
+          (read-binary session arg)
+          (read-text session arg))))))
 
-(defn- xtify-params [{:keys [conn-state] :as _conn} params {:keys [param-format] :as stmt}]
+(defn- xtify-args [{:keys [conn-state] :as _conn} args {:keys [arg-format] :as stmt}]
   (try
-    (vec (map-indexed (->xtify-param (:session @conn-state) stmt) params))
+    (vec (map-indexed (->xtify-arg (:session @conn-state) stmt) args))
     (catch Exception e
-      (throw (ex-info "invalid param representation"
-                      {::client-error (if (= param-format :binary)
+      (throw (ex-info "invalid arg representation"
+                      {::client-error (if (= arg-format :binary)
                                         (invalid-binary-representation (ex-message e))
                                         (invalid-text-representation (ex-message e)))}
                       e)))))
@@ -1193,19 +1201,18 @@
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
 
-(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query params param-fields] :as stmt}]
-  (if (or (not= (count param-fields) (count params))
+(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query args param-fields] :as stmt}]
+  (if (or (not= (count param-fields) (count args))
           (some #(= 0 (:oid %)) param-fields))
     (do (log/error "Missing types for params in DML statement")
         (cmd-send-error
          conn
-         (err-protocol-violation "Missing types for params - client must specify types for all params in DML statements")))
+         (err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")))
 
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
-          xt-params (xtify-params conn params stmt)
-          stmt {:query query,
-                :params xt-params}
+          xt-args (xtify-args conn args stmt)
+          stmt {:query query, :args xt-args}
           cmd-complete-msg {:command (case dml-type
                                        ;; insert <oid> <rows>
                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
@@ -1460,9 +1467,9 @@
                                     (map #(set/rename-keys % {:column-oid :oid}))
                                     (resolve-defaulted-params param-types)))))
 
-      ;; NOTE this means that for DML statments we assume the number and type of params is exactly
-      ;; those specified by the client in arg-types, irrelevant of the number featured in the query string.
-      ;; If a client subsequently binds a different number of params we will send an error msg
+      ;; NOTE this means that for DML statments we assume the number and type of args is exactly
+      ;; those specified by the client in param-types, irrelevant of the number featured in the query string.
+      ;; If a client subsequently binds a different number of args we will send an error msg
       (assoc stmt :param-fields param-types))))
 
 (defn parse
@@ -1479,7 +1486,7 @@
 (defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [param-oids stmt-name] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
 
-  (when-let [unsupported-param-oids (not-empty (into #{} (remove supported-param-oids) param-oids))]
+  (when-let [unsupported-param-oids (not-empty (into #{} (remove supported-oids) param-oids))]
     (throw (client-err (format "parameter type oids (%s) currently unsupported by xt" unsupported-param-oids))))
 
   (let [[stmt & more-stmts] (parse conn msg-data)]
@@ -1503,8 +1510,8 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [conn-state] :as conn} {:keys [params result-format] :as bind-msg} {:keys [statement-type] :as stmt}]
-  (let [;; add data from bind-msg to stmt, for queries params are bound now, for dml this happens later during execute-tx.
+(defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [args result-format] :as bind-msg} {:keys [statement-type] :as stmt}]
+  (let [;; add data from bind-msg to stmt, for queries args are bound now, for dml this happens later during execute-tx.
         {:keys [prepared-query] :as stmt-with-bind-msg} (merge stmt bind-msg)]
 
     ;;if statement is a query, bind it, else use the statement as a portal
@@ -1512,15 +1519,18 @@
       (let [{:keys [session transaction]} @conn-state
             {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
-            xt-params (xtify-params conn params stmt-with-bind-msg)
+            xt-args (xtify-args conn args stmt-with-bind-msg)
 
             query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
                         :current-time (or (:current-time stmt)
                                           (:current-time transaction)
                                           (.instant clock))
-                        :default-tz (.getZone clock)
-                        :args xt-params}
-            ^BoundQuery bound-query (.bind ^PreparedQuery prepared-query query-opts)
+                        :default-tz (.getZone clock)}
+
+            ^BoundQuery
+            bound-query (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
+                          (.bind ^PreparedQuery prepared-query (assoc query-opts :args args-rel)))
+
             fields (or (-> (map (partial types/field->pg-type fallback_output_format) (.columnFields bound-query))
                            (with-result-formats result-format))
                        (throw (client-err "invalid result format")))]
@@ -1699,7 +1709,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [server-state, port] :as server} ^Socket conn-socket]
+  [{:keys [server-state, port, allocator] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1711,6 +1721,7 @@
                                                                      :server server,
                                                                      :frontend (->socket-frontend conn-socket),
                                                                      :!closing? (atom false)
+                                                                     :allocator (util/->child-allocator allocator (str "pg-conn-" cid))
                                                                      :conn-state !conn-state})
                                                    (cmd-startup))
                                                (catch Throwable t
@@ -1794,7 +1805,7 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [port num-threads drain-wait ssl-ctx authn]
+  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn]
                   :or {port 5432
                        num-threads 42
                        drain-wait 5000}}]
@@ -1802,7 +1813,8 @@
      (let [port (.getLocalPort accept-socket)
            !tmp-nodes (when-not node
                         (ConcurrentHashMap.))
-           server (map->Server {:port port
+           server (map->Server {:allocator allocator
+                                :port port
                                 :accept-socket accept-socket
                                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                                 :!closing? (atom false)
@@ -1866,12 +1878,15 @@
 
 (defmethod ig/prep-key ::server [_ config]
   (into {:node (ig/ref :xtdb/node)
-         :authn (ig/ref :xtdb/authn)}
+         :authn (ig/ref :xtdb/authn)
+         :allocator (ig/ref :xtdb/allocator)}
         (<-config config)))
 
-(defmethod ig/init-key ::server [_ {:keys [node authn] :as opts}]
-  (let [{:keys [port] :as srv} (serve node (assoc opts :authn authn))]
-    (log/info (if node "Server" "Playground") "started on port:" port)
+(defmethod ig/init-key ::server [_ {:keys [node allocator authn] :as opts}]
+  (let [{:keys [port] :as srv} (serve node (assoc opts
+                                                  :authn authn
+                                                  :allocator (util/->child-allocator allocator "pgwire")))]
+    (log/info "Server started on port:" port)
     srv))
 
 (defmethod ig/halt-key! ::server [_ srv]
@@ -1880,7 +1895,9 @@
 (defn open-playground
   (^xtdb.pgwire.Server [] (open-playground nil))
 
-  (^xtdb.pgwire.Server [{:keys [port], :or {port 0}}]
-   (ig/init-key ::server (-> (<-config (doto (ServerConfig.)
-                                         (.port port)))
-                             (assoc :authn authn/default-authn)))))
+  (^xtdb.pgwire.Server [opts]
+   (let [{:keys [port] :as srv} (serve nil (merge {:port 0, :authn authn/default-authn}
+                                                  opts
+                                                  {:allocator (RootAllocator.)}))]
+     (log/info "Playground started on port:" port)
+     srv)))

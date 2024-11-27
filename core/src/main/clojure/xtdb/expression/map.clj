@@ -92,7 +92,7 @@
           (-> `(fn [~(expr/with-tag left-rel RelationReader)
                     ~(expr/with-tag right-rel RelationReader)
                     ~(-> expr/schema-sym (expr/with-tag Map))
-                    ~(-> expr/params-sym (expr/with-tag RelationReader))]
+                    ~(-> expr/args-sym (expr/with-tag RelationReader))]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx ~right-idx]
@@ -174,7 +174,7 @@
    {:keys [key-col-names store-full-build-rel?
            build-fields probe-fields
            with-nil-row? nil-keys-equal?
-           theta-expr param-fields params]
+           theta-expr param-fields args]
     :as opts}]
   (let [param-types (update-vals param-fields types/field->col-type)
         build-key-col-names (get opts :build-key-col-names key-col-names)
@@ -219,7 +219,7 @@
                       ;; NOTE: we might not need to compute `comparator` if the caller never requires `addIfNotPresent` (e.g. joins)
                       !comparator (delay
                                     (->> (map (fn [build-col in-col]
-                                                (->equi-comparator in-col build-col params
+                                                (->equi-comparator in-col build-col args
                                                                    {:nil-keys-equal? nil-keys-equal?,
                                                                     :param-types param-types}))
                                               build-key-cols
@@ -253,14 +253,14 @@
 
                       ^IntBinaryOperator
                       comparator (->> (cond-> (map (fn [build-col probe-col]
-                                                     (->equi-comparator probe-col build-col params
+                                                     (->equi-comparator probe-col build-col args
                                                                         {:nil-keys-equal? nil-keys-equal?
                                                                          :param-types param-types}))
                                                    build-key-cols
                                                    probe-key-cols)
 
                                         (some? theta-expr)
-                                        (conj (->theta-comparator probe-rel build-rel theta-expr params
+                                        (conj (->theta-comparator probe-rel build-rel theta-expr args
                                                                   {:build-fields build-fields
                                                                    :probe-fields probe-fields
                                                                    :param-types param-types})))

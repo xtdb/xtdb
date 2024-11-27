@@ -46,27 +46,27 @@
             {:a 2, :b [3 4 5], :b* 5}]
            (tu/query-ra '[:unnest {b* b}
                           [:table ?x]]
-                        {:params '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
+                        {:args {:x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unnest {b* b}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
+                        {:args {:x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unnest {b* b}
                            [:table ?x]]]
-                        {:params '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
+                        {:args {:x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
         "skips rows with non-list unnest column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
            (tu/query-ra '[:project [a b*]
                           [:unnest {b* b}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1, :b [1 "foo"]}]}}))
+                        {:args {:x [{:a 1, :b [1 "foo"]}]}}))
         "handles multiple types")
 
   (t/is (= {{:a 1, :b* 1} 1, {:a 1, :b* "foo"} 1}
@@ -74,7 +74,7 @@
             (tu/query-ra '[:project [a b*]
                            [:unnest {b* b}
                             [:table ?x]]]
-                         {:params '{?x [{:a 1, :b #{1 "foo"}}]}})))
+                         {:args {:x [{:a 1, :b #{1 "foo"}}]}})))
         "handles sets")
 
   (t/is (= {{:a 1, :b* 1} 1, {:a 1, :b* "foo"} 1, {:a 3, :b* 2} 1, {:a 3, :b* "bar"} 1}
@@ -82,9 +82,9 @@
             (tu/query-ra '[:project [a b*]
                            [:unnest {b* b}
                             [:table ?x]]]
-                         {:params '{?x [{:a 1, :b #{1 "foo"}}
-                                        {:a 2, :b "not-a-set"}
-                                        {:a 3, :b #{2 "bar"}}]}})))
+                         {:args {:x [{:a 1, :b #{1 "foo"}}
+                                     {:a 2, :b "not-a-set"}
+                                     {:a 3, :b #{2 "bar"}}]}})))
         "handles mixed lists + sets + other things")
 
   (t/is (= [{:a 1, :b* 1, :ordinal 1}
@@ -95,6 +95,6 @@
            (tu/query-ra '[:project [a b* ordinal]
                           [:unnest {b* b} {:ordinality-column ordinal}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
+                        {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
                          :key-fn :snake-case-keyword}))
         "with ordinality"))

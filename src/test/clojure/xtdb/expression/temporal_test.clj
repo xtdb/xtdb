@@ -4,7 +4,6 @@
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
-            [xtdb.api :as xt]
             [xtdb.expression-test :as et]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
@@ -21,7 +20,7 @@
   (t/are [expected a b zone-id]
       (= expected (-> (tu/query-ra [:project [{'res '(= ?a ?b)}]
                                     [:table [{}]]]
-                                   {:params {'?a a, '?b b}
+                                   {:args {:a a, :b b}
                                     :current-time Instant/EPOCH
                                     :default-tz (ZoneOffset/of zone-id)})
                       first :res))
@@ -51,11 +50,11 @@
     (letfn [(test-cast
               ([src-value tgt-type] (test-cast src-value tgt-type {}))
               ([src-value tgt-type {:keys [default-tz], :or {default-tz ZoneOffset/UTC}}]
-               (-> (tu/query-ra [:project [{'res `(~'cast ~'arg ~tgt-type)}]
+               (-> (tu/query-ra [:project [{'res (list 'cast '?arg tgt-type)}]
                                  [:table [{}]]]
                                 {:current-time current-time
                                  :default-tz default-tz
-                                 :params {'arg src-value}})
+                                 :args {:arg src-value}})
                    first :res)))]
 
       (t/testing "date ->"
@@ -676,7 +675,7 @@
     (= (LocalDate/ofInstant (->inst t1 now default-tz) default-tz)
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:date :day])}]
                           [:table [{}]]]
-                         {:params {'?t1 t1}
+                         {:args {:t1 t1}
                           :default-tz default-tz})
             first :res))))
 
@@ -689,7 +688,7 @@
          (LocalTime/ofInstant (->inst t1 now default-tz) default-tz))
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:time-local :micro])}]
                           [:table [{}]]]
-                         {:params {'?t1 t1}
+                         {:args {:t1 t1}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -703,7 +702,7 @@
          (LocalDateTime/ofInstant (->inst t1 now default-tz) default-tz))
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-local :micro])}]
                           [:table [{}]]]
-                         {:params {'?t1 t1}
+                         {:args {:t1 t1}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -716,7 +715,7 @@
     (= (ZonedDateTime/ofInstant (->inst t1 now default-tz) zdt-tz)
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-tz :micro (str zdt-tz)])}]
                           [:table [{}]]]
-                         {:params {'?t1 t1}
+                         {:args {:t1 t1}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -725,10 +724,10 @@
   (letfn [(test-arithmetic
             ([f x y] (test-arithmetic f x y {}))
             ([f x y {:keys [default-tz], :or {default-tz #time/zone "America/Los_Angeles"}}]
-             (-> (tu/query-ra [:project [{'res `(~f ~'x ~'y)}]
+             (-> (tu/query-ra [:project [{'res (list f '?x '?y)}]
                                [:table [{}]]]
                               {:default-tz default-tz
-                               :params {'x x, 'y y}})
+                               :args {:x x, :y y}})
                  first :res)))]
 
     (t/testing "(+ datetime duration)"
@@ -838,7 +837,7 @@
                       (->inst t2 now default-tz)))
        (->> (tu/query-ra [:project [{'res '(< ?t1 ?t2)}]
                           [:table [{}]]]
-                         {:params {'?t1 t1, '?t2 t2}
+                         {:args {:t1 t1, :t2 t2}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -852,7 +851,7 @@
                            (->inst t2 now default-tz))))
        (->> (tu/query-ra [:project [{'res '(<= ?t1 ?t2)}]
                           [:table [{}]]]
-                         {:params {'?t1 t1, '?t2 t2}
+                         {:args {:t1 t1, :t2 t2}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -866,7 +865,7 @@
           (->inst t2 now default-tz))
        (->> (tu/query-ra [:project [{'res '(= ?t1 ?t2)}]
                           [:table [{}]]]
-                         {:params {'?t1 t1, '?t2 t2}
+                         {:args {:t1 t1, :t2 t2}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -880,7 +879,7 @@
              (->inst t2 now default-tz))
        (->> (tu/query-ra [:project [{'res '(<> ?t1 ?t2)}]
                           [:table [{}]]]
-                         {:params {'?t1 t1, '?t2 t2}
+                         {:args {:t1 t1, :t2 t2}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -894,7 +893,7 @@
                            (->inst t2 now default-tz))))
        (->> (tu/query-ra [:project [{'res '(>= ?t1 ?t2)}]
                           [:table [{}]]]
-                         {:params {'?t1 t1, '?t2 t2}
+                         {:args {:t1 t1, :t2 t2}
                           :current-time now
                           :default-tz default-tz})
             first :res))))
@@ -908,7 +907,7 @@
                       (->inst t2 now default-tz)))
        (->> (tu/query-ra [:project [{'res '(> ?t1 ?t2)}]
                           [:table [{}]]]
-                         {:params {'?t1 t1, '?t2 t2}
+                         {:args {:t1 t1, :t2 t2}
                           :current-time now
                           :default-tz default-tz})
             first :res))))

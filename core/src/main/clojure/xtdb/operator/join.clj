@@ -453,7 +453,7 @@
   (emit-join-expr join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
       {:fields (merge-with types/merge-fields left-fields right-fields)
-       :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
+       :->cursor (fn [{:keys [allocator args]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [left-cursor (->left-cursor)]
                      (JoinCursor. allocator left-cursor nil ->right-cursor
                                   (emap/->relation-map allocator {:build-fields left-fields
@@ -463,7 +463,7 @@
                                                                   :store-full-build-rel? true
                                                                   :theta-expr theta-expr
                                                                   :param-fields param-fields
-                                                                  :params params})
+                                                                  :args args})
                                   nil (->pushdown-blooms right-key-col-names) ::inner-join)))})))
 (defmethod lp/emit-expr :join [join-expr args]
   (emit-inner-join-expr (emit-join-children join-expr args) args))
@@ -472,7 +472,7 @@
   (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
       {:fields (merge-with types/merge-fields left-fields (-> right-fields types/with-nullable-fields))
-       :->cursor (fn [{:keys [allocator params]}, ->left-cursor ->right-cursor]
+       :->cursor (fn [{:keys [allocator args]}, ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
                      (JoinCursor. allocator right-cursor nil ->left-cursor
                                   (emap/->relation-map allocator {:build-fields right-fields
@@ -483,14 +483,14 @@
                                                                   :with-nil-row? true
                                                                   :theta-expr theta-expr
                                                                   :param-fields param-fields
-                                                                  :params params})
+                                                                  :args args})
                                     nil nil ::left-outer-join)))})))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-fields] :as args}]
   (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
       {:fields (merge-with types/merge-col-types (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields))
-       :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
+       :->cursor (fn [{:keys [allocator args]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [left-cursor (->left-cursor)]
                      (JoinCursor. allocator left-cursor nil ->right-cursor
                                   (emap/->relation-map allocator {:build-fields left-fields
@@ -501,14 +501,14 @@
                                                                   :with-nil-row? true
                                                                   :theta-expr theta-expr
                                                                   :param-fields param-fields
-                                                                  :params params})
+                                                                  :args args})
                                   (RoaringBitmap.) nil ::full-outer-join)))})))
 
 (defmethod lp/emit-expr :semi-join [join-expr {:keys [param-fields] :as args}]
   (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
       {:fields left-fields
-       :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
+       :->cursor (fn [{:keys [allocator args]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
                      (JoinCursor. allocator right-cursor nil ->left-cursor
                                   (emap/->relation-map allocator {:build-fields right-fields
@@ -518,14 +518,14 @@
                                                                   :store-full-build-rel? true
                                                                   :theta-expr theta-expr
                                                                   :param-fields param-fields
-                                                                  :params params})
+                                                                  :args args})
                                     nil (->pushdown-blooms right-key-col-names) ::semi-join)))})))
 
 (defmethod lp/emit-expr :anti-join [join-expr {:keys [param-fields] :as args}]
   (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
       {:fields left-fields
-       :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
+       :->cursor (fn [{:keys [allocator args]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
                      (JoinCursor. allocator right-cursor nil ->left-cursor
                                   (emap/->relation-map allocator {:build-fields right-fields
@@ -535,7 +535,7 @@
                                                                   :store-full-build-rel? true
                                                                   :theta-expr theta-expr
                                                                   :param-fields param-fields
-                                                                  :params params})
+                                                                  :args args})
                                     nil nil ::anti-semi-join)))})))
 
 (defn- mark-join-probe-phase [^IRelationMap rel-map, ^RelationReader probe-rel, ^BitVector mark-col]
@@ -553,7 +553,7 @@
         {:fields (assoc left-fields mark-col-name (types/->field-default-name #xt.arrow/type :bool true nil))
 
          :->cursor
-         (fn [{:keys [^BufferAllocator allocator params]} ->probe-cursor ->build-cursor]
+         (fn [{:keys [^BufferAllocator allocator args]} ->probe-cursor ->build-cursor]
            (util/with-close-on-catch [build-cursor (->build-cursor)]
              (let [!probe-cursor (volatile! nil)
                    rel-map (emap/->relation-map allocator {:build-fields right-fields
@@ -563,7 +563,7 @@
                                                            :store-full-build-rel? true
                                                            :theta-expr theta-expr
                                                            :param-fields param-fields
-                                                           :params params})
+                                                           :args args})
                    pushdown-blooms (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))]
 
                (reify ICursor
@@ -605,7 +605,7 @@
   (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
       {:fields (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields))
-       :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
+       :->cursor (fn [{:keys [allocator args]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
                      (JoinCursor. allocator right-cursor nil ->left-cursor
                                   (emap/->relation-map allocator {:build-fields right-fields
@@ -616,7 +616,7 @@
                                                                   :with-nil-row? true
                                                                   :theta-expr theta-expr
                                                                   :param-fields param-fields
-                                                                  :params params})
+                                                                  :args args})
                                   nil nil ::single-join)))})))
 
 (defn columns [relation]

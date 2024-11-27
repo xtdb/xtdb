@@ -78,14 +78,14 @@
                           [:table [{:y 0} {:y 1}]]
                           [:select (= ?y a)
                            [:table ?x]]]
-                        {:params '{?x [{:a 1, :b 2}]}})))
+                        {:args {:x [{:a 1, :b 2}]}})))
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
                           (tu/query-ra '[:apply :single-join {}
                                          [:table [{:y 0}]]
                                          [:table ?x]]
-                                       {:params '{?x [{:a 1, :b 2} {:a 3, :b 4}]}}))
+                                       {:args {:x [{:a 1, :b 2} {:a 3, :b 4}]}}))
         "throws on cardinality > 1")
 
   (t/testing "returns null on empty"
@@ -93,13 +93,13 @@
              (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table ?x]]
-                          {:params '{?x []}})))
+                          {:args {:x []}})))
 
     (t/is (= [{:y 0}]
              (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table [a b] ?x]]
-                          {:params '{?x []}})))))
+                          {:args {:x []}})))))
 
 (t/deftest test-apply-empty-rel-bug-237
   (t/is (= {:res [{}], :col-types '{x3 [:union #{:null :i64}]}}

@@ -36,7 +36,7 @@
          (.accept c out-rel)
          true
          (finally
-           (when-not param? ; params get closed at toplevel
+           (when-not param? ; args get closed at toplevel
              (.close out-rel)))))))
 
   (close [_] (some-> out-rel .close)))
@@ -67,8 +67,8 @@
                                            (.add field-set struct-key))
 
                                          {:ks ks
-                                          :write-row! (fn write-param-row! [{:keys [^RelationReader params]}, ^IRelationWriter out-rel]
-                                                        (let [param-rdr (.readerForName params (str row-arg))]
+                                          :write-row! (fn write-param-row! [{:keys [^RelationReader args]}, ^IRelationWriter out-rel]
+                                                        (let [param-rdr (.readerForName args (str row-arg))]
                                                           (.startRow out-rel)
                                                           (doseq [k ks
                                                                   :let [k (str k)]]
@@ -91,9 +91,9 @@
 
                                                                          :param (let [{:keys [param]} expr]
                                                                                   (.add field-set (get param-fields param))
-                                                                                  (MapEntry/create k (fn write-param! [{:keys [^RelationReader params]} ^IVectorWriter out-col]
+                                                                                  (MapEntry/create k (fn write-param! [{:keys [^RelationReader args]} ^IVectorWriter out-col]
                                                                                                        (.writeValue out-col
-                                                                                                                    (-> (.readerForName params (str param))
+                                                                                                                    (-> (.readerForName args (str param))
                                                                                                                         (.valueReader (VectorPosition/build 0)))))))
 
                                                                          ;; HACK: this is quite heavyweight to calculate a single value -
@@ -102,8 +102,8 @@
                                                                                expr (expr/form->expr v input-types)
                                                                                projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                                                                            (.add field-set (types/col-type->field (.getColumnType projection-spec)))
-                                                                           (MapEntry/create k (fn write-expr! [{:keys [allocator params]} ^IVectorWriter out-col]
-                                                                                                (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema params)]
+                                                                           (MapEntry/create k (fn write-expr! [{:keys [allocator args]} ^IVectorWriter out-col]
+                                                                                                (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
                                                                                                   (.writeValue out-col (.valueReader out-vec (VectorPosition/build 0)))))))))))))]
 
                                        {:ks (set (keys out-row))
@@ -149,8 +149,8 @@
     {:fields (-> {(symbol (.getName field)) field}
                  (restrict-cols table-expr))
 
-     :->out-rel (fn [{:keys [allocator ^RelationReader params]}]
-                  (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) schema params)]
+     :->out-rel (fn [{:keys [allocator ^RelationReader args]}]
+                  (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
                     (let [list-rdr (cond-> list-rdr
                                      (instance? ArrowType$Union (.getType (.getField list-rdr))) (.legReader "list"))]
 
@@ -183,8 +183,8 @@
                    (restrict-cols table-expr))]
 
     {:fields fields
-     :->out-rel (fn [{:keys [^RelationReader params]}]
-                  (let [vec-rdr (.readerForName params (str (symbol param)))
+     :->out-rel (fn [{:keys [^RelationReader args]}]
+                  (let [vec-rdr (.readerForName args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
                                    (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader "list"))
                         el-rdr (some-> list-rdr .listElementReader)

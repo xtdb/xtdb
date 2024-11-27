@@ -182,7 +182,7 @@
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
            :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag ITableMetadata))
-                        ~(-> expr/params-sym (expr/with-tag RelationReader))
+                        ~(-> expr/args-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~metadata-rdr-sym (VectorReader/from (.metadataReader ~table-metadata-sym))
                            ~cols-rdr-sym (.keyReader ~metadata-rdr-sym "columns")

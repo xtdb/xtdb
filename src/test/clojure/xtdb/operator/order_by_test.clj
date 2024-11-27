@@ -42,19 +42,19 @@
     (t/is (= [{:b 15}, {:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}]
              (tu/query-ra '[:order-by [[a {:null-ordering :nulls-first}]]
                             [:table ?table]]
-                          {:params {'?table table-with-nil}}))
+                          {:args {:table table-with-nil}}))
           "nulls first")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
              (tu/query-ra '[:order-by [[a {:null-ordering :nulls-last}]]
                             [:table ?table]]
-                          {:params {'?table table-with-nil}}))
+                          {:args {:table table-with-nil}}))
           "nulls last")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
              (tu/query-ra '[:order-by [[a]]
                             [:table ?table]]
-                          {:params {'?table table-with-nil}}))
+                          {:args {:table table-with-nil}}))
           "default nulls last")))
 
 (t/deftest test-order-by-spill

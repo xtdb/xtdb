@@ -130,7 +130,7 @@
 
   (defn q [open-id]
     (tu/query-ra ra-query {:node node
-                           :params {'?i_id open-id}}))
+                           :args {:i-id open-id}}))
   ;; ra query
   (time
    #(doseq [id (take 1000 (shuffle open-ids))]

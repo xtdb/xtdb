@@ -42,7 +42,7 @@
            xtdb.arrow.RowCopier
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
-           (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.query BoundQuery IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            (xtdb.vector IVectorReader RelationReader)
            (xtdb.watermark IWatermarkSource Watermark)))
@@ -192,12 +192,16 @@
 
 (defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx tx-opts fn-iid]
   (let [lp '[:scan {:table xt/tx_fns} [{_iid (= _iid ?iid)} _id fn]]
-        ^xtdb.query.PreparedQuery pq (.prepareRaQuery q-src lp wm-src tx-opts)]
-    (with-open [bq (.bind pq
+        ^PreparedQuery pq (.prepareRaQuery q-src lp wm-src tx-opts)]
+    (with-open [^RelationReader
+                args (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
+                                         (vr/vec->reader))]
+                                    1)
+
+                bq (.bind pq
                           (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                              (assoc :params (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
-                                                                 (vr/vec->reader))]
-                                                              1))))
+                              (assoc :args args, :close-args? false)))
+
                 res (.openCursor bq)]
 
       (let [!fn-doc (object-array 1)]
@@ -222,17 +226,19 @@
               (catch Throwable t
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [^IQuerySource q-src wm-src tx-opts]
+(defn- tx-fn-q [allocator ^IQuerySource q-src wm-src tx-opts]
   (fn tx-fn-q*
     ([query] (tx-fn-q* query {}))
 
     ([query opts]
-     (let [query-opts (-> (reduce into [{:key-fn :kebab-case-keyword} tx-opts opts])
-                          (update :key-fn serde/read-key-fn))
+     (let [{:keys [args] :as query-opts} (-> (reduce into [{:key-fn :kebab-case-keyword} tx-opts opts])
+                                             (update :key-fn serde/read-key-fn))
            prepared-query (.prepareRaQuery q-src (.planQuery q-src query wm-src query-opts) wm-src query-opts)]
 
-       (with-open [res (-> (.bind prepared-query query-opts)
-                           (q/open-cursor-as-stream query-opts))]
+       (util/with-open [args (when args
+                               (vw/open-args allocator args))
+                        res (-> (.bind prepared-query (assoc query-opts :args args, :close-args? false))
+                                (q/open-cursor-as-stream query-opts))]
          (vec (.toList res)))))))
 
 (def ^:private !last-tx-fn-error (atom nil))
@@ -253,7 +259,7 @@
         args-rdr (.structKeyReader call-leg "args")
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (tx-fn-q q-src wm-src tx-opts)
+        sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator q-src wm-src tx-opts)
                                       'sleep (fn [^long n] (Thread/sleep n))
                                       '*current-tx* tx-key}
                            :namespaces {'xt xt-sci-ns}})]
@@ -392,7 +398,7 @@
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
       (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                        (assoc :params args)))
+                                        (assoc :args args, :close-args? false)))
                           (.openCursor))]
 
         (letfn [(throw-assert-failed []
@@ -414,7 +420,7 @@
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
       (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                        (assoc :params args)))
+                                        (assoc :args args, :close-args? false)))
                           (.openCursor))]
 
         (.forEachRemaining res

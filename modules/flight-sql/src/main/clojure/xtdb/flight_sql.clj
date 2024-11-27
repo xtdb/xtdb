@@ -118,14 +118,14 @@
                                    (reify BiFunction
                                      (apply [_ _ps-id {:keys [^PreparedQuery prepd-query] :as ^Map ps}]
                                        ;; TODO we likely needn't take these out and put them back.
-                                       (util/with-close-on-catch [new-params (-> (first (flight-stream->rows flight-stream))
-                                                                                 (->> (sequence (map-indexed (fn [idx v]
-                                                                                                               (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
-                                                                                                                   (vr/vec->reader))))))
-                                                                                 (vr/rel-reader 1))]
+                                       (util/with-close-on-catch [new-args (-> (first (flight-stream->rows flight-stream))
+                                                                               (->> (sequence (map-indexed (fn [idx v]
+                                                                                                             (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
+                                                                                                                 (vr/vec->reader))))))
+                                                                               (vr/rel-reader 1))]
                                          (doto ps
                                            (some-> (.put :bound-query
-                                                         (.bind prepd-query {:params new-params}))
+                                                         (.bind prepd-query {:args new-args}))
                                                    util/try-close))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 

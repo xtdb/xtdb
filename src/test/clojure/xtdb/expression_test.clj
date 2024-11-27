@@ -43,7 +43,7 @@
                 (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
                                                   tu/*allocator* in-rel
                                                   {}
-                                                  vw/empty-params)]
+                                                  vw/empty-args)]
                   (tu/<-reader project-col))))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
@@ -77,24 +77,24 @@
 
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (tu/open-rel (->data-vecs))]
-    (letfn [(select-relation [form col-types params-map]
-              (with-open [param-rel (tu/open-params params-map)]
-                (let [input-types {:col-types col-types, :param-types (expr/->param-types (RelationReader/from param-rel))}]
+    (letfn [(select-relation [form col-types args-map]
+              (with-open [arg-rel (tu/open-args args-map)]
+                (let [input-types {:col-types col-types, :param-types (expr/->param-types (RelationReader/from arg-rel))}]
                   (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
-                                    tu/*allocator* in-rel {} param-rel)))))]
+                                    tu/*allocator* in-rel {} arg-rel)))))]
 
       (t/testing "selector"
-        (t/is (= 500 (select-relation '(>= a 500) {'a :f64} {})))
-        (t/is (= 500 (select-relation '(>= e "0500") {'e :utf8} {}))))
+        (t/is (= 500 (select-relation '(>= a 500) '{a :f64} {})))
+        (t/is (= 500 (select-relation '(>= e "0500") '{e :utf8} {}))))
 
       (t/testing "parameter"
-        (t/is (= 500 (select-relation '(>= a ?a) {'a :f64} {'?a 500})))
-        (t/is (= 500 (select-relation '(>= e ?e) {'e :utf8} {'?e "0500"})))))))
+        (t/is (= 500 (select-relation '(>= a ?a) '{a :f64} {:a 500})))
+        (t/is (= 500 (select-relation '(>= e ?e) '{e :utf8} {:e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
            (-> (.select (expr/->expression-selection-spec (expr/form->expr '(and true nil) {}) {})
-                        tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-params)
+                        tu/*allocator* (vr/rel-reader [] 1) {} vw/empty-args)
                (alength)))))
 
 (defn project
@@ -331,7 +331,7 @@
         input-types {:col-types col-types, :param-types {}}
         expr (expr/form->expr form input-types)]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
-                                   tu/*allocator* rel {} vw/empty-params)]
+                                   tu/*allocator* rel {} vw/empty-args)]
       {:res (tu/<-reader out-ivec)
        :res-type (types/field->col-type (.getField out-ivec))})))
 
@@ -1952,7 +1952,7 @@
 (t/deftest test-cast-numerics
   (letfn [(test-cast
             ([src tgt-type] (test-cast src tgt-type {}))
-            ([src tgt-type params] (project1 (list 'cast src tgt-type) params)))]
+            ([src tgt-type opts] (project1 (list 'cast src tgt-type) opts)))]
     (t/is (= nil (test-cast nil :i32)))
 
     (t/is (= nil (test-cast nil :i64)))

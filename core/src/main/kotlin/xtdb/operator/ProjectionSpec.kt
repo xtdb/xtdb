@@ -10,7 +10,7 @@ interface ProjectionSpec {
     val columnType: Any
 
     /**
-     * @param params a single-row indirect relation containing the params for this invocation - maybe a view over a bigger param relation.
+     * @param args a single-row indirect relation containing the args for this invocation - maybe a view over a bigger arg relation.
      */
-    fun project(allocator: BufferAllocator, readRelation: RelationReader, schema: Map<String, Any>, params: RelationReader): IVectorReader
+    fun project(allocator: BufferAllocator, readRelation: RelationReader, schema: Map<String, Any>, args: RelationReader): IVectorReader
 }
