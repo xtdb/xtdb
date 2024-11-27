@@ -60,12 +60,6 @@
 
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
-  (getBuffer [_ k]
-    (when k
-      (or (locking memory-store
-            (some-> (.get memory-store k) retain))
-          (throw (os/obj-missing-exception k)))))
-
   (getByteArray [_ path]
     (let [^ArrowBuf arrow-buf (or (locking memory-store
                                     (some-> (.get memory-store path)))
@@ -165,17 +159,6 @@
 
 (defrecord LocalBufferPool [allocator, ^MemoryCache memory-cache, ^Path disk-store, ^Cache arrow-footer-cache]
   IBufferPool
-  (getBuffer [_ k]
-    (when k
-      (.get memory-cache (PathSlice. k)
-            (fn [^PathSlice path-slice]
-              (let [buffer-cache-path (.resolve disk-store (.getPath path-slice))]
-                (when-not (util/path-exists buffer-cache-path)
-                  (throw (os/obj-missing-exception k)))
-
-                (CompletableFuture/completedFuture
-                 (Pair. (->resolved-path-slice path-slice buffer-cache-path) nil)))))))
-
   (getByteArray [_ k]
     (when k
       (util/with-open [arrow-buf (.get memory-cache (PathSlice. k)
@@ -388,19 +371,6 @@
                              ^SortedMap !os-files
                              ^AutoCloseable !os-files-subscription]
   IBufferPool
-  (getBuffer [_ k]
-    (when k
-      (.get memory-cache (PathSlice. k)
-            (fn [^PathSlice path-slice]
-              (-> (.get disk-cache k
-                        (fn [^Path k, ^Path tmp-file]
-                          (.getObject object-store k tmp-file)))
-
-                  (.thenApply (fn [^DiskCache$Entry entry]
-                                ;; cleanup action - when the entry is evicted from the memory cache,
-                                ;; release one count on the disk-cache entry.
-                                (Pair. (->resolved-path-slice path-slice (.getPath entry)) entry))))))))
-
   (getByteArray [_ k]
     (when k
       (util/with-open [arrow-buf (.get memory-cache (PathSlice. k)

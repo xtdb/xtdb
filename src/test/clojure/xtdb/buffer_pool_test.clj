@@ -73,7 +73,7 @@
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
 (defn test-get-object [^IBufferPool bp, ^Path k, ^ByteBuffer expected]
-  (let [{:keys [^Path disk-store, object-store, ^DiskCache disk-cache]} bp
+  (let [{:keys [object-store, ^DiskCache disk-cache]} bp
         root-path (.getRootPath disk-cache)]
 
     (t/testing "immediate get from buffers map produces correct buffer"
@@ -162,11 +162,11 @@
         (t/is (= [:put] (get-remote-calls bp)))
         (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
 
-#_
 (t/deftest arrow-ipc-test
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "multipart, arrow ipc"
-      (let [schema (Schema. [(types/col-type->field "a" :i32)])
+      (let [path (util/->path "aw")
+            schema (Schema. [(types/col-type->field "a" :i32)])
             upload-multipart-buffers @#'bp/upload-multipart-buffers
             multipart-branch-taken (atom false)]
         (with-redefs [bp/min-multipart-part-size 320
@@ -175,7 +175,7 @@
                         (reset! multipart-branch-taken true)
                         (apply upload-multipart-buffers args))]
           (with-open [rel (Relation. tu/*allocator* schema)
-                      w (.openArrowWriter bp (util/->path "aw") rel)]
+                      w (.openArrowWriter bp path rel)]
             (let [v (.get rel "a")]
               (dotimes [x 10]
                 (.writeInt v x))
@@ -226,7 +226,9 @@
         (t/is (= 3 (:file-count (file-info local-disk-cache))))))))
 
 (t/deftest local-disk-cache-with-previous-values
-  (let [obj-store-factory (simulated-obj-store-factory)]
+  (let [obj-store-factory (simulated-obj-store-factory)
+        path-a (util/->path "a")
+        path-b (util/->path "b")]
     (util/with-tmp-dirs #{local-disk-cache}
       ;; Writing files to buffer pool & local-disk-cache
       (with-open [bp (bp/open-remote-storage
@@ -236,8 +238,8 @@
                           (.maxCacheBytes 12))
                       FileListCache/SOLO
                       (SimpleMeterRegistry.))]
-        (insert-utf8-to-local-cache bp (util/->path "a") 4)
-        (insert-utf8-to-local-cache bp (util/->path "b") 4)
+        (insert-utf8-to-local-cache bp path-a 4)
+        (insert-utf8-to-local-cache bp path-b 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
