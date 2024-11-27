@@ -3,7 +3,6 @@ package xtdb.cache
 import com.github.benmanes.caffeine.cache.AsyncCache
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.RemovalCause
-import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit.MILLISECONDS
@@ -12,7 +11,7 @@ import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class PinningCache<V : PinningCache.IEntry>(
+class PinningCache<K, V : PinningCache.IEntry<K>>(
     @Suppress("MemberVisibilityCanBePrivate")
     val maxSizeBytes: Long
 ) : AutoCloseable {
@@ -27,21 +26,21 @@ class PinningCache<V : PinningCache.IEntry>(
             return Stats(pinnedBytes, evictableBytes, maxSizeBytes - pinnedBytes - evictableBytes)
         }
 
-    interface IEntry {
+    interface IEntry<K> {
         val weight: Long
 
         // NOTE: updates to this ref-count MUST be done within `cache.asMap().compute(k) { ... }`
         // in order to take effect atomically in the cache eviction policy.
         val refCount: AtomicInteger
 
-        fun onEvict(k: Path, reason: RemovalCause) {}
+        fun onEvict(k: K, reason: RemovalCause) {}
     }
 
-    val cache: AsyncCache<Path, V> = Caffeine.newBuilder()
+    val cache: AsyncCache<K, V> = Caffeine.newBuilder()
         .maximumWeight(maxSizeBytes)
-        .evictionListener<Path, V> { key, value, cause -> value!!.onEvict(key!!, cause) }
-        .removalListener<Path, V> { key, value, cause -> if (!cause.wasEvicted()) value!!.onEvict(key!!, cause) }
-        .weigher<Path, V> { _, value -> if (value.refCount.get() > 0) 0 else value.weight.toInt() }
+        .evictionListener<K, V> { key, value, cause -> value!!.onEvict(key!!, cause) }
+        .removalListener<K, V> { key, value, cause -> if (!cause.wasEvicted()) value!!.onEvict(key!!, cause) }
+        .weigher<K, V> { _, value -> if (value.refCount.get() > 0) 0 else value.weight.toInt() }
         .buildAsync()
 
     private val eviction = cache.synchronous().policy().eviction().get()
@@ -56,7 +55,7 @@ class PinningCache<V : PinningCache.IEntry>(
     }
 
     @Suppress("NAME_SHADOWING")
-    fun get(k: Path, f: (Path) -> CompletableFuture<V>): CompletableFuture<V> =
+    fun get(k: K, f: (K) -> CompletableFuture<V>): CompletableFuture<V> =
         cache.asMap().compute(k) { k, fut ->
             // NOTE: this MUST be thenApplyAsync rather than thenApply
             // otherwise the entry is at risk of eviction
@@ -70,7 +69,7 @@ class PinningCache<V : PinningCache.IEntry>(
                 }
         }!!
 
-    fun invalidate(k: Path) {
+    fun invalidate(k: K) {
         cache.synchronous().run {
             invalidate(k)
             cleanUp()
@@ -85,7 +84,7 @@ class PinningCache<V : PinningCache.IEntry>(
         ForkJoinPool.commonPool().awaitQuiescence(100, MILLISECONDS)
     }
 
-    fun releaseEntry(k: Path) {
+    fun releaseEntry(k: K) {
         cache.asMap().compute(k) { _, fut ->
             fut!!.thenApplyAsync { entry ->
                 if (0 == entry.refCount.decrementAndGet().also { check(it >= 0) }) updatePinnedBytes(-entry.weight)
@@ -94,7 +93,7 @@ class PinningCache<V : PinningCache.IEntry>(
         }
     }
 
-    inner class Entry(override val weight: Long) : IEntry {
+    inner class Entry(override val weight: Long) : IEntry<K> {
         override val refCount = AtomicInteger(0)
     }
 }

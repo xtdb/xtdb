@@ -21,15 +21,15 @@ class DiskCache(
     @Suppress("MemberVisibilityCanBePrivate")
     val maxSizeBytes: Long
 ) {
-    val pinningCache = PinningCache<Entry>(maxSizeBytes)
+    val pinningCache = PinningCache<Path, Entry>(maxSizeBytes)
 
     val stats get() = pinningCache.stats
 
     inner class Entry(
-        inner: PinningCache.IEntry,
+        inner: PinningCache.IEntry<Path>,
         val k: Path,
         val path: Path,
-    ) : PinningCache.IEntry by inner, AutoCloseable {
+    ) : PinningCache.IEntry<Path> by inner, AutoCloseable {
 
         override fun onEvict(k: Path, reason: RemovalCause) {
             path.deleteIfExists()

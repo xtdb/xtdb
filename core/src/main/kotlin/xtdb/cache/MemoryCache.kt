@@ -27,7 +27,7 @@ class MemoryCache
     val maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
-    private val pinningCache = PinningCache<Entry>(maxSizeBytes)
+    private val pinningCache = PinningCache<Path, Entry>(maxSizeBytes)
 
     val stats get() = pinningCache.stats
 
@@ -55,10 +55,10 @@ class MemoryCache
     }
 
     private inner class Entry(
-        val inner: IEntry,
+        val inner: IEntry<Path>,
         val onEvict: AutoCloseable?,
         val bbuf: ByteBuffer
-    ) : IEntry by inner {
+    ) : IEntry<Path> by inner {
         override fun onEvict(k: Path, reason: RemovalCause) {
             pathLoader.tryFree(bbuf)
             onEvict?.close()
