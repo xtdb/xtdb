@@ -1715,15 +1715,18 @@
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
                                                  !conn-state (atom {:close-promise close-promise
                                                                     :session {:access-mode :read-only
-                                                                              :clock (:clock @server-state)}})]
+                                                                              :clock (:clock @server-state)}})
+                                                 !closing? (atom false)]
                                              (try
                                                (-> (map->Connection {:cid cid,
                                                                      :server server,
                                                                      :frontend (->socket-frontend conn-socket),
-                                                                     :!closing? (atom false)
+                                                                     :!closing? !closing?
                                                                      :allocator (util/->child-allocator allocator (str "pg-conn-" cid))
                                                                      :conn-state !conn-state})
                                                    (cmd-startup))
+                                               (catch EOFException _
+                                                 (reset! !closing? true))
                                                (catch Throwable t
                                                  (log/warn t "error on conn startup")
                                                  (throw t)))))]
