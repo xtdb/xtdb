@@ -1571,6 +1571,31 @@
        (t/is (= [["_id" "a"] ["1" "one"] ["2" "two"] ["3" "three"]]
                 (read)))))))
 
+(t/deftest test-combines-dml
+  (with-open [conn (jdbc-conn)]
+    (jdbc/with-transaction [tx conn]
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 1, :a "one"})])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 2, :a "two"})])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS {_id: ?, a: ?}" 3, "three"])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 4, :a "four"})])
+
+      ;; HACK.
+      (t/is (= [[:sql "INSERT INTO foo RECORDS $1"
+                 [{:xt/id 1, :a "one"}]
+                 [{:xt/id 2, :a "two"}]]
+                [:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}" [3 "three"]]
+                [:sql "INSERT INTO foo RECORDS $1" [{:xt/id 4, :a "four"}]]]
+               (-> @(:server-state (util/component tu/*node* ::pgwire/server))
+                   (get-in [:connections 2 :conn-state])
+                   deref
+                   (get-in [:transaction :dml-buf])))))
+
+    (t/is (= [{:xt/id 1, :a "one"}
+              {:xt/id 2, :a "two"}
+              {:xt/id 3, :a "three"}
+              {:xt/id 4, :a "four"}]
+             (q conn ["SELECT * FROM foo ORDER BY _id"])))))
+
 (deftest test-pg
   (with-open [conn (pg-conn {})]
     (t/is (= [{:v 1}]
