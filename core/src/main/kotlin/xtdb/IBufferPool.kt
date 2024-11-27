@@ -8,8 +8,6 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 
 interface IBufferPool : AutoCloseable {
-    fun getBuffer(key: Path): ArrowBuf
-
     /**
      * Get the whole file as an on-heap byte array.
      *
