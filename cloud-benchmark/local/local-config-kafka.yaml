@@ -11,4 +11,4 @@ storage: !Local
   path: !Env XTDB_STORAGE_DIR
 
 healthz:
-  port: 0
+  port: !Env XTDB_HEALTHZ_PORT

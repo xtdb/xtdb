@@ -132,6 +132,12 @@ spec:
           value: "True"
         - name: XTDB_NODE_ID
           value: "bench-load-phase"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8080"
+        ports:
+          - name: metrics 
+            containerPort: 8080
+            hostPort: 8080
       containers:
       - name: xtdb-azure-bench-1
         image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
@@ -153,6 +159,12 @@ spec:
           value: "False"
         - name: XTDB_NODE_ID
           value: "bench-node-1"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8081"
+        ports: 
+        - name: metrics 
+          containerPort: 8081
+          hostPort: 8081
       - name: xtdb-azure-bench-2
         image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
         volumeMounts:
@@ -173,6 +185,12 @@ spec:
           value: "False"
         - name: XTDB_NODE_ID
           value: "bench-node-2"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8082"
+        ports: 
+        - name: metrics 
+          containerPort: 8082
+          hostPort: 8082
       - name: xtdb-azure-bench-3
         image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
         volumeMounts:
@@ -193,3 +211,9 @@ spec:
           value: "False"
         - name: XTDB_NODE_ID
           value: "bench-node-3"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8083"
+        ports: 
+        - name: metrics 
+          containerPort: 8083
+          hostPort: 8083

@@ -16,5 +16,10 @@ set -e
   kubectl delete pvc xtdb-pvc-local-cache-2 --namespace cloud-benchmark || true
   kubectl delete pvc xtdb-pvc-local-cache-3 --namespace cloud-benchmark || true
   kubectl delete pvc kafka-pvc --namespace cloud-benchmark || true
+
+  echo Clearing Grafana...
+  kubectl delete deployment grafana-deployment --namespace cloud-benchmark || true
+  kubectl delete pvc grafana-pvc --namespace cloud-benchmark || true
+  echo Done
 )
 

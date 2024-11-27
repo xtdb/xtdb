@@ -31,6 +31,8 @@ metadata:
   namespace: "xtdb-benchmark"
   labels:
     app: "xtdb-multi-node-auctionmark"
+  annotations:
+    prometheus.io/scrape: "true"
 spec:
   completions: 1
   parallelism: 1
@@ -75,6 +77,12 @@ spec:
           value: "True"
         - name: XTDB_NODE_ID
           value: "bench-load-phase"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8080"
+        ports:
+          - name: metrics 
+            containerPort: 8080
+            hostPort: 8080
       containers:
       - name: xtdb-bench-1
         image: xtdb-local-auctionmark:latest
@@ -99,9 +107,14 @@ spec:
           value: "bench-node-1"
         - name: YOURKIT_PORT
           value: "10001"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8081"
         ports: 
         - containerPort: 10001
           hostPort: 10001
+        - name: metrics 
+          containerPort: 8081
+          hostPort: 8081
       - name: xtdb-bench-2
         image: xtdb-local-auctionmark:latest
         imagePullPolicy: Never
@@ -125,9 +138,14 @@ spec:
           value: "bench-node-2"
         - name: YOURKIT_PORT
           value: "10002"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8082"
         ports: 
         - containerPort: 10002
           hostPort: 10002
+        - name: metrics 
+          containerPort: 8082
+          hostPort: 8082
       - name: xtdb-bench-3
         image: xtdb-local-auctionmark:latest
         imagePullPolicy: Never
@@ -151,6 +169,11 @@ spec:
           value: "bench-node-3"
         - name: YOURKIT_PORT
           value: "10003"
+        - name: XTDB_HEALTHZ_PORT
+          value: "8083"
         ports: 
         - containerPort: 10003
           hostPort: 10003
+        - name: metrics 
+          containerPort: 8083
+          hostPort: 8083

@@ -70,6 +70,22 @@ minikube kubectl -- get pods --namespace xtdb-benchmark
 
 You should now have a running benchmark on your local Kubernetes cluster.
 
+=== Monitoring with Grafana
+
+Within here are also some provided templates for setting up a Grafana-Otel deployment which shall scrape the pods from the XTDB benchmark Job.
+
+To deploy grafana, simply run:
+```
+minikube kubectl -- apply -f kubernetes/grafana.yaml
+```
+
+To connect to the grafana page, run:
+```
+minikube service grafana-service --namespace xtdb-benchmark
+```
+
+With this up and runing, you can then import the XTDB dashboards (the cluster monitoring dashboard and node debugging dashboard) from `monitoring/grafana/dashboards`, and use these to monitor the benchmark pods.
+
 === Trailing the Logs
 
 You can trail the logs of each node within the job by running:

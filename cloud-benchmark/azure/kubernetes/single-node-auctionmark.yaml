@@ -101,3 +101,11 @@ spec:
         env:
         - name: "XTDB_LOCAL_DISK_CACHE"
           value: "/var/lib/xtdb/buffers/disk-cache-1"
+        - name: "XTDB_NODE_ID"
+          value: "bench-node-1"
+        - name: "XTDB_HEALTHZ_PORT"
+          value: "8080"
+        ports:
+          - name: "metrics"
+            containerPort: 8080
+            hostPort: 8080
