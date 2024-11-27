@@ -235,13 +235,16 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-node ^xtdb.api.Xtdb [opts]
-  (let [!closing (atom false)
-        system (-> (node-system opts)
-                   ig/prep
-                   ig/init)]
+  (try
+    (let [!closing (atom false)
+          system (-> (node-system opts)
+                     ig/prep
+                     ig/init)]
 
-    (-> (:xtdb/node system)
-        (assoc :system system
-               :close-fn #(when (compare-and-set! !closing false true)
-                            (ig/halt! system)
-                            #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
+      (-> (:xtdb/node system)
+          (assoc :system system
+                 :close-fn #(when (compare-and-set! !closing false true)
+                              (ig/halt! system)
+                              #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system)))))))
+    (catch clojure.lang.ExceptionInfo e 
+      (throw (ex-cause e)))))
