@@ -910,3 +910,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               {:xt/id 1, :system-time #time/zoned-date-time "2020-01-01T00:00:00.000001Z[UTC]"}
               {:xt/id 2, :system-time #time/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
              (xt/q node "SELECT _id, system_time FROM xt.txs ORDER BY _id")))))
+
+(t/deftest startup-error-doesnt-output-integrant-system
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Port value out of range: 99999"
+                          (xtn/start-node {:server {:port 99999}}))))

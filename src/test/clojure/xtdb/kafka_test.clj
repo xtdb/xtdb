@@ -7,7 +7,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import org.testcontainers.containers.GenericContainer
+  (:import org.apache.kafka.common.KafkaException
+           org.testcontainers.containers.GenericContainer
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName
            [xtdb.api.log Log]
@@ -99,3 +100,12 @@
                                                   (re-find #"xtdb-tx-subscription" (.getName thread))) 
                                                 all-threads)]
             (t/is (= 0 (count tx-subscription-threads))))))))
+
+(t/deftest ^:kafka test-startup-errors-returned-with-no-system-map
+  (t/is (thrown-with-msg? KafkaException
+                          #"Failed to create new KafkaAdminClient"
+                          (xtn/start-node {:log [:kafka {:tx-topic "tx-topic"
+                                                         :files-topic "files-topic"
+                                                         :bootstrap-servers "nonresolvable:9092"
+                                                         :create-topic? false
+                                                         :some-secret "foobar"}]}))))
