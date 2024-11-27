@@ -14,8 +14,8 @@
                          e [:union #{:bool :i64}]
                          f [:duration :micro]}}
            (-> (tu/query-ra '[:table [a b c d e f] ?table]
-                            {:params {'?table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
-                                               {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
+                            {:args {:table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
+                                            {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
                              :with-col-types? true}))))
 
   (t/is (= {:res [{:a 12, :b "foo", :c 1.2, :e true}
@@ -30,22 +30,22 @@
 
   (t/is (= {:res [], :col-types {}}
            (-> (tu/query-ra '[:table ?table]
-                            {:params {'?table []}
+                            {:args {:table []}
                              :with-col-types? true})))
         "empty")
 
   (t/is (= {:res [{:a 12, :b "foo"}, {:a 100}]
             :col-types '{a :i64, b [:union #{:utf8 :null}]}}
            (-> (tu/query-ra '[:table ?table]
-                            {:params {'?table [{:a 12, :b "foo"}
-                                               {:a 100}]}
+                            {:args {:table [{:a 12, :b "foo"}
+                                            {:a 100}]}
                              :with-col-types? true})))
         "differing columns")
 
   (t/is (= {:res [{:a 12}]
             :col-types '{a :i64}}
            (-> (tu/query-ra '[:table [a] ?table]
-                            {:params {'?table [{:a 12, :b "foo"}]}
+                            {:args {:table [{:a 12, :b "foo"}]}
                              :with-col-types? true})))
         "restricts to provided col-names")
 
@@ -71,16 +71,16 @@
   (t/is (= [{:a 1, :b 2}, {:a 3, :b 4}]
            (tu/query-ra '[:table [{:a ?p1, :b ?p2}
                                   {:a ?p3, :b ?p4}]]
-                        {:params {'?p1 1, '?p2 2, '?p3 3, '?p4 4}})))
+                        {:args {:p1 1, :p2 2, :p3 3, :p4 4}})))
 
   (t/is (= [{:a {:baz 1}, :b 2}]
            (tu/query-ra '[:table [{:a {:baz ?p1} :b ?p2}]]
-                        {:params {'?p1 1, '?p2 2, '?p3 3, '?p4 4}}))
+                        {:args {:p1 1, :p2 2, :p3 3, :p4 4}}))
         "nested param")
 
   (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
            (tu/query-ra ' [:table [{:foo :bar, :baz {:nested_foo ?nested_param}}]]
-                          {:params {'?nested_param :bar}}))
+                          {:args {:nested_param :bar}}))
         "nested param with need for normalisation"))
 
 (t/deftest test-table-handles-symbols
@@ -91,7 +91,7 @@
                             [{x50 true}]
                             [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
-                        {:params {'?x53 "AIR"}})))
+                        {:args {:x53 "AIR"}})))
 
   (t/is (= '[{:x50 true}]
            (tu/query-ra '[:top {:limit 1}
@@ -100,7 +100,7 @@
                             [{x50 true}]
                             [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
-                        {:params {'?x53 "AIR REG"}})))
+                        {:args {:x53 "AIR REG"}})))
 
   (t/is (= '[{:x50 false}]
            (tu/query-ra '[:top {:limit 1}
@@ -109,18 +109,18 @@
                             [{x50 true}]
                             [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
-                        {:params {'?x53 "RAIL"}}))))
+                        {:args {:x53 "RAIL"}}))))
 
 (t/deftest test-incorrect-relation-params
   (t/is
    (thrown-with-msg? RuntimeException #"Table param must be of type struct list"
                      (tu/query-ra '[:table ?a]
-                                  {:params '{?a 1}}))
+                                  {:args {:a 1}}))
    "param not list type")
   (t/is
    (thrown-with-msg? RuntimeException #"Table param must be of type struct list"
                      (tu/query-ra '[:table ?a]
-                                  {:params '{?a [1 "foo" :foo]}}))
+                                  {:args {:a [1 "foo" :foo]}}))
    "param not struct list type"))
 
 (t/deftest do-not-leak-memory-on-expression-errors
@@ -139,7 +139,7 @@
   (t/is (= '{:res [{:x5 1} {:x6 -77}],
              :col-types {x5 [:union #{:null :i64}], x6 [:union #{:null :i64}]}}
            (tu/query-ra '[:table ?table]
-                        {:params {'?table [{:x5 1} {:x6 -77}]}
+                        {:args {:table [{:x5 1} {:x6 -77}]}
                          :with-col-types? true}))
         "differing columns")
 
@@ -147,7 +147,7 @@
             :col-types '{a [:union #{:f64 :null :i64}], b :i64}}
 
            (tu/query-ra '[:table ?table]
-                        {:params {'?table [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]}
+                        {:args {:table [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]}
                          :with-col-types? true}))
         "actual nils"))
 
@@ -166,10 +166,10 @@
             :col-types '{unnest-param [:union #{:f64 :null :i64}]}}
 
            (tu/query-ra '[:table {unnest-param ?coll}]
-                        {:params {'?coll [12.4, nil, 100, 83.0]}
+                        {:args {:coll [12.4, nil, 100, 83.0]}
                          :with-col-types? true}))))
 
 (t/deftest test-table-with-map-params
   (t/is (= [{:a 4.2} {:b "1", :c 2, :a 0} {:b 2, :a 1}]
            (tu/query-ra '[:table [{:a 4.2} ?record {:a 1, :b 2}]]
-                        {:params {'?record {:a 0, :b "1", :c 2}}}))))
+                        {:args {:record {:a 0, :b "1", :c 2}}}))))

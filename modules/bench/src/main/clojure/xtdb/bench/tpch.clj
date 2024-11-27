@@ -12,15 +12,13 @@
   (let [q (nth tpch-ra/queries i)
         stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
         q @q
-        {::tpch-ra/keys [params table-args]} (meta q)]
+        {::tpch-ra/keys [args]} (meta q)]
     {:t :do
      :stage stage-name
      :tasks [{:t :call
               :f (fn [{:keys [sut]}]
                    (try
-                     (count (tu/query-ra q {:node sut
-                                            :params params
-                                            :table-args table-args}))
+                     (count (tu/query-ra q {:node sut, :args args}))
                      (catch Exception e
                        (.printStackTrace e))))}]}))
 

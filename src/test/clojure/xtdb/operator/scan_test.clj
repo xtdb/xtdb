@@ -336,15 +336,14 @@
              (set (tu/query-ra '[:scan {:table public/foo,
                                         :for-valid-time [:between ?_start ?_end]}
                                  [_id version]]
-                               {:node tu/*node* :params {'?_start (time/->instant tt1)
-                                                         '?_end nil}}))))
+                               {:node tu/*node*
+                                :args {:_start (time/->instant tt1), :_end nil}}))))
     (t/is (= #{{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}}
              (set
               (tu/query-ra '[:scan {:table public/foo,
                                     :for-valid-time :all-time}
                              [_id version]]
-                           {:node tu/*node* :params {'?_start (time/->instant tt1)
-                                                     '?_end nil}}))))))
+                           {:node tu/*node*}))))))
 
 (t/deftest test-scan-col-types
   (letfn [(->col-type [col]
@@ -417,10 +416,10 @@
                   :app-time-end [Long/MIN_VALUE (dec μs-2018)]
                   :sys-start [Long/MIN_VALUE μs-2019]
                   :sys-end [(inc μs-2019) Long/MAX_VALUE]}
-                 (with-open [params (tu/open-params {'?system-time (time/->instant #inst "2019")
-                                                     '?app-time (time/->instant #inst "2018")})]
+                 (with-open [args (tu/open-args {'?system-time (time/->instant #inst "2019")
+                                                 '?app-time (time/->instant #inst "2018")})]
                    (transpose (scan/->temporal-min-max-range
-                               params nil nil
+                               args nil nil
                                {'xt/system-from '(>= ?system-time xt/system-from)
                                 'xt/system-to '(< ?system-time xt/system-to)
                                 'xt/valid-from '(<= ?app-time xt/valid-from)
@@ -460,23 +459,22 @@
                              [:put-docs :xt-docs {:xt/id after-uuid :version 1}]])
     (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id search-uuid :version 2}]])
 
-    (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-params)))
+    (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-args)))
 
     (t/is (= (util/uuid->byte-buffer search-uuid)
-             (scan/selects->iid-byte-buffer {"_id" (list '= '_id search-uuid)} vw/empty-params)))
+             (scan/selects->iid-byte-buffer {"_id" (list '= '_id search-uuid)} vw/empty-args)))
 
-    (t/is (nil? (scan/selects->iid-byte-buffer {"_id" (list '< '_id search-uuid)} vw/empty-params)))
+    (t/is (nil? (scan/selects->iid-byte-buffer {"_id" (list '< '_id search-uuid)} vw/empty-args)))
 
-    (with-open [^RelationReader params-rel (vw/open-params tu/*allocator* {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
+    (with-open [^RelationReader args-rel (tu/open-args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
       (t/is (= (util/uuid->byte-buffer search-uuid)
-               (scan/selects->iid-byte-buffer '{"_id" (= _id ?search-uuid)}
-                                              params-rel))))
+               (scan/selects->iid-byte-buffer '{"_id" (= _id ?search_uuid)}
+                                              args-rel))))
 
-    (with-open [search-uuid-vec (vw/open-vec tu/*allocator* (name '?search-uuid) [#uuid "00000000-0000-0000-0000-000000000000"
-                                                                                  #uuid "80000000-0000-0000-0000-000000000000"])
-                ^RelationReader params-rel (vw/open-rel [search-uuid-vec])]
-      (t/is (nil? (scan/selects->iid-byte-buffer '{_id (= _id ?search-uuid)}
-                                                 params-rel))))
+    (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
+                                                                      #uuid "80000000-0000-0000-0000-000000000000"]})]
+      (t/is (nil? (scan/selects->iid-byte-buffer '{_id (= _id ?search_uuid)}
+                                                 args-rel))))
 
     (let [old-select->iid-byte-buffer scan/selects->iid-byte-buffer]
       (with-redefs [scan/selects->iid-byte-buffer
@@ -494,8 +492,8 @@
                               {:node tu/*node*})))
 
         (t/is (= [{:version 2, :xt/id search-uuid}]
-                 (tu/query-ra '[:scan {:table public/xt_docs} [version {_id (= _id ?search-uuid)}]]
-                              {:node tu/*node* :params {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
+                 (tu/query-ra '[:scan {:table public/xt_docs} [version {_id (= _id ?search_uuid)}]]
+                              {:node tu/*node*, :args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
 
         (t/is (= [{:version 2, :xt/id search-uuid}
                   {:version 1, :xt/id search-uuid}]

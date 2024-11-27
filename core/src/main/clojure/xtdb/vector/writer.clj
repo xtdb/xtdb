@@ -188,11 +188,21 @@
 (defn open-rel ^xtdb.vector.RelationReader [vecs]
   (vr/rel-reader (map vr/vec->reader vecs)))
 
-(defn open-params ^xtdb.vector.RelationReader [allocator params-map]
-  (open-rel (for [[k v] params-map]
-              (open-vec allocator k [v]))))
+(defn- param-sym [v]
+  (-> (symbol (str "?" v))
+      util/symbol->normal-form-symbol))
 
-(def empty-params (vr/rel-reader [] 1))
+(defn open-args ^xtdb.vector.RelationReader [allocator args]
+  (let [args-map (->> args
+                      (into {} (map-indexed (fn [idx v]
+                                              (if (map-entry? v)
+                                                {(param-sym (str (symbol (key v)))) (val v)}
+                                                {(symbol (str "?_" idx)) v})))))]
+
+    (open-rel (for [[k v] args-map]
+                (open-vec allocator k [v])))))
+
+(def empty-args (vr/rel-reader [] 1))
 
 (defn vec-wtr->rdr ^xtdb.vector.IVectorReader [^xtdb.vector.IVectorWriter w]
   (vr/vec->reader (.getVector (doto w (.syncValueCount)))))

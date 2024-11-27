@@ -46,14 +46,14 @@
 
                 (t/is (= expected
                          (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
-                                           {:node node, :params {'?name "Ivan"}})))))]
+                                           {:node node, :args {:name "Ivan"}})))))]
 
         (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-        (util/with-open [params (tu/open-params {'?name "Ivan"})]
+        (util/with-open [args (tu/open-args {:name "Ivan"})]
           (t/testing "only needs to scan chunk 1, page 1"
-            (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-params)
-                  param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
+            (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-args)
+                  param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} args)]
               (t/testing "L0 files don't have content metadata, so we have to match them"
                 (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 2 1))
                   (fn [^ITableMetadata table-metadata]
@@ -106,9 +106,9 @@
       (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
 
       (t/testing "only needs to scan chunk 1, page 1"
-        (util/with-open [params (tu/open-params {'?name "Ivan"})]
-          (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-params)
-                param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
+        (util/with-open [args (tu/open-args {:name "Ivan"})]
+          (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-args)
+                param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} args)]
             (t/testing "L0 has no content metadata -> always match"
               (with-table-metadata node (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 0 0 4 3))
                 (fn [^ITableMetadata table-metadata]
@@ -138,7 +138,7 @@
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan {:table public/xt_docs} [{name (= name ?name)}]]
-                                 {:node node, :params {'?name "Ivan"}})))))))
+                                 {:node node, :args {:name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
   (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
@@ -148,69 +148,69 @@
     (letfn [(q [& temporal-constraints]
               (->> (tu/query-ra [:scan '{:table public/xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
                                  (into '[last_updated] temporal-constraints)]
-                                {:node tu/*node*, :params {'?system-time1 tt1, '?system-time2 tt2}})
+                                {:node tu/*node*, :args {:system-time1 tt1, :system-time2 tt2}})
                    (into #{} (map :last-updated))))]
       (t/is (= #{"tx1" "tx2"}
                (q)))
 
       (t/is (= #{"tx1"}
-               (q '{_system_from (<= _system_from ?system-time1)})))
+               (q '{_system_from (<= _system_from ?system_time1)})))
 
       (t/is (= #{}
-               (q '{_system_from (< _system_from ?system-time1)})))
+               (q '{_system_from (< _system_from ?system_time1)})))
 
       (t/is (= #{"tx1" "tx2"}
-               (q '{_system_from (<= _system_from ?system-time2)})))
+               (q '{_system_from (<= _system_from ?system_time2)})))
 
       ;; this test depends on how one cuts rectangles
       (t/is (= #{"tx2"} #_#{"tx1" "tx2"}
-               (q '{_system_from (> _system_from ?system-time1)})))
+               (q '{_system_from (> _system_from ?system_time1)})))
 
       (t/is (= #{}
-               (q '{_system_to (< _system_to ?system-time2)})))
+               (q '{_system_to (< _system_to ?system_time2)})))
 
       (t/is (= #{"tx1"}
-               (q '{_system_to (<= _system_to ?system-time2)})))
+               (q '{_system_to (<= _system_to ?system_time2)})))
 
       (t/is (= #{"tx1" "tx2"}
-               (q '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system-time2)})))
+               (q '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system_time2)})))
 
       (t/is (= #{"tx1" "tx2"}
-               (q '{_system_to (>= (coalesce _system_to xtdb/end-of-time) ?system-time2)})))
+               (q '{_system_to (>= (coalesce _system_to xtdb/end-of-time) ?system_time2)})))
 
       (t/testing "multiple constraints"
         (t/is (= #{"tx1"}
-                 (q '{_system_from (and (<= _system_from ?system-time1)
-                                        (<= _system_from ?system-time2))})))
+                 (q '{_system_from (and (<= _system_from ?system_time1)
+                                        (<= _system_from ?system_time2))})))
 
         (t/is (= #{"tx1"}
-                 (q '{_system_from (and (<= _system_from ?system-time2)
-                                        (<= _system_from ?system-time1))})))
+                 (q '{_system_from (and (<= _system_from ?system_time2)
+                                        (<= _system_from ?system_time1))})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system-time2)
-                                      (> (coalesce _system_to xtdb/end-of-time) ?system-time1))})))
+                 (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system_time2)
+                                      (> (coalesce _system_to xtdb/end-of-time) ?system_time1))})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system-time1)
-                                      (> (coalesce _system_to xtdb/end-of-time) ?system-time2))}))))
+                 (q '{_system_to (and (> (coalesce _system_to xtdb/end-of-time) ?system_time1)
+                                      (> (coalesce _system_to xtdb/end-of-time) ?system_time2))}))))
 
       (t/is (= #{}
-               (q '{_system_from (<= _system_from ?system-time1)}
-                  '{_system_to (< _system_to ?system-time2)})))
+               (q '{_system_from (<= _system_from ?system_time1)}
+                  '{_system_to (< _system_to ?system_time2)})))
 
       (t/is (= #{"tx1"}
-               (q '{_system_from (<= _system_from ?system-time1)}
-                  '{_system_to (<= _system_to ?system-time2)})))
+               (q '{_system_from (<= _system_from ?system_time1)}
+                  '{_system_to (<= _system_to ?system_time2)})))
 
       (t/is (= #{"tx1"}
-               (q '{_system_from (<= _system_from ?system-time1)}
-                  '{_system_to (> _system_to ?system-time1)}))
+               (q '{_system_from (<= _system_from ?system_time1)}
+                  '{_system_to (> _system_to ?system_time1)}))
             "as of tt1")
 
       (t/is (= #{"tx1" "tx2"}
-               (q '{_system_from (<= _system_from ?system-time2)}
-                  '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system-time2)}))
+               (q '{_system_from (<= _system_from ?system_time2)}
+                  '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system_time2)}))
             "as of tt2"))))
 
 (t/deftest test-fixpoint-operator
@@ -232,7 +232,7 @@
                               [{a (+ a 1)}
                                {b (* (+ a 1) b)}]
                               Fact]]]
-                          {:params {'?table [{:a 0 :b 1}]}}))))
+                          {:args {:table [{:a 0 :b 1}]}}))))
 
   (t/testing "transitive closure"
     (t/is (= [{:x "a", :y "b"}
@@ -257,18 +257,18 @@
                              [:join [{z z}]
                               [:rename {y z} Path]
                               [:rename {x z} Path]]]]
-                          {:params {'?table [{:x "a" :y "b"}
-                                             {:x "b" :y "c"}
-                                             {:x "c" :y "d"}
-                                             {:x "d" :y "a"}]}})))))
+                          {:args {:table [{:x "a" :y "b"}
+                                          {:x "b" :y "c"}
+                                          {:x "c" :y "d"}
+                                          {:x "d" :y "a"}]}})))))
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
            (tu/query-ra '[:assign [X [:table ?x]
                                    Y [:table ?y]]
                           [:join [{a b}] X Y]]
-                        {:params '{?x [{:a 1}]
-                                   ?y [{:b 1}]}})))
+                        {:args {:x [{:a 1}]
+                                :y [{:b 1}]}})))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
@@ -276,22 +276,22 @@
                                      Y [:join [{a b}] X [:table ?y]]
                                      X Y]
                             X]
-                          {:params '{?x [{:a 1}]
-                                     ?y [{:b 1}]}})))))
+                          {:args {:x [{:a 1}]
+                                  :y [{:b 1}]}})))))
 
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
            (tu/query-ra '[:project [a {row-num (row-number)}]
                           [:table ?a]]
 
-                        {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))
+                        {:args {:a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-project-append-columns
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
            (tu/query-ra '[:project {:append-columns? true} [{row-num (row-number)}]
                           [:table ?a]]
 
-                        {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))
+                        {:args {:a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-array-agg
   (t/is (= [{:a 1, :bs [1 3 6]}
@@ -299,12 +299,12 @@
             {:a 3, :bs [5]}]
            (tu/query-ra '[:group-by [a {bs (array-agg b)}]
                           [:table ?ab]]
-                        {:params {'?ab [{:a 1, :b 1}
-                                        {:a 2, :b 2}
-                                        {:a 1, :b 3}
-                                        {:a 2, :b 4}
-                                        {:a 3, :b 5}
-                                        {:a 1, :b 6}]}}))))
+                        {:args {:ab [{:a 1, :b 1}
+                                     {:a 2, :b 2}
+                                     {:a 1, :b 3}
+                                     {:a 2, :b 4}
+                                     {:a 3, :b 5}
+                                     {:a 1, :b 6}]}}))))
 
 (t/deftest test-between
   (t/is (= [[true true] [false true]
@@ -316,12 +316,12 @@
                 (tu/query-ra '[:project [{b (between x l r)}
                                          {bs (between-symmetric x l r)}]
                                [:table ?xlr]]
-                             {:params {'?xlr (map #(zipmap [:x :l :r] %)
-                                                  [[5 0 10] [5 10 0]
-                                                   [0 0 10] [0 10 0]
-                                                   [-1 0 10] [-1 10 0]
-                                                   [11 0 10] [11 10 0]
-                                                   [10 0 10] [10 10 0]])}})))))
+                             {:args {:xlr (map #(zipmap [:x :l :r] %)
+                                               [[5 0 10] [5 10 0]
+                                                [0 0 10] [0 10 0]
+                                                [-1 0 10] [-1 10 0]
+                                                [11 0 10] [11 10 0]
+                                                [10 0 10] [10 10 0]])}})))))
 
 (t/deftest test-join-theta
   (t/is (= [{:x3 "31" :x4 "13"} {:x3 "31" :x4 "31"}]

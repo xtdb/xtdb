@@ -906,7 +906,7 @@
                  [{bar (- ?foo 0)}]
                  [[:table [{:bar 1}]]
                   [:table [{:baz 10}]]]]
-               {:params {'?foo 1}}))))
+               {:args {:foo 1}}))))
 
   (t/testing "empty input"
     (t/is (= []

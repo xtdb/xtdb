@@ -18,7 +18,7 @@
            [xtdb.query IQuerySource]
            xtdb.types.RegClass))
 
-(t/use-fixtures :each tu/with-mock-clock tu/with-node)
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
 (t/deftest test-multi-value-insert-423
   (letfn [(expected [tt]
@@ -758,62 +758,62 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (.columnFields pq))
           "param type is assumed to be nullable")
 
-     (with-open [bq (.bind pq {:args [42]})
-                 cursor (.openCursor bq)]
+    (with-open [bq (.bind pq {:args (tu/open-args [42])})
+                cursor (.openCursor bq)]
 
-       (t/is (= (conj column-fields
-                      #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
-                (.columnFields bq))
-             "now param value has been supplied we know its type is non-null")
+      (t/is (= (conj column-fields
+                     #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
+               (.columnFields bq))
+            "now param value has been supplied we know its type is non-null")
 
-       (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
-                (tu/<-cursor cursor))))
+      (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
+               (tu/<-cursor cursor))))
 
-     (t/testing "preparedQuery rebound with different param types"
-       (with-open [bq (.bind pq {:args ["fish"]})
-                   cursor (.openCursor bq)]
+    (t/testing "preparedQuery rebound with different param types"
+      (with-open [bq (.bind pq {:args (tu/open-args ["fish"])})
+                  cursor (.openCursor bq)]
 
-         (t/is (= (conj column-fields
-                        #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :utf8 false]])
-                  (.columnFields bq))
-               "now param value has been supplied we know its type is non-null")
+        (t/is (= (conj column-fields
+                       #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :utf8 false]])
+                 (.columnFields bq))
+              "now param value has been supplied we know its type is non-null")
 
-         (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
-                  (tu/<-cursor cursor)))))
+        (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
+                 (tu/<-cursor cursor)))))
 
-     (t/testing "statement invalidation"
+    (t/testing "statement invalidation"
 
-       (with-open [bq (.bind pq {:args [42]})]
+      (with-open [bq (.bind pq {:args (tu/open-args [42])})]
 
-         (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
-                     {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
+        (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
+                    {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
 
-           (t/testing "relevant schema unchanged since preparing query"
+          (t/testing "relevant schema unchanged since preparing query"
 
-             (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])]
-               (tu/then-await-tx tx tu/*node*))
+            (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])]
+              (tu/then-await-tx tx tu/*node*))
 
-             (with-open [cursor (.openCursor bq)]
+            (with-open [cursor (.openCursor bq)]
 
-               (t/is (= res (tu/<-cursor cursor)))))
+              (t/is (= res (tu/<-cursor cursor)))))
 
-           (t/testing "irrelevant schema changed since preparing query"
+          (t/testing "irrelevant schema changed since preparing query"
 
-             (let [tx (xt/submit-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])]
-               (tu/then-await-tx tx tu/*node*))
+            (let [tx (xt/submit-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])]
+              (tu/then-await-tx tx tu/*node*))
 
-             (with-open [cursor (.openCursor bq)]
+            (with-open [cursor (.openCursor bq)]
 
-               (t/is (= res (tu/<-cursor cursor))))))
+              (t/is (= res (tu/<-cursor cursor))))))
 
-         (t/testing "relevant schema changed since preparing query"
+        (t/testing "relevant schema changed since preparing query"
 
-           (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
-             (tu/then-await-tx tx tu/*node*))
+          (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
+            (tu/then-await-tx tx tu/*node*))
 
-           (t/is (thrown-with-msg? xtdb.RuntimeException
-                                   #"Relevant table schema has changed since preparing query, please prepare again"
-                                   (.openCursor bq))))))))
+          (t/is (thrown-with-msg? xtdb.RuntimeException
+                                  #"Relevant table schema has changed since preparing query, please prepare again"
+                                  (.openCursor bq))))))))
 
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
@@ -857,7 +857,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
      (t/testing "preparedQuery rebound with args matching the assumed type"
 
-       (with-open [bq (.bind pq {:args ["42"]})
+       (with-open [bq (.bind pq {:args (tu/open-args ["42"])})
                    cursor (.openCursor bq)]
 
                    (t/is (= [[{:v "42"}]]
@@ -865,7 +865,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
        (t/testing "or can be rebound with a different type"
 
-         (with-open [bq (.bind pq {:args [44]})
+         (with-open [bq (.bind pq {:args (tu/open-args [44])})
                      cursor (.openCursor bq)]
 
            (t/is (= [[{:v 44}]]

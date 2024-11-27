@@ -200,7 +200,7 @@
 (def idx-sym (gensym 'idx))
 (def rel-sym (gensym 'rel))
 (def schema-sym (gensym 'schema))
-(def params-sym (gensym 'params))
+(def args-sym (gensym 'args))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti codegen-expr
@@ -439,7 +439,7 @@
                     ~(continue-read f col-type var-rdr-sym)))}))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
-  (codegen-expr {:op :variable, :variable param, :rel params-sym, :idx 0}
+  (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
                 {:var->col-type {param (get param-types param)}}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
@@ -1684,7 +1684,7 @@
           {:!projection-fn (delay
                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))
                                        ~(-> schema-sym (with-tag IPersistentMap))
-                                       ~(-> params-sym (with-tag RelationReader))
+                                       ~(-> args-sym (with-tag RelationReader))
                                        ~(-> out-vec-sym (with-tag ValueVector))]
                                     (let [~@(batch-bindings emitted-expr)
                                           ~@writer-bindings
@@ -1700,8 +1700,8 @@
       (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
 
-(defn ->param-types [^RelationReader params]
-  (->> params
+(defn ->param-types [^RelationReader args]
+  (->> args
        (into {} (map (fn [^VectorReader col]
                        (MapEntry/create
                         (symbol (.getName col))
@@ -1718,15 +1718,15 @@
 
       (getColumnType [_] widest-out-type)
 
-      (project [_ allocator in-rel schema params]
+      (project [_ allocator in-rel schema args]
         (let [in-rel (RelationReader/from in-rel)
-              params (RelationReader/from params)
+              args (RelationReader/from args)
               var->col-type (->> (seq in-rel)
                                  (into {} (map (fn [^VectorReader iv]
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField iv))]))))
 
-              {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types params)
+              {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var->col-type var->col-type})
               row-count (.getRowCount in-rel)]
           (util/with-close-on-catch [out-vec (-> (types/col-type->field col-name return-type)
@@ -1735,7 +1735,7 @@
               (.setInitialCapacity row-count)
               (.allocateNew))
             (try
-              (@!projection-fn in-rel schema params out-vec)
+              (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e
                 (throw (arithmetic-ex->runtime-ex e))))
             (.setValueCount out-vec row-count)
@@ -1744,8 +1744,8 @@
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]
     (reify SelectionSpec
-      (select [_ al in-rel schema params]
-        (with-open [selection (.project projector al in-rel schema params)]
+      (select [_ al in-rel schema args]
+        (with-open [selection (.project projector al in-rel schema args)]
           (let [res (IntStream/builder)]
             (dotimes [idx (.valueCount selection)]
               (when (.getBoolean selection idx)

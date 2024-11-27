@@ -24,7 +24,7 @@
                             [[{:a 12, :b 10}
                               {:a 0, :b 15}]
                              [{:a 100, :b 83}]]]]
-                          {:params '{?p 42}
+                          {:args {:p 42}
                            :preserve-blocks? true})))))
 
 (t/deftest test-project-row-number

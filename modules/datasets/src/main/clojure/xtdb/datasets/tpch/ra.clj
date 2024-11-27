@@ -1,8 +1,8 @@
 (ns xtdb.datasets.tpch.ra
   (:import [java.time LocalDate]))
 
-(defn- with-params [q params]
-  (vary-meta q assoc ::params params))
+(defn- with-args [q args]
+  (vary-meta q assoc ::args args))
 
 (def q1-pricing-summary-report
   (-> '[:order-by [[l_returnflag] [l_linestatus]]
@@ -21,9 +21,9 @@
                                (+ 1 l_tax))}]
           [:scan {:for-valid-time [:at :now] :table public/lineitem}
            [l_returnflag l_linestatus
-                  {l_shipdate (<= l_shipdate ?ship-date)}
-                  l_quantity l_extendedprice l_discount l_tax]]]]]
-      (with-params {'?ship-date (LocalDate/parse "1998-09-02")})))
+            {l_shipdate (<= l_shipdate ?ship_date)}
+            l_quantity l_extendedprice l_discount l_tax]]]]]
+      (with-args {:ship-date (LocalDate/parse "1998-09-02")})))
 
 (def q2-minimum-cost-supplier
   (-> '[:assign [PartSupp [:join [{s_suppkey ps_suppkey}]
@@ -42,9 +42,9 @@
              [:scan {:for-valid-time [:at :now] :table public/part} [p_partkey p_mfgr {p_size (= p_size ?size)} {p_type (like p_type "%BRASS")}]]]
             [:group-by [ps_partkey {min_ps_supplycost (min ps_supplycost)}]
              PartSupp]]]]]]
-      (with-params {'?region "EUROPE"
-                    ;; '?type "BRASS"
-                    '?size 15})))
+      (with-args {:region "EUROPE"
+                  ;; :type "BRASS"
+                  :size 15})))
 
 (def q3-shipping-priority
   (-> '[:top {:limit 10}
@@ -59,24 +59,24 @@
             [:join [{c_custkey o_custkey}]
              [:scan {:for-valid-time [:at :now] :table public/customer} [c_custkey {c_mktsegment (= c_mktsegment ?segment)}]]
              [:scan {:for-valid-time [:at :now] :table public/orders} [o_orderkey o_custkey o_shippriority
-                     {o_orderdate (< o_orderdate ?date)}]]]
+                                                                       {o_orderdate (< o_orderdate ?date)}]]]
             [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_orderkey l_extendedprice l_discount
-                    {l_shipdate (> l_shipdate ?date)}]]]]]]]
-      (with-params {'?segment "BUILDING"
-                    '?date (LocalDate/parse "1995-03-15")})))
+                                                                        {l_shipdate (> l_shipdate ?date)}]]]]]]]
+      (with-args {:segment "BUILDING"
+                  :date (LocalDate/parse "1995-03-15")})))
 
 (def q4-order-priority-checking
   (-> '[:order-by [[o_orderpriority]]
         [:group-by [o_orderpriority {order_count (row-count)}]
          [:semi-join [{o_orderkey l_orderkey}]
           [:scan {:for-valid-time [:at :now] :table public/orders}
-           [{o_orderdate (and (>= o_orderdate ?start-date)
-                              (< o_orderdate ?end-date))} o_orderpriority o_orderkey]]
+           [{o_orderdate (and (>= o_orderdate ?start_date)
+                              (< o_orderdate ?end_date))} o_orderpriority o_orderkey]]
           [:select (< l_commitdate l_receiptdate)
            [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_orderkey l_commitdate l_receiptdate]]]]]]
-      (with-params {'?start-date (LocalDate/parse "1993-07-01")
-                    ;; in the spec this is one date with `+ INTERVAL 3 MONTHS`
-                    '?end-date (LocalDate/parse "1993-10-01")})))
+      (with-args {:start-date (LocalDate/parse "1993-07-01")
+                  ;; in the spec this is one date with `+ INTERVAL 3 MONTHS`
+                  :end-date (LocalDate/parse "1993-10-01")})))
 
 (def q5-local-supplier-volume
   (-> '[:order-by [[revenue {:direction :desc}]]
@@ -92,27 +92,27 @@
             [:join [{o_custkey c_custkey}]
              [:scan {:for-valid-time [:at :now] :table public/orders}
               [o_orderkey o_custkey
-               {o_orderdate (and (>= o_orderdate ?start-date)
-                                 (< o_orderdate ?end-date))}]]
+               {o_orderdate (and (>= o_orderdate ?start_date)
+                                 (< o_orderdate ?end_date))}]]
              [:scan {:for-valid-time [:at :now] :table public/customer} [c_custkey c_nationkey]]]]
            [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_orderkey l_extendedprice l_discount l_suppkey]]]]]]
-      (with-params {'?start-date (LocalDate/parse "1994-01-01")
-                    '?end-date (LocalDate/parse "1995-01-01")})))
+      (with-args {:start-date (LocalDate/parse "1994-01-01")
+                  :end-date (LocalDate/parse "1995-01-01")})))
 
 (def q6-forecasting-revenue-change
   (-> '[:group-by [{revenue (sum disc_price)}]
         [:project [{disc_price (* l_extendedprice l_discount)}]
          [:scan {:for-valid-time [:at :now] :table public/lineitem}
-          [{l_shipdate (and (>= l_shipdate ?start-date)
-                            (< l_shipdate ?end-date))}
+          [{l_shipdate (and (>= l_shipdate ?start_date)
+                            (< l_shipdate ?end_date))}
            l_extendedprice
-           {l_discount (and (>= l_discount ?min-discount)
-                            (<= l_discount ?max-discount))}
+           {l_discount (and (>= l_discount ?min_discount)
+                            (<= l_discount ?max_discount))}
            {l_quantity (< l_quantity 24.0)}]]]]
-      (with-params {'?start-date (LocalDate/parse "1994-01-01")
-                    '?end-date (LocalDate/parse "1995-01-01")
-                    '?min-discount 0.05
-                    '?max-discount 0.07})))
+      (with-args {:start-date (LocalDate/parse "1994-01-01")
+                  :end-date (LocalDate/parse "1995-01-01")
+                  :min-discount 0.05
+                  :max-discount 0.07})))
 
 (def q7-volume-shipping
   (-> '[:order-by [[supp_nation] [cust_nation] [l_year]]
@@ -133,18 +133,18 @@
                 [:scan {:for-valid-time [:at :now] :table public/supplier} [s_suppkey s_nationkey]]
                 [:scan {:for-valid-time [:at :now] :table public/lineitem}
                  [l_orderkey l_extendedprice l_discount l_suppkey
-                  {l_shipdate (and (>= l_shipdate ?start-date)
-                                   (<= l_shipdate ?end-date))}]]]
+                  {l_shipdate (and (>= l_shipdate ?start_date)
+                                   (<= l_shipdate ?end_date))}]]]
                [:scan {:for-valid-time [:at :now] :table public/orders} [o_orderkey o_custkey]]]
               [:rename n1
                [:scan {:for-valid-time [:at :now] :table public/nation} [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]]
              [:scan {:for-valid-time [:at :now] :table public/customer} [c_custkey c_nationkey]]]
             [:rename n2
              [:scan {:for-valid-time [:at :now] :table public/nation} [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]]]]]]
-      (with-params {'?nation1 "FRANCE"
-                    '?nation2 "GERMANY"
-                    '?start-date (LocalDate/parse "1995-01-01")
-                    '?end-date (LocalDate/parse "1996-12-31")})))
+      (with-args {:nation1 "FRANCE"
+                  :nation2 "GERMANY"
+                  :start-date (LocalDate/parse "1995-01-01")
+                  :end-date (LocalDate/parse "1996-12-31")})))
 
 (def q8-national-market-share
   (-> '[:order-by [[o_year]]
@@ -168,8 +168,8 @@
                  [:scan {:for-valid-time [:at :now] :table public/supplier} [s_suppkey s_nationkey]]]
                 [:scan {:for-valid-time [:at :now] :table public/orders}
                  [o_orderkey o_custkey
-                  {o_orderdate (and (>= o_orderdate ?start-date)
-                                    (<= o_orderdate ?end-date))}]]]
+                  {o_orderdate (and (>= o_orderdate ?start_date)
+                                    (<= o_orderdate ?end_date))}]]]
                [:scan {:for-valid-time [:at :now] :table public/customer} [c_custkey c_nationkey]]]
               [:join [{r_regionkey n1/n_regionkey}]
                [:scan {:for-valid-time [:at :now] :table public/region} [r_regionkey {r_name (= r_name ?region)}]]
@@ -177,11 +177,11 @@
                 [:scan {:for-valid-time [:at :now] :table public/nation} [n_name n_nationkey n_regionkey]]]]]
              [:rename n2
               [:scan {:for-valid-time [:at :now] :table public/nation} [n_name n_nationkey]]]]]]]]]
-      (with-params {'?nation "BRAZIL"
-                    '?region "AMERICA"
-                    '?type "ECONOMY ANODIZED STEEL"
-                    '?start-date (LocalDate/parse "1995-01-01")
-                    '?end-date (LocalDate/parse "1996-12-31")})))
+      (with-args {:nation "BRAZIL"
+                  :region "AMERICA"
+                  :type "ECONOMY ANODIZED STEEL"
+                  :start-date (LocalDate/parse "1995-01-01")
+                  :end-date (LocalDate/parse "1996-12-31")})))
 
 (def q9-product-type-profit-measure
   (-> '[:order-by [[nation] [o_year {:direction :desc}]]
@@ -204,7 +204,7 @@
              [:scan {:for-valid-time [:at :now] :table public/orders} [o_orderkey o_orderdate]]]
             [:scan {:for-valid-time [:at :now] :table public/nation} [n_name n_nationkey]]]]]]]
       #_
-      (with-params {'?color "green"})))
+      (with-params {:color "green"})))
 
 (def q10-returned-item-reporting
   (-> '[:top {:limit 20}
@@ -219,13 +219,13 @@
               [:scan {:for-valid-time [:at :now] :table public/customer} [c_custkey c_name c_acctbal c_address c_phone c_comment c_nationkey]]
               [:scan {:for-valid-time [:at :now] :table public/orders}
                [o_orderkey o_custkey
-                {o_orderdate (and (>= o_orderdate ?start-date)
-                                  (< o_orderdate ?end-date))}]]]
+                {o_orderdate (and (>= o_orderdate ?start_date)
+                                  (< o_orderdate ?end_date))}]]]
              [:scan {:for-valid-time [:at :now] :table public/lineitem}
               [l_orderkey {l_returnflag (= l_returnflag "R")} l_extendedprice l_discount]]]
             [:scan {:for-valid-time [:at :now] :table public/nation} [n_nationkey n_name]]]]]]]
-      (with-params {'?start-date (LocalDate/parse "1993-10-01")
-                    '?end-date (LocalDate/parse "1994-01-01")})))
+      (with-args {:start-date (LocalDate/parse "1993-10-01")
+                  :end-date (LocalDate/parse "1994-01-01")})))
 
 (def q11-important-stock-identification
   (-> '[:assign [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
@@ -242,8 +242,8 @@
            [:project [{total (* total ?fraction)}]
             [:group-by [{total (sum value)}]
              PartSupp]]]]]]
-      (with-params {'?nation "GERMANY"
-                    '?fraction 0.0001})))
+      (with-args {:nation "GERMANY"
+                  :fraction 0.0001})))
 
 (def q12-shipping-modes-and-order-priority
   (-> '[:order-by [[l_shipmode]]
@@ -265,14 +265,14 @@
                          (< l_shipdate l_commitdate))
             [:scan {:for-valid-time [:at :now] :table public/lineitem}
              [l_orderkey l_commitdate l_shipdate
-              {l_shipmode (or (= l_shipmode ?ship-mode1)
-                              (= l_shipmode ?ship-mode2))}
-              {l_receiptdate (and (>= l_receiptdate ?start-date)
-                                  (< l_receiptdate ?end-date))}]]]]]]]
-      (with-params {'?ship-mode1 "MAIL"
-                    '?ship-mode2 "SHIP"
-                    '?start-date (LocalDate/parse "1994-01-01")
-                    '?end-date (LocalDate/parse "1995-01-01")})))
+              {l_shipmode (or (= l_shipmode ?ship_mode1)
+                              (= l_shipmode ?ship_mode2))}
+              {l_receiptdate (and (>= l_receiptdate ?start_date)
+                                  (< l_receiptdate ?end_date))}]]]]]]]
+      (with-args {:ship-mode1 "MAIL"
+                  :ship-mode2 "SHIP"
+                  :start-date (LocalDate/parse "1994-01-01")
+                  :end-date (LocalDate/parse "1995-01-01")})))
 
 (def q13-customer-distribution
   (-> '[:order-by [[custdist {:direction :desc}] [c_count {:direction :desc}]]
@@ -282,8 +282,8 @@
            [:scan {:for-valid-time [:at :now] :table public/customer} [c_custkey]]
            [:scan {:for-valid-time [:at :now] :table public/orders} [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]]]]
       #_
-      (with-params {'?word1 "special"
-                    '?word2 "requests"})))
+      (with-params {:word1 "special"
+                    :word2 "requests"})))
 
 (def q14-promotion-effect
   (-> '[:project [{promo_revenue (* 100 (/ promo_revenue revenue))}]
@@ -297,10 +297,10 @@
            [:scan {:for-valid-time [:at :now] :table public/part} [p_partkey p_type]]
            [:scan {:for-valid-time [:at :now] :table public/lineitem}
             [l_partkey l_extendedprice l_discount
-             {l_shipdate (and (>= l_shipdate ?start-date)
-                              (< l_shipdate ?end-date))}]]]]]]
-      (with-params {'?start-date (LocalDate/parse "1995-09-01")
-                    '?end-date (LocalDate/parse "1995-10-01")})))
+             {l_shipdate (and (>= l_shipdate ?start_date)
+                              (< l_shipdate ?end_date))}]]]]]]
+      (with-args {:start-date (LocalDate/parse "1995-09-01")
+                  :end-date (LocalDate/parse "1995-10-01")})))
 
 (def q15-top-supplier
   (-> '[:assign [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
@@ -308,8 +308,8 @@
                            [:project [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]
                             [:scan {:for-valid-time [:at :now] :table public/lineitem}
                              [l_suppkey l_extendedprice l_discount
-                              {l_shipdate (and (>= l_shipdate ?start-date)
-                                               (< l_shipdate ?end-date))}]]]]]]
+                              {l_shipdate (and (>= l_shipdate ?start_date)
+                                               (< l_shipdate ?end_date))}]]]]]]
         [:project [s_suppkey s_name s_address s_phone total_revenue]
          [:join [{total_revenue max_total_revenue}]
           [:join [{supplier_no s_suppkey}]
@@ -317,8 +317,8 @@
            [:scan {:for-valid-time [:at :now] :table public/supplier} [s_suppkey s_name s_address s_phone]]]
           [:group-by [{max_total_revenue (max total_revenue)}]
            Revenue]]]]
-      (with-params {'?start-date (LocalDate/parse "1996-01-01")
-                    '?end-date (LocalDate/parse "1996-04-01")})))
+      (with-args {:start-date (LocalDate/parse "1996-01-01")
+                  :end-date (LocalDate/parse "1996-04-01")})))
 
 (def q16-part-supplier-relationship
   (-> '[:order-by [[supplier_cnt {:direction :desc}] [p_brand] [p_type] [p_size]]
@@ -333,17 +333,17 @@
             [:anti-join [{ps_suppkey s_suppkey}]
              [:scan {:for-valid-time [:at :now] :table public/partsupp} [ps_partkey ps_suppkey]]
              [:scan {:for-valid-time [:at :now] :table public/supplier} [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]]
-      (with-meta {::params {'?brand "Brand#45"
-                            ;; '?type "MEDIUM POLISHED%"
+      (with-args {:brand "Brand#45"
+                  ;; :type "MEDIUM POLISHED%"
 
-                            '?sizes [{:p_size 49}
-                                     {:p_size 14}
-                                     {:p_size 23}
-                                     {:p_size 45}
-                                     {:p_size 19}
-                                     {:p_size 3}
-                                     {:p_size 36}
-                                     {:p_size 9}]}})))
+                  :sizes [{:p_size 49}
+                          {:p_size 14}
+                          {:p_size 23}
+                          {:p_size 45}
+                          {:p_size 19}
+                          {:p_size 3}
+                          {:p_size 36}
+                          {:p_size 9}]})))
 
 (def q17-small-quantity-order-revenue
   (-> '[:project [{avg_yearly (/ sum_extendedprice 7)}]
@@ -356,8 +356,8 @@
             [:group-by [l_partkey {avg_qty (avg l_quantity)}]
              [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_partkey l_quantity]]]]
            [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_partkey l_quantity]]]]]]
-      (with-params {'?brand "Brand#23"
-                    '?container "MED_BOX"})))
+      (with-args {:brand "Brand#23"
+                  :container "MED_BOX"})))
 
 (def q18-large-volume-customer
   (-> '[:top {:limit 100}
@@ -372,7 +372,7 @@
                [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_orderkey l_quantity]]]]]
             [:scan {:for-valid-time [:at :now] :table public/customer} [c_name c_custkey]]]
            [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_orderkey l_quantity]]]]]]
-      (with-params {'?qty 300})))
+      (with-args {:qty 300})))
 
 (def q19-discounted-revenue
   (-> '[:group-by [{revenue (sum disc_price)}]
@@ -410,8 +410,8 @@
             [l_partkey l_extendedprice l_discount l_quantity
              {l_shipmode (or (= l_shipmode "AIR") (= l_shipmode "AIR REG"))}
              {l_shipinstruct (= l_shipinstruct "DELIVER IN PERSON")}]]]]]]
-      (with-params {'?qty1 1, '?qty2 10, '?qty3 20
-                    '?brand1 "Brand#12", '?brand2 "Brand23", '?brand3 "Brand#34"})))
+      (with-args {:qty1 1, :qty2 10, :qty3 20
+                  :brand1 "Brand#12", :brand2 "Brand23", :brand3 "Brand#34"})))
 
 (def q20-potential-part-promotion
   (-> '[:order-by [[s_name]]
@@ -428,12 +428,12 @@
             [:group-by [l_partkey l_suppkey {sum_qty (sum l_quantity)}]
              [:scan {:for-valid-time [:at :now] :table public/lineitem}
               [l_partkey l_suppkey l_quantity
-               {l_shipdate (and (>= l_shipdate ?start-date)
-                                (< l_shipdate ?end-date))}]]]]]]]]
-      (with-params {;'?color "forest"
-                    '?start-date (LocalDate/parse "1994-01-01")
-                    '?end-date (LocalDate/parse "1995-01-01")
-                    '?nation "CANADA"})))
+               {l_shipdate (and (>= l_shipdate ?start_date)
+                                (< l_shipdate ?end_date))}]]]]]]]]
+      (with-args {;:color "forest"
+                  :start-date (LocalDate/parse "1994-01-01")
+                  :end-date (LocalDate/parse "1995-01-01")
+                  :nation "CANADA"})))
 
 (def q21-suppliers-who-kept-orders-waiting
   (-> '[:assign [L1 [:join [{l1/l_orderkey l2/l_orderkey} (<> l1/l_suppkey l2/l_suppkey)]
@@ -460,7 +460,7 @@
                [:select (> l3/l_receiptdate l3/l_commitdate)
                 [:rename l3
                  [:scan {:for-valid-time [:at :now] :table public/lineitem} [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]
-      (with-params {'?nation "SAUDI ARABIA"})))
+      (with-args {:nation "SAUDI ARABIA"})))
 
 (def q22-global-sales-opportunity
   (-> '[:assign [Customer [:semi-join [{cntrycode cntrycode}]
@@ -476,13 +476,13 @@
              [:select (> c_acctbal 0.0)
               Customer]]]
            [:scan {:for-valid-time [:at :now] :table public/orders} [o_custkey]]]]]]
-      (with-meta {::params {'?cntrycodes [{:cntrycode "13"}
-                                          {:cntrycode "31"}
-                                          {:cntrycode "23"}
-                                          {:cntrycode "29"}
-                                          {:cntrycode "30"}
-                                          {:cntrycode "18"}
-                                          {:cntrycode "17"}]}})))
+      (with-args {:cntrycodes [{:cntrycode "13"}
+                               {:cntrycode "31"}
+                               {:cntrycode "23"}
+                               {:cntrycode "29"}
+                               {:cntrycode "30"}
+                               {:cntrycode "18"}
+                               {:cntrycode "17"}]})))
 
 (def queries
   [#'q1-pricing-summary-report

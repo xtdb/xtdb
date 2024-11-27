@@ -50,9 +50,9 @@
 
 (defn ->conn
   (^java.lang.AutoCloseable [frontend] (->conn frontend {}))
-  (^java.lang.AutoCloseable [frontend startup-params]
-   (->conn frontend startup-params [{:user nil, :method #xt.authn/method :trust, :address nil}]))
-  (^java.lang.AutoCloseable [frontend startup-params authn-rules]
+  (^java.lang.AutoCloseable [frontend startup-opts]
+   (->conn frontend startup-opts [{:user nil, :method #xt.authn/method :trust, :address nil}]))
+  (^java.lang.AutoCloseable [frontend startup-opts authn-rules]
    (-> (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                            "client_encoding" "UTF8"
                                                                            "DateStyle" "ISO"
@@ -63,7 +63,7 @@
                                 :cid -1
                                 :!closing? (atom false)
                                 :conn-state (atom {:session {:clock (Clock/systemUTC)}})})
-       (pgwire/cmd-startup-pg30 startup-params))))
+       (pgwire/cmd-startup-pg30 startup-opts))))
 
 (deftest test-startup
   (let [{:keys [!in-msgs] :as frontend} (->recording-frontend [{:msg-name :msg-password :password "xtdb"}])]
@@ -119,15 +119,15 @@
 
 (defn extended-query
   ([conn query] (extended-query conn query [] []))
-  ([conn query param-oids param-values]
+  ([conn query param-oids args]
    (let [portal-name "pg-test"
          stmt-name "pg-test"]
      (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name :query query :param-oids param-oids})
      (pgwire/handle-msg conn {:msg-name :msg-bind
                               :portal-name portal-name :stmt-name stmt-name
-                              :param-format (repeat (count param-values) 0)
+                              :arg-format (repeat (count args) 0)
                               ;; we are assuming strings for now
-                              :params (map #(.getBytes ^String %) param-values)
+                              :args (map #(.getBytes ^String %) args)
                               ;; can be ommitted
                               :result-format nil})
      (pgwire/handle-msg conn {:msg-name :msg-describe :describe-type :prepared-stmt :describe-name stmt-name})

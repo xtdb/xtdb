@@ -17,13 +17,13 @@
             xtdb.operator.order-by
             xtdb.operator.project
             xtdb.operator.rename
-            xtdb.operator.window
             [xtdb.operator.scan :as scan]
             xtdb.operator.select
             xtdb.operator.set
             xtdb.operator.table
             xtdb.operator.top
             xtdb.operator.unnest
+            xtdb.operator.window
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -55,18 +55,20 @@
   (^java.util.List columnFields [])
   (^xtdb.ICursor openCursor [])
   (^void close []
-   "optional: if you close this BoundQuery it'll close any closed-over params relation"))
+   "optional: if you close this BoundQuery it'll close any closed-over args relation"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface PreparedQuery
-  ;; NOTE we could arguably take the actual params here rather than param-fields
-  ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
-  ;; ... or at least raise questions about who then owns the params
   (^java.util.List paramFields [])
   (^java.util.List columnFields [])
   (^java.util.List warnings [])
   (^xtdb.query.BoundQuery bind [queryOpts]
-   "queryOpts :: {:params, :table-args, :snapshot-time, :current-time, :default-tz}"))
+   "queryOpts :: {:args, :close-args?, :snapshot-time, :current-time, :default-tz}
+
+    close-args? :: boolean, default true
+
+    args :: RelationReader
+      N.B. `args` will be closed when this BoundQuery closes"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IQuerySource
@@ -98,20 +100,6 @@
 
     (columnFields [_] fields)))
 
-(defn- param-sym [v]
-  (-> (symbol (str "?" v))
-      util/symbol->normal-form-symbol))
-
-(defn mapify-params [params]
-  (->> params
-       (map-indexed (fn [idx v]
-                      (if (map-entry? v)
-                        {(param-sym (str (symbol (key v)))) (val v)}
-                        {(symbol (str "?_" idx)) v})))))
-
-(defn open-args [^BufferAllocator allocator, args]
-  (vw/open-params allocator (into {} (mapify-params args))))
-
 (defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^IWatermarkSource wm-src]}
                  conformed-query scan-cols default-tz param-fields]
   (.computeIfAbsent cache
@@ -138,8 +126,8 @@
          (mapv (fn [[field-name field]]
                  (types/field-with-name field (str field-name)))))))
 
-(defn ->param-fields [params]
-  (->> params
+(defn ->arg-fields [args]
+  (->> args
        (into {} (map (fn [^IVectorReader col]
                        (MapEntry/create (symbol (.getName col)) (.getField col)))))))
 
@@ -192,60 +180,60 @@
              (->column-fields ordered-outer-projection fields)))
          (warnings [_] warnings)
 
-         (bind [_ {:keys [args params current-time snapshot-time default-tz]
-                   :or {default-tz default-tz}}]
+         (bind [_ {:keys [args current-time snapshot-time default-tz close-args?]
+                   :or {default-tz default-tz
+                        close-args? true}}]
 
            ;; TODO throw if basis is in the future?
-           (util/with-close-on-catch [args (open-args allocator args)]
-             ;;TODO consider making the either/or relationship between params/args explicit, e.g throw error if both are provided
-             (let [params (or params args)
-                   {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->param-fields params))
-                   current-time (or current-time (.instant expr/*clock*))
-                   clock (Clock/fixed current-time default-tz)]
+           (let [{:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
+                 current-time (or current-time (.instant expr/*clock*))
+                 clock (Clock/fixed current-time default-tz)]
 
-               (reify
-                 BoundQuery
-                 (columnFields [_]
-                   (->column-fields ordered-outer-projection fields))
+             (reify
+               BoundQuery
+               (columnFields [_]
+                 (->column-fields ordered-outer-projection fields))
 
-                 (openCursor [_]
-                   (when relevant-schema-at-prepare-time
-                     (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
-                                                          (.scanFields scan-emitter wm
-                                                                       (mapcat #(map (partial vector (key %)) (val %))
-                                                                               (scan/tables-with-cols wm-src))))]
+               (openCursor [_]
+                 (when relevant-schema-at-prepare-time
+                   (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
+                                                        (.scanFields scan-emitter wm
+                                                                     (mapcat #(map (partial vector (key %)) (val %))
+                                                                             (scan/tables-with-cols wm-src))))]
 
-                       ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
-                       ;;especially given our "per path schema" principal.
-                       (when-not (= relevant-schema-at-prepare-time
-                                    (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
-                         (throw (err/runtime-err :prepared-query-out-of-date
-                                                 ;;TODO consider adding the schema diff to the error, potentially quite large.
-                                                 {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
-                   (.acquire ref-ctr)
-                   (util/with-close-on-catch [^BufferAllocator allocator
-                                              (if allocator
-                                                (util/->child-allocator allocator "BoundQuery/openCursor")
-                                                (RootAllocator.))
-                                              wm (.openWatermark wm-src)]
-                     (try
-                       (binding [expr/*clock* clock]
-                         (-> (->cursor {:allocator allocator, :watermark wm
-                                        :clock clock,
-                                        :snapshot-time (or snapshot-time (some-> wm .txBasis .getSystemTime))
-                                        :current-time current-time
-                                        :params params
-                                        :schema (scan/tables-with-cols wm-src)})
-                             (wrap-cursor wm allocator clock ref-ctr fields)))
+                     ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
+                     ;;especially given our "per path schema" principal.
+                     (when-not (= relevant-schema-at-prepare-time
+                                  (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
+                       (throw (err/runtime-err :prepared-query-out-of-date
+                                               ;;TODO consider adding the schema diff to the error, potentially quite large.
+                                               {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
+                 (.acquire ref-ctr)
+                 (util/with-close-on-catch [^BufferAllocator allocator
+                                            (if allocator
+                                              (util/->child-allocator allocator "BoundQuery/openCursor")
+                                              (RootAllocator.))
+                                            wm (.openWatermark wm-src)]
+                   (try
+                     (binding [expr/*clock* clock]
+                       (-> (->cursor {:allocator allocator, :watermark wm
+                                      :clock clock,
+                                      :snapshot-time (or snapshot-time (some-> wm .txBasis .getSystemTime))
+                                      :current-time current-time
+                                      :args (or args vw/empty-args)
+                                      :schema (scan/tables-with-cols wm-src)})
+                           (wrap-cursor wm allocator clock ref-ctr fields)))
 
-                       (catch Throwable t
-                         (.release ref-ctr)
-                         (util/try-close wm)
-                         (util/try-close allocator)
-                         (throw t)))))
+                     (catch Throwable t
+                       (.release ref-ctr)
+                       (util/try-close wm)
+                       (util/try-close allocator)
+                       (throw t)))))
 
-                 AutoCloseable
-                 (close [_] (util/try-close params)))))))))))
+               AutoCloseable
+               (close [_]
+                 (when close-args?
+                   (util/close args)))))))))))
 
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts

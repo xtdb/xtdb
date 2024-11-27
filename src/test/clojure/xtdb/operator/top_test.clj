@@ -78,13 +78,13 @@
 
     (t/is (= [{:idx 1}, {:idx 2}]
              (tu/query-ra [:top '{:skip ?_0, :limit ?_1} blocks]
-                          {:params '{?_0 1, ?_1 2}})))
+                          {:args [1 2]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: null"
                             (tu/query-ra [:top '{:skip ?_0, :limit ?_1} blocks]))
-          "missing params")
+          "missing args")
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: 1"
                             (tu/query-ra [:top '{:limit ?_0} blocks]
-                                         {:params '{?_0 "1"}}))
+                                         {:args ["1"]}))
           "got a string")))

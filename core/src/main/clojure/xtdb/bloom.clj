@@ -98,7 +98,7 @@
                                                  (let [{:keys [param param-type]} value-expr]
                                                    {param param-type}))})
               {:keys [writer-bindings write-value-out!]} (expr/write-value-out-code return-type)]
-          (-> `(fn [~(-> expr/params-sym (expr/with-tag RelationReader))
+          (-> `(fn [~(-> expr/args-sym (expr/with-tag RelationReader))
                     ~(-> expr/out-vec-sym (expr/with-tag ValueVector))]
                  (let [~@(expr/batch-bindings emitted-expr)
                        ~@writer-bindings]

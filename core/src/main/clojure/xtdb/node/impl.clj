@@ -13,6 +13,7 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util]
+            [xtdb.vector.writer :as vw]
             [xtdb.xtql.edn :as xtql.edn])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            (java.io Closeable Writer)
@@ -52,8 +53,9 @@
                              :latest-completed-tx latest-completed-tx
                              :snapshot-time snapshot-time}))))
 
-(defn- then-execute-prepared-query [^PreparedQuery prepared-query, query-timer query-opts]
-  (let [bound-query (.bind prepared-query query-opts)]
+(defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator query-timer {:keys [args], :as query-opts}]
+  (util/with-close-on-catch [bound-query (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
+                                           (.bind prepared-query (assoc query-opts :args args-rel)))]
     ;;TODO metrics only currently wrapping openQueryAsync results
     (-> (q/open-cursor-as-stream bound-query query-opts)
         (metrics/wrap-query query-timer))))
@@ -109,12 +111,12 @@
   (open-sql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
       (-> (xtp/prepare-sql this query query-opts)
-          (then-execute-prepared-query query-timer query-opts))))
+          (then-execute-prepared-query allocator query-timer query-opts))))
 
   (open-xtql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
       (-> (xtp/prepare-xtql this query query-opts)
-          (then-execute-prepared-query query-timer query-opts))) )
+          (then-execute-prepared-query allocator query-timer query-opts))) )
 
   xtp/PStatus
   (latest-submitted-tx-id [_] @!latest-submitted-tx-id)
