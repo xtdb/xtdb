@@ -1224,7 +1224,6 @@
 
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
-          dml-op [:sql query args]
           cmd-complete-msg {:command (case dml-type
                                        ;; insert <oid> <rows>
                                        ;; oid is always 0 these days, its legacy thing in the pg protocol
@@ -1242,11 +1241,18 @@
         transaction
         ;; we buffer the statement in the transaction (to be flushed with COMMIT)
         (do
-          (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) dml-op)
+          (swap! conn-state update-in [:transaction :dml-buf]
+                 (fnil (fn [dml-ops]
+                         (or (when-let [[_sql last-query :as last-op] (peek dml-ops)]
+                               (when (= last-query query)
+                                 (conj (pop dml-ops)
+                                       (conj last-op args))))
+                             (conj dml-ops [:sql query args])))
+                       []))
           (cmd-write-msg conn msg-command-complete cmd-complete-msg))
 
         :else
-        (let [{:keys [tx-id error]} (execute-tx conn [dml-op]
+        (let [{:keys [tx-id error]} (execute-tx conn [[:sql query args]]
                                                 {:default-tz (.getZone clock)
                                                  :authn {:user (-> session :parameters (get "user"))}})]
           (when-not (skip-until-sync? conn)
@@ -1543,7 +1549,7 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [statement-type prepared-query query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [statement-type prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction]} @conn-state
         {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
