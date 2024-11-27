@@ -30,6 +30,10 @@ class MemoryCacheTest {
         override fun load(path: Path): ByteBuffer =
             ByteBuffer.allocateDirect(path.last().pathString.toInt())
                 .also { it.put(0, (++idx).toByte()) }
+
+        override fun load(pathSlice: PathSlice): ByteBuffer =
+            ByteBuffer.allocateDirect(pathSlice.path.last().pathString.toInt())
+                .also { it.put(0, (++idx).toByte()) }
     }
 
     @Test
@@ -44,13 +48,13 @@ class MemoryCacheTest {
             assertAll("get t1", {
                 val onEvict = AutoCloseable { t1Evicted = true }
 
-                cache.get(Path.of("t1/100")) { completedFuture(it to onEvict) }.use { b1 ->
+                cache.get(PathSlice(Path.of("t1/100"), 0, 100)) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(1, b1.getByte(0))
 
                     assertEquals(Stats(100, 0, 150), cache.stats)
                 }
 
-                cache.get(Path.of("t1/100")) { completedFuture(it to onEvict) }.use { b1 ->
+                cache.get(PathSlice(Path.of("t1/100"), 0, 100)) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(1, b1.getByte(0))
                 }
 
@@ -64,7 +68,7 @@ class MemoryCacheTest {
             assertAll("t2", {
                 val onEvict = AutoCloseable { t2Evicted = true }
 
-                cache.get(Path.of("t2/50")) { completedFuture(it to onEvict) }.use { b1 ->
+                cache.get(PathSlice(Path.of("t2/50"), 0, 50)) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(2, b1.getByte(0))
 
                     assertEquals(Stats(50, 100, 100), cache.stats)
@@ -78,7 +82,7 @@ class MemoryCacheTest {
             assertFalse(t2Evicted)
 
             assertAll("t3 evicts t2/t1", {
-                cache.get(Path.of("t3/170")) { completedFuture(it to null) }.use { b1 ->
+                cache.get(PathSlice(Path.of("t3/170"), 0, 170)) { completedFuture(it to null) }.use { b1 ->
                     assertEquals(3, b1.getByte(0))
                     assertTrue(t1Evicted)
 

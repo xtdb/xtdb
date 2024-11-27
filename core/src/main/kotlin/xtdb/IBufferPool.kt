@@ -11,11 +11,11 @@ interface IBufferPool : AutoCloseable {
     fun getBuffer(key: Path): ArrowBuf
 
     /**
-     * Get the whole file as an on-heap ByteBuffer.
+     * Get the whole file as an on-heap byte array.
      *
      * This should only be used for small files (metadata) or testing purposes.
      */
-    fun getByteBuffer(key: Path): ByteBuffer
+    fun getByteArray(key: Path): ByteArray
 
     /**
      * Returns the footer of the given arrow file.
