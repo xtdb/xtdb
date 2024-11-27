@@ -7,32 +7,30 @@
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
-           (com.github.benmanes.caffeine.cache AsyncCache Cache Caffeine)
+           (com.github.benmanes.caffeine.cache Cache Caffeine)
            [io.micrometer.core.instrument MeterRegistry]
            [io.micrometer.core.instrument.simple SimpleMeterRegistry]
            [java.io ByteArrayOutputStream Closeable]
            [java.lang AutoCloseable]
            (java.nio ByteBuffer)
-           (java.nio.channels Channels ClosedByInterruptException FileChannel$MapMode SeekableByteChannel)
+           (java.nio.channels Channels ClosedByInterruptException)
            [java.nio.file FileVisitOption Files LinkOption OpenOption Path StandardOpenOption]
            [java.nio.file.attribute FileAttribute]
            [java.util NavigableMap SortedMap TreeMap]
            (java.util NavigableMap)
-           (java.util.function Function)
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            kotlin.Pair
-           (org.apache.arrow.flatbuf Footer Message RecordBatch)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc SeekableReadChannel)
-           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch )
+           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter)
+           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter)
            (xtdb ArrowWriter IBufferPool)
            (xtdb.api.log FileListCache FileListCache$Subscriber)
            (xtdb.api.storage ObjectStore Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
-           (xtdb.arrow Relation)
-           (xtdb.cache DiskCache DiskCache$Entry MemoryCache)
-           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
+           (xtdb.arrow ArrowUtil Relation)
+           (xtdb.cache DiskCache DiskCache$Entry MemoryCache PathSlice)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -48,19 +46,17 @@
 
 (def ^java.nio.file.Path storage-root (util/->path version))
 
-(defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
-
 (defn ->buffer-pool-child-allocator [^BufferAllocator allocator, ^MeterRegistry metrics-registry]
   (let [child-allocator (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)]
     (when metrics-registry
       (metrics/add-allocator-gauge metrics-registry "buffer-pool.allocator.allocated_memory" child-allocator))
     child-allocator))
 
-(defn copy-bb ^ByteBuffer [^ByteBuffer bb]
-  (let [copy (ByteBuffer/allocate (.remaining bb))]
-    (.put copy bb)
-    (.flip copy)
-    copy))
+(defn arrow-buf->ba ^bytes [^ArrowBuf arrow-buf]
+  (let [bb (.nioBuffer arrow-buf 0 (.capacity arrow-buf))
+        ba (byte-array (.remaining bb))]
+    (.get bb ba)
+    ba))
 
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
@@ -70,11 +66,11 @@
             (some-> (.get memory-store k) retain))
           (throw (os/obj-missing-exception k)))))
 
-  (getByteBuffer [_ path]
+  (getByteArray [_ path]
     (let [^ArrowBuf arrow-buf (or (locking memory-store
                                     (some-> (.get memory-store path)))
                                   (throw (os/obj-missing-exception path)))]
-      (copy-bb (.nioBuffer arrow-buf 0 (.capacity arrow-buf)))))
+      (arrow-buf->ba arrow-buf)))
 
   (getFooter [_ path]
     (let [arrow-buf (or (locking memory-store
@@ -164,47 +160,33 @@
     (aset opts 0 StandardOpenOption/READ)
     (SeekableReadChannel. (Files/newByteChannel path opts))))
 
-(defn ->record-batch ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-  [^BufferAllocator alloc ^ArrowBlock block, ^Path path]
-  (let [buffer (util/->mmap-path path FileChannel$MapMode/READ_ONLY (.getOffset block)
-                                 (+ (.getMetadataLength block) (.getBodyLength block)))]
-    (util/with-open [arrow-buf (util/->arrow-buf-view alloc buffer)]
-      (let [prefix-size (if (= (.getInt arrow-buf 0) MessageSerializer/IPC_CONTINUATION_TOKEN) 8 4)
-            ^RecordBatch batch (.header (Message/getRootAsMessage
-                                         (.nioBuffer arrow-buf
-                                                     prefix-size
-                                                     (- (.getMetadataLength block) prefix-size)))
-                                        (RecordBatch.))
-            body-buffer (doto (.slice arrow-buf
-                                      (.getMetadataLength block)
-                                      (.getBodyLength block))
-                          (-> (.getReferenceManager) (.retain)))]
-        (MessageSerializer/deserializeRecordBatch batch body-buffer)))))
+(defn ->resolved-path-slice ^PathSlice [^PathSlice path-slice ^Path new-path]
+  (PathSlice. new-path (.getOffset path-slice) (.getLength path-slice)))
 
 (defrecord LocalBufferPool [allocator, ^MemoryCache memory-cache, ^Path disk-store, ^Cache arrow-footer-cache]
   IBufferPool
   (getBuffer [_ k]
     (when k
-      (.get memory-cache k
-            (fn [^Path k]
-              (let [buffer-cache-path (.resolve disk-store k)]
+      (.get memory-cache (PathSlice. k)
+            (fn [^PathSlice path-slice]
+              (let [buffer-cache-path (.resolve disk-store (.getPath path-slice))]
                 (when-not (util/path-exists buffer-cache-path)
                   (throw (os/obj-missing-exception k)))
 
                 (CompletableFuture/completedFuture
-                 (Pair. buffer-cache-path nil)))))))
+                 (Pair. (->resolved-path-slice path-slice buffer-cache-path) nil)))))))
 
-  (getByteBuffer [_ k]
+  (getByteArray [_ k]
     (when k
-      (util/with-open [arrow-buf (.get memory-cache k
-                                       (fn [^Path k]
-                                         (let [buffer-cache-path (.resolve disk-store k)]
+      (util/with-open [arrow-buf (.get memory-cache (PathSlice. k)
+                                       (fn [^PathSlice path-slice]
+                                         (let [buffer-cache-path (.resolve disk-store (.getPath path-slice))]
                                            (when-not (util/path-exists buffer-cache-path)
                                              (throw (os/obj-missing-exception k)))
 
                                            (CompletableFuture/completedFuture
-                                            (Pair. buffer-cache-path nil)))))]
-        (copy-bb (.nioBuffer arrow-buf 0 (.capacity arrow-buf))))))
+                                            (Pair. (->resolved-path-slice path-slice buffer-cache-path) nil)))))]
+        (arrow-buf->ba arrow-buf))))
 
   (getFooter [_ k]
     (let [path (.resolve disk-store k)]
@@ -218,16 +200,23 @@
       (when-not (util/path-exists path)
         (throw (os/obj-missing-exception path)))
 
-      (try
-        (let [^ArrowFooter footer (.get arrow-footer-cache k
-                                        (fn [_] (Relation/readFooter (path->seekable-byte-channel path))))
-              blocks (.getRecordBatches footer)
-              block (nth blocks block-idx nil)]
-          (if-not block
-            (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
-            (->record-batch allocator block path)))
-        (catch Exception e
-          (throw (ex-info (format "Failed opening record batch '%s'" path) {:path path :block-idx block-idx} e))))))
+      (let [^ArrowFooter footer (.get arrow-footer-cache k
+                                      (fn [_] (Relation/readFooter (path->seekable-byte-channel path))))
+            blocks (.getRecordBatches footer)
+            ^ArrowBlock block (nth blocks block-idx nil)]
+        (if-not block
+          (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
+          (util/with-open [arrow-buf (.get memory-cache (PathSlice. k (.getOffset block)
+                                                                    (+ (.getMetadataLength block) (.getBodyLength block)))
+                                           (fn [^PathSlice path-slice]
+                                             (let [buffer-cache-path (.resolve disk-store (.getPath path-slice))]
+                                               (when-not (util/path-exists buffer-cache-path)
+                                                 (throw (os/obj-missing-exception k)))
+
+                                               (CompletableFuture/completedFuture
+                                                (Pair. (->resolved-path-slice path-slice buffer-cache-path) nil)))))]
+            (ArrowUtil/arrowBufToRecordBatch arrow-buf 0 (.getMetadataLength block) (.getBodyLength block)
+                                             (format "Failed opening record batch '%s' at block-idx %d" path block-idx)))))))
 
   (putObject [_ k buffer]
     (try
@@ -286,7 +275,7 @@
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
-    (.invalidate memory-cache k))
+    (.invalidate memory-cache (PathSlice. k)))
 
   Closeable
   (close [_]
@@ -393,6 +382,7 @@
 (defrecord RemoteBufferPool [allocator
                              ^MemoryCache memory-cache
                              ^DiskCache disk-cache
+                             ^Cache arrow-footer-cache
                              ^FileListCache file-list-cache
                              ^ObjectStore object-store
                              ^SortedMap !os-files
@@ -400,8 +390,8 @@
   IBufferPool
   (getBuffer [_ k]
     (when k
-      (.get memory-cache k
-            (fn [k]
+      (.get memory-cache (PathSlice. k)
+            (fn [^PathSlice path-slice]
               (-> (.get disk-cache k
                         (fn [^Path k, ^Path tmp-file]
                           (.getObject object-store k tmp-file)))
@@ -409,7 +399,50 @@
                   (.thenApply (fn [^DiskCache$Entry entry]
                                 ;; cleanup action - when the entry is evicted from the memory cache,
                                 ;; release one count on the disk-cache entry.
-                                (Pair. (.getPath entry) entry))))))))
+                                (Pair. (->resolved-path-slice path-slice (.getPath entry)) entry))))))))
+
+  (getByteArray [_ k]
+    (when k
+      (util/with-open [arrow-buf (.get memory-cache (PathSlice. k)
+                                       (fn [^PathSlice path-slice]
+                                         (-> (.get disk-cache k
+                                                   (fn [^Path k, ^Path tmp-file]
+                                                     (.getObject object-store k tmp-file)))
+
+                                             (.thenApply (fn [^DiskCache$Entry entry]
+                                                           ;; cleanup action - when the entry is evicted from the memory cache,
+                                                           ;; release one count on the disk-cache entry.
+                                                           (Pair. (->resolved-path-slice path-slice (.getPath entry)) entry))))))]
+        (arrow-buf->ba arrow-buf))))
+
+
+  (getFooter [_ k]
+    (.get arrow-footer-cache k (fn [_]
+                                 (util/with-open [^DiskCache$Entry entry @(.get disk-cache k
+                                                                                (fn [^Path k, ^Path tmp-file]
+                                                                                  (.getObject object-store k tmp-file)))]
+                                   (Relation/readFooter (path->seekable-byte-channel (.getPath entry)))))))
+
+  (getRecordBatch [_ k block-idx]
+    (util/with-close-on-catch [^DiskCache$Entry entry @(.get disk-cache k
+                                                             (fn [^Path k, ^Path tmp-file]
+                                                               (.getObject object-store k tmp-file)))]
+      (let [path (.getPath entry)
+            ^ArrowFooter footer (.get arrow-footer-cache k
+                                      (fn [_] (Relation/readFooter (path->seekable-byte-channel path))))
+            blocks (.getRecordBatches footer)
+            ^ArrowBlock block (nth blocks block-idx nil)]
+        (if-not block
+          (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
+          (util/with-open [arrow-buf (.get memory-cache (PathSlice. k (.getOffset block)
+                                                                    (+ (.getMetadataLength block) (.getBodyLength block)))
+                                           (fn [^PathSlice path-slice]
+                                             (CompletableFuture/completedFuture
+                                              ;; cleanup action - when the entry is evicted from the memory cache,
+                                              ;; release one count on the disk-cache entry.
+                                              (Pair. (->resolved-path-slice path-slice path) entry))))]
+            (ArrowUtil/arrowBufToRecordBatch arrow-buf 0 (.getMetadataLength block) (.getBodyLength block)
+                                             (format "Failed opening record batch '%s' at block-idx %d" path block-idx)))))))
 
   (listAllObjects [_]
     (vec (.sequencedKeySet !os-files)))
@@ -452,7 +485,7 @@
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
-    (.invalidate memory-cache k))
+    (.invalidate memory-cache (PathSlice. k)))
 
   (close [_]
     (util/close memory-cache)
@@ -501,6 +534,7 @@
         (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                             memory-cache
                             disk-cache
+                            (->arrow-footer-cache 1024)
                             file-list-cache object-store !os-files !os-file-name-subscription)))))
 
 (defmulti ->object-store-factory

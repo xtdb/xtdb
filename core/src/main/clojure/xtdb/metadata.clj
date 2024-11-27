@@ -411,7 +411,7 @@
 (defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
-      (with-open [is (ByteArrayInputStream. (.array (.getByteBuffer buffer-pool cm-obj-key)))]
+      (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
                                                              arrow-read-handlers)})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))

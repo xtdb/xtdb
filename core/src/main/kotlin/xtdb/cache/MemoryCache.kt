@@ -15,6 +15,11 @@ import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
+
+data class PathSlice(val path: Path, val offset: Long? = null, val length: Long? = null) {
+    constructor(path: Path) : this(path, null, null)
+}
+
 /**
  * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
  *   - we allocate a buffer in here for every _usage_, and don't take shared memory into account.
@@ -27,12 +32,13 @@ class MemoryCache
     val maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
-    private val pinningCache = PinningCache<Path, Entry>(maxSizeBytes)
+    private val pinningCache = PinningCache<PathSlice, Entry>(maxSizeBytes)
 
     val stats get() = pinningCache.stats
 
     interface PathLoader {
         fun load(path: Path): ByteBuffer
+        fun load(pathSlice: PathSlice): ByteBuffer
         fun tryFree(bbuf: ByteBuffer) {}
 
         companion object {
@@ -47,6 +53,15 @@ class MemoryCache
                         throw InterruptedException(e.message)
                     }
 
+                override fun load(pathSlice: PathSlice) =
+                    try {
+                        val ch = FileChannel.open(pathSlice.path)
+
+                        ch.map(FileChannel.MapMode.READ_ONLY, pathSlice.offset!!, pathSlice.length!!)
+                    } catch (e: ClosedByInterruptException) {
+                        throw InterruptedException(e.message)
+                    }
+
                 override fun tryFree(bbuf: ByteBuffer) {
                     PlatformDependent.freeDirectBuffer(bbuf)
                 }
@@ -55,11 +70,11 @@ class MemoryCache
     }
 
     private inner class Entry(
-        val inner: IEntry<Path>,
+        val inner: IEntry<PathSlice>,
         val onEvict: AutoCloseable?,
         val bbuf: ByteBuffer
-    ) : IEntry<Path> by inner {
-        override fun onEvict(k: Path, reason: RemovalCause) {
+    ) : IEntry<PathSlice> by inner {
+        override fun onEvict(k: PathSlice, reason: RemovalCause) {
             pathLoader.tryFree(bbuf)
             onEvict?.close()
         }
@@ -70,14 +85,19 @@ class MemoryCache
         /**
          * @return a pair containing the on-disk path and an optional cleanup action
          */
-        operator fun invoke(k: Path): CompletableFuture<Pair<Path, AutoCloseable?>>
+        operator fun invoke(k: PathSlice): CompletableFuture<Pair<PathSlice, AutoCloseable?>>
     }
 
     @Suppress("NAME_SHADOWING")
-    fun get(k: Path, fetch: Fetch): ArrowBuf {
+    fun get(k: PathSlice, fetch: Fetch): ArrowBuf {
         val entry = pinningCache.get(k) { k ->
-            fetch(k).thenApplyAsync { (path, onEvict) ->
-                val bbuf = pathLoader.load(path)
+            fetch(k).thenApplyAsync { (pathSlice, onEvict) ->
+                var bbuf: ByteBuffer
+                if (pathSlice.offset == null || pathSlice.length == null) {
+                    bbuf = pathLoader.load(pathSlice.path)
+                } else {
+                    bbuf = pathLoader.load(pathSlice)
+                }
                 Entry(pinningCache.Entry(bbuf.capacity().toLong()), onEvict, bbuf)
             }
         }.get()!!
@@ -94,7 +114,7 @@ class MemoryCache
             })
     }
 
-    fun invalidate(k: Path) {
+    fun invalidate(k: PathSlice) {
         pinningCache.invalidate(k)
     }
 
