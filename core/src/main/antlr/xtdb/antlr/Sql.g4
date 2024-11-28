@@ -337,7 +337,7 @@ replacement : expr;
 
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
-    | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision ')')? # CurrentTimestampFunction
+    | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision? ')')? # CurrentTimestampFunction
     | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
     ;
 
