@@ -5,6 +5,7 @@
             xtdb.buffer-pool
             xtdb.expression.temporal
             [xtdb.serde :as serde]
+            [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (com.cognitect.transit TransitFactory)
@@ -16,10 +17,11 @@
            (java.util HashMap HashSet Map NavigableMap TreeMap)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
+           (xtdb.arrow Relation)
+           (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
-           (xtdb.arrow Relation)
-           (xtdb.arrow Relation)
            xtdb.IBufferPool
+           (xtdb.arrow Relation)
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
@@ -53,7 +55,8 @@
   (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
-  (allColumnFields []))
+  (allColumnFields [])
+  (cleanUp []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
@@ -174,6 +177,15 @@
                 max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
             (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache min-rdr max-rdr)))))))
 
+(defn metadata-manager-cleanup [table-names ^Cache table-metadata-idx-cache ^IBufferPool buffer-pool]
+  (doseq [table-name table-names]
+    (let [table-path (util/table-name->table-path table-name)
+          superseded-meta-files (->> (trie/list-meta-files buffer-pool table-path)
+                                     (trie/superseded-trie-files))
+          m (.asMap table-metadata-idx-cache)]
+      (doseq [meta-file superseded-meta-files]
+        (.remove m meta-file)))))
+
 (deftype MetadataManager [^IBufferPool buffer-pool
                           ^Cache table-metadata-idx-cache
                           ^NavigableMap chunks-metadata
@@ -194,6 +206,9 @@
 
   (columnFields [_ table-name] (get fields table-name))
   (allColumnFields [_] fields)
+
+  (cleanUp [_]
+    (metadata-manager-cleanup (keys fields) table-metadata-idx-cache buffer-pool))
 
   AutoCloseable
   (close [_]

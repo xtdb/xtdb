@@ -311,6 +311,9 @@
 
       (mapv :file-path !current-trie-keys))))
 
+(defn superseded-trie-files [file-names]
+  (set/difference (set file-names) (set (current-trie-files file-names))))
+
 (defrecord Segment [trie]
   ISegment
   (getTrie [_] trie))
