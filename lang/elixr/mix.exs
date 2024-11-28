@@ -21,8 +21,9 @@ defmodule Elixr.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:postgrex, "~> 0.19.2"},
-      {:jason, ">= 1.4.4"}
+      {:postgrex, "~> 0.19.3"},
+      {:jason, ">= 1.4.4"},
+      {:uuid, "~> 1.1"}
     ]
   end
 end

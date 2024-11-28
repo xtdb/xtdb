@@ -240,6 +240,10 @@
 (defmethod codegen-cast [:num :utf8] [_]
   {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str ~@%)))})
 
+(defmethod codegen-cast [:utf8 :uuid] [_]
+  {:return-type :uuid, :->call-code #(do `(util/uuid->byte-buffer
+                                           (UUID/fromString (resolve-string ~@%))))})
+
 (defn resolve-string ^String [x]
   (cond
     (instance? ByteBuffer x)
