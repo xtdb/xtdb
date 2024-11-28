@@ -159,7 +159,7 @@
   (objectSize [_ k] (Files/size (.resolve disk-store k)))
 
   (openArrowWriter [_ k rel]
-    (let [tmp-path (create-tmp-path disk-store)]
+    (let [^Path tmp-path (create-tmp-path disk-store)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  unl (.startUnload rel file-ch)]
         (reify ArrowWriter
@@ -180,7 +180,9 @@
           (close [_]
             (util/close unl)
             (when (.isOpen file-ch)
-              (.close file-ch)))))))
+              (.close file-ch))
+            ;; If tmp path still present/hasn't been atomic moved, delete it on close
+            (Files/deleteIfExists tmp-path))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
@@ -317,7 +319,7 @@
     (.get !os-files k))
 
   (openArrowWriter [_ k rel]
-    (let [tmp-path (.createTempPath disk-cache)]
+    (let [^Path tmp-path (.createTempPath disk-cache)]
       (util/with-close-on-catch [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
                                  unl (.startUnload rel file-ch)]
 
@@ -337,7 +339,9 @@
           (close [_]
             (util/close unl)
             (when (.isOpen file-ch)
-              (.close file-ch)))))))
+              (.close file-ch))
+            ;; If tmp path still present/hasn't been atomic moved, delete it on close
+            (Files/deleteIfExists tmp-path))))))
 
   (putObject [_ k buffer]
     @(-> (.putObject object-store k buffer)

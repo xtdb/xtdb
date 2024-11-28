@@ -329,3 +329,42 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
       (test-list-objects bp))))
+
+(defn count-tmp-files [^Path tmp-dir]
+  (count (.listFiles (.toFile tmp-dir))))
+
+(t/deftest buffer-pool-clears-up-arrow-writer-temp-files
+  (with-open [bp (remote-test-buffer-pool)]
+    (let [^Path root-path (.getRootPath ^DiskCache (:disk-cache bp))
+          ^Path tmp-dir (.resolve root-path ".tmp")
+          schema (Schema. [(types/col-type->field "a" :i32)])]
+      (t/testing "successful uploads"
+        (with-open [rel (Relation. tu/*allocator* schema)
+                    w (.openArrowWriter bp (util/->path "aw") rel)]
+          ;; Arrow Writer Opened
+          (t/is (= 1 (count-tmp-files tmp-dir)) "temp file present")
+
+          ;; Write arrow file out
+          (let [v (.get rel "a")]
+            (.writeInt v 1)
+            (.writeBatch w)
+            (.end w))
+          
+          (t/is (= 0 (count-tmp-files tmp-dir)) "temp file removed")))
+
+      (t/testing "failing/erroring uploads"
+        (with-redefs [util/->mmap-path (fn [_] (throw (Exception. "Example error in upload arrow file")))]
+          (with-open [rel (Relation. tu/*allocator* schema)]
+            ;; Using `with-close-on-catch`, as we do in trie.clj where we use the arrow writer
+            (t/is (thrown-with-msg? Exception #"Example error in upload arrow file"
+                                    (util/with-close-on-catch [w (.openArrowWriter bp (util/->path "aw2") rel)]
+                                      ;; Arrow Writer Opened
+                                      (t/is (= 1 (count-tmp-files tmp-dir)) "temp file present")
+
+                                     ;; Write arrow file out, should error
+                                      (let [v (.get rel "a")]
+                                        (.writeInt v 1)
+                                        (.writeBatch w)
+                                        (.end w)))))
+            
+            (t/is (= 0 (count-tmp-files tmp-dir)) "temp file removed after writer errored/closed")))))))
