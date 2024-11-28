@@ -1,7 +1,8 @@
 (ns xtdb.trie
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [xtdb.buffer-pool]
-            [xtdb.metadata :as meta]
+            [xtdb.metadata.trie :as meta-trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -11,10 +12,10 @@
            (java.util.concurrent.atomic AtomicInteger)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.arrow Relation)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            xtdb.IBufferPool
+           (xtdb.arrow Relation)
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
            (xtdb.util TemporalBounds)))
 
@@ -54,7 +55,7 @@
                                                          (types/col-type->field "idx" [:union #{:null :i32}])))
 
                            (types/col-type->field "leaf" [:struct {'data-page-idx :i32
-                                                                   'columns meta/metadata-col-type}]))]))
+                                                                   'columns meta-trie/metadata-col-type}]))]))
 
 (defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [^Field put-doc-field]
   (Schema. [(types/col-type->field "_iid" [:fixed-size-binary 16])
@@ -93,7 +94,7 @@
 
           leaf-wtr (.legWriter node-wtr "leaf")
           page-idx-wtr (.keyWriter leaf-wtr "data-page-idx")
-          page-meta-wtr (meta/->page-meta-wtr (.keyWriter leaf-wtr "columns"))
+          page-meta-wtr (meta-trie/->page-meta-wtr (.keyWriter leaf-wtr "columns"))
           !page-idx (AtomicInteger. 0)]
 
       (reify TrieWriter
