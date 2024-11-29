@@ -61,7 +61,7 @@ object Storage {
     data class LocalStorageFactory(
         val path: Path,
         var maxCacheEntries: Long = 1024,
-        var maxCacheBytes: Long = 536870912,
+        var maxCacheBytes: Long? = null,
     ) : Factory {
 
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
@@ -112,7 +112,7 @@ object Storage {
         val objectStore: ObjectStore.Factory,
         val localDiskCache: Path,
         var maxCacheEntries: Long = 1024,
-        var maxCacheBytes: Long = 536870912,
+        var maxCacheBytes: Long? = null,
         var maxDiskCachePercentage: Long = 75,
         var maxDiskCacheBytes: Long? = null
     ) : Factory {
