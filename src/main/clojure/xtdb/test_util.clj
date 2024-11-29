@@ -96,9 +96,9 @@
 (def jdbc-qopts
   {:builder-fn
    (jdbc.rs/as-maps-adapter
-     (fn [rs opts]
-       (jdbc.optional/as-unqualified-modified-maps rs (-> opts (assoc :label-fn xt-jdbc/label-fn))))
-     xt-jdbc/col-reader)})
+    (fn [rs opts]
+      (jdbc.optional/as-unqualified-modified-maps rs (-> opts (assoc :label-fn xt-jdbc/label-fn))))
+    xt-jdbc/col-reader)})
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *sys*)

@@ -2170,3 +2170,12 @@ ORDER BY t.oid DESC LIMIT 1"
                  (set (rs->maps rs))))))
 
       (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))))
+
+(t/deftest test-keywordize-nested-values-3910
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foomap RECORDS {_id: 1, a: {b: 42}}"])
+    (t/is (= [{:a {:b 42}}]
+             (q conn ["SELECT a FROM foomap where _id = 1"])))
+    (jdbc/execute! conn ["INSERT INTO foomap RECORDS {_id: 2, a: {c$d$e: 43}, bs: [{z: {w: [12, 34, {r: 'abc'}]}, y: 4}, {z: 33, y: 44}]}"])
+    (t/is (= [{:xt/id 2, :a {:c.d/e 43}, :bs [{:z {:w [12, 34, {:r "abc"}]}, :y 4}, {:z 33, :y 44}]}]
+             (q conn ["SELECT * FROM foomap where _id = 2"])))))

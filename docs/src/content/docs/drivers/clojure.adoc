@@ -41,11 +41,7 @@ Then, once you've link:/intro/installation-via-docker[started the XTDB node], fo
 
   ;; optional: use the XT col-reader to transform nested values too
   (prn (jdbc/execute! conn ["SELECT * FROM users"]
-         {:builder-fn (jdbc-rs/as-maps-adapter
-                        (fn [rs opts]
-                          (jdbc-rs/as-unqualified-modified-maps rs
-                            (-> opts (assoc :label-fn xt-jdbc/label-fn))))
-                        xt-jdbc/col-reader)}))
+                      {:builder-fn xt-jdbc/builder-fn}))
 
   ;; => [{:xt/id "joe", :first-name "Joe"}
   ;;     {:xt/id "jms", :first-name "James"}]
