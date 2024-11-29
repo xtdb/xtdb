@@ -117,7 +117,7 @@
       (time
        (do
          (time (tpch/submit-docs! node 0.5))
-         (time (tu/then-await-tx (tu/latest-submitted-tx node) node (Duration/ofHours 1)))
+         (time (tu/then-await-tx (tu/latest-submitted-tx-id node) node (Duration/ofHours 1)))
          (tu/finish-chunk! node)
          (time (c/compact-all! node (Duration/ofMinutes 5)))))))
 
