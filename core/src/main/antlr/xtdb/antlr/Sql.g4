@@ -32,7 +32,7 @@ directlyExecutableStatement
     | 'SET' identifier ( 'TO' | '=' ) literal # SetSessionVariableStatement
     | 'SHOW' showVariable # ShowVariableStatement
     | 'SHOW' identifier # ShowSessionVariableStatement
-    | 'SHOW' 'LATEST' 'SUBMITTED' 'TRANSACTION' # ShowLatestSubmittedTransactionStatement
+    | 'SHOW' 'WATERMARK' # ShowWatermarkStatement
     | 'CREATE' 'USER' userName 'WITH' 'PASSWORD' password=characterString # CreateUserStatement
     | 'ALTER' 'USER' userName 'WITH' 'PASSWORD' password=characterString # AlterUserStatement
     ;
@@ -110,7 +110,6 @@ identifier
         | 'COMMITTED' | 'UNCOMMITTED'
         | 'TIMEZONE'
         | 'VERSION'
-        | 'LATEST' | 'SUBMITTED'
         | 'SYSTEM_TIME' | 'VALID_TIME'
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
         | 'SETTING'

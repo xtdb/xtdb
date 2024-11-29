@@ -401,7 +401,7 @@
                          (subs di-str 1 (dec (count di-str)))))))
           (str/lower-case)))
 
-(defn- interpret-sql [sql {:keys [default-tz latest-submitted-tx-id session-parameters]}]
+(defn- interpret-sql [sql {:keys [default-tz watermark-tx-id session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
     (or (when (str/blank? sql-trimmed)
@@ -540,11 +540,11 @@
                                   (visitShowVariableStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})
 
-                                  (visitShowLatestSubmittedTransactionStatement [_ _]
+                                  (visitShowWatermarkStatement [_ _]
                                     {:statement-type :query, :query sql
                                      :ra-plan [:table '[tx_id]
-                                               (if latest-submitted-tx-id
-                                                 [{:tx_id latest-submitted-tx-id}]
+                                               (if watermark-tx-id
+                                                 [{:tx_id watermark-tx-id}]
                                                  [])]})
 
                                   ;; HACK: these values are fixed at prepare-time - if they were to change,
@@ -1260,7 +1260,7 @@
             (if error
               (cmd-send-error conn (err-protocol-violation (ex-message error)))
               (cmd-write-msg conn msg-command-complete cmd-complete-msg))
-            (swap! conn-state assoc :latest-submitted-tx-id tx-id)))))))
+            (swap! conn-state assoc :watermark-tx-id tx-id)))))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [query bound-query fields] :as _portal}]
   (try
@@ -1335,7 +1335,7 @@
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts]
   (swap! conn-state
-         (fn [{:keys [session latest-submitted-tx-id] :as st}]
+         (fn [{:keys [session watermark-tx-id] :as st}]
            (let [{:keys [^Clock clock]} session]
              (-> st
                  (update :transaction
@@ -1345,7 +1345,7 @@
 
                              (-> {:current-time (.instant clock)
                                   :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                                  :after-tx-id (or latest-submitted-tx-id -1)
+                                  :after-tx-id (or watermark-tx-id -1)
                                   :implicit? false}
                                  (into (:characteristics session))
                                  (into tx-opts))))))))))
@@ -1364,7 +1364,7 @@
         (swap! conn-state (fn [conn-state]
                             (-> conn-state
                                 (dissoc :transaction)
-                                (assoc :latest-submitted-tx-id tx-id))))
+                                (assoc :watermark-tx-id tx-id))))
 
         (when error
           (throw (client-err (ex-message error))))))))
@@ -1458,15 +1458,15 @@
   "Responds to a msg-parse message that creates a prepared-statement."
   [{:keys [conn-state]} {:keys [query]}]
 
-  (let [{:keys [session latest-submitted-tx-id]} @conn-state
+  (let [{:keys [session watermark-tx-id]} @conn-state
         {:keys [^Clock clock], session-parameters :parameters} session]
 
     (interpret-sql query {:default-tz (.getZone clock)
-                          :latest-submitted-tx-id latest-submitted-tx-id
+                          :watermark-tx-id watermark-tx-id
                           :session-parameters session-parameters})))
 
 (defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]
-  (let [{:keys [session latest-submitted-tx-id]} @conn-state
+  (let [{:keys [session watermark-tx-id]} @conn-state
         {:keys [^Clock clock]} session
         fallback-output-format (get-in session [:parameters "fallback_output_format"])
         param-types (map types/pg-types-by-oid param-oids)]
@@ -1484,7 +1484,7 @@
                                                                                                    (distinct)))))))})))
 
         (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
-              query-opts {:after-tx-id (or latest-submitted-tx-id -1)
+              query-opts {:after-tx-id (or watermark-tx-id -1)
                           :tx-timeout (Duration/ofSeconds 1)
                           :param-types param-col-types
                           :default-tz (.getZone clock)}

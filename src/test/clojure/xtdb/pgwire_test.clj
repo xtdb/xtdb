@@ -1737,19 +1737,19 @@
              [{"x" "foo", "y" "bar"}]
              (rs->maps (.executeQuery stmt)))))))
 
-(deftest test-show-latest-submitted-tx
+(deftest test-show-watermark
   (with-open [conn (jdbc-conn)]
-    (t/is (= [] (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
+    (t/is (= [] (q conn ["SHOW WATERMARK"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
     (t/is (= [{:tx-id 0}]
-             (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))
+             (q conn ["SHOW WATERMARK"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
     (t/is (= [{:tx-id 1}]
-             (q conn ["SHOW LATEST SUBMITTED TRANSACTION"])))))
+             (q conn ["SHOW WATERMARK"])))))
 
 (t/deftest test-show-session-variable-3804
   (with-open [conn (jdbc-conn)]
