@@ -34,17 +34,6 @@
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))
 
-(defn ->local-node [{:keys [node-dir ^String buffers-dir
-                            rows-per-chunk log-limit page-limit instant-src]
-                     :or {buffers-dir "objects"}}]
-  (let [node-dir (util/->path node-dir)]
-    (xtn/start-node {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
-                     :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :healthz {:port 8080}
-                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
-                                   (into {} (filter val)))
-                     :server {:port 0}})))
-
 (defn generate
   ([worker table f n]
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
@@ -70,7 +59,7 @@
                     ((requiring-resolve 'xtdb.bench.readings/overwritten-readings) benchmark-opts))
 
         benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
-    (with-open [node (->local-node node-opts)]
+    (with-open [node (tu/->local-node node-opts)]
       (binding [bm/*registry* (util/component node :xtdb.metrics/registry)]
         (benchmark-fn node)))))
 
