@@ -1743,12 +1743,22 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:tx-id 0}]
+    (t/is (= [{:watermark 0}]
              (q conn ["SHOW WATERMARK"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:tx-id 1}]
+    (t/is (= [{:watermark 1}]
+             (q conn ["SHOW WATERMARK"])))
+
+    (jdbc/execute! conn ["SET WATERMARK = 0"])
+
+    (t/is (= [{:watermark 0}]
+             (q conn ["SHOW WATERMARK"])))
+
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
+
+    (t/is (= [{:watermark 2}]
              (q conn ["SHOW WATERMARK"])))))
 
 (t/deftest test-show-session-variable-3804

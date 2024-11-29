@@ -540,11 +540,17 @@
                                   (visitShowVariableStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})
 
+                                  (visitSetWatermarkStatement [_ ctx]
+                                    (let [wm-tx-id (.accept (.literal ctx) (plan/->ExprPlanVisitor nil nil))]
+                                      (if (number? wm-tx-id)
+                                        {:statement-type :set-watermark, :watermark-tx-id wm-tx-id}
+                                        (throw (client-err "invalid watermark - expecting number")))))
+
                                   (visitShowWatermarkStatement [_ _]
                                     {:statement-type :query, :query sql
-                                     :ra-plan [:table '[tx_id]
+                                     :ra-plan [:table '[watermark]
                                                (if watermark-tx-id
-                                                 [{:tx_id watermark-tx-id}]
+                                                 [{:watermark watermark-tx-id}]
                                                  [])]})
 
                                   ;; HACK: these values are fixed at prepare-time - if they were to change,
@@ -1407,9 +1413,13 @@
   ;; doesn't mean anything to us because we're always serializable
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn cmd-set-time-zone [conn tz]
+(defn cmd-set-time-zone [conn {:keys [tz]}]
   (set-time-zone conn tz)
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
+
+(defn cmd-set-watermark [{:keys [conn-state] :as conn} {:keys [watermark-tx-id]}]
+  (swap! conn-state assoc :watermark-tx-id watermark-tx-id)
+  (cmd-write-msg conn msg-command-complete {:command "SET WATERMARK"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
@@ -1619,7 +1629,7 @@
     (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
     (cmd-write-msg conn msg-bind-complete)))
 
-(defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter tz value session-characteristics tx-characteristics] :as portal}]
+(defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   ;; TODO implement limit for queries that return rows
   (when-let [err (permissibility-err conn portal)]
     (throw (ex-info "parsing error"
@@ -1641,7 +1651,8 @@
     :set-session-characteristics (cmd-set-session-characteristics conn session-characteristics)
     :set-role nil
     :set-transaction (cmd-set-transaction conn tx-characteristics)
-    :set-time-zone (cmd-set-time-zone conn tz)
+    :set-time-zone (cmd-set-time-zone conn portal)
+    :set-watermark (cmd-set-watermark conn portal)
     :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
 
     :begin (do

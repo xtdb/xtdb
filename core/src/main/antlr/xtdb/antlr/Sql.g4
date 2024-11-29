@@ -21,20 +21,21 @@ directlyExecutableStatement
     | eraseStatementSearched #EraseStmt
     | prepareStatement #PrepareStmt
     | executeStatement #ExecuteStmt
-    | 'ASSERT' searchCondition #AssertStatement
-    | ('START' 'TRANSACTION' | 'BEGIN') transactionCharacteristics? # StartTransactionStatement
-    | 'SET' 'TRANSACTION' 'ISOLATION' 'LEVEL' levelOfIsolation # SetTransactionStatement
-    | 'COMMIT' # CommitStatement
-    | 'ROLLBACK' # RollbackStatement
-    | 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
-    | 'SET' 'ROLE' ( identifier | 'NONE' ) # SetRoleStatement
-    | 'SET' 'TIME' 'ZONE' characterString # SetTimeZoneStatement
-    | 'SET' identifier ( 'TO' | '=' ) literal # SetSessionVariableStatement
-    | 'SHOW' showVariable # ShowVariableStatement
-    | 'SHOW' identifier # ShowSessionVariableStatement
-    | 'SHOW' 'WATERMARK' # ShowWatermarkStatement
-    | 'CREATE' 'USER' userName 'WITH' 'PASSWORD' password=characterString # CreateUserStatement
-    | 'ALTER' 'USER' userName 'WITH' 'PASSWORD' password=characterString # AlterUserStatement
+    | ASSERT searchCondition #AssertStatement
+    | (START TRANSACTION | BEGIN) transactionCharacteristics? # StartTransactionStatement
+    | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
+    | COMMIT # CommitStatement
+    | ROLLBACK # RollbackStatement
+    | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
+    | SET ROLE ( identifier | NONE ) # SetRoleStatement
+    | SET TIME ZONE characterString # SetTimeZoneStatement
+    | SET WATERMARK ( TO | '=' ) literal # SetWatermarkStatement
+    | SET identifier ( TO | '=' ) literal # SetSessionVariableStatement
+    | SHOW showVariable # ShowVariableStatement
+    | SHOW identifier # ShowSessionVariableStatement
+    | SHOW WATERMARK # ShowWatermarkStatement
+    | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
+    | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
     ;
 
 executeStatement : EXECUTE statementName=identifier executeArgs ;
