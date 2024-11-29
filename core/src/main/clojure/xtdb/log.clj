@@ -100,6 +100,7 @@
                               (let [last-tx-id (reduce (tx-handler subscriber)
                                                        after-tx-id
                                                        (if (and latest-submitted-tx-id
+                                                                (pos? ^long latest-submitted-tx-id)
                                                                 (or (nil? after-tx-id)
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up

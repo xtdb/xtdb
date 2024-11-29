@@ -12,6 +12,10 @@
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^InstantSource instant-src
                       ^FileListCache file-list-cache]
   Log
+  (latestSubmittedTxId [_]
+    (or (some-> @!records ^TxLog$Record peek .getTxId)
+        -1))
+
   (appendTx [_ record]
     (CompletableFuture/completedFuture
      (let [^TxLog$Record record (-> (swap! !records (fn [records]

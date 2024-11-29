@@ -4,6 +4,7 @@
             [integrant.core :as ig]
             [sci.core :as sci]
             [xtdb.api :as xt]
+            [xtdb.authn :as authn]
             [xtdb.await :as await]
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
@@ -23,8 +24,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql]
-            [xtdb.authn :as authn])
+            [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)
@@ -42,7 +42,7 @@
            xtdb.arrow.RowCopier
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
-           (xtdb.query BoundQuery IQuerySource PreparedQuery)
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            (xtdb.vector IVectorReader RelationReader)
            (xtdb.watermark IWatermarkSource Watermark)))

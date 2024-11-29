@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.log :as xt.log]
             [xtdb.node :as xtn]
-            [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -15,6 +14,7 @@
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
+           [java.util.concurrent.atomic AtomicLong]
            (xtdb.api Xtdb$Config)
            (xtdb.api.log FileListCache Log Logs Logs$LocalLogFactory TxLog$Record)
            (xtdb.log INotifyingSubscriberHandler)))
@@ -26,8 +26,11 @@
 (deftype LocalDirectoryLog [^Path root-path, ^INotifyingSubscriberHandler subscriber-handler
                             ^ExecutorService pool, ^BlockingQueue queue, ^Future append-loop-future
                             ^:volatile-mutable ^FileChannel log-channel
-                            ^FileListCache file-list-cache]
+                            ^FileListCache file-list-cache
+                            ^AtomicLong !latest-submitted-tx-id]
   Log
+  (latestSubmittedTxId [_] (.get !latest-submitted-tx-id))
+
   (readTxs [_ after-offset limit]
     (when-not log-channel
       (let [log-path (.resolve root-path "LOG")]
@@ -93,7 +96,9 @@
             (recur)))))))
 
 (defn- writer-append-loop [^Path root-path, ^BlockingQueue queue, ^InstantSource instant-src,
-                           {:keys [^long buffer-size ^INotifyingSubscriberHandler subscriber-handler]}]
+                           {:keys [^long buffer-size
+                                   ^INotifyingSubscriberHandler subscriber-handler
+                                   ^AtomicLong !latest-submitted-tx-id]}]
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG") #{:create :write})]
     (let [elements (ArrayList. buffer-size)]
       (.position log-channel (.size log-channel))
@@ -129,6 +134,7 @@
               (.force log-channel true)
               (doseq [[^CompletableFuture f, ^TxLog$Record log-record] elements]
                 (let [tx-id (.getTxId log-record)]
+                  (.set !latest-submitted-tx-id tx-id)
                   (.notifyTx subscriber-handler tx-id)
                   (.complete f tx-id)))))
           (catch ClosedByInterruptException e
@@ -156,14 +162,14 @@
                  buffer-size (.bufferSize buffer-size)
                  poll-sleep-duration (.pollSleepDuration (time/->duration poll-sleep-duration))))))
 
-(defn- latest-submitted-tx [^Path root-path]
+(defn- latest-submitted-tx-id ^long [^Path root-path]
   (let [log-path (.resolve root-path "LOG")]
     (if-not (util/path-exists log-path)
-      nil
+      -1
       (with-open [log-channel (util/->file-channel log-path)]
         (let [size (.size log-channel)]
           (if (zero? size)
-            nil
+            -1
             (try
               (.position log-channel (- size Long/BYTES))
               (let [log-in (DataInputStream. (BufferedInputStream. (Channels/newInputStream log-channel)))
@@ -191,8 +197,11 @@
 
     (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
           queue (ArrayBlockingQueue. buffer-size)
-          subscriber-handler (xt.log/->notifying-subscriber-handler (latest-submitted-tx root-path))
+          latest-submitted-tx-id (latest-submitted-tx-id root-path)
+          !latest-submitted-tx-id (AtomicLong. latest-submitted-tx-id)
+          subscriber-handler (xt.log/->notifying-subscriber-handler latest-submitted-tx-id)
           append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue (.getInstantSource factory)
                                                                           {:buffer-size buffer-size
-                                                                           :subscriber-handler subscriber-handler}))]
-      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil FileListCache/SOLO))))
+                                                                           :subscriber-handler subscriber-handler
+                                                                           :!latest-submitted-tx-id !latest-submitted-tx-id}))]
+      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil FileListCache/SOLO !latest-submitted-tx-id))))

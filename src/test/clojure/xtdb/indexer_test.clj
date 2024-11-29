@@ -14,7 +14,8 @@
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.protocols :as xtp])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration InstantSource)
@@ -369,6 +370,9 @@
             (.close node1)
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
+              (t/is (<= first-half-tx-id (xtp/latest-submitted-tx-id node2)))
+              (t/is (<= first-half-tx-id (some-> (xtp/latest-completed-tx node2) :tx-id)))
+
               (let [^IBufferPool bp (util/component node2 :xtdb/buffer-pool)
                     ^IMetadataManager mm (util/component node2 ::meta/metadata-manager)
                     lc-tx (-> first-half-tx-id

@@ -11,6 +11,8 @@ interface TxLog {
     fun readTxs(afterTxId: TxId?, limit: Int): List<Record>
     fun subscribeTxs(afterTxId: TxId?, subscriber: Subscriber)
 
+    fun latestSubmittedTxId(): TxId
+
     class Record(val txId: TxId, val timestamp: Instant, val record: ByteBuffer)
 
     interface Subscriber {

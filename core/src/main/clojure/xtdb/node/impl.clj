@@ -1,11 +1,12 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
+            [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
             [xtdb.error :as err]
-            xtdb.indexer
-            [xtdb.log :as log]
+            [xtdb.indexer :as idx]
+            [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
@@ -37,9 +38,9 @@
 
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
-(defn- with-query-opts-defaults [query-opts {:keys [default-tz !latest-submitted-tx-id]}]
+(defn- with-query-opts-defaults [query-opts {:keys [default-tz] :as node}]
   (-> (into {:default-tz default-tz,
-             :after-tx-id @!latest-submitted-tx-id
+             :after-tx-id (xtp/latest-submitted-tx-id node)
              :key-fn (serde/read-key-fn :snake-case-string)}
             query-opts)
       (update :snapshot-time #(some-> % (time/->instant)))
@@ -72,7 +73,6 @@
                  ^IQuerySource q-src, wm-src, scan-emitter
                  ^CompositeMeterRegistry metrics-registry
                  default-tz
-                 !latest-submitted-tx-id
                  system, close-fn,
                  query-timer]
   Xtdb
@@ -89,13 +89,10 @@
 
   xtp/PNode
   (submit-tx [this tx-ops opts]
-    (let [^long tx-id (try
-                        @(log/submit-tx& this (->TxOps tx-ops) opts)
-                        (catch ExecutionException e
-                          (throw (ex-cause e))))]
-
-      (swap! !latest-submitted-tx-id (fnil max tx-id) tx-id)
-      tx-id))
+    (try
+      @(xt-log/submit-tx& this (->TxOps tx-ops) opts)
+      (catch ExecutionException e
+        (throw (ex-cause e)))))
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
@@ -119,7 +116,8 @@
           (then-execute-prepared-query allocator query-timer query-opts))) )
 
   xtp/PStatus
-  (latest-submitted-tx-id [_] @!latest-submitted-tx-id)
+  (latest-completed-tx [_] (.latestCompletedTx indexer))
+  (latest-submitted-tx-id [_] (.latestSubmittedTxId log))
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
@@ -178,18 +176,29 @@
           :authn (ig/ref :xtdb/authn)}
          opts))
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
+(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry, ^IIndexer indexer] :as deps}]
   (let [node (map->Node (-> deps
-                            (assoc :!latest-submitted-tx-id (atom -1)
-                                   :query-timer (metrics/add-timer metrics-registry "query.timer"
+                            (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]
-    (metrics/add-gauge metrics-registry "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
-    (metrics/add-gauge metrics-registry "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] -1)))
-    (metrics/add-gauge metrics-registry "node.tx.lag.TxId" (fn []
-                                                             (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
-                                                               (if (and latest-completed-tx (> latest-submitted-tx-id ^long (:tx-id latest-completed-tx)))
-                                                                 (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
-                                                                 0))))
+
+    (doto metrics-registry
+      (metrics/add-gauge "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
+      (metrics/add-gauge "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] -1)))
+      (metrics/add-gauge "node.tx.lag.TxId"
+                         (fn []
+                           (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
+                             (if (and latest-completed-tx (> latest-submitted-tx-id ^long (:tx-id latest-completed-tx)))
+                               (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
+                               0)))))
+
+    (let [^long ls-tx-id (xtp/latest-submitted-tx-id node)
+          ^long lc-tx-id (:tx-id (xtp/latest-completed-tx node) -1)]
+      (when (and (not (neg? ls-tx-id))
+                 (< lc-tx-id ls-tx-id))
+        (log/infof "Catching up to tx-id %d, currently at %s..." ls-tx-id (when-not (neg? lc-tx-id) lc-tx-id))
+        (let [{:keys [tx-id]} (.awaitTx indexer ls-tx-id nil)]
+          (log/infof "Caught up, now at %d." tx-id))))
+
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]

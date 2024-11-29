@@ -103,6 +103,10 @@
                        ^TopicPartition tp
                        ^Duration poll-duration]
   Log
+  (latestSubmittedTxId [_]
+    (or (some-> (.endOffsets consumer #{tp}) (get tp) dec)
+        -1))
+
   (appendTx [_ record]
     (let [fut (CompletableFuture.)]
       (.send producer (ProducerRecord. (.topic tp) nil record)
@@ -176,6 +180,8 @@
 
 (defrecord KafkaLog [^KafkaTxLog tx-log ^KafkaFileListCache file-list-cache]
   Log
+  (latestSubmittedTxId [_] (.latestSubmittedTxId tx-log))
+
   (appendTx [_ record] (.appendTx tx-log record))
   (readTxs [_ after-tx-id limit] (.readTxs tx-log after-tx-id limit))
   (subscribeTxs [_ after-tx-id subscriber] (.subscribeTxs tx-log after-tx-id subscriber))

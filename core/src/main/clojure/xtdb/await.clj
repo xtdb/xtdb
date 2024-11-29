@@ -8,10 +8,10 @@
   (compareTo [_ other]
     (Long/compare tx-id (.tx_id ^AwaitingTx other))))
 
-(defn- await-done? [^long awaited-tx-id, ^TransactionKey completed-tx-id]
+(defn- await-done? [^long awaited-tx-id, ^TransactionKey completed-tx]
   (or (neg? awaited-tx-id)
-      (and completed-tx-id
-           (not (pos? (Long/compare awaited-tx-id (.getTxId completed-tx-id)))))))
+      (and completed-tx
+           (not (pos? (Long/compare awaited-tx-id (.getTxId completed-tx)))))))
 
 (defn- ->ingester-ex [^Throwable cause]
   (ex-info (str "Ingestion stopped: " (.getMessage cause)) {} cause))
