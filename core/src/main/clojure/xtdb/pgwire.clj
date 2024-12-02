@@ -508,8 +508,10 @@
                                            (transduce (keep (partial plan/accept-visitor this)) conj q))))
 
                                   ;; could do pre-submit validation here
-                                  (visitCreateUserStatement [_ _])
-                                  (visitAlterUserStatement [_ _])
+                                  (visitCreateUserStatement [_ ctx]
+                                    {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
+                                  (visitAlterUserStatement [_ ctx]
+                                    {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
 
                                   (visitPrepareStmt [this ctx] (-> (.prepareStatement ctx) (.accept this)))
 
@@ -1240,7 +1242,8 @@
                                        :delete "DELETE 0"
                                        :update "UPDATE 0"
                                        :erase "ERASE 0"
-                                       :assert "ASSERT")}]
+                                       :assert "ASSERT"
+                                       :create-role "CREATE ROLE")}]
 
       (cond
         (skip-until-sync? conn) nil

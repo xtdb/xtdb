@@ -2143,7 +2143,6 @@ ORDER BY t.oid DESC LIMIT 1"
 
       ;; user xtdb should be fine
       (with-open [_ (jdbc-conn "user" "xtdb" "password" "xtdb")])
-
       (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: xtdb"
                               (with-open [_ (jdbc-conn "user" "xtdb" "password" "foobar")]))
             "user with a wrong password gets blocked")))
@@ -2155,8 +2154,19 @@ ORDER BY t.oid DESC LIMIT 1"
         (with-open [_ (jdbc-conn "user" "fin")]))))
 
   (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn [:user-table {:rules [{:user "fin", :method :password, :address "127.0.0.1"}]}]})]
+                                    :authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
+                                                                 {:user "fin", :method :password, :address "127.0.0.1"}]}]})]
+
     (binding [*port* (:port (tu/node->server node))]
       (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
-            "users with a authentication record but not in the database"))))
+            "users with a authentication record but not in the database")
+
+      (with-open [conn (jdbc-conn "user" "xtdb" "password" "xtdb")]
+        (jdbc/execute! conn ["CREATE USER fin WITH PASSWORD 'foobar'"])
+        (with-open [stmt (.createStatement conn)
+                    rs (.executeQuery stmt "SELECT username FROM pg_user")]
+          (is (= (set [{"username" "xtdb"} {"username" "fin"}])
+                 (set (rs->maps rs))))))
+
+      (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))))
