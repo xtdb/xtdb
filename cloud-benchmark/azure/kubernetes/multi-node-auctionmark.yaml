@@ -66,7 +66,7 @@ data:
   KAFKA_BOOTSTRAP_SERVERS: "kafka-service.cloud-benchmark.svc.cluster.local:9092"
   XTDB_TX_TOPIC: "xtdb-tx-topic"
   XTDB_FILES_TOPIC: "xtdb-files-topic"
-  AUCTIONMARK_DURATION: "PT1H"
+  AUCTIONMARK_DURATION: "PT24H"
   AUCTIONMARK_SCALE_FACTOR: "0.1"
 ---
 apiVersion: batch/v1
@@ -119,9 +119,9 @@ spec:
           name: xtdb-pvc-local-cache-lp-vol
         resources:
           requests:
-            memory: "5120Mi"
+            memory: "6244Mi"
           limits:
-            memory: "5120Mi"
+            memory: "6244Mi"
         envFrom:
         - configMapRef:
             name: xtdb-env-config
@@ -146,9 +146,9 @@ spec:
           name: xtdb-pvc-local-cache-1-vol
         resources:
           requests:
-            memory: "5120Mi"
+            memory: "6244Mi"
           limits:
-            memory: "5120Mi"
+            memory: "6244Mi"
         envFrom:
         - configMapRef:
             name: xtdb-env-config
@@ -172,9 +172,9 @@ spec:
           name: xtdb-pvc-local-cache-2-vol
         resources:
           requests:
-            memory: "5120Mi"
+            memory: "6244Mi"
           limits:
-            memory: "5120Mi"
+            memory: "6244Mi"
         envFrom:
         - configMapRef:
             name: xtdb-env-config
@@ -198,9 +198,9 @@ spec:
           name: xtdb-pvc-local-cache-3-vol
         resources:
           requests:
-            memory: "5120Mi"
+            memory: "6244Mi"
           limits:
-            memory: "5120Mi"
+            memory: "6244Mi"
         envFrom:
         - configMapRef:
             name: xtdb-env-config
