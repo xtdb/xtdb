@@ -276,6 +276,16 @@ The Grafana dashboard can be accessed via the external IP of the LoadBalancer se
 
 With this up and runing, you can then import the XTDB dashboards (the cluster monitoring dashboard and node debugging dashboard) from `monitoring/grafana/dashboards`, and use these to monitor the benchmark pods.
 
+=== Clearing up Grafana
+
+If using the `clear-azure-bench.sh` script, by default we retain the Grafana deployment. If you wish to clear this up, you can run:
+
+```bash
+./scripts/clear-azure-bench --clear-grafana
+```
+
+This will clear up the Grafana deployment, the Grafana persistent volume claim, and the Prometheus persistent volume claim.
+
 == Trailing the Logs
 
 You can trail the logs of each node within the job by running:

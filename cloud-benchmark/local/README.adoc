@@ -103,3 +103,16 @@ To see the logs of one of the nodes, run:
 ```
 minikube kubectl -- logs job.batch/xtdb-multi-node-auctionmark --namespace xtdb-benchmark -c xtdb-bench-1 -f
 ```
+
+=== Cleaning Up
+
+To clean up everything on the benchmark (excluding grafana and it's data), run:
+```
+./scripts/clear-kubernetes.sh
+```
+
+If you wish to ALSO clear up grafana, run with the following flag:
+```
+./scripts/clear-kubernetes.sh --clear-grafana
+```
+

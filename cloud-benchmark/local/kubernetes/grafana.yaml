@@ -72,7 +72,21 @@ spec:
   accessModes: ['ReadWriteOnce']
   resources:
     requests:
-      storage: 10Gi
+      storage: 1Gi
+---
+# Prometheus saves up to 15days of data by default - would need to set CLI flags via 
+# Grafana-Otel to change this/base it on size - for now assuming 100GiB should be more than enough
+# for XTDB benchmark usage. 
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: xtdb-benchmark
+spec:
+  accessModes: ['ReadWriteOnce']
+  resources:
+    requests:
+      storage: 50Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -115,8 +129,10 @@ spec:
               cpu: 250m
               memory: 750Mi
           volumeMounts:
-            - mountPath: /var/lib/grafana
+            - mountPath: /otel-lgtm/grafana/data
               name: grafana-pv
+            - mountPath: /data/prometheus
+              name: prometheus-pv
             - mountPath: /otel-lgtm/otelcol-config.yaml
               name: config-volume
               subPath: otelcol-config.yaml 
@@ -127,6 +143,9 @@ spec:
         - name: grafana-pv
           persistentVolumeClaim:
             claimName: grafana-pvc
+        - name: prometheus-pv
+          persistentVolumeClaim:
+            claimName: prometheus-pvc
         - name: config-volume
           configMap:
             name: grafana-otel-config
