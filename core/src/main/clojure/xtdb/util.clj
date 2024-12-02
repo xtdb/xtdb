@@ -668,7 +668,7 @@
 
 (defn max-direct-memory
   "Returns the maximum direct memory supposed to be used by the system"
-  []
+  ^long []
   (try
     (io.netty.util.internal.PlatformDependent/maxDirectMemory)
     (catch Throwable _t
