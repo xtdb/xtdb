@@ -19,11 +19,13 @@ class PinningCache<K, V : PinningCache.IEntry<K>>(
     @Volatile
     private var pinnedBytes: Long = 0
 
+    data class PinningCacheStats(override val pinnedBytes: Long, override val evictableBytes: Long, override val freeBytes: Long) : Stats
+
     val stats: Stats
         get() {
             val pinnedBytes =  pinnedBytes
             val evictableBytes = eviction.weightedSize().asLong
-            return Stats(pinnedBytes, evictableBytes, maxSizeBytes - pinnedBytes - evictableBytes)
+            return PinningCacheStats(pinnedBytes, evictableBytes, maxSizeBytes - pinnedBytes - evictableBytes)
         }
 
     interface IEntry<K> {

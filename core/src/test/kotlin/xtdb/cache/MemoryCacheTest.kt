@@ -51,7 +51,7 @@ class MemoryCacheTest {
                 cache.get(PathSlice(Path.of("t1/100"), 0, 100)) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(1, b1.getByte(0))
 
-                    assertEquals(Stats(100, 0, 150), cache.stats)
+                    assertTrue(Stats.compareStats(Stats(100L, 0L, 150L), cache.stats))
                 }
 
                 cache.get(PathSlice(Path.of("t1/100"), 0, 100)) { completedFuture(it to onEvict) }.use { b1 ->
@@ -59,7 +59,7 @@ class MemoryCacheTest {
                 }
 
                 Thread.sleep(50)
-                assertEquals(Stats(0, 100, 150), cache.stats)
+                assertTrue(Stats.compareStats(Stats(0L, 100L, 150L), cache.stats))
                 assertFalse(t1Evicted)
             })
 
@@ -71,11 +71,11 @@ class MemoryCacheTest {
                 cache.get(PathSlice(Path.of("t2/50"), 0, 50)) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(2, b1.getByte(0))
 
-                    assertEquals(Stats(50, 100, 100), cache.stats)
+                    assertTrue(Stats.compareStats(Stats(50L, 100L, 100L), cache.stats))
                 }
 
                 Thread.sleep(100)
-                assertEquals(Stats(0, 150, 100), cache.stats)
+                assertTrue(Stats.compareStats(Stats(0L, 150L, 100L), cache.stats))
             })
 
             assertFalse(t1Evicted)

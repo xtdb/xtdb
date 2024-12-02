@@ -9,15 +9,27 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
 import org.apache.arrow.memory.util.MemoryUtil
 import xtdb.cache.PinningCache.IEntry
+import xtdb.util.isMetaFile
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
-
 data class PathSlice(val path: Path, val offset: Long? = null, val length: Long? = null) {
     constructor(path: Path) : this(path, null, null)
+}
+
+data class CacheSectionStats(val sliceCount: Int, val weightBytes: Long, val pinned: Long, val unpinned: Long)
+
+data class MemoryCacheStats(
+    val pinningCacheStats: Stats,
+    val metaStats: CacheSectionStats,
+    val dataStats: CacheSectionStats
+) : Stats {
+    override val pinnedBytes: Long = pinningCacheStats.pinnedBytes
+    override val evictableBytes: Long = pinningCacheStats.evictableBytes
+    override val freeBytes: Long = pinningCacheStats.freeBytes
 }
 
 /**
@@ -34,7 +46,21 @@ class MemoryCache
 ) : AutoCloseable {
     private val pinningCache = PinningCache<PathSlice, Entry>(maxSizeBytes)
 
-    val stats get() = pinningCache.stats
+    val stats: MemoryCacheStats
+        get()  {
+        val grouped = pinningCache.cache.asMap().entries.groupBy { isMetaFile(it.key.path) }
+        val metaSlices = grouped[true] ?: emptyList()
+        val dataSlices = grouped[false] ?: emptyList()
+        val metaWeightBytes = metaSlices.sumOf { it.key.length ?: 0 }
+        val dataWeightBytes = dataSlices.sumOf { it.key.length ?: 0 }
+        val metaPinned = metaSlices.sumOf { if (it.value.get().inner.refCount.get() > 0) 1L else 0L }
+        val dataPinned = dataSlices.sumOf { if (it.value.get().inner.refCount.get() > 0) 1L else 0L }
+        return MemoryCacheStats(
+            pinningCache.stats,
+            CacheSectionStats(metaSlices.size, metaWeightBytes, metaPinned, metaSlices.size - metaPinned),
+            CacheSectionStats(dataSlices.size, dataWeightBytes, dataPinned, dataSlices.size - dataPinned)
+        )
+    }
 
     interface PathLoader {
         fun load(path: Path): ByteBuffer

@@ -269,7 +269,7 @@
 (defn open-local-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$LocalStorageFactory factory, ^MeterRegistry metrics-registry]
   (let [max-cache-bytes (or (.getMaxCacheBytes factory) (quot (util/max-direct-memory) 2))
         memory-cache (MemoryCache. allocator max-cache-bytes)]
-    (metrics/add-cache-gauges metrics-registry "memorycache" #(.getStats memory-cache))
+    (metrics/add-mem-cache-gauges metrics-registry "memorycache" #(.getStats memory-cache))
     (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                        memory-cache
                        (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs)
@@ -499,7 +499,7 @@
             disk-cache (DiskCache. disk-cache-root
                                    (or (.getMaxDiskCacheBytes factory)
                                        (calculate-limit-from-percentage-of-disk disk-cache-root (.getMaxDiskCachePercentage factory))))]
-        (metrics/add-cache-gauges metrics-registry "memorycache" #(.getStats memory-cache))
+        (metrics/add-mem-cache-gauges metrics-registry "memorycache" #(.getStats memory-cache))
         (metrics/add-cache-gauges metrics-registry "diskcache" #(.getStats disk-cache))
         (->RemoteBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                             memory-cache
