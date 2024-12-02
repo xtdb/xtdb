@@ -100,11 +100,15 @@
 (defrecord KafkaTxLog [kafka-config
                        ^KafkaProducer producer
                        ^KafkaConsumer consumer
+                       ^KafkaConsumer end-offsets-consumer
                        ^TopicPartition tp
                        ^Duration poll-duration]
   Log
   (latestSubmittedTxId [_]
-    (or (some-> (.endOffsets consumer #{tp}) (get tp) dec)
+    (or (some-> (locking end-offsets-consumer
+                  (.endOffsets end-offsets-consumer #{tp}))
+                (get tp)
+                dec)
         -1))
 
   (appendTx [_ record]
@@ -128,6 +132,7 @@
 
   AutoCloseable
   (close [_]
+    (util/try-close end-offsets-consumer)
     (util/try-close consumer)
     (util/try-close producer)))
 
@@ -250,6 +255,7 @@
                  (->tx-producer kafka-config)
                  (doto (->tx-consumer kafka-config)
                    (.assign #{tp}))
+                 (->tx-consumer kafka-config)
                  tp
                  poll-duration)))
 
