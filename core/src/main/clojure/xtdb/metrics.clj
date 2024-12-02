@@ -10,12 +10,15 @@
            java.util.List
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.cache Stats)))
+           (xtdb.cache Stats MemoryCacheStats)))
 
-(defn add-counter [reg name {:keys [description]}]
-  (cond-> (Counter/builder name)
-    description (.description description)
-    :always (.register reg)))
+(defn add-counter
+  ([reg name] (add-counter reg name {}))
+  ([reg name {:keys [description]}]
+   (let [cnt (cond-> (Counter/builder name)
+               description (.description description)
+               :always (.register reg)) ]
+     cnt)))
 
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
 
@@ -32,10 +35,13 @@
 
 (defn add-gauge
   ([reg meter-name f] (add-gauge reg meter-name f {}))
-  ([^MeterRegistry reg meter-name f opts]
-   (-> (Gauge/builder meter-name f)
-       (cond-> (:unit opts) (.baseUnit (str (:unit opts))))
-       (.register reg))))
+  ([^MeterRegistry reg meter-name f {:keys [unit tag]}]
+   (let [[tag-key tag-value] tag]
+     (-> (Gauge/builder meter-name f)
+         (cond->
+             unit (.baseUnit (str unit))
+             tag (.tag tag-key tag-value))
+         (.register reg)))))
 
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
@@ -52,12 +58,40 @@
                #(.getFreeBytes ^Stats (get-stats))
                {:unit "bytes"})))
 
+(defn add-mem-cache-gauges [reg meter-name get-stats]
+  (add-cache-gauges reg meter-name get-stats)
+  (doto reg
+    (add-gauge (str meter-name ".metaSliceCount")
+               #(.getSliceCount (.getMetaStats ^MemoryCacheStats (get-stats)))
+               {:tag ["type" "meta"]})
+    (add-gauge (str meter-name ".dataSliceCount")
+               #(.getSliceCount (.getDataStats ^MemoryCacheStats (get-stats)))
+               {:tag ["type" "data"]})
+    (add-gauge (str meter-name ".metaWeightBytes")
+               #(.getWeightBytes (.getMetaStats ^MemoryCacheStats (get-stats)))
+               {:unit "bytes" :tag ["type" "meta"]})
+    (add-gauge (str meter-name ".dataWeightBytes")
+               #(.getWeightBytes (.getDataStats ^MemoryCacheStats (get-stats)))
+               {:unit "bytes" :tag ["type" "data"]})
+    (add-gauge (str meter-name ".metaPinned")
+               #(.getPinned (.getMetaStats ^MemoryCacheStats (get-stats)))
+               {:tag ["type" "meta"]})
+    (add-gauge (str meter-name ".dataPinned")
+               #(.getPinned (.getDataStats ^MemoryCacheStats (get-stats)))
+               {:tag ["type" "data"]})
+    (add-gauge (str meter-name ".metaUnpinned")
+               #(.getUnpinned (.getMetaStats ^MemoryCacheStats (get-stats)))
+               {:tag ["type" "meta"]})
+    (add-gauge (str meter-name ".dataUnpinned")
+               #(.getUnpinned (.getDataStats ^MemoryCacheStats (get-stats)))
+               {:tag ["type" "data"]})))
+
 (defn random-node-id []
   (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
 
 (defmethod ig/init-key :xtdb.metrics/registry [_ _]
   (let [reg (CompositeMeterRegistry.)]
-    
+
     ;; Add common tag for the node
     (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
           ^List tags [(Tag/of "node-id" node-id)]]
