@@ -121,6 +121,8 @@ allprojects {
                 forkOptions.run {
                     val jvmArgs = defaultJvmArgs.toMutableList()
 
+                    // memoryMaximumSize = "4g"
+
                     if (project.hasProperty("yourkit")) {
                         jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=xtdb"
                     }
