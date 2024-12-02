@@ -190,20 +190,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
 
             override fun load(rel: Relation) {
-                val prefixSize =
-                    if (buf.getInt(block.offset) == MessageSerializer.IPC_CONTINUATION_TOKEN) 8L else 4L
-
-                val metadataBuf = buf.nioBuffer(block.offset + prefixSize, block.metadataLength - prefixSize.toInt())
-
-                val bodyBuf = buf.slice(block.offset + block.metadataLength, block.bodyLength)
-                    .also { it.referenceManager.retain() }
-
-                val msg = Message.getRootAsMessage(metadataBuf.asReadOnlyBuffer())
-                val recordBatchFB = RecordBatch().also { msg.header(it) }
-
-                (MessageSerializer.deserializeRecordBatch(recordBatchFB, bodyBuf)
-                    ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
-
+                ArrowUtil.arrowBufToRecordBatch(buf, block.offset, block.metadataLength, block.bodyLength,
+                    "Failed to deserialize record batch $idx, offset ${block.offset}")
                     .use { batch -> rel.load(batch) }
             }
         }
