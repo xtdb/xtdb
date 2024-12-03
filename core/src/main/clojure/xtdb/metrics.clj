@@ -15,10 +15,9 @@
 (defn add-counter
   ([reg name] (add-counter reg name {}))
   ([reg name {:keys [description]}]
-   (let [cnt (cond-> (Counter/builder name)
-               description (.description description)
-               :always (.register reg)) ]
-     cnt)))
+   (cond-> (Counter/builder name)
+     description (.description description)
+     :always (.register reg))))
 
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
 
