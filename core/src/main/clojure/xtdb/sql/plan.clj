@@ -508,7 +508,7 @@
         (add-err! env (->MissingGroupingColumns missing-grouping-cols))
         grouping-cols)))
 
-  Scope 
+  Scope
   (available-cols [_] (available-cols scope))
 
   (-find-cols [_ chain excl-cols]
@@ -955,7 +955,7 @@
 
   (visitCharacterStringType [_ _] {:cast-type :utf8}))
 
-(defn handle-cast-expr [ve {:keys [cast-type cast-opts ->cast-fn]}] 
+(defn handle-cast-expr [ve {:keys [cast-type cast-opts ->cast-fn]}]
   (if ->cast-fn
     (->cast-fn ve)
     (cond-> (list 'cast ve cast-type)
@@ -1171,7 +1171,7 @@
       (if (.NOT ctx)
         (list 'not boolean-fn)
         boolean-fn)))
-  
+
   (visitExtractFunction [this ctx]
     (let [extract-field (-> (.extractField ctx) (.getText) (str/upper-case))
           extract-source (-> (.extractSource ctx) (.expr) (.accept this))]
@@ -1629,11 +1629,27 @@
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
 
+  (visitCollateExpr [_ ctx]
+    ;; TODO - apply collation
+    (log/trace "visitCollateExpr" (.getText (.collation ctx)))
+    (.getText (.collation ctx)))
+
+  (visitPostgresOperatorExpr [this ctx]
+    (.visitPostgresRegexPredicate this ctx))
+
   (visitPostgresCastExpr [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
-  
+
+  (visitPgCatalogResolveOid [_ ctx]
+    ;; lookup the OID in pg_type and return string name
+    (let [oid (.getText (.exprPrimary ctx))]
+      (-> oid
+          (parse-long)
+          (types/pg-types-by-oid)
+          :typname)))
+
   (visitAggregateFunctionExpr [{:keys [!aggs] :as this} ctx]
     (if-not !aggs
       (add-err! env (->AggregatesDisallowed))
@@ -1834,7 +1850,17 @@
               (when (= schema-name 'xt)
                 'xtdb/xtdb-server-version))
             'xtdb/postgres-server-version)
-        (vary-meta assoc :identifier (->col-sym 'version)))))
+        (vary-meta assoc :identifier (->col-sym 'version))))
+
+  (visitPostgresTableIsVisibleFunction [_ ctx]
+    ;; FIXME - when we have authorization - need to check permissions
+    ;; (let [column-oid (.getText (.columnOid ctx))])
+    true)
+
+  (visitPostgresGetUserbyidFunction [_ ctx]
+    (let [_rel-owner (.getText (.relOwner ctx))]
+
+      "xtdb")))
 
 (defn- wrap-predicates [plan predicate]
   (or (when (seq? predicate)
@@ -1980,7 +2006,7 @@
 
 (defrecord SetOperationColumnCountMismatch [operation-type lhs-count rhs-count]
   PlanError
-  (error-string [_] 
+  (error-string [_]
     (format "Column count mismatch on %s set operation: lhs column count %s, rhs column count %s" operation-type lhs-count rhs-count)))
 
 (defrecord InsertWithoutXtId []
@@ -2256,12 +2282,12 @@
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "UNION" (count l-col-syms) (count r-col-syms))))
-          
+
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
                               [:rename (zipmap r-col-syms l-col-syms) plan]
-                              plan)) 
-          
+                              plan))
+
           plan [:union-all l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx) [:distinct plan] plan) l-col-syms)))
 
@@ -2275,16 +2301,16 @@
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "EXCEPT" (count l-col-syms) (count r-col-syms))))
 
-          rename-col-syms (fn [plan] 
+          rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
                               [:rename (zipmap r-col-syms l-col-syms) plan]
                               plan))
-          
+
           wrap-distinct (fn [plan]
                           (if (not (.ALL ctx))
                             [:distinct plan]
                             plan))]
-      
+
       (->QueryExpr [:difference
                     (wrap-distinct l-plan)
                     (rename-col-syms (wrap-distinct r-plan))]
@@ -2299,12 +2325,12 @@
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "INTERSECT" (count l-col-syms) (count r-col-syms))))
-          
+
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
                               [:rename (zipmap r-col-syms l-col-syms) plan]
                               plan))
-          
+
           plan [:intersect l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx)
                      [:distinct plan]
@@ -2685,13 +2711,13 @@
       (->UpdateStmt (symbol table-name)
                     (->QueryExpr [:project outer-projection
                                   (as-> (plan-rel dml-scope) plan
-                    
+
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
                                           (apply-sqs subqs)
                                           (wrap-predicates predicate))
                                       plan)
-                    
+
                                     [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
                                  (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
 
@@ -2764,13 +2790,13 @@
                    (->QueryExpr [:distinct
                                  [:project internal-cols
                                   (as-> (plan-rel dml-scope) plan
-                                  
+
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
                                           (apply-sqs subqs)
                                           (wrap-predicates predicate))
                                       plan)
-                                  
+
                                     [:project aliased-cols plan])]]
                                 internal-cols))))
 
