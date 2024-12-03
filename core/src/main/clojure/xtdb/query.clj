@@ -226,7 +226,6 @@
 
                      (catch Throwable t
                        (.release ref-ctr) 
-                       (util/try-close allocator)
                        (throw t)))))
 
                AutoCloseable
