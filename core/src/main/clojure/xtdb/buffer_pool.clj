@@ -8,7 +8,7 @@
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
            (com.github.benmanes.caffeine.cache Cache Caffeine)
-           [io.micrometer.core.instrument MeterRegistry]
+           [io.micrometer.core.instrument Counter MeterRegistry]
            [io.micrometer.core.instrument.simple SimpleMeterRegistry]
            [java.io ByteArrayOutputStream Closeable]
            [java.lang AutoCloseable]
@@ -157,12 +157,14 @@
 (defn ->resolved-path-slice ^PathSlice [^PathSlice path-slice ^Path new-path]
   (PathSlice. new-path (.getOffset path-slice) (.getLength path-slice)))
 
-(defrecord LocalBufferPool [allocator, ^MemoryCache memory-cache, ^Path disk-store, ^Cache arrow-footer-cache]
+(defrecord LocalBufferPool [allocator, ^MemoryCache memory-cache, ^Path disk-store, ^Cache arrow-footer-cache
+                            ^Counter record-batch-requests ^Counter mem-cache-misses]
   IBufferPool
   (getByteArray [_ k]
     (when k
       (util/with-open [arrow-buf (.get memory-cache (PathSlice. k)
                                        (fn [^PathSlice path-slice]
+                                         (.increment mem-cache-misses)
                                          (let [buffer-cache-path (.resolve disk-store (.getPath path-slice))]
                                            (when-not (util/path-exists buffer-cache-path)
                                              (throw (os/obj-missing-exception k)))
@@ -179,6 +181,7 @@
       (.get arrow-footer-cache k (fn [_] (Relation/readFooter (path->seekable-byte-channel path))))))
 
   (getRecordBatch [_ k block-idx]
+    (.increment record-batch-requests)
     (let [path (.resolve disk-store k)]
       (when-not (util/path-exists path)
         (throw (os/obj-missing-exception path)))
@@ -192,6 +195,7 @@
           (util/with-open [arrow-buf (.get memory-cache (PathSlice. k (.getOffset block)
                                                                     (+ (.getMetadataLength block) (.getBodyLength block)))
                                            (fn [^PathSlice path-slice]
+                                             (.increment mem-cache-misses)
                                              (let [buffer-cache-path (.resolve disk-store (.getPath path-slice))]
                                                (when-not (util/path-exists buffer-cache-path)
                                                  (throw (os/obj-missing-exception k)))
@@ -273,7 +277,9 @@
     (->LocalBufferPool (->buffer-pool-child-allocator allocator metrics-registry)
                        memory-cache
                        (doto (-> (.getPath factory) (.resolve storage-root)) util/mkdirs)
-                       (->arrow-footer-cache 1024))))
+                       (->arrow-footer-cache 1024)
+                       (metrics/add-counter metrics-registry "record-batch-requests")
+                       (metrics/add-counter metrics-registry "memory-cache-misses"))))
 
 (defn dir->buffer-pool
   "Creates a local storage buffer pool from the given directory."
@@ -369,14 +375,19 @@
                              ^FileListCache file-list-cache
                              ^ObjectStore object-store
                              ^SortedMap !os-files
-                             ^AutoCloseable !os-files-subscription]
+                             ^AutoCloseable !os-files-subscription
+                             ^Counter record-batch-requests
+                             ^Counter mem-cache-misses
+                             ^Counter disk-cache-misses]
   IBufferPool
   (getByteArray [_ k]
     (when k
       (util/with-open [arrow-buf (.get memory-cache (PathSlice. k)
                                        (fn [^PathSlice path-slice]
+                                         (.increment mem-cache-misses)
                                          (-> (.get disk-cache k
                                                    (fn [^Path k, ^Path tmp-file]
+                                                     (.increment disk-cache-misses)
                                                      (.getObject object-store k tmp-file)))
 
                                              (.thenApply (fn [^DiskCache$Entry entry]
@@ -390,12 +401,15 @@
     (.get arrow-footer-cache k (fn [_]
                                  (util/with-open [^DiskCache$Entry entry @(.get disk-cache k
                                                                                 (fn [^Path k, ^Path tmp-file]
+                                                                                  (.increment disk-cache-misses)
                                                                                   (.getObject object-store k tmp-file)))]
                                    (Relation/readFooter (path->seekable-byte-channel (.getPath entry)))))))
 
   (getRecordBatch [_ k block-idx]
+    (.increment record-batch-requests)
     (util/with-close-on-catch [^DiskCache$Entry entry @(.get disk-cache k
                                                              (fn [^Path k, ^Path tmp-file]
+                                                               (.increment disk-cache-misses)
                                                                (.getObject object-store k tmp-file)))]
       (let [path (.getPath entry)
             ^ArrowFooter footer (.get arrow-footer-cache k
@@ -407,6 +421,7 @@
           (util/with-open [arrow-buf (.get memory-cache (PathSlice. k (.getOffset block)
                                                                     (+ (.getMetadataLength block) (.getBodyLength block)))
                                            (fn [^PathSlice path-slice]
+                                             (.increment mem-cache-misses)
                                              (CompletableFuture/completedFuture
                                               ;; cleanup action - when the entry is evicted from the memory cache,
                                               ;; release one count on the disk-cache entry.
@@ -505,7 +520,10 @@
                             memory-cache
                             disk-cache
                             (->arrow-footer-cache 1024)
-                            file-list-cache object-store !os-files !os-file-name-subscription)))))
+                            file-list-cache object-store !os-files !os-file-name-subscription
+                            (metrics/add-counter metrics-registry "record-batch-requests")
+                            (metrics/add-counter metrics-registry "memory-cache-misses")
+                            (metrics/add-counter metrics-registry "disk-cache-misses"))))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
