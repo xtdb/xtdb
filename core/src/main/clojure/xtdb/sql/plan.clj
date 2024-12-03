@@ -1639,11 +1639,20 @@
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
 
+  (visitCollateExpr [_ _]
+    ;; nothing to do really
+    )
+
+  (visitPostgresOperatorExpr [this ctx]
+    (if (.compOp ctx)
+      (-> (.compOp ctx) (.accept this))
+      (-> (.postgresRegexOperator ctx) (.accept this))))
+
   (visitPostgresCastExpr [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
-  
+
   (visitAggregateFunctionExpr [{:keys [!aggs] :as this} ctx]
     (if-not !aggs
       (add-err! env (->AggregatesDisallowed))

@@ -198,6 +198,7 @@ expr
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
+    | expr 'OPERATOR' '(' schemaName '.' (compOp | postgresRegexOperator) ')' expr # PostgresOperatorExpr
 
     | numericExpr #NumericExpr0
     ;
@@ -235,6 +236,7 @@ exprPrimary
     | 'NULLIF' '(' expr ',' expr ')' # NullIfExpr
     | 'COALESCE' '(' expr (',' expr)* ')' # CoalesceExpr
     | 'CAST' '(' expr 'AS' dataType ')' # CastExpr
+    | 'COLLATE' exprPrimary # CollateExpr
     | arrayValueConstructor # ArrayExpr
     | objectConstructor # ObjectExpr
     | generateSeries # GenerateSeriesFunction
