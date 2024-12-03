@@ -225,9 +225,7 @@
                            (wrap-cursor wm allocator clock ref-ctr fields)))
 
                      (catch Throwable t
-                       (.release ref-ctr)
-                       (util/try-close wm)
-                       (util/try-close allocator)
+                       (.release ref-ctr) 
                        (throw t)))))
 
                AutoCloseable
