@@ -6,7 +6,7 @@
   (:import clojure.lang.Keyword
            java.nio.charset.StandardCharsets
            [java.sql ResultSet]
-           [java.util Map]
+           [java.util List Map Set]
            org.postgresql.util.PGobject
            xtdb.api.Xtdb
            xtdb.api.query.IKeyFn
@@ -20,11 +20,21 @@
                    (String. StandardCharsets/UTF_8)))))
 
 (defn- denormalize-keys [v, ^IKeyFn key-fn]
-  (w/prewalk (fn [v]
-               (cond-> v
-                 (instance? Map v)
-                 (update-keys #(.denormalize key-fn %))))
-             v))
+  (letfn [(process-map [m]
+            (if (keyword? (first (keys m)))
+              m
+              (update-keys m #(.denormalize key-fn %))))]
+    (w/prewalk (fn [v]
+                 (cond-> v
+                   (instance? Map v)
+                   (update-keys #(.denormalize key-fn %))
+
+                   (instance? List v)
+                   vec
+
+                   (instance? Set v)
+                   set))
+               v)))
 
 (defn ->sql-col [^Keyword k]
   (NormalForm/normalForm k))
@@ -46,6 +56,16 @@
           (denormalize-keys key-fn)))))
 
 (def col-reader (->col-reader :kebab-case-keyword))
+
+
+(def ^{:doc "Builder function which converts result-set rows' map keys to kebab-cased keywords (iteratively)"}
+  builder-fn
+  (nj-rs/as-maps-adapter
+   (fn [rs opts]
+     (nj-rs/as-unqualified-modified-maps
+      rs
+      (assoc opts :label-fn label-fn)))
+   col-reader))
 
 (defmulti <-pg-obj
   (fn [^PGobject obj]
