@@ -62,6 +62,10 @@
 (defmethod apply-config! :healthz [config _ opts]
   (apply-config! config :xtdb/healthz opts))
 
+(defmethod apply-config! :node [^Xtdb$Config config _ {:keys [log-catchup?]}]
+  (cond-> config
+    (not log-catchup?) (.logCatchup log-catchup?)))
+
 (defmethod apply-config! ::default [_ k _]
   (log/warn "Unknown configuration key:" k))
 

@@ -316,11 +316,13 @@
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
                                            rows-per-chunk log-limit page-limit instant-src
-                                           compactor? healthz-port]
-                                    :or {compactor? true buffers-dir "objects" healthz-port 8080}}]
+                                           compactor? healthz-port log-catchup?]
+                                    :or {compactor? true buffers-dir "objects" healthz-port 8080
+                                         log-catchup? true}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
-    (xtn/start-node {:server {:port 0}
+    (xtn/start-node {:node {:log-catchup? log-catchup?}
+                     :server {:port 0}
                      :healthz {:port healthz-port}
                      :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]

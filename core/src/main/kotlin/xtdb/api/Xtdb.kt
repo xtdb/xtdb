@@ -38,6 +38,7 @@ interface Xtdb : AutoCloseable {
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig(),
         var authn: Authenticator.Factory = UserTable(),
+        var logCatchup: Boolean = true
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
@@ -69,6 +70,8 @@ interface Xtdb : AutoCloseable {
         fun modules(modules: List<XtdbModule.Factory>) = apply { this.modules += modules }
 
         fun open(): Xtdb = requiringResolve("xtdb.node.impl/open-node").invoke(this) as Xtdb
+
+        fun logCatchup(logCatchup: Boolean) = apply { this.logCatchup = logCatchup }
     }
 
     companion object {

@@ -176,7 +176,7 @@
           :authn (ig/ref :xtdb/authn)}
          opts))
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry, ^IIndexer indexer] :as deps}]
+(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry, ^IIndexer indexer log-catchup?] :as deps}]
   (let [node (map->Node (-> deps
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]
@@ -191,13 +191,14 @@
                                (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
                                0)))))
 
-    (let [^long ls-tx-id (xtp/latest-submitted-tx-id node)
-          ^long lc-tx-id (:tx-id (xtp/latest-completed-tx node) -1)]
-      (when (and (not (neg? ls-tx-id))
-                 (< lc-tx-id ls-tx-id))
-        (log/infof "Catching up to tx-id %d, currently at %s..." ls-tx-id (when-not (neg? lc-tx-id) lc-tx-id))
-        (let [{:keys [tx-id]} (.awaitTx indexer ls-tx-id nil)]
-          (log/infof "Caught up, now at %d." tx-id))))
+    (when log-catchup?
+      (let [^long ls-tx-id (xtp/latest-submitted-tx-id node)
+            ^long lc-tx-id (:tx-id (xtp/latest-completed-tx node) -1)]
+        (when (and (not (neg? ls-tx-id))
+                   (< lc-tx-id ls-tx-id))
+          (log/infof "Catching up to tx-id %d, currently at %s..." ls-tx-id (when-not (neg? lc-tx-id) lc-tx-id))
+          (let [{:keys [tx-id]} (.awaitTx indexer ls-tx-id nil)]
+            (log/infof "Caught up, now at %d." tx-id)))))
 
     node))
 
@@ -221,7 +222,7 @@
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
         healthz (.getHealthz opts)]
-    (-> {:xtdb/node {}
+    (-> {:xtdb/node {:log-catchup? (.getLogCatchup opts)}
          :xtdb/allocator {}
          :xtdb/indexer {}
          :xtdb.log/watcher {}
