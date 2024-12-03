@@ -190,15 +190,6 @@
                              (if (and latest-completed-tx (> latest-submitted-tx-id ^long (:tx-id latest-completed-tx)))
                                (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
                                0)))))
-
-    (let [^long ls-tx-id (xtp/latest-submitted-tx-id node)
-          ^long lc-tx-id (:tx-id (xtp/latest-completed-tx node) -1)]
-      (when (and (not (neg? ls-tx-id))
-                 (< lc-tx-id ls-tx-id))
-        (log/infof "Catching up to tx-id %d, currently at %s..." ls-tx-id (when-not (neg? lc-tx-id) lc-tx-id))
-        (let [{:keys [tx-id]} (.awaitTx indexer ls-tx-id nil)]
-          (log/infof "Caught up, now at %d." tx-id))))
-
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]

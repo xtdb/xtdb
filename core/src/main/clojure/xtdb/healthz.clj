@@ -10,6 +10,7 @@
             [ring.adapter.jetty9 :as j]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
+            [xtdb.protocols :as xtp]
             [xtdb.util :as util])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
@@ -26,16 +27,25 @@
                                     {:status 200,
                                      :headers {"Content-Type" "text/plain; version=0.0.4"}
                                      :body (.scrape prometheus-registry)})}]
+
                 ["/healthz/started" {:name :started
-                                     :get (fn [{:keys [_]}]
-                                            {:status 200, :body "Started."})}]
+                                     :get (fn [{:keys [node, ^long initial-target-tx-id]}]
+                                            (let [^long lc-tx-id (:tx-id (xtp/latest-completed-tx node) -1)]
+                                              (if (< lc-tx-id initial-target-tx-id)
+                                                {:status 503,
+                                                 :body (format "Catching up - at: %d, target: %d" lc-tx-id initial-target-tx-id)}
+
+                                                {:status 200, :body "Started."})))}]
+
                 ["/healthz/alive" {:name :alive
                                    :get (fn [{:keys [^IIndexer indexer]}]
                                           (if-let [indexer-error (.indexerError indexer)]
-                                            {:status 500, :body (str "Indexer error - " indexer-error)}
+                                            {:status 503, :body (str "Indexer error - " indexer-error)}
                                             {:status 200, :body "Alive."}))}]
+
                 ["/healthz/ready" {:name :ready
                                    :get (fn [_] {:status 200, :body "Ready."})}]]
+
                {:data {:interceptors [[ri.exception/exception-interceptor
                                        (merge ri.exception/default-handlers
                                               {::ri.exception/wrap (fn [handler e req]
@@ -62,14 +72,14 @@
   {:port (.getPort config) 
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :indexer (ig/ref :xtdb/indexer)
-   :node (ig/ref :xtdb/node)
-   :pgwire-server (ig/ref :xtdb.pgwire/server)})
+   :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [^long port, ^CompositeMeterRegistry metrics-registry, ^IIndexer indexer pgwire-server]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, ^IIndexer indexer]}]
   (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
-        ^Server server (j/run-jetty (handler {:prometheus-registry prometheus-registry
-                                              :indexer indexer})
-                                    {:port port, :async? true, :join? false})]
+        ^Server server (-> (handler {:prometheus-registry prometheus-registry
+                                     :indexer indexer
+                                     :initial-target-tx-id (xtp/latest-submitted-tx-id node)})
+                           (j/run-jetty {:port port, :async? true, :join? false}))]
     (.add metrics-registry prometheus-registry) 
 
     (log/info "Healthz server started on port:" port)
