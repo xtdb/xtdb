@@ -101,8 +101,6 @@ interface VectorReader : AutoCloseable {
 
             override fun getName() = vector.name
 
-            override fun withName(colName: String?) = TODO()
-
             override fun getField() = vector.field
 
             override fun isNull(idx: Int) = vector.isNull(idx)

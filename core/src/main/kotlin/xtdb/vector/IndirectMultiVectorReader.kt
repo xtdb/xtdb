@@ -50,10 +50,6 @@ class IndirectMultiVectorReader(
         return name
     }
 
-    override fun withName(colName: String): IVectorReader {
-        return RenamedVectorReader(this, colName)
-    }
-
     override fun getField(): Field {
         return vectorField
     }

@@ -1,5 +1,6 @@
 package xtdb.vector;
 
+import clojure.lang.PersistentVector;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
@@ -13,6 +14,7 @@ import xtdb.arrow.VectorPosition;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static xtdb.arrow.VectorIndirection.selection;
 import static xtdb.arrow.VectorIndirection.slice;
@@ -23,57 +25,113 @@ public interface IVectorReader extends AutoCloseable {
 
     String getName();
 
-    IVectorReader withName(String colName);
+    default IVectorReader withName(String colName) {
+        return new RenamedVectorReader(this, colName);
+    }
 
     Field getField();
 
     int hashCode(int idx, ArrowBufHasher hasher);
 
-    boolean isNull(int idx);
+    private static RuntimeException unsupported(IVectorReader rdr) {
+        throw new UnsupportedOperationException(rdr.getClass().getName());
+    }
 
-    boolean getBoolean(int idx);
+    default boolean isNull(int idx) {
+        throw unsupported(this);
+    }
 
-    byte getByte(int idx);
+    default boolean getBoolean(int idx) {
+        throw unsupported(this);
+    }
 
-    short getShort(int idx);
+    default byte getByte(int idx) {
+        throw unsupported(this);
+    }
 
-    int getInt(int idx);
+    default short getShort(int idx) {
+        throw unsupported(this);
+    }
 
-    long getLong(int idx);
+    default int getInt(int idx) {
+        throw unsupported(this);
+    }
 
-    float getFloat(int idx);
+    default long getLong(int idx) {
+        throw unsupported(this);
+    }
 
-    double getDouble(int idx);
+    default float getFloat(int idx) {
+        throw unsupported(this);
+    }
 
-    ByteBuffer getBytes(int idx);
+    default double getDouble(int idx) {
+        throw unsupported(this);
+    }
 
-    ArrowBufPointer getPointer(int idx);
+    default ByteBuffer getBytes(int idx) {
+        throw unsupported(this);
+    }
 
-    ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse);
+    default ArrowBufPointer getPointer(int idx) {
+        throw unsupported(this);
+    }
+
+    default ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
+        throw unsupported(this);
+    }
 
     Object getObject(int idx);
 
     Object getObject(int idx, IKeyFn<?> keyFn);
 
-    IVectorReader structKeyReader(String colName);
+    default List<?> toList() {
+        return PersistentVector.create(IntStream.range(0, valueCount()).mapToObj(this::getObject).toList());
+    }
 
-    Collection<String> structKeys();
+    default List<Object> toList(IKeyFn<?> keyFn) {
+        return IntStream.range(0, valueCount()).mapToObj(idx -> getObject(idx, keyFn)).toList();
+    }
 
-    IVectorReader listElementReader();
+    default IVectorReader structKeyReader(String colName) {
+        throw unsupported(this);
+    }
 
-    int getListStartIndex(int idx);
+    default Collection<String> structKeys() {
+        throw unsupported(this);
+    }
 
-    int getListCount(int idx);
+    default IVectorReader listElementReader() {
+        throw unsupported(this);
+    }
 
-    IVectorReader mapKeyReader();
+    default int getListStartIndex(int idx) {
+        throw unsupported(this);
+    }
 
-    IVectorReader mapValueReader();
+    default int getListCount(int idx) {
+        throw unsupported(this);
+    }
 
-    String getLeg(int idx);
+    default IVectorReader mapKeyReader() {
+        throw unsupported(this);
+    }
 
-    IVectorReader legReader(String legKey);
+    default IVectorReader mapValueReader() {
+        throw unsupported(this);
+    }
 
-    List<String> legs();
+    default String getLeg(int idx) {
+        throw unsupported(this);
+    }
+
+    default IVectorReader legReader(String legKey) {
+        throw unsupported(this);
+    }
+
+    default List<String> legs() {
+        throw unsupported(this);
+    }
 
     default IVectorReader copy(BufferAllocator allocator) {
         return copyTo(getField().createVector(allocator)).withName(getName());

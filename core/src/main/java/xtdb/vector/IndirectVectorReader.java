@@ -54,11 +54,6 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader withName(String colName) {
-        return new RenamedVectorReader(this, colName);
-    }
-
-    @Override
     public Field getField() {
         return reader.getField();
     }

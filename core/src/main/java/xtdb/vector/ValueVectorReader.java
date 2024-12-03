@@ -73,11 +73,6 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader withName(String colName) {
-        return new RenamedVectorReader(this, colName);
-    }
-
-    @Override
     public Field getField() {
         return vector.getField();
     }
@@ -229,7 +224,7 @@ public class ValueVectorReader implements IVectorReader {
         return writer.rowCopier(vector);
     }
 
-    private class BaseValueReader implements ValueReader {
+    class BaseValueReader implements ValueReader {
         private final VectorPosition pos;
 
         public BaseValueReader(VectorPosition pos) {

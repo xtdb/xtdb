@@ -1,9 +1,11 @@
 package xtdb.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
+import xtdb.api.query.IKeyFn;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
 
@@ -31,6 +33,17 @@ public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
 
     public int rowCount() {
         return rowCount;
+    }
+
+    public <K> Map<K, ?> getRow(int idx, IKeyFn<K> keyFn) {
+        return cols.values().stream()
+                .collect(Collectors.toMap(
+                        e -> keyFn.denormalize(e.getName()),
+                        e -> e.getObject(idx)));
+    }
+
+    public Map<String, ?> getRow(int idx) {
+        return getRow(idx, k -> k);
     }
 
     public IVectorReader readerForName(String colName) {
