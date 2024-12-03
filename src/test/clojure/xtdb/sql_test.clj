@@ -2475,3 +2475,18 @@ UNION ALL
 (t/deftest test-str
   (t/is (= [{:str "hello, 42.0 at 2020-01-01"}]
            (xt/q tu/*node* "SELECT STR('hello, ', NULL, 42.0, ' at ', DATE '2020-01-01') str"))))
+
+(t/deftest test-unnest-error-doesnt-break-watermark-3924
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, col1: ['bar'], col2:' baz'};"]) 
+  (t/testing "successful unnest works as expected"
+    (t/is (= [{:b "bar", :xt/id 2, :col1 ["bar"], :col2 " baz"}]
+             (xt/q tu/*node* "FROM docs, UNNEST(docs.col1) AS a(b);")))) 
+
+  (t/testing "failing unnest throws suitable error, doesn't break subsequent queries"
+    (t/is (thrown-with-msg?
+           UnsupportedOperationException
+           #"org.apache.arrow.vector.NullVector"
+           (xt/q tu/*node* "FROM UNNEST(docs.col1) AS a(b);")))
+
+    (t/is (= [{:b "bar", :xt/id 2, :col1 ["bar"], :col2 " baz"}]
+               (xt/q tu/*node* "FROM docs, UNNEST(docs.col1) AS a(b);")))))
