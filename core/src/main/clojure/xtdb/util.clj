@@ -674,3 +674,14 @@
     (catch Throwable _t
       ;; otherwise we use as much direct memory as there was heap specified
       (.maxMemory (Runtime/getRuntime)))))
+
+(defn throttle [f ms]
+  (let [last-time (atom 0)
+        last-value (atom nil)]
+    (fn [& args]
+      (let [now (System/currentTimeMillis)]
+        (if (>= (- now @last-time) ms)
+          (do
+            (reset! last-time now)
+            (reset! last-value (apply f args)))
+          @last-value)))))
