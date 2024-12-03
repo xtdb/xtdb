@@ -157,7 +157,7 @@
           ^IVectorWriter sys-to-wtr (writer-for "_system_to" true)]
 
       (reify IRowConsumer
-        (accept [_ _idx valid-from valid-to sys-from sys-to]
+        (accept [_ valid-from valid-to sys-from sys-to]
           (some-> valid-from-wtr (.writeLong valid-from))
 
           (when valid-to-wtr
@@ -273,7 +273,7 @@
                                          (not (= sys-from sys-to)))
                                 (.startRow out-rel)
                                 (.accept content-rel-factory (.rel-idx q-obj) idx)
-                                (.accept bitemp-consumer idx valid-from valid-to sys-from sys-to)
+                                (.accept bitemp-consumer valid-from valid-to sys-from sys-to)
                                 (.endRow out-rel)))))))
 
                     (.nextIndex ev-ptr)
