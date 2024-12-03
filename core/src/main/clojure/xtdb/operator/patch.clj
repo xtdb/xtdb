@@ -9,7 +9,7 @@
            org.apache.arrow.vector.VectorSchemaRoot
            xtdb.operator.PatchGapsCursor))
 
-(s/def ::valid-from (partial instance? Instant))
+(s/def ::valid-from (s/nilable (partial instance? Instant)))
 (s/def ::valid-to (s/nilable (partial instance? Instant)))
 
 (defmethod lp/ra-expr :patch-gaps [_]
@@ -23,12 +23,12 @@
       (let [fields (-> inner-fields
                        (update 'doc types/->nullable-field))]
         {:fields fields
-         :->cursor (fn [{:keys [allocator]} inner]
+         :->cursor (fn [{:keys [allocator current-time]} inner]
                      (PatchGapsCursor. inner
                                        (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
                                                                                             (types/field-with-name field (str nm))))
                                                                                  allocator))
-                                       (time/instant->micros valid-from)
+                                       (time/instant->micros (or valid-from current-time))
                                        (if valid-to
                                          (time/instant->micros valid-to)
                                          Long/MAX_VALUE)))}))))

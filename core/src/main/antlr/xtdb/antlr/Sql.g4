@@ -18,6 +18,7 @@ directlyExecutableStatement
     | insertStatement #InsertStmt
     | updateStatementSearched #UpdateStmt
     | deleteStatementSearched #DeleteStmt
+    | patchStatement #PatchStmt
     | eraseStatementSearched #EraseStmt
     | prepareStatement #PrepareStmt
     | executeStatement #ExecuteStmt
@@ -794,6 +795,13 @@ deleteStatementSearched
 dmlStatementValidTimeExtents
   : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' from=staticExpr ('TO' to=staticExpr)? # DmlStatementValidTimePortion
   | 'FOR' ('ALL' 'VALID_TIME' | 'VALID_TIME' 'ALL') # DmlStatementValidTimeAll
+  ;
+
+patchStatement : PATCH INTO tableName patchSource ;
+
+patchSource
+  : recordsValueConstructor # PatchRecords
+//  | ( '(' columnNameList ')' )? tableValueConstructor # PatchValues
   ;
 
 eraseStatementSearched : 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('WHERE' searchCondition)? ;

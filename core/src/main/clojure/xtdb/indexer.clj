@@ -17,6 +17,7 @@
             [xtdb.rewrite :as r :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
+            [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.tx-ops :as tx-ops]
@@ -24,7 +25,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql])
+            [xtdb.xtql :as xtql]
+            [xtdb.logical-plan :as lp])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)
@@ -44,7 +46,7 @@
            xtdb.metadata.IMetadataManager
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
-           (xtdb.vector IVectorReader RelationReader)
+           (xtdb.vector IVectorReader RelationReader RelationAsStructReader SingletonListReader)
            (xtdb.watermark IWatermarkSource Watermark)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -445,6 +447,92 @@
             (aset selection 0 idx)
             (eval-query (-> param-rel (.select selection)))))))))
 
+(defn- patch-rel! [^ILiveTableTx live-table, ^RelationReader rel]
+  (let [iid-rdr (.readerForName rel "_iid")
+        doc-copier (.rowCopier (.readerForName rel "doc") (.docWriter live-table))
+        from-rdr (.readerForName rel "_valid_from")
+        to-rdr (.readerForName rel "_valid_to")]
+    (dotimes [idx (.rowCount rel)]
+      (.logPut live-table
+               (.getBytes iid-rdr idx)
+               (.getLong from-rdr idx)
+               (.getLong to-rdr idx)
+               #(.copyRow doc-copier idx)))))
+
+(defn- ->patch-docs-indexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr,
+                             ^IQuerySource q-src, wm-src,
+                             {:keys [snapshot-time] :as tx-opts}]
+  (let [patch-leg (.legReader tx-ops-rdr "patch-docs")
+        iids-rdr (.structKeyReader patch-leg "iids")
+        iid-rdr (.listElementReader iids-rdr)
+        docs-rdr (.structKeyReader patch-leg "documents")
+
+        valid-from-rdr (.structKeyReader patch-leg "_valid_from")
+        valid-to-rdr (.structKeyReader patch-leg "_valid_to")
+
+        system-time-µs (time/instant->micros snapshot-time)]
+    (letfn [(->table-idxer [table-name]
+              (when (xt-log/forbidden-table? table-name)
+                (throw (xt-log/forbidden-table-ex table-name)))
+
+              (let [table-docs-rdr (.legReader docs-rdr table-name)
+                    doc-rdr (.listElementReader table-docs-rdr)
+                    ks (.structKeys doc-rdr)]
+                (when-let [forbidden-cols (not-empty (->> ks
+                                                          (into #{} (filter (every-pred #(str/starts-with? % "_")
+                                                                                        (complement #{"_id" "_fn"}))))))]
+                  (throw (err/illegal-arg :xtdb/forbidden-columns
+                                          {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
+                                           :table-name table-name
+                                           :forbidden-cols forbidden-cols})))
+
+                (let [live-table (.liveTable live-idx-tx table-name)]
+                  (reify OpIndexer
+                    (indexOp [_ tx-op-idx]
+                      (let [valid-from (time/micros->instant (if (.isNull valid-from-rdr tx-op-idx)
+                                                               system-time-µs
+                                                               (.getLong valid-from-rdr tx-op-idx)))
+                            valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
+                                       (time/micros->instant (.getLong valid-to-rdr tx-op-idx)))]
+                        (when-not (or (nil? valid-to) (pos? (compare valid-to valid-from)))
+                          (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                                  {:valid-from valid-from
+                                                   :valid-to valid-to})))
+
+                        (let [pq (.prepareRaQuery q-src (-> (plan/plan-patch {:table-info (plan/xform-table-info (scan/tables-with-cols wm-src))}
+                                                                             {:table (symbol table-name)
+                                                                              :valid-from valid-from
+                                                                              :valid-to valid-to
+                                                                              :patch-rel (plan/->QueryExpr '[:table [_iid doc]
+                                                                                                             ?patch_docs]
+                                                                                                           '[_iid doc])})
+                                                            (lp/rewrite-plan))
+                                                  wm-src tx-opts)
+                              args (vr/rel-reader [(SingletonListReader.
+                                                    "?patch_docs"
+                                                    (RelationAsStructReader.
+                                                     "patch_doc"
+                                                     (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
+                                                                         (.withName "_iid"))
+                                                                     (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
+                                                                         (.withName "doc"))])))])]
+
+                          (with-open [bq (.bind pq
+                                                (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                                                    (assoc :args args
+                                                           :close-args? false)))
+                                      res (.openCursor bq)]
+                            (.forEachRemaining res
+                                               (fn [^RelationReader rel]
+                                                 (patch-rel! live-table rel)))))))))))]
+
+      (let [tables (->> (.legs docs-rdr)
+                        (into {} (map (juxt identity ->table-idxer))))]
+        (reify OpIndexer
+          (indexOp [_ tx-op-idx]
+            (.indexOp ^OpIndexer (get tables (.getLeg docs-rdr tx-op-idx))
+                      tx-op-idx)))))))
+
 (defn- wrap-sql-args [f ^long param-count]
   (fn [^RelationReader args]
     (if (not args)
@@ -687,6 +775,7 @@
                 (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
                           (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
                                 !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time))
+                                !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
                                 !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time))
                                 !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr))
                                 !call-idxer (delay (->call-indexer allocator q-src wm-src tx-ops-rdr tx-opts))
@@ -699,6 +788,7 @@
                                                              "xtql" (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
                                                              "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
                                                              "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                             "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
                                                              "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
                                                              "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
                                                              "call" (.indexOp ^OpIndexer @!call-idxer tx-op-idx)

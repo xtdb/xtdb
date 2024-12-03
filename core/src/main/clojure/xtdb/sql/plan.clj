@@ -2426,6 +2426,18 @@
 (def ^:private vf-col (->col-sym "_valid_from"))
 (def ^:private vt-col (->col-sym "_valid_to"))
 
+(defn- dml-stmt-valid-time-portion [from-expr to-expr]
+  {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
+   :projection [{vf-col (xt/template
+                         (greatest ~vf-col (cast ~(or from-expr '(current-timestamp)) ~types/temporal-col-type)))}
+
+                {vt-col (if to-expr
+                          (xt/template
+                           (least (coalesce ~vt-col xtdb/end-of-time)
+                                  (coalesce (cast ~to-expr ~types/temporal-col-type) xtdb/end-of-time)))
+
+                          vt-col)}]})
+
 (defrecord DmlValidTimeExtentsVisitor [env scope]
   SqlVisitor
   (visitDmlStatementValidTimeAll [_ _]
@@ -2433,19 +2445,9 @@
      :projection [vf-col vt-col]})
 
   (visitDmlStatementValidTimePortion [_ ctx]
-    (let [expr-visitor (->ExprPlanVisitor env scope)
-          from-expr (-> (.from ctx) (.accept expr-visitor))
-          to-expr (some-> (.to ctx) (.accept expr-visitor))]
-      {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
-       :projection [{vf-col (xt/template
-                             (greatest ~vf-col (cast ~(or from-expr '(current-timestamp)) ~types/temporal-col-type)))}
-
-                    {vt-col (if to-expr
-                              (xt/template
-                               (least (coalesce ~vt-col xtdb/end-of-time)
-                                      (coalesce (cast ~to-expr ~types/temporal-col-type) xtdb/end-of-time)))
-
-                              vt-col)}]})))
+    (let [expr-visitor (->ExprPlanVisitor env scope)]
+      (dml-stmt-valid-time-portion (-> (.from ctx) (.accept expr-visitor))
+                                   (some-> (.to ctx) (.accept expr-visitor))))))
 
 (def ^:private default-vt-extents-projection
   [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
@@ -2489,6 +2491,25 @@
 (defrecord ForbiddenColumnInsert [col]
   PlanError
   (error-string [_] (format "Cannot INSERT %s column" col)))
+
+(defn plan-patch [{:keys [table-info]} {:keys [table valid-from valid-to patch-rel]}]
+  (let [known-cols (mapv symbol (get table-info table))]
+    (xt/template
+     [:project [{_iid new/_iid}
+                {_valid_from (coalesce old/_valid_from ~valid-from (current-timestamp))}
+                {_valid_to (coalesce old/_valid_to ~valid-to xtdb/end-of-time)}
+                {doc (_patch old/doc new/doc)}]
+      [:left-outer-join [{new/_iid old/_iid}]
+       [:rename new
+        ~(:plan patch-rel)]
+       [:rename old
+        [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
+         [:project [_iid _valid_from _valid_to
+                    {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
+          [:scan {:table ~table,
+                  :for-valid-time [:in ~valid-from ~valid-to]}
+           [_iid _valid_from _valid_to
+            ~@known-cols]]]]]]])))
 
 (defrecord InsertStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
@@ -2734,7 +2755,7 @@
   (visitExecuteStmt [this ctx]
     (.accept (.executeStatement ctx) this)))
 
-(defn- xform-table-info [table-info]
+(defn xform-table-info [table-info]
   (into {}
         (for [[tn cns] (merge info-schema/table-info
                               '{xt/txs #{_id committed error system_time}}
