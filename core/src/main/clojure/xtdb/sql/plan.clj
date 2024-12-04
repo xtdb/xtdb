@@ -2426,6 +2426,18 @@
 (def ^:private vf-col (->col-sym "_valid_from"))
 (def ^:private vt-col (->col-sym "_valid_to"))
 
+(defn- dml-stmt-valid-time-portion [from-expr to-expr]
+  {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
+   :projection [{vf-col (xt/template
+                         (greatest ~vf-col (cast ~(or from-expr '(current-timestamp)) ~types/temporal-col-type)))}
+
+                {vt-col (if to-expr
+                          (xt/template
+                           (least (coalesce ~vt-col xtdb/end-of-time)
+                                  (coalesce (cast ~to-expr ~types/temporal-col-type) xtdb/end-of-time)))
+
+                          vt-col)}]})
+
 (defrecord DmlValidTimeExtentsVisitor [env scope]
   SqlVisitor
   (visitDmlStatementValidTimeAll [_ _]
@@ -2433,19 +2445,9 @@
      :projection [vf-col vt-col]})
 
   (visitDmlStatementValidTimePortion [_ ctx]
-    (let [expr-visitor (->ExprPlanVisitor env scope)
-          from-expr (-> (.from ctx) (.accept expr-visitor))
-          to-expr (some-> (.to ctx) (.accept expr-visitor))]
-      {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
-       :projection [{vf-col (xt/template
-                             (greatest ~vf-col (cast ~(or from-expr '(current-timestamp)) ~types/temporal-col-type)))}
-
-                    {vt-col (if to-expr
-                              (xt/template
-                               (least (coalesce ~vt-col xtdb/end-of-time)
-                                      (coalesce (cast ~to-expr ~types/temporal-col-type) xtdb/end-of-time)))
-
-                              vt-col)}]})))
+    (let [expr-visitor (->ExprPlanVisitor env scope)]
+      (dml-stmt-valid-time-portion (-> (.from ctx) (.accept expr-visitor))
+                                   (some-> (.to ctx) (.accept expr-visitor))))))
 
 (def ^:private default-vt-extents-projection
   [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
@@ -2490,7 +2492,29 @@
   PlanError
   (error-string [_] (format "Cannot INSERT %s column" col)))
 
+(defn plan-patch [{:keys [table-info]} {:keys [table valid-from valid-to patch-rel]}]
+  (let [known-cols (mapv symbol (get table-info table))]
+    (xt/template
+     [:project [{_iid new/_iid}
+                {_valid_from (coalesce old/_valid_from ~valid-from (current-timestamp))}
+                {_valid_to (coalesce old/_valid_to ~valid-to xtdb/end-of-time)}
+                {doc (_patch old/doc new/doc)}]
+      [:left-outer-join [{new/_iid old/_iid}]
+       [:rename new
+        ~(:plan patch-rel)]
+       [:rename old
+        [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
+         [:project [_iid _valid_from _valid_to
+                    {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
+          [:scan {:table ~table,
+                  :for-valid-time [:in ~valid-from ~valid-to]}
+           [_iid _valid_from _valid_to
+            ~@known-cols]]]]]]])))
+
 (defrecord InsertStmt [table query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
+
+(defrecord PatchStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
 (defrecord UpdateStmt [table query-plan]
@@ -2546,6 +2570,29 @@
 
       (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
                     insert-plan)))
+
+  (visitPatchStmt [this ctx] (-> (.patchStatement ctx) (.accept this)))
+
+  (visitPatchStatement [this ctx]
+    (let [table-name (-> (identifier-sym (.tableName ctx))
+                         util/with-default-schema)
+          expr-visitor (->ExprPlanVisitor env scope)]
+      (->PatchStmt table-name
+                   (->QueryExpr (plan-patch env {:table table-name
+                                                 :valid-from (some-> (.validFrom ctx) (.accept expr-visitor))
+                                                 :valid-to (some-> (.validTo ctx) (.accept expr-visitor))
+                                                 ;; TODO valid-from/valid-to
+                                                 :patch-rel (.accept (.patchSource ctx) this)})
+                                '[_iid _valid_from _valid_from doc]))))
+
+  (visitPatchRecords [_ ctx]
+    (let [{:keys [plan col-syms]} (-> (.recordsValueConstructor ctx)
+                                      (.accept (->QueryPlanVisitor env scope))
+                                      (remove-ns-qualifiers env))]
+      (->QueryExpr [:project ['{_iid (_iid _id)}
+                              {'doc (into {} (map (juxt keyword identity)) col-syms)}]
+                    plan]
+                   '[_iid doc])))
 
   (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
@@ -2734,7 +2781,7 @@
   (visitExecuteStmt [this ctx]
     (.accept (.executeStatement ctx) this)))
 
-(defn- xform-table-info [table-info]
+(defn xform-table-info [table-info]
   (into {}
         (for [[tn cns] (merge info-schema/table-info
                               '{xt/txs #{_id committed error system_time}}
@@ -2791,6 +2838,11 @@
   InsertStmt
   (->logical-plan [{:keys [table query-plan]}]
     [:insert {:table table}
+     (->logical-plan query-plan)])
+
+  PatchStmt
+  (->logical-plan [{:keys [table query-plan]}]
+    [:patch {:table table}
      (->logical-plan query-plan)])
 
   UpdateStmt
@@ -2929,7 +2981,10 @@
                                 (mapv identifier-sym))
           {:keys [rows]} (-> (.recordsValueConstructor ctx)
                              (.accept (->TableRowsVisitor env scope out-col-syms)))]
-      rows)))
+      rows))
+
+  ;; TODO these can be made static ops too
+  (visitPatchStmt [_ _ctx]))
 
 (defn sql->static-ops
   ([sql arg-rows] (sql->static-ops sql arg-rows {}))

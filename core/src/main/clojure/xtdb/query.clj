@@ -15,6 +15,7 @@
             xtdb.operator.group-by
             xtdb.operator.join
             xtdb.operator.order-by
+            xtdb.operator.patch
             xtdb.operator.project
             xtdb.operator.rename
             [xtdb.operator.scan :as scan]
@@ -218,6 +219,7 @@
                      (binding [expr/*clock* clock]
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :clock clock,
+                                      :default-tz default-tz,
                                       :snapshot-time (or snapshot-time (some-> wm .txBasis .getSystemTime))
                                       :current-time current-time
                                       :args (or args vw/empty-args)

@@ -70,6 +70,69 @@ Upserts documents into the given table, optionally during the given valid time p
                   {:xt/id n, :n-str (str n)}))))
 ----
 
+=== `patch-docs`
+
+Upserts documents into the given table, merging them with any existing documents, optionally during the given valid time period.
+
+Documents are currently merged at the granularity of individual keys - e.g. if a key is present in the patch document, it will override the same key in the database document; if a key is absent or null, the key from the document already in the database will be preserved.
+
+[source,clojure]
+----
+[:patch-docs
+ ;; -- required
+
+ ;; options map
+ ;; * can just provide `<table>` rather than a map if there are
+ ;;   no other options
+ {;; -- required
+
+  ;; table to patch docs into (keyword)
+  :into <table>
+
+  ;; --optional
+
+  ;; valid-from, valid-to can be `java.util.Date`, `java.time.Instant`
+  ;; or `java.time.ZonedDateTime`
+  :valid-from #inst "..."
+  :valid-to #inst "..."
+  }
+
+ ;; -- required
+ ;; documents to submit (variadic, 0..n)
+ ;; * each must contain `:xt/id`
+ & <docs>
+ ]
+----
+
+==== Examples
+
+* single document
++
+[source,clojure]
+----
+[:put-docs :my-table {:xt/id :foo, :a 1}]
+[:patch-docs :my-table {:xt/id :foo, :b 2}]
+
+;; => {:xt/id :foo, :a 1, :b 2}
+----
+* with options
++
+[source,clojure]
+----
+[:patch-docs {:into :my-table, :valid-from #inst "2024-01-01"}
+ {:xt/id :foo, ...}
+ {:xt/id :bar, ...}]
+----
+* dynamically generated
++
+[source,clojure]
+----
+(into [:patch-docs {:into :my-table, ...}]
+      (->> (range 100)
+           (map (fn [n]
+                  {:xt/id n, :n-str (str n)}))))
+----
+
 [#delete-docs]
 === `delete-docs`
 

@@ -63,6 +63,9 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
 
     fun openAsRelation(): Relation
 
+    fun toReader() =
+        RelationReader.from(this.map { ValueVectorReader.from(it.value.vector) }, writerPosition().position)
+
     fun clear() {
         this.forEach { it.value.clear() }
         writerPosition().position = 0

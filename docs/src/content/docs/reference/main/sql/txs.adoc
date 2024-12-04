@@ -52,6 +52,25 @@ return rr.Diagram(rr.Stack(updateTable, rr.Optional(forValidTime, "skip"), rr.Se
 * The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
 * The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the `SET` clause).
 
+=== `PATCH`
+
+Patches documents already in a table with the given document - updating those that exist, inserting any that don't (an 'upsert') - optionally for a period of valid-time.
+
+[railroad]
+----
+const patchTable = rr.Sequence("PATCH", "INTO", "<table name>")
+const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
+const forValidTime = rr.Optional(
+  rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')))
+const objs = rr.OneOrMore(rr.Choice(0, "<object>", "<param>"), ",")
+const records = rr.Sequence("RECORDS", objs)
+return rr.Diagram(rr.Stack(patchTable, rr.Optional(forValidTime, "skip"), records))
+----
+
+* If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time.
+* The `_id` column cannot be patched - instead, users should delete this document and re-insert a new one.
+* The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the records themselves).
+* Documents are currently merged at the granularity of individual keys - e.g. if a key is present in the patch document, it will override the same key in the database document; if a key is absent or null, the key from the document already in the database will be preserved.
 
 === `DELETE`
 

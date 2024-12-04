@@ -2035,3 +2035,20 @@
 
   (t/is (= "number: 42.0" (project1 '(str "number: " 42.0) {})))
   (t/is (= "keyword: :foo/bar" (project1 '(str "keyword: " :foo/bar) {}))))
+
+(t/deftest test-patch
+  (t/is (= {} (project1 '(_patch {} {}) {})))
+  (t/is (= {:a 1} (project1 '(_patch nil {:a 1}) {})))
+  (t/is (= {:a 1} (project1 '(_patch {:a 2} {:a 1}) {})))
+  (t/is (= {:a 1, :b 2} (project1 '(_patch {:a 2, :b 2} {:a 1}) {})))
+  (t/is (= {:a 1, :b 1} (project1 '(_patch {:a 2} {:a 1, :b 1}) {})))
+  (t/is (= {:a 2} (project1 '(_patch {:a 2} {}) {})))
+
+  (t/is (= {:a 1} (project1 '(_patch {:a 2.4} {:a 1}) {})))
+  (t/is (= {:a 2.4} (project1 '(_patch {:a 1} {:a 2.4}) {})))
+
+  (t/is (= [{:a 2.4}, {:a 1}, {:a "3"}]
+           (project '(_patch {:a a1} {:a a2})
+                    [{:a1 1.0, :a2 2.4}
+                     {:a1 1, :a2 nil}
+                     {:a1 3, :a2 "3"}]))))

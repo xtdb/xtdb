@@ -551,7 +551,7 @@
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
                       :null_eq :compare_nulls_first :compare_nulls_last
-                      :period :str}
+                      :period :str :_patch}
                     normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]
@@ -1447,6 +1447,44 @@
                                  (if (zero? ~res-sym)
                                    ~(f :null nil)
                                    ~(f :bool `(== ~return-code ~res-sym))))))})))))
+
+(defn -patch [^ValueReader l, ^ValueReader r]
+  (if (.isNull r)
+    l
+    r))
+
+(defmethod codegen-call [:_patch :struct :struct] [{[[_ l-ks] [_ r-ks]] :arg-types}]
+  (let [flattened-r-types (-> r-ks (update-vals types/flatten-union-types))]
+    {:return-type [:struct (into l-ks
+                                 (map (fn [[k r-type]]
+                                        [k (let [r-types (flattened-r-types k)]
+                                             (if-not (contains? r-types :null)
+                                               r-type
+                                               (let [l-type (get l-ks k :null)]
+                                                 ;; if the r-val is null, we take the l-val
+                                                 (apply types/merge-col-types l-type (disj r-types :null)))))]))
+                                 r-ks)]
+     :->call-code (fn [[l r]]
+                    (let [l-sym (gensym 'l)
+                          r-sym (gensym 'r)]
+                      `(let [~l-sym ~l, ~r-sym ~r]
+                         ~(-> {}
+                              (into (map (fn [k]
+                                           (let [k-str (str k)]
+                                             [k-str `(get ~l-sym ~k-str)])))
+                                    (keys l-ks))
+                              (into (map (fn [k]
+                                           (let [k-str (str k)]
+                                             [k-str
+                                              (if (and (contains? l-ks k)
+                                                       (get-in flattened-r-types [k :null]))
+                                                `(-patch (get ~l-sym ~k-str) (get ~r-sym ~k-str))
+                                                `(get ~r-sym ~k-str))])))
+                                    (keys r-ks))))))}))
+
+(defmethod codegen-call [:_patch :null :struct] [{[_ [_ r-ks]] :arg-types}]
+  {:return-type [:struct r-ks]
+   :->call-code (fn [[l r]] r)})
 
 (defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
                                         [_ target-el-type :as target-type] :target-type}]

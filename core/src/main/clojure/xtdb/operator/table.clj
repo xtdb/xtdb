@@ -9,12 +9,12 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
-           (java.util ArrayList HashMap HashSet Set)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
+           (java.util HashMap HashSet Set)
            (org.apache.arrow.vector VectorSchemaRoot ZeroVector)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            (xtdb ICursor)
            xtdb.arrow.VectorPosition
-           (xtdb.vector RelationReader IRelationWriter IVectorWriter)))
+           (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}

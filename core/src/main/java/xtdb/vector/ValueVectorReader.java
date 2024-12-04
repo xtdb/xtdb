@@ -484,9 +484,21 @@ public class ValueVectorReader implements IVectorReader {
 
     public static IVectorReader uuidVector(UuidVector v) {
         return new ValueVectorReader(v) {
+            private final FixedSizeBinaryVector underlyingVector = v.getUnderlyingVector();
+
             @Override
             public ByteBuffer getBytes(int idx) {
-                return getBytes(v.getUnderlyingVector(), idx);
+                return getBytes(underlyingVector, idx);
+            }
+
+            @Override
+            public ArrowBufPointer getPointer(int idx) {
+                return underlyingVector.getDataPointer(idx);
+            }
+
+            @Override
+            public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
+                return underlyingVector.getDataPointer(idx, reuse);
             }
         };
     }

@@ -24,7 +24,7 @@
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.log Log Log$Factory TxLog$Record TxLog$Subscriber)
            (xtdb.api.tx TxOp$Sql)
-           (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PutDocs SqlByteArgs Update XtqlAndArgs)
+           (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PatchDocs PutDocs SqlByteArgs Update XtqlAndArgs)
            xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
@@ -261,19 +261,18 @@
 
       (.endStruct sql-writer))))
 
-(defn- ->put-writer [^IVectorWriter op-writer]
-  (let [put-writer (.legWriter op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))
-        iids-writer (.structKeyWriter put-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
+(defn- ->docs-op-writer [^IVectorWriter op-writer]
+  (let [iids-writer (.structKeyWriter op-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.listElementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
-        doc-writer (.structKeyWriter put-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
-        valid-from-writer (.structKeyWriter put-writer "_valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.structKeyWriter put-writer "_valid_to" types/nullable-temporal-field-type)
+        doc-writer (.structKeyWriter op-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
+        valid-from-writer (.structKeyWriter op-writer "_valid_from" types/nullable-temporal-field-type)
+        valid-to-writer (.structKeyWriter op-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [table-name docs valid-from valid-to]}]
       (let [table-name (str (symbol (util/with-default-schema table-name)))]
         (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
-        (.startStruct put-writer)
+        (.startStruct op-writer)
         (let [^IVectorWriter table-doc-writer
               (.computeIfAbsent table-doc-writers table-name
                                 (fn [table]
@@ -295,7 +294,13 @@
         (.writeObject valid-from-writer valid-from)
         (.writeObject valid-to-writer valid-to)
 
-        (.endStruct put-writer)))))
+        (.endStruct op-writer)))))
+
+(defn- ->put-writer [^IVectorWriter op-writer]
+  (->docs-op-writer (.legWriter op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))))
+
+(defn- ->patch-writer [^IVectorWriter op-writer]
+  (->docs-op-writer (.legWriter op-writer "patch-docs" (FieldType/notNullable #xt.arrow/type :struct))))
 
 (defn- ->delete-writer [^IVectorWriter op-writer]
   (let [delete-writer (.legWriter op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
@@ -371,6 +376,7 @@
         !write-sql! (delay (->sql-writer op-writer allocator))
         !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer))
         !write-put! (delay (->put-writer op-writer))
+        !write-patch! (delay (->patch-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
         !write-erase! (delay (->erase-writer op-writer))
         !write-call! (delay (->call-writer op-writer))
@@ -395,6 +401,7 @@
 
         SqlByteArgs (@!write-sql-byte-args! tx-op)
         PutDocs (@!write-put! tx-op)
+        PatchDocs (@!write-patch! tx-op)
         DeleteDocs (@!write-delete! tx-op)
         EraseDocs (@!write-erase! tx-op)
         Call (@!write-call! tx-op)

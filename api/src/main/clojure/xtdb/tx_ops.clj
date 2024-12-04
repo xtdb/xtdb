@@ -59,6 +59,17 @@
                        table-name)]
           docs)))
 
+(defrecord PatchDocs [table-name docs valid-from valid-to]
+  TxOp
+  Unparse
+  (unparse-tx-op [_]
+    (into [:patch-docs (if (or valid-from valid-to)
+                         {:into table-name
+                          :valid-from valid-from
+                          :valid-to valid-to}
+                         table-name)]
+          docs)))
+
 (defrecord DeleteDocs [table-name doc-ids valid-from valid-to]
   TxOp
   Unparse
@@ -212,7 +223,19 @@
                (some-> valid-from time/expect-instant)
                (some-> valid-to time/expect-instant))))
 
-(defmethod parse-tx-op :insert-into [[_ table query & arg-rows :as this]]
+(defmethod parse-tx-op :patch-docs [[_ table-or-opts & docs]]
+  (let [{table :into, :keys [valid-from valid-to]} (cond
+                                                     (map? table-or-opts) table-or-opts
+                                                     (keyword? table-or-opts) {:into table-or-opts})]
+    (when (or valid-from valid-to)
+      (throw (UnsupportedOperationException. "valid-from and valid-to are not yet supported for patch-docs")))
+
+    (->PatchDocs (expect-table-name table)
+                 (mapv expect-doc docs)
+                 (some-> valid-from time/expect-instant)
+                 (some-> valid-to time/expect-instant))))
+
+(defmethod parse-tx-op :insert-into [[_ table query & arg-rows]]
   (cond-> (->Insert (expect-table-name table)
                     (xtql.edn/parse-query query))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
