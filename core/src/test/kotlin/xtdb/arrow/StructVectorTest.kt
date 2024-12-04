@@ -170,4 +170,26 @@ class StructVectorTest {
         }
     }
 
+    @Test
+    fun `from null into struct vector`() {
+        NullVector("v1" ).use { nullVector ->
+            nullVector.writeNull()
+            nullVector.writeNull()
+            nullVector.writeNull()
+
+            StructVector(allocator, "v2", true,
+                linkedMapOf(
+                    "i32" to IntVector(allocator, "i32", false),
+                    "utf8" to Utf8Vector(allocator, "utf8", true)
+                )).use { copy ->
+                val copier = nullVector.rowCopier(copy)
+                copier.copyRow(0)
+                copier.copyRow(1)
+                copier.copyRow(2)
+
+                assertEquals(3, copy.valueCount)
+                assertNull(copy.getObject(1))
+            }
+        }
+    }
 }
