@@ -1,50 +1,22 @@
 (ns xtdb.trie
   (:require [clojure.string :as str]
             [xtdb.buffer-pool]
-            [xtdb.error :as err]
             [xtdb.metadata :as meta]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
-           (java.nio ByteBuffer)
            (java.nio.file Path)
-           java.security.MessageDigest
            (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
-           (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.arrow Relation Relation$Loader)
+           (xtdb.arrow Relation)
            xtdb.IBufferPool
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
-           (xtdb.util TemporalBounds TemporalDimension)))
-
-(def ^:private ^java.lang.ThreadLocal !msg-digest
-  (ThreadLocal/withInitial
-   (fn []
-     (MessageDigest/getInstance "SHA-256"))))
-
-(defn ->iid ^ByteBuffer [eid]
-  (if (uuid? eid)
-    (util/uuid->byte-buffer eid)
-    (ByteBuffer/wrap
-     (let [^bytes eid-bytes (cond
-                              (string? eid) (.getBytes (str "s" eid))
-                              (keyword? eid) (.getBytes (str "k" eid))
-                              (integer? eid) (.getBytes (str "i" eid))
-                              :else (let [id-type (some-> (class eid) .getName symbol)]
-                                      (throw (err/runtime-err :xtdb/invalid-id
-                                                              {::err/message (format "Invalid ID type: %s" id-type)
-                                                               :type id-type
-                                                               :eid eid}))))]
-       (-> ^MessageDigest (.get !msg-digest)
-           (.digest eid-bytes)
-           (Arrays/copyOfRange 0 16))))))
-
-(def valid-iid? (some-fn uuid? string? keyword? integer?))
+           (xtdb.util TemporalBounds)))
 
 (defn ->log-l0-l1-trie-key [^long level, ^long first-row ,^long next-row, ^long row-count]
   (assert (<= 0 level 1))

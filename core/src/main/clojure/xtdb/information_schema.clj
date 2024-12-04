@@ -244,7 +244,7 @@
           put-wrt (.legWriter (.colWriter out-rel-writer "op") "put")]
       (doseq [user initial-user-data]
         (.startRow out-rel-writer)
-        (.writeObject iid-wrt (trie/->iid (:_id user)))
+        (.writeObject iid-wrt (util/->iid (:_id user)))
         (.writeLong sys-wrt 0)
         (.writeLong vf-wrt 0)
         (.writeLong vt-wrt Long/MAX_VALUE)

@@ -310,15 +310,15 @@
     (when (= '= (first eid-select))
       (when-let [eid (eid-select->eid eid-select)]
         (cond
-          (and (s/valid? ::lp/value eid) (trie/valid-iid? eid))
-          (trie/->iid eid)
+          (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
+          (util/->iid eid)
 
           (s/valid? ::lp/param eid)
           (let [eid-rdr (.readerForName args-rel (name eid))]
             (when (= 1 (.valueCount eid-rdr))
               (let [eid (.getObject eid-rdr 0)]
-                (when (trie/valid-iid? eid)
-                  (trie/->iid eid))))))))))
+                (when (util/valid-iid? eid)
+                  (util/->iid eid))))))))))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^ITableMetadata table-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]

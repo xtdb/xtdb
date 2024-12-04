@@ -469,7 +469,7 @@
           (doseq [i (range (inc max-page-id))]
             (doseq [[op doc] (get page-idx->documents i)]
               (case op
-                :put (let [iid-bytes (trie/->iid (:xt/id doc))]
+                :put (let [iid-bytes (util/->iid (:xt/id doc))]
                        (when (and @!last-iid (> (util/compare-nio-buffers-unsigned @!last-iid iid-bytes) 0))
                          (log/error "IID's not in required order!" (:xt/id doc)))
                        (.startRow data-wtr)
@@ -499,7 +499,7 @@
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],
                        :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
-          (.logPut live-table-tx (trie/->iid eid)
+          (.logPut live-table-tx (util/->iid eid)
                    (time/instant->micros valid-from) (time/instant->micros valid-to)
                    (fn [] (.writeObject doc-wtr doc)))))
       (catch Throwable t

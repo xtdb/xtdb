@@ -133,7 +133,7 @@
                 (.logPut live-table
                          (if iid-rdr
                            (.getBytes iid-rdr (+ iid-start-idx row-idx))
-                           (trie/->iid (.getObject id-rdr doc-idx)))
+                           (util/->iid (.getObject id-rdr doc-idx)))
                          valid-from valid-to
                          #(.copyRow doc-copier doc-idx))))))
 
@@ -269,7 +269,7 @@
         (try
           (let [fn-iid (if fn-iid-rdr
                          (.getBytes fn-iid-rdr tx-op-idx)
-                         (trie/->iid (.getObject fn-id-rdr tx-op-idx)))
+                         (util/->iid (.getObject fn-id-rdr tx-op-idx)))
                 {:keys [fn-id tx-fn]} (find-fn allocator q-src wm-src (sci/fork sci-ctx) tx-opts fn-iid)
                 args (.form ^ClojureForm (.getObject args-rdr tx-op-idx))
 
@@ -352,7 +352,7 @@
 
               ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
               (when (< valid-from valid-to)
-                (.logPut live-idx-table (trie/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
+                (.logPut live-idx-table (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
 
 (defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
   (reify RelationIndexer
@@ -472,7 +472,7 @@
         live-table (.liveTable live-idx-tx user-table)
         doc-writer (.docWriter live-table)]
 
-    (.logPut live-table (trie/->iid user) system-time-µs Long/MAX_VALUE
+    (.logPut live-table (util/->iid user) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (.startStruct doc-writer)
                (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
@@ -609,7 +609,7 @@
         live-table (.liveTable live-idx-tx txs-table)
         doc-writer (.docWriter live-table)]
 
-    (.logPut live-table (trie/->iid tx-id) system-time-µs Long/MAX_VALUE
+    (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (.startStruct doc-writer)
                (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))

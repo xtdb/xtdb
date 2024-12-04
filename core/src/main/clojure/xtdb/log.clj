@@ -289,7 +289,7 @@
                                                   (when (.equals "_id" (util/->normal-form-str (key e)))
                                                     e))))
                                      (throw (err/illegal-arg :missing-id {:doc doc}))))]]
-            (.writeBytes iid-writer (trie/->iid eid)))
+            (.writeBytes iid-writer (util/->iid eid)))
           (.endList iids-writer))
 
         (.writeObject valid-from-writer valid-from)
@@ -315,7 +315,7 @@
 
           (.startList iids-writer)
           (doseq [doc-id doc-ids]
-            (.writeObject iid-writer (trie/->iid doc-id)))
+            (.writeObject iid-writer (util/->iid doc-id)))
           (.endList iids-writer)
 
           (.writeObject valid-from-writer valid-from)
@@ -338,7 +338,7 @@
 
           (.startList iids-writer)
           (doseq [doc-id doc-ids]
-            (.writeObject iid-writer (trie/->iid doc-id)))
+            (.writeObject iid-writer (util/->iid doc-id)))
           (.endList iids-writer)
 
           (.endStruct erase-writer))))))
@@ -350,7 +350,7 @@
     (fn write-call! [{:keys [fn-id args]}]
       (.startStruct call-writer)
 
-      (.writeObject fn-iid-writer (trie/->iid fn-id))
+      (.writeObject fn-iid-writer (util/->iid fn-id))
 
       (let [clj-form (xt/->ClojureForm (vec args))]
         (.writeObject args-list-writer clj-form))

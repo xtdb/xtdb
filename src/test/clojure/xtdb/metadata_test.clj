@@ -115,7 +115,7 @@
       (tu/finish-chunk! node)
       (c/compact-all! node)
 
-      (let [first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
+      (let [first-buckets (map (comp first tu/byte-buffer->path util/->iid) (range 20))
             bucket->page-idx (->> (into (sorted-set) first-buckets)
                                   (map-indexed #(MapEntry/create %2 %1))
                                   (into {}))

@@ -546,7 +546,7 @@
   (let [eid #uuid "00000000-0000-0000-0000-000000000000"]
     (util/with-tmp-dirs #{tmp-dir}
       (with-open [al (RootAllocator.)
-                  iid-arrow-buf (util/->arrow-buf-view al (trie/->iid eid))
+                  iid-arrow-buf (util/->arrow-buf-view al (util/->iid eid))
                   t1-rel (tu/open-arrow-hash-trie-rel al [{(time/instant->micros (time/->instant #inst "2023-01-01"))
                                                            [0 nil nil 1]
                                                            Long/MAX_VALUE [2 nil nil 3]}

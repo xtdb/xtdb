@@ -911,6 +911,26 @@
     buf-or-bytes
     (ByteBuffer/wrap ^bytes buf-or-bytes)))
 
+(defmethod codegen-call [:_iid :i64] [_]
+  {:return-type [:fixed-size-binary 16]
+   :->call-code (fn [[id]]
+                  `(resolve-buf (util/->iid ~id)))})
+
+(defmethod codegen-call [:_iid :utf8] [_]
+  {:return-type [:fixed-size-binary 16]
+   :->call-code (fn [[id]]
+                  `(resolve-buf (util/->iid (buf->str ~id))))})
+
+(defmethod codegen-call [:_iid :uuid] [_]
+    {:return-type [:fixed-size-binary 16]
+     :->call-code (fn [[id]]
+                    `(resolve-buf (util/->iid (util/bytes->uuid ~id))))})
+
+(defmethod codegen-call [:_iid :keyword] [_]
+  {:return-type [:fixed-size-binary 16]
+   :->call-code (fn [[id]]
+                  `(resolve-buf (util/->iid (keyword (buf->str ~id)))))})
+
 (defmethod codegen-call [:like :varbinary :varbinary] [{[_ {:keys [literal]}] :args}]
   {:return-type :bool
    :->call-code (fn [[haystack-code needle-code]]
