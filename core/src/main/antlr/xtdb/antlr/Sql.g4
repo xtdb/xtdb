@@ -797,7 +797,11 @@ dmlStatementValidTimeExtents
   | 'FOR' ('ALL' 'VALID_TIME' | 'VALID_TIME' 'ALL') # DmlStatementValidTimeAll
   ;
 
-patchStatement : PATCH INTO tableName patchSource ;
+patchStatement
+  : PATCH INTO tableName
+    ('FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' validFrom=staticExpr ('TO' validTo=staticExpr)?)?
+    patchSource
+  ;
 
 patchSource
   : recordsValueConstructor # PatchRecords

@@ -584,6 +584,9 @@
         query-rdr (.structKeyReader sql-leg "query")
         args-rdr (.structKeyReader sql-leg "args")
         upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
+        patch-idxer (reify RelationIndexer
+                      (indexOp [_ rel {:keys [table]}]
+                        (patch-rel! (.liveTable live-idx-tx (str table)) rel)))
         delete-idxer (->delete-rel-indexer live-idx-tx)
         erase-idxer (->erase-rel-indexer live-idx-tx)]
     (reify OpIndexer
@@ -600,6 +603,11 @@
                 [:insert query-opts inner-query]
                 (foreach-arg-row args-arrow-rdr
                                  (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                     (wrap-sql-args param-count)))
+
+                [:patch query-opts inner-query]
+                (foreach-arg-row args-arrow-rdr
+                                 (-> (query-indexer q-src wm-src patch-idxer inner-query tx-opts query-opts)
                                      (wrap-sql-args param-count)))
 
                 [:update query-opts inner-query]

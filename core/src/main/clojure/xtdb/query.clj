@@ -219,6 +219,7 @@
                      (binding [expr/*clock* clock]
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :clock clock,
+                                      :default-tz default-tz,
                                       :snapshot-time (or snapshot-time (some-> wm .txBasis .getSystemTime))
                                       :current-time current-time
                                       :args (or args vw/empty-args)

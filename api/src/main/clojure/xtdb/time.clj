@@ -18,10 +18,15 @@
 (s/def ::datetime-value
   (some-fn (partial instance? Date)
            (partial instance? Instant)
-           (partial instance? ZonedDateTime)))
+           (partial instance? ZonedDateTime)
+           (partial instance? LocalDate)
+           (partial instance? LocalDateTime)))
 
 (defprotocol TimeConversions
-  (^java.time.Instant ->instant [v])
+  (->instant
+    ^java.time.Instant [v]
+    ^java.time.Instant [v {:keys [default-tz]}])
+
   (^java.time.ZonedDateTime ->zdt [v]))
 
 (defn expect-instant [instant]
@@ -38,23 +43,36 @@
 
 (extend-protocol TimeConversions
   nil
-  (->instant [_] nil)
+  (->instant ([_] nil) ([_ _] nil))
   (->zdt [_] nil)
 
   Instant
-  (->instant [i] i)
+  (->instant ([i] i) ([i _] i))
   (->zdt [i] (-> i (.atZone utc)))
 
   Date
-  (->instant [d] (.toInstant d))
+  (->instant
+    ([d] (.toInstant d))
+    ([d _] (.toInstant d)))
   (->zdt [d] (->zdt (->instant d)))
 
   ZonedDateTime
-  (->instant [zdt] (.toInstant zdt))
+  (->instant
+    ([zdt] (.toInstant zdt))
+    ([zdt _] (.toInstant zdt)))
   (->zdt [zdt] zdt)
 
   OffsetDateTime
-  (->instant [odt] (.toInstant odt)))
+  (->instant
+    ([odt] (.toInstant odt))
+    ([odt _] (.toInstant odt)))
+
+  LocalDate
+  (->instant [ld opts] (->instant (.atStartOfDay ld) opts))
+
+  LocalDateTime
+  (->instant [ldt {:keys [^ZoneId default-tz] :as opts}]
+    (->instant (.atZone ldt default-tz) opts)))
 
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) #=(long 1e6))

@@ -4,13 +4,24 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.vector.writer :as vw])
-  (:import [java.time Instant]
-           org.apache.arrow.vector.types.pojo.Schema
+  (:import org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.operator.PatchGapsCursor))
+           xtdb.operator.PatchGapsCursor
+           [xtdb.vector RelationReader]))
 
-(s/def ::valid-from (s/nilable (partial instance? Instant)))
-(s/def ::valid-to (s/nilable (partial instance? Instant)))
+(s/def ::instantable
+  (s/or :literal ::time/datetime-value
+        :param ::lp/param))
+
+(s/def ::valid-from (s/nilable ::instantable))
+(s/def ::valid-to (s/nilable ::instantable))
+
+(defn- ->instant [[tag value] {:keys [^RelationReader args] :as opts}]
+  (-> (case tag
+        :literal value
+        :param (-> (.readerForName args (str value))
+                   (.getObject 0)))
+      (time/->instant opts)))
 
 (defmethod lp/ra-expr :patch-gaps [_]
   (s/cat :op #{:patch-gaps}
@@ -23,12 +34,12 @@
       (let [fields (-> inner-fields
                        (update 'doc types/->nullable-field))]
         {:fields fields
-         :->cursor (fn [{:keys [allocator current-time]} inner]
+         :->cursor (fn [{:keys [allocator current-time] :as qopts} inner]
                      (PatchGapsCursor. inner
                                        (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
                                                                                             (types/field-with-name field (str nm))))
                                                                                  allocator))
-                                       (time/instant->micros (or valid-from current-time))
+                                       (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                                        (if valid-to
-                                         (time/instant->micros valid-to)
+                                         (time/instant->micros (->instant valid-to qopts))
                                          Long/MAX_VALUE)))}))))

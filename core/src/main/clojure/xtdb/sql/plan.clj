@@ -2514,6 +2514,9 @@
 (defrecord InsertStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
+(defrecord PatchStmt [table query-plan]
+  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
+
 (defrecord UpdateStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
@@ -2567,6 +2570,29 @@
 
       (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
                     insert-plan)))
+
+  (visitPatchStmt [this ctx] (-> (.patchStatement ctx) (.accept this)))
+
+  (visitPatchStatement [this ctx]
+    (let [table-name (-> (identifier-sym (.tableName ctx))
+                         util/with-default-schema)
+          expr-visitor (->ExprPlanVisitor env scope)]
+      (->PatchStmt table-name
+                   (->QueryExpr (plan-patch env {:table table-name
+                                                 :valid-from (some-> (.validFrom ctx) (.accept expr-visitor))
+                                                 :valid-to (some-> (.validTo ctx) (.accept expr-visitor))
+                                                 ;; TODO valid-from/valid-to
+                                                 :patch-rel (.accept (.patchSource ctx) this)})
+                                '[_iid _valid_from _valid_from doc]))))
+
+  (visitPatchRecords [_ ctx]
+    (let [{:keys [plan col-syms]} (-> (.recordsValueConstructor ctx)
+                                      (.accept (->QueryPlanVisitor env scope))
+                                      (remove-ns-qualifiers env))]
+      (->QueryExpr [:project ['{_iid (_iid _id)}
+                              {'doc (into {} (map (juxt keyword identity)) col-syms)}]
+                    plan]
+                   '[_iid doc])))
 
   (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
@@ -2814,6 +2840,11 @@
     [:insert {:table table}
      (->logical-plan query-plan)])
 
+  PatchStmt
+  (->logical-plan [{:keys [table query-plan]}]
+    [:patch {:table table}
+     (->logical-plan query-plan)])
+
   UpdateStmt
   (->logical-plan [{:keys [table query-plan]}]
     [:update {:table table}
@@ -2950,7 +2981,10 @@
                                 (mapv identifier-sym))
           {:keys [rows]} (-> (.recordsValueConstructor ctx)
                              (.accept (->TableRowsVisitor env scope out-col-syms)))]
-      rows)))
+      rows))
+
+  ;; TODO these can be made static ops too
+  (visitPatchStmt [_ _ctx]))
 
 (defn sql->static-ops
   ([sql arg-rows] (sql->static-ops sql arg-rows {}))

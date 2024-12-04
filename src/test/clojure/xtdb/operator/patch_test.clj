@@ -82,3 +82,27 @@
                   [id2 (time/->zdt #inst "2020-01-03") (time/->zdt #inst "2020-01-04") 2]]
                  (test [[id (time/->instant #inst "2020-01-01") (time/->instant #inst "2020-01-02T12") 1]
                         [id2 (time/->instant #inst "2020-01-03") nil 2]])))))))
+
+(t/deftest test-patch-sql
+  (letfn [(q [sql]
+            (->> (xt/q tu/*node* sql)
+                 (map (juxt #(select-keys % [:xt/id :a :b :c :tmp]) :xt/valid-from :xt/valid-to))))]
+
+    (xt/submit-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, a: 1, b: 2}"])
+    (xt/execute-tx tu/*node* ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
+
+    (t/is (= [[{:xt/id 1, :a 1, :b 2} (time/->zdt #inst "2020-01-01") (time/->zdt #inst "2020-01-02")]
+              [{:xt/id 1, :a 1, :b 2, :c 3} (time/->zdt #inst "2020-01-02") nil]
+              [{:xt/id 2, :a 4, :b 5} (time/->zdt #inst "2020-01-02") nil]]
+             (q "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+    (t/testing "for portion of valid_time"
+      (xt/submit-tx tu/*node* ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
+      (xt/execute-tx tu/*node* ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
+      (xt/execute-tx tu/*node* [["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"]])
+
+      (t/is (= [[{:xt/id 1, :a 1, :b 2} (time/->zdt #inst "2020-01-03") (time/->zdt #inst "2020-01-05")]
+                [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} (time/->zdt #inst "2020-01-05") (time/->zdt #inst "2020-01-07")]
+                [{:xt/id 1, :a 1, :b 2} (time/->zdt #inst "2020-01-07") nil]
+                [{:xt/id 2, :a 6, :b 8} (time/->zdt #inst "2020-01-08") nil]]
+               (q "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))))
