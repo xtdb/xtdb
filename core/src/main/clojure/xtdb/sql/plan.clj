@@ -2861,7 +2861,7 @@
                    FROM foo, foo AS baz"
                   {:table-info {"bar" #{"id"}}}))
 
-(defrecord SqlToPutsVisitor [env scope arg-rows]
+(defrecord SqlToStaticOpsVisitor [env scope arg-rows]
   SqlVisitor
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
   (visitUpdateStmt [_ _])
@@ -2928,16 +2928,16 @@
                              (.accept (->TableRowsVisitor env scope out-col-syms)))]
       rows)))
 
-(defn sql->put-docs-ops
-  ([sql arg-rows] (sql->put-docs-ops sql arg-rows {}))
+(defn sql->static-ops
+  ([sql arg-rows] (sql->static-ops sql arg-rows {}))
 
   ([sql arg-rows {:keys [scope] :as opts}]
    (try
      (let [{:keys [!errors !warnings] :as env} (->env opts)
-           put-docs-ops (-> (antlr/parse-statement sql)
-                            (.accept (->SqlToPutsVisitor env scope arg-rows)))]
+           tx-ops (-> (antlr/parse-statement sql)
+                      (.accept (->SqlToStaticOpsVisitor env scope arg-rows)))]
        (when (and (empty? @!errors) (empty? @!warnings))
-         put-docs-ops))
+         tx-ops))
 
      ;; eventually we could deal with these on pre-submit
      (catch IllegalArgumentException _)

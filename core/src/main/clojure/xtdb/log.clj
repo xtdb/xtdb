@@ -387,7 +387,7 @@
         AssertNotExists (@!write-xtql! tx-op)
 
         TxOp$Sql (let [^TxOp$Sql tx-op tx-op]
-                   (if-let [put-docs-ops (plan/sql->put-docs-ops (.sql tx-op) (.argRows tx-op) {:default-tz default-tz})]
+                   (if-let [put-docs-ops (plan/sql->static-ops (.sql tx-op) (.argRows tx-op) {:default-tz default-tz})]
                      (doseq [op put-docs-ops]
                        (@!write-put! op))
 

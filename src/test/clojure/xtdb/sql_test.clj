@@ -2084,20 +2084,20 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
            (xt/q tu/*node* "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = 'foo'")
            (xt/q tu/*node* "SELECT * FROM information_schema.columns WHERE table_name = 'foo'"))))
 
-(t/deftest test-sql->put-docs-3484
+(t/deftest test-sql->static-ops-3484
   (let [opts {:table-info {"public/foo" #{"bar"}}}]
     (t/testing "non-inserts"
-      (t/is (nil? (plan/sql->put-docs-ops "UPDATE foo SET bar = baz" nil opts)))
-      (t/is (nil? (plan/sql->put-docs-ops "DELETE FROM foo WHERE bar = 1" nil opts)))
-      (t/is (nil? (plan/sql->put-docs-ops "ERASE FROM foo WHERE bar = 1" nil opts))))
+      (t/is (nil? (plan/sql->static-ops "UPDATE foo SET bar = baz" nil opts)))
+      (t/is (nil? (plan/sql->static-ops "DELETE FROM foo WHERE bar = 1" nil opts)))
+      (t/is (nil? (plan/sql->static-ops "ERASE FROM foo WHERE bar = 1" nil opts))))
 
-    (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO baz (bar) SELECT bar FROM foo" nil))
+    (t/is (nil? (plan/sql->static-ops "INSERT INTO baz (bar) SELECT bar FROM foo" nil))
           "excludes insert-from-subquery"))
 
   (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1, "v" 2}]})]
-           (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2)" nil)))
+           (plan/sql->static-ops "INSERT INTO foo (_id, v) VALUES (1, 2)" nil)))
 
-  (t/is (nil? (plan/sql->put-docs-ops "INSERT INTO foo (_id, v) VALUES (1, 2 + 3)" nil))
+  (t/is (nil? (plan/sql->static-ops "INSERT INTO foo (_id, v) VALUES (1, 2 + 3)" nil))
         "excludes expressions")
 
   (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 2}]
@@ -2105,7 +2105,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
             (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 3}]
                                   :valid-from #time/instant "2021-01-01T00:00:00Z"})]
 
-           (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
+           (plan/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
                                    {:default-tz #time/zone "Europe/London"}))
         "groups by valid-from")
 
@@ -2115,7 +2115,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
               (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 2} {"_id" 4}]
                                     :valid-from #time/instant "2020-01-02T00:00:00Z"})]
 
-             (plan/sql->put-docs-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
+             (plan/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                      '[[1 2] [3 4]])))))
 
 (t/deftest show-canned-responses
