@@ -1098,6 +1098,9 @@
                             (dec param-idx))))
         (vary-meta assoc :param? true)))
 
+  (visitStaticLiteral [this ctx] (-> (.literal ctx) (.accept this)))
+  (visitStaticParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
+
   (visitFieldAccess [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           field-name (identifier-sym (.fieldName ctx))]

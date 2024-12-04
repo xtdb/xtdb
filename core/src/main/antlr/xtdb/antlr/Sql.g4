@@ -359,6 +359,11 @@ parameterSpecification
     | POSTGRES_PARAMETER_SPECIFICATION #PostgresParameter
     ;
 
+staticExpr
+    : literal #StaticLiteral
+    | parameterSpecification #StaticParam
+    ;
+
 columnReference : identifierChain ;
 
 /// generate_series function
@@ -787,7 +792,7 @@ deleteStatementSearched
     ;
 
 dmlStatementValidTimeExtents
-  : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' from=expr ('TO' to=expr)? # DmlStatementValidTimePortion
+  : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' from=staticExpr ('TO' to=staticExpr)? # DmlStatementValidTimePortion
   | 'FOR' ('ALL' 'VALID_TIME' | 'VALID_TIME' 'ALL') # DmlStatementValidTimeAll
   ;
 

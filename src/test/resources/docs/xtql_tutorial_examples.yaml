@@ -127,7 +127,7 @@ DML-Delete-additional-unify-clauses-sql: |
 DML-Delete-bitemporal-sql: |
   -- tag::DML-Delete-bitemporal-sql[]
   DELETE FROM promotions
-  FOR PORTION OF VALID_TIME FROM DATE '2023-12-26' TO END_OF_TIME
+  FOR PORTION OF VALID_TIME FROM DATE '2023-12-26'
   WHERE promotion_type = 'christmas'
   -- end::DML-Delete-bitemporal-sql[]
 
