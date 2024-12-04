@@ -1,7 +1,6 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
-            [xtdb.error :as err]
-            [xtdb.protocols :as xtp])
+            [xtdb.error :as err])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
            (java.util Date)))

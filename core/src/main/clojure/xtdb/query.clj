@@ -15,6 +15,7 @@
             xtdb.operator.group-by
             xtdb.operator.join
             xtdb.operator.order-by
+            xtdb.operator.patch
             xtdb.operator.project
             xtdb.operator.rename
             [xtdb.operator.scan :as scan]

@@ -1,6 +1,5 @@
 package xtdb.vector
 
-import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
@@ -10,10 +9,10 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.VectorPosition
-import xtdb.arrow.ValueWriter
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
+import xtdb.arrow.ValueWriter
+import xtdb.arrow.VectorPosition
 import xtdb.toLeg
 import xtdb.vector.extensions.SetType
 import xtdb.vector.extensions.SetVector
