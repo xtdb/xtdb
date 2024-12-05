@@ -12,6 +12,7 @@ import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.util.LinkedHashMap
 
 class StructVectorTest {
     private lateinit var allocator: BufferAllocator
@@ -190,6 +191,36 @@ class StructVectorTest {
                 assertEquals(3, copy.valueCount)
                 assertNull(copy.getObject(1))
             }
+        }
+    }
+
+    @Test
+    fun `use nested writers with DUV and nulls - 3946`() {
+        val children = linkedMapOf(
+            "i32" to IntVector(allocator, "i32", false),
+            "duv" to DenseUnionVector(allocator, "duv", listOf(
+                IntVector(allocator, "i32", false),
+                Utf8Vector(allocator, "utf8", true)
+            )))
+
+        StructVector(allocator, "struct", false, children).use { structVec ->
+            val i32Writer = structVec.keyWriter("i32")
+            val duvWriter = structVec.keyWriter("duv")
+            val nestedUtf8Writer = duvWriter.legWriter("utf8")
+            i32Writer.writeInt(1)
+            nestedUtf8Writer.writeObject("one")
+            structVec.endStruct()
+
+            i32Writer.writeInt(2)
+            structVec.endStruct()
+
+            assertEquals(
+                listOf(
+                    mapOf("i32" to 1, "duv" to "one"),
+                    mapOf("i32" to 2),
+                ),
+                structVec.asList
+            )
         }
     }
 }

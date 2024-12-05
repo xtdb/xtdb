@@ -138,6 +138,20 @@ class DenseUnionVector(
         valueCount++
     }
 
+    override fun writeNull() {
+        var legWriter : LegWriter? = null
+        for (i in legVectors.indices) {
+            val leg = legVectors[i]
+            if (leg.nullable) {
+                legWriter = LegWriter(i.toByte(), leg)
+                break
+            }
+        }
+        legWriter?.writeNull() ?: run {
+            TODO("auto-creation: null vs ${legVectors.map { it.name }}")
+        }
+    }
+
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = leg(idx)?.getObject(getOffset(idx), keyFn)
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
     override fun writeObject0(value: Any) = throw UnsupportedOperationException()
