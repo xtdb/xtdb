@@ -59,7 +59,7 @@ class StructVector(
         val valueCount = valueCount
 
         children.sequencedValues().forEach { child ->
-            repeat(valueCount - child.valueCount) { child.writeNull() }
+            repeat(valueCount - child.valueCount) { child.writeUndefined() }
         }
     }
 
