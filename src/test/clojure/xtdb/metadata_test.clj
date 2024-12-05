@@ -1,8 +1,10 @@
 (ns xtdb.metadata-test
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
+            [xtdb.compactor :as c]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
@@ -11,11 +13,11 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.compactor :as c])
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.metadata IMetadataManager)))
+           (com.github.benmanes.caffeine.cache Cache)
+           (xtdb.metadata IMetadataManager MetadataManager)
+           (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
@@ -225,3 +227,36 @@
 
               (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
                        (.columnNames table-metadata))))))))))
+
+(deftest metadata-cleanup
+  (with-open [node (xtn/start-node {:server {:port 0}})]
+    (let [^MetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+          ^Cache table-metadata-cache (.table-metadata-cache metadata-mgr)]
+      (letfn [(submit-docs [] (xt/execute-tx node [(into [:put-docs :docs] (for [i (range 20)] {:xt/id i}))]))
+              (query [] (xt/q node '(from :docs [*])))
+              (docs-metadata-files []
+                (->> (.asMap table-metadata-cache)
+                     keys
+                     (map str)
+                     (filter #(str/starts-with? % "tables/public$docs/"))))]
+
+        (submit-docs)
+        (tu/finish-chunk! node)
+        (query)
+
+        ;; L0
+        (t/is (= 1 (count (doto (docs-metadata-files)
+                            #_prn))))
+
+        (c/compact-all! node)
+        (query)
+
+        ;; L0 + L1
+        (t/is (= 2 (count (doto (docs-metadata-files)
+                            #_prn))))
+
+        (.cleanUp metadata-mgr)
+
+        ;; L1
+        (t/is (= 1 (count (doto (docs-metadata-files)
+                            #_prn))))))))

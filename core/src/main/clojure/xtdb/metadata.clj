@@ -3,30 +3,29 @@
             [integrant.core :as ig]
             [xtdb.bloom :as bloom]
             xtdb.buffer-pool
-            [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
             [xtdb.serde :as serde]
+            [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (com.cognitect.transit TransitFactory)
-           (com.github.benmanes.caffeine.cache Cache Caffeine RemovalListener)
+           (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.file Path)
            (java.util HashMap HashSet Map NavigableMap TreeMap)
-           (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function Function IntPredicate)
-           (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow Relation VectorReader VectorWriter)
+           (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
+           (xtdb.arrow Relation)
+           (org.apache.arrow.memory ArrowBuf)
+           (org.apache.arrow.vector.types.pojo ArrowType Field FieldType)
            xtdb.IBufferPool
+           (xtdb.arrow Relation)
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader)
-           (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
+           (xtdb.vector IVectorReader)))
 
 (def arrow-read-handlers
   {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
@@ -48,9 +47,6 @@
                                   (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))})
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface IPageMetadataWriter
-  (^void writeMetadata [^Iterable cols]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
@@ -59,7 +55,8 @@
   (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
-  (allColumnFields []))
+  (allColumnFields [])
+  (cleanUp []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
@@ -95,200 +92,6 @@
           fields
           tables))
 
-(def metadata-col-type
-  '[:list
-    [:struct
-     {col-name :utf8
-      root-col? :bool
-      count :i64
-      types [:struct {}]
-      bloom [:union #{:null :varbinary}]}]])
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ContentMetadataWriter
-  (^void writeContentMetadata []))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface NestedMetadataWriter
-  (^xtdb.metadata.ContentMetadataWriter appendNestedMetadata [^xtdb.arrow.VectorReader contentCol]))
-
-#_{:clj-kondo/ignore [:unused-binding]}
-(defprotocol MetadataWriterFactory
-  (type->metadata-writer [arrow-type write-col-meta! types-vec]))
-
-(defn- ->bool-type-handler [^VectorWriter types-wtr, arrow-type]
-  (let [bit-wtr (.keyWriter types-wtr (if (instance? ArrowType$FixedSizeBinary arrow-type)
-                                        "fixed-size-binary"
-                                        (name (types/arrow-type->leg arrow-type)))
-                            (FieldType/nullable #xt.arrow/type :bool))]
-    (reify NestedMetadataWriter
-      (appendNestedMetadata [_ _content-col]
-        (reify ContentMetadataWriter
-          (writeContentMetadata [_]
-            (.writeBoolean bit-wtr true)))))))
-
-(defn- ->min-max-type-handler [^VectorWriter types-wtr, arrow-type]
-  (let [struct-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type)) (FieldType/nullable #xt.arrow/type :struct))
-
-        min-wtr (.keyWriter struct-wtr "min" (FieldType/nullable arrow-type))
-        max-wtr (.keyWriter struct-wtr "max" (FieldType/nullable arrow-type))]
-
-    (reify NestedMetadataWriter
-      (appendNestedMetadata [_ content-col]
-        (reify ContentMetadataWriter
-          (writeContentMetadata [_]
-
-            (let [min-copier (.rowCopier content-col min-wtr)
-                  max-copier (.rowCopier content-col max-wtr)
-
-                  min-comparator (expr.comp/->comparator content-col content-col :nulls-last)
-                  max-comparator (expr.comp/->comparator content-col content-col :nulls-first)]
-
-              (loop [value-idx 0
-                     min-idx -1
-                     max-idx -1]
-                (if (= value-idx (.getValueCount content-col))
-                  (do
-                    (if (neg? min-idx)
-                      (.writeNull min-wtr)
-                      (.copyRow min-copier min-idx))
-                    (if (neg? max-idx)
-                      (.writeNull max-wtr)
-                      (.copyRow max-copier max-idx)))
-
-                  (recur (inc value-idx)
-                         (if (and (not (.isNull content-col value-idx))
-                                  (or (neg? min-idx)
-                                      (neg? (.applyAsInt min-comparator value-idx min-idx))))
-                           value-idx
-                           min-idx)
-                         (if (and (not (.isNull content-col value-idx))
-                                  (or (neg? max-idx)
-                                      (pos? (.applyAsInt max-comparator value-idx max-idx))))
-                           value-idx
-                           max-idx))))
-
-              (.endStruct struct-wtr))))))))
-
-(extend-protocol MetadataWriterFactory
-  ArrowType$Null (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
-  ArrowType$Bool (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
-  ArrowType$FixedSizeBinary (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
-  TransitType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type))
-  TsTzRangeType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->bool-type-handler metadata-root arrow-type)))
-
-(extend-protocol MetadataWriterFactory
-  ArrowType$Int (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$FloatingPoint (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$Utf8 (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$Binary (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  KeywordType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  UriType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  UuidType (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$Timestamp (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$Date (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$Interval (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type))
-  ArrowType$Time (type->metadata-writer [arrow-type _write-col-meta! metadata-root] (->min-max-type-handler metadata-root arrow-type)))
-
-(extend-protocol MetadataWriterFactory
-  ArrowType$List
-  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
-    (let [list-type-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type))
-                                    (FieldType/nullable #xt.arrow/type :i32))]
-      (reify NestedMetadataWriter
-        (appendNestedMetadata [_ content-col]
-          (write-col-meta! (.elementReader ^VectorReader content-col))
-
-          (let [data-meta-idx (dec (.getValueCount types-wtr))]
-            (reify ContentMetadataWriter
-              (writeContentMetadata [_]
-                (.writeInt list-type-wtr data-meta-idx))))))))
-
-  SetType
-  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
-    (let [set-type-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type))
-                                   (FieldType/nullable #xt.arrow/type :i32))]
-      (reify NestedMetadataWriter
-        (appendNestedMetadata [_ content-col]
-          (write-col-meta! (.elementReader ^VectorReader content-col))
-
-          (let [data-meta-idx (dec (.getValueCount types-wtr))]
-            (reify ContentMetadataWriter
-              (writeContentMetadata [_]
-                (.writeInt set-type-wtr data-meta-idx))))))))
-
-  ArrowType$Struct
-  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
-    (let [struct-type-wtr (.keyWriter types-wtr
-                                      (str (name (types/arrow-type->leg arrow-type)) "-" (count (seq types-wtr)))
-                                      (FieldType/nullable #xt.arrow/type :list))
-          struct-type-el-wtr (.elementWriter struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
-      (reify NestedMetadataWriter
-        (appendNestedMetadata [_ content-col]
-          (let [struct-keys (.getKeys content-col)
-                sub-col-idxs (IntStream/builder)]
-
-            (doseq [^String struct-key struct-keys]
-              (write-col-meta! (.keyReader content-col struct-key))
-              (.add sub-col-idxs (dec (.getValueCount types-wtr))))
-
-            (reify ContentMetadataWriter
-              (writeContentMetadata [_]
-                (doseq [sub-col-idx (.toArray (.build sub-col-idxs))]
-                  (.writeInt struct-type-el-wtr sub-col-idx))
-                (.endList struct-type-wtr)))))))))
-
-(defn ->page-meta-wtr ^xtdb.metadata.IPageMetadataWriter [^VectorWriter cols-wtr]
-  (let [col-wtr (.elementWriter cols-wtr)
-        col-name-wtr (.keyWriter col-wtr "col-name")
-        root-col-wtr (.keyWriter col-wtr "root-col?")
-        count-wtr (.keyWriter col-wtr "count")
-        types-wtr (.keyWriter col-wtr "types")
-        bloom-wtr (.keyWriter col-wtr "bloom")
-
-        type-metadata-writers (HashMap.)]
-
-    (letfn [(->nested-meta-writer [^VectorReader content-col]
-              (when-let [^Field field (first (-> (.getField content-col)
-                                                 (types/flatten-union-field)
-                                                 (->> (remove #(= ArrowType$Null/INSTANCE (.getType ^Field %))))
-                                                 (doto (-> count (<= 1) (assert (str (pr-str (.getField content-col)) "should just be nullable mono-vecs here"))))))]
-                (-> ^NestedMetadataWriter
-                    (.computeIfAbsent type-metadata-writers (.getType field)
-                                      (reify Function
-                                        (apply [_ arrow-type]
-                                          (type->metadata-writer arrow-type (partial write-col-meta! false) types-wtr))))
-                    (.appendNestedMetadata content-col))))
-
-            (write-col-meta! [root-col?, ^VectorReader content-col]
-              (let [content-writers (->> (if (instance? ArrowType$Union (.getType (.getField content-col)))
-                                           (->> (.getLegs content-col)
-                                                (mapv (fn [leg]
-                                                        (->nested-meta-writer (.legReader content-col leg)))))
-                                           [(->nested-meta-writer content-col)])
-                                         (remove nil?))]
-                (.writeBoolean root-col-wtr root-col?)
-                (.writeObject col-name-wtr (.getName content-col))
-                (.writeLong count-wtr (-> (IntStream/range 0 (.getValueCount content-col))
-                                          (.filter (reify IntPredicate
-                                                     (test [_ idx]
-                                                       (not (.isNull content-col idx)))))
-                                          (.count)))
-                (bloom/write-bloom bloom-wtr content-col)
-
-                (doseq [^ContentMetadataWriter content-writer content-writers]
-                  (.writeContentMetadata content-writer))
-                (.endStruct types-wtr)
-
-                (.endStruct col-wtr)))]
-
-      (reify IPageMetadataWriter
-        (writeMetadata [_ cols]
-          (doseq [^VectorReader col cols
-                  :when (pos? (.getValueCount col))]
-            (write-col-meta! true col))
-          (.endList cols-wtr))))))
-
 (defn ->table-metadata-idxs [^IVectorReader metadata-rdr]
   (let [page-idx-cache (HashMap.)
         meta-row-count (.valueCount metadata-rdr)
@@ -322,7 +125,6 @@
                           ^IVectorReader metadata-leaf-rdr
                           col-names
                           ^Map page-idx-cache
-                          ^AtomicInteger ref-count
                           ^IVectorReader min-rdr
                           ^IVectorReader max-rdr]
   ITableMetadata
@@ -348,12 +150,11 @@
 
   AutoCloseable
   (close [_]
-    (when (zero? (.decrementAndGet ref-count))
-      (util/close meta-rel))))
+    (util/close meta-rel)))
 
 (def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path]
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path, ^Cache table-metadata-idx-cache]
   (let [footer (.getFooter buffer-pool file-path)]
     (util/with-open [rb (.getRecordBatch buffer-pool file-path 0)]
       (let [alloc (.getAllocator (.getReferenceManager ^ArrowBuf (first (.getBuffers rb))))]
@@ -362,7 +163,11 @@
                 rdr (.getOldRelReader rel)
                 ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
                                                    (.legReader "leaf"))
-                {:keys [col-names page-idx-cache]} (->table-metadata-idxs metadata-reader)
+                {:keys [col-names page-idx-cache]} (.get table-metadata-idx-cache file-path
+                                                         (fn [_]
+                                                           (->table-metadata-idxs metadata-reader)))
+
+
                 temporal-col-types-rdr (some-> (.structKeyReader metadata-reader "columns")
                                                (.listElementReader)
                                                (.structKeyReader "types")
@@ -370,11 +175,19 @@
 
                 min-rdr (some-> temporal-col-types-rdr (.structKeyReader "min"))
                 max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
-            (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache (AtomicInteger. 1)
-                             min-rdr max-rdr)))))))
+            (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache min-rdr max-rdr)))))))
+
+(defn metadata-manager-cleanup [table-names ^Cache table-metadata-idx-cache ^IBufferPool buffer-pool]
+  (doseq [table-name table-names]
+    (let [table-path (util/table-name->table-path table-name)
+          superseded-meta-files (->> (trie/list-meta-files buffer-pool table-path)
+                                     (trie/superseded-trie-files))
+          m (.asMap table-metadata-idx-cache)]
+      (doseq [meta-file superseded-meta-files]
+        (.remove m meta-file)))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool
-                          ^Cache table-metadata-cache
+                          ^Cache table-metadata-idx-cache
                           ^NavigableMap chunks-metadata
                           ^:volatile-mutable ^Map fields]
   IMetadataManager
@@ -384,12 +197,7 @@
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
   (openTableMetadata [_ file-path]
-    (-> (.asMap table-metadata-cache)
-        (.compute file-path (fn [file-path table-metadata]
-                              (let [{:keys [^AtomicInteger ref-count] :as tm} (or table-metadata
-                                                                                  (->table-metadata buffer-pool file-path))]
-                                (.incrementAndGet ref-count)
-                                tm)))))
+    (->table-metadata buffer-pool file-path table-metadata-idx-cache))
 
   (chunksMetadata [_] chunks-metadata)
   (columnField [_ table-name col-name]
@@ -399,10 +207,12 @@
   (columnFields [_ table-name] (get fields table-name))
   (allColumnFields [_] fields)
 
+  (cleanUp [_]
+    (metadata-manager-cleanup (keys fields) table-metadata-idx-cache buffer-pool))
+
   AutoCloseable
   (close [_]
-    (.clear chunks-metadata)
-    (util/close (.asMap table-metadata-cache))))
+    (.clear chunks-metadata)))
 
 (defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
@@ -433,9 +243,6 @@
   (let [chunks-metadata (load-chunks-metadata deps)
         table-metadata-cache (-> (Caffeine/newBuilder)
                                  (.maximumSize cache-size)
-                                 (.removalListener (reify RemovalListener
-                                                     (onRemoval [_ _path table-metadata _reason]
-                                                       (util/close table-metadata))))
                                  (.build))]
     (MetadataManager. buffer-pool
                       table-metadata-cache

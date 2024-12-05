@@ -355,7 +355,12 @@
             (.finishChunk metadata-mgr chunk-idx
                           {:latest-completed-tx latest-completed-tx
                            :next-chunk-idx next-chunk-idx
-                           :tables table-metadata}))))
+                           :tables table-metadata})
+            (future
+              (try
+                (.cleanUp metadata-mgr)
+                (catch Exception e
+                  (log/error e "Error while cleaning up the metadata manager.")))))))
 
       (.nextChunk row-counter)
 

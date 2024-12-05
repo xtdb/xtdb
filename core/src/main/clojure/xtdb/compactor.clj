@@ -2,10 +2,11 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.bitemporal :as bitemp]
+            [xtdb.metadata]
+            [xtdb.metrics :as metrics]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.metrics :as metrics])
+            [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
            [java.nio.file Path]
            [java.time Duration]
