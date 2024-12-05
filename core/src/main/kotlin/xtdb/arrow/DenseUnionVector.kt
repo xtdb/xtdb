@@ -160,6 +160,13 @@ class DenseUnionVector(
             val leg = legVectors[i]
             if (leg.name == name) return LegWriter(i.toByte(), leg)
         }
+        // we try to find a nullable child vector
+        if (name == "null") {
+            for (i in legVectors.indices) {
+                val leg = legVectors[i]
+                if (leg.nullable) return LegWriter(i.toByte(), leg)
+            }
+        }
 
         TODO("auto-creation: $name vs ${legVectors.map { it.name }}")
     }
