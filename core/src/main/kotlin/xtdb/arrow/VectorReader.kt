@@ -71,10 +71,20 @@ interface VectorReader : AutoCloseable {
     val asList get() = List(valueCount) { getObject(it) }
 
     fun rowCopier(dest: VectorWriter): RowCopier {
-        val copier = dest.rowCopier0(this)
-        return if (dest is DenseUnionVector) copier
-        else RowCopier { srcIdx ->
-            if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+        when {
+            dest is DenseUnionVector -> return dest.rowCopier0(this)
+            this is NullVector -> {
+                require(dest.nullable)
+                return RowCopier {
+                    dest.valueCount.also { dest.writeNull() }
+                }
+            }
+            else -> {
+                val copier = dest.rowCopier0(this)
+                return RowCopier { srcIdx ->
+                    if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+                }
+            }
         }
     }
 

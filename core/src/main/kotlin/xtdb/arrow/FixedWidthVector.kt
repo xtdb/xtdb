@@ -121,7 +121,6 @@ sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is FixedWidthVector)
         require(src.byteWidth == byteWidth)
-
         return RowCopier { srcIdx ->
             dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
             valueCount.also { writeNotNull() }

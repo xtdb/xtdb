@@ -3,12 +3,11 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
-class FixedWidthVectorTest {
+class VariableWidthVectorTest {
     private lateinit var allocator: BufferAllocator
 
     @BeforeEach
@@ -22,28 +21,13 @@ class FixedWidthVectorTest {
     }
 
     @Test
-    fun testIntVector() {
-        IntVector(allocator,"foo", false).use { vector ->
-            vector.writeInt(42)
-            vector.writeInt(43)
-            vector.writeInt(44)
-
-            assertEquals(3, vector.valueCount)
-
-            assertEquals(42, vector.getInt(0))
-            assertEquals(43, vector.getInt(1))
-            assertEquals(44, vector.getInt(2))
-        }
-    }
-
-    @Test
-    fun `from null into Int vector`() {
+    fun `from null into string vector - 3726`() {
         NullVector("v1" ).use { nullVector ->
             nullVector.writeNull()
             nullVector.writeNull()
             nullVector.writeNull()
 
-            IntVector(allocator, "v2", true).use { copy ->
+            Utf8Vector(allocator, "v2", true).use { copy ->
                 val copier = nullVector.rowCopier(copy)
                 copier.copyRow(0)
                 copier.copyRow(1)
@@ -54,7 +38,4 @@ class FixedWidthVectorTest {
             }
         }
     }
-
-
-
 }
