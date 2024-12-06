@@ -3,6 +3,7 @@
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
+import com.sun.nio.file.ExtendedOpenOption
 import io.netty.util.internal.PlatformDependent
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -14,6 +15,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.CompletableFuture
 
 data class PathSlice(val path: Path, val offset: Long? = null, val length: Long? = null) {
@@ -68,22 +70,38 @@ class MemoryCache
         fun tryFree(bbuf: ByteBuffer) {}
 
         companion object {
+
+            private val BLOCK_SIZE = 4096;
+
+            private fun multipleOfBlockSize(size: Long): Int {
+                return (((size + BLOCK_SIZE - 1) / BLOCK_SIZE ) * BLOCK_SIZE).toInt()
+            }
+
             operator fun invoke() = object : PathLoader {
                 override fun load(path: Path) =
                     try {
-                        val ch = FileChannel.open(path)
+                        val ch = FileChannel.open(path, setOf(StandardOpenOption.READ, ExtendedOpenOption.DIRECT))
                         val size = ch.size()
 
-                        ch.map(FileChannel.MapMode.READ_ONLY, 0, size)
+                        val bbuf = ByteBuffer.allocateDirect(multipleOfBlockSize(size))
+                        ch.read(bbuf)
+                        bbuf.flip()
+                        bbuf
+
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
 
                 override fun load(pathSlice: PathSlice) =
                     try {
-                        val ch = FileChannel.open(pathSlice.path)
+                        require(pathSlice.length != null && pathSlice.offset != null)
+                        val ch = FileChannel.open(pathSlice.path, setOf(StandardOpenOption.READ, ExtendedOpenOption.DIRECT))
 
-                        ch.map(FileChannel.MapMode.READ_ONLY, pathSlice.offset!!, pathSlice.length!!)
+                        val bbuf = ByteBuffer.allocateDirect(multipleOfBlockSize(pathSlice.length))
+                        ch.read(arrayOf(bbuf), pathSlice.offset.toInt(), pathSlice.length.toInt())
+                        bbuf.flip()
+                        bbuf
+
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
