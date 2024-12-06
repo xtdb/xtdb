@@ -199,6 +199,7 @@ expr
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
+    | expr 'OPERATOR' '(' schemaName '.' (compOp | postgresRegexOperator) ')' expr # PostgresOperatorExpr
 
     | numericExpr #NumericExpr0
     ;
@@ -236,6 +237,7 @@ exprPrimary
     | 'NULLIF' '(' expr ',' expr ')' # NullIfExpr
     | 'COALESCE' '(' expr (',' expr)* ')' # CoalesceExpr
     | 'CAST' '(' expr 'AS' dataType ')' # CastExpr
+    | 'COLLATE' exprPrimary # CollateExpr
     | arrayValueConstructor # ArrayExpr
     | objectConstructor # ObjectExpr
     | generateSeries # GenerateSeriesFunction
@@ -261,6 +263,10 @@ exprPrimary
       ')' # HasSchemaPrivilegePredicate
 
     | (schemaName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
+
+    | (schemaName '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' #PostgresGetUserbyidFunction
+
+    | (schemaName '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' #PostgresTableIsVisibleFunction
 
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
