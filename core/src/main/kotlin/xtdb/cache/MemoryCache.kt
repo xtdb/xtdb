@@ -11,6 +11,8 @@ import org.apache.arrow.memory.ForeignAllocation
 import org.apache.arrow.memory.util.MemoryUtil
 import xtdb.cache.PinningCache.IEntry
 import xtdb.util.isMetaFile
+import java.lang.foreign.Arena
+import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
@@ -65,9 +67,8 @@ class MemoryCache
     }
 
     interface PathLoader {
-        fun load(path: Path): ByteBuffer
-        fun load(pathSlice: PathSlice): ByteBuffer
-        fun tryFree(bbuf: ByteBuffer) {}
+        fun load(path: Path): Pair<ByteBuffer, Arena>
+        fun load(pathSlice: PathSlice): Pair<ByteBuffer, Arena>
 
         companion object {
 
@@ -77,37 +78,66 @@ class MemoryCache
                 return (((size + BLOCK_SIZE - 1) / BLOCK_SIZE ) * BLOCK_SIZE).toInt()
             }
 
+            private fun multipleOfBlockSizeLower(size: Long): Long {
+                val res = multipleOfBlockSize(size)
+                return if (res > size) (res - BLOCK_SIZE).toLong() else res.toLong()
+            }
+
+
+            fun getAlignedMemorySegment(arena: Arena , size: Int, alignment: Int): MemorySegment {
+                val segment = arena.allocate(size.toLong(), alignment.toLong())
+                return segment
+            }
+
+
             operator fun invoke() = object : PathLoader {
-                override fun load(path: Path) =
+                override fun load(path: Path): Pair<ByteBuffer, Arena> {
+                    val arena = Arena.ofShared()
                     try {
+
                         val ch = FileChannel.open(path, setOf(StandardOpenOption.READ, ExtendedOpenOption.DIRECT))
                         val size = ch.size()
+                        val sizeUpper = multipleOfBlockSize(size)
 
-                        val bbuf = ByteBuffer.allocateDirect(multipleOfBlockSize(size))
+                        val segment = getAlignedMemorySegment(arena, sizeUpper, BLOCK_SIZE)
+                        val bbuf = segment.asByteBuffer()
                         ch.read(bbuf)
                         bbuf.flip()
-                        bbuf
 
+                        return bbuf to arena
                     } catch (e: ClosedByInterruptException) {
+                        arena.close()
                         throw InterruptedException(e.message)
+                    } catch (e : Exception) {
+                        arena.close()
+                        throw e
                     }
+                }
 
-                override fun load(pathSlice: PathSlice) =
+                override fun load(pathSlice: PathSlice) : Pair<ByteBuffer, Arena> {
+                    val arena = Arena.ofShared()
                     try {
                         require(pathSlice.length != null && pathSlice.offset != null)
-                        val ch = FileChannel.open(pathSlice.path, setOf(StandardOpenOption.READ, ExtendedOpenOption.DIRECT))
+                        val ch =
+                            FileChannel.open(pathSlice.path, setOf(StandardOpenOption.READ, ExtendedOpenOption.DIRECT))
 
-                        val bbuf = ByteBuffer.allocateDirect(multipleOfBlockSize(pathSlice.length))
-                        ch.read(arrayOf(bbuf), pathSlice.offset.toInt(), pathSlice.length.toInt())
+                        val lower = multipleOfBlockSizeLower(pathSlice.offset)
+                        val diff = pathSlice.offset - lower
+                        val sizeUpper = multipleOfBlockSize(pathSlice.length + diff)
+
+                        val segment = getAlignedMemorySegment(arena, sizeUpper, BLOCK_SIZE)
+                        val bbuf = segment.asByteBuffer()
+                        ch.read(bbuf, lower)
                         bbuf.flip()
-                        bbuf
 
+                        return bbuf.slice(diff.toInt(), pathSlice.length.toInt()) to arena
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
+                    } catch (e : Exception) {
+                        arena.close()
+                        throw e
                     }
 
-                override fun tryFree(bbuf: ByteBuffer) {
-                    PlatformDependent.freeDirectBuffer(bbuf)
                 }
             }
         }
@@ -116,10 +146,11 @@ class MemoryCache
     private inner class Entry(
         val inner: IEntry<PathSlice>,
         val onEvict: AutoCloseable?,
-        val bbuf: ByteBuffer
+        val bbuf: ByteBuffer,
+        val arena: Arena
     ) : IEntry<PathSlice> by inner {
         override fun onEvict(k: PathSlice, reason: RemovalCause) {
-            pathLoader.tryFree(bbuf)
+            arena.close()
             onEvict?.close()
         }
     }
@@ -137,12 +168,18 @@ class MemoryCache
         val entry = pinningCache.get(k) { k ->
             fetch(k).thenApplyAsync { (pathSlice, onEvict) ->
                 var bbuf: ByteBuffer
+                var arena: Arena
                 if (pathSlice.offset == null || pathSlice.length == null) {
-                    bbuf = pathLoader.load(pathSlice.path)
+                    val (bb, a) = pathLoader.load(pathSlice.path)
+                    bbuf = bb
+                    arena = a
                 } else {
-                    bbuf = pathLoader.load(pathSlice)
+
+                    val (bb, a) = pathLoader.load(pathSlice)
+                    bbuf = bb
+                    arena = a
                 }
-                Entry(pinningCache.Entry(bbuf.capacity().toLong()), onEvict, bbuf)
+                Entry(pinningCache.Entry(bbuf.capacity().toLong()), onEvict, bbuf, arena)
             }
         }.get()!!
 

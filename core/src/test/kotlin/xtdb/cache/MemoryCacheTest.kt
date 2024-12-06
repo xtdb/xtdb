@@ -35,13 +35,25 @@ class MemoryCacheTest {
 
     inner class PathLoader : MemoryCache.PathLoader {
         private var idx = 0
-        override fun load(path: Path): ByteBuffer =
-            ByteBuffer.allocateDirect(path.last().pathString.toInt())
-                .also { it.put(0, (++idx).toByte()) }
+        override fun load(path: Path): Pair<ByteBuffer, Arena> {
+            val arena = Arena.ofShared()
+            val segment = arena.allocate(path.last().pathString.toLong())
+            val bbuf = segment.asByteBuffer()
 
-        override fun load(pathSlice: PathSlice): ByteBuffer =
-            ByteBuffer.allocateDirect(pathSlice.path.last().pathString.toInt())
-                .also { it.put(0, (++idx).toByte()) }
+            bbuf.put(0, (++idx).toByte())
+            return bbuf to arena
+        }
+
+        override fun load(pathSlice: PathSlice): Pair<ByteBuffer, Arena> {
+            val arena = Arena.ofShared()
+            val segment = arena.allocate(pathSlice.path.last().pathString.toLong())
+            val bbuf = segment.asByteBuffer()
+
+            bbuf.put(0, (++idx).toByte())
+            return bbuf to arena
+
+
+        }
     }
 
     @Test
@@ -136,7 +148,7 @@ class MemoryCacheTest {
 //        return buffer.slice()
 //    }
 
-    private fun getAlignedMemorySegment(arena: Arena, size: Int, alignment: Int): MemorySegment {
+    private fun getAlignedMemorySegment(arena: Arena , size: Int, alignment: Int): MemorySegment {
         val segment = arena.allocate(size.toLong(), alignment.toLong())
         return segment
     }
