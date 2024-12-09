@@ -1639,14 +1639,13 @@
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
 
-  (visitCollateExpr [_ _]
-    ;; nothing to do really
-    )
+  (visitCollateExpr [_ ctx]
+    ;; TODO - apply collation
+    (log/trace "visitCollateExpr" (.getText (.collation ctx)))
+    (.getText (.collation ctx)))
 
   (visitPostgresOperatorExpr [this ctx]
-    (if (.compOp ctx)
-      (-> (.compOp ctx) (.accept this))
-      (-> (.postgresRegexOperator ctx) (.accept this))))
+    (.visitPostgresRegexPredicate this ctx))
 
   (visitPostgresCastExpr [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))

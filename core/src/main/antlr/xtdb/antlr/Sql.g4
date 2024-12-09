@@ -198,10 +198,15 @@ expr
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
-    | expr 'OPERATOR' '(' schemaName '.' (compOp | postgresRegexOperator) ')' expr # PostgresOperatorExpr
+    | expr 'COLLATE' collation # CollateExpr
+    | expr 'OPERATOR' '(' schemaName '.' postgresRegexOperator ')' xqueryPattern # PostgresOperatorExpr
 
     | numericExpr #NumericExpr0
     ;
+
+collation
+  : DELIMITED_IDENTIFIER
+  | PG_CATALOG_DEFAULT ;
 
 numericExpr
     : '+' numericExpr #UnaryPlusExpr
@@ -236,7 +241,6 @@ exprPrimary
     | 'NULLIF' '(' expr ',' expr ')' # NullIfExpr
     | 'COALESCE' '(' expr (',' expr)* ')' # CoalesceExpr
     | 'CAST' '(' expr 'AS' dataType ')' # CastExpr
-    | 'COLLATE' exprPrimary # CollateExpr
     | arrayValueConstructor # ArrayExpr
     | objectConstructor # ObjectExpr
     | generateSeries # GenerateSeriesFunction
