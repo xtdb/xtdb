@@ -1,5 +1,7 @@
 package xtdb.cache
 
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -27,13 +29,13 @@ class MemoryCacheTest {
 
     inner class PathLoader : MemoryCache.PathLoader {
         private var idx = 0
-        override fun load(path: Path): ByteBuffer =
-            ByteBuffer.allocateDirect(path.last().pathString.toInt())
-                .also { it.put(0, (++idx).toByte()) }
+        override fun load(path: Path): ByteBuf =
+            Unpooled.directBuffer(path.last().pathString.toInt())
+                .also { it.setByte(0, ++idx) }
 
-        override fun load(pathSlice: PathSlice): ByteBuffer =
-            ByteBuffer.allocateDirect(pathSlice.path.last().pathString.toInt())
-                .also { it.put(0, (++idx).toByte()) }
+        override fun load(pathSlice: PathSlice): ByteBuf =
+            Unpooled.directBuffer(pathSlice.path.last().pathString.toInt())
+                .also { it.setByte(0, ++idx) }
     }
 
     @Test

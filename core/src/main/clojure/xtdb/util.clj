@@ -26,6 +26,7 @@
            (org.apache.arrow.vector.complex ListVector UnionVector)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
+           (io.netty.buffer Unpooled)
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -438,49 +439,23 @@
         footer-bb (.nioBuffer ipc-file-format-buffer footer-position footer-size)]
     (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
-(defn- try-open-reflective-access [^Class from ^Class to]
-  (try
-    (let [this-module (.getModule from)]
-      (when-not (.isNamed this-module)
-        (.addOpens (.getModule to) (.getName (.getPackage to)) this-module)))
-    (catch Exception e
-      (log/warn e "could not open reflective access from" from "to" to))))
-
-#_{:clj-kondo/ignore [:unused-private-var]} ; side-effect
-(defonce ^:private direct-byte-buffer-access
-  (try-open-reflective-access ArrowBuf (class (ByteBuffer/allocateDirect 0))))
-
-(def ^:private try-free-direct-buffer
-  (try
-    (Class/forName "io.netty.util.internal.PlatformDependent")
-    (eval
-     '(fn free-direct-buffer [nio-buffer]
-        (try
-          (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)
-          (catch Exception e
-            ;; NOTE: this happens when we give a sliced buffer from
-            ;; the in-memory object store to the buffer pool.
-            (let [cause (.getCause e)]
-              (when-not (and (instance? IllegalArgumentException cause)
-                             (= "duplicate or slice" (.getMessage cause)))
-                (throw e)))))))
-    (catch ClassNotFoundException _
-      (fn free-direct-buffer-nop [_]))))
-
 (defn ->arrow-buf-view
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
    (->arrow-buf-view allocator nio-buffer nil))
 
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer release-fn]
-   (let [nio-buffer (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
-                      nio-buffer
-                      (-> (ByteBuffer/allocateDirect (.remaining nio-buffer))
-                          (.put (.duplicate nio-buffer))
-                          (.clear)))]
+   (let [netty-buf (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
+                     (Unpooled/wrappedBuffer nio-buffer)
+                     (let [size (.remaining nio-buffer)
+                           netty-buf (Unpooled/directBuffer size)
+                           bb (.nioBuffer netty-buf 0 size)]
+                       (-> (.put bb (.duplicate nio-buffer))
+                           (.clear))
+                       netty-buf))]
      (.wrapForeignAllocation allocator
-                             (proxy [ForeignAllocation] [(.remaining nio-buffer) (MemoryUtil/getByteBufferAddress nio-buffer)]
+                             (proxy [ForeignAllocation] [(.capacity netty-buf) (.memoryAddress netty-buf)]
                                (release0 []
-                                 (try-free-direct-buffer nio-buffer)
+                                 (.release netty-buf)
                                  (when release-fn
                                    (release-fn))))))))
 
