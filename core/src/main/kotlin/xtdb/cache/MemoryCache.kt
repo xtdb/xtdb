@@ -73,8 +73,11 @@ class MemoryCache
                     try {
                         val ch = FileChannel.open(path)
                         val size = ch.size()
+                        val bbuf = ByteBuffer.allocateDirect(size.toInt())
+                        ch.read(bbuf)
+                        bbuf.flip()
+                        bbuf
 
-                        ch.map(FileChannel.MapMode.READ_ONLY, 0, size)
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
@@ -82,8 +85,12 @@ class MemoryCache
                 override fun load(pathSlice: PathSlice) =
                     try {
                         val ch = FileChannel.open(pathSlice.path)
+                        val bbuf = ByteBuffer.allocateDirect(pathSlice.length!!.toInt()
+                            .also { ch.position(pathSlice.offset!!) })
+                        ch.read(bbuf)
+                        bbuf.flip()
+                        bbuf
 
-                        ch.map(FileChannel.MapMode.READ_ONLY, pathSlice.offset!!, pathSlice.length!!)
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
