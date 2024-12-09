@@ -205,18 +205,21 @@
   (t/is (= #{{:relkind "r",
               :relnamespace 1106696632,
               :oid 732573471,
-              :relname "baseball"}
+              :relname "baseball"
+              :relam 2}
              {:relkind "r",
               :relnamespace 1106696632,
               :oid 598393539,
-              :relname "txs"}
+              :relname "txs"
+              :relam 2}
              {:relkind "r",
               :relnamespace 1106696632,
               :oid 127091884,
-              :relname "beanie"}}
+              :relname "beanie"
+              :relam 2}}
            (set (tu/query-ra '[:scan
                                {:table pg_catalog/pg_class}
-                               [oid relname relnamespace relkind]]
+                               [oid relname relnamespace relkind relam]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-type
