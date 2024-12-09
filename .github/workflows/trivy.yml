@@ -1,0 +1,29 @@
+name: Trivy Security Scan
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3     
+
+      - name: Run Trivy against sample XTDBk8s 
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: ./modules/azure/docs/azure-setup-guide/kubernetes/xtdb.yaml
+          scanners: "vuln,secret,misconfig"
+          format: 'template'
+          output: 'trivy-report.html'
+          template: '@.github/trivy/trivy-html-template.tpl'
+      
+      - name: HTML Trivy Report
+        shell: bash
+        if: always()
+        run: 'cat $TRIVY_OUTPUT >> $GITHUB_STEP_SUMMARY'
