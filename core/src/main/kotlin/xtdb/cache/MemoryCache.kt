@@ -3,6 +3,8 @@
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
 import io.netty.util.internal.PlatformDependent
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -63,8 +65,8 @@ class MemoryCache
     }
 
     interface PathLoader {
-        fun load(path: Path): ByteBuffer
-        fun load(pathSlice: PathSlice): ByteBuffer
+        fun load(path: Path): ByteBuf
+        fun load(pathSlice: PathSlice): ByteBuf
         fun tryFree(bbuf: ByteBuffer) {}
 
         companion object {
@@ -73,8 +75,11 @@ class MemoryCache
                     try {
                         val ch = FileChannel.open(path)
                         val size = ch.size()
+                        val nettyBuf = Unpooled.directBuffer(size.toInt())
+                        val bbuf = nettyBuf.nioBuffer(0, size.toInt())
+                        ch.read(bbuf)
+                        nettyBuf
 
-                        ch.map(FileChannel.MapMode.READ_ONLY, 0, size)
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
@@ -82,15 +87,15 @@ class MemoryCache
                 override fun load(pathSlice: PathSlice) =
                     try {
                         val ch = FileChannel.open(pathSlice.path)
+                        val nettyBuf = Unpooled.directBuffer(pathSlice.length!!.toInt())
+                        val bbuf = nettyBuf.nioBuffer(0, pathSlice.length.toInt())
+                        ch.position(pathSlice.offset!!)
+                        ch.read(bbuf)
+                        nettyBuf
 
-                        ch.map(FileChannel.MapMode.READ_ONLY, pathSlice.offset!!, pathSlice.length!!)
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
-
-                override fun tryFree(bbuf: ByteBuffer) {
-                    PlatformDependent.freeDirectBuffer(bbuf)
-                }
             }
         }
     }
@@ -98,10 +103,10 @@ class MemoryCache
     private inner class Entry(
         val inner: IEntry<PathSlice>,
         val onEvict: AutoCloseable?,
-        val bbuf: ByteBuffer
+        val nettyBuf: ByteBuf
     ) : IEntry<PathSlice> by inner {
         override fun onEvict(k: PathSlice, reason: RemovalCause) {
-            pathLoader.tryFree(bbuf)
+            nettyBuf.release()
             onEvict?.close()
         }
     }
@@ -118,22 +123,22 @@ class MemoryCache
     fun get(k: PathSlice, fetch: Fetch): ArrowBuf {
         val entry = pinningCache.get(k) { k ->
             fetch(k).thenApplyAsync { (pathSlice, onEvict) ->
-                var bbuf: ByteBuffer
-                if (pathSlice.offset == null || pathSlice.length == null) {
-                    bbuf = pathLoader.load(pathSlice.path)
-                } else {
-                    bbuf = pathLoader.load(pathSlice)
-                }
-                Entry(pinningCache.Entry(bbuf.capacity().toLong()), onEvict, bbuf)
+                val nettyBuf =
+                    if (pathSlice.offset != null && pathSlice.length != null) {
+                        pathLoader.load(pathSlice)
+                    } else {
+                        pathLoader.load(pathSlice.path)
+                    }
+                Entry(pinningCache.Entry(nettyBuf.capacity().toLong()), onEvict, nettyBuf)
             }
         }.get()!!
 
-        val bbuf = entry.bbuf
+        val nettyBuf = entry.nettyBuf
 
         // create a new ArrowBuf for each request.
         // when the ref-count drops to zero, we release a ref-count in the cache.
         return allocator.wrapForeignAllocation(
-            object : ForeignAllocation(bbuf.capacity().toLong(), MemoryUtil.getByteBufferAddress(bbuf)) {
+            object : ForeignAllocation(nettyBuf.capacity().toLong(), nettyBuf.memoryAddress()) {
                 override fun release0() {
                     pinningCache.releaseEntry(k)
                 }
