@@ -1653,6 +1653,12 @@
    :->call-code (fn [[p1-code ts-code]]
                   `(temporal-contains-point? ~p1-code ~ts-code))})
 
+(defmethod expr/codegen-call [:contains? :tstz-range :timestamp-local] [{[arg1 [_ arg2-unit]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast arg1 [:timestamp-tz arg2-unit (str (.getZone expr/*clock*))])))
+
+(defmethod expr/codegen-call [:contains? :tstz-range :date] [{[arg1 _arg2] :arg-types, :as expr}]
+  (-> expr (recall-with-cast arg1 [:timestamp-local :micro])))
+
 (defn temporal-contains? [p1 p2]
   (and (<= (from p1) (from p2))
        (>= (to p1) (to p2))))

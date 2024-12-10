@@ -138,7 +138,14 @@
       (t/is (= [{:last-updated "3000"}]
                (query-at
                 "SELECT foo.last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
-                tx))))))
+                tx)))
+
+      (t/testing "#3935"
+        (t/is (= [{:last-updated "2000"}]
+                 (query-at "SELECT last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME CONTAINS TIMESTAMP '2500-01-01T00:00:00'" tx)))
+
+        (t/is (= [{:last-updated "3000"}]
+                 (query-at "SELECT last_updated FROM foo FOR ALL VALID_TIME WHERE foo._VALID_TIME CONTAINS DATE '3500-01-01'" tx)))))))
 
 (t/deftest app-time-multiple-tables
   (let [tx (xt/execute-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2000", :valid-to #inst "2001"}
