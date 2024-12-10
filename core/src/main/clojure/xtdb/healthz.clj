@@ -1,10 +1,8 @@
 (ns xtdb.healthz
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [reitit.http :as http]
-            [reitit.http.coercion :as rh.coercion]
-            [reitit.http.interceptors.exception :as ri.exception]
-            [reitit.http.interceptors.muuntaja :as ri.muuntaja]
+            [reitit.http :as http] 
+            [reitit.http.interceptors.exception :as ri.exception] 
             [reitit.interceptor.sieppari :as r.sieppari]
             [reitit.ring :as r.ring]
             [ring.adapter.jetty9 :as j]
@@ -52,11 +50,8 @@
                {:data {:interceptors [[ri.exception/exception-interceptor
                                        (merge ri.exception/default-handlers
                                               {::ri.exception/wrap (fn [_handler e _req]
-                                                                     (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e))) 
-                                                                     {:status 500 :body (str "Exception when calling endpoint - " e)})})] 
-                                      [ri.muuntaja/format-response-interceptor]
-                                      [ri.muuntaja/format-request-interceptor]
-                                      [rh.coercion/coerce-request-interceptor]]}}))
+                                                                     (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
+                                                                     {:status 500 :body (str "Exception when calling endpoint - " e)})})]]}}))
 
 (defn- with-opts [opts]
   {:enter (fn [ctx]
