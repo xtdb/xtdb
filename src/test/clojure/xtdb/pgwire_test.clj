@@ -2188,3 +2188,21 @@ ORDER BY t.oid DESC LIMIT 1"
                            (xt-jdbc/->pg-obj {:xt/id 2, :v 1})]
                           [(xt-jdbc/->pg-obj {:xt/id 1, :v 2})
                            (xt-jdbc/->pg-obj {:xt/id 3, :v 1})]])))
+
+(t/deftest test-multiple-tzs-3723
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO docs (_id, foo) VALUES (1, TIMESTAMP '2023-03-15 12:00:00+01:00')"])
+    (jdbc/execute! conn ["INSERT INTO docs (_id, foo) VALUES (2, TIMESTAMP '2023-03-15 12:00:00+03:00')"])
+
+    (t/is (= [{:xt/id 1, :foo #inst "2023-03-15T11"}
+              {:xt/id 2, :foo #inst "2023-03-15T09"}]
+             (jdbc/execute! conn ["SELECT _id, foo FROM docs ORDER BY _id"]
+                            {:builder-fn xt-jdbc/builder-fn})))
+
+    (psql-session
+     (fn [send read]
+       (send "SELECT _id, foo FROM docs ORDER BY _id;\n")
+       (t/is (= [["_id" "foo"]
+                 ["1" "2023-03-15 12:00:00+01:00"]
+                 ["2" "2023-03-15 12:00:00+03:00"]]
+                (read)))))))
