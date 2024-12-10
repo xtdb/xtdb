@@ -5,6 +5,7 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
+            [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
@@ -2490,3 +2491,41 @@ UNION ALL
 
     (t/is (= [{:b "bar", :xt/id 2, :col1 ["bar"], :col2 " baz"}]
                (xt/q tu/*node* "FROM docs, UNNEST(docs.col1) AS a(b);")))))
+
+(t/deftest insert-with-transit-param-3907
+  (letfn [(->serialised-records [records]
+            (map xt-jdbc/->pg-obj records))
+
+          (jdbc-insert-txn [table records]
+            (let [total (count records)
+                  into-table (partial str "INSERT INTO " table " RECORDS ")
+                  args (interpose ", " (repeat total "?"))
+                  pg-objects (->serialised-records records)]
+              (into [(apply into-table args)] pg-objects)))
+
+          (jdbc-insert-records [conn table records]
+            (jdbc/execute! conn (jdbc-insert-txn table records) {:builder-fn xt-jdbc/builder-fn}))]
+
+    (jdbc-insert-records tu/*node* "applications"
+                         [{:_id "payee::1:1"
+                           :application {:personal-details {:first-name "Alice"
+                                                            :middle-name "P."
+                                                            :last-name "Rogamer"
+                                                            :date-of-birth "1968-08-12"
+                                                            :address {:line-1 "22 Azing Loop"
+                                                                      :city "Lambda Town"}
+                                                            :ni "AB325468"}
+                                         :account-details {:account-name "Alice P. Rogamer"
+                                                           :account-number "12893476"
+                                                           :sort-code "00-00-00"}
+                                         :payroll-details {:company-id "1"
+                                                           :payroll-id "1"
+                                                           :pay-date "2020-01-01"
+                                                           :annual-gross-pay 50000}
+                                         :banking-details {:beneficiary-id "1"
+                                                           :ledger-id "ledger-1"
+                                                           :spend-ledger-id "spend-ledger-1"
+                                                           :limit-ledger-id "limit-ledger-1"}}}])
+
+    (t/is (= {:app_count 1}
+             (jdbc/execute-one! tu/*node* ["SELECT COUNT(*) app_count FROM applications"])))))
