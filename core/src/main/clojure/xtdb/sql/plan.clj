@@ -1652,6 +1652,14 @@
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
 
+  (visitPgCatalogResolveOid [_ ctx]
+    ;; lookup the OID in pg_type and return string name
+    (let [oid (.getText (.exprPrimary ctx))]
+      (-> oid
+          (parse-long)
+          (types/pg-types-by-oid)
+          :typname)))
+
   (visitAggregateFunctionExpr [{:keys [!aggs] :as this} ctx]
     (if-not !aggs
       (add-err! env (->AggregatesDisallowed))
