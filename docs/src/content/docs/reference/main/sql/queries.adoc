@@ -70,6 +70,12 @@ const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "E
 return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, binary, rr.Sequence("(", "<query term>", ")")));
 ----
 
+NB:
+
+* `SELECT` is optional in XTDB - if not provided, it defaults to `SELECT *`
+* `SELECT` may be placed after `GROUP BY` in XTDB, so that the query clauses are written in the order that they're executed in practice.
+* `GROUP BY` is optional in XTDB - if not provided, it defaults to all of the columns used outside of an aggregate function.
+
 === <select clause>
 [railroad]
 ----
