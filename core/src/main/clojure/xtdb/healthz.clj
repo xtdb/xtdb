@@ -1,10 +1,8 @@
 (ns xtdb.healthz
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [reitit.http :as http]
-            [reitit.http.coercion :as rh.coercion]
-            [reitit.http.interceptors.exception :as ri.exception]
-            [reitit.http.interceptors.muuntaja :as ri.muuntaja]
+            [reitit.http :as http] 
+            [reitit.http.interceptors.exception :as ri.exception] 
             [reitit.interceptor.sieppari :as r.sieppari]
             [reitit.ring :as r.ring]
             [ring.adapter.jetty9 :as j]
@@ -21,6 +19,9 @@
            xtdb.api.Xtdb$Config
            xtdb.indexer.IIndexer))
 
+(defn get-indexer-error [^IIndexer indexer] 
+  (.indexerError indexer))
+
 (def router
   (http/router [["/metrics" {:name :metrics
                              :get (fn [{:keys [^PrometheusMeterRegistry prometheus-registry]}]
@@ -34,12 +35,12 @@
                                               (if (< lc-tx-id initial-target-tx-id)
                                                 {:status 503,
                                                  :body (format "Catching up - at: %d, target: %d" lc-tx-id initial-target-tx-id)}
-
+                                            
                                                 {:status 200, :body "Started."})))}]
 
                 ["/healthz/alive" {:name :alive
-                                   :get (fn [{:keys [^IIndexer indexer]}]
-                                          (if-let [indexer-error (.indexerError indexer)]
+                                   :get (fn [{:keys [indexer]}]
+                                          (if-let [indexer-error (get-indexer-error indexer)]
                                             {:status 503, :body (str "Indexer error - " indexer-error)}
                                             {:status 200, :body "Alive."}))}]
 
@@ -48,12 +49,9 @@
 
                {:data {:interceptors [[ri.exception/exception-interceptor
                                        (merge ri.exception/default-handlers
-                                              {::ri.exception/wrap (fn [handler e req]
+                                              {::ri.exception/wrap (fn [_handler e _req]
                                                                      (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
-                                                                     (handler e req))})]
-
-                                      [ri.muuntaja/format-request-interceptor]
-                                      [rh.coercion/coerce-request-interceptor]]}}))
+                                                                     {:status 500 :body (str "Exception when calling endpoint - " e)})})]]}}))
 
 (defn- with-opts [opts]
   {:enter (fn [ctx]
@@ -78,7 +76,8 @@
   (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
         ^Server server (-> (handler {:prometheus-registry prometheus-registry
                                      :indexer indexer
-                                     :initial-target-tx-id (xtp/latest-submitted-tx-id node)})
+                                     :initial-target-tx-id (xtp/latest-submitted-tx-id node)
+                                     :node node})
                            (j/run-jetty {:port port, :async? true, :join? false}))]
     (.add metrics-registry prometheus-registry) 
 
