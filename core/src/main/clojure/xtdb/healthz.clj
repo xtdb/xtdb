@@ -34,7 +34,7 @@
                                               (if (< lc-tx-id initial-target-tx-id)
                                                 {:status 503,
                                                  :body (format "Catching up - at: %d, target: %d" lc-tx-id initial-target-tx-id)}
-
+                                            
                                                 {:status 200, :body "Started."})))}]
 
                 ["/healthz/alive" {:name :alive
@@ -48,10 +48,10 @@
 
                {:data {:interceptors [[ri.exception/exception-interceptor
                                        (merge ri.exception/default-handlers
-                                              {::ri.exception/wrap (fn [handler e req]
-                                                                     (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e)))
-                                                                     (handler e req))})]
-
+                                              {::ri.exception/wrap (fn [_handler e _req]
+                                                                     (log/debug e (format "response error (%s): '%s'" (class e) (ex-message e))) 
+                                                                     {:status 500 :body (str "Exception when calling endpoint - " e)})})] 
+                                      [ri.muuntaja/format-response-interceptor]
                                       [ri.muuntaja/format-request-interceptor]
                                       [rh.coercion/coerce-request-interceptor]]}}))
 
