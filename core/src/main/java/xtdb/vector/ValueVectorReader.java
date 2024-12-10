@@ -1074,14 +1074,50 @@ public class ValueVectorReader implements IVectorReader {
 
         @SuppressWarnings("resource")
         @Override
+        public boolean getBoolean(int idx) {
+            return legReader(getLeg(idx)).getBoolean(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public byte getByte(int idx) {
+            return legReader(getLeg(idx)).getByte(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public short getShort(int idx) {
+            return legReader(getLeg(idx)).getShort(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public int getInt(int idx) {
+            return legReader(getLeg(idx)).getInt(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
         public long getLong(int idx) {
             return legReader(getLeg(idx)).getLong(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
+        public float getFloat(int idx) {
+            return legReader(getLeg(idx)).getFloat(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
         public double getDouble(int idx) {
             return legReader(getLeg(idx)).getDouble(idx);
+        }
+
+        @SuppressWarnings("resource")
+        @Override
+        public ByteBuffer getBytes(int idx) {
+            return legReader(getLeg(idx)).getBytes(idx);
         }
 
         @SuppressWarnings("resource")
