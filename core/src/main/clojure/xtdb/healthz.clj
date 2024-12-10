@@ -78,7 +78,8 @@
   (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
         ^Server server (-> (handler {:prometheus-registry prometheus-registry
                                      :indexer indexer
-                                     :initial-target-tx-id (xtp/latest-submitted-tx-id node)})
+                                     :initial-target-tx-id (xtp/latest-submitted-tx-id node)
+                                     :node node})
                            (j/run-jetty {:port port, :async? true, :join? false}))]
     (.add metrics-registry prometheus-registry) 
 
