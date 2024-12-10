@@ -2507,25 +2507,10 @@ UNION ALL
             (jdbc/execute! conn (jdbc-insert-txn table records) {:builder-fn xt-jdbc/builder-fn}))]
 
     (jdbc-insert-records tu/*node* "applications"
-                         [{:_id "payee::1:1"
-                           :application {:personal-details {:first-name "Alice"
-                                                            :middle-name "P."
-                                                            :last-name "Rogamer"
-                                                            :date-of-birth "1968-08-12"
-                                                            :address {:line-1 "22 Azing Loop"
-                                                                      :city "Lambda Town"}
-                                                            :ni "AB325468"}
-                                         :account-details {:account-name "Alice P. Rogamer"
-                                                           :account-number "12893476"
-                                                           :sort-code "00-00-00"}
-                                         :payroll-details {:company-id "1"
-                                                           :payroll-id "1"
-                                                           :pay-date "2020-01-01"
-                                                           :annual-gross-pay 50000}
-                                         :banking-details {:beneficiary-id "1"
-                                                           :ledger-id "ledger-1"
-                                                           :spend-ledger-id "spend-ledger-1"
-                                                           :limit-ledger-id "limit-ledger-1"}}}])
+                         [{:_id "payee1"
+                           :application {}}
+                          {:_id "payee2"
+                           :application {}}])
 
-    (t/is (= {:app_count 1}
+    (t/is (= {:app_count 2}
              (jdbc/execute-one! tu/*node* ["SELECT COUNT(*) app_count FROM applications"])))))

@@ -2070,7 +2070,8 @@
                                                                 (visitParameterRecord [this ctx] (.accept (.parameterSpecification ctx) this))
 
                                                                 (visitDynamicParameter [_ _] (emit-param @(:!param-count env)))
-                                                                (visitPostgresParameter [_ _] (emit-param (dec (parse-long (subs (.getText ctx) 1)))))
+                                                                (visitPostgresParameter [_ ctx]
+                                                                  (emit-param (dec (parse-long (subs (.getText ctx) 1)))))
 
                                                                 (visitObjectRecord [this ctx]
                                                                   (->> (.objectNameAndValue (.objectConstructor ctx))
