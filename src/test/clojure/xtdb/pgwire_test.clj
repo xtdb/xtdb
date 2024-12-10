@@ -2179,3 +2179,12 @@ ORDER BY t.oid DESC LIMIT 1"
     (jdbc/execute! conn ["INSERT INTO foomap RECORDS {_id: 2, a: {c$d$e: 43}, bs: [{z: {w: [12, 34, {r: 'abc'}]}, y: 4}, {z: 33, y: 44}]}"])
     (t/is (= [{:xt/id 2, :a {:c.d/e 43}, :bs [{:z {:w [12, 34, {:r "abc"}]}, :y 4}, {:z 33, :y 44}]}]
              (q conn ["SELECT * FROM foomap where _id = 2"])))))
+
+(t/deftest jdbc-batch-3599
+  (with-open [conn (jdbc-conn)
+              ps (jdbc/prepare conn ["INSERT INTO foo RECORDS ?, ?"])]
+    (jdbc/execute-batch! ps
+                         [[(xt-jdbc/->pg-obj {:xt/id 1, :v 1})
+                           (xt-jdbc/->pg-obj {:xt/id 2, :v 1})]
+                          [(xt-jdbc/->pg-obj {:xt/id 1, :v 2})
+                           (xt-jdbc/->pg-obj {:xt/id 3, :v 1})]])))
