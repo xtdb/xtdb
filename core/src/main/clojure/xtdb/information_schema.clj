@@ -45,7 +45,10 @@
                           typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
                           typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
                           typrelid :i32, typelem :i32}
-      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32}
+      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
+                          relhasindex :bool, relhasrules :bool, relhastriggers :bool, relhasrowsecurity :bool
+                          relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
+                          relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
       pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
       pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
       pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
@@ -131,7 +134,19 @@
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (name table))
      :relnamespace (name->oid "public")
      :relkind "r"
-     :relam (int 2)}))
+     :relam (int 2)
+     :relchecks (int 0)
+     :relhasindex true
+     :relhasrules false
+     :relhastriggers false
+     :relhasrowsecurity false
+     :relforcerowsecurity false
+     :relispartition false
+     :reltablespace (int 0)
+     :reloftype (int 0)
+     :relpersistence "p"
+     :relreplident "d"
+     :reltoastrelid (int 0)}))
 
 (defn pg-type []
   (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (->> (vals types/pg-types)
