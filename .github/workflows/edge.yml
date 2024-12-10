@@ -10,3 +10,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+
+  remove-untagged:
+    runs-on: ubuntu-latest
+    steps:
+      - name: purge untagged packages
+        uses: Chizkiyahu/delete-untagged-ghcr-action@v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner_type: org
+          untagged_only: true
+    permissions:
+      packages: write
