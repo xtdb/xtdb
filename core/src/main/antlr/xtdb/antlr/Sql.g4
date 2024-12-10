@@ -157,6 +157,7 @@ dataType
     | 'KEYWORD' #KeywordType
     | 'UUID' #UuidType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
+    | schemaName '.' dataType # PgCatalogType
     ;
 
 precision : UNSIGNED_INTEGER ;
@@ -226,6 +227,7 @@ exprPrimary
     | exprPrimary '.' fieldName #FieldAccess
     | exprPrimary '[' expr ']' #ArrayAccess
     | exprPrimary '::' dataType #PostgresCastExpr
+    | exprPrimary '::' dataType '::' dataType #PostgresDoubleCastExpr
     | exprPrimary '||' exprPrimary #ConcatExpr
 
     | parameterSpecification # ParamExpr
