@@ -89,7 +89,18 @@
   (def unq-pg-catalog
     (-> (merge pg-catalog-tables pg-catalog-template-tables)
         (update-vals keys)
-        (update-keys (comp symbol name)))))
+        (update-keys (comp symbol name))))
+
+  (def meta-table-schemas
+    (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
+        (update-vals (fn [col-name->type]
+                       (-> col-name->type
+                           (update-keys str)
+                           (update-vals #(types/col-type->field %)))))))
+
+  (def views (-> (set (keys meta-table-schemas))
+                 (disj 'pg_catalog/pg_user))))
+
 
 
 (def schemas
@@ -115,7 +126,7 @@
     {:table-catalog "xtdb"
      :table-name (name table)
      :table-schema (namespace table)
-     :table-type "BASE TABLE"}))
+     :table-type (if (views table) "VIEW" "BASE TABLE")}))
 
 (defn pg-tables [schema-info]
   (for [table (keys schema-info)]
@@ -284,7 +295,8 @@
                                       (.allColumnFields metadata-mgr)
                                       (some-> (.liveIndex wm)
                                               (.allColumnFields)))
-                          (update-keys symbol))
+                          (update-keys symbol)
+                          (merge meta-table-schemas))
 
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (doto out-rel-wtr

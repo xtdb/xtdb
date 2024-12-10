@@ -60,10 +60,12 @@
               :table-name "txs",
               :column-name "committed",
               :data-type ":bool"}}
-           (set (tu/query-ra '[:scan
-                               {:table information_schema/columns}
-                               [table_catalog table_schema table_name column_name data_type]]
-                             {:node tu/*node*})))))
+           (set (tu/query-ra
+                 '[:select (or (= table_schema "public") (= table_schema "xt"))
+                   [:scan
+                    {:table information_schema/columns}
+                    [table_catalog table_schema table_name column_name data_type]]]
+                 {:node tu/*node*})))))
 
 (deftest test-info-schema-tables
   (xt/submit-tx tu/*node* test-data)
@@ -80,7 +82,8 @@
               :table-schema "public",
               :table-name "baseball",
               :table-type "BASE TABLE"}}
-           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]
+           (set (tu/query-ra '[:select (or (= table_schema "public") (= table_schema "xt"))
+                               [:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-attribute
@@ -176,10 +179,12 @@
               :attnum 2,
               :attname "committed",
               :attisdropped false}}
-           (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_attribute}
-                               [attrelid attname atttypid attlen attnum attisdropped
-                                attnotnull atttypmod attidentity attgenerated]]
+           (set (tu/query-ra '[:select (or (= attname "_id") (= attname "col1") (= attname "col2")
+                                           (= attname "error") (= attname "system_time") (= attname "committed"))
+                               [:scan
+                                {:table pg_catalog/pg_attribute}
+                                [attrelid attname atttypid attlen attnum attisdropped
+                                 attnotnull atttypmod attidentity attgenerated]]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-tables
@@ -194,9 +199,10 @@
              {:schemaname "public",
               :tableowner "xtdb",
               :tablename "beanie"}}
-           (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_tables}
-                               [schemaname tablename tableowner tablespace]]
+           (set (tu/query-ra '[:select (or (= schemaname "public") (= schemaname "xt"))
+                               [:scan
+                                {:table pg_catalog/pg_tables}
+                                [schemaname tablename tableowner tablespace]]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-class
@@ -214,9 +220,10 @@
               :relnamespace 1106696632,
               :oid 127091884,
               :relname "beanie"}}
-           (set (tu/query-ra '[:scan
-                               {:table pg_catalog/pg_class}
-                               [oid relname relnamespace relkind]]
+           (set (tu/query-ra '[:select (or (= relname "beanie") (= relname "baseball") (= relname "txs"))
+                               [:scan
+                                {:table pg_catalog/pg_class}
+                                [oid relname relnamespace relkind]]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-type
@@ -408,18 +415,17 @@
                            [:put-docs :baseball {:xt/id :baz, :col1 123 :col2 456}]])
 
   (t/is (= [{:column-name "_id"}]
-           (xt/q tu/*node* "SELECT column_name FROM information_schema.columns LIMIT 1")))
+           (xt/q tu/*node* "SELECT column_name FROM information_schema.columns ORDER BY column_name LIMIT 1")))
 
-  (t/is (= #{{:attrelid 732573471, :attname "col2"}
-             {:attrelid 732573471, :attname "_id"}}
-           (set (xt/q tu/*node* "SELECT attname, attrelid FROM pg_attribute LIMIT 2"))))
+  (t/is (= [{:attname "_id", :attrelid 127091884}]
+           (xt/q tu/*node* "SELECT attname, attrelid FROM pg_attribute ORDER BY attname LIMIT 1")))
 
   (t/is (= [{:table-name "baseball",
              :data-type ":keyword",
              :column-name "_id",
              :table-catalog "xtdb",
              :table-schema "public"}]
-           (xt/q tu/*node* "FROM information_schema.columns LIMIT 1"))))
+           (xt/q tu/*node* "FROM information_schema.columns ORDER BY table_name LIMIT 1"))))
 
 (deftest test-selection-and-projection
   (xt/submit-tx tu/*node* [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]
@@ -429,8 +435,9 @@
   (t/is (= #{{:table-name "txs", :table-schema "xt"}
              {:table-name "beanie", :table-schema "public"}
              {:table-name "baseball", :table-schema "public"}}
-           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name table_schema]]
-                             {:node tu/*node*})))
+           (set (tu/query-ra ' [:select (or (= table_schema "public") (= table_schema "xt"))
+                                [:scan {:table information_schema/tables} [table_name table_schema]]]
+                               {:node tu/*node*})))
         "Only requested cols are projected")
 
   (t/is (= #{{:table-name "baseball", :table-schema "public"}}
@@ -447,10 +454,11 @@
   ;;TODO although this doesn't error, not sure this exctly works, adding a unknown col = null didn't work
   ;;I think another complication could be that these tables don't necesasrily have a primary/unique key due to
   ;;lack of xtid
-  (t/is (= #{{:table-name "baseball"}
-             {:table-name "beanie"}
-             {:table-name "txs"}}
-           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_name unknown_col]]
+  (t/is (= #{{:table-name "baseball" :table-schema "public"}
+             {:table-name "beanie" :table-schema "public"}
+             {:table-name "txs" :table-schema "xt"}}
+           (set (tu/query-ra '[:select (or (= table_schema "public") (= table_schema "xt"))
+                               [:scan {:table information_schema/tables} [table_name unknown_col table_schema]]]
                              {:node tu/*node*})))
         "cols that don't exist don't error/projected as nulls/absents"))
 
@@ -536,3 +544,17 @@
              (count results)))
     (t/is (= types
              results))))
+
+(deftest schema-for-meta-tables-3550
+  (t/is (= [{:table-catalog "xtdb",
+             :table-schema "information_schema",
+             :table-name "tables",
+             :table-type "VIEW"}
+            {:table-catalog "xtdb",
+             :table-schema "pg_catalog",
+             :table-name "pg_user",
+             :table-type "BASE TABLE"}]
+           (tu/query-ra '[:select (or (and (= table_schema "information_schema") (= table_name "tables"))
+                                      (and (= table_schema "pg_catalog") (= table_name "pg_user")))
+                          [:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]]
+                        {:node tu/*node*}))))
