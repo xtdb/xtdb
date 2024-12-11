@@ -20,9 +20,12 @@ class DenseUnionVector(
     legVectors: List<Vector>
 ) : Vector() {
 
-    override val nullable: Boolean = false
-
     private val legVectors = legVectors.toMutableList()
+
+    override val fieldType: FieldType
+        get() = FieldType(false, ArrowType.Union(Dense, IntArray(legVectors.size) { it }), null)
+
+    override val children: Iterable<Vector> get() = legVectors
 
     inner class LegReader(private val typeId: Byte, private val inner: VectorReader) : VectorReader {
         override val name get() = inner.name
@@ -113,12 +116,6 @@ class DenseUnionVector(
 
         override val asList get() = inner.asList
     }
-
-    override val field
-        get() = Field(
-            name,
-            FieldType.notNullable(ArrowType.Union(Dense, IntArray(legVectors.size) { it })),
-            legVectors.map { it.field })
 
     private val typeBuffer = ExtensibleBuffer(allocator)
     private fun getTypeId(idx: Int) = typeBuffer.getByte(idx)

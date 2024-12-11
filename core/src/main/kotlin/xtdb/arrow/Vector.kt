@@ -17,17 +17,27 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
+import org.apache.arrow.vector.types.pojo.ArrowType.Utf8.INSTANCE as UTF8_TYPE
 
 internal fun Any.unsupported(op: String): Nothing =
     throw UnsupportedOperationException("$op unsupported on ${this::class.simpleName}")
 
+internal fun FieldType.withNullable(nullable: Boolean) = FieldType(nullable, type, dictionary)
+internal fun FieldType.withArrowType(type: ArrowType) = FieldType(isNullable, type, dictionary)
+
 sealed class Vector : VectorReader, VectorWriter {
 
-    abstract override val nullable: Boolean
+    final override val nullable get() = fieldType.isNullable
+    abstract val fieldType: FieldType
+    abstract val children: Iterable<Vector>
+
+    final override val field: Field get() = Field(name, fieldType, children.map { it.field })
+
     override var valueCount: Int = 0; internal set
 
     internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any

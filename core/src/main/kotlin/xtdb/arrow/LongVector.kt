@@ -2,16 +2,13 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 
 class LongVector(
     allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean
-) : FixedWidthVector(allocator, Long.SIZE_BYTES) {
-
-    override val arrowType: ArrowType = MinorType.BIGINT.type
+    nullable: Boolean
+) : FixedWidthVector(allocator, nullable, MinorType.BIGINT.type, Long.SIZE_BYTES) {
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

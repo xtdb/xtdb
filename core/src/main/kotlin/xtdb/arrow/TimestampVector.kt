@@ -19,11 +19,9 @@ private fun TimeUnit.toInstant(value: Long) = when(this) {
 class TimestampLocalVector(
     al: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
+    nullable: Boolean,
     val unit: TimeUnit = MICROSECOND,
-) : FixedWidthVector(al, Long.SIZE_BYTES) {
-
-    override val arrowType = ArrowType.Timestamp(unit, null)
+) : FixedWidthVector(al, nullable, ArrowType.Timestamp(unit, null), Long.SIZE_BYTES) {
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
@@ -39,12 +37,10 @@ class TimestampLocalVector(
 class TimestampTzVector(
     al: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
+    nullable: Boolean,
     val unit: TimeUnit = MICROSECOND,
     val zone: ZoneId = UTC
-) : FixedWidthVector(al, Long.SIZE_BYTES) {
-
-    override val arrowType = ArrowType.Timestamp(unit, zone.toString())
+) : FixedWidthVector(al, nullable, ArrowType.Timestamp(unit, zone.toString()), Long.SIZE_BYTES) {
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

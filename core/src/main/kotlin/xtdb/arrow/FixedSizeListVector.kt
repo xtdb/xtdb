@@ -7,7 +7,6 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
@@ -15,13 +14,14 @@ import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeList
 class FixedSizeListVector(
     allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
+    nullable: Boolean,
     private val listSize: Int,
     private val elVector: Vector
 ) : Vector() {
 
-    override val field: Field
-        get() = Field(name, FieldType(nullable, ArrowType.FixedSizeList(listSize), null), listOf(elVector.field))
+    override val fieldType: FieldType = FieldType(nullable, ArrowType.FixedSizeList(listSize), null)
+
+    override val children get() = listOf(elVector)
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 

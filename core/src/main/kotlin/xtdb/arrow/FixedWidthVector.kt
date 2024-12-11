@@ -9,7 +9,6 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import java.nio.ByteBuffer
 
@@ -20,10 +19,15 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
     TimeUnit.NANOSECOND -> seconds * 1_000_000_000 + nanos
 }
 
-sealed class FixedWidthVector(allocator: BufferAllocator, val byteWidth: Int) : Vector() {
+sealed class FixedWidthVector(
+    allocator: BufferAllocator,
+    nullable: Boolean,
+    arrowType: ArrowType,
+    val byteWidth: Int
+) : Vector() {
 
-    final override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
-    abstract val arrowType: ArrowType
+    final override val fieldType = FieldType(nullable, arrowType, null)
+    override val children: Iterable<Vector> = emptyList()
 
     private val validityBuffer = ExtensibleBuffer(allocator)
     private val dataBuffer = ExtensibleBuffer(allocator)

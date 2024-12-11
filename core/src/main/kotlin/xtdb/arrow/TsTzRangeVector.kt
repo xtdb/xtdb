@@ -2,17 +2,13 @@ package xtdb.arrow
 
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.types.ZonedDateTimeRange
 import xtdb.vector.extensions.TsTzRangeType
 import java.time.ZonedDateTime
 
-class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector() {
-    override val field
-        get() = Field(name, FieldType(nullable, TsTzRangeType, null), inner.field.children)
-
+class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector(TsTzRangeType) {
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         inner.elementReader().let {
             ZonedDateTimeRange(

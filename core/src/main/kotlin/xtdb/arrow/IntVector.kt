@@ -2,16 +2,13 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 
 class IntVector(
     allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean
-) : FixedWidthVector(allocator, Int.SIZE_BYTES) {
-
-    override val arrowType: ArrowType = MinorType.INT.type
+    nullable: Boolean
+) : FixedWidthVector(allocator, nullable, MinorType.INT.type, Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)

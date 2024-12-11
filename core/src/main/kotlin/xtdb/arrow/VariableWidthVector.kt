@@ -8,15 +8,17 @@ import org.apache.arrow.vector.BaseVariableWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
-abstract class VariableWidthVector(allocator: BufferAllocator) : Vector() {
+abstract class VariableWidthVector(
+    allocator: BufferAllocator,
+    nullable: Boolean,
+    arrowType: ArrowType
+) : Vector() {
 
-    override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), emptyList())
-    abstract val arrowType: ArrowType
+    override val fieldType = FieldType(nullable, arrowType, null)
+    override val children = emptyList<Vector>()
 
     private val validityBuffer = ExtensibleBuffer(allocator)
     private val offsetBuffer = ExtensibleBuffer(allocator)

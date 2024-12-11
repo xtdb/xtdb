@@ -14,10 +14,8 @@ import java.time.Period
 class IntervalYearMonthVector(
     al: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean
-) : FixedWidthVector(al, Int.SIZE_BYTES) {
-
-    override val arrowType: ArrowType = MinorType.INTERVALYEAR.type
+    nullable: Boolean
+) : FixedWidthVector(al, nullable, MinorType.INTERVALYEAR.type, Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -32,10 +30,8 @@ class IntervalYearMonthVector(
 class IntervalDayTimeVector(
     al: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean
-) : FixedWidthVector(al, Long.SIZE_BYTES) {
-
-    override val arrowType: ArrowType = MinorType.INTERVALDAY.type
+    nullable: Boolean
+) : FixedWidthVector(al, nullable, MinorType.INTERVALDAY.type, Long.SIZE_BYTES) {
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         IntervalDayTime(
@@ -59,10 +55,8 @@ class IntervalDayTimeVector(
 class IntervalMonthDayNanoVector(
     al: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean
-) : FixedWidthVector(al, 16) {
-
-    override val arrowType: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
+    nullable: Boolean
+) : FixedWidthVector(al, nullable, MinorType.INTERVALMONTHDAYNANO.type, 16) {
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         IntervalMonthDayNano(

@@ -2,14 +2,11 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
-import org.apache.arrow.vector.types.Types.MinorType
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
-class BitVector(al: BufferAllocator, override val name: String, override var nullable: Boolean) :
-    FixedWidthVector(al, 0) {
-
-    override val arrowType: ArrowType = MinorType.BIT.type
+class BitVector(al: BufferAllocator, override val name: String, nullable: Boolean) :
+    FixedWidthVector(al, nullable, BIT_TYPE, 0) {
 
     override fun getBoolean(idx: Int) = getBoolean0(idx)
     override fun writeBoolean(value: Boolean) = writeBoolean0(value)
@@ -25,6 +22,7 @@ class BitVector(al: BufferAllocator, override val name: String, override var nul
     override fun rowCopier0(src: VectorReader) =
         if (src !is BitVector) TODO("promote ${src::class.simpleName}")
         else RowCopier { srcIdx ->
+            if (src.nullable && !nullable) TODO("promote to nullable")
             valueCount.apply { if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx)) }
         }
 }

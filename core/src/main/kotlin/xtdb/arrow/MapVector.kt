@@ -5,21 +5,17 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
 
     override val name get() = listVector.name
-    override var nullable: Boolean
-        get() = listVector.nullable
-        set(value) {
-            listVector.nullable = value
-        }
 
-    override val field: Field
-        get() = Field(name, FieldType(nullable, ArrowType.Map(keysSorted), null), listVector.field.children)
+    override val fieldType: FieldType
+        get() = listVector.fieldType.withArrowType(ArrowType.Map(keysSorted))
+
+    override val children get() = listVector.children
 
     override var valueCount: Int
         get() = listVector.valueCount

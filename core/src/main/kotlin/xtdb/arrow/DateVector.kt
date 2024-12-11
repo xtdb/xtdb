@@ -10,9 +10,8 @@ import java.time.LocalDate
 class DateDayVector(
     allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
-) : FixedWidthVector(allocator, Int.SIZE_BYTES) {
-    override val arrowType = ArrowType.Date(DAY)
+    nullable: Boolean,
+) : FixedWidthVector(allocator, nullable, ArrowType.Date(DAY), Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -29,9 +28,8 @@ private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
 class DateMilliVector(
     allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
-) : FixedWidthVector(allocator, Long.SIZE_BYTES) {
-    override val arrowType = ArrowType.Date(MILLISECOND)
+    nullable: Boolean,
+) : FixedWidthVector(allocator, nullable, ArrowType.Date(MILLISECOND), Long.SIZE_BYTES) {
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

@@ -8,11 +8,9 @@ import java.nio.ByteBuffer
 class FixedSizeBinaryVector(
     al: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
+    nullable: Boolean,
     byteWidth: Int
-) : FixedWidthVector(al, byteWidth) {
-
-    override val arrowType = ArrowType.FixedSizeBinary(byteWidth)
+) : FixedWidthVector(al, nullable, ArrowType.FixedSizeBinary(byteWidth), byteWidth) {
 
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 

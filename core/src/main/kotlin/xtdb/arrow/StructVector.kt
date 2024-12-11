@@ -7,22 +7,23 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import java.util.*
+import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 class StructVector(
     private val allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
-    private val children: SequencedMap<String, Vector> = LinkedHashMap()
-) : Vector(), Iterable<Vector> {
+    override val fieldType: FieldType,
+    private val childrenByKey: SequencedMap<String, Vector>,
+) : Vector() {
 
-    override val field
-        get() =
-            Field(name, FieldType(nullable, ArrowType.Struct.INSTANCE, null), children.map { it.value.field })
+    constructor(allocator: BufferAllocator, name: String, nullable: Boolean, childrenByKey: SequencedMap<String, Vector> = LinkedHashMap())
+            : this(allocator, name, FieldType(nullable, STRUCT_TYPE, null), childrenByKey)
+
+    override val children: Iterable<Vector> get() = childrenByKey.sequencedValues()
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 
@@ -30,18 +31,17 @@ class StructVector(
 
     override fun writeNull() {
         validityBuffer.writeBit(valueCount++, 0)
-        children.sequencedValues().forEach { it.writeUndefined() }
+        childrenByKey.sequencedValues().forEach { it.writeUndefined() }
     }
 
-    override val keys get() = children.keys
-    override fun iterator() = children.values.iterator()
+    override val keys get() = childrenByKey.keys
 
-    override fun keyReader(name: String) = children[name]
+    override fun keyReader(name: String) = childrenByKey[name]
 
-    override fun keyWriter(name: String) = children[name] ?: TODO("auto-creation")
+    override fun keyWriter(name: String) = childrenByKey[name] ?: TODO("auto-creation")
 
     override fun keyWriter(name: String, fieldType: FieldType) =
-        children.compute(name) { _, v ->
+        childrenByKey.compute(name) { _, v ->
             if (v == null) {
                 fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
                     repeat(valueCount) { newVec.writeNull() }
@@ -58,18 +58,18 @@ class StructVector(
 
         val valueCount = valueCount
 
-        children.sequencedValues().forEach { child ->
+        childrenByKey.sequencedValues().forEach { child ->
             repeat(valueCount - child.valueCount) { child.writeUndefined() }
         }
     }
 
-    override fun mapKeyReader(): VectorReader = children.sequencedValues().firstOrNull() ?: TODO("auto-creation")
-    override fun mapValueReader(): VectorReader = children.sequencedValues().lastOrNull() ?: TODO("auto-creation")
-    override fun mapKeyWriter(): VectorWriter = children.sequencedValues().firstOrNull() ?: TODO("auto-creation")
-    override fun mapValueWriter(): VectorWriter = children.sequencedValues().lastOrNull() ?: TODO("auto-creation")
+    override fun mapKeyReader(): VectorReader = childrenByKey.sequencedValues().firstOrNull() ?: TODO("auto-creation")
+    override fun mapValueReader(): VectorReader = childrenByKey.sequencedValues().lastOrNull() ?: TODO("auto-creation")
+    override fun mapKeyWriter(): VectorWriter = childrenByKey.sequencedValues().firstOrNull() ?: TODO("auto-creation")
+    override fun mapValueWriter(): VectorWriter = childrenByKey.sequencedValues().lastOrNull() ?: TODO("auto-creation")
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any =
-        children.sequencedEntrySet()
+        childrenByKey.sequencedEntrySet()
             .associateBy({ keyFn.denormalize(it.key) }, { it.value.getObject(idx, keyFn) })
             .filterValues { it != null }
 
@@ -77,13 +77,13 @@ class StructVector(
         if (value !is Map<*, *>) TODO("unknown type: ${value::class.simpleName}")
         else {
             value.forEach {
-                (children[it.key] ?: TODO("promotion not supported yet")).writeObject(it.value)
+                (childrenByKey[it.key] ?: TODO("promotion not supported yet")).writeObject(it.value)
             }
             endStruct()
         }
 
     override fun valueReader(pos: VectorPosition): ValueReader {
-        val readers = children.mapValues { it.value.valueReader(pos) }
+        val readers = childrenByKey.mapValues { it.value.valueReader(pos) }
 
         return object : ValueReader {
             override val isNull get() = this@StructVector.isNull(pos.position)
@@ -93,14 +93,14 @@ class StructVector(
     }
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
-        children.values.fold(0) { hash, child ->
+        childrenByKey.values.fold(0) { hash, child ->
             ByteFunctionHelpers.combineHash(hash, child.hashCode(idx, hasher))
         }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is StructVector)
-        val childCopiers = src.children.map { (childName, child) ->
-            child.rowCopier(children[childName] ?: error("missing child vector: $childName"))
+        val childCopiers = src.childrenByKey.map { (childName, child) ->
+            child.rowCopier(childrenByKey[childName] ?: error("missing child vector: $childName"))
         }
 
         return RowCopier { srcIdx ->
@@ -113,14 +113,14 @@ class StructVector(
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
 
-        children.sequencedValues().forEach { it.unloadBatch(nodes, buffers) }
+        childrenByKey.sequencedValues().forEach { it.unloadBatch(nodes, buffers) }
     }
 
     override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst() ?: error("missing node")
 
         validityBuffer.loadBuffer(buffers.removeFirst() ?: error("missing validity buffer"))
-        children.sequencedValues().forEach { it.loadBatch(nodes, buffers) }
+        childrenByKey.sequencedValues().forEach { it.loadBatch(nodes, buffers) }
 
         valueCount = node.length
     }
@@ -128,7 +128,7 @@ class StructVector(
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is NonNullableStructVector)
         validityBuffer.loadBuffer(vec.validityBuffer)
-        children.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
+        childrenByKey.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
 
         valueCount = vec.valueCount
     }
@@ -136,11 +136,11 @@ class StructVector(
     override fun clear() {
         validityBuffer.clear()
         valueCount = 0
-        children.sequencedValues().forEach(Vector::clear)
+        childrenByKey.sequencedValues().forEach(Vector::clear)
     }
 
     override fun close() {
         validityBuffer.close()
-        children.sequencedValues().forEach(Vector::close)
+        childrenByKey.sequencedValues().forEach(Vector::close)
     }
 }

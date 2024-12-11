@@ -19,7 +19,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow Relation VectorReader VectorWriter)
+           (xtdb.arrow Relation VectorReader VectorWriter Vector)
            xtdb.IBufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
@@ -217,9 +217,9 @@
                 (.writeInt set-type-wtr data-meta-idx))))))))
 
   ArrowType$Struct
-  (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
+  (type->metadata-writer [arrow-type write-col-meta! ^Vector types-wtr]
     (let [struct-type-wtr (.keyWriter types-wtr
-                                      (str (name (types/arrow-type->leg arrow-type)) "-" (count (seq types-wtr)))
+                                      (str (name (types/arrow-type->leg arrow-type)) "-" (count (.getChildren types-wtr)))
                                       (FieldType/nullable #xt.arrow/type :list))
           struct-type-el-wtr (.elementWriter struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter

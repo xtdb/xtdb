@@ -5,15 +5,13 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 class NullVector(override val name: String) : Vector() {
-    override var nullable: Boolean = true
-
-    override val field: Field = Field(name, FieldType.nullable(ArrowType.Null.INSTANCE), emptyList())
+    override val fieldType: FieldType = FieldType.nullable(ArrowType.Null.INSTANCE)
+    override val children = emptyList<Vector>()
 
     override fun isNull(idx: Int) = true
 

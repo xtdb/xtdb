@@ -6,21 +6,23 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
+import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
 class ListVector(
     private val allocator: BufferAllocator,
     override val name: String,
-    override var nullable: Boolean,
+    override val fieldType: FieldType,
     private var elVector: Vector
 ) : Vector() {
 
-    override val field: Field
-        get() = Field(name, FieldType(nullable, MinorType.LIST.type, null), listOf(elVector.field))
+    constructor(allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector)
+            : this(allocator, name, FieldType(nullable, LIST_TYPE, null), elVector)
+
+    override val children: Iterable<Vector> get() = listOf(elVector)
 
     private val validityBuffer = ExtensibleBuffer(allocator)
     private val offsetBuffer = ExtensibleBuffer(allocator)
@@ -139,6 +141,8 @@ class ListVector(
         validityBuffer.close()
         offsetBuffer.close()
         elVector.close()
+        valueCount = 0
+        lastOffset = 0
     }
 
 }
