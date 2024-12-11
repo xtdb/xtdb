@@ -34,7 +34,7 @@ abstract class VariableWidthVector(
         lastOffset = newOffset
     }
 
-    override fun writeNull() {
+    override fun writeUndefined() {
         writeOffset(lastOffset)
         validityBuffer.writeBit(valueCount++, 0)
     }

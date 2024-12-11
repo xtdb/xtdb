@@ -16,6 +16,7 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.*
+import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
@@ -26,8 +27,11 @@ import org.apache.arrow.vector.NullVector as ArrowNullVector
 internal fun Any.unsupported(op: String): Nothing =
     throw UnsupportedOperationException("$op unsupported on ${this::class.simpleName}")
 
-internal fun FieldType.withNullable(nullable: Boolean) = FieldType(nullable, type, dictionary)
-internal fun FieldType.withArrowType(type: ArrowType) = FieldType(isNullable, type, dictionary)
+fun FieldType.copy(
+    nullable: Boolean = isNullable,
+    type: ArrowType = this.type,
+    dictionary: DictionaryEncoding? = this.dictionary
+) = FieldType(nullable, type, dictionary)
 
 sealed class Vector : VectorReader, VectorWriter {
 
@@ -36,7 +40,7 @@ sealed class Vector : VectorReader, VectorWriter {
     final override var nullable
         get() = fieldType.isNullable
         set(value) {
-            fieldType = fieldType.withNullable(value)
+            fieldType = fieldType.copy(nullable = value)
         }
 
     abstract override var fieldType: FieldType; internal set
@@ -49,8 +53,15 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = if (isNull(idx)) null else getObject0(idx, keyFn)
 
+    override fun writeNull() {
+        if (!nullable) nullable = true
+        writeUndefined()
+    }
+
     protected abstract fun writeObject0(value: Any)
-    override fun writeObject(value: Any?) = if (value == null) writeNull() else writeObject0(value)
+
+    override fun writeObject(value: Any?) =
+        if (value == null) writeNull() else writeObject0(value)
 
     abstract fun hashCode0(idx: Int, hasher: ArrowBufHasher): Int
     final override fun hashCode(idx: Int, hasher: ArrowBufHasher) =

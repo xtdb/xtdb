@@ -23,6 +23,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
                 it.writeObject(value.from)
                 if (value.to != null) it.writeObject(value.to) else it.writeLong(Long.MAX_VALUE)
             }
+            inner.endList()
         }
 
         else -> throw InvalidWriteObjectException(fieldType, value)

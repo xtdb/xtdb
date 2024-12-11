@@ -18,8 +18,11 @@ internal data class InvalidCopySourceException(val src: FieldType, val dest: Fie
 
 interface VectorWriter : VectorReader, AutoCloseable {
 
-    fun writeUndefined(): Unit = writeNull()
-    fun writeNull(): Unit = unsupported("writeNull")
+    override val nullable: Boolean
+
+    fun writeUndefined()
+    fun writeNull()
+
     fun writeBoolean(value: Boolean): Unit = unsupported("writeBoolean")
     fun writeByte(value: Byte): Unit = unsupported("writeByte")
     fun writeShort(value: Short): Unit = unsupported("writeShort")

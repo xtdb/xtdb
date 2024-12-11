@@ -17,9 +17,9 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         }
 
     override var fieldType: FieldType
-        get() = listVector.fieldType.withArrowType(ArrowType.Map(keysSorted))
+        get() = listVector.fieldType.copy(type = ArrowType.Map(keysSorted))
         set(value) {
-            listVector.fieldType = value.withArrowType(listVector.fieldType.type)
+            listVector.fieldType = value.copy(type = listVector.fieldType.type)
         }
 
     override val children get() = listVector.children
@@ -31,6 +31,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         }
 
     override fun isNull(idx: Int) = listVector.isNull(idx)
+    override fun writeUndefined() = listVector.writeUndefined()
     override fun writeNull() = listVector.writeNull()
 
     override fun getListCount(idx: Int) = listVector.getListCount(idx)

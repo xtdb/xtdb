@@ -2,8 +2,6 @@ package xtdb.arrow
 
 import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer
-import org.apache.arrow.flatbuf.Message
-import org.apache.arrow.flatbuf.RecordBatch
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
