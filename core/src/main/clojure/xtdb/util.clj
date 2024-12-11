@@ -204,7 +204,7 @@
       (close [_])
 
       (^int read [_ ^ByteBuffer dst]
-        (let [^ByteBuffer src (-> buffer (.slice) (.limit (.remaining dst)))]
+       (let [^ByteBuffer src (-> buffer (.slice) (.limit (min (.remaining dst) (.remaining buffer))))]
           (.put dst src)
           (let [bytes-read (.position src)]
             (.position buffer (+ (.position buffer) bytes-read))
