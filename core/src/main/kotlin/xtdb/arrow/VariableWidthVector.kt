@@ -17,7 +17,7 @@ abstract class VariableWidthVector(
     arrowType: ArrowType
 ) : Vector() {
 
-    override val fieldType = FieldType(nullable, arrowType, null)
+    override var fieldType = FieldType(nullable, arrowType, null)
     override val children = emptyList<Vector>()
 
     private val validityBuffer = ExtensibleBuffer(allocator)

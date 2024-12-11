@@ -9,8 +9,8 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
-class NullVector(override val name: String) : Vector() {
-    override val fieldType: FieldType = FieldType.nullable(ArrowType.Null.INSTANCE)
+class NullVector(override var name: String) : Vector() {
+    override var fieldType: FieldType = FieldType.nullable(ArrowType.Null.INSTANCE)
     override val children = emptyList<Vector>()
 
     override fun isNull(idx: Int) = true

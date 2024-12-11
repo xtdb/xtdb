@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
 
 class Utf8Vector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean
 ) : VariableWidthVector(al, nullable, Types.MinorType.VARCHAR.type) {
 

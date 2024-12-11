@@ -16,14 +16,14 @@ import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 class DenseUnionVector(
     private val allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     legVectors: List<Vector>
 ) : Vector() {
 
     private val legVectors = legVectors.toMutableList()
 
-    override val fieldType: FieldType
-        get() = FieldType(false, ArrowType.Union(Dense, IntArray(legVectors.size) { it }), null)
+    override var fieldType: FieldType =
+        FieldType(false, ArrowType.Union(Dense, IntArray(legVectors.size) { it }), null)
 
     override val children: Iterable<Vector> get() = legVectors
 

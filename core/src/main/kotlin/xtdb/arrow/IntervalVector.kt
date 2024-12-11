@@ -2,7 +2,6 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.types.IntervalDayTime
 import xtdb.types.IntervalMonthDayNano
@@ -13,7 +12,7 @@ import java.time.Period
 
 class IntervalYearMonthVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean
 ) : FixedWidthVector(al, nullable, MinorType.INTERVALYEAR.type, Int.SIZE_BYTES) {
 
@@ -29,7 +28,7 @@ class IntervalYearMonthVector(
 
 class IntervalDayTimeVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean
 ) : FixedWidthVector(al, nullable, MinorType.INTERVALDAY.type, Long.SIZE_BYTES) {
 
@@ -54,7 +53,7 @@ class IntervalDayTimeVector(
 
 class IntervalMonthDayNanoVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean
 ) : FixedWidthVector(al, nullable, MinorType.INTERVALMONTHDAYNANO.type, 16) {
 

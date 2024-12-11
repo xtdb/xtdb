@@ -12,13 +12,25 @@ import java.nio.ByteBuffer
 abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
     protected abstract val inner: Vector
 
-    override val name get() = inner.name
-    final override val fieldType get() = inner.fieldType.withArrowType(arrowType)
+    override var name
+        get() = inner.name
+        set(value) {
+            inner.name = value
+        }
+
+    final override var fieldType
+        get() = inner.fieldType.withArrowType(arrowType)
+        set(value) {
+            inner.fieldType = value.withArrowType(inner.fieldType.type)
+        }
+
     final override val children get() = inner.children
 
     override var valueCount: Int
         get() = inner.valueCount
-        set(value) { inner.valueCount = value }
+        set(value) {
+            inner.valueCount = value
+        }
 
     override fun isNull(idx: Int) = inner.isNull(idx)
     override fun writeNull() = inner.writeNull()

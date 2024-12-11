@@ -6,7 +6,7 @@ import xtdb.api.query.IKeyFn
 
 class IntVector(
     allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean
 ) : FixedWidthVector(allocator, nullable, MinorType.INT.type, Int.SIZE_BYTES) {
 

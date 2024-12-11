@@ -9,7 +9,7 @@ import java.time.LocalDate
 
 class DateDayVector(
     allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
 ) : FixedWidthVector(allocator, nullable, ArrowType.Date(DAY), Int.SIZE_BYTES) {
 
@@ -27,7 +27,7 @@ private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
 
 class DateMilliVector(
     allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
 ) : FixedWidthVector(allocator, nullable, ArrowType.Date(MILLISECOND), Long.SIZE_BYTES) {
 

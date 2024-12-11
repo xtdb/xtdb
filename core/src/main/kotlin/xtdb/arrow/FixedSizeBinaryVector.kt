@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
 
 class FixedSizeBinaryVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
     byteWidth: Int
 ) : FixedWidthVector(al, nullable, ArrowType.FixedSizeBinary(byteWidth), byteWidth) {

@@ -18,7 +18,7 @@ private fun TimeUnit.toInstant(value: Long) = when(this) {
 
 class TimestampLocalVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
     val unit: TimeUnit = MICROSECOND,
 ) : FixedWidthVector(al, nullable, ArrowType.Timestamp(unit, null), Long.SIZE_BYTES) {
@@ -36,7 +36,7 @@ class TimestampLocalVector(
 
 class TimestampTzVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
     val unit: TimeUnit = MICROSECOND,
     val zone: ZoneId = UTC

@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
 
 class VarBinaryVector(
     al: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean
 ) : VariableWidthVector(al, nullable, Types.MinorType.VARBINARY.type) {
 

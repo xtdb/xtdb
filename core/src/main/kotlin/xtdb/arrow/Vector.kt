@@ -32,8 +32,15 @@ internal fun FieldType.withArrowType(type: ArrowType) = FieldType(isNullable, ty
 
 sealed class Vector : VectorReader, VectorWriter {
 
-    final override val nullable get() = fieldType.isNullable
-    abstract val fieldType: FieldType
+    abstract override var name: String
+
+    final override var nullable
+        get() = fieldType.isNullable
+        set(value) {
+            fieldType = fieldType.withNullable(value)
+        }
+
+    abstract var fieldType: FieldType; internal set
     abstract val children: Iterable<Vector>
 
     final override val field: Field get() = Field(name, fieldType, children.map { it.field })

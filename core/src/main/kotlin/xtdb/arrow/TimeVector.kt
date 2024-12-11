@@ -34,7 +34,7 @@ internal fun TimeUnit.toLocalTime(value: Long): LocalTime = when (this) {
 
 class Time32Vector(
     allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
     override val unit: TimeUnit
 ) : TimeVector(allocator, nullable, ArrowType.Time(unit, Int.SIZE_BITS), Int.SIZE_BYTES) {
@@ -51,7 +51,7 @@ class Time32Vector(
 
 class Time64Vector(
     allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
     override val unit: TimeUnit
 ) : TimeVector(allocator, nullable, ArrowType.Time(unit, Long.SIZE_BITS), Long.SIZE_BYTES) {

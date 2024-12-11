@@ -10,10 +10,17 @@ import xtdb.api.query.IKeyFn
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
 
-    override val name get() = listVector.name
+    override var name
+        get() = listVector.name
+        set(value) {
+            listVector.name = value
+        }
 
-    override val fieldType: FieldType
+    override var fieldType: FieldType
         get() = listVector.fieldType.withArrowType(ArrowType.Map(keysSorted))
+        set(value) {
+            listVector.fieldType = value.withArrowType(listVector.fieldType.type)
+        }
 
     override val children get() = listVector.children
 

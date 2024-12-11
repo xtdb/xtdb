@@ -17,7 +17,7 @@ internal fun TimeUnit.toDuration(value: Long): Duration = when (this) {
 
 class DurationVector(
     allocator: BufferAllocator,
-    override val name: String,
+    override var name: String,
     nullable: Boolean,
     val unit: TimeUnit = MICROSECOND
 ) : FixedWidthVector(allocator, nullable, ArrowType.Duration(unit), Long.SIZE_BYTES) {

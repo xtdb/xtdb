@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
 
-class ByteVector(allocator: BufferAllocator, override val name: String, nullable: Boolean) :
+class ByteVector(allocator: BufferAllocator, override var name: String, nullable: Boolean) :
     FixedWidthVector(allocator, nullable, MinorType.TINYINT.type, Byte.SIZE_BYTES) {
 
     override fun getByte(idx: Int) = getByte0(idx)

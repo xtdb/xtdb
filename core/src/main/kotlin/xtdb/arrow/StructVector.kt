@@ -15,8 +15,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TY
 
 class StructVector(
     private val allocator: BufferAllocator,
-    override val name: String,
-    override val fieldType: FieldType,
+    override var name: String,
+    override var fieldType: FieldType,
     private val childrenByKey: SequencedMap<String, Vector>,
 ) : Vector() {
 

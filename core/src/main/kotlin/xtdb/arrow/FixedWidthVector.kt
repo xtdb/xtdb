@@ -26,7 +26,7 @@ sealed class FixedWidthVector(
     val byteWidth: Int
 ) : Vector() {
 
-    final override val fieldType = FieldType(nullable, arrowType, null)
+    final override var fieldType = FieldType(nullable, arrowType, null)
     override val children: Iterable<Vector> = emptyList()
 
     private val validityBuffer = ExtensibleBuffer(allocator)

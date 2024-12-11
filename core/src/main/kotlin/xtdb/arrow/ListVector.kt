@@ -14,8 +14,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
 class ListVector(
     private val allocator: BufferAllocator,
-    override val name: String,
-    override val fieldType: FieldType,
+    override var name: String,
+    override var fieldType: FieldType,
     private var elVector: Vector
 ) : Vector() {
 

@@ -5,7 +5,7 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
-class BitVector(al: BufferAllocator, override val name: String, nullable: Boolean) :
+class BitVector(al: BufferAllocator, override var name: String, nullable: Boolean) :
     FixedWidthVector(al, nullable, BIT_TYPE, 0) {
 
     override fun getBoolean(idx: Int) = getBoolean0(idx)
