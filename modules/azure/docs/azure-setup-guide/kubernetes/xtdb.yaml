@@ -81,6 +81,26 @@ spec:
         # If removed, will have a random suffix that will change on pod restart, which can be seen within logs
         - name: XTDB_NODE_ID
           value: "xtdb-node-$(ORDINAL_NUMBER)"
+          
+        # The following are adjustable based on the exact requirements of the deployment:
+        # startupProbe will wait for a while before checking if the pod is considered "started"
+        # We check that the node is started & "reasonably" caught up on it's indexes before considering it "started"
+        startupProbe:
+            httpGet:
+              path: /healthz/started
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 10 
+        # livenessProbe will check if the node is still alive, and if the indexer hasn't errored out
+        # It will run after the first successful startup probe
+        livenessProbe:
+          httpGet:
+            path: /healthz/alive
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
   volumeClaimTemplates:
   - metadata:
       name: xtdb-persistent-storage
