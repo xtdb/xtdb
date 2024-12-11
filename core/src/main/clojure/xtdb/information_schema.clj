@@ -89,7 +89,14 @@
   (def unq-pg-catalog
     (-> (merge pg-catalog-tables pg-catalog-template-tables)
         (update-vals keys)
-        (update-keys (comp symbol name)))))
+        (update-keys (comp symbol name))))
+
+  (def meta-table-schemas
+    (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
+        (update-vals (fn [col-name->type]
+                       (-> col-name->type
+                           (update-keys str)
+                           (update-vals #(types/col-type->field %))))))))
 
 
 (def schemas
@@ -284,7 +291,8 @@
                                       (.allColumnFields metadata-mgr)
                                       (some-> (.liveIndex wm)
                                               (.allColumnFields)))
-                          (update-keys symbol))
+                          (update-keys symbol)
+                          (merge meta-table-schemas))
 
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (doto out-rel-wtr
