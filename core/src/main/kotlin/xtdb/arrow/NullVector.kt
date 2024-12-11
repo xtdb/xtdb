@@ -25,6 +25,15 @@ class NullVector(override var name: String) : Vector() {
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = error("hashCode0 called on NullVector")
 
+    override fun rowCopier(dest: VectorWriter) =
+        if (dest is DenseUnionVector) dest.rowCopier0(this)
+        else {
+            require(dest.nullable)
+            RowCopier {
+                dest.valueCount.also { dest.writeNull() }
+            }
+        }
+
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is NullVector)
         return RowCopier { valueCount.also { writeNull() } }

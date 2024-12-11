@@ -158,13 +158,6 @@ class DenseUnionVector(
             val leg = legVectors[i]
             if (leg.name == name) return LegWriter(i.toByte(), leg)
         }
-        // we try to find a nullable child vector
-        if (name == "null") {
-            for (i in legVectors.indices) {
-                val leg = legVectors[i]
-                if (leg.nullable) return LegWriter(i.toByte(), leg)
-            }
-        }
 
         TODO("auto-creation: $name vs ${legVectors.map { it.name }}")
     }
@@ -212,18 +205,33 @@ class DenseUnionVector(
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
-    override fun rowCopier0(src: VectorReader) =
-        if (src is DenseUnionVector) {
-            val copierMapping = src.legVectors.map { childVec ->
-                val childField = childVec.field
-                childVec.rowCopier(legWriter(childField.name, childField.fieldType))
+    override fun rowCopier0(src: VectorReader) : RowCopier =
+        when (src) {
+            is DenseUnionVector -> {
+                val copierMapping = src.legVectors.map { childVec ->
+                    childVec.rowCopier(legWriter(childVec.name, childVec.fieldType))
+                }
+
+                RowCopier { srcIdx ->
+                    copierMapping[src.getTypeId(srcIdx).toInt().also { check(it >= 0) }].copyRow(src.getOffset(srcIdx))
+                }
             }
 
-            RowCopier { srcIdx ->
-                copierMapping[src.getTypeId(srcIdx).toInt().also { check(it >= 0) }].copyRow(src.getOffset(srcIdx))
+            is NullVector -> {
+                // we try to find a nullable child vector
+
+                src.rowCopier(
+                    legVectors.asSequence()
+                        .mapIndexedNotNull { idx, vector ->
+                            vector.takeIf { it.nullable }?.let { LegWriter(idx.toByte(), it) }
+                        }
+                        .firstOrNull()
+                        ?: legWriter("null", src.fieldType))
             }
-        } else {
-            legWriter(src.field.type.toLeg()).rowCopier0(src)
+
+            else -> {
+                legWriter(src.fieldType.type.toLeg()).rowCopier0(src)
+            }
         }
 
     override fun rowCopier(dest: VectorWriter) =
