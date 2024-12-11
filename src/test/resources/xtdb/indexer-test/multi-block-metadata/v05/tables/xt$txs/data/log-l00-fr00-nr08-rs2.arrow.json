@@ -41,7 +41,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "typeIds" : [ ]
       },
       "children" : [{
         "name" : "put",
@@ -112,7 +112,7 @@
       "name" : "_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["384622e6080e0b3c037df0d3f8baf8d2","a4e167a76a05add8a8654c169b07b044"]
+      "DATA" : ["1c976cc0219dad0526db1e8a910589b7","a4e167a76a05add8a8654c169b07b044"]
     },{
       "name" : "_system_from",
       "count" : 2,
@@ -141,7 +141,7 @@
           "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
-          "DATA" : ["3837","0"]
+          "DATA" : ["3829","0"]
         },{
           "name" : "system_time",
           "count" : 2,

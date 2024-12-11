@@ -9,6 +9,7 @@
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
+            [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
             [xtdb.operator.scan :as scan]
@@ -19,14 +20,12 @@
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
-            [xtdb.trie :as trie]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql]
-            [xtdb.logical-plan :as lp])
+            [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)
@@ -41,12 +40,12 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
            (xtdb.api.tx TxOp)
-           xtdb.arrow.RowCopier
+           (xtdb.arrow RowCopier Vector)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
-           (xtdb.vector IVectorReader RelationReader RelationAsStructReader SingletonListReader)
+           (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)
            (xtdb.watermark IWatermarkSource Watermark)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -300,10 +299,13 @@
 
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
-              (util/with-close-on-catch [tx-ops-vec (xt-log/open-tx-ops-vec allocator)]
-                (xt-log/write-tx-ops! allocator (vw/->writer tx-ops-vec) res tx-opts)
-                (.setValueCount tx-ops-vec (count res))
-                tx-ops-vec)))
+              ;; HACK an adapter 'til this is all migrated to xtdb.arrow
+              (util/with-open [tx-ops-rel (xt-log/open-tx-ops-rel allocator)]
+                (let [xt-vec (.get tx-ops-rel "tx-ops")]
+                  (xt-log/write-tx-ops! allocator xt-vec res tx-opts)
+                  (.setRowCount tx-ops-rel (.getValueCount xt-vec)))
+                (-> (.openAsRoot tx-ops-rel allocator)
+                    (.getVector "tx-ops")))))
 
           (catch Throwable t
             (reset! !last-tx-fn-error t)

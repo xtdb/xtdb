@@ -4,6 +4,7 @@ import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.WriteChannel
@@ -98,10 +99,26 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         abstract fun end(ch: WriteChannel, schema: Schema, recordBlocks: MutableList<ArrowBlock>)
     }
 
+    internal fun openArrowRecordBatch(): ArrowRecordBatch {
+        val nodes = mutableListOf<ArrowFieldNode>()
+        val buffers = mutableListOf<ArrowBuf>()
+
+        vectors.values.forEach { it.unloadBatch(nodes, buffers) }
+
+        return ArrowRecordBatch(rowCount, nodes, buffers)
+    }
+
+    fun openAsRoot(al: BufferAllocator): VectorSchemaRoot =
+        VectorSchemaRoot.create(Schema(vectors.values.map { it.field }), al)
+            .also { vsr ->
+                openArrowRecordBatch().use { recordBatch ->
+                    VectorLoader(vsr).load(recordBatch)
+                }
+            }
+
     inner class RelationUnloader(private val ch: WriteChannel, private val mode: UnloadMode) : AutoCloseable {
 
-        private val vectors = this@Relation.vectors.values
-        private val schema = Schema(vectors.map { it.field })
+        private val schema = Schema(this@Relation.vectors.values.map { it.field })
         private val recordBlocks = mutableListOf<ArrowBlock>()
 
         init {
@@ -115,12 +132,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
         fun writeBatch() {
             try {
-                val nodes = mutableListOf<ArrowFieldNode>()
-                val buffers = mutableListOf<ArrowBuf>()
-
-                vectors.forEach { it.unloadBatch(nodes, buffers) }
-
-                ArrowRecordBatch(rowCount, nodes, buffers).use { recordBatch ->
+                openArrowRecordBatch().use { recordBatch ->
                     MessageSerializer.serialize(ch, recordBatch)
                         .also { recordBlocks.add(it) }
                 }

@@ -41,7 +41,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "typeIds" : [ ]
       },
       "children" : [{
         "name" : "put",
