@@ -199,9 +199,15 @@ expr
     | 'NOT' expr #UnaryNotExpr
     | expr 'AND' expr #AndExpr
     | expr 'OR' expr #OrExpr
+    | expr 'COLLATE' collation # CollateExpr
+    | expr 'OPERATOR' '(' schemaName '.' postgresRegexOperator ')' xqueryPattern # PostgresOperatorExpr
 
     | numericExpr #NumericExpr0
     ;
+
+collation
+  : DELIMITED_IDENTIFIER
+  | PG_CATALOG_DEFAULT ;
 
 numericExpr
     : '+' numericExpr #UnaryPlusExpr
@@ -221,6 +227,7 @@ exprPrimary
     | exprPrimary '.' fieldName #FieldAccess
     | exprPrimary '[' expr ']' #ArrayAccess
     | exprPrimary '::' dataType #PostgresCastExpr
+    | exprPrimary '::' schemaName '.' 'REGTYPE' '::' schemaName '.' 'TEXT' # PgCatalogResolveOid
     | exprPrimary '||' exprPrimary #ConcatExpr
 
     | parameterSpecification # ParamExpr
@@ -261,6 +268,10 @@ exprPrimary
       ')' # HasSchemaPrivilegePredicate
 
     | (schemaName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
+
+    | (schemaName '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' #PostgresGetUserbyidFunction
+
+    | (schemaName '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' #PostgresTableIsVisibleFunction
 
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
