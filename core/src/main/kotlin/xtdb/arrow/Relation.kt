@@ -40,7 +40,12 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
             : this(fields.map { fromField(allocator, it) }, rowCount)
 
-    fun endRow() = ++rowCount
+    fun endRow() =
+        (++rowCount).also { rowCount ->
+            vectors.forEach { (_, vec) ->
+                repeat(rowCount - vec.valueCount) { vec.writeNull() }
+            }
+        }
 
     override fun iterator() = vectors.values.iterator()
 
