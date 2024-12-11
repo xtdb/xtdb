@@ -75,7 +75,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
             listVector.endList()
         }
 
-        else -> TODO("promotion: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
     override fun elementReader() = listVector.elementReader()

@@ -21,7 +21,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(Trans
             is ClojureForm, is xtdb.RuntimeException, is xtdb.IllegalArgumentException,
             -> inner.writeObject(requiringResolve("xtdb.serde/write-transit")(value) as ByteArray)
 
-            else -> TODO("unknown type: ${value::class.simpleName}")
+            else -> throw InvalidWriteObjectException(fieldType, value)
         }
 
 }

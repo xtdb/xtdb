@@ -25,6 +25,6 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
             }
         }
 
-        else -> TODO("promotion: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 }

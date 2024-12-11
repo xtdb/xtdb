@@ -16,6 +16,6 @@ class ShortVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getShort(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Short) writeShort(value) else TODO("not a Short")
+        if (value is Short) writeShort(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 }

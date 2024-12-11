@@ -16,6 +16,6 @@ class VarBinaryVector(
     override fun writeObject0(value: Any) = when (value) {
         is ByteArray -> writeBytes(ByteBuffer.wrap(value))
         is ByteBuffer -> writeBytes(value)
-        else -> TODO("unknown type: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 }

@@ -16,6 +16,6 @@ class LongVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getLong(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Long) writeLong(value) else TODO("not a Long")
+        if (value is Long) writeLong(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 }

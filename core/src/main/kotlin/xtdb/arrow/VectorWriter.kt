@@ -3,6 +3,12 @@ package xtdb.arrow
 import org.apache.arrow.vector.types.pojo.FieldType
 import java.nio.ByteBuffer
 
+internal data class InvalidWriteObjectException(val fieldType: FieldType, val obj: Any?) :
+    IllegalArgumentException("invalid writeObject")
+
+internal data class InvalidCopySourceException(val src: FieldType, val dest: FieldType) :
+    IllegalArgumentException("illegal copy src vector")
+
 interface VectorWriter : VectorReader, AutoCloseable {
 
     fun writeUndefined(): Unit = writeNull()

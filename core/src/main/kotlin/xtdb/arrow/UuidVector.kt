@@ -19,6 +19,6 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(Uu
             inner.writeObject(array())
         }
 
-        else -> TODO("promotion: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 }

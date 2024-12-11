@@ -31,6 +31,7 @@ class DenseUnionVector(
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val valueCount get() = this@DenseUnionVector.valueCount
+        override val fieldType get() = inner.fieldType
         override val field get() = inner.field
 
         override fun isNull(idx: Int) = getTypeId(idx) != typeId || inner.isNull(getOffset(idx))

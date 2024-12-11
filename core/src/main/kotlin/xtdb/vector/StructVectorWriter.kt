@@ -10,9 +10,9 @@ import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.VectorPosition
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ValueReader
+import xtdb.arrow.*
+import xtdb.arrow.InvalidCopySourceException
+import xtdb.arrow.InvalidWriteObjectException
 import xtdb.asKeyword
 import xtdb.toFieldType
 import xtdb.util.normalForm
@@ -73,7 +73,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         }
 
     override fun writeObject0(obj: Any) {
-        if (obj !is Map<*, *>) throw InvalidWriteObjectException(field, obj)
+        if (obj !is Map<*, *>) throw InvalidWriteObjectException(field.fieldType, obj)
 
         writeStruct {
             val structPos = wp.position
@@ -148,7 +148,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         return try {
             toRowCopier(childWriter)
         } catch (e: InvalidCopySourceException) {
-            return toRowCopier(promoteChild(childWriter, e.src.fieldType))
+            return toRowCopier(promoteChild(childWriter, e.src))
         }
     }
 
@@ -167,7 +167,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         is DenseUnionVector -> duvToVecCopier(this, src)
         is StructVector -> {
             if (src.field.isNullable && !field.isNullable)
-                throw InvalidCopySourceException(src.field, field)
+                throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
 
             val innerCopiers =
                 src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> w.rowCopier(child) } }
@@ -183,7 +183,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             }
         }
 
-        else -> throw InvalidCopySourceException(src.field, field)
+        else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
 
     override fun rowCopier(src: RelationReader): RowCopier {

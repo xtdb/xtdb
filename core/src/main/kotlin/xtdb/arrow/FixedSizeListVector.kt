@@ -45,7 +45,7 @@ class FixedSizeListVector(
             value.forEach { elVector.writeObject(it) }
         }
 
-        else -> TODO("unknown type")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
     override fun elementReader() = elVector

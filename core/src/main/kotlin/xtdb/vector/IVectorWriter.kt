@@ -9,10 +9,8 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ValueReader
-import xtdb.arrow.ValueWriter
-import xtdb.arrow.VectorPosition
+import xtdb.arrow.*
+import xtdb.arrow.InvalidWriteObjectException
 import xtdb.toLeg
 import xtdb.vector.extensions.SetType
 import xtdb.vector.extensions.SetVector
@@ -81,7 +79,7 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
     override fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
     override fun writeObject(obj: Any?): Unit = when {
         obj != null -> writeObject0(obj)
-        !field.isNullable -> throw InvalidWriteObjectException(field, null)
+        !field.isNullable -> throw InvalidWriteObjectException(field.fieldType, null)
         else -> writeNull()
     }
 
@@ -116,12 +114,6 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
 }
 
 internal val UNION_FIELD_TYPE = FieldType.notNullable(ArrowType.Union(UnionMode.Dense, null))
-
-internal data class InvalidWriteObjectException(val field: Field, val obj: Any?) :
-    IllegalArgumentException("invalid writeObject")
-
-internal data class InvalidCopySourceException(val src: Field, val dest: Field) :
-    IllegalArgumentException("illegal copy src vector")
 
 internal fun IVectorWriter.populateWithAbsents(pos: Int) =
     repeat(pos - writerPosition().position) { writeObject(null) }

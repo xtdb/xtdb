@@ -4,6 +4,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.vector.IVectorReader
@@ -15,6 +16,7 @@ interface VectorReader : AutoCloseable {
     val valueCount: Int
 
     val nullable: Boolean
+    val fieldType: FieldType
     val field: Field
 
     private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner
@@ -105,7 +107,7 @@ interface VectorReader : AutoCloseable {
 
         internal class NewToOldAdapter(private val vector: VectorReader) : IVectorReader {
 
-            override fun hashCode(idx: Int, hasher: ArrowBufHasher?) = TODO("Not yet implemented")
+            override fun hashCode(idx: Int, hasher: ArrowBufHasher) = vector.hashCode(idx, hasher)
 
             override fun valueCount() = vector.valueCount
 
@@ -158,7 +160,8 @@ interface VectorReader : AutoCloseable {
         private class OldToNewAdapter(private val old: IVectorReader) : VectorReader {
             override val name: String get() = old.name
             override val valueCount: Int get() = old.valueCount()
-            override val nullable: Boolean get() = old.field.isNullable
+            override val nullable: Boolean get() = this.field.isNullable
+            override val fieldType: FieldType get() = this.field.fieldType
             override val field: Field get() = old.field
 
             override fun isNull(idx: Int) = old.isNull(idx)

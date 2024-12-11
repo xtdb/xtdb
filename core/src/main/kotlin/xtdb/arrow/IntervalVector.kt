@@ -23,7 +23,7 @@ class IntervalYearMonthVector(
 
     override fun writeObject0(value: Any) =
         if (value is IntervalYearMonth) writeInt(value.period.toTotalMonths().toInt())
-        else TODO("unknown type: ${value::class.simpleName}")
+        else throw InvalidWriteObjectException(fieldType, value)
 }
 
 class IntervalDayTimeVector(
@@ -48,7 +48,7 @@ class IntervalDayTimeVector(
             buf.putInt(value.duration.toMillis().toInt())
             buf.flip()
             writeBytes(buf)
-        } else TODO("unknown type: ${value::class.simpleName}")
+        } else throw InvalidWriteObjectException(fieldType, value)
 }
 
 class IntervalMonthDayNanoVector(
@@ -73,5 +73,5 @@ class IntervalMonthDayNanoVector(
             buf.putLong(value.duration.toNanos())
             buf.flip()
             writeBytes(buf)
-        } else TODO("unknown type: ${value::class.simpleName}")
+        } else throw InvalidWriteObjectException(fieldType, value)
 }

@@ -16,6 +16,6 @@ class IntVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Int) writeInt(value) else TODO("not an Int")
+        if (value is Int) writeInt(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 }

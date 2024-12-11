@@ -16,6 +16,6 @@ class FloatVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Float) writeFloat(value) else TODO("not a Float")
+        if (value is Float) writeFloat(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 }

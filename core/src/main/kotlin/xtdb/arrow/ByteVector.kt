@@ -13,13 +13,13 @@ class ByteVector(allocator: BufferAllocator, override var name: String, nullable
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByte(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Byte) writeByte(value) else TODO("not a Byte")
+        if (value is Byte) writeByte(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 
     override fun rowCopier0(src: VectorReader) =
-        if (src !is ByteVector) TODO("promote ${src::class.simpleName}")
+        if (src !is ByteVector) throw InvalidCopySourceException(src.fieldType, fieldType)
         else {
-            if (src.nullable && !nullable) TODO("promote to nullable")
+            if (src.nullable && !nullable) nullable = true
             RowCopier { srcIdx ->
                 valueCount.also { writeByte(src.getByte(srcIdx)) }
             }

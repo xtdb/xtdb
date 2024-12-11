@@ -9,10 +9,8 @@ import org.apache.arrow.vector.complex.replaceDataVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.VectorPosition
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ListValueReader
-import xtdb.arrow.ValueReader
+import xtdb.arrow.*
+import xtdb.arrow.InvalidWriteObjectException
 import xtdb.toFieldType
 
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
@@ -93,7 +91,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
                     }
                 }
 
-                else -> throw InvalidWriteObjectException(field, obj)
+                else -> throw InvalidWriteObjectException(field.fieldType, obj)
             }
         }
     }
@@ -114,7 +112,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         is DenseUnionVector -> duvToVecCopier(this, src)
         is ListVector -> {
             if (src.field.isNullable && !field.isNullable)
-                throw InvalidCopySourceException(src.field, field)
+                throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
 
             val innerCopier = listElementWriter().rowCopier(src.dataVector)
 
@@ -130,6 +128,6 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
             }
         }
 
-        else -> throw InvalidCopySourceException(src.field, field)
+        else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
 }

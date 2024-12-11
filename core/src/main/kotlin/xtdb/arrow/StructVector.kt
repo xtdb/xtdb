@@ -74,7 +74,7 @@ class StructVector(
             .filterValues { it != null }
 
     override fun writeObject0(value: Any) =
-        if (value !is Map<*, *>) TODO("unknown type: ${value::class.simpleName}")
+        if (value !is Map<*, *>) throw InvalidWriteObjectException(fieldType, value)
         else {
             value.forEach {
                 (childrenByKey[it.key] ?: TODO("promotion not supported yet")).writeObject(it.value)

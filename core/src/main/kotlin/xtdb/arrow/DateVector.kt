@@ -19,7 +19,8 @@ class DateDayVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getInt(idx).toLong())
 
     override fun writeObject0(value: Any) {
-        if (value is LocalDate) writeInt(value.toEpochDay().toInt()) else TODO("not a LocalDate")
+        if (value is LocalDate) writeInt(value.toEpochDay().toInt())
+        else throw InvalidWriteObjectException(fieldType, value)
     }
 }
 
@@ -37,6 +38,7 @@ class DateMilliVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getLong(idx) / MILLIS_PER_DAY)!!
 
     override fun writeObject0(value: Any) {
-        if (value is LocalDate) writeLong(value.toEpochDay() * MILLIS_PER_DAY) else TODO("not a LocalDate")
+        if (value is LocalDate) writeLong(value.toEpochDay() * MILLIS_PER_DAY)
+        else throw InvalidWriteObjectException(fieldType, value)
     }
 }

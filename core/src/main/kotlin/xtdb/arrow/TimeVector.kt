@@ -45,7 +45,7 @@ class Time32Vector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = unit.toLocalTime(getInt(idx))
 
     override fun writeObject0(value: Any) {
-        if (value is LocalTime) writeInt(unit.toInt(value)) else TODO("not a LocalTime")
+        if (value is LocalTime) writeInt(unit.toInt(value)) else throw InvalidWriteObjectException(fieldType, value)
     }
 }
 
@@ -67,6 +67,6 @@ class Time64Vector(
                 value.toSecondOfDay().toLong(),
                 value.nano
             )
-        ) else TODO("not a LocalTime")
+        ) else throw InvalidWriteObjectException(fieldType, value)
     }
 }

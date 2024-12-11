@@ -30,7 +30,7 @@ class TimestampLocalVector(
 
     override fun writeObject0(value: Any) = writeLong(when (value) {
         is LocalDateTime -> unit.toLong(value.toEpochSecond(UTC), value.nano)
-        else -> TODO("unknown type: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     })
 }
 
@@ -51,6 +51,6 @@ class TimestampTzVector(
         is ZonedDateTime -> unit.toLong(value.toEpochSecond(), value.nano)
         is OffsetDateTime -> unit.toLong(value.toEpochSecond(), value.nano)
         is Instant -> unit.toLong(value.epochSecond, value.nano)
-        else -> TODO("unknown type: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     })
 }

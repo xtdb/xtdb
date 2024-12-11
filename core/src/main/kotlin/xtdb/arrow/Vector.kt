@@ -22,7 +22,6 @@ import xtdb.api.query.IKeyFn
 import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
-import org.apache.arrow.vector.types.pojo.ArrowType.Utf8.INSTANCE as UTF8_TYPE
 
 internal fun Any.unsupported(op: String): Nothing =
     throw UnsupportedOperationException("$op unsupported on ${this::class.simpleName}")
@@ -40,7 +39,7 @@ sealed class Vector : VectorReader, VectorWriter {
             fieldType = fieldType.withNullable(value)
         }
 
-    abstract var fieldType: FieldType; internal set
+    abstract override var fieldType: FieldType; internal set
     abstract val children: Iterable<Vector>
 
     final override val field: Field get() = Field(name, fieldType, children.map { it.field })
@@ -117,7 +116,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 }
 
                 override fun visit(type: FloatingPoint) = when (type.precision!!) {
-                    HALF -> TODO("half precision not supported")
+                    HALF -> error("half precision not supported")
                     SINGLE -> FloatVector(al, name, isNullable)
                     DOUBLE -> DoubleVector(al, name, isNullable)
                 }

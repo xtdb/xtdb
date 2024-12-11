@@ -11,7 +11,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.ValueReader
 import xtdb.types.RegClass
 import xtdb.vector.ExtensionVectorWriter
-import xtdb.vector.InvalidWriteObjectException
+import xtdb.arrow.InvalidWriteObjectException
 import xtdb.vector.ValueVectorReader
 
 class RegClassVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
@@ -41,7 +41,7 @@ internal class RegClassReader(vec: RegClassVector): ValueVectorReader(vec) {
 
 internal class RegClassWriter(vector: RegClassVector) : ExtensionVectorWriter(vector, null) {
     override fun writeObject0(obj: Any) =
-        if (obj !is RegClass) throw InvalidWriteObjectException(field, obj)
+        if (obj !is RegClass) throw InvalidWriteObjectException(field.fieldType, obj)
         else super.writeObject0(obj.oid)
 
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())

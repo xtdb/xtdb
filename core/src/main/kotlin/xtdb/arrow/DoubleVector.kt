@@ -16,6 +16,6 @@ class DoubleVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getDouble(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Double) writeDouble(value) else TODO("not a Double")
+        if (value is Double) writeDouble(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 }

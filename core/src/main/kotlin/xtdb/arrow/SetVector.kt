@@ -8,6 +8,6 @@ class SetVector(override val inner: ListVector) : ExtensionVector(SetType) {
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn).toSet()
 
     override fun writeObject0(value: Any) =
-        if (value !is Set<*>) TODO("promotion ${value::class.simpleName}")
+        if (value !is Set<*>) throw InvalidWriteObjectException(fieldType, value)
         else inner.writeObject(value.toList())
 }

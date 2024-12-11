@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toLeg
 import xtdb.util.requiringResolve
@@ -23,13 +24,15 @@ class MultiVectorReader(
     private val legReaders = ConcurrentHashMap<String, VectorReader>()
     override val nullable get() = this.field.isNullable
 
+    companion object {
+        private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
+    }
+
     override val field by lazy(LazyThreadSafetyMode.PUBLICATION) {
         MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field
     }
 
-    companion object {
-        private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
-    }
+    override val fieldType: FieldType get() = this.field.fieldType
 
     init {
         assert(readers.any { it != null })

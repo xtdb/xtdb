@@ -29,6 +29,6 @@ class DurationVector(
 
     override fun writeObject0(value: Any) = when (value) {
         is Duration -> writeLong(unit.toLong(value.seconds, value.nano))
-        else -> TODO("unknown type: ${value::class.simpleName}")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 }

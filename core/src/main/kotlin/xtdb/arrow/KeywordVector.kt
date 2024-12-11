@@ -10,6 +10,6 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector(KeywordType
 
     override fun writeObject0(value: Any) = when(value) {
         is Keyword -> inner.writeObject(value.sym.toString())
-        else -> TODO("promotion")
+        else -> throw InvalidWriteObjectException(fieldType, value)
     }
 }
