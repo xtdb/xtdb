@@ -180,7 +180,7 @@
             ;; spill remaining rows
             (when (pos? (.getRowCount out-rel))
               (.writeBatch out-unl))
-            (.endFile out-unl)
+            (.end out-unl)
             out-file))))))
 
 (def ^:private k-way-constant 4)

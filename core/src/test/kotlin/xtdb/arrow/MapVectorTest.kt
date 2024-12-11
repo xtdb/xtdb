@@ -87,7 +87,7 @@ class MapVectorTest {
                 rel.endRow()
 
                 unloader.writeBatch()
-                unloader.endFile()
+                unloader.end()
             }
         }
 

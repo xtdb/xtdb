@@ -116,7 +116,7 @@
           (writeBatch [_] (.writeBatch unl))
 
           (end [_]
-            (.endFile unl)
+            (.end unl)
             (.close write-ch)
             (.putObject this k (ByteBuffer/wrap (.toByteArray baos))))
 
@@ -246,7 +246,7 @@
                 (throw (InterruptedException.)))))
 
           (end [_]
-            (.endFile unl)
+            (.end unl)
             (.close file-ch)
 
             (let [file-path (.resolve disk-store k)]
@@ -447,7 +447,7 @@
           (writeBatch [_] (.writeBatch unl))
 
           (end [_]
-            (.endFile unl)
+            (.end unl)
             (.close file-ch)
 
             (upload-arrow-file allocator object-store k tmp-path)

@@ -3,7 +3,8 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation.Companion.loader
@@ -12,7 +13,6 @@ import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import java.util.LinkedHashMap
 
 class StructVectorTest {
     private lateinit var allocator: BufferAllocator
@@ -141,7 +141,7 @@ class StructVectorTest {
 
                     unloader.writeBatch()
 
-                    unloader.endFile()
+                    unloader.end()
                 }
         }
 

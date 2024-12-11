@@ -109,10 +109,10 @@
 (defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]
     (try
-      (with-open [allocator (RootAllocator.)
-                  in-ch (util/->seekable-byte-channel buf)
-                  file-reader (ArrowStreamReader. in-ch allocator)
-                  file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]
+      (util/with-open [allocator (RootAllocator.)
+                       in-ch (util/->seekable-byte-channel buf)
+                       file-reader (ArrowStreamReader. in-ch allocator)
+                       file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]
         (let [root (.getVectorSchemaRoot file-reader)]
           (.start file-writer (.getSchema root) nil)
           (while (.loadNextBatch file-reader)

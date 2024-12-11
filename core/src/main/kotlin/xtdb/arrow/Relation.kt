@@ -14,8 +14,12 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.arrow.Relation.UnloadMode.FILE
+import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
@@ -63,7 +67,40 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         rowCount = root.rowCount
     }
 
-    inner class RelationUnloader(private val ch: WriteChannel) : AutoCloseable {
+    enum class UnloadMode {
+        STREAM {
+            override fun start(ch: WriteChannel) {
+            }
+
+            override fun end(ch: WriteChannel, schema: Schema, recordBlocks: MutableList<ArrowBlock>) {
+                ch.writeIntLittleEndian(0)
+            }
+        },
+
+        FILE {
+            override fun start(ch: WriteChannel) {
+                ch.write(MAGIC)
+                ch.align()
+            }
+
+            override fun end(ch: WriteChannel, schema: Schema, recordBlocks: MutableList<ArrowBlock>) {
+                STREAM.end(ch, schema, recordBlocks)
+
+                val footerStart = ch.currentPosition
+                ch.write(ArrowFooter(schema, emptyList(), recordBlocks), false)
+
+                val footerLength = ch.currentPosition - footerStart
+                check(footerLength > 0) { "Footer length must be positive" }
+                ch.writeIntLittleEndian(footerLength.toInt())
+                ch.write(MAGIC)
+            }
+        };
+
+        abstract fun start(ch: WriteChannel)
+        abstract fun end(ch: WriteChannel, schema: Schema, recordBlocks: MutableList<ArrowBlock>)
+    }
+
+    inner class RelationUnloader(private val ch: WriteChannel, private val mode: UnloadMode) : AutoCloseable {
 
         private val vectors = this@Relation.vectors.values
         private val schema = Schema(vectors.map { it.field })
@@ -71,8 +108,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
         init {
             try {
-                ch.write(MAGIC)
-                ch.align()
+                mode.start(ch)
                 MessageSerializer.serialize(ch, schema)
             } catch (_: ClosedByInterruptException) {
                 throw InterruptedException()
@@ -95,29 +131,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             }
         }
 
-        fun endStream() {
-            try {
-                ch.writeIntLittleEndian(MessageSerializer.IPC_CONTINUATION_TOKEN)
-                ch.writeIntLittleEndian(0)
-            } catch (_: ClosedByInterruptException) {
-                throw InterruptedException()
-            }
-        }
-
-        fun endFile() {
-            try {
-                endStream()
-
-                val footerStart = ch.currentPosition
-                ch.write(ArrowFooter(schema, emptyList(), recordBlocks), false)
-
-                val footerLength = ch.currentPosition - footerStart
-                check(footerLength > 0) { "Footer length must be positive" }
-                ch.writeIntLittleEndian(footerLength.toInt())
-                ch.write(MAGIC)
-            } catch (_: ClosedByInterruptException) {
-                throw InterruptedException()
-            }
+        fun end() {
+            mode.end(ch, schema, recordBlocks)
         }
 
         override fun close() {
@@ -125,7 +140,19 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         }
     }
 
-    fun startUnload(ch: WritableByteChannel): RelationUnloader = RelationUnloader(WriteChannel(ch))
+    @JvmOverloads
+    fun startUnload(ch: WritableByteChannel, mode: UnloadMode = FILE) =
+        RelationUnloader(WriteChannel(ch), mode)
+
+    val asArrowStream: ByteBuffer
+        get() {
+            val baos = ByteArrayOutputStream()
+            startUnload(Channels.newChannel(baos), STREAM).use { unl ->
+                unl.writeBatch()
+            }
+
+            return ByteBuffer.wrap(baos.toByteArray())
+        }
 
     private fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
@@ -195,8 +222,10 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
 
             override fun load(rel: Relation) {
-                ArrowUtil.arrowBufToRecordBatch(buf, block.offset, block.metadataLength, block.bodyLength,
-                    "Failed to deserialize record batch $idx, offset ${block.offset}")
+                ArrowUtil.arrowBufToRecordBatch(
+                    buf, block.offset, block.metadataLength, block.bodyLength,
+                    "Failed to deserialize record batch $idx, offset ${block.offset}"
+                )
                     .use { batch -> rel.load(batch) }
             }
         }
@@ -263,7 +292,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         @JvmStatic
         fun loader(buf: ArrowBuf): Loader {
             buf.referenceManager.retain()
-            
+
             try {
                 return BufferLoader(buf, readFooter(buf))
             } catch (e: Throwable) {
@@ -281,7 +310,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         fun fromRoot(vsr: VectorSchemaRoot) = Relation(vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
 
         @JvmStatic
-        fun fromRecordBatch (allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch) : Relation {
+        fun fromRecordBatch(allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch): Relation {
             val rel = Relation(allocator, schema)
             // this load retains the buffers
             rel.load(recordBatch)

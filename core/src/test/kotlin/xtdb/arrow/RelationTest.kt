@@ -72,7 +72,7 @@ class RelationTest {
 
                         unloader.writeBatch()
 
-                        unloader.endFile()
+                        unloader.end()
                     }
             }
         }
@@ -137,7 +137,7 @@ class RelationTest {
 
                     unloader.writeBatch()
 
-                    unloader.endFile()
+                    unloader.end()
                 }
         }
 
@@ -195,7 +195,7 @@ class RelationTest {
         Relation(listOf(duv), duv.valueCount).use { rel ->
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
                 unloader.writeBatch()
-                unloader.endFile()
+                unloader.end()
             }
         }
 
