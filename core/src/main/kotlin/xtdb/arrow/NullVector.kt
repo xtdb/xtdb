@@ -9,11 +9,17 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
+internal val NULL_TYPE = ArrowType.Null.INSTANCE
+
 class NullVector(override var name: String) : Vector() {
-    override var fieldType: FieldType = FieldType.nullable(ArrowType.Null.INSTANCE)
+    override var fieldType: FieldType = FieldType.nullable(NULL_TYPE)
     override val children = emptyList<Vector>()
 
     override fun isNull(idx: Int) = true
+
+    override fun writeUndefined() {
+        valueCount++
+    }
 
     override fun writeNull() {
         valueCount++
@@ -21,7 +27,7 @@ class NullVector(override var name: String) : Vector() {
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = error("NullVector getObject0")
 
-    override fun writeObject0(value: Any) = error("NullVector writeObject0")
+    override fun writeObject0(value: Any) = throw InvalidWriteObjectException(fieldType, value)
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = error("hashCode0 called on NullVector")
 

@@ -55,7 +55,7 @@
       "children" : [ ]
     },{
       "name" : "default-tz",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "utf8"
       },
@@ -108,7 +108,7 @@
     },{
       "name" : "default-tz",
       "count" : 1,
-      "VALIDITY" : [1],
+      "VALIDITY" : [0],
       "OFFSET" : [0,0],
       "DATA" : [""]
     },{

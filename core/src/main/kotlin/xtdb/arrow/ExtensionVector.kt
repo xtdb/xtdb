@@ -19,9 +19,9 @@ abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
         }
 
     final override var fieldType
-        get() = inner.fieldType.withArrowType(arrowType)
+        get() = inner.fieldType.copy(type = arrowType)
         set(value) {
-            inner.fieldType = value.withArrowType(inner.fieldType.type)
+            inner.fieldType = value.copy(type = inner.fieldType.type)
         }
 
     final override val children get() = inner.children
@@ -33,6 +33,7 @@ abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
         }
 
     override fun isNull(idx: Int) = inner.isNull(idx)
+    override fun writeUndefined() = inner.writeUndefined()
     override fun writeNull() = inner.writeNull()
 
     override fun getBytes(idx: Int): ByteBuffer = inner.getBytes(idx)

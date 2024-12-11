@@ -4,11 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
 
+internal val I32_TYPE = MinorType.INT.type
+
 class IntVector(
     allocator: BufferAllocator,
     override var name: String,
     nullable: Boolean
-) : FixedWidthVector(allocator, nullable, MinorType.INT.type, Int.SIZE_BYTES) {
+) : FixedWidthVector(allocator, nullable, I32_TYPE, Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)

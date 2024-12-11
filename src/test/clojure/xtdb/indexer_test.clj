@@ -18,12 +18,10 @@
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration InstantSource)
-           [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
            xtdb.IBufferPool
-           (xtdb.metadata IMetadataManager)
-           (xtdb.watermark IWatermarkSource)))
+           (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
@@ -75,7 +73,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4757)
+  4749)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]

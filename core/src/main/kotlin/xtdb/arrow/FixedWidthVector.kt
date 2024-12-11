@@ -34,9 +34,14 @@ sealed class FixedWidthVector(
 
     final override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
-    final override fun writeNull() {
+    final override fun writeUndefined() {
         if (byteWidth == 0) dataBuffer.writeBit(valueCount, 0) else dataBuffer.writeZero(byteWidth)
         validityBuffer.writeBit(valueCount++, 0)
+    }
+
+    final override fun writeNull() {
+        if (!nullable) nullable = true
+        writeUndefined()
     }
 
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)

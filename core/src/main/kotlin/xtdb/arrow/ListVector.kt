@@ -6,11 +6,15 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.toFieldType
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
+
+internal val LIST_TYPE = ArrowType.List.INSTANCE
 
 class ListVector(
     private val allocator: BufferAllocator,
@@ -37,7 +41,7 @@ class ListVector(
         lastOffset = newOffset
     }
 
-    override fun writeNull() {
+    override fun writeUndefined() {
         writeOffset(lastOffset)
         validityBuffer.writeBit(valueCount++, 0)
     }
@@ -57,7 +61,15 @@ class ListVector(
     override fun writeObject0(value: Any) = when (value) {
         is List<*> -> {
             writeNotNull(value.size)
-            value.forEach { elVector.writeObject(it) }
+
+            value.forEach { el ->
+                try {
+                    elVector.writeObject(el)
+                } catch (e: InvalidWriteObjectException) {
+                    elVector = DenseUnionVector.promote(allocator, elVector, e.obj.toFieldType())
+                    elVector.writeObject(el)
+                }
+            }
         }
 
         else -> throw InvalidWriteObjectException(fieldType, value)
@@ -71,7 +83,7 @@ class ListVector(
             elVector.field.fieldType == fieldType -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                fromField(allocator, Field("els", fieldType, emptyList())).also { elVector = it }
+                fromField(allocator, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
 
             else -> TODO("promote elVector")
         }

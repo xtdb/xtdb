@@ -10,9 +10,12 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.toFieldType
 import xtdb.toLeg
 import java.nio.ByteBuffer
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
+
+internal val UNION_TYPE = ArrowType.Union(Dense, null)
 
 class DenseUnionVector(
     private val allocator: BufferAllocator,
@@ -20,10 +23,29 @@ class DenseUnionVector(
     legVectors: List<Vector>
 ) : Vector() {
 
+    companion object {
+        internal fun promote(al: BufferAllocator, vector: Vector, target: FieldType) =
+            if (vector is NullVector)
+                fromField(al, Field(vector.name, target, emptyList()))
+                    .also { newVec -> repeat(vector.valueCount) { newVec.writeNull() } }
+            else
+                DenseUnionVector(al, vector.name, listOf(vector))
+                    .apply {
+                        vector.name = vector.fieldType.type.toLeg()
+
+                        valueCount = vector.valueCount
+                        repeat(vector.valueCount) { idx ->
+                            typeBuffer.writeByte(0)
+                            offsetBuffer.writeInt(idx)
+                        }
+                    }
+    }
+
     private val legVectors = legVectors.toMutableList()
 
-    override var fieldType: FieldType =
-        FieldType(false, ArrowType.Union(Dense, IntArray(legVectors.size) { it }), null)
+    private val fieldType0 get() = FieldType(false, UNION_TYPE, null)
+
+    override var fieldType = fieldType0
 
     override val children: Iterable<Vector> get() = legVectors
 
@@ -69,10 +91,8 @@ class DenseUnionVector(
         override fun close() = Unit
     }
 
-    inner class LegWriter(
-        private val typeId: Byte,
-        val inner: Vector
-    ) : VectorReader by LegReader(typeId, inner), VectorWriter {
+    inner class LegWriter(private val typeId: Byte, val inner: Vector) :
+        VectorReader by LegReader(typeId, inner), VectorWriter {
 
         private fun writeValueThen(): Vector {
             typeBuffer.writeByte(typeId)
@@ -81,22 +101,17 @@ class DenseUnionVector(
             return inner
         }
 
+        override fun writeUndefined() = writeValueThen().writeUndefined()
         override fun writeNull() = writeValueThen().writeNull()
 
         override fun writeByte(value: Byte) = writeValueThen().writeByte(value)
-
         override fun writeShort(value: Short) = writeValueThen().writeShort(value)
-
         override fun writeInt(value: Int) = writeValueThen().writeInt(value)
-
         override fun writeLong(value: Long) = writeValueThen().writeLong(value)
-
         override fun writeFloat(value: Float) = writeValueThen().writeFloat(value)
-
         override fun writeDouble(value: Double) = writeValueThen().writeDouble(value)
 
         override fun writeBytes(buf: ByteBuffer) = writeValueThen().writeBytes(buf)
-
         override fun writeObject(value: Any?) = writeValueThen().writeObject(value)
 
         override fun keyWriter(name: String) = inner.keyWriter(name)
@@ -136,9 +151,15 @@ class DenseUnionVector(
         valueCount++
     }
 
+    override fun writeNull() {
+        legWriter(FieldType.nullable(NULL_TYPE)).writeNull()
+    }
+
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = leg(idx)?.getObject(getOffset(idx), keyFn)
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
-    override fun writeObject0(value: Any) = throw UnsupportedOperationException()
+
+    override fun writeObject0(value: Any) =
+        value.toFieldType().let(::legWriter).writeObject(value)
 
     override fun getLeg(idx: Int) = leg(idx)?.name
 
@@ -174,11 +195,13 @@ class DenseUnionVector(
             }
         }
 
-        return LegWriter(
-            legVectors.size.toByte(),
-            fromField(allocator, Field(name, fieldType, emptyList())).also { legVectors.add(it) }
-        )
+        val typeId = legVectors.size.toByte()
+        val legVec = fromField(allocator, Field(name, fieldType, emptyList())).also { legVectors.add(it) }
+        this.fieldType = fieldType0
+        return LegWriter(typeId, legVec)
     }
+
+    private fun legWriter(fieldType: FieldType) = legWriter(fieldType.type.toLeg(), fieldType)
 
     override fun valueReader(pos: VectorPosition): ValueReader {
         val legReaders = legVectors
@@ -205,7 +228,7 @@ class DenseUnionVector(
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
-    override fun rowCopier0(src: VectorReader) : RowCopier =
+    override fun rowCopier0(src: VectorReader): RowCopier =
         when (src) {
             is DenseUnionVector -> {
                 val copierMapping = src.legVectors.map { childVec ->

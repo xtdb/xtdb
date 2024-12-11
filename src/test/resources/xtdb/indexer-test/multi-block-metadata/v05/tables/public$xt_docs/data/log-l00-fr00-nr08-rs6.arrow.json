@@ -41,7 +41,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1,2]
+        "typeIds" : [ ]
       },
       "children" : [{
         "name" : "put",
@@ -61,7 +61,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [0,1]
+              "typeIds" : [ ]
             },
             "children" : [{
               "name" : "i64",
@@ -86,7 +86,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [0,1]
+              "typeIds" : [ ]
             },
             "children" : [{
               "name" : "utf8",
@@ -124,7 +124,7 @@
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [0,1,2]
+            "typeIds" : [ ]
           },
           "children" : [{
             "name" : "utf8",
@@ -169,7 +169,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [0,1,2,3]
+              "typeIds" : [ ]
             },
             "children" : [{
               "name" : "f64",

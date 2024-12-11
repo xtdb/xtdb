@@ -7,16 +7,17 @@ import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
 class FixedSizeListVector(
-    allocator: BufferAllocator,
+    private val allocator: BufferAllocator,
     override var name: String,
     nullable: Boolean,
     private val listSize: Int,
-    private val elVector: Vector
+    private var elVector: Vector
 ) : Vector() {
 
     override var fieldType: FieldType = FieldType(nullable, ArrowType.FixedSizeList(listSize), null)
@@ -27,9 +28,14 @@ class FixedSizeListVector(
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
-    override fun writeNull() {
+    override fun writeUndefined() {
         validityBuffer.writeBit(valueCount++, 0)
         repeat(listSize) { elVector.writeUndefined() }
+    }
+
+    override fun writeNull() {
+        if (!nullable) nullable = true
+        writeUndefined()
     }
 
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
@@ -49,7 +55,18 @@ class FixedSizeListVector(
     }
 
     override fun elementReader() = elVector
+
     override fun elementWriter() = elVector
+
+    override fun elementWriter(fieldType: FieldType): VectorWriter =
+        when {
+            elVector.field.fieldType == fieldType -> elVector
+
+            elVector is NullVector && elVector.valueCount == 0 ->
+                fromField(allocator, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
+
+            else -> TODO("promote elVector")
+        }
 
     override fun getListCount(idx: Int) = listSize
     override fun getListStartIndex(idx: Int) = idx * listSize

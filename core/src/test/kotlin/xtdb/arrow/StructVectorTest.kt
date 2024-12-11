@@ -2,6 +2,8 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -220,6 +222,71 @@ class StructVectorTest {
                     mapOf("i32" to 2),
                 ),
                 structVec.asList
+            )
+        }
+    }
+
+    @Test
+    fun `can add keys to a struct`() {
+        StructVector(allocator, "struct", false).use { structVec ->
+            val els = listOf(
+                mapOf("i32" to 4),
+                mapOf("i32" to 8, "utf8" to "Hello"),
+                mapOf("utf8" to "World")
+            )
+            structVec.writeObject(els[0])
+            structVec.writeObject(els[1])
+            structVec.writeObject(els[2])
+
+            assertEquals(els, structVec.asList)
+
+            assertEquals(
+                Field("struct", FieldType(false, STRUCT_TYPE, null), listOf(
+                    Field("i32", FieldType(true, I32_TYPE, null), emptyList()),
+                    Field("utf8", FieldType(true, UTF8_TYPE, null), emptyList())
+                )),
+                structVec.field
+            )
+        }
+    }
+
+    @Test
+    fun `writing null to struct doesn't make the underlying vectors nullable`() {
+        StructVector(allocator, "struct", false).use { structVec ->
+            structVec.writeObject(mapOf("i32" to 4, "utf8" to "Hello"))
+            structVec.writeNull()
+
+            assertEquals(
+                listOf(mapOf("i32" to 4, "utf8" to "Hello"), null),
+                structVec.asList
+            )
+
+            assertEquals(
+                Field("struct", FieldType(true, STRUCT_TYPE, null), listOf(
+                    Field("i32", FieldType(false, I32_TYPE, null), emptyList()),
+                    Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
+                )),
+                structVec.field
+            )
+        }
+    }
+
+    @Test
+    fun `promoting a struct key to a union`() {
+        StructVector(allocator, "struct", false).use { structVec ->
+            val els = listOf(mapOf("a" to 4), mapOf("a" to "Hello"))
+                .onEach(structVec::writeObject)
+
+            assertEquals(els, structVec.asList)
+
+            assertEquals(
+                Field("struct", FieldType(false, STRUCT_TYPE, null), listOf(
+                    Field("a", FieldType(false, UNION_TYPE, null), listOf(
+                        Field("i32", FieldType(false, I32_TYPE, null), emptyList()),
+                        Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
+                    ))
+                )),
+                structVec.field
             )
         }
     }
