@@ -1,5 +1,6 @@
 (ns xtdb.bench.ingest-tx-overhead
-  (:require [next.jdbc :as jdbc]
+  (:require [clojure.tools.logging :as log]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.bench :as bench]
             [xtdb.node :as xtn]
@@ -15,9 +16,13 @@
 (extend-protocol DoIngest
   Connection
   (do-ingest [conn table ^long doc-count ^long per-batch]
-    (with-open [ps (jdbc/prepare conn [(format "INSERT INTO %s (id) VALUES (?)" (name table))])]
+    (with-open [ps (jdbc/prepare conn [(format "INSERT INTO %s (_id) VALUES (?)" (name table))])]
       (doseq [batch (partition-all per-batch (range doc-count))]
+        (when (zero? (mod (first batch) 1000))
+          (log/trace :done (first batch)))
+
         (when (Thread/interrupted) (throw (InterruptedException.)))
+
         (jdbc/execute-batch! ps (mapv vector batch))))
 
     (let [{actual :doc_count} (jdbc/execute-one! conn [(format "SELECT COUNT(*) doc_count FROM %s" (name table))])]
@@ -28,6 +33,10 @@
   (do-ingest [node table ^long doc-count ^long per-batch]
     (doseq [batch (partition-all per-batch (range doc-count))]
       (when (Thread/interrupted) (throw (InterruptedException.)))
+
+      (when (zero? (mod (first batch) 1000))
+        (log/trace :done (first batch)))
+
       (xt/submit-tx node
                     [(into [:put-docs table]
                            (map (fn [idx]
@@ -64,15 +73,19 @@
                (filter (comp batch-sizes :batch-size)))})
 
 (comment
-  (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000 100 10 1}})
+  (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000}})
                                    @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
-    (with-open [^AutoCloseable
+    (with-open [in-mem (xtn/start-node {:server {:port 0}})
+
+                ^AutoCloseable
                 node (case :xt-memory
                        :xt-memory (xtn/start-node {:server {:port 0}})
 
                        :xt-local (let [path (util/->path "/tmp/xt-tx-overhead-bench")]
                                    (util/delete-dir path)
                                    (tu/->local-node {:node-dir path}))
+
+                       :xt-conn (jdbc/get-connection in-mem)
 
                        :pg-conn (jdbc/get-connection {:dbtype "postgresql"
                                                       :dbname "postgres"
