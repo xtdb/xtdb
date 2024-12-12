@@ -1209,24 +1209,36 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       to.typeBuffer = refManager.transferOwnership(slicedBuffer, to.allocator).getTransferredBuffer();
 
       // transfer offset buffer
-      while (to.offsetBuffer.capacity() < (long) length * OFFSET_WIDTH) {
-        to.reallocOffsetBuffer();
-      }
-
-      int [] typeCounts = new int[Byte.MAX_VALUE + 1];
+      int [] typeCounts;
       int [] typeStarts = new int[Byte.MAX_VALUE + 1];
-      for (int i = 0; i < typeCounts.length; i++) {
-        typeCounts[i] = 0;
-        typeStarts[i] = -1;
-      }
 
-      for (int i = startIndex; i < startIndex + length; i++) {
-        byte typeId = typeBuffer.getByte(i);
-        if (typeId >= 0) {
-          to.offsetBuffer.setInt((long) (i - startIndex) * OFFSET_WIDTH, typeCounts[typeId]);
-          typeCounts[typeId] += 1;
-          if (typeStarts[typeId] == -1) {
-            typeStarts[typeId] = offsetBuffer.getInt((long) i * OFFSET_WIDTH);
+      if (startIndex == 0 && length == valueCount) {
+        // transferring the whole vector, skip the offset mapping
+        int[] srcTypeCounts = DenseUnionVector.this.typeCounts;
+        typeCounts = Arrays.copyOf(srcTypeCounts, srcTypeCounts.length);
+
+        ArrowBuf slicedOffsetBuffer = offsetBuffer.slice(0, (long) length * OFFSET_WIDTH);
+        ReferenceManager offsetRefManager = slicedOffsetBuffer.getReferenceManager();
+        to.offsetBuffer = offsetRefManager.transferOwnership(slicedOffsetBuffer, to.allocator).getTransferredBuffer();
+      } else {
+        typeCounts = new int[Byte.MAX_VALUE + 1];
+
+        for (int i = 0; i < typeCounts.length; i++) {
+          typeStarts[i] = -1;
+        }
+
+        while (to.offsetBuffer.capacity() < (long) length * OFFSET_WIDTH) {
+          to.reallocOffsetBuffer();
+        }
+
+        for (int i = startIndex; i < startIndex + length; i++) {
+          byte typeId = typeBuffer.getByte(i);
+          if (typeId >= 0) {
+            to.offsetBuffer.setInt((long) (i - startIndex) * OFFSET_WIDTH, typeCounts[typeId]);
+            typeCounts[typeId] += 1;
+            if (typeStarts[typeId] == -1) {
+              typeStarts[typeId] = offsetBuffer.getInt((long) i * OFFSET_WIDTH);
+            }
           }
         }
       }
@@ -1236,8 +1248,9 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
         byte typeId = typeMapFields[i];
         if (typeCounts[typeId] > 0 && typeStarts[typeId] != -1) {
           internalTransferPairs[i].splitAndTransfer(typeStarts[typeId], typeCounts[typeId]);
-          to.childVectors[typeId] = internalTransferPairs[i].getTo();
         }
+
+        to.childVectors[typeId] = internalTransferPairs[i].getTo();
       }
       to.typeCounts = typeCounts;
       to.nextTypeId = nextTypeId;
