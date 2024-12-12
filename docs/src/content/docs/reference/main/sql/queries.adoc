@@ -25,7 +25,7 @@ const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
 const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
 
 const defaultTimePeriods = rr.Sequence("DEFAULT", rr.Choice(0, "VALID_TIME", "SYSTEM_TIME"), rr.Optional("TO", "skip"), timePeriodOpts)
-const basis = rr.Sequence(rr.Choice(0, "BASIS", "CURRENT_TIME"), rr.Choice(0, "TO", "="), "<timestamp>")
+const basis = rr.Sequence(rr.Choice(0, "SNAPSHOT_TIME", "CURRENT_TIME"), rr.Choice(0, "TO", "="), "<timestamp>")
 const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Choice(0, defaultTimePeriods, basis), ","))
 return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
 ----
