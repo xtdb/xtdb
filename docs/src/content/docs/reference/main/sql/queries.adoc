@@ -79,7 +79,21 @@ NB:
 === <select clause>
 [railroad]
 ----
-return rr.Diagram("SELECT", rr.OneOrMore(rr.Sequence("<value>", rr.Optional(rr.Sequence(rr.Optional("AS", "skip"), "<column name>"), "skip")), ","))
+return rr.Diagram("SELECT", rr.OneOrMore(rr.Choice(0, rr.Skip(), rr.Sequence('*', rr.Optional('<star exclude>', 'skip'), rr.Optional('<star rename>', 'skip')), rr.Sequence("<value>", rr.Optional(rr.Sequence(rr.Optional("AS", "skip"), "<column name>"), 'skip'))), ","))
+----
+
+==== <star exclude>
+[railroad]
+----
+return rr.Diagram(rr.Sequence('EXCLUDE', rr.Choice(0, '<column name>', rr.Sequence('(', rr.OneOrMore('<column name>', ','), ')'))))
+----
+
+==== <star rename>
+
+[railroad]
+----
+const renameCol = rr.Sequence('<column name>', 'AS', '<column name>')
+return rr.Diagram('RENAME', rr.Choice(0, renameCol, rr.Sequence('(', rr.OneOrMore(renameCol, ','), ')')))
 ----
 
 == From clause, joins
@@ -87,8 +101,8 @@ return rr.Diagram("SELECT", rr.OneOrMore(rr.Sequence("<value>", rr.Optional(rr.S
 === <from clause>
 [railroad]
 ----
-const tableRef = "<relation>"
-return rr.Diagram("FROM", rr.OneOrMore(tableRef, ","))
+const tableProjection = rr.Optional(rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")"), "skip")
+return rr.Diagram("FROM", rr.OneOrMore(rr.Sequence("<relation>", tableProjection), ","))
 ----
 
 === <relation>
@@ -111,8 +125,7 @@ const lateral = rr.Sequence("LATERAL", subquery)
 const unnest = rr.Sequence("UNNEST", "(", "<value>", ")", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
 const subqs = rr.Sequence(rr.Choice(0, subquery, lateral, unnest), tableAlias)
 
-const tableProjection = rr.Optional(rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")"), "skip")
-return rr.Diagram(rr.Stack(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs), tableProjection))
+return rr.Diagram(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs))
 ----
 
 === <temporal filter>
@@ -155,7 +168,7 @@ const wrapped = rr.Sequence("(", "<value>", ")")
 
 const subqs = rr.Sequence(rr.Choice(0, rr.Skip(), "NEST_ONE", "NEST_MANY"), "(", "<query>", ")")
 
-return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp, fn, wfn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, "<object>", subqs, wrapped))
+return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp, fn, wfn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, "<record>", subqs, wrapped))
 ----
 
 === <param>
@@ -164,12 +177,12 @@ return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp
 return rr.Diagram(rr.Choice(0, "?", "$<param idx>"))
 ----
 
-=== <object>
+=== <record>
 [railroad]
 ----
 const objectEntries = rr.ZeroOrMore(rr.Sequence("<field name>", ":", "<value>"), ",", "skip")
 const objectBraceConstructor = rr.Sequence("{", objectEntries, "}")
-const objectFnConstructor = rr.Sequence("OBJECT", "(", objectEntries, ")")
+const objectFnConstructor = rr.Sequence(rr.Choice(0, "RECORD", "OBJECT"), "(", objectEntries, ")")
 
 return rr.Diagram(rr.Choice(0, objectBraceConstructor, objectFnConstructor))
 ----
