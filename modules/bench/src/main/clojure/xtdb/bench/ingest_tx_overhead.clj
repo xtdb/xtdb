@@ -1,47 +1,83 @@
 (ns xtdb.bench.ingest-tx-overhead
-  (:require [xtdb.api :as xt]
+  (:require [next.jdbc :as jdbc]
+            [xtdb.api :as xt]
             [xtdb.bench :as bench]
-            [xtdb.node :as xtn]))
+            [xtdb.node :as xtn]
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
+  (:import [java.lang AutoCloseable]
+           [java.sql Connection]
+           [xtdb.api Xtdb]))
 
-(defn benchmark [{:keys [seed doc-count], :or {seed 0, doc-count 100000}}]
-  (letfn [(do-ingest [node table ^long per-batch]
-            (doseq [batch (partition-all per-batch (range doc-count))]
-              (xt/submit-tx node
-                            [(into [:put-docs table]
-                                   (map (fn [idx]
-                                          {:xt/id idx}))
-                                   batch)]))
+(defprotocol DoIngest
+  (do-ingest [this table doc-count per-batch]))
 
-            (let [[{actual :doc-count}] (xt/q node (format "SELECT COUNT(*) doc_count FROM %s" (name table)))]
-              (assert (= actual doc-count)
-                      (format "failed for %s: expected: %d, got: %d" (name table) doc-count actual))))]
+(extend-protocol DoIngest
+  Connection
+  (do-ingest [conn table ^long doc-count ^long per-batch]
+    (with-open [ps (jdbc/prepare conn [(format "INSERT INTO %s (id) VALUES (?)" (name table))])]
+      (doseq [batch (partition-all per-batch (range doc-count))]
+        (when (Thread/interrupted) (throw (InterruptedException.)))
+        (jdbc/execute-batch! ps (mapv vector batch))))
 
-    {:title "Ingest batch vs individual"
-     :seed seed
-     :tasks [{:t :call
-              :stage :ingest-batch-1000
-              :f (fn [{node :sut}]
-                   (do-ingest node :batched_1000 1000))}
+    (let [{actual :doc_count} (jdbc/execute-one! conn [(format "SELECT COUNT(*) doc_count FROM %s" (name table))])]
+      (assert (= actual doc-count)
+              (format "failed for %s: expected: %d, got: %d" (name table) doc-count actual))))
 
-             {:t :call
-              :stage :ingest-batch-100
-              :f (fn [{node :sut}]
-                   (do-ingest node :batched_100 100))}
+  Xtdb
+  (do-ingest [node table ^long doc-count ^long per-batch]
+    (doseq [batch (partition-all per-batch (range doc-count))]
+      (when (Thread/interrupted) (throw (InterruptedException.)))
+      (xt/submit-tx node
+                    [(into [:put-docs table]
+                           (map (fn [idx]
+                                  {:xt/id idx}))
+                           batch)]))))
 
-             {:t :call
-              :stage :ingest-batch-10
-              :f (fn [{node :sut}]
-                   (do-ingest node :batched_10 10))}
+(defn benchmark [{:keys [seed doc-count batch-sizes], :or {seed 0, doc-count 100000, batch-sizes #{1000 100 10 1}}}]
+  {:title "Ingest batch vs individual"
+   :seed seed
+   :tasks (->> [{:t :call
+                 :batch-size 1000
+                 :stage :ingest-batch-1000
+                 :f (fn [{node :sut}]
+                      (do-ingest node :batched_1000 doc-count 1000))}
 
-             {:t :call
-              :stage :ingest-batch-1
-              :f (fn [{node :sut}]
-                   (do-ingest node :batched_1 1))}]}))
+                {:t :call
+                 :batch-size 100
+                 :stage :ingest-batch-100
+                 :f (fn [{node :sut}]
+                      (do-ingest node :batched_100 doc-count 100))}
+
+                {:t :call
+                 :batch-size 10
+                 :stage :ingest-batch-10
+                 :f (fn [{node :sut}]
+                      (do-ingest node :batched_10 doc-count 10))}
+
+                {:t :call
+                 :batch-size 1
+                 :stage :ingest-batch-1
+                 :f (fn [{node :sut}]
+                      (do-ingest node :batched_1 doc-count 1))}]
+
+               (filter (comp batch-sizes :batch-size)))})
 
 (comment
-  (let [f (bench/compile-benchmark (benchmark {})
+  (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000 100 10 1}})
                                    @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
-    (with-open [node (xtn/start-node {:server {:port 0}})]
+    (with-open [^AutoCloseable
+                node (case :xt-memory
+                       :xt-memory (xtn/start-node {:server {:port 0}})
+
+                       :xt-local (let [path (util/->path "/tmp/xt-tx-overhead-bench")]
+                                   (util/delete-dir path)
+                                   (tu/->local-node {:node-dir path}))
+
+                       :pg-conn (jdbc/get-connection {:dbtype "postgresql"
+                                                      :dbname "postgres"
+                                                      :user "postgres"
+                                                      :password "postgres"}))]
       (f node))
 
     #_
