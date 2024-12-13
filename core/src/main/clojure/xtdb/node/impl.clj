@@ -176,7 +176,7 @@
           :authn (ig/ref :xtdb/authn)}
          opts))
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry, ^IIndexer indexer] :as deps}]
+(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
   (let [node (map->Node (-> deps
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))))]

@@ -23,7 +23,8 @@
 
         (when (Thread/interrupted) (throw (InterruptedException.)))
 
-        (jdbc/execute-batch! ps (mapv vector batch))))
+        (jdbc/with-transaction [_ conn]
+          (jdbc/execute-batch! ps (mapv vector batch)))))
 
     (let [{actual :doc_count} (jdbc/execute-one! conn [(format "SELECT COUNT(*) doc_count FROM %s" (name table))])]
       (assert (= actual doc-count)
