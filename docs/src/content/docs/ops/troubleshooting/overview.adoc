@@ -1,0 +1,40 @@
+---
+title: Troubleshooting
+---
+
+If you encounter any issues, it is recommended to raise a ticket at link:https://github.com/xtdb/xtdb/issues[XTDB Issues].
+Additionally, check if someone else has already experienced and resolved a similar issue.
+
+=== Increasing the Log Level
+If you face issues with XTDB and the logs (`INFO` by default) do not provide any specific information about the problem,
+you can try increasing the log level to `DEBUG` or `TRACE`.
+
+Example `logback.xml`:
+[source,xml]
+----
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="WARN">
+        <appender-ref ref="STDOUT" />
+    </root>
+    <logger name="xtdb" level="TRACE" />
+</configuration>
+----
+
+You can then pass the `logback.xml` configuration file to the Docker container using the following command:
+
+`docker run --volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml' ...`
+
+=== Ingestion Stopped
+
+As XTDB is a deterministic system (every node must index transactions in exactly the same way),
+it is crucial to ensure that everything written to disk is deterministic.
+This is a strict requirement because inconsistencies in node states can lead to various issues later.
+
+If you encounter an `Ingestion Stopped: ... some cause ...` error, it means we were unable to guarantee this
+requirement and had to stop ingestion.
+Please raise an issue with the full stack trace at link:https://github.com/xtdb/xtdb/issues[XTDB Issues].

@@ -152,7 +152,15 @@ export default defineConfig({
                                 },
                                { label: 'Authentication', link: '/ops/config/authentication' }
                             ]
-                        }
+                        },
+                        {
+                            label: 'Troubleshooting',
+                            collapsed: true,
+                            items: [
+                                {label: "Overview", link: 'ops/troubleshooting/overview' }
+                            ],
+                        },
+
                     ]
                 },
                 {
