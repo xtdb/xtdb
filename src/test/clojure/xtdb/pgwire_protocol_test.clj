@@ -131,7 +131,7 @@
                               ;; can be ommitted
                               :result-format nil})
      (pgwire/handle-msg conn {:msg-name :msg-describe :describe-type :prepared-stmt :describe-name stmt-name})
-     (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name portal-name})
+     (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name portal-name :limit 0})
      (pgwire/handle-msg conn {:msg-name :msg-sync}))))
 
 (deftest test-extended-query

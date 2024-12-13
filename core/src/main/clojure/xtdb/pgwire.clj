@@ -1271,7 +1271,7 @@
               (cmd-write-msg conn msg-command-complete cmd-complete-msg))
             (swap! conn-state assoc :watermark-tx-id tx-id)))))))
 
-(defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [query bound-query fields] :as _portal}]
+(defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [limit query bound-query fields] :as _portal}]
   (try
     (with-open [result-cursor (.openCursor ^BoundQuery bound-query)]
       (let [cancelled-by-client? #(:cancel @conn-state)
@@ -1281,31 +1281,33 @@
 
             session (:session @conn-state)]
 
-        (.forEachRemaining result-cursor
-                           (fn [^RelationReader rel]
-                             (cond
-                               (cancelled-by-client?)
-                               (do (log/trace "query cancelled by client")
-                                   (swap! conn-state dissoc :cancel)
-                                   (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
+        (while (and (or (nil? limit) (< @n-rows-out limit))
+                    (.tryAdvance result-cursor
+                                 (fn [^RelationReader rel]
+                                   (cond
+                                     (cancelled-by-client?)
+                                     (do (log/trace "query cancelled by client")
+                                         (swap! conn-state dissoc :cancel)
+                                         (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
-                               (Thread/interrupted) (throw (InterruptedException.))
+                                     (Thread/interrupted) (throw (InterruptedException.))
 
-                               @!closing? (log/trace "query result stream stopping (conn closing)")
+                                     @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                               :else (dotimes [idx (.rowCount rel)]
-                                       (let [row (mapv
-                                                  (fn [{:keys [field-name write-binary write-text result-format]}]
-                                                    (let [rdr (.readerForName rel field-name)]
-                                                      (when-not (.isNull rdr idx)
-                                                        (if (= :binary result-format)
-                                                          (write-binary session rdr idx)
-                                                          (if write-text
-                                                            (write-text session rdr idx)
-                                                            (write-json session rdr idx))))))
-                                                  fields)]
-                                         (cmd-write-msg conn msg-data-row {:vals row})
-                                         (vswap! n-rows-out inc))))))
+                                     :else (dotimes [idx (cond-> (.rowCount rel)
+                                                           limit (min (- limit @n-rows-out)))]
+                                             (let [row (mapv
+                                                        (fn [{:keys [field-name write-binary write-text result-format]}]
+                                                          (let [rdr (.readerForName rel field-name)]
+                                                            (when-not (.isNull rdr idx)
+                                                              (if (= :binary result-format)
+                                                                (write-binary session rdr idx)
+                                                                (if write-text
+                                                                  (write-text session rdr idx)
+                                                                  (write-json session rdr idx))))))
+                                                        fields)]
+                                               (cmd-write-msg conn msg-data-row {:vals row})
+                                               (vswap! n-rows-out inc))))))))
 
         (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
 
@@ -1633,7 +1635,6 @@
     (cmd-write-msg conn msg-bind-complete)))
 
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
-  ;; TODO implement limit for queries that return rows
   (when-let [err (permissibility-err conn portal)]
     (throw (ex-info "parsing error"
                     {::client-error err})))
@@ -1676,12 +1677,13 @@
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 
-(defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name _limit]}]
+(defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name limit]}]
   ;; Handles a msg-execute to run a previously bound portal (via msg-bind).
   (let [portal (or (get-in @conn-state [:portals portal-name])
                    (throw (ex-info "no such portal"
                                    {::client-error (err-protocol-violation "no such portal")})))]
-    (execute-portal conn portal)))
+    (execute-portal conn (cond-> portal
+                           (not (zero? limit)) (assoc :limit limit)))))
 
 (defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)

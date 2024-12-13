@@ -2206,3 +2206,24 @@ ORDER BY t.oid DESC LIMIT 1"
                  ["1" "2023-03-15 12:00:00+01:00"]
                  ["2" "2023-03-15 12:00:00+03:00"]]
                 (read)))))))
+
+(deftest test-max-rows-3902
+  (with-open [conn (jdbc-conn)
+              insert-stmt (.prepareStatement conn "INSERT INTO docs (_id) VALUES (?)")
+              select-stmt (.prepareStatement conn "SELECT * FROM docs ORDER BY _id")]
+    (doseq [i (range 10)]
+      (.setInt insert-stmt 1 i)
+      (.execute insert-stmt))
+
+    (.setMaxRows select-stmt 3)
+    (with-open [rs (.executeQuery select-stmt)]
+      (t/is (= [{"_id" 0} {"_id" 1} {"_id" 2}] (rs->maps rs))
+            "single batch limiting"))
+
+    (with-open [multi-batch-stmt (.prepareStatement conn "(SELECT * FROM docs ORDER BY _id LIMIT 3)
+                                                          UNION ALL
+                                                          (SELECT * FROM docs ORDER BY _id LIMIT 3)")]
+      (.setMaxRows multi-batch-stmt 4)
+      (with-open [rs (.executeQuery multi-batch-stmt)]
+        (t/is (= [{"_id" 0} {"_id" 1} {"_id" 2} {"_id" 0}] (rs->maps rs))
+              "multi batch limiting")))))
