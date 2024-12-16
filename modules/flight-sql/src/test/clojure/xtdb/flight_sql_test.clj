@@ -190,7 +190,7 @@
         (with-open [rel (Relation/fromRoot root)]
           (t/is (= [{:xt/id #uuid "b82ae7b2-13cf-4828-858d-cd992fec9aa7"
                      :name "foo"
-                     :created-at #time/zoned-date-time "2020-01-01T12:34Z"}]
+                     :created-at #xt/zoned-date-time "2020-01-01T12:34Z"}]
                    (.toMaps rel))))
 
         (t/is (false? (.loadNextBatch rdr)))))))

@@ -6,6 +6,6 @@
    {:table public/foo,
     :for-valid-time
     [:in
-     #time/date "2999-01-01"
-     #time/zoned-date-time "3000-01-01T00:00Z"]}
+     #xt/date "2999-01-01"
+     #xt/zoned-date-time "3000-01-01T00:00Z"]}
    [bar]]]]

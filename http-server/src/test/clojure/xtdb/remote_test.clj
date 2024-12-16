@@ -141,7 +141,7 @@
 
 (deftest json-request-test
   (let [_tx1 (xt/submit-tx *node* [[:put-docs :docs {:xt/id 1}]])
-        {:keys [tx-id system-time]} #xt/tx-key {:tx-id 1, :system-time #time/instant "2020-01-02T00:00:00Z"}]
+        {:keys [tx-id system-time]} #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}]
 
     (t/is (= 1
              (-> (http/request {:accept :json

@@ -19,16 +19,16 @@
 
   (t/is (= :a (roundtrip-expr :a)))
 
-  (t/is (= #time/date "2020-01-01" (roundtrip-expr #time/date "2020-01-01")))
+  (t/is (= #xt/date "2020-01-01" (roundtrip-expr #xt/date "2020-01-01")))
 
-  (t/is (= #time/date-time "2020-01-01T12:34:56.789"
-           (roundtrip-expr #time/date-time "2020-01-01T12:34:56.789")))
+  (t/is (= #xt/date-time "2020-01-01T12:34:56.789"
+           (roundtrip-expr #xt/date-time "2020-01-01T12:34:56.789")))
 
-  (t/is (= #time/zoned-date-time "2020-01-01T12:34:56.789Z"
-           (roundtrip-expr #time/zoned-date-time "2020-01-01T12:34:56.789Z")))
+  (t/is (= #xt/zoned-date-time "2020-01-01T12:34:56.789Z"
+           (roundtrip-expr #xt/zoned-date-time "2020-01-01T12:34:56.789Z")))
 
-  (t/is (= #time/duration "PT3H1M35.23S"
-           (roundtrip-expr #time/duration "PT3H1M35.23S")))
+  (t/is (= #xt/duration "PT3H1M35.23S"
+           (roundtrip-expr #xt/duration "PT3H1M35.23S")))
 
   (t/is (= [1 2 3] (roundtrip-expr [1 2 3]))
         "vectors")

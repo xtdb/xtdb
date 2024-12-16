@@ -5,7 +5,7 @@
    {_valid_from
     (greatest
      _valid_from
-     (cast #time/date "2020-05-01" [:timestamp-tz :micro "UTC"]))}
+     (cast #xt/date "2020-05-01" [:timestamp-tz :micro "UTC"]))}
    {_valid_to _valid_to}]
   [:project
    [{_iid u.1/_iid}
@@ -15,5 +15,5 @@
     u.1
     [:scan
      {:table public/users,
-      :for-valid-time [:in #time/date "2020-05-01" nil]}
+      :for-valid-time [:in #xt/date "2020-05-01" nil]}
      [_valid_to {id (= id ?_0)} _valid_from _iid]]]]]]

@@ -10,13 +10,13 @@
 (t/deftest test-json-ld-roundtripping
   (let [v {"keyword" :foo/bar
            "set-key" #{:foo :baz}
-           "instant" #time/instant "2023-12-06T09:31:27.570827956Z"
-           "date" #time/date "2020-01-01"
-           "date-time" #time/date-time "2020-01-01T12:34:56.789"
-           "zoned-date-time" #time/zoned-date-time "2020-01-01T12:34:56.789Z"
-           "time-zone" #time/zone "America/Los_Angeles"
-           "duration" #time/duration "PT3H1M35.23S"
-           "period" #time/period "P18Y"
+           "instant" #xt/instant "2023-12-06T09:31:27.570827956Z"
+           "date" #xt/date "2020-01-01"
+           "date-time" #xt/date-time "2020-01-01T12:34:56.789"
+           "zoned-date-time" #xt/zoned-date-time "2020-01-01T12:34:56.789Z"
+           "time-zone" #xt/zone "America/Los_Angeles"
+           "duration" #xt/duration "PT3H1M35.23S"
+           "period" #xt/period "P18Y"
            "uuid" (UUID/randomUUID)}]
     (t/is (= v
              (roundtrip-json-ld v))

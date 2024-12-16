@@ -5,7 +5,7 @@
    {_valid_from
     (greatest
      _valid_from
-     (cast #time/date "2021-07-01" [:timestamp-tz :micro "UTC"]))}
+     (cast #xt/date "2021-07-01" [:timestamp-tz :micro "UTC"]))}
    {_valid_to _valid_to}
    first_name
    id
@@ -21,5 +21,5 @@
     u.1
     [:scan
      {:table public/users,
-      :for-valid-time [:in #time/date "2021-07-01" nil]}
+      :for-valid-time [:in #xt/date "2021-07-01" nil]}
      [_valid_to last_name {id (= id ?_0)} _valid_from _iid]]]]]]

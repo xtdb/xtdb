@@ -71,7 +71,7 @@
                              [:scan {:table public/xt_docs} [foo]]]
                            {:node node}))))
 
-    (c/compact-all! node #time/duration "PT1S")
+    (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= {{:bar 42} 20, {:bar "forty-two"} 20}
              (frequencies (tu/query-ra
@@ -205,59 +205,59 @@
 
     ;; valid-time
     (t/is (= #{{:v 1, :xt/id :doc1,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                :xt/valid-to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                :xt/valid-to #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc2,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                :xt/valid-to #xt/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2017"]}
                                  [_id v _valid_from _valid_to]]
                                {:node tu/*node*}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1
-                :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",}
+                :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]",}
 
                {:v 1, :xt/id :doc2,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                :xt/valid-to #xt/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2023"]}
                                  [_id v _valid_from _valid_to]]
                                {:node tu/*node*}))))
     ;; system-time
     (t/is (= #{{:v 1, :xt/id :doc1,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc2,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc3,
-                :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
+                :xt/valid-from #xt/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at #inst "2023"], :for-system-time [:at #inst "2020"]}
                                  [_id v _valid_from _valid_to]]
                                {:node tu/*node*}))))
 
     (t/is (= #{{:v 1, :xt/id :doc1,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc2,
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]"}}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan {:table public/xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time [:at #inst "2020"]}
                                  [_id v _valid_from _valid_to]]
                                {:node tu/*node*}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1,
-                :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+                :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}
                {:v 1, :xt/id :doc2
-                :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]",}}
+                :xt/valid-from #xt/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                :xt/valid-to #xt/zoned-date-time "2100-01-01T00:00Z[UTC]",}}
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2023"], :for-system-time [:at #inst "2020-01-02"]}
                                  [_id v _valid_from _valid_to]]
                                {:node tu/*node*}))))
 
     (t/is (= #{{:v 2, :xt/id :doc1,
-                :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+                :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}
                {:v 2, :xt/id :doc2,
-                :xt/valid-from #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
+                :xt/valid-from #xt/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan
                                  {:table public/xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time [:at #inst "2020-01-02"]}
                                  [_id v _valid_from _valid_to]]
@@ -306,18 +306,18 @@
   (tu/finish-chunk! tu/*node*)
 
   (t/is (= #{{:last-updated "tx2",
-              :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
-              :xt/system-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]"}
+              :xt/valid-from #xt/zoned-date-time "3001-01-01T00:00Z[UTC]",
+              :xt/system-from #xt/zoned-date-time "3001-01-01T00:00Z[UTC]"}
              {:last-updated "tx1",
-              :xt/valid-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
-              :xt/valid-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
-              :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]"}
+              :xt/valid-from #xt/zoned-date-time "3000-01-01T00:00Z[UTC]",
+              :xt/valid-to #xt/zoned-date-time "3001-01-01T00:00Z[UTC]",
+              :xt/system-from #xt/zoned-date-time "3000-01-01T00:00Z[UTC]"}
              {:last-updated "tx1",
-              :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
-              :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
-              :xt/system-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
+              :xt/valid-from #xt/zoned-date-time "3001-01-01T00:00Z[UTC]",
+              :xt/system-from #xt/zoned-date-time "3000-01-01T00:00Z[UTC]",
+              :xt/system-to #xt/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
            (set (tu/query-ra '[:scan {:table public/foo,
-                                      :for-system-time [:between #time/zoned-date-time "2999-01-01T00:00Z" #time/zoned-date-time "3002-01-01T00:00Z"]
+                                      :for-system-time [:between #xt/zoned-date-time "2999-01-01T00:00Z" #xt/zoned-date-time "3002-01-01T00:00Z"]
                                       :for-valid-time :all-time}
                                [_system_from _system_to
                                 _valid_from _valid_to
@@ -672,10 +672,10 @@
       (dotimes [i 2]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version i}]]))
       (tu/finish-chunk! node)
-      (c/compact-all! node #time/duration "PT2S")
+      (c/compact-all! node #xt/duration "PT2S")
 
       (t/is (= [{:xt/id 1,
-                 :xt/valid-to #time/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
+                 :xt/valid-to #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
                (xt/q node '(from :docs {:bind [xt/id xt/valid-to {:version 0}]
                                         :for-valid-time :all-time})))))))
 
@@ -698,22 +698,22 @@
 
           ;; no filter, we should still get the latest entry (2025)
           (t/is (= [{:xt/id 1,
-                     :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                    (tu/query-ra '[:scan {:table public/docs} [_id _valid_from]] query-opts)))
 
           ;; one day earlier we still get the 2024 entry
           (t/is (= [{:xt/id 1,
-                     :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
-                     :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     :xt/valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                     :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                    (tu/query-ra '[:scan {:table public/docs} [_id _valid_from _valid_to]]
-                                (assoc query-opts :current-time #time/instant "2024-12-30T00:00:00Z"))))
+                                (assoc query-opts :current-time #xt/instant "2024-12-30T00:00:00Z"))))
 
           ;; two entries 2024 and 2025
           (t/is (= [{:xt/id 1,
-                     :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}
+                     :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}
                     {:xt/id 1,
-                     :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
-                     :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     :xt/valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                     :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                    (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2024" #inst "2026"]}
                                   [_id _valid_from _valid_to]]
                                 query-opts)))
@@ -721,7 +721,7 @@
 
           ;; newest entry, basis at 2025
           (t/is (= [{:xt/id 1,
-                     :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                    (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2026" nil]}
                                   [_id _valid_from _valid_to]]
                                 query-opts)))
@@ -754,23 +754,23 @@
 
           (tu/finish-chunk! node)
           ;; compaction happens in 2026
-          (c/compact-all! node #time/duration "PT2S")
+          (c/compact-all! node #xt/duration "PT2S")
 
           (let [query-opts {:node node, :current-time (:system-time tx-key)}]
 
             ;; at the end of 2024 we still get the 2024
             (t/is (= [{:xt/id 1,
-                       :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
-                       :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                       :xt/valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                       :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                      (tu/query-ra '[:scan {:table public/docs} [_id _valid_from _valid_to]]
-                                  (assoc query-opts :current-time #time/instant "2024-12-30T00:00:00Z"))))
+                                  (assoc query-opts :current-time #xt/instant "2024-12-30T00:00:00Z"))))
             ;; two entries 2024 and 2025
             (t/is (= [{:xt/id 1,
-                       :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"
-                       :xt/valid-to #time/zoned-date-time "2026-01-01T00:00Z[UTC]"}
+                       :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"
+                       :xt/valid-to #xt/zoned-date-time "2026-01-01T00:00Z[UTC]"}
                       {:xt/id 1,
-                       :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
-                       :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                       :xt/valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                       :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                      (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2024" #inst "2026"]}
                                     [_id _valid_from _valid_to]]
                                   query-opts)))
@@ -778,8 +778,8 @@
 
             ;; newest entry, basis at 2025
             (t/is (= [{:xt/id 1,
-                       :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"
-                       :xt/valid-to #time/zoned-date-time "2026-01-01T00:00Z[UTC]"}]
+                       :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"
+                       :xt/valid-to #xt/zoned-date-time "2026-01-01T00:00Z[UTC]"}]
                      (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2025-12-30" nil]}
                                     [_id _valid_from _valid_to]]
                                   query-opts)))
@@ -814,20 +814,20 @@
 
                 (t/testing "temporal bounds from the live-index"
                   (t/is (= [{:xt/id 1,
-                             :xt/valid-from #time/zoned-date-time "2025-01-01T00:00Z[UTC]"
-                             :xt/valid-to #time/zoned-date-time "2026-01-01T00:00Z[UTC]"}
+                             :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"
+                             :xt/valid-to #xt/zoned-date-time "2026-01-01T00:00Z[UTC]"}
                             {:xt/id 1,
-                             :xt/valid-from #time/zoned-date-time "2024-01-01T00:00Z[UTC]",
-                             :xt/valid-to #time/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                             :xt/valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]",
+                             :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                            (tu/query-ra '[:scan {:table public/docs :for-valid-time [:in #inst "2024" #inst "2026"]}
                                           [_id _valid_from _valid_to]]
                                         query-opts))))
 
                 (t/testing "earlier system times get ignored via the basis"
-                  (t/is (= [#:xt{:valid-from #time/zoned-date-time "2027-01-01T00:00Z[UTC]",
+                  (t/is (= [#:xt{:valid-from #xt/zoned-date-time "2027-01-01T00:00Z[UTC]",
                                  :id 1}
-                            #:xt{:valid-to #time/zoned-date-time "2027-01-01T00:00Z[UTC]",
-                                 :valid-from #time/zoned-date-time "2026-01-01T00:00Z[UTC]",
+                            #:xt{:valid-to #xt/zoned-date-time "2027-01-01T00:00Z[UTC]",
+                                 :valid-from #xt/zoned-date-time "2026-01-01T00:00Z[UTC]",
                                  :id 1}]
 
                            (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2026" #inst "3000"]}
@@ -835,11 +835,11 @@
                                         query-opts))))
 
                 (t/testing "earlier system times bound the interval even when laying outside"
-                  (t/is (= [#:xt{:valid-to #time/zoned-date-time "2120-01-01T00:00Z[UTC]",
-                                 :valid-from #time/zoned-date-time "2027-01-01T00:00Z[UTC]",
+                  (t/is (= [#:xt{:valid-to #xt/zoned-date-time "2120-01-01T00:00Z[UTC]",
+                                 :valid-from #xt/zoned-date-time "2027-01-01T00:00Z[UTC]",
                                  :id 1}
-                            #:xt{:valid-to #time/zoned-date-time "2027-01-01T00:00Z[UTC]",
-                                 :valid-from #time/zoned-date-time "2026-01-01T00:00Z[UTC]",
+                            #:xt{:valid-to #xt/zoned-date-time "2027-01-01T00:00Z[UTC]",
+                                 :valid-from #xt/zoned-date-time "2026-01-01T00:00Z[UTC]",
                                  :id 1}]
                            (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2026" #inst "2027"]}
                                           [_id _valid_from _valid_to]]

@@ -57,8 +57,8 @@
           [{l_shipdate
             (between
              l_shipdate
-             #time/date "1995-01-01"
-             #time/date "1996-12-31")}
+             #xt/date "1995-01-01"
+             #xt/date "1996-12-31")}
            l_discount
            l_suppkey
            l_orderkey

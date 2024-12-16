@@ -8,18 +8,18 @@
   [:scan
    {:table public/foo,
     :for-system-time
-    [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
+    [:in #xt/date "2001-01-01" #xt/date "2002-01-01"]}
    [{_valid_from
      (and
       (<
        _valid_from
-       (coalesce #time/date "2004-01-01" xtdb/end-of-time))
+       (coalesce #xt/date "2004-01-01" xtdb/end-of-time))
       (= _valid_from 4))}
     {_system_from (= _system_from 20)}
     {_valid_to
      (and
       (>
        (coalesce _valid_to xtdb/end-of-time)
-       #time/date "2000-01-01")
+       #xt/date "2000-01-01")
       (> _valid_to 10))}
     {_system_to (<= _system_to 23)}]]]]

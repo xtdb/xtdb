@@ -21,18 +21,18 @@
  xt.tx/xtql xtdb.serde/xtql-reader
  xt/tx-op xtdb.tx-ops/parse-tx-op
 
- time/period xtdb.mirrors.time-literals/period
- time/date xtdb.mirrors.time-literals/date
- time/date-time xtdb.mirrors.time-literals/date-time
- time/zoned-date-time xtdb.mirrors.time-literals/zoned-date-time
- time/offset-time xtdb.mirrors.time-literals/offset-time
- time/instant xtdb.mirrors.time-literals/instant
- time/offset-date-time xtdb.mirrors.time-literals/offset-date-time
- time/zone xtdb.mirrors.time-literals/zone
- time/day-of-week xtdb.mirrors.time-literals/day-of-week
- time/time xtdb.mirrors.time-literals/time
- time/month xtdb.mirrors.time-literals/month
- time/month-day xtdb.mirrors.time-literals/month-day
- time/duration xtdb.mirrors.time-literals/duration
- time/year xtdb.mirrors.time-literals/year
- time/year-month xtdb.mirrors.time-literals/year-month}
+ xt/period xtdb.mirrors.time-literals/period
+ xt/date xtdb.mirrors.time-literals/date
+ xt/date-time xtdb.mirrors.time-literals/date-time
+ xt/zoned-date-time xtdb.mirrors.time-literals/zoned-date-time
+ xt/offset-time xtdb.mirrors.time-literals/offset-time
+ xt/instant xtdb.mirrors.time-literals/instant
+ xt/offset-date-time xtdb.mirrors.time-literals/offset-date-time
+ xt/zone xtdb.mirrors.time-literals/zone
+ xt/day-of-week xtdb.mirrors.time-literals/day-of-week
+ xt/time xtdb.mirrors.time-literals/time
+ xt/month xtdb.mirrors.time-literals/month
+ xt/month-day xtdb.mirrors.time-literals/month-day
+ xt/duration xtdb.mirrors.time-literals/duration
+ xt/year xtdb.mirrors.time-literals/year
+ xt/year-month xtdb.mirrors.time-literals/year-month}

@@ -82,7 +82,7 @@
   (xtn/start-node (merge tu/*node-opts* {:indexer {:flush-duration flush-duration}})))
 
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test
-  (with-open [node (start-node #time/duration "PT0.001S")]
+  (with-open [node (start-node #xt/duration "PT0.001S")]
     (t/testing "sent after a first message"
       (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]])
       (t/is (spin (log-indexed? node)))
@@ -100,7 +100,7 @@
                  (some-> (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer)) (.getTxId)))))))
 
   (t/testing "test :duration actually does something"
-    (with-open [node (start-node #time/duration "PT1H")]
+    (with-open [node (start-node #xt/duration "PT1H")]
       (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]])
       (t/is (spin (= 1 (count (node-log node)))))
       (t/is (spin-ensure 10 (= 1 (count (node-log node)))))))
@@ -109,7 +109,7 @@
     (let [control (Semaphore. 0)
           heartbeat (fn [] (.release control))]
       (binding [slf/*on-heartbeat* (fn [_] (.acquire control))]
-        (with-open [node (start-node #time/duration "PT0.001S")
+        (with-open [node (start-node #xt/duration "PT0.001S")
                     _ (reify Closeable
                         (close [_] (.release control (- Integer/MAX_VALUE 1000))))]
           (let [send-msg (fn [] (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]]))
@@ -152,11 +152,11 @@
     (filter #(re-matches #"tables/public\$foo/meta/log-(.*)" (str %)) (.listAllObjects ^IBufferPool pool))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
-  (with-open [node (start-node #time/duration "PT0.001S")]
+  (with-open [node (start-node #xt/duration "PT0.001S")]
     (t/is (spin-ensure 10 (= 0 (count (chunk-path-seq node)))))
     (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]])
     (t/is (spin (= 1 (count (chunk-path-seq node))))))
 
-  (with-open [node (start-node #time/duration "PT1H")]
+  (with-open [node (start-node #xt/duration "PT1H")]
     (xt/submit-tx node [[:put-docs :foo {:xt/id 42}]])
     (t/is (spin-ensure 10 (= 0 (count (chunk-path-seq node)))))))

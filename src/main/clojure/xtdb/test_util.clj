@@ -91,7 +91,7 @@
 (extend-protocol jdbc.prep/SettableParameter
   java.util.Date
   (set-parameter [v ^PreparedStatement ps ^long i]
-    (.setObject ps i (-> (.toInstant v) (.atZone #time/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
+    (.setObject ps i (-> (.toInstant v) (.atZone #xt/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
 
 (def jdbc-qopts
   {:builder-fn

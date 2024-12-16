@@ -28,7 +28,7 @@
   (defn month-day [x] (MonthDay/parse x)))
 
 (defn- print-to-string [t o]
-  (str "#time/" t " \"" (str o) "\""))
+  (format "#xt/%s \"%s\"" t o))
 
 (def ^String print-period (partial print-to-string "period"))
 (def ^String print-date (partial print-to-string "date"))

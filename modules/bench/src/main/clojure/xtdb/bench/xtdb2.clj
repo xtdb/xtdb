@@ -140,7 +140,7 @@
 (def ^:private auctionmark-cli-options
   [["-d" "--duration DURATION"
     :parse-fn #(Duration/parse %)
-    :default #time/duration "PT30S"]
+    :default #xt/duration "PT30S"]
 
    ["-s" "--scale-factor SCALE_FACTOR"
     :parse-fn parse-double

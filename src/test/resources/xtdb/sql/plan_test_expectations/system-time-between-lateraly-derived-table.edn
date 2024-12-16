@@ -7,7 +7,7 @@
    x.1
    [:scan
     {:table public/x,
-     :for-system-time [:at #time/date "3001-01-01"]}
+     :for-system-time [:at #xt/date "3001-01-01"]}
     [y]]]
   [:rename
    y.4
@@ -19,6 +19,6 @@
       {:table public/z,
        :for-system-time
        [:in
-        #time/date "3001-01-01"
-        #time/zoned-date-time "3002-01-01T00:00Z"]}
+        #xt/date "3001-01-01"
+        #xt/zoned-date-time "3002-01-01T00:00Z"]}
       [{z (= z ?_sq_y_2)}]]]]]]]

@@ -122,5 +122,5 @@
                          [[:sql "INSERT INTO foo (_id) VALUES (0)"]]
 
                          {:system-time (time/->instant #inst "2021")
-                          :default-tz #time/zone "Europe/London"
+                          :default-tz #xt/zone "Europe/London"
                           :authn {:user "xtdb"}}))

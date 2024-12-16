@@ -175,17 +175,17 @@
   (util/with-open [lt0 (tu/open-live-table "foo")
                    lt1 (tu/open-live-table "foo")]
 
-    (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
+    (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}
                   [{:xt/id "foo", :v 0}
                    {:xt/id "bar", :v 0}])
 
-    (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #time/instant "2021-01-01T00:00:00Z"}
+    (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #xt/instant "2021-01-01T00:00:00Z"}
                   [{:xt/id "bar", :v 1}])
 
-    (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #time/instant "2022-01-01T00:00:00Z"}
+    (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #xt/instant "2022-01-01T00:00:00Z"}
                   [{:xt/id "foo", :v 1}])
 
-    (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #time/instant "2023-01-01T00:00:00Z"}
+    (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #xt/instant "2023-01-01T00:00:00Z"}
                   [{:xt/id "foo", :v 2}
                    {:xt/id "bar", :v 2}])
 
@@ -463,11 +463,11 @@
 (t/deftest test-compaction-promotion-bug-3673
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
   (tu/finish-chunk! tu/*node*)
-  (c/compact-all! tu/*node* #time/duration "PT0.5S")
+  (c/compact-all! tu/*node* #xt/duration "PT0.5S")
 
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2, :foo 24} {:xt/id 3, :foo 28.1} {:xt/id 4}]])
   (tu/finish-chunk! tu/*node*)
-  (c/compact-all! tu/*node* #time/duration "PT0.5S")
+  (c/compact-all! tu/*node* #xt/duration "PT0.5S")
 
   (t/is (= #{12.0 nil 24 28.1}
            (->> (xt/q tu/*node* "SELECT foo FROM foo")
@@ -476,7 +476,7 @@
   (util/with-open [node (xtn/start-node tu/*node-opts*)]
     (xt/submit-tx node [[:put-docs :foo {:xt/id 1} {:foo "foo", :xt/id 0} {:foo 3, :xt/id 2}]])
     (tu/finish-chunk! node)
-    (c/compact-all! node #time/duration "PT0.5S")
+    (c/compact-all! node #xt/duration "PT0.5S")
 
     (t/is (= #{"foo" nil 3}
              (->> (xt/q node "SELECT foo FROM foo")
