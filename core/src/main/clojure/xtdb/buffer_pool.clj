@@ -405,29 +405,28 @@
                                                                                   (.getObject object-store k tmp-file)))]
                                    (Relation/readFooter (path->seekable-byte-channel (.getPath entry)))))))
 
-  (getRecordBatch [_ k block-idx]
+  (getRecordBatch [this k block-idx]
     (.increment record-batch-requests)
-    (util/with-close-on-catch [^DiskCache$Entry entry @(.get disk-cache k
-                                                             (fn [^Path k, ^Path tmp-file]
-                                                               (.increment disk-cache-misses)
-                                                               (.getObject object-store k tmp-file)))]
-      (let [path (.getPath entry)
-            ^ArrowFooter footer (.get arrow-footer-cache k
-                                      (fn [_] (Relation/readFooter (path->seekable-byte-channel path))))
-            blocks (.getRecordBatches footer)
-            ^ArrowBlock block (nth blocks block-idx nil)]
-        (if-not block
-          (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
-          (util/with-open [arrow-buf (.get memory-cache (PathSlice. k (.getOffset block)
-                                                                    (+ (.getMetadataLength block) (.getBodyLength block)))
-                                           (fn [^PathSlice path-slice]
-                                             (.increment mem-cache-misses)
-                                             (CompletableFuture/completedFuture
-                                              ;; cleanup action - when the entry is evicted from the memory cache,
-                                              ;; release one count on the disk-cache entry.
-                                              (Pair. (->resolved-path-slice path-slice path) entry))))]
-            (ArrowUtil/arrowBufToRecordBatch arrow-buf 0 (.getMetadataLength block) (.getBodyLength block)
-                                             (format "Failed opening record batch '%s' at block-idx %d" path block-idx)))))))
+    (let [^ArrowFooter footer (.getFooter this k)
+          blocks (.getRecordBatches footer)
+          ^ArrowBlock block (nth blocks block-idx nil)]
+      (if-not block
+        (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
+        (util/with-open [arrow-buf (.get memory-cache (PathSlice. k (.getOffset block)
+                                                                  (+ (.getMetadataLength block) (.getBodyLength block)))
+                                         (fn [^PathSlice path-slice]
+                                           (.increment mem-cache-misses)
+                                           (-> (.get disk-cache k
+                                                     (fn [^Path k, ^Path tmp-file]
+                                                       (.increment disk-cache-misses)
+                                                       (.getObject object-store k tmp-file)))
+
+                                               (.thenApply (fn [^DiskCache$Entry entry]
+                                                             ;; cleanup action - when the entry is evicted from the memory cache,
+                                                             ;; release one count on the disk-cache entry.
+                                                             (Pair. (->resolved-path-slice path-slice (.getPath entry)) entry))))))]
+          (ArrowUtil/arrowBufToRecordBatch arrow-buf 0 (.getMetadataLength block) (.getBodyLength block)
+                                           (format "Failed opening record batch '%s' at block-idx %d" k block-idx))))))
 
   (listAllObjects [_]
     (vec (.sequencedKeySet !os-files)))
