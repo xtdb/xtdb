@@ -30,8 +30,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql.plan :as xtql]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql.plan :as xtql.plan]
+            [xtdb.xtql :as xtql])
   (:import clojure.lang.MapEntry
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            java.lang.AutoCloseable
@@ -261,26 +261,25 @@
                   (select-keys
                    [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan?])
                   (update :decorrelate? #(if (nil? %) true false))
-                  (assoc :table-info table-info))
-              ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,
-              ;;Move all defaulting to this level if/when everyone goes via planQuery
-              cache-key (assoc plan-query-opts :query query)]
-          (.get ^Cache plan-cache cache-key
-                (reify Function
-                  (apply [_ _]
-                    (let [plan (cond
-                                 (or (string? query)
-                                     (instance? Sql$DirectlyExecutableStatementContext query))
-                                 (sql/compile-query query plan-query-opts)
+                  (assoc :table-info table-info))]
 
-                                 (seq? query) (xtql/compile-query (xtql.edn/parse-query query) plan-query-opts)
+          ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,
+          ;;Move all defaulting to this level if/when everyone goes via planQuery
+          (.get ^Cache plan-cache (assoc plan-query-opts :query query)
+                (fn [_cache-key]
+                  (let [plan (cond
+                               (or (string? query) (instance? Sql$DirectlyExecutableStatementContext query))
+                               (sql/compile-query query plan-query-opts)
 
-                                 (instance? Query query) (xtql/compile-query query plan-query-opts)
+                               (seq? query) (-> (xtql/parse-query query)
+                                                (xtql.plan/compile-query plan-query-opts))
 
-                                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-                      (if (:explain? query-opts)
-                        [:table [{:plan (with-out-str (pp/pprint plan))}]]
-                        plan)))))))
+                               (instance? Query query) (xtql.plan/compile-query query plan-query-opts)
+
+                               :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+                    (if (:explain? query-opts)
+                      [:table [{:plan (with-out-str (pp/pprint plan))}]]
+                      plan))))))
 
       AutoCloseable
       (close [_]

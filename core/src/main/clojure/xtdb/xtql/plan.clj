@@ -5,11 +5,13 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
             xtdb.tx-ops
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
-           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs Queries TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents XtqlQuery$Aggregate XtqlQuery$DocsRelation XtqlQuery$From XtqlQuery$Join XtqlQuery$LeftJoin XtqlQuery$Limit XtqlQuery$Offset XtqlQuery$OrderBy XtqlQuery$OrderDirection XtqlQuery$OrderNulls XtqlQuery$OrderSpec XtqlQuery$ParamRelation XtqlQuery$Pipeline XtqlQuery$Return XtqlQuery$Unify XtqlQuery$Unnest XtqlQuery$Where XtqlQuery$With XtqlQuery$Without)
+           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
            (xtdb.tx_ops AssertExists AssertNotExists Delete Erase Insert Update)
-           (xtdb.util NormalForm)))
+           (xtdb.util NormalForm)
+           (xtdb.xtql From Where With Without Return DocsRelation ParamRelation Unify Join LeftJoin Pipeline Aggregate OrderBy Limit Offset Unnest)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -179,6 +181,7 @@
                     (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
+
   Expr$Subquery
   (plan-expr [this]
     (when-not *subqueries*
@@ -199,6 +202,7 @@
                     (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
+
   Expr$Pull
   (plan-expr [this]
     (when-not *subqueries*
@@ -214,6 +218,7 @@
                     (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
+
   Expr$PullMany
   (plan-expr [this]
     (when-not *subqueries*
@@ -231,6 +236,7 @@
                     (plan-arg-bindings (.args this))))
       placeholder))
   (required-vars [this] (expr-subquery-required-vars (.args this)))
+
   nil
   (plan-expr [_] nil)
   (required-vars [_] nil))
@@ -410,10 +416,10 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
-(defn- plan-from [^XtqlQuery$From from]
-  (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec (.bindings from))
-                                     (.projectAllCols from)
-                                     (concat (->> (get *table-info* (-> (.table from) (util/with-default-schema)))
+(defn- plan-from [{:keys [table for-valid-time for-system-time bindings project-all-cols?]}]
+  (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec bindings)
+                                     project-all-cols?
+                                     (concat (->> (get *table-info* (-> table (util/with-default-schema) symbol str))
                                                   (mapv symbol)
                                                   (mapv #(hash-map :l % :r %))))))
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
@@ -422,9 +428,9 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (symbol (NormalForm/normalTableName (keyword (.table from))))
-                :for-valid-time (plan-temporal-filter (.forValidTime from))
-                :for-system-time (plan-temporal-filter (.forSystemTime from))}
+    (-> [:scan {:table (symbol (NormalForm/normalTableName table))
+                :for-valid-time (plan-temporal-filter for-valid-time)
+                :for-system-time (plan-temporal-filter for-system-time)}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
         (wrap-with-period-projection-or-selection planned-bind-specs)
         (wrap-with-ra-plan)
@@ -433,8 +439,8 @@
                              (group-by :r))
                         (update-vals (comp set #(mapv :l %))))))))
 
-(defn- plan-where [^XtqlQuery$Where where]
-  (for [pred (.preds where)
+(defn- plan-where [{:keys [preds]}]
+  (for [pred preds
         :let [{:keys [expr subqueries]} (plan-expr-with-subqueries pred)]]
     {:expr expr
      :subqueries subqueries
@@ -452,27 +458,24 @@
    :provided-vars (set (map :r out-bindings))})
 
 (extend-protocol PlanQuery
-  XtqlQuery$From
-  (plan-query [from]
-    (plan-from from))
+  From (plan-query [from] (plan-from from))
 
-  XtqlQuery$Pipeline
-  (plan-query [pipeline]
+  Pipeline
+  (plan-query [{:keys [head tails]}]
     (reduce (fn [plan query-tail]
               (plan-query-tail query-tail plan))
-            (plan-query (.query pipeline))
-            (.tails pipeline)))
+            (plan-query head)
+            tails))
 
-  XtqlQuery$DocsRelation
-  (plan-query [rel]
+  DocsRelation
+  (plan-query [{:keys [documents bindings]}]
     (plan-rel (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
-                    (.documents rel))
-              (mapv plan-out-spec (.bindings rel))))
+                    documents)
+              (mapv plan-out-spec bindings)))
 
-  XtqlQuery$ParamRelation
-  (plan-query [rel]
-    (plan-rel (plan-expr (.param rel))
-              (mapv plan-out-spec (.bindings rel)))))
+  ParamRelation
+  (plan-query [{:keys [param bindings]}]
+    (plan-rel (plan-expr param) (mapv plan-out-spec bindings))))
 
 (declare wrap-expr-subqueries*)
 
@@ -500,11 +503,10 @@
        subquery])))
 
 (defn- wrap-expr-subqueries* [plan subqueries]
-  (reduce
-   (fn [plan sq]
-     (wrap-expr-subquery plan sq))
-   plan
-   subqueries))
+  (->> subqueries
+       (reduce (fn [plan sq]
+                 (wrap-expr-subquery plan sq))
+               plan)))
 
 (defn- wrap-project [plan projection]
   [:project projection plan])
@@ -520,7 +522,7 @@
         _ (required-vars-available? spec-expr provided-vars)
         required-vars (required-vars spec-expr)
         {:keys [subqueries expr agg-fns]} (plan-expr-with-subqueries spec-expr)]
-    {:l col :r expr
+    {:l col, :r expr
      :subqueries subqueries
      :agg-fns agg-fns
      :required-vars required-vars
@@ -530,14 +532,13 @@
   (let [var (col-sym (.getBinding spec))
         spec-expr (.getExpr spec)
         {:keys [subqueries expr]} (plan-expr-with-subqueries spec-expr)]
-    {:l var :r expr :required-vars (required-vars spec-expr)
+    {:l var, :r expr, :required-vars (required-vars spec-expr)
      :subqueries subqueries :logic-var? (instance? Expr$LogicVar spec-expr)}))
 
 (extend-protocol PlanQueryTail
-  XtqlQuery$Where
-  (plan-query-tail [this {:keys [ra-plan provided-vars] :as _acc-plan}]
-
-    (doseq [pred (.preds this)]
+  Where
+  (plan-query-tail [{:keys [preds] :as this} {:keys [ra-plan provided-vars] :as _acc-plan}]
+    (doseq [pred preds]
       (required-vars-available? pred provided-vars))
 
     (let [planned-where-exprs (plan-where this)]
@@ -547,48 +548,44 @@
                     (wrap-project (vec provided-vars)))
        :provided-vars provided-vars}))
 
-  XtqlQuery$With
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [projections (map #(plan-col-spec % provided-vars) (.bindings this))
+  With
+  (plan-query-tail [{:keys [with-bindings]} {:keys [ra-plan provided-vars]}]
+    (let [projections (map #(plan-col-spec % provided-vars) with-bindings)
           return-vars (set/union
                        provided-vars
                        (set (map :l projections)))]
-      {:ra-plan
-       [:project (vec return-vars)
-        [:map (mapv (fn [{:keys [l r]}] {l r}) projections)
-         (-> ra-plan
-             (wrap-expr-subqueries provided-vars (mapcat :subqueries projections)))]]
+      {:ra-plan [:project (vec return-vars)
+                 [:map (mapv (fn [{:keys [l r]}] {l r}) projections)
+                  (-> ra-plan
+                      (wrap-expr-subqueries provided-vars (mapcat :subqueries projections)))]]
        :provided-vars return-vars}))
 
-  XtqlQuery$Without
-  (plan-query-tail [without {:keys [ra-plan provided-vars]}]
-    (let [cols-to-be-removed (into #{} (map col-sym) (.cols without))
+  Without
+  (plan-query-tail [{:keys [without-cols]} {:keys [ra-plan provided-vars]}]
+    (let [cols-to-be-removed (into #{} (map col-sym) without-cols)
           output-projection (set/difference provided-vars cols-to-be-removed)]
       {:ra-plan [:project (vec output-projection) ra-plan]
        :provided-vars output-projection}))
 
-  XtqlQuery$Return
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [projections
-          (mapv
-           (fn [col]
-             (let [expr (.getExpr ^Binding col)]
-               (required-vars-available? expr provided-vars)
-               {(col-sym (.getBinding ^Binding col)) (plan-expr expr)}))
-           (.cols this))]
+  Return
+  (plan-query-tail [{:keys [return-bindings]} {:keys [ra-plan provided-vars]}]
+    (let [projections (->> return-bindings
+                           (mapv (fn [col]
+                                   (let [expr (.getExpr ^Binding col)]
+                                     (required-vars-available? expr provided-vars)
+                                     {(col-sym (.getBinding ^Binding col)) (plan-expr expr)}))))]
       {:ra-plan [:project projections ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))}))
 
-  XtqlQuery$Unnest
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [{:keys [l r subqueries]} (plan-col-spec (.binding this) provided-vars)
+  Unnest
+  (plan-query-tail [{:keys [unnest-binding]} {:keys [ra-plan provided-vars]}]
+    (let [{:keys [l r subqueries]} (plan-col-spec unnest-binding provided-vars)
           pre-col (gen-col)
           return-vars (conj provided-vars l)]
-      {:ra-plan
-       [:project (vec return-vars)
-        [:unnest {l pre-col}
-         [:map [{pre-col r}]
-          (wrap-expr-subqueries ra-plan provided-vars subqueries)]]]
+      {:ra-plan [:project (vec return-vars)
+                 [:unnest {l pre-col}
+                  [:map [{pre-col r}]
+                   (wrap-expr-subqueries ra-plan provided-vars subqueries)]]]
        :provided-vars return-vars})))
 
 (defn plan-join [join-type query args binding]
@@ -605,55 +602,55 @@
                    (plan-arg-bindings args))]]))
 
 (extend-protocol PlanUnifyClause
-  XtqlQuery$From
-  (plan-unify-clause [from]
-    (when (.projectAllCols from)
+  From
+  (plan-unify-clause [{:keys [project-all-cols?] :as from}]
+    (when project-all-cols?
       (throw (err/illegal-arg
               :xtql/invalid-from
               {:from (str from)
                ::err/message "* is not a valid in from when inside a unify context"})))
     [[:from (plan-from from)]])
 
-  XtqlQuery$DocsRelation
-  (plan-unify-clause [rel]
+  DocsRelation
+  (plan-unify-clause [{:keys [documents bindings]}]
     [[:from (plan-rel (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
-                            (.documents rel))
-                      (mapv plan-out-spec (.bindings rel)))]])
+                            documents)
+                      (mapv plan-out-spec bindings))]])
 
-  XtqlQuery$ParamRelation
-  (plan-unify-clause [rel]
-    [[:from (plan-rel (plan-expr (.param rel))
-                      (mapv plan-out-spec (.bindings rel)))]])
+  ParamRelation
+  (plan-unify-clause [{:keys [param bindings]}]
+    [[:from (plan-rel (plan-expr param)
+                      (mapv plan-out-spec bindings))]])
 
-  XtqlQuery$Where
+  Where
   (plan-unify-clause [where]
     (for [planned-where-exprs (plan-where where)]
       [:where planned-where-exprs]))
 
-  XtqlQuery$With
-  (plan-unify-clause [this]
-    (for [binding (.bindings this)
+  With
+  (plan-unify-clause [{:keys [with-bindings]}]
+    (for [binding with-bindings
           :let [{:keys [l r required-vars subqueries]} (plan-var-spec binding)]]
       [:with {:expr r
               :provided-vars #{l}
               :required-vars required-vars
               :subqueries subqueries}]))
 
-  XtqlQuery$Unnest
-  (plan-unify-clause [this]
-    (let [{:keys [l r subqueries required-vars]} (plan-var-spec (.binding this))]
+  Unnest
+  (plan-unify-clause [{:keys [unnest-binding]}]
+    (let [{:keys [l r subqueries required-vars]} (plan-var-spec unnest-binding)]
       [[:unnest {:expr r
                  :required-vars required-vars
                  :provided-vars #{l}
                  :subqueries subqueries}]]))
 
-  XtqlQuery$Join
-  (plan-unify-clause [this]
-    (plan-join :inner-join (.query this) (.args this) (.bindings this)))
+  Join
+  (plan-unify-clause [{:keys [join-query args bindings]}]
+    (plan-join :inner-join join-query args bindings))
 
-  XtqlQuery$LeftJoin
-  (plan-unify-clause [this]
-    (plan-join :left-outer-join (.query this) (.args this) (.bindings this))))
+  LeftJoin
+  (plan-unify-clause [{:keys [left-join-query args bindings]}]
+    (plan-join :left-outer-join left-join-query args bindings)))
 
 (defn wrap-wheres [{:keys [ra-plan provided-vars]} wheres]
   {:ra-plan (-> ra-plan
@@ -749,13 +746,13 @@
         plan)))
 
 (extend-protocol PlanQuery
-  XtqlQuery$Unify
-  (plan-query [unify]
+  Unify
+  (plan-query [{:keys [unify-clauses]}]
     ;;TODO not all clauses can return entire plans (e.g. where-clauses),
     ;;they require an extra call to wrap should these still use the :ra-plan key.
     (let [{from-clauses :from, where-clauses :where with-clauses :with join-clauses :join
            unnests :unnest}
-          (-> (mapcat plan-unify-clause (.clauses unify))
+          (-> (mapcat plan-unify-clause unify-clauses)
               (->> (group-by first))
               (update-vals #(mapv second %)))]
 
@@ -773,7 +770,6 @@
              unnests unnests]
 
         (if (and (empty? wheres) (empty? withs) (empty? joins) (empty? unnests))
-
           plan
 
           (let [available-vars (:provided-vars plan)]
@@ -803,30 +799,31 @@
                          unavailable-joins
                          unavailable-unnests))))))))))
 
-(defn- plan-order-spec [^XtqlQuery$OrderSpec spec]
-  (let [expr (.expr spec)]
-    {:order-spec [(if (instance? Expr$LogicVar expr)
-                    (col-sym (.lv ^Expr$LogicVar expr))
-                    (throw (UnsupportedOperationException. "TODO order-by spec can only take a column as val")))
+(defn- plan-order-spec [{:keys [expr direction nulls]}]
+  {:order-spec [(if (instance? Expr$LogicVar expr)
+                  (col-sym (.lv ^Expr$LogicVar expr))
+                  (throw (UnsupportedOperationException. "TODO order-by spec can only take a column as val")))
 
-                  (cond-> {}
-                    (.direction spec)
-                    (assoc :direction (if (= XtqlQuery$OrderDirection/DESC (.direction spec)) :desc :asc))
-                    (.nulls spec)
-                    (assoc :null-ordering (if (= XtqlQuery$OrderNulls/LAST (.nulls spec)) :nulls-last :nulls-first)))]}))
+                (cond-> {}
+                  direction (assoc :direction (case direction
+                                                :desc :desc
+                                                :asc))
+                  nulls (assoc :null-ordering (case nulls
+                                                :last :nulls-last
+                                                :nulls-first)))]})
 
 (extend-protocol PlanQueryTail
-  XtqlQuery$OrderBy
-  (plan-query-tail [order-by {:keys [ra-plan provided-vars]}]
+  OrderBy
+  (plan-query-tail [{:keys [order-specs]} {:keys [ra-plan provided-vars]}]
     ;;TODO Change order specs to use keywords
-    (let [planned-specs (mapv plan-order-spec (.orderSpecs order-by))]
+    (let [planned-specs (mapv plan-order-spec order-specs)]
       {:ra-plan [:order-by (mapv :order-spec planned-specs)
                  ra-plan]
        :provided-vars provided-vars}))
 
-  XtqlQuery$Aggregate
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    (let [planned-specs (map #(plan-col-spec % provided-vars) (.cols this))
+  Aggregate
+  (plan-query-tail [{:keys [agg-bindings]} {:keys [ra-plan provided-vars]}]
+    (let [planned-specs (map #(plan-col-spec % provided-vars) agg-bindings)
           groups (group-by (comp boolean seq :agg-fns) planned-specs)
 
           aggregate-specs (mapcat (fn [{:keys [agg-fns]}]
@@ -882,14 +879,14 @@
                      ra-plan)]]
        :provided-vars (set (map :l planned-specs))}))
 
-  XtqlQuery$Limit
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    {:ra-plan [:top {:limit (.length this)} ra-plan]
+  Limit
+  (plan-query-tail [{:keys [limit]} {:keys [ra-plan provided-vars]}]
+    {:ra-plan [:top {:limit limit} ra-plan]
      :provided-vars provided-vars})
 
-  XtqlQuery$Offset
-  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
-    {:ra-plan [:top {:skip (.length this)} ra-plan]
+  Offset
+  (plan-query-tail [{:keys [offset]} {:keys [ra-plan provided-vars]}]
+    {:ra-plan [:top {:skip offset} ra-plan]
      :provided-vars provided-vars}))
 
 (def compile-query
@@ -946,63 +943,57 @@
         ra-plan]]))
 
   Delete
-  (plan-dml [{:keys [table for-valid-time bind-specs unify-clauses]} tx-opts]
-    (let [table-name (str (symbol (util/with-default-schema table)))
-          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
-                                                                         (doto (.setBindings (concat bind-specs
-                                                                                                     extra-dml-bind-specs)))
-                                                                         (.build))]
-                                                                    unify-clauses))
+  (plan-dml [{:keys [table for-valid-time bind-specs unify-clauses]} _tx-opts]
+    (let [table-name (util/with-default-schema table)
+          target-query (xtql/->Pipeline (xtql/->Unify (into [(xtql/map->From {:table table-name
+                                                                              :bindings (concat bind-specs extra-dml-bind-specs)})]
+                                                            unify-clauses))
 
-                                            [(XtqlQuery$Return. (dml-colspecs for-valid-time))])
+                                        [(xtql/->Return (dml-colspecs for-valid-time))])
 
           {target-plan :ra-plan} (plan-query target-query)]
-      [:delete {:table table-name}
+      [:delete {:table (str (symbol table-name))}
        target-plan]))
 
   Erase
   (plan-dml [{:keys [table bind-specs unify-clauses]} _tx-opts]
-    (let [table-name (str (symbol (util/with-default-schema table)))
-          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
-                                                                         (doto (.setBindings (concat bind-specs
-                                                                                                     [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])))
-                                                                         (.build))]
-                                                                    unify-clauses))
+    (let [table-name (util/with-default-schema table)
+          target-query (xtql/->Pipeline (xtql/->Unify (into [(xtql/map->From {:table table-name
+                                                                              :bindings (concat bind-specs [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])})]
+                                                            unify-clauses))
 
-                                            [(XtqlQuery$Return. [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])])
+                                        [(xtql/->Return [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])])
 
           {target-plan :ra-plan} (plan-query target-query)]
-      [:erase {:table table-name}
+      [:erase {:table (str (symbol table-name))}
        target-plan]))
 
   Update
   (plan-dml [{:keys [table for-valid-time set-specs bind-specs unify-clauses]} tx-opts]
-    (let [table-name (str (symbol (util/with-default-schema table)))
-          known-columns (set (get-in tx-opts [:table-info table-name]))
+    (let [table-name (util/with-default-schema table)
+          known-columns (set (get-in tx-opts [:table-info (str (symbol table-name))]))
           unspecified-columns (-> (set/difference known-columns
                                                   (set (for [^Binding set-spec set-specs]
                                                          (util/str->normal-form-str (.getBinding set-spec)))))
                                   (disj "_id"))
 
-          target-query (XtqlQuery$Pipeline. (XtqlQuery$Unify. (into [(-> (Queries/from table-name)
-                                                                         (.forValidTime for-valid-time)
-                                                                         (doto (.setBindings
-                                                                                (concat bind-specs
-                                                                                        [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
-                                                                                        (for [^String col unspecified-columns]
-                                                                                          (Binding. col (Exprs/lVar (str "xt$update$" col))))
-                                                                                        extra-dml-bind-specs)))
-                                                                         (.build))]
-                                                                    unify-clauses))
+          target-query (xtql/->Pipeline (xtql/->Unify (into [(xtql/map->From {:table table-name
+                                                                              :for-valid-time for-valid-time
+                                                                              :bindings (concat bind-specs
+                                                                                                [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
+                                                                                                (for [^String col unspecified-columns]
+                                                                                                  (Binding. col (Exprs/lVar (str "xt$update$" col))))
+                                                                                                extra-dml-bind-specs)})]
+                                                            unify-clauses))
 
-                                            [(XtqlQuery$Return. (concat (dml-colspecs for-valid-time)
-                                                                        [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
-                                                                        (for [^String col unspecified-columns]
-                                                                          (Binding. col (Exprs/lVar (str "xt$update$" col))))
-                                                                        set-specs))])
+                                        [(xtql/->Return (concat (dml-colspecs for-valid-time)
+                                                                [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
+                                                                (for [^String col unspecified-columns]
+                                                                  (Binding. col (Exprs/lVar (str "xt$update$" col))))
+                                                                set-specs))])
 
           {target-plan :ra-plan} (plan-query target-query)]
-      [:update {:table table-name}
+      [:update {:table (str (symbol table-name))}
        target-plan]))
 
   AssertNotExists

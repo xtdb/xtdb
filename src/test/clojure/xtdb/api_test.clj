@@ -396,8 +396,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
       (t/is (= tx1-expected (all-users tx1)))
 
       (t/testing "insert by query"
-        (xt/submit-tx *node* [[:insert-into :users2 '(from :users {:bind [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]
-                                                                   :for-valid-time :all-time})]])
+        (xt/execute-tx *node* [[:insert-into :users2 '(from :users {:bind [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]
+                                                                    :for-valid-time :all-time})]])
 
         (t/is (= #{["Dave" "Davis", (time/->zdt #inst "2018"), nil]
                    ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]

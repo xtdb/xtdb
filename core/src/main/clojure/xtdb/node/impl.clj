@@ -1,6 +1,5 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
-            [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
@@ -15,7 +14,7 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql :as xtql])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
@@ -139,7 +138,7 @@
   (prepare-xtql [this query query-opts]
    (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
          ast (cond
-               (sequential? query) (xtql.edn/parse-query query)
+               (sequential? query) (xtql/parse-query query)
                (instance? XtqlQuery query) query
                :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                              {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]

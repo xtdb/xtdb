@@ -87,7 +87,7 @@ When the query is submitted:
 1. It is first *parsed into an https://en.wikipedia.org/wiki/Abstract_syntax_tree[AST]* - for SQL, using https://www.antlr.org[Antlr]; for XTQL, using a hand-rolled parser.
 +
 --
-(see `Sql.g4`, `xtdb.xtql.edn`)
+(see `Sql.g4`, `xtdb.xtql`)
 --
 2. *The AST is transformed into a naïve 'logical plan'*.
 +

@@ -6,7 +6,7 @@
             [xtdb.mirrors.time-literals :as tl]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql :as xtql])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.time Duration Period)
            java.util.List
@@ -15,7 +15,8 @@
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
            (xtdb.tx_ops AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PutDocs Update XtqlAndArgs)
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)))
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
+           (xtdb.xtql Pipeline From Where With Join LeftJoin Without Return UnionAll OrderBy Limit Offset Aggregate DocsRelation ParamRelation Unify)))
 
 (defrecord TxKey [tx-id system-time]
   TransactionKey
@@ -94,13 +95,13 @@
   (ZonedDateTimeRange. (time/->zdt from) (time/->zdt to)))
 
 (defn- render-binding [binding]
-  (xtql.edn/unparse-binding identity identity binding))
+  (xtql/unparse-binding identity identity binding))
 
 (defn- render-query [^XtqlQuery query]
-  (xtql.edn/unparse-query query))
+  (xtql/unparse-query query))
 
 (defn- xtql-query-reader [q-edn]
-  (xtql.edn/parse-query q-edn))
+  (xtql/parse-query q-edn))
 
 (defn- render-sql-op [^TxOp$Sql op]
   {:sql (.sql op), :arg-rows (.argRows op)})
@@ -247,6 +248,22 @@
 
           Binding (transit/write-handler "xtdb.query/binding" render-binding)
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
+          Pipeline (transit/write-handler "xtdb.query/xtql" render-query)
+          From (transit/write-handler "xtdb.query/xtql" render-query)
+          Where (transit/write-handler "xtdb.query/xtql" render-query)
+          With (transit/write-handler "xtdb.query/xtql" render-query)
+          Join (transit/write-handler "xtdb.query/xtql" render-query)
+          LeftJoin (transit/write-handler "xtdb.query/xtql" render-query)
+          Without (transit/write-handler "xtdb.query/xtql" render-query)
+          Return (transit/write-handler "xtdb.query/xtql" render-query)
+          UnionAll (transit/write-handler "xtdb.query/xtql" render-query)
+          OrderBy (transit/write-handler "xtdb.query/xtql" render-query)
+          Limit (transit/write-handler "xtdb.query/xtql" render-query)
+          Offset (transit/write-handler "xtdb.query/xtql" render-query)
+          DocsRelation (transit/write-handler "xtdb.query/xtql" render-query)
+          ParamRelation (transit/write-handler "xtdb.query/xtql" render-query)
+          Aggregate (transit/write-handler "xtdb.query/xtql" render-query)
+          Unify (transit/write-handler "xtdb.query/xtql" render-query)
 
           TxOp$Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
 

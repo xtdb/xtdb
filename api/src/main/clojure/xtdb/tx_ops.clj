@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql :as xtql])
   (:import [java.io Writer]
            [java.nio ByteBuffer]
            [java.util List]
@@ -97,46 +97,46 @@
   TxOp
   Unparse
   (unparse-tx-op [_]
-    [:insert-into table (xtql.edn/unparse-query query)]))
+    [:insert-into table (xtql/unparse-query query)]))
 
 (defrecord Update [table for-valid-time bind-specs set-specs unify-clauses]
   TxOp
   Unparse
   (unparse-tx-op [_]
     [:update (cond-> {:table table
-                      :set (into {} (map xtql.edn/unparse-col-spec) set-specs)}
-               for-valid-time (assoc :for-valid-time (xtql.edn/unparse for-valid-time))
-               bind-specs (assoc :bind (mapv xtql.edn/unparse-out-spec bind-specs))
-               unify-clauses (assoc :unify (mapv xtql.edn/unparse-unify-clause unify-clauses)))]))
+                      :set (into {} (map xtql/unparse-col-spec) set-specs)}
+               for-valid-time (assoc :for-valid-time (xtql/unparse for-valid-time))
+               bind-specs (assoc :bind (mapv xtql/unparse-out-spec bind-specs))
+               unify-clauses (assoc :unify (mapv xtql/unparse-unify-clause unify-clauses)))]))
 
 (defrecord Delete [table for-valid-time bind-specs unify-clauses]
   TxOp
   Unparse
   (unparse-tx-op [_]
     [:delete (cond-> {:from table}
-               for-valid-time (assoc :for-valid-time (xtql.edn/unparse for-valid-time))
-               bind-specs (assoc :bind (mapv xtql.edn/unparse-out-spec bind-specs))
-               unify-clauses (assoc :unify (mapv xtql.edn/unparse-unify-clause unify-clauses)))]))
+               for-valid-time (assoc :for-valid-time (xtql/unparse for-valid-time))
+               bind-specs (assoc :bind (mapv xtql/unparse-out-spec bind-specs))
+               unify-clauses (assoc :unify (mapv xtql/unparse-unify-clause unify-clauses)))]))
 
 (defrecord Erase [table bind-specs unify-clauses]
   TxOp
   Unparse
   (unparse-tx-op [_]
     [:erase (cond-> {:from table}
-              bind-specs (assoc :bind (mapv xtql.edn/unparse-out-spec bind-specs))
-              unify-clauses (assoc :unify (mapv xtql.edn/unparse-unify-clause unify-clauses)))]))
+              bind-specs (assoc :bind (mapv xtql/unparse-out-spec bind-specs))
+              unify-clauses (assoc :unify (mapv xtql/unparse-unify-clause unify-clauses)))]))
 
 (defrecord AssertExists [query]
   TxOp
   Unparse
   (unparse-tx-op [_]
-    [:assert-exists (xtql.edn/unparse-query query)]))
+    [:assert-exists (xtql/unparse-query query)]))
 
 (defrecord AssertNotExists [query]
   TxOp
   Unparse
   (unparse-tx-op [_]
-    [:assert-not-exists (xtql.edn/unparse-query query)]) )
+    [:assert-not-exists (xtql/unparse-query query)]) )
 
 (defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]
   TxOp)
@@ -237,7 +237,7 @@
 
 (defmethod parse-tx-op :insert-into [[_ table query & arg-rows]]
   (cond-> (->Insert (expect-table-name table)
-                    (xtql.edn/parse-query query))
+                    (xtql/parse-query query))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :update [[_ opts & arg-rows :as this]]
@@ -254,7 +254,7 @@
       (throw (err/illegal-arg :xtql/malformed-bind
                               {::err/message "expected nil or vector", :bind bind, :update this})))
 
-    (let [set-specs (xtql.edn/parse-col-specs set-specs this)]
+    (let [set-specs (xtql/parse-col-specs set-specs this)]
       (when-let [forbidden-cols (not-empty (set (for [^Binding binding set-specs
                                                       :let [binding-name (.getBinding binding)]
                                                       :when (str/starts-with? (NormalForm/normalForm binding-name) "_")]
@@ -264,17 +264,17 @@
                                  :cols forbidden-cols})))
 
       (cond-> (->Update (expect-table-name table)
-                        (some-> for-valid-time (xtql.edn/parse-temporal-filter :for-valid-time this))
-                        (some-> bind (xtql.edn/parse-out-specs this))
+                        (some-> for-valid-time (xtql/parse-temporal-filter :for-valid-time this))
+                        (some-> bind (xtql/parse-out-specs this))
                         set-specs
-                        (some->> unify (mapv xtql.edn/parse-unify-clause)))
+                        (some->> unify (mapv xtql/parse-unify-clause)))
         (seq arg-rows) (->XtqlAndArgs arg-rows)))))
 
 (defmethod parse-tx-op :delete [[_ {table :from, :keys [for-valid-time bind unify]} & arg-rows :as this]]
   (cond-> (->Delete (expect-table-name table)
-                    (some-> for-valid-time (xtql.edn/parse-temporal-filter :for-valid-time this))
-                    (some-> bind (xtql.edn/parse-out-specs this))
-                    (some->> unify (mapv xtql.edn/parse-unify-clause)))
+                    (some-> for-valid-time (xtql/parse-temporal-filter :for-valid-time this))
+                    (some-> bind (xtql/parse-out-specs this))
+                    (some->> unify (mapv xtql/parse-unify-clause)))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :delete-docs [[_ table-or-opts & doc-ids]]
@@ -287,19 +287,19 @@
 
 (defmethod parse-tx-op :erase [[_ {table :from, :keys [bind unify]} & arg-rows :as this]]
   (cond-> (->Erase (expect-table-name table)
-                   (some-> bind (xtql.edn/parse-out-specs this))
-                   (some->> unify (mapv xtql.edn/parse-unify-clause)))
+                   (some-> bind (xtql/parse-out-specs this))
+                   (some->> unify (mapv xtql/parse-unify-clause)))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :erase-docs [[_ table & doc-ids]]
   (->EraseDocs (expect-table-name table) (mapv expect-eid doc-ids)))
 
 (defmethod parse-tx-op :assert-exists [[_ query & arg-rows]]
-  (cond-> (->AssertExists (xtql.edn/parse-query query))
+  (cond-> (->AssertExists (xtql/parse-query query))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :assert-not-exists [[_ query & arg-rows]]
-  (cond-> (->AssertNotExists (xtql.edn/parse-query query))
+  (cond-> (->AssertNotExists (xtql/parse-query query))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
 (defmethod parse-tx-op :call [[_ f & args]]
