@@ -238,7 +238,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 53
+            "y": 69
           },
           "id": 19,
           "options": {
@@ -337,7 +337,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 53
+            "y": 69
           },
           "id": 17,
           "options": {
@@ -398,7 +398,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 61
+            "y": 77
           },
           "id": 16,
           "options": {
@@ -533,7 +533,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 70
           },
           "id": 18,
           "options": {
@@ -632,7 +632,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 54
+            "y": 70
           },
           "id": 15,
           "options": {
@@ -693,7 +693,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 62
+            "y": 78
           },
           "id": 14,
           "options": {
@@ -830,7 +830,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 55
+            "y": 71
           },
           "id": 8,
           "options": {
@@ -928,7 +928,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 55
+            "y": 71
           },
           "id": 20,
           "options": {
@@ -1026,7 +1026,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 63
+            "y": 79
           },
           "id": 9,
           "options": {
@@ -1124,7 +1124,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 63
+            "y": 79
           },
           "id": 10,
           "options": {
@@ -1223,7 +1223,7 @@
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 71
+            "y": 87
           },
           "id": 11,
           "options": {
@@ -1309,7 +1309,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -1325,7 +1326,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 8
           },
           "id": 24,
           "options": {
@@ -1438,7 +1439,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -1454,7 +1456,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 8
           },
           "id": 3,
           "options": {
@@ -1536,7 +1538,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -1552,7 +1555,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 64
+            "y": 16
           },
           "id": 4,
           "options": {
@@ -1634,7 +1637,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -1650,7 +1654,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 64
+            "y": 16
           },
           "id": 5,
           "options": {
@@ -1732,7 +1736,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -1748,7 +1753,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 72
+            "y": 24
           },
           "id": 6,
           "options": {
@@ -1784,13 +1789,199 @@
           ],
           "title": "XTDB - Log Watcher Allocated Memory",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "decbytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 24
+          },
+          "id": 38,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "jvm_memory_netty_bytes{node_id=\"$xtdbnode\"}",
+              "legendFormat": "{{node_id}} - netty used memory",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Netty Allocated Memory",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "decbytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 32
+          },
+          "id": 40,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "jvm_memory_direct_bytes{node_id=\"$xtdbnode\"}",
+              "legendFormat": "{{node_id}} - direct used memory",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Direct Allocated Memory",
+          "type": "timeseries"
         }
       ],
       "title": "XTDB - Direct Allocated Memory",
       "type": "row"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1798,614 +1989,610 @@
         "y": 8
       },
       "id": 28,
-      "panels": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 26,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_metaSliceCount{node_id=\"$xtdbnode\"}",
+              "legendFormat": "{{node_id}} Meta Record Batches",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_dataSliceCount{node_id=\"$xtdbnode\"}",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Data Record Batches",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "memorycache_metaSliceCount{node_id=\"$xtdbnode\"} + memorycache_dataSliceCount{node_id=\"$xtdbnode\"}",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Record Batches",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Memory Cache - Record Batch count",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 30,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_metaWeightBytes_bytes{node_id=\"$xtdbnode\"}",
+              "legendFormat": "{{node_id}} - Meta Record Batches weight",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_dataWeightBytes_bytes{node_id=\"$xtdbnode\"}",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Data Record Batches weight",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Memory Cache - Weights",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 17
+          },
+          "id": 32,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_metaPinned{node_id=\"$xtdbnode\"}",
+              "legendFormat": "{{node_id}} - Meta pinned",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_metaUnpinned{node_id=\"$xtdbnode\"}",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Meta unpinned",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_dataPinned{node_id=\"$xtdbnode\"}",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Data pinned",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "builder",
+              "expr": "memorycache_dataUnpinned{node_id=\"$xtdbnode\"}",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Data unpinned",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Memory Cache - Pinned vs Unpinned",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 17
+          },
+          "id": 34,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "rate(memory_cache_misses_total{node_id=\"$xtdbnode\"}[1m])",
+              "legendFormat": "{{node_id}} Memory Cache Misses 1min",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "rate(disk_cache_misses_total{node_id=\"$xtdbnode\"}[1m])",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Disk Cash Misses 1min",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Record Batch Requests 1min",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "avg_over_time(rate(memory_cache_misses_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
+              "hide": false,
+              "legendFormat": "{{node_id}} Memory Cache Misses 5min avg",
+              "range": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Record Batch Requests 5min avg",
+              "range": true,
+              "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Record Batch Requests 5min avg",
+              "range": true,
+              "refId": "F"
+            }
+          ],
+          "title": "Memory Cache - Cache misses",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_DS_XTDB}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 25
+          },
+          "id": 36,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])",
+              "legendFormat": "{{node_id}} - Record Batch requests 1min",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_DS_XTDB}"
+              },
+              "editorMode": "code",
+              "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
+              "hide": false,
+              "legendFormat": "{{node_id}} - Record Batch requests 5min avg",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Buffer Pool - Record Batch requests",
+          "type": "timeseries"
+        }
+      ],
       "title": "XTDB - Memory Cache",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_DS_XTDB}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 9
-      },
-      "id": 26,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_metaSliceCount{node_id=\"$xtdbnode\"}",
-          "legendFormat": "{{node_id}} Meta Record Batches",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_dataSliceCount{node_id=\"$xtdbnode\"}",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Data Record Batches",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "memorycache_metaSliceCount{node_id=\"$xtdbnode\"} + memorycache_dataSliceCount{node_id=\"$xtdbnode\"}",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Record Batches",
-          "range": true,
-          "refId": "C"
-        }
-      ],
-      "title": "Memory Cache - Record Batch count",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_DS_XTDB}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 9
-      },
-      "id": 30,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_metaWeightBytes_bytes{node_id=\"$xtdbnode\"}",
-          "legendFormat": "{{node_id}} - Meta Record Batches weight",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_dataWeightBytes_bytes{node_id=\"$xtdbnode\"}",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Data Record Batches weight",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Memory Cache - Weights",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_DS_XTDB}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 17
-      },
-      "id": 32,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_metaPinned{node_id=\"$xtdbnode\"}",
-          "legendFormat": "{{node_id}} - Meta pinned",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_metaUnpinned{node_id=\"$xtdbnode\"}",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Meta unpinned",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_dataPinned{node_id=\"$xtdbnode\"}",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Data pinned",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "builder",
-          "expr": "memorycache_dataUnpinned{node_id=\"$xtdbnode\"}",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Data unpinned",
-          "range": true,
-          "refId": "D"
-        }
-      ],
-      "title": "Memory Cache - Pinned vs Unpinned",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_DS_XTDB}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 17
-      },
-      "id": 34,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "rate(memory_cache_misses_total{node_id=\"$xtdbnode\"}[1m])",
-          "legendFormat": "{{node_id}} Memory Cache Misses 1min",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "rate(disk_cache_misses_total{node_id=\"$xtdbnode\"}[1m])",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Disk Cash Misses 1min",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Record Batch Requests 1min",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "avg_over_time(rate(memory_cache_misses_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
-          "hide": false,
-          "legendFormat": "{{node_id}} Memory Cache Misses 5min avg",
-          "range": true,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Record Batch Requests 5min avg",
-          "range": true,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Record Batch Requests 5min avg",
-          "range": true,
-          "refId": "F"
-        }
-      ],
-      "title": "Memory Cache - Cache misses",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_DS_XTDB}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 25
-      },
-      "id": 36,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])",
-          "legendFormat": "{{node_id}} - Record Batch requests 1min",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_DS_XTDB}"
-          },
-          "editorMode": "code",
-          "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
-          "hide": false,
-          "legendFormat": "{{node_id}} - Record Batch requests 5min avg",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Buffer Pool - Record Batch requests",
-      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -2443,13 +2630,13 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "XTDB: Node Debugging Dashboard",
-  "uid": "edznf2lfly22o1",
-  "version": 4,
+  "uid": "edznf2lfly22o1aa",
+  "version": 1,
   "weekStart": ""
 }
