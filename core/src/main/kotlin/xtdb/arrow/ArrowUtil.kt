@@ -25,10 +25,16 @@ object ArrowUtil {
         val bodyBuf = buf.slice(offset + metadataLength, bodyLength)
             .also { it.referenceManager.retain() }
 
-        val msg = Message.getRootAsMessage(metadataBuf.asReadOnlyBuffer())
-        val recordBatchFB = RecordBatch().also { msg.header(it) }
+        try {
+            val msg = Message.getRootAsMessage(metadataBuf.asReadOnlyBuffer())
+            val recordBatchFB = RecordBatch().also { msg.header(it) }
 
-        return MessageSerializer.deserializeRecordBatch(recordBatchFB, bodyBuf
-            ?: error(errorString ?: "Failed to deserialize record batch at offset $offset"))
+            return MessageSerializer.deserializeRecordBatch(recordBatchFB, bodyBuf
+                ?: error(errorString ?: "Failed to deserialize record batch at offset $offset"))
+
+        } catch (t: Throwable) {
+            bodyBuf.referenceManager.release()
+            throw t
+        }
     }
 }
