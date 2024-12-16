@@ -667,13 +667,18 @@
      (step coll #{}))))
 
 (defn max-direct-memory
-  "Returns the maximum direct memory supposed to be used by the system"
+  "Returns the maximum direct memory supposed to be used by the system.
+
+  Assumes the JVM option `io.netty.maxDirectMemory` is not set as otherwise that value is returned."
   ^long []
   (try
     (io.netty.util.internal.PlatformDependent/maxDirectMemory)
     (catch Throwable _t
       ;; otherwise we use as much direct memory as there was heap specified
       (.maxMemory (Runtime/getRuntime)))))
+
+(defn used-netty-memory []
+  (io.netty.util.internal.PlatformDependent/usedDirectMemory))
 
 (defn throttle [f ^long ms]
   (let [last-time (atom 0)
