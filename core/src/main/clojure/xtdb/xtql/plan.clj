@@ -1,4 +1,4 @@
-(ns xtdb.xtql
+(ns xtdb.xtql.plan
   (:require [clojure.set :as set]
             [xtdb.error :as err]
             [xtdb.expression :as expr]

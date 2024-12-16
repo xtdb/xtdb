@@ -25,7 +25,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql])
+            [xtdb.xtql.plan :as xtql])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Timer)
            (java.io ByteArrayInputStream Closeable)

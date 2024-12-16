@@ -30,7 +30,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql]
+            [xtdb.xtql.plan :as xtql]
             [xtdb.xtql.edn :as xtql.edn])
   (:import clojure.lang.MapEntry
            (com.github.benmanes.caffeine.cache Cache Caffeine)
