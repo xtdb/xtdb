@@ -1,7 +1,8 @@
 (ns xtdb.metrics
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [xtdb.node :as xtn])
+            [xtdb.node :as xtn]
+            [xtdb.util :as util])
   (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
@@ -10,7 +11,7 @@
            java.util.List
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb.cache Stats MemoryCacheStats)))
+           (xtdb.cache MemoryCacheStats Stats)))
 
 (defn add-counter
   ([reg name] (add-counter reg name {}))
@@ -88,6 +89,11 @@
 (defn random-node-id []
   (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
 
+
+(defn direct-memory-pool ^java.lang.management.BufferPoolMXBean []
+  (->> (java.lang.management.ManagementFactory/getPlatformMXBeans java.lang.management.BufferPoolMXBean)
+       (some #(when (= (.getName ^java.lang.management.BufferPoolMXBean %) "direct") %))))
+
 (defmethod ig/init-key :xtdb.metrics/registry [_ _]
   (let [reg (CompositeMeterRegistry.)]
 
@@ -102,7 +108,14 @@
                                  (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]
       (.bindTo metric reg))
 
+    (add-gauge reg "jvm.memory.netty.bytes" #(util/used-netty-memory) {:unit "bytes"})
+
+    (when-let [direct-pool (direct-memory-pool)]
+      (add-gauge reg "jvm.memory.direct.bytes"
+                 #(.getMemoryUsed direct-pool)
+                 {:unit "bytes"}))
     reg))
+
 
 (defmethod xtn/apply-config! ::cloudwatch [config _k v]
   (xtn/apply-config! config :xtdb.aws.cloudwatch/metrics v))
