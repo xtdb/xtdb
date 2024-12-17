@@ -169,7 +169,7 @@
         {:keys [^UUID i_id u_id i_buyer_id bid max_bid ^UUID new_bid_id now]} (generate-new-bid-params worker)]
     (when (and i_id u_id)
       (let [{:keys [imb, imb_ib_id] :as _res}
-            (-> (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb._id = ?"
+            (-> (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ?"
                       {:after-tx-id last-tx-id, :args [i_id], :key-fn :snake-case-keyword})
                 first)
             {:keys [curr_bid, curr_max]}
@@ -184,24 +184,22 @@
         (->> (xt/submit-tx sut
                            ;; increment number of bids on item
                            (cond->
-                               [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item._id = ?"
-                                 [i_id]]]
+                               [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item._id = ?" [i_id]]]
 
                              ;; if new bid exceeds old, bump it
                              upd_curr_bid
-                             (conj [[:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid._id = ?"
-                                     [bid imb]]])
+                             (conj [:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid._id = ?" [bid imb]])
 
                              ;; we exceed the old max, win the bid.
                              (and curr_bid new_bid_win)
-                             (conj [[:sql "UPDATE item_max_bid
-                                      SET imb_ib_id = ?
-                                      imb_ib_i_id = ?
-                                      imb_ib_u_id = ?
+                             (conj [:sql "UPDATE item_max_bid
+                                      SET imb_ib_id = ?,
+                                      imb_ib_i_id = ?,
+                                      imb_ib_u_id = ?,
                                       imb_updated = ?
-                                      WHERE item_max_bid.i_id = ? AND item_max_bid.u_id = ?"
+                                      WHERE item_max_bid._id = ?"
 
-                                     [new_bid_id i_id u_id now i_id u_id]]])
+                                    [new_bid_id i_id u_id now imb]])
                              ;; no previous max bid, insert new max bid
                              (nil? imb_ib_id)
                              (conj [:put-docs :item-max-bid {:xt/id (UUID. (.getMostSignificantBits i_id)

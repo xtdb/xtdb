@@ -117,47 +117,64 @@
 
 (deftest proc-new-bid-test
   (with-redefs [am/sample-status (constantly :open)]
-    (let [worker (->worker *node*)]
-      (t/testing "new bid"
-        (bxt2/generate worker :user am/generate-user 2)
-        (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 1)
-        (bxt2/generate worker :item am/generate-item 1)
+    (letfn [(number-bids []
+              (-> (xt/q *node* '(from :item [i_num_bids])
+                        {:key-fn :snake-case-keyword})
+                  first :i_num_bids))]
 
-        (am/proc-new-bid worker)
+      (let [worker (->worker *node*)]
+        (t/testing "new bid"
+          (bxt2/generate worker :user am/generate-user 2)
+          (am/load-categories-tsv worker)
+          (bxt2/generate worker :category am/generate-category 1)
+          (bxt2/generate worker :item am/generate-item 1)
 
-        ;; item has a new bid
-        ;; (t/is (= nil (am/generate-new-bid-params worker)))
-        (t/is (= {:i_num_bids 1}
-                 (first (xt/q *node* '(from :item [i_num_bids])
-                              {:key-fn :snake-case-keyword}))))
-        ;; there exists a bid
-        (t/is (= {:ib_id #uuid "d33def0e-b493-3f91-0000-000000000000",
-                  :ib_i_id #uuid "d33def0e-b493-3f91-0000-000000000000",
-                  :ib_buyer_id #uuid "d526fcdf-9b10-329b-9482-0f729dbb25f4"}
-                 (first (xt/q *node* '(from :item-bid [ib_id ib_i_id ib_buyer_id])
-                              {:key-fn :snake-case-keyword}))))
-        ;; new max bid
-        (t/is (= {:imb_i_id #uuid "d33def0e-b493-3f91-0000-000000000000",
-                  :imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91"}
-                 (first (xt/q *node*
-                              '(from :item-max-bid [{:xt/id imb}, imb_i_id])
-                              {:key-fn :snake-case-keyword})))))
-
-      (t/testing "new bid but does not exceed max"
-        (with-redefs [am/random-price (constantly Double/MIN_VALUE)]
-          (bxt2/generate worker :user am/generate-user 1)
           (am/proc-new-bid worker)
 
-          ;; new bid
-          (t/is (= 2 (-> (xt/q *node* '(from :item [i_num_bids])
-                               {:key-fn :snake-case-keyword})
-                         first :i_num_bids)))
-          ;; winning bid remains the same
-          (t/is (= {:imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91",
-                    :imb_i_id #uuid "d33def0e-b493-3f91-0000-000000000000"}
-                   (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_i_id])
-                                {:key-fn :snake-case-keyword})))))))))
+          ;; item has a new bid
+          ;; (t/is (= nil (am/generate-new-bid-params worker)))
+          (t/is (= 1 (number-bids)))
+          ;; there exists a bid
+          (t/is (= {:ib_id #uuid "d33def0e-b493-3f91-0000-000000000000",
+                    :ib_i_id #uuid "d33def0e-b493-3f91-0000-000000000000",
+                    :ib_buyer_id #uuid "d526fcdf-9b10-329b-9482-0f729dbb25f4"}
+                   (first (xt/q *node* '(from :item-bid [ib_id ib_i_id ib_buyer_id])
+                                {:key-fn :snake-case-keyword}))))
+          ;; new max bid
+          (t/is (= {:imb_i_id #uuid "d33def0e-b493-3f91-0000-000000000000",
+                    :imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91"}
+                   (first (xt/q *node*
+                                '(from :item-max-bid [{:xt/id imb}, imb_i_id])
+                                {:key-fn :snake-case-keyword})))))
+
+        (t/testing "new bid but does not exceed max"
+          (with-redefs [am/random-price (constantly Double/MIN_VALUE)]
+            (bxt2/generate worker :user am/generate-user 1)
+            (am/proc-new-bid worker)
+
+            ;; new bid
+            (t/is (= 2 (number-bids)))
+
+            ;; winning bid remains the same
+            (t/is (= {:imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91",
+                      :imb_ib_id #uuid "d33def0e-b493-3f91-0000-000000000000"}
+                     (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_ib_id])
+                                  {:key-fn :snake-case-keyword}))))))
+
+        (t/testing "new exceeds max bid"
+          (with-redefs [am/random-price (constantly Double/MAX_VALUE)]
+            ;; (bxt2/generate worker :user am/generate-user 1)
+            (am/proc-new-bid worker)
+
+            ;; new bid
+            (t/is (= 3 (number-bids)))
+
+
+            ;; winning bid gets superseded
+            (t/is (= {:imb #uuid "d33def0e-b493-3f91-d33d-ef0eb4933f91",
+                      :imb_ib_id #uuid "d33def0e-b493-3f91-0000-000000000002"}
+                     (first (xt/q *node* '(from :item-max-bid [{:xt/id imb} imb_ib_id])
+                                  {:key-fn :snake-case-keyword}))))))))))
 
 (deftest proc-new-item-test
   (with-redefs [am/sample-status (constantly :open)]
