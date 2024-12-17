@@ -6,7 +6,6 @@
   - implements `next.jdbc.result-set/ReadableColumn` for `PGobject`, using XTDB's extensions for Transit and JSON
   "
   (:require [clojure.walk :as w]
-            [next.jdbc.protocols :as njp]
             [next.jdbc.result-set :as nj-rs]
             [xtdb.serde :as serde])
   (:import clojure.lang.Keyword
@@ -14,7 +13,6 @@
            [java.sql ResultSet]
            [java.util List Map Set]
            org.postgresql.util.PGobject
-           xtdb.api.Xtdb
            xtdb.api.query.IKeyFn
            xtdb.JsonSerde
            xtdb.util.NormalForm))
@@ -101,27 +99,7 @@
   (read-column-by-index [^PGobject obj _rs-meta _idx]
     (<-pg-obj obj)))
 
-(extend-protocol njp/Connectable
-  Xtdb
-  (get-connection [this opts]
-    (njp/get-connection {:dbtype "xtdb"
-                         :classname "xtdb.jdbc.XtdbDriver"
-                         :dbname (:dbname opts "xtdb")
-                         :host "localhost"
-                         :port (.getServerPort this)
-                         :options (:conn-opts opts "-c fallback_output_format=transit")}
-                        opts)))
-
-(extend-protocol njp/Executable
-  Xtdb
-  (-execute ^clojure.lang.IReduceInit [this sql-params opts]
-    (with-open [conn (njp/get-connection this opts)]
-      (njp/-execute conn sql-params opts)))
-
-  (-execute-one [this sql-params opts]
-    (with-open [conn (njp/get-connection this opts)]
-      (njp/-execute-one conn sql-params opts)))
-
-  (-execute-all [this sql-params opts]
-    (with-open [conn (njp/get-connection this opts)]
-      (njp/-execute-all conn sql-params opts))))
+(try
+  (Class/forName "xtdb.api.Xtdb")
+  (require 'xtdb.next.jdbc.impls)
+  (catch ClassNotFoundException _))
