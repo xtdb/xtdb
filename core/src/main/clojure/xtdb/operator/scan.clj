@@ -305,6 +305,8 @@
         (= '_id (nth eid-select 2))
         (second eid-select)))
 
+(def ^:private dummy-iid (ByteBuffer/allocateDirect 16))
+
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader args-rel]
   (when-let [eid-select (get selects "_id")]
     (when (= '= (first eid-select))
@@ -317,8 +319,9 @@
           (let [eid-rdr (.readerForName args-rel (name eid))]
             (when (= 1 (.valueCount eid-rdr))
               (let [eid (.getObject eid-rdr 0)]
-                (when (util/valid-iid? eid)
-                  (util/->iid eid))))))))))
+                (if (util/valid-iid? eid)
+                  (util/->iid eid)
+                  dummy-iid)))))))))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^ITableMetadata table-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
