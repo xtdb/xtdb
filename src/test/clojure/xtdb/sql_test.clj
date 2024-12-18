@@ -10,6 +10,7 @@
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types])
   (:import (xtdb.types RegClass RegProc)))
@@ -2532,3 +2533,16 @@ UNION ALL
           nil nil nil]
          (->> (xt/q tu/*node* "SELECT name, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _valid_to NULLS LAST")
               (map :xt/valid-to)))))
+
+(t/deftest select-with-lots-of-commas
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a "a", :b "b"}]])
+
+  (t/is (= [{}] (xt/q tu/*node* "SELECT FROM foo")))
+  (t/is (= [{}] (xt/q tu/*node* "SELECT ,, FROM foo")))
+  (t/is (= [{:a "a", :b "b"}] (xt/q tu/*node* "SELECT a,,b FROM foo")))
+  (t/is (= [{:a "a"}] (xt/q tu/*node* "SELECT ,,a, FROM foo")))
+  (t/is (= [{:a "a", :b "b"}] (xt/q tu/*node* "SELECT a,,b FROM foo")))
+
+  (t/is (= [{:xt/id 1, :a "a", :b "b"}] (xt/q tu/*node* "SELECT *,, FROM foo")))
+  (t/is (= [{:xt/id 1, :a "a", :b "b", :xt/valid-from (time/->zdt #inst "2020")}]
+           (xt/q tu/*node* "SELECT ,_valid_from,,* FROM foo"))))
