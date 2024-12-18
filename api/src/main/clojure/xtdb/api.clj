@@ -130,7 +130,7 @@
 
      \"UPDATE foo SET b = 1\"]
 
-  Returns a map with details about the submitted transaction, including system-time and tx-id.
+  Returns the tx-id.
 
   opts (map):
    - :system-time
