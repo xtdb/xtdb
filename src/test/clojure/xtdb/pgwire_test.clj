@@ -620,8 +620,18 @@
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
-           (is (= [["_column_1"] ["ping"]] (read)))))))))
+           (is (= [["_column_1"] ["ping"]] (read))))))))
 
+  (deftest psql-error-no-hanging-3930
+    (psql-session
+     (fn [send read]
+       (testing "error query"
+         (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
+         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] (read :err))))
+
+       (testing "ping"
+         (send "select 'ping';\n")
+         (is (= [["_column_1"] ["ping"]] (read))))))))
 
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]

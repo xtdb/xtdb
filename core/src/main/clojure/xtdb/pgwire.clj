@@ -1369,16 +1369,21 @@
     (if failed
       (throw (client-err "transaction failed"))
 
-      (let [{:keys [tx-id error]} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                            :system-time tx-system-time
-                                                            :authn {:user (get parameters "user")}})]
-        (swap! conn-state (fn [conn-state]
-                            (-> conn-state
-                                (dissoc :transaction)
-                                (assoc :watermark-tx-id tx-id))))
+      (try
+        (let [{:keys [tx-id error]} (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                              :system-time tx-system-time
+                                                              :authn {:user (get parameters "user")}})]
+          (swap! conn-state (fn [conn-state]
+                              (-> conn-state
+                                  (dissoc :transaction)
+                                  (assoc :watermark-tx-id tx-id))))
 
-        (when error
-          (throw (client-err (ex-message error))))))))
+          (when error
+            (throw (client-err (ex-message error)))))
+        (catch InterruptedException e (throw e))
+        (catch Exception e
+          (swap! conn-state #(dissoc % :transaction))
+          (throw e))))))
 
 (defn cmd-rollback [{:keys [conn-state]}]
   (swap! conn-state dissoc :transaction))
@@ -1720,15 +1725,15 @@
             (cmd-rollback conn))
           (send-ex conn e))))
 
+    (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+      (when implicit?
+        (if failed
+          (cmd-rollback conn)
+          (cmd-commit conn))))
+
     ;; here we catch explicitly because we need to send the error, then a ready message
     (catch InterruptedException e (throw e))
     (catch Exception e (send-ex conn e)))
-
-  (let [{:keys [implicit? failed]} (:transaction @conn-state)]
-    (when implicit?
-      (if failed
-        (cmd-rollback conn)
-        (cmd-commit conn))))
 
   (cmd-send-ready conn))
 
