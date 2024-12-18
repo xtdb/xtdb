@@ -1,0 +1,86 @@
+---
+title: Monitoring & Observability
+---
+
+XTDB offers a suite of tools & templates to facilitate monitoring and observability. These include a **Healthz Server** for health checks, **Metrics** for performance insights, integrations with third-party monitoring systems and **Grafana** dashboards for visualizing the health and performance of XTDB nodes.
+
+== Healthz Server
+
+The Healthz Server is a lightweight HTTP server that runs by default on all XTDB nodes. It provides health indicators, making it useful for monitoring in containerized and orchestrated environments.
+
+=== Configuration
+
+The Healthz Server can be configured to run on a custom port:
+
+[source,yaml]
+----
+healthz:
+  # Port to run the Healthz Server on.
+  # Default: 8080 (can be set as an !Env value).
+  port: 8080
+----
+
+=== Health Routes
+
+The following routes are exposed by the Healthz Server and can be used to monitor the node's status:
+
+* `/healthz/started`: Indicates whether the node has completed startup and has caught up on indexing.
+  ** Recommended for https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/#startup-probe[startup probes].
+  ** We recommend configuring a generous initial timeout, as it waits for indexing to stabilize.
+
+* `/healthz/alive`: Confirms the application is running without critical errors.
+  ** Suitable for https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/#liveness-probe[liveness probes].
+
+* `/healthz/ready`: Signals that the node is ready to process requests.
+  ** Suitable for https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/#readiness-probe[readiness probes].
+
+== Metrics
+
+XTDB provides various metrics for monitoring the health and performance of its nodes. These metrics are available via Prometheus and can also be integrated with cloud-based observability services.
+
+=== Prometheus Metrics
+
+By default, XTDB nodes expose metrics in the https://prometheus.io/[Prometheus] format. These can be accessed at the following endpoint on the **Healthz Server**:
+
+```
+<node_url>:<healthz_port>/metrics
+```
+
+=== Cloud Integrations
+
+XTDB nodes can be configured to report metrics to the following cloud-based monitoring services:
+
+* link:../azure#monitoring[Azure Application Insights]
+* link:../aws#monitoring[AWS CloudWatch]
+
+== Observability with Grafana
+
+NOTE: This guide assumes you have a working Grafana instance configured to scrape Prometheus metrics from XTDB nodes. For setup instructions, refer to the official documentation for https://grafana.com/docs/grafana/latest/installation/[Grafana] and https://prometheus.io/docs/prometheus/latest/getting_started/[Prometheus].
+
+To complement the metrics exposed by XTDB, we provide pre-built Grafana dashboards for monitoring the health and performance of XTDB clusters and individual nodes.
+
+
+To add these dashboards on Grafana:
+
+* Navigate to the `Dashboards -> New -> New dashboard`.
+* Click `Import dashboard`.
+* `Upload dashboard JSON file` -> Upload the dashboard file from the example directory.
+** Select the Prometheus data source.
+** Click `Import`.
+
+
+=== Cluster Monitoring Dashboard
+
+image::/images/docs/cluster-monitoring.png["Cluster Monitoring Dashboard"]
+
+This dashboard provides an overview of the entire XTDB cluster, including the health and performance of all nodes.
+
+Download the template: https://github.com/xtdb/xtdb/blob/main/monitoring/grafana/dashboards/xtdb-monitoring.json[here].
+
+=== Node Debugging Dashboard
+
+image::/images/docs/node-debugging.png["Node Debugging Dashboard"]
+
+This dashboard focuses on individual XTDB nodes, showing detailed metrics such as resource usage, performance, and health.
+
+Download the template: https://github.com/xtdb/xtdb/blob/main/monitoring/grafana/dashboards/xtdb-node-debugging.json[here].

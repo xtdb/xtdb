@@ -142,6 +142,7 @@ export default defineConfig({
                                 },
 
                                 { label: 'Storage', link: '/ops/config/storage' },
+                                { label: 'Monitoring & Observability', link: '/ops/config/monitoring' },
                                 { label: 'Authentication', link: '/ops/config/authentication' }
                             ]
                         },
