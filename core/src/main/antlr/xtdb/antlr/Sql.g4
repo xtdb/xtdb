@@ -583,7 +583,7 @@ outerJoinType : 'LEFT' | 'RIGHT' | 'FULL' ;
 
 /// §7.8 <where clause>
 
-whereClause : 'WHERE' expr ;
+whereClause : 'WHERE' searchCondition ;
 
 /// §7.9 <group by clause>
 
@@ -596,7 +596,7 @@ groupingElement
 
 /// §7.10 <having clause>
 
-havingClause : 'HAVING' expr ;
+havingClause : 'HAVING' searchCondition ;
 
 /// §7.11 <window clause>
 
@@ -631,9 +631,9 @@ windowFrameExclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUDE'
 
 selectClause : 'SELECT' setQuantifier? selectList ;
 selectList
-  : (selectListAsterisk | selectSublist) (',' selectSublist)*
-  | selectSublist (',' selectSublist)* (',' selectListAsterisk)
-  ;
+    : selectListAsterisk (',' selectSublist?)*
+    | selectSublist? (',' selectSublist?)* (',' selectListAsterisk)?
+    ;
 
 selectListAsterisk : ASTERISK excludeClause? renameClause? ;
 
@@ -742,7 +742,7 @@ quantifier : 'ALL' | 'SOME' | 'ANY' ;
 
 /// §8.21 <search condition>
 
-searchCondition : expr ;
+searchCondition : expr? (',' expr?)* ;
 
 /// postgres access privilege predicates
 
