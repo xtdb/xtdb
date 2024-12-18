@@ -1,11 +1,11 @@
 ---
-title: Google Cloud Storage
+title: Google Cloud
 ---
+
+[#storage]
+== Google Cloud Storage
+
 Google Cloud Storage can be used as a shared object-store for XTDB's remote storage module.
-
-== Setup
-
-First, ensure the `com.xtdb/xtdb-google-cloud` Maven dependency is added to your XTDB node.
 
 === Infrastructure
 
@@ -17,7 +17,6 @@ Prior to deploying any infrastructure, you will need to ensure that the followin
 
 [#deployment-manager]
 [NOTE]
-.Cloud Deployment Manager template
 ====
 We provide a https://github.com/xtdb/xtdb/tree/main/modules/google-cloud/cloud-deployment-manager[parameterized 'Cloud Deployment Manager' template] to help set up everything that you need.
 ====
@@ -52,7 +51,7 @@ properties:
 
 Authentication is done via Google’s "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[Google Cloud documentation] for setup instructions.
 
-== Configuration
+=== Configuration
 
 To use the Google Cloud module, include the following in your node configuration:
 

@@ -1,18 +1,16 @@
 ---
-title: Azure Blob Storage
+title: Azure
 ---
+
+[#storage]
+== Azure Blob Storage
+
 Azure Blob Storage can be used as a shared object-store for XTDB's remote storage module.
-
-[NOTE]
-== Setup
-
-First, ensure the `com.xtdb/xtdb-azure` Maven dependency is added to your XTDB node.
 
 === Infrastructure
 
 [#resource-manager]
 [NOTE]
-.Resource Manager template
 ====
 We provide a https://github.com/xtdb/xtdb/blob/main/modules/azure/azure-resource-manager/azure-stack.json[parameterized 'Azure Resource Manager' stack] to help set up everything that you need.
 ====
@@ -48,7 +46,7 @@ To use Azure Blob Storage as the object store, the following infrastructure is r
 
 Authentication is done via the Azure SDK, which uses the *DefaultAzureCredential*. See the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation] for setup instructions.
 
-== Configuration
+=== Configuration
 
 To use the Azure module, include the following in your node configuration:
 
@@ -86,3 +84,16 @@ storage: !Remote
   localDiskCache: /var/cache/xtdb/object-store
 ----
 
+[#monitoring]
+== Application Insights Monitoring
+
+To report XTDB node metrics to **Azure Application Insights**, we can add the `!AzureMonitor` module as follows:
+
+[source,yaml]
+----
+modules:
+  - !AzureMonitor
+    instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
+----
+
+Providing a valid `instrumentationKey` of a pre-existing Application Insights resource is required.
