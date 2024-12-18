@@ -55,10 +55,12 @@ return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
 ----
 const selectClause = "<select clause>"
 const fromClause = "<from clause>"
-const whereClause = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+const predicates = rr.OneOrMore(rr.Optional('<predicate>', 'skip'), ',')
+const whereClause = rr.Optional(rr.Sequence("WHERE", predicates), "skip")
 const groupByClause = rr.Optional(rr.Sequence("GROUP", "BY", rr.OneOrMore("<value>", ",")), "skip")
-const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), whereClause, groupByClause)
-const fromFirst = rr.Sequence(fromClause, whereClause, groupByClause, rr.Optional(selectClause, "skip"))
+const havingClause = rr.Optional(rr.Sequence("HAVING", predicates), "skip")
+const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), whereClause, groupByClause, havingClause)
+const fromFirst = rr.Sequence(fromClause, whereClause, groupByClause, havingClause, rr.Optional(selectClause, "skip"))
 
 const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
 const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
@@ -75,6 +77,8 @@ NB:
 * `SELECT` is optional in XTDB - if not provided, it defaults to `SELECT *`
 * `SELECT` may be placed after `GROUP BY` in XTDB, so that the query clauses are written in the order that they're executed in practice.
 * `GROUP BY` is optional in XTDB - if not provided, it defaults to all of the columns used outside of an aggregate function.
+* Predicates can be comma-separated in XTDB, to aid with SQL generation - these are treated as conjuncts.
+  There may be an arbitrary number of commas at the start, between any two predicate expressions, or at the end.
 
 === <select clause>
 [railroad]
