@@ -631,9 +631,9 @@ windowFrameExclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUDE'
 
 selectClause : 'SELECT' setQuantifier? selectList ;
 selectList
-  : (selectListAsterisk | selectSublist) (',' selectSublist)*
-  | selectSublist (',' selectSublist)* (',' selectListAsterisk)
-  ;
+    : selectListAsterisk (',' selectSublist?)*
+    | selectSublist? (',' selectSublist?)* (',' selectListAsterisk)?
+    ;
 
 selectListAsterisk : ASTERISK excludeClause? renameClause? ;
 
