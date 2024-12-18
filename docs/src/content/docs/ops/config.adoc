@@ -33,7 +33,11 @@ storage: !Local
 
 Any key that we allow the use of `!Env` will be documented as such.
 
+=== Monitoring & Observability
+
+XTDB provides a suite of tools & templates to facilitate monitoring and observability. See link:config/monitoring[Monitoring & Observability].
+
 === Authentication
 
 The pg-wire server and the http-server both support authentication which can be configured via authentication rules.
-See * link:config/authentication[Authentication].
+See link:config/authentication[Authentication].
