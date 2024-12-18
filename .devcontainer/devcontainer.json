@@ -17,13 +17,13 @@
             "port": 5432,
             "driver": "PostgreSQL",
             "name": "XTDB",
-            "database": "postgres",
-            "username": "postgres",
-            "password": "postgres"
+            "database": "xtdb",
+            "username": "xtdb",
+            "password": "xtdb"
           }
         ],
         "sqltools.results.reuseTabs": "connection"
       }
     }
-	}
+  }
 }
