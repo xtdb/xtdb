@@ -1,16 +1,15 @@
 ---
-title: S3
+title: AWS
 ---
+
+[#storage]
+== S3 Storage
+
 S3 can be used as a shared object-store for XTDB's remote storage module.
-
-== Setup
-
-First, ensure the `com.xtdb/xtdb-aws` Maven dependency is added to your XTDB node.
 
 === Infrastructure
 
 [NOTE]
-.CloudFormation stack
 ====
 We provide a https://github.com/xtdb/xtdb/blob/main/modules/aws/cloudformation/s3-stack.yml[parameterized CloudFormation stack] to help set up everything that you need.
 
@@ -43,7 +42,7 @@ Statement:
 Authentication is done via the AWS SDK, using the default AWS credential provider chain.
 See the https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html[AWS documentation] for setup instructions.
 
-== Configuration
+=== Configuration
 
 To use the S3 module, include the following in your node configuration:
 
@@ -80,3 +79,18 @@ storage: !Remote
 
 If configured as an in-process node, you can also specify an `S3Configurator` instance - this is used to modify the requests sent to S3.
 
+[#monitoring]
+== CloudWatch Monitoring
+
+To report XTDB node metrics to **AWS CloudWatch**, we can the `!CloudWatch` module as follows:
+
+[source,yaml]
+----
+modules:
+  - !CloudWatch
+----
+
+Authentication is handled via the AWS SDK, using the default AWS credential provider chain.
+See the https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html[AWS documentation] for setup instructions.
+
+The associated credentials must have permissions to write metrics to a pre-configured `CloudWatch` namespace.
