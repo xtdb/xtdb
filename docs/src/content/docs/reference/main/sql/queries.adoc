@@ -83,7 +83,10 @@ NB:
 === <select clause>
 [railroad]
 ----
-return rr.Diagram("SELECT", rr.OneOrMore(rr.Choice(0, rr.Skip(), rr.Sequence('*', rr.Optional('<star exclude>', 'skip'), rr.Optional('<star rename>', 'skip')), rr.Sequence("<value>", rr.Optional(rr.Sequence(rr.Optional("AS", "skip"), "<column name>"), 'skip'))), ","))
+const starOpts = rr.Sequence(rr.Optional('<star exclude>', 'skip'), rr.Optional('<star rename>', 'skip'))
+const selectCol = rr.Sequence("<value>", rr.Optional(rr.Sequence(rr.Optional("AS", "skip"), "<column name>"), 'skip'))
+const qualifiedStar = rr.Sequence('<table name>', '.', '*', starOpts)
+return rr.Diagram("SELECT", rr.Stack(rr.Optional(rr.Sequence('*', starOpts), 'skip'), rr.OneOrMore(rr.Choice(0, rr.Skip(), selectCol, qualifiedStar), ",")))
 ----
 
 ==== <star exclude>
