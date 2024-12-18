@@ -17,6 +17,7 @@
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
+           [org.apache.commons.codec.binary Hex]
            (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
@@ -859,6 +860,16 @@
     (catch Exception e
       (add-err! env (->CannotParseDuration d-str (.getMessage e))))))
 
+(defrecord CannotParseBinaryHexString [bin-str-expr msg]
+  PlanError
+  (error-string [_] (format "Cannot parse binary string expr: %s - failed with message %s" bin-str-expr msg)))
+
+(defn- parse-hex-string [bin-str env]
+  (try
+    (Hex/decodeHex (subs bin-str 3 (- (count bin-str) 2)))
+    (catch Exception e
+      (add-err! env (->CannotParseBinaryHexString bin-str (.getMessage e))))))
+
 (defn- <-period-literal [expr]
   (when (and (seq? expr)
              (= 'period (first expr))
@@ -968,6 +979,7 @@
 
   (visitKeywordType [_ _] {:cast-type :keyword})
   (visitUuidType [_ _] {:cast-type :uuid})
+  (visitVarbinaryType [_ _] {:cast-type :varbinary})
 
   (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
   (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
@@ -1044,6 +1056,8 @@
         interval-expr)))
 
   (visitDurationLiteral [this ctx] (parse-duration-literal (.accept (.characterString ctx) this) env))
+
+  (visitBinaryStringLiteral [_ ctx] (parse-hex-string (.getText ctx) env))
 
   (visitBooleanLiteral [_ ctx]
     (case (-> (.getText ctx) str/lower-case)

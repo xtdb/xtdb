@@ -24,7 +24,7 @@
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           (java.util Calendar List TimeZone UUID)
+           (java.util Calendar List TimeZone UUID Arrays)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
@@ -2237,3 +2237,26 @@ ORDER BY t.oid DESC LIMIT 1"
       (with-open [rs (.executeQuery multi-batch-stmt)]
         (t/is (= [{"_id" 0} {"_id" 1} {"_id" 2} {"_id" 0}] (rs->maps rs))
               "multi batch limiting")))))
+
+(deftest test-scalar-types
+  (let [^bytes ba (byte-array [0 -16])]
+    (with-open [conn (pg-conn {})]
+      (t/is (Arrays/equals ba ^bytes (:v (first (pg/execute conn "SELECT $1 v" {:params [ba]
+                                                                                :oids [OID/BYTEA]}))))
+            "reading varbinary parameter"))
+
+    (with-open [conn (jdbc-conn)]
+      (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT X('00f0') AS v"]))))
+            "reading varbinary result")
+
+      (t/testing "casting to varbinary"
+        (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT '00f0'::varbinary AS v"])))))
+        (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT '00f0'::bytea AS v"]))))))
+
+      (t/testing "nested varbinary"
+        (t/is (= [{:v {:ba "0x00f0"}}] (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"]))
+              "reading nested varbinary result")))
+
+    (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
+      (let [res (:v (first  (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))]
+        (t/is (Arrays/equals  ba (.array ^ByteBuffer (:ba res))))))))

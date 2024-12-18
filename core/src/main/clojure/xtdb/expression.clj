@@ -244,6 +244,9 @@
   {:return-type :uuid, :->call-code #(do `(util/uuid->byte-buffer
                                            (UUID/fromString (resolve-string ~@%))))})
 
+(defmethod codegen-cast [:utf8 :varbinary] [_]
+  {:return-type :varbinary , :->call-code #(do `(ByteBuffer/wrap (Hex/decodeHex (resolve-string ~@%))))})
+
 (defn resolve-string ^String [x]
   (cond
     (instance? ByteBuffer x)

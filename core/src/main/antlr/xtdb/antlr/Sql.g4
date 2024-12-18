@@ -119,6 +119,7 @@ identifier
         | 'ROLE'
         | 'STR' | 'LOCAL_NAME' | 'NAMESPACE'
         | 'USER' | 'PASSWORD'
+        | 'VARBINARY' | 'BYTEA'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -157,6 +158,8 @@ dataType
     | 'REGPROC' #RegProcType
     | 'KEYWORD' #KeywordType
     | 'UUID' #UuidType
+    | 'VARBINARY' #VarbinaryType
+    | 'BYTEA' #VarbinaryType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
     ;
 

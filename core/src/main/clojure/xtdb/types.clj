@@ -1114,6 +1114,26 @@
                                    ba ^bytes (byte-array (.remaining bb))]
                                (.get bb ba)
                                ba))}
+
+   :bytea {:typname "bytea"
+           :col-type :varbinary
+           :oid 17
+           :typsend "byteasend"
+           :typreceive "bytearecv"
+           :read-text (fn [_env ba] ba)
+           :read-binary (fn [_env ba] (ByteBuffer/wrap ba)
+                          (throw (UnsupportedOperationException.)))
+           :write-text (fn [_env ^IVectorReader rdr idx]
+                         (let [bb (.getBytes rdr idx)
+                               ba ^bytes (byte-array (.remaining bb))]
+                           (.get bb ba)
+                           ba))
+           :write-binary (fn [_env ^IVectorReader rdr idx]
+                           (let [bb (.getBytes rdr idx)
+                                 ba ^bytes (byte-array (.remaining bb))]
+                             (.get bb ba)
+                             ba))}
+
    ;;same as varchar which makes this technically lossy in roundtrip
    ;;text is arguably more correct for us than varchar
    :text {:typname "text"
@@ -1336,6 +1356,7 @@
    :bool :boolean
    :null :text
    :regclass :regclass
+   :varbinary :bytea
    [:date :day] :date
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz

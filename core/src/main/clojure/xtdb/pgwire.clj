@@ -20,7 +20,8 @@
   (:import [clojure.lang MapEntry]
            [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang AutoCloseable Thread$State]
-           [java.net ServerSocket Socket SocketException]
+           [java.net ServerSocket Socket SocketException URI]
+           [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
            [java.nio.file Path]
            [java.security KeyStore]
@@ -32,6 +33,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector PeriodDuration]
            org.apache.arrow.vector.types.pojo.Field
+           [org.apache.commons.codec.binary Hex]
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
@@ -649,7 +651,8 @@
 
     (instance? clojure.lang.Keyword obj) (json-clj (str (symbol obj)))
     (instance? clojure.lang.Symbol obj) (json-clj (str (symbol obj)))
-    (instance? UUID obj) (str obj)
+    (instance? UUID obj) (json-clj (str obj))
+    (instance? ByteBuffer obj) (json-clj (str "0x" (Hex/encodeHexString (util/byte-buffer->byte-array obj))))
 
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
