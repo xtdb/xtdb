@@ -28,8 +28,8 @@ defmodule ElixrTest do
 
   test "should be able to read an array of int4", state do
     pid = state[:xt]
-    result = Postgrex.query!(pid, "SELECT ARRAY(select oid from pg_type order by oid)", [])
-    assert [[[16, 20, 21, 23, 25, 114, 700, 701, 1007, 1016, 1043, 1082, 1114, 1184, 1186, 2205, 2950, 3802, 3910, 16384]]] == result.rows
+    result = Postgrex.query!(pid, "SELECT ARRAY[1, 2, 3]", [])
+    assert [[[1, 2, 3]]] == result.rows
   end
 
   test "inserts/retrieves boolean", state do
