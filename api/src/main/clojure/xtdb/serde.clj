@@ -8,6 +8,7 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql :as xtql])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
+           (java.net URI)
            (java.time Duration Period)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
@@ -93,6 +94,14 @@
 
 (defn tstz-range-reader [[from to]]
   (ZonedDateTimeRange. (time/->zdt from) (time/->zdt to)))
+
+(defmethod print-dup URI [^URI uri, ^Writer w]
+  (.write w (str "#xt/uri " (pr-str (.toASCIIString uri)))))
+
+(defmethod print-method URI [uri w]
+  (print-dup uri w))
+
+(defn uri-reader [uri] (URI. uri))
 
 (defn- render-binding [binding]
   (xtql/unparse-binding identity identity binding))
