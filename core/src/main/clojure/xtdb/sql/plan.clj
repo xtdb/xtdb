@@ -19,7 +19,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
            [org.apache.commons.codec.binary Hex]
-           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$WhereClauseContext Sql$HavingClauseContext Sql$GroupByClauseContext Sql$SelectClauseContext Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
@@ -509,22 +509,18 @@
   SqlVisitor
   (visitSelectClause [this ctx] (.accept (.getParent ctx) this))
 
-  (visitQuerySpecification [_ ctx]
-    (if-let [gbc (.groupByClause ctx)]
-      (let [grouping-cols (vec (for [^ParserRuleContext grp-el (.groupingElement gbc)]
-                                 (.accept grp-el
-                                          (reify SqlVisitor
-                                            (visitOrdinaryGroupingSet [_ ctx]
-                                              (.accept (.columnReference ctx)
-                                                       (map->ExprPlanVisitor {:env env :scope scope
-                                                                              :!unresolved-cr !unresolved-cr})))))))]
+  (visitGroupByClause [_ gbc]
+    (let [grouping-cols (vec (for [^ParserRuleContext grp-el (.groupingElement gbc)]
+                               (.accept grp-el
+                                        (reify SqlVisitor
+                                          (visitOrdinaryGroupingSet [_ ctx]
+                                            (.accept (.columnReference ctx)
+                                                     (map->ExprPlanVisitor {:env env :scope scope
+                                                                            :!unresolved-cr !unresolved-cr})))))))]
 
-        (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs) (set grouping-cols)))]
-          (add-err! env (->MissingGroupingColumns missing-grouping-cols))
-          grouping-cols))
-
-      (for [col-ref !implied-gicrs]
-        col-ref)))
+      (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs) (set grouping-cols)))]
+        (add-err! env (->MissingGroupingColumns missing-grouping-cols))
+        grouping-cols)))
 
   Scope 
   (available-cols [_ table-name] (available-cols scope table-name))
@@ -1968,6 +1964,9 @@
         plan))))
 
 (defn- wrap-windows [plan windows]
+  (when (> (count windows) 1)
+    (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
+
   (let [{:keys [windows] :as window-opts} (apply merge-with into (vals windows))
         in-projs (not-empty (->> (mapcat :order-specs (vals windows))
                                  (into [] (keep :in-projection))))
@@ -2120,6 +2119,98 @@
                   (mapv (partial accept-visitor row-visitor)))
        :col-syms col-syms})))
 
+(defn- ->qs-scope [{:keys [env scope]} table-refs]
+  (->QuerySpecificationScope scope
+                             (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
+                                       (let [!sq-refs (HashMap.)
+                                             left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
+                                             right-table-ref (.accept table-ref (->TableRefVisitor env scope left-sq-scope))]
+                                         (if left-table-ref
+                                           (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
+                                           right-table-ref)))
+                                     nil
+                                     table-refs)))
+
+(defn- ->query-tail [{:keys [env scope order-by-ctx]}
+                     ^Sql$WhereClauseContext where-clause
+                     ^Sql$GroupByClauseContext group-by-clause
+                     ^Sql$HavingClauseContext having-clause
+                     ^Sql$SelectClauseContext select-clause]
+  (let [where-plan (when where-clause
+                     (let [!subqs (HashMap.)]
+                       {:predicate (-> (.searchCondition where-clause)
+                                       (.accept (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs})))
+                        :subqs (not-empty (into {} !subqs))}))
+
+        !unresolved-cr (HashSet.)
+        !implied-gicrs (HashSet.)
+        group-invar-col-tracker (->GroupInvariantColsTracker env scope !implied-gicrs !unresolved-cr)
+
+        having-plan (when having-clause
+                      (let [!subqs (HashMap.)
+                            !aggs (HashMap.)]
+                        {:predicate (-> (.searchCondition having-clause)
+                                        (.accept (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs})))
+                         :subqs (not-empty (into {} !subqs))
+                         :aggs (not-empty (into {} !aggs))}))
+
+        {:keys [projected-cols windows] :as select-plan} (if select-clause
+                                                           (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
+                                                           (project-all-cols group-invar-col-tracker))
+
+        aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
+        grouped-table? (boolean (or aggs group-by-clause))
+        group-invariant-cols (when grouped-table?
+                               (if group-by-clause
+                                 (.accept group-by-clause group-invar-col-tracker)
+                                 (for [col-ref !implied-gicrs]
+                                   col-ref)))
+
+        ob-plan (some-> order-by-ctx
+                        (plan-order-by env scope
+                                       (mapv :col-sym projected-cols)))]
+    (fn wrap-query-tail [plan]
+      (let [plan (as-> plan plan
+                   (if-let [unresolved-cr (not-empty (into #{} !unresolved-cr))]
+                     [:map (mapv #(hash-map % nil) unresolved-cr)
+                      plan]
+                     plan)
+
+                   (if-let [{:keys [predicate subqs]} where-plan]
+                     (-> plan
+                         (apply-sqs subqs)
+                         (wrap-predicates predicate))
+                     plan)
+
+                   (cond-> plan
+                     grouped-table? (wrap-aggs aggs group-invariant-cols))
+
+                   (if-let [{:keys [predicate subqs]} having-plan]
+                     (-> plan
+                         (apply-sqs subqs)
+                         (wrap-predicates predicate))
+                     plan)
+
+                   (-> plan (apply-sqs (:subqs select-plan)))
+
+                   (cond-> plan
+                     windows (wrap-windows windows))
+
+                   (if ob-plan
+                     (-> plan
+                         (wrap-integrated-ob projected-cols ob-plan))
+
+                     [:project (mapv :projection projected-cols)
+                      plan]))]
+
+        (as-> (->QueryExpr plan (mapv :col-sym (:projected-cols select-plan)))
+            {:keys [plan col-syms] :as query-expr}
+
+          (if (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
+            (->QueryExpr [:distinct plan]
+                         col-syms)
+            query-expr))))))
+
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor
   (visitWrappedQuery [this ctx] (-> (.queryExpressionNoWith ctx) (.accept this)))
@@ -2236,93 +2327,13 @@
                      plan)
                    l-col-syms)))
 
-  (visitQuerySpecification [{:keys [out-col-syms order-by-ctx]} ctx]
-    (let [qs-scope (->QuerySpecificationScope scope
-                                              (when-let [from (.fromClause ctx)]
-                                                (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
-                                                          (let [!sq-refs (HashMap.)
-                                                                left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
-                                                                right-table-ref (.accept table-ref (->TableRefVisitor env scope left-sq-scope))]
-                                                            (if left-table-ref
-                                                              (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
-                                                              right-table-ref)))
-                                                        nil
-                                                        (.tableReference from))))
+  (visitQuerySpecification [{:keys [out-col-syms order-by-ctx] :as this} ctx]
+    (let [qs-scope (->qs-scope this (some->> (.fromClause ctx) (.tableReference)))
+          wrap-tail (-> (assoc this :scope qs-scope)
+                        (->query-tail (.whereClause ctx) (.groupByClause ctx) (.havingClause ctx) (.selectClause ctx)))]
 
-          where-plan (when-let [where-clause (.whereClause ctx)]
-                       (let [!subqs (HashMap.)]
-                         {:predicate (-> (.searchCondition where-clause)
-                                         (.accept (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs}))
-                                         )
-                          :subqs (not-empty (into {} !subqs))}))
-
-          !unresolved-cr (HashSet.)
-          group-invar-col-tracker (->GroupInvariantColsTracker env qs-scope (HashSet.) !unresolved-cr)
-
-          having-plan (when-let [having-clause (.havingClause ctx)]
-                        (let [!subqs (HashMap.)
-                              !aggs (HashMap.)]
-                          {:predicate (-> (.searchCondition having-clause)
-                                          (.accept (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs, :!aggs !aggs})))
-                           :subqs (not-empty (into {} !subqs))
-                           :aggs (not-empty (into {} !aggs))}))
-
-          select-clause (.selectClause ctx)
-
-          {:keys [projected-cols windows] :as select-plan} (if select-clause
-                                                             (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
-                                                             (project-all-cols group-invar-col-tracker))
-
-          aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
-          grouped-table? (boolean (or aggs (.groupByClause ctx)))
-          group-invariant-cols (when grouped-table?
-                                 (.accept ctx group-invar-col-tracker))
-
-          distinct? (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
-
-          _ (when (> (count windows) 1)
-              (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
-          window-functions? (boolean windows)
-          unresolved-cr (not-empty (into #{} !unresolved-cr))
-
-          ob-specs (some-> order-by-ctx
-                           (plan-order-by env qs-scope (mapv :col-sym projected-cols)))
-
-          ;; plan-table-ref reads the state written by all the find-decls
-          plan (as-> (plan-table-ref qs-scope) plan
-                 (if unresolved-cr
-                   [:map (mapv #(hash-map % nil) unresolved-cr)
-                    plan]
-                   plan)
-
-                 (if-let [{:keys [predicate subqs]} where-plan]
-                   (-> plan
-                       (apply-sqs subqs)
-                       (wrap-predicates predicate))
-                   plan)
-
-                 (cond-> plan
-                   grouped-table? (wrap-aggs aggs group-invariant-cols))
-
-                 (if-let [{:keys [predicate subqs]} having-plan]
-                   (-> plan
-                       (apply-sqs subqs)
-                       (wrap-predicates predicate))
-                   plan)
-
-                 (-> plan (apply-sqs (:subqs select-plan)))
-
-                 (cond-> plan
-                   window-functions? (wrap-windows windows))
-
-                 (if order-by-ctx
-                   (-> plan
-                       (wrap-integrated-ob projected-cols ob-specs))
-
-                   [:project (mapv :projection projected-cols)
-                    plan]))]
-
-      (as-> (->QueryExpr plan (mapv :col-sym (:projected-cols select-plan)))
+      (as-> (-> (plan-table-ref qs-scope)
+                (wrap-tail))
           {:keys [plan col-syms] :as query-expr}
 
         (if out-col-syms
@@ -2334,11 +2345,6 @@
               (->QueryExpr [:rename (zipmap col-syms out-col-syms)
                             plan]
                            out-col-syms)))
-          query-expr)
-
-        (if distinct?
-          (->QueryExpr [:distinct plan]
-                       col-syms)
           query-expr))))
 
   (visitValuesQuery [this ctx] (-> (.tableValueConstructor ctx) (.accept this)))
