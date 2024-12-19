@@ -130,6 +130,13 @@
     (.position bb 0)
     bb))
 
+(defn uri->byte-buffer ^ByteBuffer [^URI uri]
+  (let [^bytes ba (.getBytes (.toASCIIString uri))
+        bb (ByteBuffer/allocate (count ba))]
+    (.put bb ba)
+    (.flip bb)
+    bb))
+
 (defn byte-buffer->uuid [^ByteBuffer bb]
   (UUID. (.getLong bb 0) (.getLong bb Long/BYTES)))
 

@@ -2259,4 +2259,15 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
       (let [res (:v (first  (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))]
-        (t/is (Arrays/equals  ba (.array ^ByteBuffer (:ba res))))))))
+        (t/is (Arrays/equals  ba (.array ^ByteBuffer (:ba res)))))))
+
+  (t/testing "uri literals"
+    (with-open [conn (jdbc-conn)]
+      (t/is (= "http://xtdb.com" (:v (first (jdbc/execute! conn ["SELECT URI 'http://xtdb.com' AS v"])))))
+
+      (t/is (= [{:v {:uri "http://xtdb.com"}}] (q conn ["SELECT OBJECT(uri: URI 'http://xtdb.com') AS v"]))
+            "nested uri"))
+
+    (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
+      ;; TODO transit has it's own implementation of URI
+      (t/is (= "http://xtdb.com" (str (:v (first  (q conn ["SELECT URI 'http://xtdb.com' AS v"])))))))))

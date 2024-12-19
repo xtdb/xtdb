@@ -81,6 +81,7 @@ literal
     | intervalLiteral #IntervalLiteral0
     | 'DURATION' characterString #DurationLiteral
     | 'UUID' characterString #UUIDLiteral
+    | 'URI' characterString #URILiteral
     | 'KEYWORD' characterString #KeywordLiteral
     | (TRUE | FALSE) #BooleanLiteral
     | NULL #NullLiteral
@@ -120,6 +121,7 @@ identifier
         | 'STR' | 'LOCAL_NAME' | 'NAMESPACE'
         | 'USER' | 'PASSWORD'
         | 'VARBINARY' | 'BYTEA'
+        | 'URI'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier

@@ -12,8 +12,9 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
+           [java.net URI]
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet HexFormat LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
@@ -886,6 +887,16 @@
     (catch Exception e
       (add-err! env (->CannotParseUUID u-str (.getMessage e))))))
 
+(defrecord CannotParseURI [u-str msg]
+  PlanError
+  (error-string [_] (format "Cannot parse uri: %s - failed with message %s" u-str msg)))
+
+(defn- parse-uri-literal [u-str env]
+  (try
+    (URI. u-str)
+    (catch Exception e
+      (add-err! env (->CannotParseURI u-str (.getMessage e))))))
+
 (defn fn-with-precision [fn-symbol ^ParserRuleContext precision-ctx]
   (if-let [precision (some-> precision-ctx (.getText) (parse-long))]
     (list fn-symbol precision)
@@ -1070,6 +1081,7 @@
       (keyword (if (str/starts-with? s ":") (subs s 1) s))))
 
   (visitUUIDLiteral [this ctx] (parse-uuid-literal (.accept (.characterString ctx) this) env))
+  (visitURILiteral [this ctx] (parse-uri-literal (.accept (.characterString ctx) this) env))
 
   (visitNullLiteral [_ _ctx] nil)
 

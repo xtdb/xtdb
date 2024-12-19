@@ -653,6 +653,7 @@
     (instance? clojure.lang.Symbol obj) (json-clj (str (symbol obj)))
     (instance? UUID obj) (json-clj (str obj))
     (instance? ByteBuffer obj) (json-clj (str "0x" (Hex/encodeHexString (util/byte-buffer->byte-array obj))))
+    (instance? URI obj) (json-clj (str obj))
 
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
