@@ -2270,4 +2270,11 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
       ;; TODO transit has it's own implementation of URI
-      (t/is (= "http://xtdb.com" (str (:v (first  (q conn ["SELECT URI 'http://xtdb.com' AS v"])))))))))
+      (t/is (= "http://xtdb.com" (str (:v (first  (q conn ["SELECT URI 'http://xtdb.com' AS v"]))))))))
+
+  (t/testing "text literals"
+    (with-open [conn (jdbc-conn)]
+      (t/is (= [{:v "hello\n world!"}] (q conn ["SELECT E'hello\n world!' AS v"]))
+            "c-style escape characters")
+      (t/is (= [{:v "dollar $quoted$ string"}] (q conn ["SELECT $$dollar $quoted$ string$$ AS v"]))
+            "dollar quoted string"))))
