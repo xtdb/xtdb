@@ -133,6 +133,12 @@
 (defn byte-buffer->uuid [^ByteBuffer bb]
   (UUID. (.getLong bb 0) (.getLong bb Long/BYTES)))
 
+(defn byte-buffer->byte-array ^bytes [^ByteBuffer bb]
+  (let [ba (byte-array (.remaining bb))]
+    (.get bb ba)
+    (.flip bb)
+    ba))
+
 (def ^:private ^java.lang.ThreadLocal !msg-digest
   (ThreadLocal/withInitial
    (fn []

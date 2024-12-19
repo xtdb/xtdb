@@ -9,9 +9,11 @@
             [xtdb.xtql :as xtql])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.net URI)
+           [java.nio ByteBuffer]
            (java.time Duration Period)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
+           [org.apache.commons.codec.binary Hex]
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
@@ -224,11 +226,19 @@
           "i64" (transit/read-handler long)
           "i32" (transit/read-handler int)
           "i16" (transit/read-handler short)
-          "i8" (transit/read-handler byte)}))
+          "i8" (transit/read-handler byte)
+          "xtdb/byte-array" (transit/read-handler #(ByteBuffer/wrap (Hex/decodeHex (subs % 2))))}))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; TransitVector
 (defn transit-msgpack-reader [in]
   (.r ^cognitect.transit.Reader (transit/reader in :msgpack {:handlers transit-read-handlers})))
+
+
+(defn- bb->ba ^bytes [^ByteBuffer bb]
+  (let [ba (byte-array (.remaining bb))]
+    (.get bb ba)
+    (.flip bb)
+    ba))
 
 (def transit-write-handlers
   (merge transit/default-write-handlers
@@ -254,6 +264,8 @@
                                                                (str (.duration ^IntervalMonthDayNano %))))
 
           ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
+          ByteBuffer (transit/write-handler "xtdb/byte-array" #(str "0x" (Hex/encodeHexString (bb->ba %))))
+
 
           Binding (transit/write-handler "xtdb.query/binding" render-binding)
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
