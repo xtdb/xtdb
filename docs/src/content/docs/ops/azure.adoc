@@ -2,14 +2,14 @@
 title: Azure
 ---
 
-XTDB provides modular support for Azure environments, including a prebuilt Docker image, integrations with Azure Blob Storage, Application Insights monitoring and configuration options for deploying onto Azure infrastructure.
+XTDB provides modular support for Azure environments, including a prebuilt Docker image, integrations with **Azure Blob Storage**, **Application Insights monitoring** and configuration options for deploying onto Azure infrastructure.
 
-NOTE: For more details on getting started with Azure, see the link:guides/starting-with-azure["Getting Started with Azure"] guide.
+NOTE: For more details on getting started with Azure, see the link:guides/starting-with-azure["Getting Started with Azure"^] guide.
 
 [#storage]
 == Azure Blob Storage
 
-Azure Blob Storage can be used as a shared object-store for XTDB's link:config/storage#remote[remote storage] module.
+https://azure.microsoft.com/en-gb/products/storage/blobs[**Azure Blob Storage**^] can be used as a shared object-store for XTDB's link:config/storage#remote[remote storage^] module.
 
 === Infrastructure Requirements
 
@@ -44,7 +44,7 @@ To use Azure Blob Storage as the object store, the following infrastructure is r
 
 === Authentication
 
-XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`. This supports multiple authentication methods, including Managed Identity. For more details, refer to the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation].
+XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`. This supports multiple authentication methods, including Managed Identity. For more details, refer to the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation^].
 
 === Configuration
 
@@ -87,7 +87,7 @@ storage: !Remote
 [#monitoring]
 == Application Insights Monitoring
 
-XTDB supports reporting metrics to Azure Application Insights for performance and health monitoring.
+XTDB supports reporting metrics to https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview[**Azure Application Insights**^] for performance and health monitoring.
 
 === Configuration
 
@@ -107,7 +107,7 @@ Providing a valid `instrumentationKey` linked to a pre-existing Application Insi
 [#docker-image]
 == `xtdb-azure` Docker Image
 
-The `xtdb-azure` image is optimized for running XTDB in Azure environments, and is deployed on every release to XTDB.
+The https://github.com/xtdb/xtdb/pkgs/container/xtdb-azure[**xtdb-azure**^] image is optimized for running XTDB in Azure environments, and is deployed on every release to XTDB.
 
 [source,bash]
 ----
@@ -120,9 +120,10 @@ By default, it will use Azure Blob Storage for object storage and Kafka for tran
 
 To run the `xtdb-azure` image with the default configuration, the following infrastructure is required:
 
-. An **Azure Storage Account**, containing a **Storage Account Container**.
-. A user assigned managed identity for authentication with Azure services.
-. A **Kafka cluster** for transaction logs.
+* An **Azure Storage Account**, containing a **Storage Account Container**.
+* A user assigned managed identity for authentication with Azure services.
+* A **Kafka cluster** for transaction logs.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
 
 === Standard Configuration
 
