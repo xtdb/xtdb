@@ -1,5 +1,5 @@
 [:project
- [{film film.3/film} {film_ord film.3/film_ord} {films si.1/films}]
+ [{films si.1/films} {film film.3/film} {film_ord film.3/film_ord}]
  [:unnest
   {film.3/film unnest}
   {:ordinality-column film.3/film_ord}

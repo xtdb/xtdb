@@ -1,5 +1,5 @@
 [:project
- [{b1 b.2/b1} {a1 a.1/a1} {a2 a.1/a2}]
+ [{a1 a.1/a1} {a2 a.1/a2} {b1 b.2/b1}]
  [:mega-join
   []
   [[:rename a.1 [:scan {:table public/a} [a2 a1]]]

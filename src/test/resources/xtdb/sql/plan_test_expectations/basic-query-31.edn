@@ -1,7 +1,7 @@
 [:project
- [{_column_1 film.3/_unnest.4}
-  {_column_2 film.3/_ordinal.5}
-  {films si.1/films}]
+ [{films si.1/films}
+  {_column_2 film.3/_unnest.4}
+  {_column_3 film.3/_ordinal.5}]
  [:unnest
   {film.3/_unnest.4 unnest}
   {:ordinality-column film.3/_ordinal.5}
