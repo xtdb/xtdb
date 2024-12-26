@@ -14,12 +14,12 @@
   (:import clojure.lang.MapEntry
            [java.net URI]
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap HashSet HexFormat LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
            [org.apache.commons.codec.binary Hex]
-           (xtdb.antlr Sql$WhereClauseContext Sql$HavingClauseContext Sql$GroupByClauseContext Sql$SelectClauseContext Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
@@ -88,8 +88,8 @@
   (available-tables [scope])
   (find-decls [scope chain]))
 
-(defprotocol TableRef
-  (plan-table-ref [scope]))
+(defprotocol PlanRelation
+  (plan-rel [scope]))
 
 (extend-protocol Scope
   nil
@@ -97,9 +97,9 @@
   (available-tables [_])
   (find-decls [_ _]))
 
-(extend-protocol TableRef
+(extend-protocol PlanRelation
   nil
-  (plan-table-ref [_]
+  (plan-rel [_]
     [:table [{}]]))
 
 (defn- find-decl [scope chain]
@@ -291,8 +291,8 @@
                            (apply [_ col]
                              (->col-sym (str unique-table-alias) (str col)))))]))
 
-  TableRef
-  (plan-table-ref [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
+  PlanRelation
+  (plan-rel [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
     (let [expr-visitor (->ExprPlanVisitor env this)]
       (letfn [(<-table-time-period-specification [specs]
                 (case (count specs)
@@ -348,8 +348,8 @@
            [l] [l r])
          (mapcat #(find-decls % chain))))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     (let [join-type (case (some-> join-type-ctx
                                   (.outerJoinType)
                                   (.getText)
@@ -367,8 +367,8 @@
         [join-type (vec (for [col-name common-cols]
                           {(find-decl l [col-name])
                            (find-decl r [col-name])}))
-         (plan-table-ref l)
-         (plan-table-ref r)]
+         (plan-rel l)
+         (plan-rel r)]
 
         (some-> join-spec-ctx
                 (.accept
@@ -385,9 +385,9 @@
                                  :cross-join
                                  join-type)
                         (into {} !lhs-refs)
-                        (plan-table-ref l)
+                        (plan-rel l)
                         [:select join-pred
-                         (-> (plan-table-ref r)
+                         (-> (plan-rel r)
                              (apply-sqs !join-cond-subqs))]])))))))))
 
 (defrecord CrossJoinTable [env !sq-refs l r]
@@ -405,10 +405,10 @@
     (->> [l r]
          (mapcat #(find-decls % chain))))
 
-  TableRef
-  (plan-table-ref [_]
-    (let [planned-l (plan-table-ref l)
-          planned-r (plan-table-ref r)]
+  PlanRelation
+  (plan-rel [_]
+    (let [planned-l (plan-rel l)
+          planned-r (plan-rel r)]
       [:apply :cross-join (into {} !sq-refs)
        planned-l planned-r])))
 
@@ -425,8 +425,8 @@
       (when (.contains available-cols col-name)
         [(->col-sym (str unique-table-alias) (str col-name))])))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      plan]))
 
@@ -448,8 +448,8 @@
                             (with-meta (meta ordinality-col)))]
         nil)))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     (as-> [:table {(-> (->col-sym (str unique-table-alias) (str unnest-col))
                        (with-meta (meta unnest-col)))
                    unnest-expr}]
@@ -475,8 +475,8 @@
                (.contains !table-cols col-name))
       [(->col-sym (str unique-table-alias) (str col-name))]))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      [:project (vec !table-cols)
       [:arrow url]]]))
@@ -674,22 +674,22 @@
                     (symbol (str table-alias "." (swap! !id-count inc)))
                     (->insertion-ordered-set cols)))))
 
-(defrecord QuerySpecificationScope [outer-scope from-table-ref]
+(defrecord QuerySpecificationScope [outer-scope from-rel]
   Scope
-  (available-cols [_ chain] (available-cols from-table-ref chain))
+  (available-cols [_ chain] (available-cols from-rel chain))
 
   (available-tables [_]
     (into (available-tables outer-scope)
-          (available-tables from-table-ref)))
+          (available-tables from-rel)))
 
   (find-decls [_ chain]
-    (or (not-empty (find-decls from-table-ref chain))
+    (or (not-empty (find-decls from-rel chain))
         (find-decls outer-scope chain)))
 
-  TableRef
-  (plan-table-ref [_]
-    (if from-table-ref
-      (plan-table-ref from-table-ref)
+  PlanRelation
+  (plan-rel [_]
+    (if from-rel
+      (plan-rel from-rel)
       [:table [{}]])))
 
 (defn- ->projected-col-expr [col-idx expr]
@@ -2332,7 +2332,7 @@
           wrap-tail (-> (assoc this :scope qs-scope)
                         (->query-tail (.whereClause ctx) (.groupByClause ctx) (.havingClause ctx) (.selectClause ctx)))]
 
-      (as-> (-> (plan-table-ref qs-scope)
+      (as-> (-> (plan-rel qs-scope)
                 (wrap-tail))
           {:keys [plan col-syms] :as query-expr}
 
@@ -2452,8 +2452,8 @@
                            (apply [_ col]
                              (->col-sym (str unique-table-alias) (str col)))))]))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      [:scan (cond-> {:table (symbol table-name)}
               for-valid-time (assoc :for-valid-time for-valid-time))
@@ -2505,8 +2505,8 @@
                            (apply [_ col]
                              (->col-sym (str unique-table-alias) (str col)))))]))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      [:scan {:table (symbol table-name)
              :for-system-time :all-time
@@ -2686,7 +2686,7 @@
 
       (->UpdateStmt (symbol table-name)
                     (->QueryExpr [:project outer-projection
-                                  (as-> (plan-table-ref dml-scope) plan
+                                  (as-> (plan-rel dml-scope) plan
                     
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
@@ -2727,7 +2727,7 @@
           projection (into '[_iid] (or vt-projection default-vt-extents-projection))]
       (->DeleteStmt table-name
                     (->QueryExpr [:project projection
-                                  (as-> (plan-table-ref dml-scope) plan
+                                  (as-> (plan-rel dml-scope) plan
 
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
@@ -2765,7 +2765,7 @@
       (->EraseStmt (symbol table-name)
                    (->QueryExpr [:distinct
                                  [:project internal-cols
-                                  (as-> (plan-table-ref dml-scope) plan
+                                  (as-> (plan-rel dml-scope) plan
                                   
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
