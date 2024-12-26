@@ -682,7 +682,7 @@ queryExpressionBody
 
 queryTerm
     : selectClause fromClause? whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
-    | fromClause whereClause? groupByClause? havingClause? selectClause? windowClause? # QuerySpecification
+    | fromClause whereClause? (groupByClause? havingClause? selectClause)? windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
     | recordsValueConstructor # RecordsQuery
     | '(' queryExpressionNoWith ')' # WrappedQuery

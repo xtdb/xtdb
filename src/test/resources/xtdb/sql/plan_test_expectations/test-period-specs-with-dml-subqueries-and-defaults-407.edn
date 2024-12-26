@@ -17,7 +17,7 @@
      {_column_2 145}
      {_column_3 7797}
      {_column_4 #xt/date "1998-01-03"}
-     tmp.3/app_start]
+     {tmp.3/app_start tmp.3/app_start}]
     [:rename
      tmp.3
      [:project
