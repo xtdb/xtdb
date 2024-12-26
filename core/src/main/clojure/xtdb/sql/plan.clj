@@ -2138,47 +2138,49 @@
         ob-plan (some-> order-by-ctx
                         (plan-order-by env scope
                                        (mapv :col-sym projected-cols)))]
-    (fn wrap-query-tail [plan]
-      (let [plan (as-> plan plan
-                   (if-let [unresolved-cr (not-empty (into #{} !unresolved-cr))]
-                     [:map (mapv #(hash-map % nil) unresolved-cr)
-                      plan]
-                     plan)
+    (reify
+      Scope
+      (available-cols [_]
+        (mapv :col-sym (:projected-cols select-plan)))
 
-                   (if-let [{:keys [predicate subqs]} where-plan]
-                     (-> plan
-                         (apply-sqs subqs)
-                         (wrap-predicates predicate))
-                     plan)
+      PlanRelation
+      (plan-rel [_]
+        (as-> (plan-rel scope) plan
+          (if-let [unresolved-cr (not-empty (into #{} !unresolved-cr))]
+            [:map (mapv #(hash-map % nil) unresolved-cr)
+             plan]
+            plan)
 
-                   (cond-> plan
-                     grouped-table? (wrap-aggs aggs group-invariant-cols))
+          (if-let [{:keys [predicate subqs]} where-plan]
+            (-> plan
+                (apply-sqs subqs)
+                (wrap-predicates predicate))
+            plan)
 
-                   (if-let [{:keys [predicate subqs]} having-plan]
-                     (-> plan
-                         (apply-sqs subqs)
-                         (wrap-predicates predicate))
-                     plan)
+          (cond-> plan
+            grouped-table? (wrap-aggs aggs group-invariant-cols))
 
-                   (-> plan (apply-sqs (:subqs select-plan)))
+          (if-let [{:keys [predicate subqs]} having-plan]
+            (-> plan
+                (apply-sqs subqs)
+                (wrap-predicates predicate))
+            plan)
 
-                   (cond-> plan
-                     windows (wrap-windows windows))
+          (-> plan (apply-sqs (:subqs select-plan)))
 
-                   (if ob-plan
-                     (-> plan
-                         (wrap-integrated-ob projected-cols ob-plan))
+          (cond-> plan
+            windows (wrap-windows windows))
 
-                     [:project (mapv :projection projected-cols)
-                      plan]))]
+          (if ob-plan
+            (-> plan
+                (wrap-integrated-ob projected-cols ob-plan))
 
-        (as-> (->QueryExpr plan (mapv :col-sym (:projected-cols select-plan)))
-            {:keys [plan col-syms] :as query-expr}
+            [:project (mapv :projection projected-cols)
+             plan])
 
           (if (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
-            (->QueryExpr [:distinct plan]
-                         col-syms)
-            query-expr))))))
+            [:distinct plan]
+            plan))))))
 
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor
@@ -2296,25 +2298,23 @@
                      plan)
                    l-col-syms)))
 
-  (visitQuerySpecification [{:keys [out-col-syms order-by-ctx] :as this} ctx]
+  (visitQuerySpecification [{:keys [out-col-syms] :as this} ctx]
     (let [qs-scope (->qs-scope this (some->> (.fromClause ctx) (.tableReference)))
-          wrap-tail (-> (assoc this :scope qs-scope)
-                        (->query-tail (.whereClause ctx) (.groupByClause ctx) (.havingClause ctx) (.selectClause ctx)))]
+          tail (-> (assoc this :scope qs-scope)
+                   (->query-tail (.whereClause ctx) (.groupByClause ctx) (.havingClause ctx) (.selectClause ctx)))
 
-      (as-> (-> (plan-rel qs-scope)
-                (wrap-tail))
-          {:keys [plan col-syms] :as query-expr}
+          plan (plan-rel tail)
+          col-syms (available-cols tail)]
+      (if out-col-syms
+        (let [out-count (count out-col-syms)
+              in-count (count col-syms)]
+          (if (not= out-count in-count)
+            (add-err! env (->ColumnCountMismatch out-count in-count))
 
-        (if out-col-syms
-          (let [out-count (count out-col-syms)
-                in-count (count col-syms)]
-            (if (not= out-count in-count)
-              (add-err! env (->ColumnCountMismatch out-count in-count))
-
-              (->QueryExpr [:rename (zipmap col-syms out-col-syms)
-                            plan]
-                           out-col-syms)))
-          query-expr))))
+            (->QueryExpr [:rename (zipmap col-syms out-col-syms)
+                          plan]
+                         out-col-syms)))
+        (->QueryExpr plan col-syms))))
 
   (visitValuesQuery [this ctx] (-> (.tableValueConstructor ctx) (.accept this)))
   (visitTableValueConstructor [this ctx] (-> (.rowValueList ctx) (.accept this)))
