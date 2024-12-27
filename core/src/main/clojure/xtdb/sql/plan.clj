@@ -19,7 +19,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
            [org.apache.commons.codec.binary Hex]
-           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
@@ -404,7 +404,7 @@
   Scope
   (available-cols [_] available-cols)
 
-  (-find-cols [this [col-name table-name] excl-cols]
+  (-find-cols [_ [col-name table-name] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
       (for [col (if col-name
                   (when (.contains available-cols col-name)
@@ -1067,7 +1067,8 @@
                            1 (first matches)
                            (add-err! env (->AmbiguousColumnReference chain))) ]
             (some-> !ob-col-refs (.add sym))
-            sym)))))
+
+         sym)))))
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
@@ -2141,13 +2142,16 @@
     (reify
       Scope
       (available-cols [_]
-        (mapv :col-sym (:projected-cols select-plan)))
+        (->insertion-ordered-set (mapv :col-sym (:projected-cols select-plan))))
 
-      (-find-cols [this chain excl-cols]
-        ;; HACK: for now, we're assuming it's select-star outside of here
-        (assert (nil? chain))
-        (assert (empty? excl-cols))
-        (available-cols this))
+      (-find-cols [this [col-name table-name] excl-cols]
+        (when (nil? table-name)
+          (let [cols (available-cols this)
+                cols-by-name (group-by (comp symbol name) cols)]
+            (->> (if col-name
+                   (cols-by-name (symbol (name col-name)))
+                   cols)
+                 (into [] (remove (set excl-cols)))))))
 
       PlanRelation
       (plan-rel [_]
@@ -2300,11 +2304,22 @@
 
   (visitQuerySpecification [{:keys [out-col-syms order-by-ctx] :as this} ctx]
     (let [qs-scope (->qs-scope this (some->> (.fromClause ctx) (.tableReference)))
-          where-clause (.whereClause ctx)
-          select-clause (.selectClause ctx)
-          rel (-> qs-scope
-                  (cond-> where-clause (wrap-where this where-clause)
-                          select-clause (wrap-query-tail this (.groupByClause ctx) (.havingClause ctx) select-clause order-by-ctx)))
+          rel (if-let [select-clause (.selectClause ctx)]
+                (let [where-clause (.whereClause ctx)]
+                  (-> qs-scope
+                      (cond-> where-clause (wrap-where this where-clause)
+                              select-clause (wrap-query-tail this (.groupByClause ctx) (.havingClause ctx) select-clause order-by-ctx))))
+
+                (letfn [(wrap-tail [order-by-ctx, rel, ^Sql$QueryTailContext tail]
+                          (let [where-clause (some-> tail .whereClause)
+                                select-clause (some-> tail .selectClause)]
+                            (-> rel
+                                (cond-> where-clause (wrap-where this where-clause)
+                                        select-clause (wrap-query-tail this (.groupByClause tail) (.havingClause tail) select-clause order-by-ctx)))))]
+                  (let [tails (.queryTail ctx)]
+                    (as-> qs-scope rel
+                      (reduce (partial wrap-tail nil) rel (butlast tails))
+                      (wrap-tail order-by-ctx rel (last tails))))))
 
           projections (->> (find-cols rel nil)
                            (into [] (map-indexed ->projected-col-expr)))

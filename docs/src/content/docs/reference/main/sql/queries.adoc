@@ -60,7 +60,7 @@ const whereClause = rr.Optional(rr.Sequence("WHERE", predicates), "skip")
 const groupByClause = rr.Optional(rr.Sequence("GROUP", "BY", rr.OneOrMore("<value>", ",")), "skip")
 const havingClause = rr.Optional(rr.Sequence("HAVING", predicates), "skip")
 const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), whereClause, groupByClause, havingClause)
-const fromFirst = rr.Sequence(fromClause, whereClause, groupByClause, havingClause, rr.Optional(selectClause, "skip"))
+const fromFirst = rr.Sequence(fromClause, rr.OneOrMore(rr.Sequence(whereClause, rr.Optional(rr.Sequence(groupByClause, havingClause, selectClause), 'skip'))))
 
 const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
 const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
@@ -77,6 +77,7 @@ NB:
 * `SELECT` is optional in XTDB - if not provided, it defaults to `SELECT *`
 * `SELECT` may be placed after `GROUP BY` in XTDB, so that the query clauses are written in the order that they're executed in practice.
 * `GROUP BY` is optional in XTDB - if not provided, it defaults to all of the columns used outside of an aggregate function.
+* If you start your query with `FROM`, you may then include arbitrarily many sets of `WHERE`/`GROUP BY`/`SELECT` clauses, which will be evaluated in order.
 * Predicates can be comma-separated in XTDB, to aid with SQL generation - these are treated as conjuncts.
   There may be an arbitrary number of commas at the start, between any two predicate expressions, or at the end.
 
