@@ -2546,3 +2546,37 @@ UNION ALL
   (t/is (= [{:xt/id 1, :a "a", :b "b"}] (xt/q tu/*node* "SELECT *,, FROM foo")))
   (t/is (= [{:xt/id 1, :a "a", :b "b", :xt/valid-from (time/->zdt #inst "2020")}]
            (xt/q tu/*node* "SELECT ,_valid_from,,* FROM foo"))))
+
+(t/deftest multiple-query-tails
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :v 1}]
+                           [:put-docs :foo {:xt/id 2, :v 1}]
+                           [:put-docs :foo {:xt/id 3, :v 2}]
+                           [:put-docs :foo {:xt/id 4, :v 3}]
+                           [:put-docs :foo {:xt/id 5, :v 4}]])
+
+  (t/is (= [{:v 1, :v-count 2} {:v 2, :v-count 1} {:v 3, :v-count 1} {:v 4, :v-count 1}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT v, COUNT(*) AS v_count
+                            ORDER BY v")))
+
+  (t/is (= [{:v-count 1, :freq 3} {:v-count 2, :freq 1}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT v, COUNT(*) AS v_count
+                            SELECT v_count, COUNT(*) AS freq
+                            ORDER BY v_count"))
+        "double aggregate")
+
+  (t/is (= [{:v 2} {:v 3} {:v 4} {:v 1}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT v, COUNT(*) AS v_count
+                            SELECT v
+                            ORDER BY v_count, v"))
+        "ORDER BY sees through outermost SELECT")
+
+  (t/is (= [{:xt/id 1} {:xt/id 3} {:xt/id 4} {:xt/id 5}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT _id, ROW_NUMBER () OVER (PARTITION BY v ORDER BY _id) row_num
+                            WHERE row_num = 0
+                            SELECT _id
+                            ORDER BY _id"))
+        "we can filter on window functions"))
