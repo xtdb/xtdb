@@ -2514,3 +2514,21 @@ UNION ALL
 
     (t/is (= {:app_count 2}
              (jdbc/execute-one! tu/*node* ["SELECT COUNT(*) app_count FROM applications"])))))
+
+(t/deftest test-order-nulls-first-last
+  (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, name) VALUES (1, 'foo'), (2, 'bar'), (3, 'baz')"])
+  (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, name) VALUES (1, 'fooz'), (2, 'barz'), (3, 'bazz')"])
+  (t/is (=
+         [nil nil nil
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"]
+         (->> (xt/q tu/*node* "SELECT name, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _valid_to NULLS FIRST")
+              (map :xt/valid-to))))
+  (t/is (=
+         [#xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          nil nil nil]
+         (->> (xt/q tu/*node* "SELECT name, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _valid_to NULLS LAST")
+              (map :xt/valid-to)))))
