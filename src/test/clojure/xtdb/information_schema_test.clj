@@ -395,7 +395,15 @@
               :typnamespace 2125819141,
               :typname "bytea",
               :typowner 1376455703,
-              :oid 17}}
+              :oid 17}
+             {:typtypmod -1,
+              :oid 1009,
+              :typtype "b",
+              :typowner 1376455703,
+              :typnotnull false,
+              :typname "_text",
+              :typnamespace 2125819141,
+              :typbasetype 0}}
            (set (tu/query-ra '[:scan {:table pg_catalog/pg_type}
                                [oid typname typnamespace typowner typtype typbasetype typnotnull typtypmod]]
                              {:node tu/*node*})))))
