@@ -273,12 +273,19 @@
                             {::err/message "The maximum fractional seconds precision is 9."
                              :fractional-precision fractional-precision}))))
 
-(defn parse-with-error-handling [date-type parse-fn s]
-  (or (try
-        (parse-fn s)
-        (catch DateTimeParseException _))
-      (throw (err/runtime-err :xtdb.expression/invalid-temporal-string
-                              {::err/message (format "String '%s' has invalid format for type %s" s date-type)}))))
+(defn parse-with-error-handling
+  ([date-type parse-fn s]
+   (parse-with-error-handling date-type parse-fn nil s))
+  ([date-type parse-fn fallback-parse-fn s]
+   (or (try
+         (parse-fn s)
+         (catch DateTimeParseException _))
+       (when fallback-parse-fn
+         (try
+           (fallback-parse-fn s)
+           (catch DateTimeParseException _)))
+       (throw (err/runtime-err :xtdb.expression/invalid-temporal-string
+                               {::err/message (format "String '%s' has invalid format for type %s" s date-type)})))))
 
 (defn alter-precision [^long precision ^Temporal temporal]
   (if (= precision 0)
@@ -287,7 +294,7 @@
                                                      factor (Math/pow 10 (- 9 precision))]
                                                  (* (Math/floor (/ nanos factor)) factor)))))
 
-(defn gen-alter-precision [precision] 
+(defn gen-alter-precision [precision]
   (if precision (list `(alter-precision ~precision)) '()))
 
 (defn parse-ts-local [ts-str]
@@ -318,7 +325,7 @@
 (defmethod expr/codegen-cast [:utf8 :timestamp-tz] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
   (when precision (ensure-fractional-precision-valid precision))
   {:return-type target-type
-   :->call-code (fn [[s]] 
+   :->call-code (fn [[s]]
                   (-> `(->> (expr/resolve-string ~s)
                             (parse-with-error-handling "timestamp with timezone" parse-tstz)
                             ~@(gen-alter-precision precision))
@@ -341,7 +348,7 @@
 (defmethod expr/codegen-cast [:utf8 :time-local] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
   (when precision (ensure-fractional-precision-valid precision))
   {:return-type target-type
-   :->call-code (fn [[s]] 
+   :->call-code (fn [[s]]
                   (-> `(->> (expr/resolve-string ~s)
                             (parse-with-error-handling "time without timezone" #(LocalTime/parse %))
                             ~@(gen-alter-precision precision)
@@ -358,12 +365,29 @@
 (defn duration->nano ^long [^Duration d]
   (.toNanos d))
 
+(defn string->duration [input]
+  (when-let [[_ amount unit] (re-matches #"^'?(?i)([0-9.]+)\s+(microsecond|millisecond|second|minute|hour|day|week|month|year)s?'?$"
+                                         (or input ""))]
+    (let [amt (Double/parseDouble amount)
+          millis (long
+                  (case (str/lower-case unit)
+                    "microsecond" (/ amt 1000)
+                    "millisecond" amt
+                    "second" (* 1000 amt)
+                    "minute" (* 60 1000 amt)
+                    "hour" (* 3600 1000 amt)
+                    "day" (* 86400 1000 amt)
+                    "week" (* 604800 1000 amt)
+                    "month" (* 2628000 1000 amt)
+                    "year" (* 31536000 1000 amt)))]
+      (Duration/ofMillis millis))))
+
 (defmethod expr/codegen-cast [:utf8 :duration] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
   (when precision (ensure-fractional-precision-valid precision))
   {:return-type target-type
    :->call-code (fn [[s]]
                   (-> `(->> (expr/resolve-string ~s)
-                            (parse-with-error-handling "duration" #(Duration/parse %))
+                            (parse-with-error-handling "duration" #(Duration/parse %) string->duration)
                             ~@(if precision (list `(alter-duration-precision ~precision)) '())
                             (duration->nano))
                       (with-conversion :nano tgt-tsunit)))})
@@ -430,7 +454,7 @@
 (defmethod expr/codegen-cast [:interval :duration] [{[_ iunit] :source-type [_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
   (when (not= iunit :month-day-nano)
     (throw (UnsupportedOperationException. (format "Cannot cast a %s interval to a duration" (name iunit)))))
-  
+
   (when precision (ensure-fractional-precision-valid precision))
 
   {:return-type target-type
@@ -478,7 +502,7 @@
 (defn normalize-interval-to-mdn-iq [^PeriodDuration pd {:keys [start-field end-field fractional-precision]}]
   (let [period (.getPeriod pd)
         duration (.getDuration pd)]
-    
+
     (when (> (.toTotalMonths period) 0)
       (throw (throw (err/runtime-err :xtdb.expression/cannot-normalize-mdn-interval-with-months
                                      {::err/message "Cannot normalize month-day-nano interval with non-zero month component"}))))
@@ -500,7 +524,7 @@
 
 (defmethod expr/codegen-cast [:duration :interval]
   [{[_ d-unit] :source-type {:keys [start-field end-field leading-precision fractional-precision] :as interval-qualifier} :cast-opts}]
-  
+
   (when interval-qualifier
     (when (or (= "YEAR" start-field) (= "MONTH" start-field))
       (throw (UnsupportedOperationException. "Cannot cast a duration to a year-month interval")))
@@ -529,7 +553,7 @@
   (if (empty? interval-qualifier)
     {:return-type source-type, :->call-code first}
     (let [{:keys [start-field end-field leading-precision fractional-precision]} interval-qualifier
-          ym-cast? (some? (#{"YEAR" "MONTH"} start-field))]  
+          ym-cast? (some? (#{"YEAR" "MONTH"} start-field))]
       ;; Assertions against precision and units are not strictly necessary but are specified by SQL2011
       (ensure-interval-precision-valid leading-precision)
       (when end-field (ensure-interval-units-valid start-field end-field))
@@ -537,7 +561,7 @@
       ;; Assert that we are not casting year-month intervals to month-day-nano/day-time intervals and vice versa
       (when (and ym-cast? (not= source-type [:interval :year-month])) (throw (UnsupportedOperationException. "Cannot cast a non Year-Month interval with a Year-Month interval qualifier")))
       (when (and (not ym-cast?) (= source-type [:interval :year-month])) (throw (UnsupportedOperationException. "Cannot cast a Year-Month interval with a non Year-Month interval qualifier")))
-      
+
       (if ym-cast?
         {:return-type [:interval :year-month], :->call-code (fn [[pd]] `(normalize-interval-to-ym-iq ~pd ~interval-qualifier))}
         {:return-type source-type, :->call-code (fn [[pd]] `(normalize-interval-to-mdn-iq ~pd ~interval-qualifier))}))))
@@ -583,12 +607,20 @@
               :arg-types [:utf8 :utf8 :int :utf8 :int]}]
     (expr/codegen-call expr)))
 
+(defn duration-from-seconds [^double seconds unit]
+  (long (* seconds (types/ts-units-per-second unit))))
+
+(defmethod expr/codegen-cast [:f64 :duration] [{[_duration unit] :target-type}]
+  {:return-type [:duration unit]
+   :->call-code (fn [[x]]
+                  `(duration-from-seconds ~x ~unit))})
+
 (defmethod expr/codegen-cast [:utf8 :interval] [{interval-opts :cast-opts :as expr}]
   (if (empty? interval-opts)
     {:return-type [:interval :month-day-nano]
      :->call-code (fn [[x]]
                     `(iso8601-string-to-period-duration (expr/resolve-string ~x)))}
-    
+
     (if (nil? (:end-field interval-opts))
       (->single-field-interval-call expr)
       (->multi-field-interval-call expr))))
@@ -1224,7 +1256,7 @@
     "DAY" `ChronoField/DAY_OF_MONTH
     "HOUR" `ChronoField/HOUR_OF_DAY
     "MINUTE" `ChronoField/MINUTE_OF_HOUR
-    "SECOND" `ChronoField/SECOND_OF_MINUTE)) 
+    "SECOND" `ChronoField/SECOND_OF_MINUTE))
 
 (defmethod expr/codegen-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_ts ts-unit tz]] :arg-types}]
   (let [zone-id-sym (gensym 'zone-id)]
@@ -1434,7 +1466,7 @@
     (PeriodDuration. adjusted-period adjusted-duration)))
 
 (defmethod expr/codegen-call [:age :timestamp-local :timestamp-local] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
-  {:return-type [:interval :month-day-nano] 
+  {:return-type [:interval :month-day-nano]
    :->call-code (fn [[x y]] `(->mdn-interval-between ~(ts->ldt x x-unit) ~(ts->ldt y y-unit)))})
 
 ;; Cast and call for timestamp tz and mixed types
@@ -1444,14 +1476,14 @@
     (defmethod expr/codegen-call [:age x y] [{[[_ x-unit _], [_ y-unit _]] :arg-types, :as expr}]
       (-> expr (recall-with-cast [:timestamp-local x-unit] [:timestamp-local y-unit])))))
 
-;; Cast and call age for date and mixed types with date 
+;; Cast and call age for date and mixed types with date
 (defmethod expr/codegen-call [:age :date :date] [expr]
   (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
 
 (doseq [x [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:age x :date] [{[[_ x-unit _] _] :arg-types, :as expr}]
     (-> expr (recall-with-cast [:timestamp-local x-unit] [:timestamp-local :micro])))
-  
+
   (defmethod expr/codegen-call [:age :date x] [{[_ [_ y-unit _]] :arg-types, :as expr}]
     (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local y-unit]))))
 

@@ -1573,6 +1573,26 @@
                                   #(->dur-vec "x" TimeUnit/SECOND 10)
                                   #(->bigint-vec "y" 3))))))))
 
+(t/deftest cast-duration-test
+  (letfn [(run-cast [s col-type]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [s])])]
+              (run-projection rel (list 'cast 'x col-type))))]
+
+    (t/is (= [(Duration/ofMillis 1000)]
+             (:res (run-cast "1 SECOND" [:duration :milli]))))
+
+    (t/is (= [(Duration/ofNanos 15e8)]
+             (:res (run-cast "1.5 SECOND" [:duration :nano]))))
+
+    (t/is (= [(Duration/ofMillis 990)]
+             (:res (run-cast "0.99 second" [:duration :micro]))))
+
+    (t/is (= [(Duration/ofMillis (* 2 1000))]
+             (:res (run-cast "PT2S" [:duration :micro]))))
+
+    (t/is (= [(Duration/ofMillis (* 1000 60))]
+             (:res (run-cast "PT1M" [:duration :milli]))))))
+
 (t/deftest test-struct-literals
   (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])
                                 (tu/open-vec "y" [3.4 8.25])])]

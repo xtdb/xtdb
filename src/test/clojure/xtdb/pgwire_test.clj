@@ -2465,3 +2465,19 @@ ORDER BY t.oid DESC LIMIT 1"
                             (jdbc/execute! conn ["SELECT 1 / 0;"])))
     (t/is (thrown-with-msg? PSQLException #"ERROR: Negative substring length"
                             (jdbc/execute! conn ["SELECT SUBSTRING('asf' FROM 0 FOR -1);"])))))
+
+(deftest pg-sleep-test
+  (with-open [conn (pg-conn {})]
+    (let [start (System/currentTimeMillis)]
+      (pg/execute conn "SELECT pg_sleep(0.1)")
+      (t/is (< 100 (- (System/currentTimeMillis) start)))
+      (pg/execute conn "SELECT pg_sleep(0.1+0.1)")
+      (t/is (< 300 (- (System/currentTimeMillis) start))))))
+
+(deftest pg-sleep-for-test
+  (with-open [conn (pg-conn {})]
+    (let [start (System/currentTimeMillis)]
+      (pg/execute conn "SELECT pg_sleep_for('0.100 second')")
+      (t/is (< 100 (- (System/currentTimeMillis) start)))
+      (pg/execute conn "SELECT pg_sleep_for('0.01 minute')")
+      (t/is (< 160 (- (System/currentTimeMillis) start))))))
