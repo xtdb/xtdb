@@ -87,6 +87,13 @@ defmodule ElixrTest do
     assert ~D[2020-01-01] == dat
   end
 
+  test "should be able to read a text array", state do
+    pid = state[:xt]
+    result = Postgrex.query!(pid, "SELECT ARRAY['a', 'b', 'c']", [])
+    assert [[["a", "b", "c"]]] == result.rows
+
+  end
+
   # test "should be able to insert a JSON field and read it back", state do
   #   pid = state[:xt]
   #   json_field = %{"foo" => "bar"}

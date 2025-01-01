@@ -276,8 +276,6 @@
      ;; arrays
 
      {:sql "ARRAY []", :clj []}
-     {:sql "ARRAY ['foo']", :clj ["foo"]}
-     {:sql "ARRAY ['2022-01-02']", :clj ["2022-01-02"]}
      {:sql "ARRAY [ARRAY ['42'], 42, '42']", :clj [["42"] 42 "42"]}]))
 
 (deftest json-representation-test
@@ -2105,7 +2103,56 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (= [{"arr" "_int8"}] (result-metadata stmt)))
 
         (with-open [rs (.executeQuery stmt)]
-          (t/is (= [{"arr" [1 2 3]}] (rs->maps rs))))))))
+          (t/is (= [{"arr" [1 2 3]}] (rs->maps rs)))))))
+
+  (t/testing "array as parameter"
+    (with-open [conn (jdbc-conn)
+                ps (jdbc/prepare conn ["INSERT INTO docs (_id, nums) VALUES (?, ?)"])]
+      (.setInt ps 1 1)
+      (.setArray ps 2 (.createArrayOf conn "int8" (into-array [1, 2, 3])))
+      (.executeUpdate ps)
+
+      (with-open [stmt (.prepareStatement conn "SELECT _id, nums FROM docs WHERE _id = 1")
+                  rs (.executeQuery stmt)]
+        (t/is (= [{"_id" "int8"}, {"nums" "_int8"}] (result-metadata stmt)))
+        (t/is (= [{"_id" 1, "nums" [1, 2, 3]}] (rs->maps rs)))))))
+
+(deftest test-text-array
+  (t/testing "array as subselect"
+    (with-open [conn (jdbc-conn)]
+      (jdbc/execute! conn ["INSERT INTO docs(_id, name) VALUES (1, 'a')"])
+      (jdbc/execute! conn ["INSERT INTO docs(_id, name) VALUES (2, 'b')"])
+
+      (with-open [stmt (.prepareStatement conn "SELECT ARRAY(SELECT name FROM docs ORDER BY name) AS names")]
+        (with-open [rs (.executeQuery stmt)]
+          (t/is (= [{"names" "_text"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          (t/is (= [{"names" ["a" "b"]}] (rs->maps rs)))))))
+
+  (t/testing "array in select"
+    (with-open [conn (jdbc-conn)]
+      (with-open [stmt (.prepareStatement conn "SELECT ['a', 'b', 'c'] AS arr")]
+
+        (t/is (= [{"arr" "_text"}] (result-metadata stmt)))
+
+        (with-open [rs (.executeQuery stmt)]
+          (t/is (= [{"arr" ["a" "b" "c"]}] (rs->maps rs)))))))
+
+  (t/testing "text array as parameter"
+    (with-open [conn (jdbc-conn)
+                ;; intentionally using different table name to avoid union column type [:union [:utf8 [:list :utf8]]]
+                ;; which would render this to fallback type - JSON
+                ps (jdbc/prepare conn ["INSERT INTO docz (_id, name) VALUES (?, ?)"])]
+      (.setInt ps 1 1)
+      (.setArray ps 2 (.createArrayOf conn "text" (into-array ["aa", "bbb", "cccc"])))
+      (.executeUpdate ps)
+
+      (with-open [stmt (.prepareStatement conn "SELECT _id, name FROM docz WHERE _id = 1")
+                  rs (.executeQuery stmt)]
+        (t/is (= [{"_id" "int4"}, {"name" "_text"}] (result-metadata stmt)))
+        (t/is (= [{"_id" 1, "name" ["aa", "bbb", "cccc"]}] (rs->maps rs)))))))
 
 (deftest test-elixir-client-complex-array
   (with-open [conn (jdbc-conn)]
