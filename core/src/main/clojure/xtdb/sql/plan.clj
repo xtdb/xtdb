@@ -1463,6 +1463,11 @@
   (visitPgExpandArrayFunction [_ _] nil)
   (visitPgGetExprFunction [_ _] nil)
   (visitPgGetIndexdefFunction [_ _] nil)
+  (visitPgSleepFunction [this ctx]
+    (list 'sleep (list 'cast (.accept (.sleepSeconds ctx) this) [:duration :milli])))
+
+  (visitPgSleepForFunction [this ctx]
+    (list 'sleep (list 'cast (.accept (.sleepPeriod ctx) this) [:duration :milli])))
 
   (visitCurrentDateFunction [_ _] '(current-date))
   (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
