@@ -320,6 +320,8 @@ exprPrimary
     | (schemaName '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
     | (schemaName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
     | (schemaName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
+    | PG_SLEEP '(' sleepSeconds=expr ')' # PgSleepFunction
+    | PG_SLEEP_FOR '(' sleepPeriod=expr ')' # PgSleepForFunction
 
     | currentInstantFunction # CurrentInstantFunction0
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
