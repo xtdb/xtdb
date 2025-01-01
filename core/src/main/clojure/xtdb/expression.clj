@@ -283,7 +283,10 @@
     :list Object, :set Object, :struct Object :transit Object})
 
 (defmethod read-value-code :null [_ & _args] nil)
-(defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
+
+(defmethod write-value-code :null [_ w & args]
+  ;; This evals the args to perform any side effects
+  `(do ~@args (.writeNull ~w)))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
            :timestamp-tz :timestamp-local :time-local :duration :tstz-range
@@ -1223,6 +1226,22 @@
    :->call-code (fn [[setting-name]]
                   `(current-setting (resolve-string ~setting-name)))})
 
+(defn sleep [^double seconds-expr]
+  (Thread/sleep (long (* 1000 seconds-expr))))
+
+(defmethod codegen-call [:sleep :f64] [_]
+  {:return-type :null
+   :->call-code (fn [[seconds-expr]]
+                  `(sleep ~seconds-expr))})
+
+(defn sleep-for [millis]
+  (Thread/sleep (long millis)))
+
+(defmethod codegen-call [:sleep_for :i64] [_]
+  {:return-type :null
+   :->call-code (fn [[millis]]
+                  `(sleep-for ~millis))})
+
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)
          capacity (int 0)]
@@ -1598,11 +1617,11 @@
 (defmethod codegen-call [:length :list] [expr]
   (codegen-call (assoc expr :f :cardinality)))
 
-(defmethod codegen-call [:length :set] [_] 
+(defmethod codegen-call [:length :set] [_]
   {:return-type :i32
    :->call-code #(do `(count ~@%))})
 
-(defn count-non-empty [m] 
+(defn count-non-empty [m]
   (loop [n 0, xs (vals m)]
     (if (seq xs)
       (if (.isNull ^ValueReader (first xs))
@@ -1610,7 +1629,7 @@
         (recur (inc n) (rest xs)))
       n)))
 
-(defmethod codegen-call [:length :struct] [_] 
+(defmethod codegen-call [:length :struct] [_]
   {:return-type :i32
    :->call-code #(do `(count-non-empty ~@%))})
 

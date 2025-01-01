@@ -2379,3 +2379,23 @@ ORDER BY t.oid DESC LIMIT 1"
     (q conn ["SET STANDARD_CONFORMING_STRINGS = ON"])
     (t/is (= [{:standard-conforming-strings true}] (q conn ["SHOW STANDARD_CONFORMING_STRINGS"])))
     (t/is (= [{:world "hello"}] (q conn ["SELECT 'hello' AS world"])))))
+
+(deftest pg-sleep-test
+  (with-open [conn (pg-conn {})]
+    (let [start (System/currentTimeMillis)]
+      (pg/execute conn "SELECT pg_sleep(0.1)")
+      (t/is (< 100 (- (System/currentTimeMillis) start)))
+      (pg/execute conn "SELECT pg_sleep(0.1+0.1)")
+      (t/is (< 300 (- (System/currentTimeMillis) start)))
+      ;; should also test the unhappy path (string input - but add-err! doesn't seem to work the way i'd expect it??)
+      )))
+
+(deftest pg-sleep-for-test
+  (with-open [conn (pg-conn {})]
+    (let [start (System/currentTimeMillis)]
+      (pg/execute conn "SELECT pg_sleep_for('0.100 second')")
+      (t/is (< 100 (- (System/currentTimeMillis) start)))
+      (pg/execute conn "SELECT pg_sleep_for('0.01 minute')")
+      (t/is (< 160 (- (System/currentTimeMillis) start)))
+      ;; should also test the unhappy path (string input - but add-err! doesn't seem to work the way i'd expect it??)
+      )))
