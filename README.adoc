@@ -49,7 +49,7 @@ XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x 
 |===
 | | XTDB 1.x | XTDB 2.x
 | Status | Stable | Beta
-| Initial Stable Release | 2019 | 2024-2025
+| Initial Stable Release | 2019 | 2025
 | Query languages | EDN Datalog | XTQL + SQL:2011
 | Bitemporal Querying | Timeslice only (point-in-time) | Fully bitemporal - SQL:2011 and beyond
 | Query focus | OLTP | OLAP + OLTP ('HTAP')
@@ -70,4 +70,4 @@ We would love to hear from you: hello@xtdb.com
 
 XTDB is licensed under the Mozilla Public License, version 2 or (at your option) any later version.
 
-Copyright © 2018-2024 JUXT LTD.
+Copyright © 2018-2025 JUXT LTD.
