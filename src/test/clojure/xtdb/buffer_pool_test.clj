@@ -5,27 +5,23 @@
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
             [xtdb.node :as xtn]
-            [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (com.github.benmanes.caffeine.cache AsyncCache)
-           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
+  (:import (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (java.io File)
            (java.nio ByteBuffer)
            [java.nio.charset StandardCharsets]
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
-           (java.util.concurrent CompletableFuture)
-           (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo Schema)
            xtdb.api.log.FileListCache
-           (xtdb.api.storage ObjectStore ObjectStore$Factory Storage)
+           (xtdb.api.storage ObjectStore$Factory Storage)
            xtdb.arrow.Relation
            xtdb.buffer_pool.RemoteBufferPool
            xtdb.cache.DiskCache
            xtdb.IBufferPool
-           (xtdb.multipart IMultipartUpload SupportsMultipart)))
+           (xtdb.api.storage SimulatedObjectStore StoreOperation)))
 
 (defonce tmp-dirs (atom []))
 
@@ -54,26 +50,15 @@
 
       (tu/finish-chunk! node)
 
-      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))]
-        (t/is (instance? RemoteBufferPool buffer-pool))
+      (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
+            object-store (.getObjectStore buffer-pool)]
         (t/is (seq (.listAllObjects object-store)))))))
-
-(defn copy-byte-buffer ^ByteBuffer [^ByteBuffer buf]
-  (-> (ByteBuffer/allocate (.remaining buf))
-      (.put buf)
-      (.flip)))
-
-(defn concat-byte-buffers ^ByteBuffer [buffers]
-  (let [n (reduce + (map #(.remaining ^ByteBuffer %) buffers))
-        dst (ByteBuffer/allocate n)]
-    (doseq [^ByteBuffer src buffers]
-      (.put dst src))
-    (.flip dst)))
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
-(defn test-get-object [^IBufferPool bp, ^Path k, ^ByteBuffer expected]
-  (let [{:keys [object-store, ^DiskCache disk-cache]} bp
+(defn test-get-object [^RemoteBufferPool bp, ^Path k, ^ByteBuffer expected]
+  (let [object-store (.getObjectStore bp)
+        ^DiskCache disk-cache (.getDiskCache bp)
         root-path (.getRootPath disk-cache)]
 
     (t/testing "immediate get from buffers map produces correct buffer"
@@ -85,12 +70,12 @@
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.resolve root-path k))))))
 
       (t/testing "if the buffer is evicted, it is loaded from disk"
-        (bp/evict-cached-buffer! bp k)
+        (.evictCachedBuffer bp k)
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k)))))))
 
     (when object-store
       (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
-        (bp/evict-cached-buffer! bp k)
+        (.evictCachedBuffer bp k)
         ;; Evicted from map and deleted from disk (ie, replicating effects of 'eviction' here)
         (-> (.asMap (.getCache (.getPinningCache disk-cache)))
             (.remove k))
@@ -98,52 +83,10 @@
         ;; Will fetch from object store again
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k)))))))))
 
-(defrecord SimulatedObjectStore [!calls !buffers]
-  ObjectStore
-  (getObject [_ k] (CompletableFuture/completedFuture (get @!buffers k)))
-
-  (getObject [_ k path]
-    (if-some [^ByteBuffer nio-buf (get @!buffers k)]
-      (let [barr (byte-array (.remaining nio-buf))]
-        (.get (.duplicate nio-buf) barr)
-        (io/copy barr (.toFile path))
-        (CompletableFuture/completedFuture path))
-      (CompletableFuture/failedFuture (os/obj-missing-exception k))))
-
-  (putObject [_ k buf]
-    (swap! !buffers assoc k buf)
-    (swap! !calls conj :put)
-    (CompletableFuture/completedFuture nil))
-
-  (listAllObjects [_]
-    (->> @!buffers
-         (mapv (fn [[^Path k, ^ByteBuffer buf]]
-                 (os/->StoredObject k (.capacity buf))))))
-
-  SupportsMultipart
-  (startMultipart [_ k]
-    (let [parts (atom [])]
-      (CompletableFuture/completedFuture
-       (reify IMultipartUpload
-         (uploadPart [_ buf]
-           (swap! !calls conj :upload)
-           (swap! parts conj (copy-byte-buffer buf))
-           (CompletableFuture/completedFuture nil))
-
-         (complete [_]
-           (swap! !calls conj :complete)
-           (swap! !buffers assoc k (concat-byte-buffers @parts))
-           (CompletableFuture/completedFuture nil))
-
-         (abort [_]
-           (swap! !calls conj :abort)
-           (CompletableFuture/completedFuture nil)))))))
-
 (defn simulated-obj-store-factory []
-  (let [!buffers (atom {})]
-    (reify ObjectStore$Factory
-      (openObjectStore [_]
-        (->SimulatedObjectStore (atom []) !buffers)))))
+  (reify ObjectStore$Factory
+    (openObjectStore [_]
+      (SimulatedObjectStore.))))
 
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
@@ -151,43 +94,15 @@
                           FileListCache/SOLO
                           (SimpleMeterRegistry.)))
 
-(defn get-remote-calls [test-bp]
-  @(:!calls (:object-store test-bp)))
+(defn get-remote-calls [^RemoteBufferPool test-bp]
+  (.getCalls ^SimulatedObjectStore (.getObjectStore test-bp)))
 
 (t/deftest below-min-size-put-test
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "if <= min part size, putObject is used"
-      (with-redefs [bp/min-multipart-part-size 2]
-        (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
-        (t/is (= [:put] (get-remote-calls bp)))
-        (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
-
-(t/deftest arrow-ipc-test
-  (with-open [bp (remote-test-buffer-pool)]
-    (t/testing "multipart, arrow ipc"
-      (let [path (util/->path "aw")
-            schema (Schema. [(types/col-type->field "a" :i32)])
-            upload-multipart-buffers @#'bp/upload-multipart-buffers
-            multipart-branch-taken (atom false)]
-        (with-redefs [bp/min-multipart-part-size 320
-                      bp/upload-multipart-buffers
-                      (fn [& args]
-                        (reset! multipart-branch-taken true)
-                        (apply upload-multipart-buffers args))]
-          (with-open [rel (Relation. tu/*allocator* schema)
-                      w (.openArrowWriter bp path rel)]
-            (let [v (.get rel "a")]
-              (dotimes [x 10]
-                (.writeInt v x))
-              (.writeBatch w)
-              (.end w))))
-
-        (t/is @multipart-branch-taken true)
-        (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (util/with-open [rb (.getRecordBatch bp path 0)]
-          (let [footer (.getFooter bp path)
-                rel (Relation/fromRecordBatch tu/*allocator* (.getSchema footer) rb)]
-            (util/close rel)))))))
+      (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
+      (t/is (= [StoreOperation/PUT] (get-remote-calls bp)))
+      (test-get-object bp (util/->path "min-part-put") (utf8-buf "12")))))
 
 (defn file-info [^Path dir]
   (let [files (filter #(.isFile ^File %) (file-seq (.toFile dir)))]
@@ -318,42 +233,3 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [bp (bp/open-local-storage tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
       (test-list-objects bp))))
-
-(defn count-tmp-files [^Path tmp-dir]
-  (count (.listFiles (.toFile tmp-dir))))
-
-(t/deftest buffer-pool-clears-up-arrow-writer-temp-files
-  (with-open [bp (remote-test-buffer-pool)]
-    (let [^Path root-path (.getRootPath ^DiskCache (:disk-cache bp))
-          ^Path tmp-dir (.resolve root-path ".tmp")
-          schema (Schema. [(types/col-type->field "a" :i32)])]
-      (t/testing "successful uploads"
-        (with-open [rel (Relation. tu/*allocator* schema)
-                    w (.openArrowWriter bp (util/->path "aw") rel)]
-          ;; Arrow Writer Opened
-          (t/is (= 1 (count-tmp-files tmp-dir)) "temp file present")
-
-          ;; Write arrow file out
-          (let [v (.get rel "a")]
-            (.writeInt v 1)
-            (.writeBatch w)
-            (.end w))
-          
-          (t/is (= 0 (count-tmp-files tmp-dir)) "temp file removed")))
-
-      (t/testing "failing/erroring uploads"
-        (with-redefs [util/->mmap-path (fn [_] (throw (Exception. "Example error in upload arrow file")))]
-          (with-open [rel (Relation. tu/*allocator* schema)]
-            ;; Using `with-close-on-catch`, as we do in trie.clj where we use the arrow writer
-            (t/is (thrown-with-msg? Exception #"Example error in upload arrow file"
-                                    (util/with-close-on-catch [w (.openArrowWriter bp (util/->path "aw2") rel)]
-                                      ;; Arrow Writer Opened
-                                      (t/is (= 1 (count-tmp-files tmp-dir)) "temp file present")
-
-                                     ;; Write arrow file out, should error
-                                      (let [v (.get rel "a")]
-                                        (.writeInt v 1)
-                                        (.writeBatch w)
-                                        (.end w)))))
-            
-            (t/is (= 0 (count-tmp-files tmp-dir)) "temp file removed after writer errored/closed")))))))

@@ -92,14 +92,14 @@
           (t/is (= {(util/->path "foo1") 12
                     (util/->path "foo2") 15
                     (util/->path "foo3") 8}
-                   (:!os-files buffer-pool)))))
-      
-        (t/testing "should be no 'xtdb-tx-subscription' threads remaining"
-          (let [all-threads (.keySet (Thread/getAllStackTraces))
-                tx-subscription-threads (filter (fn [^Thread thread]
-                                                  (re-find #"xtdb-tx-subscription" (.getName thread))) 
-                                                all-threads)]
-            (t/is (= 0 (count tx-subscription-threads))))))))
+                   (.getOsFiles buffer-pool)))))
+
+      (t/testing "should be no 'xtdb-tx-subscription' threads remaining"
+        (let [all-threads (.keySet (Thread/getAllStackTraces))
+              tx-subscription-threads (filter (fn [^Thread thread]
+                                                (re-find #"xtdb-tx-subscription" (.getName thread)))
+                                              all-threads)]
+          (t/is (= 0 (count tx-subscription-threads))))))))
 
 (t/deftest ^:kafka test-startup-errors-returned-with-no-system-map
   (t/is (thrown-with-msg? KafkaException
