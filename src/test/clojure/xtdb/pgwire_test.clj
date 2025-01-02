@@ -627,7 +627,9 @@
      (fn [send read]
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
-         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] (read :err))))
+         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] (read :err)))
+         ;; to drain the standard stream
+         (read))
 
        (testing "ping"
          (send "select 'ping';\n")
