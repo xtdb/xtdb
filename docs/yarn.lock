@@ -2274,10 +2274,10 @@ astro-heroicons@^2.1.1:
   resolved "https://registry.yarnpkg.com/astro-heroicons/-/astro-heroicons-2.1.5.tgz#a603a0a47c156410f0048ac61433d6449fddf9c9"
   integrity sha512-5o58jOnbxli8sec5Ht6Olmy/bgcl5nP+QyV3C7sYRP40D3OuJ3z1F9oMZn25wkwKymdQco0M9bOeJ3r90ZGGmQ==
 
-astro@4.16.17:
-  version "4.16.17"
-  resolved "https://registry.yarnpkg.com/astro/-/astro-4.16.17.tgz#058f222c3633704b909e8621fd90b86d40072c71"
-  integrity sha512-OuD+BP7U6OqQLKtZ/FJkU2S+TOlifxS/OKUbZOb5p6y+LLBa1J3zHRJrIl7DUSq6eXY+9wSWwbJpD9JS+lqhxA==
+astro@4.16.18:
+  version "4.16.18"
+  resolved "https://registry.yarnpkg.com/astro/-/astro-4.16.18.tgz#c7db47d5554d865543d6917f42b5129819c6bc88"
+  integrity sha512-G7zfwJt9BDHEZwlaLNvjbInIw2hPryyD654314KV/XT34pJU6SfN1S+mWa8RAkALcZNJnJXCJmT3JXLQStD3Lw==
   dependencies:
     "@astrojs/compiler" "^2.10.3"
     "@astrojs/internal-helpers" "0.4.1"
