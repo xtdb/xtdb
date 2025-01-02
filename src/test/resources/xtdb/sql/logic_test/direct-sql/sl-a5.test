@@ -4,12 +4,12 @@ hash-threshold 100
 
 statement ok
 INSERT INTO posts (_id, user_id, body, _valid_from)
-	VALUES (9012, 5678, 'Happy 2025!', DATE '2025-01-01')
+	VALUES (9012, 5678, 'Happy 2080!', DATE '2080-01-01')
 
 query T nosort
-SELECT posts.body FROM posts FOR VALID_TIME AS OF DATE '2025-01-02'
+SELECT posts.body FROM posts FOR VALID_TIME AS OF DATE '2080-01-02'
 ----
-Happy 2025!
+Happy 2080!
 
 query T nosort
 SELECT posts.body FROM posts
