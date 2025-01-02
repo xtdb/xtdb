@@ -1,6 +1,5 @@
 package xtdb
 
-import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.arrow.Relation
@@ -29,7 +28,7 @@ interface IBufferPool : AutoCloseable {
      */
     fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch
 
-    fun putObject(k: Path, buffer: ByteBuffer)
+    fun putObject(key: Path, buffer: ByteBuffer)
 
     /**
      * Recursively lists all objects in the buffer pool.
@@ -45,7 +44,7 @@ interface IBufferPool : AutoCloseable {
      */
     fun listObjects(dir: Path): Iterable<Path>
 
-    fun objectSize(k: Path): Long
+    fun objectSize(key: Path): Long
 
-    fun openArrowWriter(k: Path, rel: Relation): ArrowWriter
+    fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
 }
