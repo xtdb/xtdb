@@ -800,6 +800,14 @@
   PlanError
   (error-string [_] (format "Cannot parse date: %s - failed with message %s" d-str msg)))
 
+(defrecord CannotParseDouble [d-str]
+  PlanError
+  (error-string [_] (format "Invalid input syntax for type double precision: %s" d-str)))
+
+(defrecord CannotParsePeriod [d-str]
+  PlanError
+  (error-string [_] (format "Invalid input syntax for type interval: %s" d-str)))
+
 (defn parse-date-literal [d-str env]
   (try
     (LocalDate/parse d-str)
@@ -1502,6 +1510,31 @@
   (visitPgExpandArrayFunction [_ _] nil)
   (visitPgGetExprFunction [_ _] nil)
   (visitPgGetIndexdefFunction [_ _] nil)
+  (visitPgSleepFunction [this ctx]
+    (list 'sleep (-> (.sleepSeconds ctx) (.accept this))))
+
+  (visitPgSleepForFunction [_ ctx]
+    (let [period (.getText (.sleepPeriod ctx))]
+      ;; Would it be cleaner to do it in ANTLR? or EE maybe?
+      (if-let [[_ amount unit] (re-matches #"^'?(?i)([0-9.]+)\s+(microsecond|millisecond|second|minute|hour|day|week|month|year)s?'?$"
+                                           period)]
+        (let [amt (try (Double/parseDouble amount)
+                       (catch NumberFormatException _
+                         (add-err! env (->CannotParseDouble amount))))
+              millis (long
+                      (case (str/lower-case unit)
+                        "microsecond" (/ amt 1000)
+                        "millisecond" amt
+                        "second" (* 1000 amt)
+                        "minute" (* 60 1000 amt)
+                        "hour" (* 3600 1000 amt)
+                        "day" (* 86400 1000 amt)
+                        "week" (* 604800 1000 amt)
+                        "month" (* 2628000 1000 amt)
+                        "year" (* 31536000 1000 amt)))]
+          (list 'sleep-for millis))
+
+        (add-err! env (->CannotParsePeriod period)))))
 
   (visitCurrentDateFunction [_ _] '(current-date))
   (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
