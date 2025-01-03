@@ -451,7 +451,7 @@
 
             (upload-arrow-file allocator object-store k tmp-path)
 
-            (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [{:k k, :size (Files/size tmp-path)}]}))
+            (.appendFileNotification file-list-cache (flc/addition k (Files/size tmp-path)))
 
             (.put disk-cache k tmp-path))
 
@@ -465,7 +465,7 @@
   (putObject [_ k buffer]
     @(-> (.putObject object-store k buffer)
          (.thenApply (fn [_]
-                       (.appendFileNotification file-list-cache (flc/map->FileNotification {:added [{:k k, :size (.capacity buffer)}]}))))))
+                       (.appendFileNotification file-list-cache (flc/addition k (.capacity buffer)))))))
 
   EvictBufferTest
   (evict-cached-buffer! [_ k]
