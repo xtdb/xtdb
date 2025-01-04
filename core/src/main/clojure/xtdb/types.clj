@@ -13,7 +13,7 @@
            [java.nio.charset StandardCharsets]
            [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
-           [java.util UUID]
+           [java.util Arrays UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
@@ -816,25 +816,56 @@
       ;; l-bound - MUST BE 1
       (.putInt 1))))
 
-(defn read-binary-array [ba]
+(defn binary-variable-size-array-header
+  [^long element-count oid ^long length-of-elements]
+  (doto
+   (ByteBuffer/allocate (+ 20 (* 4 element-count) length-of-elements))
+    (.putInt 1) ;; dimensions
+    (.putInt 0) ;; data offset
+    (.putInt oid)
+    (.putInt element-count)
+    ;; l-bounds - MUST BE 1
+    (.putInt 1)))
+
+(defn read-binary-int-array [ba]
   (let [^ByteBuffer bb (ByteBuffer/wrap ba)
-        ;; _payload-size (.getInt bb 0)
-        ;; _dimensions (.getInt bb 4)
-        data-offset (.getInt bb 8)
-        oid (.getInt bb 12)
-        length (.getInt bb 16)
-        [typlen get-elem] (case oid
-                            (23 1007) [4 (fn [^ByteBuffer bb ^long start ^long typlen ^long idx]
-                                           (.getInt bb (+ start (* idx typlen))))]
-                            (20 1016) [8 (fn [^ByteBuffer bb ^long start ^long typlen ^long idx]
-                                           (.getLong bb (+ start (* idx typlen))))])
-        get-start (fn ^long [^long header-length ^long data-offset] (+ header-length data-offset))
-        start  (get-start 20 data-offset)]
-    (into []
-          (map
-           (fn [idx]
-             (get-elem bb start typlen idx))
-           (range length)))))
+        data-offset (long (.getInt bb 4))
+        elem-oid (.getInt bb 8)
+        length (.getInt bb 12)
+        start (long (+ 24 data-offset)) ;; 24 - header = 20 bytes + length of element = 4 bytes
+        [typlen get-elem] (case elem-oid
+                            23 [4 (fn [^ByteBuffer bb ^long start]
+                                    (.getInt bb start))]
+                            20 [8 (fn [^ByteBuffer bb ^long start]
+                                    (.getLong bb start))])]
+    (loop [arr []
+           start start
+           idx 0]
+      (if (< idx length)
+        (recur (conj arr (get-elem bb start))
+               (+ start 4 typlen)
+               (inc idx))
+        arr))))
+
+(defn read-binary-text-array
+  "This seems to not have length as the first int32 - that's what JDBC connection/createArrayOf does"
+  [^bytes ba]
+  (let [^ByteBuffer bb (ByteBuffer/wrap ba)
+        data-offset (long (.getInt bb 4))
+        length (.getInt bb 12)
+        start (long (+ 20 data-offset))]
+    (loop [elem 0
+           start start
+           arr []]
+      (if (< elem length)
+        (let [str-len (long (.getInt bb start))
+              string (read-utf8 (Arrays/copyOfRange ba
+                                                    (int (+ 4 start))
+                                                    (int (+ 4 start str-len))))]
+          (recur (inc elem)
+                 (+ 4 start str-len)
+                 (conj arr string)))
+        arr))))
 
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
@@ -1278,7 +1309,7 @@
                                               (str/split #","))))]
                             (mapv #(Integer/parseInt %) elems)))
              :read-binary (fn [_env ba]
-                            (read-binary-array ba))
+                            (read-binary-int-array ba))
              :write-text (fn [_env ^IVectorReader list-rdr idx]
                            (let [list (.getObject list-rdr idx)
                                  sb (StringBuilder. "{")]
@@ -1320,7 +1351,7 @@
                                               (str/split #","))))]
                             (mapv #(Long/parseLong %) elems)))
              :read-binary (fn [_env ba]
-                            (read-binary-array ba))
+                            (read-binary-int-array ba))
              :write-text (fn [_env ^IVectorReader list-rdr idx]
                            (let [list (.getObject list-rdr idx)
                                  sb (StringBuilder. "{")]
@@ -1340,6 +1371,47 @@
                                  ;; also the way vanilla postgres does it seems to confirm this
                                  (.putInt bb typlen)
                                  (.putLong bb elem))
+                               (.array bb)))})
+   :_text (let [oid 1009
+                typelem 25]
+            {:typname "_text"
+             :oid oid
+             :typelem typelem
+             :typsend "array_send"
+             :typreceive "array_recv"
+             :typinput "array_in"
+             :typoutput "array_out"
+             :read-text (fn [_env arr]
+                          (when-not (empty? arr)
+                            (let [sa (str/trim arr)]
+                              (-> sa
+                                  (subs 1 (dec (count sa)))
+                                  (str/split #",")))))
+             :write-text (fn [_env ^IVectorReader list-rdr idx]
+                           (let [list (.getObject list-rdr idx)
+                                 sb (StringBuilder. "{")]
+                             (doseq [elem list]
+                               (.append sb (or elem "NULL"))
+                               (.append sb ","))
+                             (if (seq list)
+                               (.setCharAt sb (dec (.length sb)) \})
+                               (.append sb "}"))
+                             (utf8 (.toString sb))))
+             :read-binary (fn [_env ba]
+                            (read-binary-text-array ba))
+             :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                             (let [list (.getObject list-rdr idx)
+                                   ^ByteBuffer bb (binary-variable-size-array-header
+                                                   (count list)
+                                                   typelem
+                                                   (reduce + 0 (map count list)))]
+                               (doseq [^String elem list]
+                                 ;; apparently each element has to be prefixed with its length
+                                 ;; https://stackoverflow.com/questions/4016412/postgresqls-libpq-encoding-for-binary-transport-of-array-data
+                                 ;; also the way vanilla postgres does it seems to confirm this
+                                 (let [bytez (.getBytes elem)]
+                                   (.putInt bb (count bytez))
+                                   (.put bb bytez)))
                                (.array bb)))})})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
@@ -1364,6 +1436,7 @@
    [:interval :month-day-nano] :interval
    [:list :i32] :_int4
    [:list :i64] :_int8
+   [:list :utf8] :_text
 
    #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})
