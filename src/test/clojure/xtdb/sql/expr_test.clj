@@ -9,12 +9,15 @@
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
+(def foo-scope
+  (plan/map->BaseTable (-> '{:table-name foo
+                             :table-alias foo
+                             :unique-table-alias f
+                             :cols #{a b}}
+                           (assoc :!reqd-cols (HashMap.)))))
+
 (defn plan-expr-with-foo [expr]
-  (plan/plan-expr expr {:scope (plan/map->BaseTable (-> '{:table-name foo
-                                                          :table-alias foo
-                                                          :unique-table-alias f
-                                                          :cols #{a b}}
-                                                        (assoc :!reqd-cols (HashMap.))))}))
+  (plan/plan-expr expr {:scope foo-scope}))
 
 (t/deftest test-trim-expr
   (t/are [sql expected]
@@ -1333,3 +1336,12 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"no viable alternative"
                             (plan/plan-expr "$tag$foo$tagg$")))))
+
+(t/deftest test-where-commas
+  (letfn [(plan-expr [expr]
+            (plan/plan-expr expr {:ast-type :where, :scope foo-scope}))]
+    (t/is (= '(and) (plan-expr "WHERE")))
+
+    (t/is (= '(and) (plan-expr "WHERE , ,")))
+    (t/is (= '(and (= f/a 1)) (plan-expr "WHERE , a = 1")))
+    (t/is (= '(and (= f/a 1) (= f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))

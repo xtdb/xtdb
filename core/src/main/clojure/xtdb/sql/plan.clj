@@ -1033,7 +1033,7 @@
 
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
-  (visitSearchCondition [this ctx] (-> (.expr ctx) (.accept this)))
+  (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
   (visitExprPrimary1 [this ctx] (-> (.exprPrimary ctx) (.accept this)))
   (visitNumericExpr0 [this ctx] (-> (.numericExpr ctx) (.accept this)))
   (visitWrappedExpr [this ctx] (-> (.expr ctx) (.accept this)))
@@ -1876,7 +1876,7 @@
         (vary-meta assoc :identifier 'version))))
 
 (defn- wrap-predicates [plan predicate]
-  (or (when (list? predicate)
+  (or (when (seq? predicate)
         (let [[f & args] predicate]
           (when (= 'and f)
             (reduce wrap-predicates plan args))))
@@ -2251,7 +2251,9 @@
 
           where-plan (when-let [where-clause (.whereClause ctx)]
                        (let [!subqs (HashMap.)]
-                         {:predicate (.accept (.expr where-clause) (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs}))
+                         {:predicate (-> (.searchCondition where-clause)
+                                         (.accept (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs}))
+                                         )
                           :subqs (not-empty (into {} !subqs))}))
 
           !unresolved-cr (HashSet.)
@@ -2260,7 +2262,8 @@
           having-plan (when-let [having-clause (.havingClause ctx)]
                         (let [!subqs (HashMap.)
                               !aggs (HashMap.)]
-                          {:predicate (.accept (.expr having-clause) (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs, :!aggs !aggs}))
+                          {:predicate (-> (.searchCondition having-clause)
+                                          (.accept (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs, :!aggs !aggs})))
                            :subqs (not-empty (into {} !subqs))
                            :aggs (not-empty (into {} !aggs))}))
 
@@ -2838,10 +2841,13 @@
 (defn plan-expr
   ([sql] (plan-expr sql {}))
 
-  ([sql {:keys [scope] :as opts}]
+  ([sql {:keys [scope ast-type], :or {ast-type :expr}, :as opts}]
    (let [{:keys [!errors !warnings] :as env} (->env opts)
          parser (antlr/->parser sql)
-         plan (-> (.expr parser)
+         ^ParserRuleContext ast (case ast-type
+                                  :expr (.expr parser)
+                                  :where (.searchCondition (.whereClause parser)))
+         plan (-> ast
                   #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
                   (.accept (->ExprPlanVisitor env scope)))]
 
