@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.IBufferPool
 import xtdb.api.log.FileListCache
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.SimulatedObjectStore
@@ -20,10 +21,12 @@ import xtdb.api.storage.StoreOperation.UPLOAD
 import xtdb.arrow.I32_TYPE
 import xtdb.arrow.Relation
 import xtdb.util.requiringResolve
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 
-class RemoteBufferPoolTest {
+class RemoteBufferPoolTest : BufferPoolTest() {
+    override fun bufferPool(): IBufferPool  = remoteBufferPool
 
     private lateinit var allocator: BufferAllocator
     private lateinit var remoteBufferPool: RemoteBufferPool
