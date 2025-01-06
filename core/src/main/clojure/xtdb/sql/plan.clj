@@ -14,12 +14,12 @@
   (:import clojure.lang.MapEntry
            [java.net URI]
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
-           (java.util Collection HashMap HashSet HexFormat LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field Schema)
            [org.apache.commons.codec.binary Hex]
-           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)
            xtdb.util.StringUtil))
 
@@ -84,26 +84,28 @@
   OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
 
 (defprotocol Scope
-  (available-cols [scope chain])
-  (available-tables [scope])
-  (find-decls [scope chain]))
+  (available-cols [scope])
+  (-find-cols [scope chain excl-cols]))
 
-(defprotocol TableRef
-  (plan-table-ref [scope]))
+(defprotocol PlanRelation
+  (plan-rel [scope]))
 
 (extend-protocol Scope
   nil
-  (available-cols [_ _])
-  (available-tables [_])
-  (find-decls [_ _]))
+  (available-cols [_])
+  (-find-cols [_ _ _]))
 
-(extend-protocol TableRef
+(extend-protocol PlanRelation
   nil
-  (plan-table-ref [_]
+  (plan-rel [_]
     [:table [{}]]))
 
-(defn- find-decl [scope chain]
-  (let [[match & more-matches] (find-decls scope chain)]
+(defn- find-cols
+  ([scope chain] (find-cols scope chain #{}))
+  ([scope chain excl-cols] (-find-cols scope chain excl-cols)))
+
+(defn- find-col [scope chain]
+  (let [[match & more-matches] (find-cols scope chain)]
     (assert (nil? more-matches) (str "multiple decls: " {:matches (cons match more-matches), :chain chain}))
     match))
 
@@ -135,11 +137,10 @@
 
 (defrecord SubqueryScope [env, scope, ^Map !sq-refs]
   Scope
-  (available-cols [_ chain] (available-cols scope chain))
-  (available-tables [_] (available-tables scope))
+  (available-cols [_] (available-cols scope))
 
-  (find-decls [_ chain]
-    (not-empty (->> (find-decls scope chain)
+  (-find-cols [_ chain excl-cols]
+    (not-empty (->> (find-cols scope chain excl-cols)
                     (mapv #(->sq-sym % env !sq-refs))))))
 
 (defn- plan-sq [^ParserRuleContext sq-ctx, {:keys [!id-count] :as env}, scope, ^Map !subqs, sq-opts]
@@ -276,23 +277,22 @@
                       schema-name table-name table-alias unique-table-alias cols
                       ^Map !reqd-cols]
   Scope
-  (available-cols [_ chain]
-    (when-not (and chain (not= chain [table-alias]))
-      cols))
+  (available-cols [_] cols)
 
-  (available-tables [_] [table-alias])
-
-  (find-decls [this [col-name table-name schema-name]]
+  (-find-cols [this [col-name table-name schema-name] excl-cols]
     (when (and (or (nil? table-name) (= table-name table-alias))
-               (or (nil? schema-name) (= schema-name (:schema-name this)))
-               (or (contains? cols col-name) (types/temporal-column? col-name)))
-      [(.computeIfAbsent !reqd-cols col-name
-                         (reify Function
-                           (apply [_ col]
-                             (->col-sym (str unique-table-alias) (str col)))))]))
+               (or (nil? schema-name) (= schema-name (:schema-name this))))
+      (for [col (if col-name
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                    [col-name])
+                  (available-cols this))
+            :when (not (contains? excl-cols col))]
+        (.computeIfAbsent !reqd-cols col
+                          (fn [col]
+                            (->col-sym (str unique-table-alias) (str col)))))))
 
-  TableRef
-  (plan-table-ref [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
+  PlanRelation
+  (plan-rel [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
     (let [expr-visitor (->ExprPlanVisitor env this)]
       (letfn [(<-table-time-period-specification [specs]
                 (case (count specs)
@@ -315,41 +315,33 @@
 
 (defrecord JoinConditionScope [env l r]
   Scope
-  (available-cols [_ chain]
+  (available-cols [_]
     (->> [l r]
-         (into [] (comp (mapcat #(available-cols % chain))
+         (into [] (comp (mapcat available-cols)
                         (distinct)))))
 
-  (available-tables [_]
-    (into (available-tables l)
-          (available-tables r)))
-
-  (find-decls [_ chain]
+  (-find-cols [_ chain excl-cols]
     (->> [l r]
-         (mapcat #(find-decls % chain)))))
+         (mapcat #(find-cols % chain excl-cols)))))
 
 (defrecord JoinTable [env l r
                       ^Sql$JoinTypeContext join-type-ctx
                       ^Sql$JoinSpecificationContext join-spec-ctx
                       common-cols]
   Scope
-  (available-cols [_ chain]
+  (available-cols [_]
     (->> [l r]
-         (into [] (comp (mapcat #(available-cols % chain))
+         (into [] (comp (mapcat available-cols)
                         (distinct)))))
 
-  (available-tables [_]
-    (into (available-tables l)
-          (available-tables r)))
-
-  (find-decls [_ chain]
+  (-find-cols [_ chain excl-cols]
     (->> (if (and (= 1 (count chain))
                   (get common-cols (first chain)))
            [l] [l r])
-         (mapcat #(find-decls % chain))))
+         (mapcat #(find-cols % chain excl-cols))))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     (let [join-type (case (some-> join-type-ctx
                                   (.outerJoinType)
                                   (.getText)
@@ -365,10 +357,10 @@
 
       (if common-cols
         [join-type (vec (for [col-name common-cols]
-                          {(find-decl l [col-name])
-                           (find-decl r [col-name])}))
-         (plan-table-ref l)
-         (plan-table-ref r)]
+                          {(find-col l [col-name])
+                           (find-col r [col-name])}))
+         (plan-rel l)
+         (plan-rel r)]
 
         (some-> join-spec-ctx
                 (.accept
@@ -385,71 +377,63 @@
                                  :cross-join
                                  join-type)
                         (into {} !lhs-refs)
-                        (plan-table-ref l)
+                        (plan-rel l)
                         [:select join-pred
-                         (-> (plan-table-ref r)
+                         (-> (plan-rel r)
                              (apply-sqs !join-cond-subqs))]])))))))))
 
 (defrecord CrossJoinTable [env !sq-refs l r]
   Scope
-  (available-cols [_ chain]
+  (available-cols [_]
     (->> [l r]
-         (into [] (comp (mapcat #(available-cols % chain))
+         (into [] (comp (mapcat available-cols)
                         (distinct)))))
 
-  (available-tables [_]
-    (into (available-tables l)
-          (available-tables r)))
-
-  (find-decls [_ chain]
+  (-find-cols [_ chain excl-cols]
     (->> [l r]
-         (mapcat #(find-decls % chain))))
+         (mapcat #(-find-cols % chain excl-cols))))
 
-  TableRef
-  (plan-table-ref [_]
-    (let [planned-l (plan-table-ref l)
-          planned-r (plan-table-ref r)]
+  PlanRelation
+  (plan-rel [_]
+    (let [planned-l (plan-rel l)
+          planned-r (plan-rel r)]
       [:apply :cross-join (into {} !sq-refs)
        planned-l planned-r])))
 
 (defrecord DerivedTable [plan table-alias unique-table-alias, ^SequencedSet available-cols]
   Scope
-  (available-cols [_ chain]
-    (when-not (and chain (not= chain [table-alias]))
-      available-cols))
+  (available-cols [_] available-cols)
 
-  (available-tables [_] [table-alias])
-
-  (find-decls [_ [col-name table-name]]
+  (-find-cols [_ [col-name table-name] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
-      (when (.contains available-cols col-name)
-        [(->col-sym (str unique-table-alias) (str col-name))])))
+      (for [col (if col-name
+                  (when (.contains available-cols col-name)
+                    [col-name])
+                  available-cols)
+            :when (not (contains? excl-cols col))]
+        (->col-sym (str unique-table-alias) (str col)))))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      plan]))
 
 (defrecord UnnestTable [env table-alias unique-table-alias unnest-col unnest-expr ordinality-col]
   Scope
-  (available-cols [_ chain]
-    (when-not (and chain (not= chain [table-alias]))
-      (->insertion-ordered-set (cond-> [unnest-col]
-                                 ordinality-col (conj ordinality-col)))))
+  (available-cols [_]
+    (->insertion-ordered-set (cond-> [unnest-col]
+                               ordinality-col (conj ordinality-col))))
 
-  (available-tables [_] [table-alias])
-
-  (find-decls [_ [col-name table-name]]
+  (-find-cols [this [col-name table-name] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
-      (condp = col-name
-        unnest-col [(-> (->col-sym (str unique-table-alias) (str col-name))
-                        (with-meta (meta unnest-col)))]
-        ordinality-col [(-> (->col-sym (str unique-table-alias) (str ordinality-col))
-                            (with-meta (meta ordinality-col)))]
-        nil)))
+      (for [col (available-cols this)
+            :when (or (nil? col-name) (= col-name col))
+            :when (not (contains? excl-cols col))]
+        (-> (->col-sym (str unique-table-alias) (str col))
+            (with-meta (meta col))))))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     (as-> [:table {(-> (->col-sym (str unique-table-alias) (str unnest-col))
                        (with-meta (meta unnest-col)))
                    unnest-expr}]
@@ -464,19 +448,20 @@
 
 (defrecord ArrowTable [env url table-alias unique-table-alias ^SequencedSet !table-cols]
   Scope
-  (available-cols [_ chain]
-    (when-not (and chain (not= chain [table-alias]))
-      !table-cols))
+  (available-cols [_]
+    !table-cols)
 
-  (available-tables [_] [table-alias])
+  (-find-cols [this [col-name table-name] excl-cols]
+    (when (or (nil? table-name) (= table-name table-alias))
+      (for [col (if col-name
+                  (when (.contains !table-cols col-name)
+                    [col-name])
+                  (available-cols this))
+            :when (not (contains? excl-cols col))]
+        (->col-sym (str unique-table-alias) (str col)))))
 
-  (find-decls [_ [col-name table-name]]
-    (when (and (or (nil? table-name) (= table-name table-alias))
-               (.contains !table-cols col-name))
-      [(->col-sym (str unique-table-alias) (str col-name))]))
-
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      [:project (vec !table-cols)
       [:arrow url]]]))
@@ -509,30 +494,24 @@
   SqlVisitor
   (visitSelectClause [this ctx] (.accept (.getParent ctx) this))
 
-  (visitQuerySpecification [_ ctx]
-    (if-let [gbc (.groupByClause ctx)]
-      (let [grouping-cols (vec (for [^ParserRuleContext grp-el (.groupingElement gbc)]
-                                 (.accept grp-el
-                                          (reify SqlVisitor
-                                            (visitOrdinaryGroupingSet [_ ctx]
-                                              (.accept (.columnReference ctx)
-                                                       (map->ExprPlanVisitor {:env env :scope scope
-                                                                              :!unresolved-cr !unresolved-cr})))))))]
+  (visitGroupByClause [_ gbc]
+    (let [grouping-cols (vec (for [^ParserRuleContext grp-el (.groupingElement gbc)]
+                               (.accept grp-el
+                                        (reify SqlVisitor
+                                          (visitOrdinaryGroupingSet [_ ctx]
+                                            (.accept (.columnReference ctx)
+                                                     (map->ExprPlanVisitor {:env env :scope scope
+                                                                            :!unresolved-cr !unresolved-cr})))))))]
 
-        (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs) (set grouping-cols)))]
-          (add-err! env (->MissingGroupingColumns missing-grouping-cols))
-          grouping-cols))
-
-      (for [col-ref !implied-gicrs]
-        col-ref)))
+      (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs) (set grouping-cols)))]
+        (add-err! env (->MissingGroupingColumns missing-grouping-cols))
+        grouping-cols)))
 
   Scope 
-  (available-cols [_ table-name] (available-cols scope table-name))
+  (available-cols [_] (available-cols scope))
 
-  (available-tables [_] (available-tables scope))
-
-  (find-decls [_ chain]
-    (for [sym (find-decls scope chain)]
+  (-find-cols [_ chain excl-cols]
+    (for [sym (-find-cols scope chain excl-cols)]
       (do
         (some-> !implied-gicrs (.add sym))
         sym))))
@@ -604,7 +583,7 @@
   (visitNaturalJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
           r (-> (.tableReference ctx 1) (.accept this))
-          common-cols (set/intersection (set (available-cols l nil)) (set (available-cols r nil)))]
+          common-cols (set/intersection (set (available-cols l)) (set (available-cols r)))]
 
       (->JoinTable env l r (.joinType ctx) nil common-cols)))
 
@@ -678,23 +657,17 @@
                     (symbol (str table-alias "." (swap! !id-count inc)))
                     (->insertion-ordered-set cols)))))
 
-(defrecord QuerySpecificationScope [outer-scope from-table-ref]
+(defrecord QuerySpecificationScope [outer-scope from-rel]
   Scope
-  (available-cols [_ chain] (available-cols from-table-ref chain))
+  (available-cols [_] (available-cols from-rel))
 
-  (available-tables [_]
-    (into (available-tables outer-scope)
-          (available-tables from-table-ref)))
+  (-find-cols [_ chain excl-cols]
+    (or (not-empty (-find-cols from-rel chain excl-cols))
+        (-find-cols outer-scope chain excl-cols)))
 
-  (find-decls [_ chain]
-    (or (not-empty (find-decls from-table-ref chain))
-        (find-decls outer-scope chain)))
-
-  TableRef
-  (plan-table-ref [_]
-    (if from-table-ref
-      (plan-table-ref from-table-ref)
-      [:table [{}]])))
+  PlanRelation
+  (plan-rel [_]
+    (plan-rel from-rel)))
 
 (defn- ->projected-col-expr [col-idx expr]
   (let [{:keys [column? sq-out-sym? agg-out-sym? window-out-sym? unnamed-unnest-col? identifier]} (meta expr)]
@@ -731,26 +704,23 @@
                                                                           (when schema-name
                                                                             (throw (UnsupportedOperationException. "schema not supported")))
 
-                                                                          (if-let [table-cols (available-cols scope [table-name])]
-                                                                            (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
-                                                                                                                                                           (.qualifiedRenameColumn))]
-                                                                                                 (let [sym (find-decl scope [(identifier-sym (.identifier rename-pair)) table-name])
-                                                                                                       out-col-name (.columnName (.asClause rename-pair))]
-                                                                                                   (MapEntry/create sym (identifier-sym out-col-name))))
-                                                                                               (into {}))
-                                                                                  excludes (when-let [exclude-ctx (.excludeClause ctx)]
-                                                                                             (into #{} (map identifier-sym) (.identifier exclude-ctx)))]
-                                                                              (->> (for [col-name table-cols
-                                                                                         :when (not (contains? excludes col-name))
-                                                                                         :let [sym (find-decl scope [col-name table-name])]
-                                                                                         :when (not (contains? excludes sym))]
-                                                                                     sym)
-                                                                                   (into [] (map-indexed (fn [col-idx sym]
-                                                                                                           (if-let [renamed-col (get renames sym)]
-                                                                                                             (->ProjectedCol {renamed-col sym} renamed-col)
-                                                                                                             (->projected-col-expr col-idx sym)))))))
+                                                                          (let [excludes (when-let [exclude-ctx (.excludeClause ctx)]
+                                                                                           (into #{} (map identifier-sym) (.identifier exclude-ctx)))]
 
-                                                                            (throw (UnsupportedOperationException. (str "Table not found: " table-name))))))))))
+                                                                            (if-let [table-cols (not-empty (find-cols scope [nil table-name] excludes))]
+                                                                              (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
+                                                                                                                                                             (.qualifiedRenameColumn))]
+                                                                                                   (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
+                                                                                                         out-col-name (.columnName (.asClause rename-pair))]
+                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                                                                 (into {}))]
+                                                                                (->> table-cols
+                                                                                     (into [] (map-indexed (fn [col-idx sym]
+                                                                                                             (if-let [renamed-col (get renames sym)]
+                                                                                                               (->ProjectedCol {renamed-col sym} renamed-col)
+                                                                                                               (->projected-col-expr col-idx sym)))))))
+
+                                                                              (throw (UnsupportedOperationException. (str "Table not found: " table-name)))))))))))
                                                         cat)))]
 
       {:projected-cols (vec (concat (when-let [star-ctx (.selectListAsterisk sl-ctx)]
@@ -758,21 +728,16 @@
                                                                                                             (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
                                                                  out-col-name (.columnName (.asClause rename-pair))
-                                                                 sym (find-decl scope chain)]
+                                                                 sym (find-col scope chain)]
 
                                                              (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
                                                          (into {}))
 
-                                            excludes (set/union (into #{} (map :col-sym) explicitly-projected-cols)
+                                            excludes (set/union (into #{} (map (comp symbol name :col-sym)) explicitly-projected-cols)
                                                                 (when-let [exclude-ctx (.excludeClause star-ctx)]
                                                                   (into #{} (map identifier-sym) (.identifier exclude-ctx))))]
 
-                                        (->> (for [table-name (available-tables scope)
-                                                   col-name (available-cols scope [table-name])
-                                                   :when (not (contains? excludes col-name))
-                                                   :let [sym (find-decl scope [col-name table-name])]
-                                                   :when (not (contains? excludes sym))]
-                                               sym)
+                                        (->> (find-cols scope nil excludes)
                                              (map-indexed (fn [col-idx sym]
                                                             (if-let [renamed-col (get renames sym)]
                                                               (->ProjectedCol {renamed-col sym} renamed-col)
@@ -783,14 +748,6 @@
        :subqs (not-empty (into {} !subqs))
        :aggs (not-empty (into {} !aggs))
        :windows (not-empty (into {} !windows))})))
-
-(defn- project-all-cols [scope]
-  ;; duplicated from the ASTERISK case above
-  {:projected-cols (->> (for [table-name (available-tables scope)
-                              col-name (available-cols scope [table-name])
-                              :let [sym (find-decl scope [col-name table-name])]]
-                          sym)
-                        (into [] (map-indexed ->projected-col-expr)))})
 
 (defrecord CannotParseInteger[s]
   PlanError
@@ -1091,16 +1048,16 @@
     (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
       (case (first chain)
         _valid_time
-        (-> (xt/template (period ~(find-decl scope (into ['_valid_from] (rest chain)))
-                                 ~(find-decl scope (into ['_valid_to] (rest chain)))))
-            (vary-meta assoc :identifier '_valid_time))
+        (-> (xt/template (period ~(find-col scope (into ['_valid_from] (rest chain)))
+                                 ~(find-col scope (into ['_valid_to] (rest chain)))))
+            (vary-meta assoc :identifier (->col-sym '_valid_time)))
 
         _system_time
-        (-> (xt/template (period ~(find-decl scope (into ['_system_from] (rest chain)))
-                                 ~(find-decl scope (into ['_system_to] (rest chain)))))
-            (vary-meta assoc :identifier '_system_time))
+        (-> (xt/template (period ~(find-col scope (into ['_system_from] (rest chain)))
+                                 ~(find-col scope (into ['_system_to] (rest chain)))))
+            (vary-meta assoc :identifier (->col-sym '_system_time)))
 
-        (let [matches (find-decls scope chain)]
+        (let [matches (find-cols scope chain)]
           (when-let [sym (case (count matches)
                            0 (do (add-warning! env (->ColumnNotFound chain))
                                  (when !unresolved-cr
@@ -1110,7 +1067,8 @@
                            1 (first matches)
                            (add-err! env (->AmbiguousColumnReference chain))) ]
             (some-> !ob-col-refs (.add sym))
-            sym)))))
+
+         sym)))))
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
@@ -1131,7 +1089,7 @@
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           field-name (identifier-sym (.fieldName ctx))]
       (-> (list '. ve (keyword field-name))
-          (vary-meta assoc :identifier field-name))))
+          (vary-meta assoc :identifier (->col-sym field-name)))))
 
   (visitArrayAccess [this ctx]
     (let [ve (-> (.exprPrimary ctx) (.accept this))
@@ -1873,7 +1831,7 @@
               (when (= schema-name 'xt)
                 'xtdb/xtdb-server-version))
             'xtdb/postgres-server-version)
-        (vary-meta assoc :identifier 'version))))
+        (vary-meta assoc :identifier (->col-sym 'version)))))
 
 (defn- wrap-predicates [plan predicate]
   (or (when (seq? predicate)
@@ -1890,18 +1848,21 @@
 
 (defn- plan-sort-specification-list [^Sql$SortSpecificationListContext ctx
                                      {:keys [!id-count] :as env} inner-scope outer-col-syms]
-  (let [available-cols (set outer-col-syms)
+  (let [outer-cols (->> outer-col-syms
+                        (into {} (mapcat (juxt (juxt identity identity)
+                                               (juxt (comp symbol name) identity)))))
         ob-expr-visitor (->ExprPlanVisitor env
                                            (reify Scope
-                                             (available-cols [_ chain]
-                                               (set/union (available-cols inner-scope chain)
-                                                          (when (empty? chain) available-cols)))
+                                             (available-cols [_]
+                                               (set/union (available-cols inner-scope) (set (keys outer-cols))))
 
-                                             (find-decls [_ [col-name :as chain]]
+                                             (-find-cols [_ [col-name :as chain] excl-cols]
+                                               (assert col-name)
                                                (or (when (= 1 (count chain))
-                                                     (when-let [sym (get available-cols col-name)]
-                                                       [sym]))
-                                                   (find-decls inner-scope chain)))))]
+                                                     (when-let [sym (get outer-cols col-name)]
+                                                       (when-not (contains? excl-cols col-name)
+                                                         [sym])))
+                                                   (find-cols inner-scope chain excl-cols)))))]
 
     (-> (.sortSpecification ctx)
         (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
@@ -1930,7 +1891,7 @@
                                            {:order-by-spec [(nth outer-col-syms (dec expr)) ob-opts]}
                                            (add-err! env (->InvalidOrderByOrdinal outer-col-syms expr)))
 
-                         (contains? available-cols expr) {:order-by-spec [expr ob-opts]}
+                         (contains? outer-cols expr) {:order-by-spec [expr ob-opts]}
 
                          :else (let [in-sym (->col-sym (str "_ob" (swap! !id-count inc)))]
                                  {:order-by-spec [in-sym ob-opts]
@@ -1968,6 +1929,9 @@
         plan))))
 
 (defn- wrap-windows [plan windows]
+  (when (> (count windows) 1)
+    (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
+
   (let [{:keys [windows] :as window-opts} (apply merge-with into (vals windows))
         in-projs (not-empty (->> (mapcat :order-specs (vals windows))
                                  (into [] (keep :in-projection))))
@@ -2120,6 +2084,110 @@
                   (mapv (partial accept-visitor row-visitor)))
        :col-syms col-syms})))
 
+(defn- ->qs-scope [{:keys [env scope]} table-refs]
+  (->QuerySpecificationScope scope
+                             (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
+                                       (let [!sq-refs (HashMap.)
+                                             left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
+                                             right-table-ref (.accept table-ref (->TableRefVisitor env scope left-sq-scope))]
+                                         (if left-table-ref
+                                           (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
+                                           right-table-ref)))
+                                     nil
+                                     table-refs)))
+
+(defn- wrap-where [scope, {:keys [env]}, ^Sql$WhereClauseContext where-clause]
+  (let [!subqs (HashMap.)
+        predicate (-> (.searchCondition where-clause)
+                      (.accept (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs})))]
+    (reify
+      Scope
+      (available-cols [_] (available-cols scope))
+      (-find-cols [_ chain excl-cols] (-find-cols scope chain excl-cols))
+
+      PlanRelation
+      (plan-rel [_]
+        (-> (plan-rel scope)
+            (apply-sqs !subqs)
+            (wrap-predicates predicate))))))
+
+(defn- wrap-query-tail [scope {:keys [env]}
+                        ^Sql$GroupByClauseContext group-by-clause
+                        ^Sql$HavingClauseContext having-clause
+                        ^Sql$SelectClauseContext select-clause
+                        order-by-clause]
+  (let [!unresolved-cr (HashSet.)
+        !implied-gicrs (HashSet.)
+        group-invar-col-tracker (->GroupInvariantColsTracker env scope !implied-gicrs !unresolved-cr)
+
+        having-plan (when having-clause
+                      (let [!subqs (HashMap.)
+                            !aggs (HashMap.)]
+                        {:predicate (-> (.searchCondition having-clause)
+                                        (.accept (map->ExprPlanVisitor {:env env, :scope group-invar-col-tracker, :!subqs !subqs, :!aggs !aggs})))
+                         :subqs (not-empty (into {} !subqs))
+                         :aggs (not-empty (into {} !aggs))}))
+
+        {:keys [projected-cols windows] :as select-plan} (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
+
+        aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
+        grouped-table? (boolean (or aggs group-by-clause))
+        group-invariant-cols (when grouped-table?
+                               (if group-by-clause
+                                 (.accept group-by-clause group-invar-col-tracker)
+                                 (for [col-ref !implied-gicrs]
+                                   col-ref)))
+
+        ob-plan (some-> order-by-clause
+                        (plan-order-by env scope
+                                       (mapv :col-sym projected-cols)))]
+    (reify
+      Scope
+      (available-cols [_]
+        (->insertion-ordered-set (mapv :col-sym (:projected-cols select-plan))))
+
+      (-find-cols [this [col-name table-name] excl-cols]
+        (when (nil? table-name)
+          (let [cols (available-cols this)
+                cols-by-name (group-by (comp symbol name) cols)]
+            (->> (if col-name
+                   (cols-by-name (symbol (name col-name)))
+                   cols)
+                 (into [] (remove (set excl-cols)))))))
+
+      PlanRelation
+      (plan-rel [_]
+        (as-> (plan-rel scope) plan
+          (if-let [unresolved-cr (not-empty (into #{} !unresolved-cr))]
+            [:map (mapv #(hash-map % nil) unresolved-cr)
+             plan]
+            plan)
+
+          (cond-> plan
+            grouped-table? (wrap-aggs aggs group-invariant-cols))
+
+          (if-let [{:keys [predicate subqs]} having-plan]
+            (-> plan
+                (apply-sqs subqs)
+                (wrap-predicates predicate))
+            plan)
+
+          (-> plan (apply-sqs (:subqs select-plan)))
+
+          (cond-> plan
+            windows (wrap-windows windows))
+
+          (if ob-plan
+            (-> plan
+                (wrap-integrated-ob projected-cols ob-plan))
+
+            [:project (mapv :projection projected-cols)
+             plan])
+
+          (if (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
+            [:distinct plan]
+            plan))))))
+
 (defrecord QueryPlanVisitor [env scope]
   SqlVisitor
   (visitWrappedQuery [this ctx] (-> (.queryExpressionNoWith ctx) (.accept this)))
@@ -2138,7 +2206,11 @@
 
           ;; see SQL:2011 §7.13, syntax rule 28c
           simple-table-query? (when (instance? Sql$QueryBodyTermContext qeb-ctx)
-                                (instance? Sql$QuerySpecificationContext (.queryTerm ^Sql$QueryBodyTermContext qeb-ctx)))]
+                                (let [term (.queryTerm ^Sql$QueryBodyTermContext qeb-ctx)]
+                                  (when (instance? Sql$QuerySpecificationContext term)
+                                    (let [^Sql$QuerySpecificationContext qs-ctx term]
+                                      (or (.selectClause qs-ctx)
+                                          (seq (.queryTail qs-ctx)))))))]
 
       (as-> (.accept qeb-ctx (cond-> (assoc this :scope scope)
                                simple-table-query? (assoc :order-by-ctx order-by-ctx)))
@@ -2236,110 +2308,43 @@
                      plan)
                    l-col-syms)))
 
-  (visitQuerySpecification [{:keys [out-col-syms order-by-ctx]} ctx]
-    (let [qs-scope (->QuerySpecificationScope scope
-                                              (when-let [from (.fromClause ctx)]
-                                                (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
-                                                          (let [!sq-refs (HashMap.)
-                                                                left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
-                                                                right-table-ref (.accept table-ref (->TableRefVisitor env scope left-sq-scope))]
-                                                            (if left-table-ref
-                                                              (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
-                                                              right-table-ref)))
-                                                        nil
-                                                        (.tableReference from))))
+  (visitQuerySpecification [{:keys [out-col-syms order-by-ctx] :as this} ctx]
+    (let [qs-scope (->qs-scope this (some->> (.fromClause ctx) (.tableReference)))
+          rel (if-let [select-clause (.selectClause ctx)]
+                (let [where-clause (.whereClause ctx)]
+                  (-> qs-scope
+                      (cond-> where-clause (wrap-where this where-clause)
+                              select-clause (wrap-query-tail this (.groupByClause ctx) (.havingClause ctx) select-clause order-by-ctx))))
 
-          where-plan (when-let [where-clause (.whereClause ctx)]
-                       (let [!subqs (HashMap.)]
-                         {:predicate (-> (.searchCondition where-clause)
-                                         (.accept (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs}))
-                                         )
-                          :subqs (not-empty (into {} !subqs))}))
+                (letfn [(wrap-tail [order-by-ctx, rel, ^Sql$QueryTailContext tail]
+                          (let [where-clause (some-> tail .whereClause)
+                                select-clause (some-> tail .selectClause)]
+                            (-> rel
+                                (cond-> where-clause (wrap-where this where-clause)
+                                        select-clause (wrap-query-tail this (.groupByClause tail) (.havingClause tail) select-clause order-by-ctx)))))]
+                  (let [tails (.queryTail ctx)]
+                    (as-> qs-scope rel
+                      (reduce (partial wrap-tail nil) rel (butlast tails))
+                      (wrap-tail order-by-ctx rel (last tails))))))
 
-          !unresolved-cr (HashSet.)
-          group-invar-col-tracker (->GroupInvariantColsTracker env qs-scope (HashSet.) !unresolved-cr)
+          projections (->> (find-cols rel nil)
+                           (into [] (map-indexed ->projected-col-expr)))
 
-          having-plan (when-let [having-clause (.havingClause ctx)]
-                        (let [!subqs (HashMap.)
-                              !aggs (HashMap.)]
-                          {:predicate (-> (.searchCondition having-clause)
-                                          (.accept (map->ExprPlanVisitor {:env env, :scope qs-scope, :!subqs !subqs, :!aggs !aggs})))
-                           :subqs (not-empty (into {} !subqs))
-                           :aggs (not-empty (into {} !aggs))}))
+          plan [:project (mapv :projection projections)
+                (plan-rel rel)]
 
-          select-clause (.selectClause ctx)
+          col-syms (mapv :col-sym projections)]
 
-          {:keys [projected-cols windows] :as select-plan} (if select-clause
-                                                             (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
-                                                             (project-all-cols group-invar-col-tracker))
+      (if out-col-syms
+        (let [out-count (count out-col-syms)
+              in-count (count col-syms)]
+          (if (not= out-count in-count)
+            (add-err! env (->ColumnCountMismatch out-count in-count))
 
-          aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
-          grouped-table? (boolean (or aggs (.groupByClause ctx)))
-          group-invariant-cols (when grouped-table?
-                                 (.accept ctx group-invar-col-tracker))
-
-          distinct? (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
-
-          _ (when (> (count windows) 1)
-              (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
-          window-functions? (boolean windows)
-          unresolved-cr (not-empty (into #{} !unresolved-cr))
-
-          ob-specs (some-> order-by-ctx
-                           (plan-order-by env qs-scope (mapv :col-sym projected-cols)))
-
-          ;; plan-table-ref reads the state written by all the find-decls
-          plan (as-> (plan-table-ref qs-scope) plan
-                 (if unresolved-cr
-                   [:map (mapv #(hash-map % nil) unresolved-cr)
-                    plan]
-                   plan)
-
-                 (if-let [{:keys [predicate subqs]} where-plan]
-                   (-> plan
-                       (apply-sqs subqs)
-                       (wrap-predicates predicate))
-                   plan)
-
-                 (cond-> plan
-                   grouped-table? (wrap-aggs aggs group-invariant-cols))
-
-                 (if-let [{:keys [predicate subqs]} having-plan]
-                   (-> plan
-                       (apply-sqs subqs)
-                       (wrap-predicates predicate))
-                   plan)
-
-                 (-> plan (apply-sqs (:subqs select-plan)))
-
-                 (cond-> plan
-                   window-functions? (wrap-windows windows))
-
-                 (if order-by-ctx
-                   (-> plan
-                       (wrap-integrated-ob projected-cols ob-specs))
-
-                   [:project (mapv :projection projected-cols)
-                    plan]))]
-
-      (as-> (->QueryExpr plan (mapv :col-sym (:projected-cols select-plan)))
-          {:keys [plan col-syms] :as query-expr}
-
-        (if out-col-syms
-          (let [out-count (count out-col-syms)
-                in-count (count col-syms)]
-            (if (not= out-count in-count)
-              (add-err! env (->ColumnCountMismatch out-count in-count))
-
-              (->QueryExpr [:rename (zipmap col-syms out-col-syms)
-                            plan]
-                           out-col-syms)))
-          query-expr)
-
-        (if distinct?
-          (->QueryExpr [:distinct plan]
-                       col-syms)
-          query-expr))))
+            (->QueryExpr [:rename (zipmap col-syms out-col-syms)
+                          plan]
+                         out-col-syms)))
+        (->QueryExpr plan col-syms))))
 
   (visitValuesQuery [this ctx] (-> (.tableValueConstructor ctx) (.accept this)))
   (visitTableValueConstructor [this ctx] (-> (.rowValueList ctx) (.accept this)))
@@ -2432,22 +2437,21 @@
 
 (defrecord DmlTableRef [env table-name table-alias unique-table-alias for-valid-time cols ^Map !reqd-cols]
   Scope
-  (available-cols [_ chain]
-    (when-not (and chain (not= chain [table-alias]))
-      cols))
-  
-  (available-tables [_] [table-alias])
+  (available-cols [_] cols)
 
-  (find-decls [_ [col-name table-name]]
-    (when (and (or (nil? table-name) (= table-name table-alias))
-               (or (contains? cols col-name) (types/temporal-column? col-name)))
-      [(.computeIfAbsent !reqd-cols (->col-sym col-name)
-                         (reify Function
-                           (apply [_ col]
-                             (->col-sym (str unique-table-alias) (str col)))))]))
+  (-find-cols [this [col-name table-name] excl-cols]
+    (when (or (nil? table-name) (= table-name table-alias))
+      (for [col (if col-name
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                    [col-name])
+                  (available-cols this))
+            :when (not (contains? excl-cols col))]
+        (.computeIfAbsent !reqd-cols (->col-sym col)
+                          (fn [col]
+                            (->col-sym (str unique-table-alias) (str col)))))))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      [:scan (cond-> {:table (symbol table-name)}
               for-valid-time (assoc :for-valid-time for-valid-time))
@@ -2485,22 +2489,22 @@
 
 (defrecord EraseTableRef [env table-name table-alias unique-table-alias cols ^Map !reqd-cols]
   Scope
-  (available-cols [_ chain]
-    (when-not (and chain (not= chain [table-alias]))
-      cols))
-  
-  (available-tables [_] [table-alias])
+  (available-cols [_] cols)
 
-  (find-decls [_ [col-name table-name :as _chain]]
-    (when (and (or (nil? table-name) (= table-name table-alias))
-               (or (contains? cols col-name) (types/temporal-column? col-name)))
-      [(.computeIfAbsent !reqd-cols (->col-sym col-name)
-                         (reify Function
-                           (apply [_ col]
-                             (->col-sym (str unique-table-alias) (str col)))))]))
+  (-find-cols [this [col-name table-name :as _chain] excl-cols]
+    (when (or (nil? table-name) (= table-name table-alias))
+      (for [col (if col-name
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                    [col-name])
+                  (available-cols this))
+            :when (not (contains? excl-cols col))]
+        (.computeIfAbsent !reqd-cols (->col-sym col)
+                          (reify Function
+                            (apply [_ col]
+                              (->col-sym (str unique-table-alias) (str col))))))))
 
-  TableRef
-  (plan-table-ref [_]
+  PlanRelation
+  (plan-rel [_]
     [:rename unique-table-alias
      [:scan {:table (symbol table-name)
              :for-system-time :all-time
@@ -2665,22 +2669,18 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))
 
-          all-non-set-cols (filter (fn [col] 
-                                     (not (contains? set-clauses-cols col))) 
-                                   (available-cols dml-scope nil))
-
-          col-projections (for [col all-non-set-cols
-                                :let [col-sym (->col-sym col)]]
-                            {col-sym (find-decl dml-scope [col-sym])})
+          all-non-set-cols (for [col (find-cols dml-scope nil set-clauses-cols)
+                                 :let [col-sym (->col-sym (name col))]]
+                             (->ProjectedCol {col-sym col} col-sym))
 
           outer-projection (vec (concat '[_iid]
                                         (or vt-projection default-vt-extents-projection)
                                         set-clauses-cols
-                                        (map ffirst col-projections)))]
+                                        (mapv :col-sym all-non-set-cols)))]
 
       (->UpdateStmt (symbol table-name)
                     (->QueryExpr [:project outer-projection
-                                  (as-> (plan-table-ref dml-scope) plan
+                                  (as-> (plan-rel dml-scope) plan
                     
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
@@ -2688,7 +2688,7 @@
                                           (wrap-predicates predicate))
                                       plan)
                     
-                                    [:project (concat aliased-cols set-clauses col-projections) plan])]
+                                    [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
                                  (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
 
   (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
@@ -2721,7 +2721,7 @@
           projection (into '[_iid] (or vt-projection default-vt-extents-projection))]
       (->DeleteStmt table-name
                     (->QueryExpr [:project projection
-                                  (as-> (plan-table-ref dml-scope) plan
+                                  (as-> (plan-rel dml-scope) plan
 
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
@@ -2759,7 +2759,7 @@
       (->EraseStmt (symbol table-name)
                    (->QueryExpr [:distinct
                                  [:project internal-cols
-                                  (as-> (plan-table-ref dml-scope) plan
+                                  (as-> (plan-rel dml-scope) plan
                                   
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan

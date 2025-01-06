@@ -10,7 +10,7 @@
     [:rename
      {bar.2/b b}
      [:project
-      [bar.2/b]
+      [{bar.2/b bar.2/b}]
       [:rename
        bar.2
        [:scan {:table public/bar} [b {c (= c ?_0)}]]]]]]]]]

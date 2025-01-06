@@ -1,5 +1,5 @@
 [:project
- [{_column_1 film.3/_unnest.4} {films si.1/films}]
+ [{films si.1/films} {_column_2 film.3/_unnest.4}]
  [:unnest
   {film.3/_unnest.4 unnest}
   [:map

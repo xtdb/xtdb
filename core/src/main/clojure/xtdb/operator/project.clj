@@ -158,8 +158,10 @@
                                            :star (let [[col-name _star] (first arg)]
                                                    (->star-projection-spec col-name [:struct (update-vals inner-fields types/field->col-type)]))
 
-                                           :rename (let [[to-name from-name] (first arg)]
-                                                     (->rename-projection-spec to-name from-name (get inner-fields from-name)))
+                                           :rename (let [[to-name from-name] (first arg)
+                                                         field (get inner-fields from-name)]
+                                                     (assert field (format "Field %s not found in relation, available %s" from-name (pr-str (keys inner-fields))))
+                                                     (->rename-projection-spec to-name from-name field))
 
                                            :extend (let [[col-name form] (first arg)
                                                          input-types {:col-types (update-vals inner-fields types/field->col-type)

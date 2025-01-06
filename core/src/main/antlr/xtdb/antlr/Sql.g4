@@ -682,11 +682,16 @@ queryExpressionBody
 
 queryTerm
     : selectClause fromClause? whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
-    | fromClause whereClause? groupByClause? havingClause? selectClause? windowClause? # QuerySpecification
+    | fromClause queryTail* windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
     | recordsValueConstructor # RecordsQuery
     | '(' queryExpressionNoWith ')' # WrappedQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
+    ;
+
+queryTail
+    : whereClause (groupByClause? havingClause? selectClause)?
+    | groupByClause? havingClause? selectClause
     ;
 
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;
