@@ -245,5 +245,6 @@
                  :close-fn #(when (compare-and-set! !closing false true)
                               (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system)))))))
-    (catch clojure.lang.ExceptionInfo e 
+    (catch clojure.lang.ExceptionInfo e
+      (ig/halt! (:system (ex-data e)))
       (throw (ex-cause e)))))
