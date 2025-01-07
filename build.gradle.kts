@@ -62,6 +62,14 @@ allprojects {
             withSourcesJar()
         }
 
+        tasks.jar {
+            manifest {
+                attributes(
+                    "Implementation-Version" to project.version,
+                )
+            }
+        }
+
         if (plugins.hasPlugin("org.jetbrains.dokka"))
             tasks.register<Jar>("dokkaJavadocJar") {
                 dependsOn(tasks.dokkaJavadoc)
