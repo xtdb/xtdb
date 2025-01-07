@@ -11,7 +11,8 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.ipc.message.ArrowBlock
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import org.apache.arrow.vector.ipc.message.MessageSerializer.*
+import org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUATION_TOKEN
+import org.apache.arrow.vector.ipc.message.MessageSerializer.deserializeRecordBatch
 import xtdb.IllegalArgumentException
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -26,9 +27,8 @@ object ArrowUtil {
         metadataLength: Int,
         bodyLength: Long,
         errorString: String? = null,
-    ) : ArrowRecordBatch {
-        val prefixSize =
-            if (buf.getInt(offset) == IPC_CONTINUATION_TOKEN) 8L else 4L
+    ): ArrowRecordBatch {
+        val prefixSize = if (buf.getInt(offset) == IPC_CONTINUATION_TOKEN) 8L else 4L
 
         val metadataBuf = buf.nioBuffer(offset + prefixSize, (metadataLength - prefixSize).toInt())
 
@@ -39,8 +39,10 @@ object ArrowUtil {
             val msg = Message.getRootAsMessage(metadataBuf.asReadOnlyBuffer())
             val recordBatchFB = RecordBatch().also { msg.header(it) }
 
-            return deserializeRecordBatch(recordBatchFB, bodyBuf
-                ?: error(errorString ?: "Failed to deserialize record batch at offset $offset"))
+            return deserializeRecordBatch(
+                recordBatchFB,
+                bodyBuf ?: error(errorString ?: "Failed to deserialize record batch at offset $offset")
+            )
 
         } catch (t: Throwable) {
             bodyBuf.referenceManager.release()
@@ -50,30 +52,18 @@ object ArrowUtil {
 
     private val ARROW_MAGIC = "ARROW1".toByteArray(StandardCharsets.UTF_8)
 
-    /**
-     * Validates the Arrow magic bytes at the end of the buffer
-     */
     private fun validateArrowMagic(ipcFileFormatBuffer: ArrowBuf) {
         val capacity = ipcFileFormatBuffer.capacity()
         val magicLength = ARROW_MAGIC.size
 
-        val isValid = ByteFunctionHelpers.compare(
-            ipcFileFormatBuffer,
-            (capacity - magicLength).toInt(),
-            capacity.toInt(),
-            ARROW_MAGIC,
-            0,
-            magicLength
-        ) == 0
-
-        if (!isValid) {
+        if (0 != ByteFunctionHelpers.compare(
+                ipcFileFormatBuffer, (capacity - magicLength).toInt(), capacity.toInt(),
+                ARROW_MAGIC, 0, magicLength
+            )
+        )
             throw IllegalArgumentException.createNoKey("invalid Arrow IPC file format", emptyMap<String, String>())
-        }
     }
 
-    /**
-     * Reads the Arrow footer from the given buffer
-     */
     fun readArrowFooter(ipcFileFormatBuffer: ArrowBuf): ArrowFooter {
         validateArrowMagic(ipcFileFormatBuffer)
 
@@ -90,8 +80,6 @@ object ArrowUtil {
         return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
     }
 
-
-
     /**
      * Creates an Arrow record batch view from the given block and buffer
      */
@@ -105,16 +93,12 @@ object ArrowUtil {
             block.metadataLength - prefixSize
         )
 
-        val batch  = RecordBatch()
+        val batch = RecordBatch()
         Message.getRootAsMessage(messageBuffer).header(batch)
 
         // Create and retain body buffer
-        val bodyBuffer = buffer.slice(
-            block.offset + block.metadataLength,
-            block.bodyLength
-        ).apply {
-            referenceManager.retain()
-        }
+        val bodyBuffer = buffer.slice(block.offset + block.metadataLength, block.bodyLength)
+            .apply { referenceManager.retain() }
 
         return try {
             deserializeRecordBatch(batch, bodyBuffer)

@@ -9,6 +9,7 @@ import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.IBufferPool
 import xtdb.IEvictBufferTest
 import xtdb.arrow.ArrowUtil
+import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
@@ -16,9 +17,11 @@ import xtdb.util.useAndCloseOnException
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
-import java.nio.file.*
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
 
@@ -33,17 +36,13 @@ class LocalBufferPool(
 
     companion object {
         private fun createTempPath(diskStore: Path): Path {
-            val tmpDir = diskStore.resolve(".tmp").also { path ->
-                Files.createDirectories(path)
-            }
+            val tmpDir = diskStore.resolve(".tmp").also { path -> Files.createDirectories(path) }
             return Files.createTempFile(tmpDir, "upload", ".arrow")
         }
 
-        private fun pathToSeekableByteChannel(path: Path) =
-            SeekableReadChannel(Files.newByteChannel(path, READ))
+        private fun pathToSeekableByteChannel(path: Path) = SeekableReadChannel(Files.newByteChannel(path, READ))
 
-        private fun objectMissingExcepiton(path: Path) =
-            IllegalStateException("Object $path doesn't exist.")
+        private fun objectMissingException(path: Path) = IllegalStateException("Object $path doesn't exist.")
     }
 
     override fun getByteArray(key: Path): ByteArray =
@@ -51,20 +50,14 @@ class LocalBufferPool(
             memCacheMisses.increment()
             val bufferCachePath = diskStore.resolve(pathSlice.path)
 
-            if (!bufferCachePath.exists()) {
-                throw objectMissingExcepiton(key)
-            }
+            if (!bufferCachePath.exists()) throw objectMissingException(key)
 
-            CompletableFuture.completedFuture(
-                Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null)
-            )
-        }.use { arrowBuf ->
-            ArrowUtil.arrowBufToByteArray(arrowBuf)
-        }
+            completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
+        }.use(ArrowUtil::arrowBufToByteArray)
 
     override fun getFooter(key: Path): ArrowFooter {
         val path = diskStore.resolve(key)
-        if (!path.exists()) throw objectMissingExcepiton(path)
+        if (!path.exists()) throw objectMissingException(path)
 
         return arrowFooterCache.get(key) {
             Relation.readFooter(pathToSeekableByteChannel(path))
@@ -75,7 +68,7 @@ class LocalBufferPool(
         recordBatchRequests.increment()
         val path = diskStore.resolve(key)
 
-        if (!path.exists()) throw objectMissingExcepiton(path)
+        if (!path.exists()) throw objectMissingException(path)
 
         val footer = arrowFooterCache.get(key) {
             Relation.readFooter(pathToSeekableByteChannel(path))
@@ -90,19 +83,12 @@ class LocalBufferPool(
             memCacheMisses.increment()
             val bufferCachePath = diskStore.resolve(pathSlice.path)
 
-            if (!bufferCachePath.exists()) {
-                throw objectMissingExcepiton(path)
-            }
+            if (!bufferCachePath.exists()) throw objectMissingException(path)
 
-            CompletableFuture.completedFuture(
-                Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null)
-            )
+            completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
         }.use { arrowBuf ->
-            ArrowUtil.arrowBufToRecordBatch(
-                arrowBuf,
-                0,
-                block.metadataLength,
-                block.bodyLength,
+            arrowBufToRecordBatch(
+                arrowBuf, 0, block.metadataLength, block.bodyLength,
                 "Failed opening record batch '$path' at block-idx $blockIdx"
             )
         }
@@ -129,12 +115,10 @@ class LocalBufferPool(
         }
     }
 
-    override fun listAllObjects(): List<Path>  =
+    override fun listAllObjects(): List<Path> =
         Files.walk(diskStore).use { stream ->
-            stream.filter { path ->
-                Files.isRegularFile(path) &&
-                        !diskStore.relativize(path).startsWith(".tmp")
-            }
+            stream
+                .filter { path -> Files.isRegularFile(path) && !diskStore.relativize(path).startsWith(".tmp") }
                 .map { diskStore.relativize(it) }
                 .sorted()
                 .toList()
@@ -144,13 +128,9 @@ class LocalBufferPool(
         val dirPath = diskStore.resolve(dir)
         return if (dirPath.exists()) {
             Files.newDirectoryStream(dirPath).use { stream ->
-                stream.map { diskStore.relativize(it) }
-                    .sorted()
-                    .toList()
+                stream.map { diskStore.relativize(it) }.sorted().toList()
             }
-        } else {
-            emptyList()
-        }
+        } else emptyList()
     }
 
     override fun objectSize(key: Path): Long = diskStore.resolve(key).fileSize()
@@ -179,9 +159,7 @@ class LocalBufferPool(
 
                     override fun close() {
                         unloader.close()
-                        if (fileChannel.isOpen) {
-                            fileChannel.close()
-                        }
+                        if (fileChannel.isOpen) fileChannel.close()
                         Files.deleteIfExists(tmpPath)
                     }
                 }

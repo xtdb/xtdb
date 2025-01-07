@@ -6,14 +6,17 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.IBufferPool
 import xtdb.IEvictBufferTest
+import xtdb.arrow.ArrowUtil.arrowBufToByteArray
+import xtdb.arrow.ArrowUtil.readArrowFooter
+import xtdb.arrow.ArrowUtil.toArrowBufView
+import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
 import xtdb.arrow.Relation
+import xtdb.util.useAndCloseOnException
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
+import java.nio.channels.Channels.newChannel
 import java.nio.file.Path
 import java.util.*
-import xtdb.arrow.ArrowUtil
-import xtdb.util.useAndCloseOnException
 
 class MemoryBufferPool(
     private val allocator: BufferAllocator,
@@ -21,37 +24,25 @@ class MemoryBufferPool(
 ) : IBufferPool, IEvictBufferTest {
 
     companion object {
-        private fun objectMissingExcepiton(path: Path) = IllegalStateException("Object $path doesn't exist.")
+        private fun objectMissingException(path: Path) = IllegalStateException("Object $path doesn't exist.")
+
+        private fun <K, V> Map<K, V>.lockAndGet(key: K): V? = synchronized(this) { get(key) }
     }
 
-    override fun getByteArray(key: Path): ByteArray {
-        val arrowBuf = synchronized(memoryStore) {
-            memoryStore[key]
-        } ?: throw objectMissingExcepiton(key)
+    override fun getByteArray(key: Path): ByteArray =
+        arrowBufToByteArray(memoryStore.lockAndGet(key) ?: throw objectMissingException(key))
 
-        return ArrowUtil.arrowBufToByteArray(arrowBuf)
-    }
-
-    override fun getFooter(key: Path): ArrowFooter {
-        val arrowBuf = synchronized(memoryStore) {
-            memoryStore[key]
-        } ?: throw objectMissingExcepiton(key)
-
-        return ArrowUtil.readArrowFooter(arrowBuf)
-    }
+    override fun getFooter(key: Path): ArrowFooter =
+        readArrowFooter(memoryStore.lockAndGet(key) ?: throw objectMissingException(key))
 
     override fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch {
         try {
-            val arrowBuf = synchronized(memoryStore) {
-                memoryStore[key]
-            } ?: throw objectMissingExcepiton(key)
+            val arrowBuf = memoryStore.lockAndGet(key) ?: throw objectMissingException(key)
 
-            val footer = ArrowUtil.readArrowFooter(arrowBuf)
-            val blocks = footer.recordBatches
-            val block = blocks.getOrNull(blockIdx)
+            val block = readArrowFooter(arrowBuf).recordBatches.getOrNull(blockIdx)
                 ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
-            return ArrowUtil.toArrowRecordBatchView(block, arrowBuf)
+            return toArrowRecordBatchView(block, arrowBuf)
         } catch (e: Exception) {
             throw IllegalStateException("Failed opening record batch '$key'", e)
         }
@@ -59,7 +50,7 @@ class MemoryBufferPool(
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
         synchronized(memoryStore) {
-            memoryStore[key] = ArrowUtil.toArrowBufView(allocator, buffer)
+            memoryStore[key] = toArrowBufView(allocator, buffer)
         }
     }
 
@@ -73,11 +64,7 @@ class MemoryBufferPool(
             val dirDepth = dir.nameCount
             memoryStore.tailMap(dir).keys
                 .takeWhile { it.startsWith(dir) }
-                .mapNotNull { path ->
-                    if (path.nameCount > dirDepth) {
-                        path.subpath(0, dirDepth + 1)
-                    } else null
-                }
+                .mapNotNull { path -> if (path.nameCount > dirDepth) path.subpath(0, dirDepth + 1) else null }
                 .distinct()
         }
 
@@ -85,7 +72,7 @@ class MemoryBufferPool(
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val baos = ByteArrayOutputStream()
-        return Channels.newChannel(baos).useAndCloseOnException { writeChannel ->
+        return newChannel(baos).useAndCloseOnException { writeChannel ->
             rel.startUnload(writeChannel).useAndCloseOnException { unloader ->
                 object : xtdb.ArrowWriter {
                     override fun writeBatch() {
