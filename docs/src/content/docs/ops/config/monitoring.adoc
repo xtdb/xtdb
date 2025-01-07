@@ -57,35 +57,9 @@ XTDB nodes can be configured to report metrics to the following cloud-based moni
 * link:../azure#monitoring[Azure Application Insights^]
 * link:../aws#monitoring[AWS CloudWatch^]
 
-== Observability with Grafana
+== Grafana Dashboards
 
-NOTE: This guide assumes you have a working Grafana instance configured to scrape Prometheus metrics from XTDB nodes. 
-For setup instructions, refer to the official documentation for https://grafana.com/docs/grafana/latest/installation/[Grafana^] and https://prometheus.io/docs/prometheus/latest/getting_started/[Prometheus^].
+XTDB provides https://github.com/xtdb/xtdb/tree/main/monitoring/grafana/dashboards[pre-built Grafana dashboards^] for monitoring the health and performance of XTDB clusters and individual nodes.
 
-To complement the metrics exposed by XTDB, we provide pre-built Grafana dashboards for monitoring the health and performance of XTDB clusters and individual nodes.
+For more information on how to set these up on Grafana, see the link:../guides/monitoring-with-grafana["Monitoring XTDB with Grafana"^] guide.
 
-
-To add these dashboards on Grafana:
-
-* Navigate to the `Dashboards -> New -> New dashboard`.
-* Click `Import dashboard`.
-* `Upload dashboard JSON file` -> Upload the dashboard file from the example directory.
-** Select the Prometheus data source.
-** Click `Import`.
-
-
-=== Cluster Monitoring Dashboard
-
-image::/images/docs/cluster-monitoring.png["Cluster Monitoring Dashboard"^]
-
-This dashboard provides an overview of the entire XTDB cluster, including the health and performance of all nodes.
-
-Download the template: https://github.com/xtdb/xtdb/blob/main/monitoring/grafana/dashboards/xtdb-monitoring.json[here].
-
-=== Node Debugging Dashboard
-
-image::/images/docs/node-debugging.png["Node Debugging Dashboard"^]
-
-This dashboard focuses on individual XTDB nodes, showing detailed metrics such as resource usage, performance, and health.
-
-Download the template: https://github.com/xtdb/xtdb/blob/main/monitoring/grafana/dashboards/xtdb-node-debugging.json[here].

@@ -123,7 +123,8 @@ export default defineConfig({
                             collapsed: true,
                             items: [
                                 'ops/guides/starting-with-aws',
-                                'ops/guides/starting-with-azure'
+                                'ops/guides/starting-with-azure',
+                                'ops/guides/monitoring-with-grafana'
                             ],
                         },
                         {
