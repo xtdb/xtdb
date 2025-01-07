@@ -39,6 +39,8 @@
   ;; TODO this won't work if the user has XT in-process in their own git repo.
   (or (System/getenv "XTDB_VERSION")
 
+      (util/implementation-version)
+
       (when-let [git-sha (System/getenv "GIT_SHA")]
         (subs git-sha 0 7))
 
