@@ -6,7 +6,7 @@ title: Installation via Docker
 
 == Try Online
 
-If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying right now using the link:https://play.xtdb.com/[XT Play] web-based console. The interactive link:quickstart/sql-overview.html[SQL Quickstart] uses this console to showcase XTDB's SQL dialect and bitemporal capabilities.
+If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying right now using the link:https://play.xtdb.com/[XT Play] web-based console. The interactive link:/quickstart/sql-overview.html[SQL Quickstart] uses this console to showcase XTDB's SQL dialect and bitemporal capabilities.
 
 Otherwise, let's get XTDB downloaded and running on your own machine...
 
