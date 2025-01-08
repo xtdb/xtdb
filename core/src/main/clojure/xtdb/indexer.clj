@@ -722,7 +722,12 @@
                (let [e-wtr (.structKeyWriter doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (or (nil? t) (= t abort-exn))
                    (.writeNull e-wtr)
-                   (.writeObject e-wtr t)))
+                   (try
+                     (.writeObject e-wtr t)
+                     (catch Exception e
+                       (log/warnf (doto t (.addSuppressed e)) "Error serializing error, tx %d" tx-id)
+                       (.writeObject e-wtr (xt/->ClojureForm "error serializing error - see server logs"))))))
+
                (.endStruct doc-writer)))))
 
 (deftype Indexer [^BufferAllocator allocator

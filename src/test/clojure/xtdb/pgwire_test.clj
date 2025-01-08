@@ -2301,8 +2301,18 @@ ORDER BY t.oid DESC LIMIT 1"
         (q conn ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
         (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"])
 
-        (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
-                  [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
-                  [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
-                  [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]
-                 (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))))))
+        (let [expected [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
+                        [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
+                        [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
+                        [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]]
+          (t/is (= expected
+                   (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+          (t/testing "parse error doesn't halt ingestion"
+            (t/is (thrown-with-msg? PSQLException
+                                    #"internal error conforming query plan"
+                                    (q conn ["PATCH INTO bar FOR VALID_TIME FROM '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])))
+
+            (t/is (= expected
+                     (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))
+                  "node continues")))))))

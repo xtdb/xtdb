@@ -142,9 +142,10 @@
 
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
-       (throw (err/illegal-arg :malformed-query
-                               {:plan query
-                                :explain (s/explain-data ::lp/logical-plan query)})))
+       (log/debug "error conforming LP"
+                  (pr-str {:plan query
+                           :explain (s/explain-data ::lp/logical-plan query)}))
+       (throw (err/illegal-arg :malformed-query {::err/message "internal error conforming query plan", :plan query})))
 
      (let [{:keys [ordered-outer-projection param-count warnings], :or {param-count 0}} (meta query)
            param-types-with-defaults (->> (concat
