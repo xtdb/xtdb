@@ -322,6 +322,7 @@ exprPrimary
     | (schemaName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
 
     | currentInstantFunction # CurrentInstantFunction0
+    | 'CURRENT_SETTING' '(' expr ')' #CurrentSettingFunction
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
     | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction

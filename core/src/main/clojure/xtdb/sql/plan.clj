@@ -1468,6 +1468,8 @@
   (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
 
   (visitCurrentInstantFunction0 [this ctx] (-> (.currentInstantFunction ctx) (.accept this)))
+  (visitCurrentSettingFunction [this ctx]
+    (xt/template (current-setting ~(-> (.expr ctx) (.accept this)))))
 
   (visitDateTruncFunction [this ctx]
     (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))
