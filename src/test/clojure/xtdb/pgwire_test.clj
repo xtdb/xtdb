@@ -2315,4 +2315,18 @@ ORDER BY t.oid DESC LIMIT 1"
 
             (t/is (= expected
                      (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))
-                  "node continues")))))))
+                  "node continues"))))
+
+      (t/testing "out-of-order updates"
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01T00:00:00Z' RECORDS {_id: 1, version: 1}"])
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2022-01-01T00:00:00Z' RECORDS {_id: 1, version: 2, patched: 2022}"]);
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2021-01-01T00:00:00Z' RECORDS {_id: 1, patched: 2021}"])
+
+        (t/is (= [{:xt/id 1, :version 1,
+                   :xt/valid-from #inst "2020", :xt/valid-to #inst "2021"}
+                  {:xt/id 1, :patched 2021, :version 1,
+                   :xt/valid-from #inst "2021", :xt/valid-to #inst "2022"}
+                  {:xt/id 1, :patched 2021, :version 2,
+                   :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
+             (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"])))))))
+

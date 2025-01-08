@@ -2542,10 +2542,11 @@
         [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
          [:project [_iid _valid_from _valid_to
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
-          [:scan {:table ~table,
-                  :for-valid-time [:in ~valid-from ~valid-to]}
-           [_iid _valid_from _valid_to
-            ~@known-cols]]]]]]])))
+          [:order-by [[_iid] [_valid_from]]
+           [:scan {:table ~table,
+                   :for-valid-time [:in ~valid-from ~valid-to]}
+            [_iid _valid_from _valid_to
+             ~@known-cols]]]]]]]])))
 
 (defrecord InsertStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
