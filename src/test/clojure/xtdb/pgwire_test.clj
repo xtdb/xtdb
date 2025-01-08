@@ -17,6 +17,7 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
@@ -24,7 +25,7 @@
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           (java.util Calendar List TimeZone UUID Arrays)
+           (java.util Arrays Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
@@ -2280,3 +2281,28 @@ ORDER BY t.oid DESC LIMIT 1"
             "c-style escape characters")
       (t/is (= [{:v "dollar $quoted$ string"}] (q conn ["SELECT $$dollar $quoted$ string$$ AS v"]))
             "dollar quoted string"))))
+
+(t/deftest test-patch
+  (with-open [conn (jdbc-conn)]
+    (letfn [(q* [sql]
+              (->> (q conn [sql])
+                   (map (juxt #(select-keys % [:xt/id :a :b :c :tmp]) :xt/valid-from :xt/valid-to))))]
+
+      (q conn ["INSERT INTO foo RECORDS {_id: 1, a: 1, b: 2}"])
+      (q conn ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
+
+      (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-01" #inst "2020-01-02"]
+                [{:xt/id 1, :a 1, :b 2, :c 3} #inst "2020-01-02" nil]
+                [{:xt/id 2, :a 4, :b 5} #inst "2020-01-02" nil]]
+               (q* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+      (t/testing "for portion of valid_time"
+        (q conn ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"])
+
+        (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
+                  [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
+                  [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
+                  [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]
+                 (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))))))

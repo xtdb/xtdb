@@ -488,6 +488,9 @@
 
                                   (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
+                                  (visitPatchStmt [_ ctx]
+                                    {:statement-type :dml, :dml-type :patch, :query (subsql ctx)})
+
                                   (visitUpdateStatementSearched [_ ctx]
                                     {:statement-type :dml, :dml-type :update, :query (subsql ctx)})
 
@@ -1245,6 +1248,7 @@
                                        ;; otherwise head <rows>
                                        :delete "DELETE 0"
                                        :update "UPDATE 0"
+                                       :patch "PATCH 0"
                                        :erase "ERASE 0"
                                        :assert "ASSERT"
                                        :create-role "CREATE ROLE")}]
