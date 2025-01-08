@@ -1,6 +1,7 @@
 (ns xtdb.sql.expr-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.expression]
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
@@ -739,6 +740,15 @@
     "LOCALTIMESTAMP" '(local-timestamp)
     "LOCALTIMESTAMP()" '(local-timestamp)
     "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
+
+(t/deftest test-current-setting-server-version-num
+  (with-redefs [xtdb.expression/xtdb-server-version (fn [] "2.0.0-SNAPSHOT")]
+    (t/is (= [{:v 2000000}]
+             (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v"))))
+  (t/is (thrown-with-msg?
+         UnsupportedOperationException
+         #"Setting not supported"
+         (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
 
 (t/deftest test-date-trunc-query
   (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:34:00Z"}]

@@ -1205,6 +1205,24 @@
      :->call-code (fn [[include-implicit?]]
                     `(current-schemas ~include-implicit?))})
 
+(defn parse-version [version-str]
+  (let [[major minor patch] (->> (re-find #"(\d+)\.(\d+)\.(\d+)" version-str)
+                                 rest
+                                 (map #(Integer/parseInt %)))]
+    (+ (* major 1000000)
+       (* minor 1000)
+       patch)))
+
+(defn current-setting [setting-name]
+  (if (= setting-name "server_version_num")
+    (parse-version (xtdb-server-version))
+    (throw (UnsupportedOperationException. "Setting not supported"))))
+
+(defmethod codegen-call [:current_setting :utf8] [_]
+  {:return-type :i64
+   :->call-code (fn [[setting-name]]
+                  `(current-setting (resolve-string ~setting-name)))})
+
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)
          capacity (int 0)]
