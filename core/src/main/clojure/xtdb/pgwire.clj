@@ -18,7 +18,7 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
-           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
+           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream BufferedInputStream BufferedOutputStream]
            [java.lang AutoCloseable Thread$State]
            [java.net ServerSocket Socket SocketException URI]
            [java.nio ByteBuffer]
@@ -151,6 +151,7 @@
 (declare client-err)
 (declare err-protocol-violation)
 (declare ->socket-frontend)
+(declare flush-messages)
 
 (defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
   Frontend
@@ -158,7 +159,9 @@
     (log/trace "Writing server message" (select-keys msg-def [:char8 :name]))
 
     (.writeByte out (byte (:char8 msg-def)))
-    (.writeInt out 4))
+    (.writeInt out 4)
+    (when (flush-messages (:name msg-def))
+      (.flush out)))
 
   (send-client-msg! [_ msg-def data]
     (log/trace "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
@@ -168,7 +171,9 @@
           arr (.toByteArray bytes-out)]
       (.writeByte out (byte (:char8 msg-def)))
       (.writeInt out (+ 4 (alength arr)))
-      (.write out arr)))
+      (.write out arr)
+      (when (flush-messages (:name msg-def))
+        (.flush out))))
 
   (read-client-msg! [_]
     (let [type-char (char (.readUnsignedByte in))
@@ -193,6 +198,7 @@
         (log/trace "upgrading to SSL")
 
         (.writeByte out (byte \S))
+        (.flush out)
 
         (let [^SSLSocket ssl-socket (-> (.getSocketFactory ^SSLContext ssl-ctx)
                                         (.createSocket socket
@@ -213,6 +219,7 @@
       ;; unsupported - recur and give the client another chance to say hi
       (do
         (.writeByte out (byte \N))
+        (.flush out)
         this)))
 
   (flush! [_] (.flush out))
@@ -222,10 +229,12 @@
     (when-not (.isClosed socket)
       (util/try-close socket))))
 
+(def ^:private socket-buffer-size 1024)
+
 (defn ->socket-frontend [^Socket socket]
   (->SocketFrontend socket
-                    (DataInputStream. (.getInputStream socket))
-                    (DataOutputStream. (.getOutputStream socket))))
+                    (DataInputStream. (BufferedInputStream. (.getInputStream socket) socket-buffer-size))
+                    (DataOutputStream. (BufferedOutputStream. (.getOutputStream socket) socket-buffer-size))))
 
 (defrecord Connection [^BufferAllocator allocator
                        ^Server server, frontend, node
@@ -905,6 +914,11 @@
 
 ;;; server messages
 
+(def ^:private flush-messages #{:msg-error-response :msg-notice-response
+                                :msg-parameter-status :msg-auth :msg-ready
+                                :msg-portal-suspended})
+
+
 (def-msg msg-error-response :server \E
   :error-fields (io-null-terminated-list io-error-notice-field))
 
@@ -1083,7 +1097,7 @@
     (let [default-server-params (-> (:parameters @server-state)
                                     (update-keys str/lower-case))
           startup-opts-from-client (-> startup-opts
-                                             (update-keys str/lower-case))]
+                                       (update-keys str/lower-case))]
 
       (doseq [[k v] (merge default-server-params startup-opts-from-client)]
         (if (= time-zone-nf-param-name k)
@@ -1210,7 +1224,7 @@
     (when (some? arg)
       (let [param-oid (:oid (nth param-fields arg-idx))
             arg-format (or (nth arg-format arg-idx nil)
-                             (nth arg-format arg-idx :text))
+                           (nth arg-format arg-idx :text))
             {:keys [read-binary, read-text]} (or (get types/pg-types-by-oid param-oid)
                                                  (throw (Exception. "Unsupported param type provided for read")))]
         (if (= :binary arg-format)
