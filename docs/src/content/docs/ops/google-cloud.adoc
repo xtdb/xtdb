@@ -4,6 +4,80 @@ title: Google Cloud
 
 XTDB provides modular support for Google Cloud environments, including a prebuilt Docker image, integrations with **Google Cloud Storage**, and configuration options for deploying onto Google Cloud infrastructure.
 
+== Required Infrastructure
+
+In order to run a Google Cloud based XTDB cluster, the following infrastructure is required:
+
+* A **Google Cloud Storage bucket** for remote storage.
+* A **Kafka cluster** for transaction logs.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
+* A service account with the necessary permissions to access the storage bucket and Kafka cluster.
+* XTDB nodes configured to communicate with the Kafka cluster and Google Cloud Storage.
+
+NOTE: We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluster, which provides a managed Kubernetes environment in Google Cloud.
+
+[#docker-image]
+== `xtdb-google-cloud` Docker Image
+
+The https://github.com/xtdb/xtdb/pkgs/container/xtdb-google-cloud[**xtdb-google-cloud**^] image is optimized for running XTDB in Google Cloud environments and is deployed on every release to XTDB.
+
+[source,bash]
+----
+xtdb/xtdb-google-cloud:2.0.0-beta4
+----
+
+By default, it will use Google Cloud Storage for storage and Kafka for transaction logs, including dependencies for both.
+
+=== Configuration
+
+The following environment variables are used to configure the `xtdb-google-cloud` image:
+
+[cols="2,3", options="header"]
+|===
+| Variable              | Description
+
+| `KAFKA_BOOTSTRAP_SERVERS`
+| Kafka bootstrap server containing the XTDB topics.
+
+| `XTDB_TX_TOPIC`
+| Kafka topic to be used as the transaction log.
+
+| `XTDB_FILES_TOPIC`
+| Kafka topic to be used for node file notifications.
+
+| `XTDB_GCP_PROJECT_ID`
+| GCP project ID containing the bucket.
+
+| `XTDB_GCP_BUCKET`
+| Name of the Google Cloud Storage bucket used for remote storage.
+
+| `XTDB_GCP_LOCAL_DISK_CACHE_PATH`
+| Path to the local disk cache.
+
+| `XTDB_LOGGING_LEVEL`
+| Sets the root logging level for the node - defaults to `INFO`. See link:troubleshooting/overview#loglevel["Increasing the Log Level"^] for more information.
+
+| `XTDB_NODE_ID`
+| Persistent node id for labelling Prometheus metrics.
+
+
+|===
+
+=== Using a Custom Node Configuration
+
+For advanced usage, XTDB allows the above YAML configuration to be overridden to customize the running node's system/modules.
+
+In order to override the default configuration:
+
+. Mount a custom YAML configuration file to the container.
+. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
++
+[source, bash]
+----
+CMD ["-f", "/path/to/custom-config.yaml"]
+----
+
+
 [#storage]
 == Google Cloud Storage
 
@@ -66,93 +140,4 @@ storage: !Remote
     # prefix: my-xtdb-node
 
   localDiskCache: /var/cache/xtdb/object-store
-----
-
-[#docker-image]
-== `xtdb-google-cloud` Docker Image
-
-The https://github.com/xtdb/xtdb/pkgs/container/xtdb-google-cloud[**xtdb-google-cloud**^] image is optimized for running XTDB in Google Cloud environments and is deployed on every release to XTDB.
-
-[source,bash]
-----
-xtdb/xtdb-google-cloud:2.0.0-beta4
-----
-
-By default, it will use Google Cloud Storage for storage and Kafka for transaction logs, including dependencies for both.
-
-=== Required Infrastructure
-
-To run the `xtdb-google-cloud` image with the default configuration, the following infrastructure is required:
-
-* A **Google Cloud Storage bucket** for remote storage.
-* A **Kafka cluster** for transaction logs.
-** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
-* A service account with the necessary permissions to access the storage bucket and Kafka cluster.
-
-NOTE: We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluster, which provides a managed Kubernetes environment in Google Cloud.
-
-=== Standard Configuration
-
-The `xtdb-google-cloud` image uses the following default YAML configuration:
-
-[source,yaml]
-----
-txLog: !Kafka
-  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-  txTopic: !Env XTDB_TX_TOPIC
-  filesTopic: !Env XTDB_FILES_TOPIC
-
-storage: !Remote
-  objectStore: !GoogleCloud
-    projectId: !Env XTDB_GCP_PROJECT_ID
-    bucket: !Env XTDB_GCP_BUCKET
-    prefix: "xtdb-object-store"
-  localDiskCache: !Env XTDB_GCP_LOCAL_DISK_CACHE_PATH
-
-healthz:
-  port: 8080
-
-modules:
-- !HttpServer
-  port: 3000
-----
-
-The following environment variables are used to configure the image:
-
-[cols="2,3", options="header"]
-|===
-| Variable              | Description
-
-| `KAFKA_BOOTSTRAP_SERVERS`
-| Kafka bootstrap server containing the XTDB topics.
-
-| `XTDB_TX_TOPIC`
-| Kafka topic to be used as the transaction log.
-
-| `XTDB_FILES_TOPIC`
-| Kafka topic to be used for node file notifications.
-
-| `XTDB_GCP_PROJECT_ID`
-| GCP project ID containing the bucket.
-
-| `XTDB_GCP_BUCKET`
-| Name of the Google Cloud Storage bucket used for remote storage.
-
-| `XTDB_GCP_LOCAL_DISK_CACHE_PATH`
-| Path to the local disk cache.
-
-|===
-
-=== Using a Custom Node Configuration
-
-For advanced usage, XTDB allows the above YAML configuration to be overridden to customize the running node's system/modules.
-
-In order to override the default configuration:
-
-. Mount a custom YAML configuration file to the container.
-. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
-+
-[source, bash]
-----
-CMD ["-f", "/path/to/custom-config.yaml"]
 ----
