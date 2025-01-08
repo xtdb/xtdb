@@ -1,0 +1,143 @@
+---
+title: Google Cloud
+---
+
+XTDB provides modular support for Google Cloud environments, including a prebuilt Docker image, integrations with **Google Cloud Storage**, and configuration options for deploying onto Google Cloud infrastructure.
+
+== Required Infrastructure
+
+In order to run a Google Cloud based XTDB cluster, the following infrastructure is required:
+
+* A **Google Cloud Storage bucket** for remote storage.
+* A **Kafka cluster** for transaction logs.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
+* A service account with the necessary permissions to access the storage bucket and Kafka cluster.
+* XTDB nodes configured to communicate with the Kafka cluster and Google Cloud Storage.
+
+NOTE: We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluster, which provides a managed Kubernetes environment in Google Cloud.
+
+[#docker-image]
+== `xtdb-google-cloud` Docker Image
+
+The https://github.com/xtdb/xtdb/pkgs/container/xtdb-google-cloud[**xtdb-google-cloud**^] image is optimized for running XTDB in Google Cloud environments and is deployed on every release to XTDB.
+
+[source,bash]
+----
+xtdb/xtdb-google-cloud:2.0.0-beta4
+----
+
+By default, it will use Google Cloud Storage for storage and Kafka for transaction logs, including dependencies for both.
+
+=== Configuration
+
+The following environment variables are used to configure the `xtdb-google-cloud` image:
+
+[cols="2,3", options="header"]
+|===
+| Variable              | Description
+
+| `KAFKA_BOOTSTRAP_SERVERS`
+| Kafka bootstrap server containing the XTDB topics.
+
+| `XTDB_TX_TOPIC`
+| Kafka topic to be used as the transaction log.
+
+| `XTDB_FILES_TOPIC`
+| Kafka topic to be used for node file notifications.
+
+| `XTDB_GCP_PROJECT_ID`
+| GCP project ID containing the bucket.
+
+| `XTDB_GCP_BUCKET`
+| Name of the Google Cloud Storage bucket used for remote storage.
+
+| `XTDB_GCP_LOCAL_DISK_CACHE_PATH`
+| Path to the local disk cache.
+
+| `XTDB_LOGGING_LEVEL`
+| Sets the root logging level for the node - defaults to `INFO`. See link:troubleshooting/overview#loglevel["Increasing the Log Level"^] for more information.
+
+| `XTDB_NODE_ID`
+| Persistent node id for labelling Prometheus metrics.
+
+
+|===
+
+=== Using a Custom Node Configuration
+
+For advanced usage, XTDB allows the above YAML configuration to be overridden to customize the running node's system/modules.
+
+In order to override the default configuration:
+
+. Mount a custom YAML configuration file to the container.
+. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
++
+[source, bash]
+----
+CMD ["-f", "/path/to/custom-config.yaml"]
+----
+
+
+[#storage]
+== Google Cloud Storage
+
+https://cloud.google.com/storage?hl=en[**Google Cloud Storage**^] can be used as a shared object-store for XTDB's link:config/storage#remote[remote storage^] module.
+
+=== Infrastructure Requirements
+
+To use Google Cloud Storage as the object store, the following infrastructure is required:
+
+. A **Google Cloud Storage bucket**
+. A **custom role** with the necessary permissions for XTDB to use the bucket:
++
+[source,yaml]
+----
+type: gcp-types/iam-v1:projects.roles
+name: custom-role-name
+properties:
+  parent: projects/project-name
+  roleId: custom-role-name
+  role:
+    title: XTDB Custom Role
+    stage: GA
+    description: Custom role for XTDB - allows usage of containers.
+    includedPermissions:
+      - storage.objects.create
+      - storage.objects.delete
+      - storage.objects.get
+      - storage.objects.list
+      - storage.objects.update
+      - storage.buckets.get
+----
+
+=== Authentication
+
+XTDB uses Google's "Application Default Credentials" for authentication. 
+See the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[Google Cloud documentation^] for setup instructions.
+
+=== Configuration
+
+To use the Google Cloud module, include the following in your node configuration:
+
+[source,yaml]
+----
+storage: !Remote
+  objectStore: !GoogleCloud
+    ## -- required
+
+    # The name of the GCP project containing the bucket
+    # (Can be set as an !Env value)
+    projectId: xtdb-project
+
+    # The Cloud Storage bucket to store documents
+    # (Can be set as an !Env value)
+    bucket: xtdb-bucket
+
+    ## -- optional
+    # A file path to prefix all files with
+    # - for example, if "foo" is provided, all XTDB files will be under a "foo" sub-directory
+    # (Can be set as an !Env value)
+    # prefix: my-xtdb-node
+
+  localDiskCache: /var/cache/xtdb/object-store
+----

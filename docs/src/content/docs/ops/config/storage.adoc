@@ -49,7 +49,7 @@ storage: !Local
 
 A persistent storage implementation that:
 
-* Persists data remotely to a provided object store.
+* Persists data remotely to a provided, cloud based object store.
 * Maintains an local-disk cache and in-memory cache of the working set.
 
 NOTE: When using a remote storage implementation as part of a distributed cluster of XTDB nodes, we **must** ensure that all nodes are able to efficiently communicate the stream of file changes they make to the remote storage. We achieve this inter-node messaging using a link:tx-log#Remote[**remote transaction log**] implementation.
@@ -81,9 +81,8 @@ storage: !Remote
   # The upper limit of bytes that can be stored within the localDiskCache directory (unset by default).
   # maxDiskCacheBytes: 107374182400
 ----
-Each Object Store implementation is configured separately - see the individual documentation for more information:
+Each Object Store implementation is configured separately - see the individual cloud platform documentation for more information:
 
-* link:storage/s3[S3]
-* link:storage/azure[Azure]
-* link:storage/google-cloud[Google Cloud]
-
+* link:../aws#storage[AWS]
+* link:../azure#storage[Azure]
+* link:../google-cloud#storage[Google Cloud]
