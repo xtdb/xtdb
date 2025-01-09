@@ -6,7 +6,7 @@
   Xtdb
   (get-connection [this opts]
     (njp/get-connection {:dbtype "xtdb"
-                         :classname "xtdb.jdbc.XtdbDriver"
+                         :classname "xtdb.jdbc.Driver"
                          :dbname (:dbname opts "xtdb")
                          :host "localhost"
                          :port (.getServerPort this)
