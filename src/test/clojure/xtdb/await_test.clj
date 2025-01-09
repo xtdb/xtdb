@@ -27,14 +27,21 @@
     (t/is (= ::waiting (.getNow fut4 ::waiting)))
     (t/is (= ::waiting (.getNow fut5 ::waiting)))
 
-    (await/notify-tx (->tx 4) awaiters)
+    (let [committed-tx (serde/->tx-committed 4 (time/->instant #inst "2020"))]
+      (await/notify-tx committed-tx awaiters)
 
-    ;;avoids race condition, await-tx-async doesn't instantly react to being notified
-    (t/is (= (->tx 4) (.get fut4 100 TimeUnit/MILLISECONDS))
-          "now yields")
+      ;;avoids race condition, await-tx-async doesn't instantly react to being notified
+      (t/is (= committed-tx (.get fut4 100 TimeUnit/MILLISECONDS))
+            "now yields the committed tx"))
 
     (t/is (= ::waiting (.getNow fut5 ::waiting))
-          "still waiting"))
+          "still waiting")
+
+    (let [aborted-tx (serde/->tx-aborted 5 (time/->instant #inst "2020") (ex-info "oh no" {}))]
+      (await/notify-tx aborted-tx awaiters)
+
+      (t/is (= aborted-tx (.get fut5 100 TimeUnit/MILLISECONDS))
+            "now yields the aborted tx")))
 
   (let [fut (await/await-tx-async (->tx 5) #(throw (RuntimeException.)) (PriorityBlockingQueue.))]
     (t/is (.isCompletedExceptionally fut))

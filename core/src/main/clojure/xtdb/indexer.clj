@@ -58,7 +58,9 @@
   (^xtdb.api.TransactionKey latestCompletedTx [])
   (^xtdb.api.TransactionKey latestCompletedChunkTx [])
 
-  (^xtdb.api.TransactionKey awaitTx [^long txId, ^java.time.Duration timeout])
+  (^xtdb.api.TransactionKey awaitTx [^long txId, ^java.time.Duration timeout]
+   "_may_ return a TransactionResult if available.")
+
   (^void forceFlush [^xtdb.api.TransactionKey txKey ^long expected-last-chunk-tx-id])
   (^Throwable indexerError []))
 
@@ -753,20 +755,20 @@
 
         (if (and system-time lc-tx
                  (neg? (compare system-time (.getSystemTime lc-tx))))
-          (let [tx-key (serde/->TxKey tx-id default-system-time)]
+          (let [tx-key (serde/->TxKey tx-id default-system-time)
+                err (err/illegal-arg :invalid-system-time
+                                     {::err/message "specified system-time older than current tx"
+                                      :tx-key (serde/->TxKey tx-id system-time)
+                                      :latest-completed-tx (.latestCompletedTx this)})]
             (log/warnf "specified system-time '%s' older than current tx '%s'"
                        (pr-str system-time)
                        (pr-str (.latestCompletedTx this)))
 
             (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
-              (add-tx-row! live-idx-tx tx-key
-                           (err/illegal-arg :invalid-system-time
-                                            {::err/message "specified system-time older than current tx"
-                                             :tx-key (serde/->TxKey tx-id system-time)
-                                             :latest-completed-tx (.latestCompletedTx this)}))
+              (add-tx-row! live-idx-tx tx-key err)
               (.commit live-idx-tx))
 
-            (doto tx-key
+            (doto (serde/->tx-aborted tx-id default-system-time err)
               (await/notify-tx awaiters)))
 
           (let [system-time (or system-time default-system-time)
@@ -812,34 +814,37 @@
                                   (index-tx-ops more-tx-ops)
                                   (finally
                                     (util/try-close more-tx-ops)))))))]
-                  (let [e (try
-                            (index-tx-ops tx-ops-vec)
-                            (catch xtdb.RuntimeException e e)
-                            (catch xtdb.IllegalArgumentException e e)
-                            (catch ClosedByInterruptException e
-                              (throw (InterruptedException. (.toString e))))
-                            (catch InterruptedException e
-                              (throw e))
-                            (catch Throwable t
-                              (log/error t "error in indexer, indexing" tx-key)
-                              (throw t)))]
-                    (if e
-                      (do
-                        (when (not= e abort-exn)
-                          (log/debug e "aborted tx")
-                          (.abort live-idx-tx))
+                  (doto (let [e (try
+                                  (index-tx-ops tx-ops-vec)
+                                  (catch xtdb.RuntimeException e e)
+                                  (catch xtdb.IllegalArgumentException e e)
+                                  (catch ClosedByInterruptException e
+                                    (throw (InterruptedException. (.toString e))))
+                                  (catch InterruptedException e
+                                    (throw e))
+                                  (catch Throwable t
+                                    (log/error t "error in indexer, indexing" tx-key)
+                                    (throw t)))]
+                          (if e
+                            (do
+                              (when-not (= e abort-exn)
+                                (log/debug e "aborted tx")
+                                (.abort live-idx-tx))
 
-                        (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
-                          (add-tx-row! live-idx-tx tx-key e)
-                          (.commit live-idx-tx)))
+                              (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+                                (add-tx-row! live-idx-tx tx-key e)
+                                (.commit live-idx-tx))
 
-                      (do
-                        (add-tx-row! live-idx-tx tx-key nil)
+                              (serde/->tx-aborted tx-id system-time
+                                                  (when-not (= e abort-exn)
+                                                    e)))
 
-                        (.commit live-idx-tx)))))
+                            (do
+                              (add-tx-row! live-idx-tx tx-key nil)
+                              (.commit live-idx-tx)
+                              (serde/->tx-committed tx-id system-time))))
 
-                (doto tx-key
-                  (await/notify-tx awaiters)))))))
+                    (await/notify-tx awaiters))))))))
 
       (catch Throwable t
         (set! (.indexer-error this) t)

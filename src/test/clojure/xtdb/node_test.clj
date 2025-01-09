@@ -386,10 +386,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                  #xt/runtime-err [:xtdb.call/error-evaluating-tx-fn
                                                   "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
                                                   {:fn-id :tx-fn-fail, :args []}])
-             (xt/execute-tx tu/*node* [[:put-fn :tx-fn-fail
-                                        '(fn []
-                                           (throw (Exception. "boom")))]
-                                       [:call :tx-fn-fail]])))
+             (-> (xt/execute-tx tu/*node* [[:put-fn :tx-fn-fail
+                                            '(fn []
+                                               (throw (Exception. "boom")))]
+                                           [:call :tx-fn-fail]])
+
+                 ;; can't compare `:cause`, because Exceptions are identity-equal
+                 (update :error (comp read-string pr-str)))))
 
     (t/is (= #{{:tx-id 0, :system-time (time/->zdt #inst "2020-01-01"), :committed? true}
                {:tx-id 1, :system-time (time/->zdt #inst "2020-01-02"), :committed? false}

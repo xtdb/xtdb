@@ -196,8 +196,8 @@
 (defmethod print-method xtdb.RuntimeException [e, ^Writer w]
   (print-dup e w))
 
-(defn runex-reader [[k message data]]
-  (xtdb.RuntimeException. k message data nil))
+(defn runex-reader [[k message data cause]]
+  (xtdb.RuntimeException. k message data cause))
 
 (def transit-read-handlers
   (merge transit/default-read-handlers

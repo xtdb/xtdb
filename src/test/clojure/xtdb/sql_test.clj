@@ -1756,7 +1756,9 @@
     (t/is (= (serde/->tx-aborted 2
                                  #xt/instant "2020-01-03T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "Parameter error: 1 provided, 2 expected" {:param-count 2, :arg-count 1}])
-             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))))
+             (-> (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]])
+                 ;; different types of numbers in the map (int vs long), so we roundtrip via EDN
+                 (update :error (comp read-string pr-str))))))
 
   (t/testing "incorrect number of args on one row"
     (t/is (thrown-with-msg?

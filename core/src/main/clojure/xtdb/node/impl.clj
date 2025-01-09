@@ -21,7 +21,7 @@
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api TransactionKey Xtdb Xtdb$Config)
+           (xtdb.api TransactionKey TransactionResult Xtdb Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
@@ -95,14 +95,19 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (with-open [res (xtp/open-sql-query this "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
-                                          {:args [tx-id]
-                                           :key-fn (serde/read-key-fn :kebab-case-keyword)})]
-        (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
-              system-time (time/->instant system-time)]
-          (if committed?
-            (serde/->tx-committed tx-id system-time)
-            (serde/->tx-aborted tx-id system-time error))))))
+      (or (let [tx-res (.awaitTx indexer tx-id nil)]
+            (when (and (instance? TransactionResult tx-res)
+                       (= (.getTxId tx-res) tx-id))
+              tx-res))
+
+          (with-open [res (xtp/open-sql-query this "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
+                                              {:args [tx-id]
+                                               :key-fn (serde/read-key-fn :kebab-case-keyword)})]
+            (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
+                  system-time (time/->instant system-time)]
+              (if committed?
+                (serde/->tx-committed tx-id system-time)
+                (serde/->tx-aborted tx-id system-time error)))))))
 
   (open-sql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]

@@ -1,7 +1,7 @@
 (ns xtdb.await
   (:require xtdb.api)
   (:import [java.util.concurrent CompletableFuture PriorityBlockingQueue]
-           xtdb.api.TransactionKey))
+           (xtdb.api TransactionKey TransactionResult)))
 
 (deftype AwaitingTx [^long tx-id, ^CompletableFuture fut]
   Comparable
@@ -41,11 +41,11 @@
 
         fut)))
 
-(defn notify-tx [^TransactionKey completed-tx, ^PriorityBlockingQueue awaiters]
+(defn notify-tx [^TransactionResult completed-tx, ^PriorityBlockingQueue awaiters]
   (while (when-let [^AwaitingTx awaiting-tx (.peek awaiters)]
            (let [awaited-tx-id (.tx_id awaiting-tx)]
-             (when (await-done? awaited-tx-id completed-tx)
-               (.remove awaiters awaiting-tx)
+             (when (and (await-done? awaited-tx-id completed-tx)
+                        (.remove awaiters awaiting-tx))
                (.completeAsync ^CompletableFuture (.fut awaiting-tx)
                                (fn [] completed-tx))
                true)))))
