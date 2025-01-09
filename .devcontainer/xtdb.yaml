@@ -7,6 +7,9 @@ storage: !Local
 healthz:
   port: 8080
 
+server:
+  port: 5432
+
 modules:
 - !HttpServer
   port: 3000

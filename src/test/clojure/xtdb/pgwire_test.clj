@@ -67,7 +67,7 @@
                                                               :authn authn/default-authn
                                                               :allocator tu/*allocator*}
                                                              opts
-                                                             {:port 0, :drain-wait 250}))))
+                                                             {:drain-wait 250}))))
 
 (defn- pg-config [params]
   (merge {:host "localhost"
@@ -314,7 +314,7 @@
 
 (deftest server-resources-freed-on-close-test
   (doseq [close-method [#(.close %)]]
-    (with-open [server (pgwire/serve tu/*node* {:port 0})]
+    (with-open [server (pgwire/serve tu/*node* {})]
       (close-method server)
       (check-server-resources-freed server))))
 
@@ -569,8 +569,7 @@
       "verify-ca" :unsupported
       "verify-full" :unsupported))
 
-  (with-open [node (xtn/start-node {:server {:port 0
-                                             :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+  (with-open [node (xtn/start-node {:server {:ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                                    :keystore-password "password123"}}})]
     (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
@@ -1229,7 +1228,7 @@
            (q-seq conn ["select oid, typbasetype from pg_type where typname = 'lo'"])))))
 
 (t/deftest test-pg-port
-  (util/with-open [node (xtn/start-node {::pgwire/server {:port 0}})]
+  (util/with-open [node (xtn/start-node {::pgwire/server {}})]
     (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc-conn)]
         (t/is (= "ping" (ping conn)))))))
@@ -1860,7 +1859,7 @@
           (t/is (= v (.getBoolean rs 1))))))))
 
 (deftest test-transit-param
-  (with-open [node (xtn/start-node {:server {:port 0}})]
+  (with-open [node (xtn/start-node)]
     (t/testing "pgwire metadata query"
       (t/is (= [{:oid 16384, :typname "transit"}]
                (xt/q node ["
@@ -2147,8 +2146,7 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (= [{"_id" 8, "arr" [1 2 3]} {"_id" 9, "arr" [4 5 6]}] (rs->maps rs)))))))
 
 (deftest pg-authentication
-  (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
+  (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
     (binding [*port* (:port (tu/node->server node))]
       (t/is (thrown-with-msg? PSQLException #"ERROR: no authentication record found for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
@@ -2161,13 +2159,11 @@ ORDER BY t.oid DESC LIMIT 1"
             "user with a wrong password gets blocked")))
 
   (t/testing "users with a trusted record are allowed"
-    (with-open [node (xtn/start-node {:server {:port 0}
-                                      :authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
+    (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
       (binding [*port* (:port (tu/node->server node))]
         (with-open [_ (jdbc-conn "user" "fin")]))))
 
-  (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
+  (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
                                                                  {:user "fin", :method :password, :address "127.0.0.1"}]}]})]
 
     (binding [*port* (:port (tu/node->server node))]

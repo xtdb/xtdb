@@ -44,7 +44,7 @@
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
            xtdb.indexer.live_index.ILiveTable
-           (xtdb.query BoundQuery IQuerySource PreparedQuery)
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader RelationReader)
@@ -65,7 +65,7 @@
                      (.buffer *allocator* 10)
                      (throw (ex-info "boom!" {})))))))
 
-(def ^:dynamic *node-opts* {:server {:port 0}})
+(def ^:dynamic *node-opts* {})
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^xtdb.api.Xtdb *node*)
@@ -320,8 +320,7 @@
                                     :or {compactor? true buffers-dir "objects" healthz-port 8080}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
-    (xtn/start-node {:server {:port 0}
-                     :healthz {:port healthz-port}
+    (xtn/start-node {:healthz {:port healthz-port}
                      :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}

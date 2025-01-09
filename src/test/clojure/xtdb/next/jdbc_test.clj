@@ -5,7 +5,7 @@
             [xtdb.node :as xtn]))
 
 (t/deftest uses-xtdb-node-as-jdbc-conn
-  (with-open [node (xtn/start-node {:server {:port 0}})
+  (with-open [node (xtn/start-node)
               conn (jdbc/get-connection node)]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
     (t/is (= [{:xt/id 1}] (jdbc/execute! conn ["SELECT * FROM foo"]

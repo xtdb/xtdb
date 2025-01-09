@@ -1906,12 +1906,12 @@
 
   Options:
 
-  :port (default 5432). Provide '0' to open a socket on an unused port.
+  :port (default 0, opening the socket on an unused port).
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
   (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn]
-                  :or {port 5432
+                  :or {port 0
                        num-threads 42
                        drain-wait 5000}}]
    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
@@ -2001,7 +2001,7 @@
   (^xtdb.pgwire.Server [] (open-playground nil))
 
   (^xtdb.pgwire.Server [opts]
-   (let [{:keys [port] :as srv} (serve nil (merge {:port 0, :authn authn/default-authn}
+   (let [{:keys [port] :as srv} (serve nil (merge {:authn authn/default-authn}
                                                   opts
                                                   {:allocator (RootAllocator.)}))]
      (log/info "Playground started on port:" port)

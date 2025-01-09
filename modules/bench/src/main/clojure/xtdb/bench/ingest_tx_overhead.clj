@@ -76,11 +76,11 @@
 (comment
   (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000}})
                                    @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
-    (with-open [in-mem (xtn/start-node {:server {:port 0}})
+    (with-open [in-mem (xtn/start-node)
 
                 ^AutoCloseable
                 node (case :xt-memory
-                       :xt-memory (xtn/start-node {:server {:port 0}})
+                       :xt-memory (xtn/start-node)
 
                        :xt-local (let [path (util/->path "/tmp/xt-tx-overhead-bench")]
                                    (util/delete-dir path)

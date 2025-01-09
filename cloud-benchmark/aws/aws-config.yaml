@@ -1,4 +1,6 @@
-# CONFIG FOR RUNNING WITH AWS INFRA
+server:
+  port: 5432
+
 txLog: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
   txTopic: !Env XTDB_TX_TOPIC

@@ -13,7 +13,7 @@ interface FlightSqlServer : XtdbModule {
     @Serializable
     data class Factory(
         var host: String = "127.0.0.1",
-        var port: Int = 9832,
+        var port: Int = 0,
     ) : XtdbModule.Factory {
         override val moduleKey = "xtdb.flight-sql-server"
 

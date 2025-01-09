@@ -9,7 +9,7 @@ import xtdb.api.IntWithEnvVarSerde
 
 @Serializable
 data class ServerConfig(
-    var port: Int = 5432,
+    var port: Int = 0,
     var numThreads: Int = 42,
     var ssl: SslSettings? = null,
 ) {
@@ -21,18 +21,16 @@ data class ServerConfig(
     )
 
     /**
-     * Port to start the Pgwire server on. Default is 5432.
+     * Port to start the PG wire server on.
      *
-     * Specify '0' to have the server choose an available port.
+     * Default is 0, to have the server choose an available port.
      */
     fun port(port: Int) = apply { this.port = port }
-
-    fun anyAvailablePort() = port(0)
 
     fun numThreads(numThreads: Int) = apply { this.numThreads = numThreads }
 
     /**
-     * Enable SSL for the Pgwire server.
+     * Enable SSL for the PG wire server.
      *
      * @param keyStore path to the keystore file.
      * @param keyStorePassword password for the keystore.

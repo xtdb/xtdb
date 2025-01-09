@@ -1,3 +1,6 @@
+server:
+  port: 5432
+
 txLog: !Local
   path: "/var/lib/xtdb/log"
 
