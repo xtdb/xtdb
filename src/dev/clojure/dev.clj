@@ -10,12 +10,15 @@
             [xtdb.pgwire :as pgw]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import [java.nio.file Path]
            java.time.Duration
-           [org.apache.arrow.memory RootAllocator]
+           [java.util List]
+           [org.apache.arrow.memory BaseAllocator RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
+           (xtdb.arrow Relation StructVector Vector)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node ArrowHashTrie$RecencyBranch)))
 
 #_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
@@ -129,6 +132,22 @@
       (prn !q)
       (time (tu/query-ra @!q node)))))
 
+
+(defn data->struct-vec [^BaseAllocator alloc data]
+  (util/with-close-on-catch [^StructVector struct-vec (Vector/fromField alloc (types/col-type->field "my-struct" [:struct {}]))]
+    (doseq [row data]
+      (.writeObject struct-vec row))
+    struct-vec))
+
+(defn write-arrow-file [^Path path data]
+  (with-open [al (RootAllocator.)
+              ch (util/->file-channel path #{:write :create})
+              ^StructVector struct-vec (data->struct-vec al data)]
+    (let [rel (Relation. ^List (into [] (.getChildren struct-vec)) (.getValueCount struct-vec))]
+      (with-open [unloader (.startUnload rel ch)]
+        (.writeBatch unloader)
+        (.end unloader)))))
+
 (defn read-arrow-file [^Path path]
   (reify clojure.lang.IReduceInit
     (reduce [_ f init]
@@ -143,6 +162,9 @@
             :else v))))))
 
 (comment
+  (write-arrow-file (util/->path "/tmp/test.arrow")
+                    [{:a 1 :b 2} {:a 3 :b "foo" :c {:a 1 :b 2}}])
+
   (->> (util/->path "/tmp/test.arrow")
        (read-arrow-file)
        (into [] cat)))
