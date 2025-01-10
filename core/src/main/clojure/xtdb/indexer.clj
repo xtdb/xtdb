@@ -598,9 +598,10 @@
         (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
           (let [query-str (.getObject query-rdr tx-op-idx)
                 compiled-query (sql/compile-query query-str {:table-info (scan/tables-with-cols wm-src)
-                                                             :args-schema (some-> args-arrow-rdr
-                                                                                  .getVectorSchemaRoot
-                                                                                  .getSchema)})
+                                                             :arg-fields (some-> args-arrow-rdr
+                                                                                 .getVectorSchemaRoot
+                                                                                 .getSchema
+                                                                                 (.getFields))})
                 param-count (:param-count (meta compiled-query))]
             (try
               (zmatch (r/vector-zip compiled-query)

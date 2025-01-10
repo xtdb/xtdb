@@ -1593,10 +1593,10 @@
 
       ;; HACK.
       (t/is (= [[:sql "INSERT INTO foo RECORDS $1"
-                 [{:xt/id 1, :a "one"}]
-                 [{:xt/id 2, :a "two"}]]
+                 [{:_id 1, :a "one"}]
+                 [{:_id 2, :a "two"}]]
                 [:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}" [3 "three"]]
-                [:sql "INSERT INTO foo RECORDS $1" [{:xt/id 4, :a "four"}]]]
+                [:sql "INSERT INTO foo RECORDS $1" [{:_id 4, :a "four"}]]]
                (-> @(:server-state (util/component tu/*node* ::pgwire/server))
                    (get-in [:connections 2 :conn-state])
                    deref
@@ -2325,4 +2325,3 @@ ORDER BY t.oid DESC LIMIT 1"
                   {:xt/id 1, :patched 2021, :version 2,
                    :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
              (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"])))))))
-

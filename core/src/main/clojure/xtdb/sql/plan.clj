@@ -10,14 +10,15 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            [java.net URI]
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
-           (org.apache.arrow.vector.types.pojo Field Schema)
+           (org.apache.arrow.vector.types.pojo Field)
            [org.apache.commons.codec.binary Hex]
            (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
            (xtdb.types IntervalMonthDayNano)
@@ -2040,7 +2041,7 @@
 
   (visitRecordsValueList [_ ctx]
     (let [expr-plan-visitor (->ExprPlanVisitor env scope)
-          arg-fields (some->> ^Schema (:args-schema env) (.getFields))
+          arg-fields (:arg-fields env)
 
           col-syms (or out-col-syms
                        (letfn [(emit-param [param-idx]
@@ -2913,7 +2914,7 @@
         (-plan-statement opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-statement [ctx {:keys [scope table-info args-schema]}]
+  (-plan-statement [ctx {:keys [scope table-info arg-fields]}]
     (let [!errors (atom [])
          !warnings (atom [])
          !param-count (atom 0)
@@ -2924,7 +2925,7 @@
               :table-info (xform-table-info table-info)
               ;; NOTE this may not necessarily be provided
               ;; we get it through SQL DML, which is the main case we need it for #3656
-              :args-schema args-schema}
+              :arg-fields arg-fields}
 
           stmt (.accept ctx (->StmtVisitor env scope))]
      (if-let [errs (not-empty @!errors)]
@@ -2970,14 +2971,14 @@
         (letfn [(->const [v arg-row]
                   (letfn [(->const* [obj]
                             (cond
-                              (symbol? obj) (val (or (find arg-row obj) (throw (RuntimeException.))))
+                              (symbol? obj) (->const* (val (or (find arg-row obj) (throw (RuntimeException.)))))
                               (seq? obj) (throw (RuntimeException.))
                               (vector? obj) (mapv ->const* obj)
                               (set? obj) (into #{} (map ->const*) obj)
-                              (map? obj) (->> obj
-                                              (into {} (map (fn [[k v]]
-                                                              (MapEntry/create (str (symbol k))
-                                                                               (->const* v))))))
+                              (instance? Map obj) (->> obj
+                                                       (into {} (map (fn [[k v]]
+                                                                       (MapEntry/create (str (symbol k))
+                                                                                        (->const* v))))))
                               :else obj))]
                     (->const* v)))
 
@@ -3013,7 +3014,8 @@
       rows))
 
   (visitInsertRecords [_ ctx]
-    (let [out-col-syms (some->> (.columnName (.columnNameList ctx))
+    (let [out-col-syms (some->> (.columnNameList ctx)
+                                .columnName
                                 (mapv identifier-sym))
           {:keys [rows]} (-> (.recordsValueConstructor ctx)
                              (.accept (->TableRowsVisitor env scope out-col-syms)))]
@@ -3027,7 +3029,12 @@
 
   ([sql arg-rows {:keys [scope] :as opts}]
    (try
-     (let [{:keys [!errors !warnings] :as env} (->env opts)
+     (let [{:keys [!errors !warnings] :as env} (-> (->env opts)
+                                                   (assoc :arg-fields (for [arg-idx (range (count (first arg-rows)))]
+                                                                        (->> (for [arg-row arg-rows]
+                                                                               (vw/value->col-type (nth arg-row arg-idx)))
+                                                                             (apply types/merge-col-types)
+                                                                             types/col-type->field))))
            tx-ops (-> (antlr/parse-statement sql)
                       (.accept (->SqlToStaticOpsVisitor env scope arg-rows)))]
        (when (and (empty? @!errors) (empty? @!warnings))

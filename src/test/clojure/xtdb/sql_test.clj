@@ -2120,7 +2120,14 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
                                     :valid-from #xt/instant "2020-01-02T00:00:00Z"})]
 
              (plan/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
-                                     '[[1 2] [3 4]])))))
+                                   '[[1 2] [3 4]]))))
+
+  (t/testing "insert records"
+    (t/is (= [(tx-ops/map->PutDocs {:table-name "public/bar", :docs [{"_id" 0, "value" "hola"} {"_id" 1, "value" "mundo"}],
+                                    :valid-from nil, :valid-to nil})]
+             (plan/sql->static-ops "INSERT INTO bar RECORDS $1"
+                                   '[[{"_id" 0, "value" "hola"}]
+                                     [{"_id" 1, "value" "mundo"}]])))))
 
 (t/deftest show-canned-responses
   (t/is (= [{:standard-conforming-strings "on"}]
@@ -2254,7 +2261,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
+  (t/is (thrown-with-msg? IllegalArgumentException #"missing-id"
                           (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))))
 
   (t/is (= [{:x 2, :xt/id 1}]
@@ -2273,7 +2280,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
+  (t/is (thrown-with-msg? IllegalArgumentException #"missing-id"
                           (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
                                                                     [{:id 2, :x 3}]]]))))))
 
