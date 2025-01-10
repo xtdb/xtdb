@@ -199,40 +199,43 @@
 (defn runex-reader [[k message data cause]]
   (xtdb.RuntimeException. k message data cause))
 
-(def transit-read-handlers
-  (merge transit/default-read-handlers
-         tl/transit-read-handlers
-         {"xtdb/clj-form" (transit/read-handler ClojureForm/new)
-          "xtdb/tx-key" (transit/read-handler map->TxKey)
-          "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
-          "xtdb/key-fn" (transit/read-handler read-key-fn)
-          "xtdb/illegal-arg" (transit/read-handler iae-reader)
-          "xtdb/runtime-err" (transit/read-handler runex-reader)
-          "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
-          "xtdb/period-duration" period-duration-reader
-          "xtdb.interval/year-month" interval-ym-reader
-          "xtdb.interval/day-time" interval-dt-reader
-          "xtdb.interval/month-day-nano" interval-mdn-reader
-          "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
-          "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
-          "xtdb.tx/sql" (transit/read-handler sql-op-reader)
-          "xtdb.tx/xtql" (transit/read-handler tx-ops/parse-tx-op)
-          "xtdb.tx/put-docs" (transit/read-handler tx-ops/map->PutDocs)
-          "xtdb.tx/delete-docs" (transit/read-handler tx-ops/map->DeleteDocs)
-          "xtdb.tx/erase-docs" (transit/read-handler tx-ops/map->EraseDocs)
-          "xtdb.tx/call" (transit/read-handler tx-ops/map->Call)
-          "f64" (transit/read-handler double)
-          "f32" (transit/read-handler float)
-          "i64" (transit/read-handler long)
-          "i32" (transit/read-handler int)
-          "i16" (transit/read-handler short)
-          "i8" (transit/read-handler byte)
-          "xtdb/byte-array" (transit/read-handler #(ByteBuffer/wrap (Hex/decodeHex (subs % 2))))}))
+(do
+  (def transit-read-handlers
+    (merge transit/default-read-handlers
+           tl/transit-read-handlers
+           {"xtdb/clj-form" (transit/read-handler ClojureForm/new)
+            "xtdb/tx-key" (transit/read-handler map->TxKey)
+            "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
+            "xtdb/key-fn" (transit/read-handler read-key-fn)
+            "xtdb/illegal-arg" (transit/read-handler iae-reader)
+            "xtdb/runtime-err" (transit/read-handler runex-reader)
+            "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
+            "xtdb/period-duration" period-duration-reader
+            "xtdb.interval/year-month" interval-ym-reader
+            "xtdb.interval/day-time" interval-dt-reader
+            "xtdb.interval/month-day-nano" interval-mdn-reader
+            "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
+            "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
+            "xtdb.tx/sql" (transit/read-handler sql-op-reader)
+            "xtdb.tx/xtql" (transit/read-handler tx-ops/parse-tx-op)
+            "xtdb.tx/put-docs" (transit/read-handler tx-ops/map->PutDocs)
+            "xtdb.tx/delete-docs" (transit/read-handler tx-ops/map->DeleteDocs)
+            "xtdb.tx/erase-docs" (transit/read-handler tx-ops/map->EraseDocs)
+            "xtdb.tx/call" (transit/read-handler tx-ops/map->Call)
+            "f64" (transit/read-handler double)
+            "f32" (transit/read-handler float)
+            "i64" (transit/read-handler long)
+            "i32" (transit/read-handler int)
+            "i16" (transit/read-handler short)
+            "i8" (transit/read-handler byte)
+            "xtdb/byte-array" (transit/read-handler #(ByteBuffer/wrap (Hex/decodeHex (subs % 2))))}))
+
+  (def transit-read-handler-map
+    (transit/read-handler-map transit-read-handlers)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; TransitVector
 (defn transit-msgpack-reader [in]
-  (.r ^cognitect.transit.Reader (transit/reader in :msgpack {:handlers transit-read-handlers})))
-
+  (.r ^cognitect.transit.Reader (transit/reader in :msgpack {:handlers transit-read-handler-map})))
 
 (defn- bb->ba ^bytes [^ByteBuffer bb]
   (let [ba (byte-array (.remaining bb))]
@@ -301,16 +304,19 @@
           AssertExists (transit/write-handler "xtdb.tx/xtql" tx-ops/unparse-tx-op)
           AssertNotExists (transit/write-handler "xtdb.tx/xtql" tx-ops/unparse-tx-op)}))
 
+(def transit-write-handler-map
+  (transit/write-handler-map transit-write-handlers))
+
 (defn read-transit
   ([bytes] (read-transit bytes nil))
   ([bytes fmt]
    (with-open [bais (ByteArrayInputStream. bytes)]
-     (transit/read (transit/reader bais (or fmt :msgpack) {:handlers transit-read-handlers})))))
+     (transit/read (transit/reader bais (or fmt :msgpack) {:handlers transit-read-handler-map})))))
 
 (defn write-transit
   (^bytes [v] (write-transit v nil))
   (^bytes [v fmt]
    (with-open [baos (ByteArrayOutputStream.)]
-     (-> (transit/writer baos (or fmt :msgpack) {:handlers transit-write-handlers})
+     (-> (transit/writer baos (or fmt :msgpack) {:handlers transit-write-handler-map})
          (transit/write v))
      (.toByteArray baos))))

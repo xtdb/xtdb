@@ -12,8 +12,8 @@
            [java.util.stream StreamSupport]))
 
 (def transit-opts
-  {:decode {:handlers serde/transit-read-handlers}
-   :encode {:handlers serde/transit-write-handlers}})
+  {:decode {:handlers serde/transit-read-handler-map}
+   :encode {:handlers serde/transit-write-handler-map}})
 
 (def router
   (r/router xtp/http-routes))

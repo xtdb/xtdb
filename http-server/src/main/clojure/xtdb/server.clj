@@ -67,8 +67,8 @@
       (m/select-formats #{"application/transit+json"})
       (assoc-in [:formats "application/json"] json-format)
       (assoc :default-format "application/json")
-      (assoc-in [:formats "application/transit+json" :decoder-opts :handlers] serde/transit-read-handlers)
-      (assoc-in [:formats "application/transit+json" :encoder-opts :handlers] serde/transit-write-handlers)
+      (assoc-in [:formats "application/transit+json" :decoder-opts :handlers] serde/transit-read-handler-map)
+      (assoc-in [:formats "application/transit+json" :encoder-opts :handlers] serde/transit-write-handler-map)
       (assoc-in [:http :encode-response-body?] (constantly true))))
 
 (defmulti ^:private route-handler :name, :default ::default)
