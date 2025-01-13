@@ -2130,9 +2130,6 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
                                      [{"_id" 1, "value" "mundo"}]])))))
 
 (t/deftest show-canned-responses
-  (t/is (= [{:standard-conforming-strings "on"}]
-           (xt/q tu/*node* "SHOW STANDARD_CONFORMING_STRINGS")))
-
   (t/is (= [{:transaction-isolation "read committed"}]
            (xt/q tu/*node* "SHOW TRANSACTION ISOLATION LEVEL")))
 

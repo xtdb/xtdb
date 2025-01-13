@@ -579,7 +579,7 @@
                                                           [])]})))))))
 
           (catch Exception e
-            (log/error e "Error parsing SQL")
+            (log/debug e "Error parsing SQL")
             (throw (ex-info "error parsing sql"
                             {::client-error (err-pg-exception e "error parsing sql")}
                             e)))))))
@@ -1003,7 +1003,11 @@
   ;;parameter names are case insensitive, choosing to lossily downcase them for now and store a mapping to a display format
   ;;for any name not typically displayed in lower case.
   (swap! (:conn-state conn) update-in [:session :parameters] (fnil into {}) (parse-session-params {parameter value}))
-  (cmd-write-msg conn msg-parameter-status {:parameter (get pg-param-nf->display-format parameter parameter), :value (str value)}))
+  (let [param (get pg-param-nf->display-format parameter parameter)]
+    (cmd-write-msg conn msg-parameter-status {:parameter param,
+                                              :value (case param
+                                                       "standard_conforming_strings" "on"
+                                                       (str value))})))
 
 (defn cmd-send-ready
   "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
@@ -1948,7 +1952,8 @@
                                                                     "DateStyle" "ISO"
                                                                     "IntervalStyle" "ISO_8601"
                                                                     "TimeZone" (str (.getZone ^Clock default-clock))
-                                                                    "integer_datetimes" "on"}}))
+                                                                    "integer_datetimes" "on"
+                                                                    "standard_conforming_strings" "on"}}))
 
                                 :ssl-ctx ssl-ctx
                                 :authn authn

@@ -2372,3 +2372,10 @@ ORDER BY t.oid DESC LIMIT 1"
                   {:xt/id 1, :patched 2021, :version 2,
                    :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
              (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"])))))))
+
+(t/deftest set-standard-conforming-strings-on-3972
+  ;; this just has to no-op to appease the Ruby Sequel driver
+  (with-open [conn (jdbc-conn)]
+    (q conn ["SET STANDARD_CONFORMING_STRINGS = ON"])
+    (t/is (= [{:standard-conforming-strings true}] (q conn ["SHOW STANDARD_CONFORMING_STRINGS"])))
+    (t/is (= [{:world "hello"}] (q conn ["SELECT 'hello' AS world"])))))

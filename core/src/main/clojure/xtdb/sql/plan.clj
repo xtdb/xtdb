@@ -1030,8 +1030,8 @@
 
   (visitBooleanLiteral [_ ctx]
     (case (-> (.getText ctx) str/lower-case)
-      "true" true
-      "false" false
+      ("true" "on") true
+      ("false" "off") false
       "unknown" nil))
 
   (visitKeywordLiteral [this ctx]
@@ -2784,10 +2784,6 @@
                                  []))))
 
   (visitShowVariableStatement [this ctx] (.accept (.showVariable ctx) this))
-
-  (visitShowStandardConformingStrings [_ _]
-    (->QueryExpr [:table [{:standard_conforming_strings "on"}]]
-                 [(->col-sym 'standard_conforming_strings)]))
 
   (visitShowTransactionIsolationLevel [_ _]
     (->QueryExpr [:table [{:transaction_isolation "read committed"}]]

@@ -47,7 +47,6 @@ prepareStatement : PREPARE statementName=identifier AS directlyExecutableStateme
 
 showVariable
    : 'TRANSACTION' 'ISOLATION' 'LEVEL' # ShowTransactionIsolationLevel
-   | 'STANDARD_CONFORMING_STRINGS' # ShowStandardConformingStrings
    | ('TIME' 'ZONE' | 'TIMEZONE') # ShowTimeZone
    ;
 
@@ -83,7 +82,7 @@ literal
     | 'UUID' characterString #UUIDLiteral
     | 'URI' characterString #URILiteral
     | 'KEYWORD' characterString #KeywordLiteral
-    | (TRUE | FALSE) #BooleanLiteral
+    | (TRUE | FALSE | ON | OFF) #BooleanLiteral
     | NULL #NullLiteral
     ;
 
