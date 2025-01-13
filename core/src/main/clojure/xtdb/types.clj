@@ -833,11 +833,11 @@
         elem-oid (.getInt bb 8)
         length (.getInt bb 12)
         start (long (+ 24 data-offset)) ;; 24 - header = 20 bytes + length of element = 4 bytes
-        [typlen get-elem] (case elem-oid
-                            23 [4 (fn [^ByteBuffer bb ^long start]
-                                    (.getInt bb start))]
-                            20 [8 (fn [^ByteBuffer bb ^long start]
-                                    (.getLong bb start))])]
+        [^long typlen get-elem] (case elem-oid
+                                  23 [4 (fn [^ByteBuffer bb ^long start]
+                                          (.getInt bb start))]
+                                  20 [8 (fn [^ByteBuffer bb ^long start]
+                                          (.getLong bb start))])]
     (loop [arr []
            start start
            idx 0]
