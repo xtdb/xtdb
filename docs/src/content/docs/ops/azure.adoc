@@ -21,11 +21,6 @@ In order to run an Azure based XTDB cluster, the following infrastructure is req
 
 The https://github.com/xtdb/xtdb/pkgs/container/xtdb-azure[**xtdb-azure**^] image is optimized for running XTDB in Azure environments, and is deployed on every release to XTDB.
 
-[source,bash]
-----
-xtdb/xtdb-azure:2.0.0-beta4
-----
-
 By default, it will use Azure Blob Storage for object storage and Kafka for transaction logs, including dependencies for both.
 
 === Configuration

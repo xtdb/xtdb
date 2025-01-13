@@ -21,11 +21,6 @@ NOTE: We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluste
 
 The https://github.com/xtdb/xtdb/pkgs/container/xtdb-google-cloud[**xtdb-google-cloud**^] image is optimized for running XTDB in Google Cloud environments and is deployed on every release to XTDB.
 
-[source,bash]
-----
-xtdb/xtdb-google-cloud:2.0.0-beta4
-----
-
 By default, it will use Google Cloud Storage for storage and Kafka for transaction logs, including dependencies for both.
 
 === Configuration

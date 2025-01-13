@@ -22,11 +22,6 @@ In order to run an AWS based XTDB cluster, the following infrastructure is requi
 
 The https://github.com/xtdb/xtdb/pkgs/container/xtdb-aws[**xtdb-aws**^] image is optimized for running XTDB in AWS environments, and is deployed on every release to XTDB. 
 
-[source,bash]
-----
-xtdb/xtdb-aws:2.0.0-beta4
-----
-
 By default, it will use **S3** for storage and **Kafka** for transaction logs, including dependencies for both.
 
 === Configuration
