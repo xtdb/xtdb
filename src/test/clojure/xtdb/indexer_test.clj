@@ -89,8 +89,7 @@
                    (last (for [tx-ops txs]
                            (xt/submit-tx node tx-ops)))))
 
-          (t/is (= last-tx-key
-                   (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))))
+          (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
 
           (tu/finish-chunk! node)
 
@@ -283,8 +282,7 @@
                  (last (for [tx-ops txs]
                          (xt/submit-tx node tx-ops)))))
 
-        (t/is (= last-tx-key
-                 (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))))
+        (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
         (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -323,7 +321,7 @@
                            (partition-all 100 tx-ops))
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
-          (t/is (= last-tx-key (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))))
+          (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-chunk! node)
 
@@ -372,7 +370,8 @@
                     lc-tx (-> first-half-tx-id
                               (tu/then-await-tx node2 (Duration/ofSeconds 10)))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
-                (t/is (= lc-tx (tu/latest-completed-tx node2)))
+                (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
+                         (tu/latest-completed-tx node2)))
 
 
                 (let [{:keys [latest-completed-tx, next-chunk-idx]}
@@ -419,8 +418,8 @@
 
                       (let [lc-tx (-> second-half-tx-id (tu/then-await-tx node3 (Duration/ofSeconds 15)))]
                         (t/is (= second-half-tx-id (:tx-id lc-tx)))
-                        (t/is (= lc-tx (tu/latest-completed-tx node3))))
-
+                        (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
+                                 (tu/latest-completed-tx node3))))
 
                       (Thread/sleep 250); wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx

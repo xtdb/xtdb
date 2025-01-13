@@ -17,6 +17,7 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
@@ -24,7 +25,7 @@
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           (java.util Calendar List TimeZone UUID Arrays)
+           (java.util Arrays Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
@@ -66,7 +67,7 @@
                                                               :authn authn/default-authn
                                                               :allocator tu/*allocator*}
                                                              opts
-                                                             {:port 0, :drain-wait 250}))))
+                                                             {:drain-wait 250}))))
 
 (defn- pg-config [params]
   (merge {:host "localhost"
@@ -313,7 +314,7 @@
 
 (deftest server-resources-freed-on-close-test
   (doseq [close-method [#(.close %)]]
-    (with-open [server (pgwire/serve tu/*node* {:port 0})]
+    (with-open [server (pgwire/serve tu/*node* {})]
       (close-method server)
       (check-server-resources-freed server))))
 
@@ -568,8 +569,7 @@
       "verify-ca" :unsupported
       "verify-full" :unsupported))
 
-  (with-open [node (xtn/start-node {:server {:port 0
-                                             :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
+  (with-open [node (xtn/start-node {:server {:ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                                    :keystore-password "password123"}}})]
     (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
@@ -627,7 +627,9 @@
      (fn [send read]
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
-         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] (read :err))))
+         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] (read :err)))
+         ;; to drain the standard stream
+         (read))
 
        (testing "ping"
          (send "select 'ping';\n")
@@ -1226,7 +1228,7 @@
            (q-seq conn ["select oid, typbasetype from pg_type where typname = 'lo'"])))))
 
 (t/deftest test-pg-port
-  (util/with-open [node (xtn/start-node {::pgwire/server {:port 0}})]
+  (util/with-open [node (xtn/start-node {::pgwire/server {}})]
     (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc-conn)]
         (t/is (= "ping" (ping conn)))))))
@@ -1591,10 +1593,10 @@
 
       ;; HACK.
       (t/is (= [[:sql "INSERT INTO foo RECORDS $1"
-                 [{:xt/id 1, :a "one"}]
-                 [{:xt/id 2, :a "two"}]]
+                 [{:_id 1, :a "one"}]
+                 [{:_id 2, :a "two"}]]
                 [:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}" [3 "three"]]
-                [:sql "INSERT INTO foo RECORDS $1" [{:xt/id 4, :a "four"}]]]
+                [:sql "INSERT INTO foo RECORDS $1" [{:_id 4, :a "four"}]]]
                (-> @(:server-state (util/component tu/*node* ::pgwire/server))
                    (get-in [:connections 2 :conn-state])
                    deref
@@ -1857,7 +1859,7 @@
           (t/is (= v (.getBoolean rs 1))))))))
 
 (deftest test-transit-param
-  (with-open [node (xtn/start-node {:server {:port 0}})]
+  (with-open [node (xtn/start-node)]
     (t/testing "pgwire metadata query"
       (t/is (= [{:oid 16384, :typname "transit"}]
                (xt/q node ["
@@ -2144,8 +2146,7 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (= [{"_id" 8, "arr" [1 2 3]} {"_id" 9, "arr" [4 5 6]}] (rs->maps rs)))))))
 
 (deftest pg-authentication
-  (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
+  (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
     (binding [*port* (:port (tu/node->server node))]
       (t/is (thrown-with-msg? PSQLException #"ERROR: no authentication record found for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
@@ -2158,13 +2159,11 @@ ORDER BY t.oid DESC LIMIT 1"
             "user with a wrong password gets blocked")))
 
   (t/testing "users with a trusted record are allowed"
-    (with-open [node (xtn/start-node {:server {:port 0}
-                                      :authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
+    (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
       (binding [*port* (:port (tu/node->server node))]
         (with-open [_ (jdbc-conn "user" "fin")]))))
 
-  (with-open [node (xtn/start-node {:server {:port 0}
-                                    :authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
+  (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
                                                                  {:user "fin", :method :password, :address "127.0.0.1"}]}]})]
 
     (binding [*port* (:port (tu/node->server node))]
@@ -2278,3 +2277,51 @@ ORDER BY t.oid DESC LIMIT 1"
             "c-style escape characters")
       (t/is (= [{:v "dollar $quoted$ string"}] (q conn ["SELECT $$dollar $quoted$ string$$ AS v"]))
             "dollar quoted string"))))
+
+(t/deftest test-patch
+  (with-open [conn (jdbc-conn)]
+    (letfn [(q* [sql]
+              (->> (q conn [sql])
+                   (map (juxt #(select-keys % [:xt/id :a :b :c :tmp]) :xt/valid-from :xt/valid-to))))]
+
+      (q conn ["INSERT INTO foo RECORDS {_id: 1, a: 1, b: 2}"])
+      (q conn ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
+
+      (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-01" #inst "2020-01-02"]
+                [{:xt/id 1, :a 1, :b 2, :c 3} #inst "2020-01-02" nil]
+                [{:xt/id 2, :a 4, :b 5} #inst "2020-01-02" nil]]
+               (q* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+      (t/testing "for portion of valid_time"
+        (q conn ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"])
+
+        (let [expected [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
+                        [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
+                        [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
+                        [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]]
+          (t/is (= expected
+                   (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+          (t/testing "parse error doesn't halt ingestion"
+            (t/is (thrown-with-msg? PSQLException
+                                    #"internal error conforming query plan"
+                                    (q conn ["PATCH INTO bar FOR VALID_TIME FROM '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])))
+
+            (t/is (= expected
+                     (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))
+                  "node continues"))))
+
+      (t/testing "out-of-order updates"
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01T00:00:00Z' RECORDS {_id: 1, version: 1}"])
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2022-01-01T00:00:00Z' RECORDS {_id: 1, version: 2, patched: 2022}"]);
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2021-01-01T00:00:00Z' RECORDS {_id: 1, patched: 2021}"])
+
+        (t/is (= [{:xt/id 1, :version 1,
+                   :xt/valid-from #inst "2020", :xt/valid-to #inst "2021"}
+                  {:xt/id 1, :patched 2021, :version 1,
+                   :xt/valid-from #inst "2021", :xt/valid-to #inst "2022"}
+                  {:xt/id 1, :patched 2021, :version 2,
+                   :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
+             (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"])))))))

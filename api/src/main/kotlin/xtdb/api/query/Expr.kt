@@ -1,23 +1,8 @@
-@file:UseSerializers(AnySerde::class)
-
 package xtdb.api.query
 
-import kotlinx.serialization.UseSerializers
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import xtdb.AnySerde
 import xtdb.api.query.Expr.Null
-import xtdb.jsonIAE
 import kotlin.Double as KDouble
 import kotlin.Long as KLong
-
-private fun JsonElement.requireObject(errorType: String) = this as? JsonObject ?: throw jsonIAE(errorType, this)
-private fun JsonElement.requireArray(errorType: String) = this as? JsonArray ?: throw jsonIAE(errorType, this)
-
-private fun JsonObject.requireType(errorType: String) = apply { if ("@type" !in this) throw jsonIAE(errorType, this) }
-
-private fun JsonObject.requireValue(errorType: String) = this["@value"] ?: throw jsonIAE(errorType, this)
 
 sealed interface Expr {
 

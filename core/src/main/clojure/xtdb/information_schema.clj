@@ -221,7 +221,7 @@
               :amhandler "heap_tableam_handler"
               :amtype "t"
              }
-             ;; FIXME this should prolly be something else (arrow-HMT-handler?)
+             ;; FIXME this should prolly be something else (arrow-HAMTrie-handler?)
              {:oid 403
               :amname "btree"
               :amhandler "bthandler"

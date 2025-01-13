@@ -10,6 +10,7 @@
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types])
   (:import (xtdb.types RegClass RegProc)))
@@ -1755,7 +1756,9 @@
     (t/is (= (serde/->tx-aborted 2
                                  #xt/instant "2020-01-03T00:00:00Z"
                                  #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count "Parameter error: 1 provided, 2 expected" {:param-count 2, :arg-count 1}])
-             (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))))
+             (-> (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]])
+                 ;; different types of numbers in the map (int vs long), so we roundtrip via EDN
+                 (update :error (comp read-string pr-str))))))
 
   (t/testing "incorrect number of args on one row"
     (t/is (thrown-with-msg?
@@ -2117,7 +2120,14 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
                                     :valid-from #xt/instant "2020-01-02T00:00:00Z"})]
 
              (plan/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
-                                     '[[1 2] [3 4]])))))
+                                   '[[1 2] [3 4]]))))
+
+  (t/testing "insert records"
+    (t/is (= [(tx-ops/map->PutDocs {:table-name "public/bar", :docs [{"_id" 0, "value" "hola"} {"_id" 1, "value" "mundo"}],
+                                    :valid-from nil, :valid-to nil})]
+             (plan/sql->static-ops "INSERT INTO bar RECORDS $1"
+                                   '[[{"_id" 0, "value" "hola"}]
+                                     [{"_id" 1, "value" "mundo"}]])))))
 
 (t/deftest show-canned-responses
   (t/is (= [{:standard-conforming-strings "on"}]
@@ -2251,7 +2261,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
+  (t/is (thrown-with-msg? IllegalArgumentException #"missing-id"
                           (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))))
 
   (t/is (= [{:x 2, :xt/id 1}]
@@ -2270,7 +2280,7 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"mandatory _id column"
+  (t/is (thrown-with-msg? IllegalArgumentException #"missing-id"
                           (throw (:error (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
                                                                     [{:id 2, :x 3}]]]))))))
 
@@ -2514,3 +2524,68 @@ UNION ALL
 
     (t/is (= {:app_count 2}
              (jdbc/execute-one! tu/*node* ["SELECT COUNT(*) app_count FROM applications"])))))
+
+(t/deftest test-order-nulls-first-last
+  (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, name) VALUES (1, 'foo'), (2, 'bar'), (3, 'baz')"])
+  (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, name) VALUES (1, 'fooz'), (2, 'barz'), (3, 'bazz')"])
+  (t/is (=
+         [nil nil nil
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"]
+         (->> (xt/q tu/*node* "SELECT name, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _valid_to NULLS FIRST")
+              (map :xt/valid-to))))
+  (t/is (=
+         [#xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          #xt/zoned-date-time "2020-01-02T00:00:00Z[UTC]"
+          nil nil nil]
+         (->> (xt/q tu/*node* "SELECT name, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _valid_to NULLS LAST")
+              (map :xt/valid-to)))))
+
+(t/deftest select-with-lots-of-commas
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a "a", :b "b"}]])
+
+  (t/is (= [{}] (xt/q tu/*node* "SELECT FROM foo")))
+  (t/is (= [{}] (xt/q tu/*node* "SELECT ,, FROM foo")))
+  (t/is (= [{:a "a", :b "b"}] (xt/q tu/*node* "SELECT a,,b FROM foo")))
+  (t/is (= [{:a "a"}] (xt/q tu/*node* "SELECT ,,a, FROM foo")))
+  (t/is (= [{:a "a", :b "b"}] (xt/q tu/*node* "SELECT a,,b FROM foo")))
+
+  (t/is (= [{:xt/id 1, :a "a", :b "b"}] (xt/q tu/*node* "SELECT *,, FROM foo")))
+  (t/is (= [{:xt/id 1, :a "a", :b "b", :xt/valid-from (time/->zdt #inst "2020")}]
+           (xt/q tu/*node* "SELECT ,_valid_from,,* FROM foo"))))
+
+(t/deftest multiple-query-tails
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :v 1}]
+                           [:put-docs :foo {:xt/id 2, :v 1}]
+                           [:put-docs :foo {:xt/id 3, :v 2}]
+                           [:put-docs :foo {:xt/id 4, :v 3}]
+                           [:put-docs :foo {:xt/id 5, :v 4}]])
+
+  (t/is (= [{:v 1, :v-count 2} {:v 2, :v-count 1} {:v 3, :v-count 1} {:v 4, :v-count 1}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT v, COUNT(*) AS v_count
+                            ORDER BY v")))
+
+  (t/is (= [{:v-count 1, :freq 3} {:v-count 2, :freq 1}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT v, COUNT(*) AS v_count
+                            SELECT v_count, COUNT(*) AS freq
+                            ORDER BY v_count"))
+        "double aggregate")
+
+  (t/is (= [{:v 2} {:v 3} {:v 4} {:v 1}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT v, COUNT(*) AS v_count
+                            SELECT v
+                            ORDER BY v_count, v"))
+        "ORDER BY sees through outermost SELECT")
+
+  (t/is (= [{:xt/id 1} {:xt/id 3} {:xt/id 4} {:xt/id 5}]
+           (xt/q tu/*node* "FROM foo
+                            SELECT _id, ROW_NUMBER () OVER (PARTITION BY v ORDER BY _id) row_num
+                            WHERE row_num = 0
+                            SELECT _id
+                            ORDER BY _id"))
+        "we can filter on window functions"))

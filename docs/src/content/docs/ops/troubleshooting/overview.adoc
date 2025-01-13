@@ -5,7 +5,8 @@ title: Troubleshooting
 If you encounter any issues, it is recommended to raise a ticket at link:https://github.com/xtdb/xtdb/issues[XTDB Issues].
 Additionally, check if someone else has already experienced and resolved a similar issue.
 
-=== Increasing the Log Level
+[#loglevel]
+== Increasing the Log Level
 If you face issues with XTDB and the logs (`INFO` by default) do not provide any specific information about the problem,
 you can try increasing the log level to `DEBUG` or `TRACE`.
 
@@ -29,7 +30,18 @@ You can then pass the `logback.xml` configuration file to the Docker container u
 
 `docker run --volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml' ...`
 
-=== Ingestion Stopped
+=== Setting Log Level via Environment Variables
+
+We provide the ability to set the root XTDB log level using the `XTDB_LOGGING_LEVEL` environment variable:
+
+`docker run --env XTDB_LOGGING_LEVEL='DEBUG' ...`
+
+We also provide the ability to configure the log level for specific namespaces/components using `XTDB_LOGGING_LEVEL_<namespace>`. For example, to set the `compactor` namespace to `DEBUG`;
+
+`docker run --env XTDB_LOGGING_LEVEL_COMPACTOR='DEBUG' ...`
+
+[#ingestion-stopped]
+== Ingestion Stopped
 
 As XTDB is a deterministic system (every node must index transactions in exactly the same way),
 it is crucial to ensure that everything written to disk is deterministic.

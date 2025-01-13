@@ -1,4 +1,6 @@
-# CONFIG FOR RUNNING WITH GOOGLE CLOUD INFRA
+server:
+  port: 5432
+
 txLog: !Local
   path: !Env XTDB_GCP_LOCAL_LOG_PATH
 

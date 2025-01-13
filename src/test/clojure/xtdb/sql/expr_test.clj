@@ -1,6 +1,7 @@
 (ns xtdb.sql.expr-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.expression]
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
@@ -9,12 +10,15 @@
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
+(def foo-scope
+  (plan/map->BaseTable (-> '{:table-name foo
+                             :table-alias foo
+                             :unique-table-alias f
+                             :cols #{a b}}
+                           (assoc :!reqd-cols (HashMap.)))))
+
 (defn plan-expr-with-foo [expr]
-  (plan/plan-expr expr {:scope (plan/map->BaseTable (-> '{:table-name foo
-                                                          :table-alias foo
-                                                          :unique-table-alias f
-                                                          :cols #{a b}}
-                                                        (assoc :!reqd-cols (HashMap.))))}))
+  (plan/plan-expr expr {:scope foo-scope}))
 
 (t/deftest test-trim-expr
   (t/are [sql expected]
@@ -737,6 +741,15 @@
     "LOCALTIMESTAMP()" '(local-timestamp)
     "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
 
+(t/deftest test-current-setting-server-version-num
+  (with-redefs [xtdb.expression/xtdb-server-version (fn [] "2.0.0-SNAPSHOT")]
+    (t/is (= [{:v 2000000}]
+             (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v"))))
+  (t/is (thrown-with-msg?
+         UnsupportedOperationException
+         #"Setting not supported"
+         (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
+
 (t/deftest test-date-trunc-query
   (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:34:00Z"}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(MINUTE, TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))
@@ -1333,3 +1346,12 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"no viable alternative"
                             (plan/plan-expr "$tag$foo$tagg$")))))
+
+(t/deftest test-where-commas
+  (letfn [(plan-expr [expr]
+            (plan/plan-expr expr {:ast-type :where, :scope foo-scope}))]
+    (t/is (= '(and) (plan-expr "WHERE")))
+
+    (t/is (= '(and) (plan-expr "WHERE , ,")))
+    (t/is (= '(and (= f/a 1)) (plan-expr "WHERE , a = 1")))
+    (t/is (= '(and (= f/a 1) (= f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))

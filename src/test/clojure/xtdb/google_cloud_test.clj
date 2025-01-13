@@ -64,8 +64,7 @@
 
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
-   {:server {:port 0}
-    :storage [:remote
+   {:storage [:remote
               {:object-store [:google-cloud {:project-id project-id
                                              :bucket test-bucket
                                              :prefix (str "xtdb.google-cloud-test." prefix)}]

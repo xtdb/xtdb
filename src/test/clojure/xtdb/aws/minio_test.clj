@@ -47,7 +47,6 @@
                                            :credentials test-creds
                                            :endpoint "http://127.0.0.1:9000"}]
                        :local-disk-cache (.resolve node-dir "local-cache")}]
-    :server {:port 0}
     :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
                   :files-topic (str "xtdb.kafka-test.files-" prefix)
                   :bootstrap-servers "localhost:9092"}]}))

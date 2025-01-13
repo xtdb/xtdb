@@ -4,14 +4,14 @@
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
             [xtdb.types :as types])
-  (:import (org.apache.arrow.adbc.core AdbcConnection AdbcDatabase)
+  (:import (org.apache.arrow.adbc.core AdbcConnection)
            org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
            (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.arrow.Relation
-           xtdb.api.FlightSqlServer))
+           xtdb.api.FlightSqlServer
+           xtdb.arrow.Relation))
 
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
 (def ^:private ^:dynamic *conn* nil)
@@ -20,7 +20,7 @@
 (t/use-fixtures :each
   tu/with-allocator
   (fn [f]
-    (tu/with-opts {:flight-sql-server {:port 0}}
+    (tu/with-opts {:flight-sql-server {}}
       f))
 
   tu/with-node

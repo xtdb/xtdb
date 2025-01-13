@@ -39,6 +39,8 @@
   ;; TODO this won't work if the user has XT in-process in their own git repo.
   (or (System/getenv "XTDB_VERSION")
 
+      (util/implementation-version)
+
       (when-let [git-sha (System/getenv "GIT_SHA")]
         (subs git-sha 0 7))
 
@@ -1202,6 +1204,24 @@
     {:return-type [:list :utf8]
      :->call-code (fn [[include-implicit?]]
                     `(current-schemas ~include-implicit?))})
+
+(defn parse-version [version-str]
+  (let [[^long major, ^long minor, ^long patch] (->> (re-find #"^(\d+)\.(\d+)\.(\d+)" version-str)
+                                                     rest
+                                                     (map parse-long))]
+    (+ (* major 1000000)
+       (* minor 1000)
+       patch)))
+
+(defn current-setting [setting-name]
+  (if (= setting-name "server_version_num")
+    (parse-version (xtdb-server-version))
+    (throw (UnsupportedOperationException. "Setting not supported"))))
+
+(defmethod codegen-call [:current_setting :utf8] [_]
+  {:return-type :i64
+   :->call-code (fn [[setting-name]]
+                  `(current-setting (resolve-string ~setting-name)))})
 
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)

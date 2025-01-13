@@ -123,7 +123,8 @@ export default defineConfig({
                             collapsed: true,
                             items: [
                                 'ops/guides/starting-with-aws',
-                                'ops/guides/starting-with-azure'
+                                'ops/guides/starting-with-azure',
+                                'ops/guides/monitoring-with-grafana'
                             ],
                         },
                         {
@@ -141,18 +142,14 @@ export default defineConfig({
                                     ],
                                 },
 
-                                {
-                                    label: 'Storage',
-                                    items: [
-                                        { label: 'Overview', link: '/ops/config/storage' },
-                                        { label: 'AWS S3', link: '/ops/config/storage/s3' },
-                                        { label: 'Azure Blob Storage', link: '/ops/config/storage/azure' },
-                                        { label: 'Google Cloud Storage', link: '/ops/config/storage/google-cloud' }
-                                    ]
-                                },
-                               { label: 'Authentication', link: '/ops/config/authentication' }
+                                { label: 'Storage', link: '/ops/config/storage' },
+                                { label: 'Monitoring & Observability', link: '/ops/config/monitoring' },
+                                { label: 'Authentication', link: '/ops/config/authentication' }
                             ]
                         },
+                        { label: 'AWS', link: '/ops/aws' },
+                        { label: 'Azure', link: '/ops/azure' },
+                        { label: 'Google Cloud', link: '/ops/google-cloud' },
                         {
                             label: 'Troubleshooting',
                             collapsed: true,

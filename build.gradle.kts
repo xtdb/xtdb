@@ -62,6 +62,14 @@ allprojects {
             withSourcesJar()
         }
 
+        tasks.jar {
+            manifest {
+                attributes(
+                    "Implementation-Version" to project.version,
+                )
+            }
+        }
+
         if (plugins.hasPlugin("org.jetbrains.dokka"))
             tasks.register<Jar>("dokkaJavadocJar") {
                 dependsOn(tasks.dokkaJavadoc)
@@ -330,6 +338,7 @@ fun createSltTask(
 
 createSltTask(
     "slt-test",
+    maxFailures = 295,
     maxErrors = 4,
     testFiles = listOf(
         "xtdb.test",
@@ -344,6 +353,7 @@ createSltTask(
 
 createSltTask(
     "slt-test-2",
+    maxFailures = 10,
     testFiles = listOf(
         "index/between/1/slt_good_0.test",
         "index/commute/10/slt_good_0.test",

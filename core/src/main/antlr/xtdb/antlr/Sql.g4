@@ -333,6 +333,7 @@ exprPrimary
     | (schemaName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
 
     | currentInstantFunction # CurrentInstantFunction0
+    | 'CURRENT_SETTING' '(' expr ')' #CurrentSettingFunction
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
     | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
@@ -599,7 +600,7 @@ outerJoinType : 'LEFT' | 'RIGHT' | 'FULL' ;
 
 /// §7.8 <where clause>
 
-whereClause : 'WHERE' expr ;
+whereClause : 'WHERE' searchCondition ;
 
 /// §7.9 <group by clause>
 
@@ -612,7 +613,7 @@ groupingElement
 
 /// §7.10 <having clause>
 
-havingClause : 'HAVING' expr ;
+havingClause : 'HAVING' searchCondition ;
 
 /// §7.11 <window clause>
 
@@ -647,9 +648,9 @@ windowFrameExclusion : 'EXCLUDE' 'CURRENT' 'ROW' | 'EXCLUDE' 'GROUP' | 'EXCLUDE'
 
 selectClause : 'SELECT' setQuantifier? selectList ;
 selectList
-  : (selectListAsterisk | selectSublist) (',' selectSublist)*
-  | selectSublist (',' selectSublist)* (',' selectListAsterisk)
-  ;
+    : selectListAsterisk (',' selectSublist?)*
+    | selectSublist? (',' selectSublist?)* (',' selectListAsterisk)?
+    ;
 
 selectListAsterisk : ASTERISK excludeClause? renameClause? ;
 
@@ -693,11 +694,16 @@ queryExpressionBody
 
 queryTerm
     : selectClause fromClause? whereClause? groupByClause? havingClause? windowClause? # QuerySpecification
-    | fromClause whereClause? groupByClause? havingClause? selectClause? windowClause? # QuerySpecification
+    | fromClause queryTail* windowClause? # QuerySpecification
     | tableValueConstructor # ValuesQuery
     | recordsValueConstructor # RecordsQuery
     | '(' queryExpressionNoWith ')' # WrappedQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
+    ;
+
+queryTail
+    : whereClause (groupByClause? havingClause? selectClause)?
+    | groupByClause? havingClause? selectClause
     ;
 
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;
@@ -758,7 +764,7 @@ quantifier : 'ALL' | 'SOME' | 'ANY' ;
 
 /// §8.21 <search condition>
 
-searchCondition : expr ;
+searchCondition : expr? (',' expr?)* ;
 
 /// postgres access privilege predicates
 

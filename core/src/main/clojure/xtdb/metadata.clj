@@ -27,24 +27,29 @@
            (xtdb.vector IVectorReader)
            (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
 
-(def arrow-read-handlers
-  {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
-   "xtdb/field-type" (transit/read-handler (fn [[arrow-type nullable?]]
-                                             (if nullable?
-                                               (FieldType/nullable arrow-type)
-                                               (FieldType/notNullable arrow-type))))
-   "xtdb/field" (transit/read-handler (fn [[name field-type children]]
-                                        (Field. name field-type children)))})
+(def metadata-read-handler-map
+  (transit/read-handler-map
+   (into {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
+          "xtdb/field-type" (transit/read-handler (fn [[arrow-type nullable?]]
+                                                    (if nullable?
+                                                      (FieldType/nullable arrow-type)
+                                                      (FieldType/notNullable arrow-type))))
+          "xtdb/field" (transit/read-handler (fn [[name field-type children]]
+                                               (Field. name field-type children)))}
+         serde/transit-read-handlers)))
 
-(def arrow-write-handlers
-  {ArrowType (transit/write-handler "xtdb/arrow-type" #(types/<-arrow-type %))
-   ;; beware that this currently ignores dictionary encoding and metadata of FieldType's
-   FieldType (transit/write-handler "xtdb/field-type"
-                                    (fn [^FieldType field-type]
-                                      (TransitFactory/taggedValue "array" [(.getType field-type) (.isNullable field-type)])))
-   Field (transit/write-handler "xtdb/field"
-                                (fn [^Field field]
-                                  (TransitFactory/taggedValue "array" [(.getName field) (.getFieldType field) (.getChildren field)])))})
+(def metadata-write-handler-map
+  (transit/write-handler-map
+   (into {ArrowType (transit/write-handler "xtdb/arrow-type" #(types/<-arrow-type %))
+          ;; beware that this currently ignores dictionary encoding and metadata of FieldType's
+          FieldType (transit/write-handler "xtdb/field-type"
+                                           (fn [^FieldType field-type]
+                                             [(.getType field-type) (.isNullable field-type)]))
+          Field (transit/write-handler "xtdb/field"
+                                       (fn [^Field field]
+                                         [(.getName field) (.getFieldType field) (.getChildren field)]))}
+         serde/transit-write-handlers)))
+
 (set! *unchecked-math* :warn-on-boxed)
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -78,8 +83,7 @@
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
   (with-open [os (ByteArrayOutputStream.)]
-    (let [w (transit/writer os :json {:handlers (merge serde/transit-write-handlers
-                                                       arrow-write-handlers)})]
+    (let [w (transit/writer os :json {:handlers metadata-write-handler-map})]
       (transit/write w chunk-meta))
     (ByteBuffer/wrap (.toByteArray os))))
 
@@ -406,8 +410,7 @@
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
       (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool cm-obj-key))]
-        (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
-                                                             arrow-read-handlers)})]
+        (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
     cm))
 
@@ -415,8 +418,7 @@
   (require '[clojure.java.io :as io])
 
   (with-open [is (io/input-stream "src/test/resources/xtdb/indexer-test/can-build-live-index/v02/chunk-metadata/00.transit.json")]
-    (let [rdr (transit/reader is :json {:handlers (merge serde/transit-read-handlers
-                                                         arrow-read-handlers)})]
+    (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
       (transit/read rdr))))
 
 (defmethod ig/prep-key ::metadata-manager [_ opts]

@@ -5,7 +5,6 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.azure :as azure]
-            [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -79,8 +78,7 @@
 
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
-   {:server {:port 0}
-    :storage [:remote
+   {:storage [:remote
               {:object-store [:azure {:storage-account storage-account
                                       :container container
                                       :prefix (util/->path (str "xtdb.azure-test." prefix))}]
@@ -315,7 +313,7 @@
                          (fn []
                            (try
                              ;; Start the multipart upload
-                             (#'bp/upload-multipart-buffers os (util/->path "multipart-interrupted") parts)
+                             (RemoteBufferPool/uploadMultipartBuffers os (util/->path "multipart-interrupted") parts)
                              (catch InterruptedException _
                                (log/warn "Upload was interrupted")))))]
       ;; Start the upload thread

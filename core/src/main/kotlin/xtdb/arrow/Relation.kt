@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer
+import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
@@ -13,6 +14,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation.UnloadMode.FILE
 import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
@@ -232,11 +234,10 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
 
             override fun load(rel: Relation) {
-                ArrowUtil.arrowBufToRecordBatch(
+                arrowBufToRecordBatch(
                     buf, block.offset, block.metadataLength, block.bodyLength,
                     "Failed to deserialize record batch $idx, offset ${block.offset}"
-                )
-                    .use { batch -> rel.load(batch) }
+                ).use { rel.load(it) }
             }
         }
 
@@ -268,7 +269,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             ch.setPosition(footerLengthOffset - footerLength)
             ch.readFully(footerBuffer)
             footerBuffer.flip()
-            return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
+            return ArrowFooter(getRootAsFooter(footerBuffer))
         }
 
         @JvmStatic
@@ -296,7 +297,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             val footerBuffer = ByteBuffer.allocate(footerLength)
             buf.getBytes(footerLengthOffset - footerLength, footerBuffer)
             footerBuffer.flip()
-            return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
+            return ArrowFooter(getRootAsFooter(footerBuffer))
         }
 
         @JvmStatic

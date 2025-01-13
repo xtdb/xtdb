@@ -1,8 +1,4 @@
-# Use any available port for PGWire Server.
-server: 
-  port: 0
-
-healthz: 
+healthz:
   port: !Env XTDB_HEALTHZ_PORT
 
 # CONFIG FOR RUNNING WITH AZURE INFRA

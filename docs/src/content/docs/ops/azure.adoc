@@ -1,0 +1,210 @@
+---
+title: Azure
+---
+
+XTDB provides modular support for Azure environments, including a prebuilt Docker image, integrations with **Azure Blob Storage**, **Application Insights monitoring** and configuration options for deploying onto Azure infrastructure.
+
+NOTE: For more details on getting started with Azure, see the link:guides/starting-with-azure["Getting Started with Azure"^] guide.
+
+== Required infrastructure
+
+In order to run an Azure based XTDB cluster, the following infrastructure is required:
+
+* An **Azure Storage Account**, containing a **Storage Account Container**.
+* A user assigned managed identity for authentication with Azure services.
+* A **Kafka cluster** for transaction logs.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
+* XTDB nodes configured to communicate with the Kafka cluster and Azure Storage Account/Container.
+
+[#docker-image]
+== `xtdb-azure` Docker Image
+
+The https://github.com/xtdb/xtdb/pkgs/container/xtdb-azure[**xtdb-azure**^] image is optimized for running XTDB in Azure environments, and is deployed on every release to XTDB.
+
+[source,bash]
+----
+xtdb/xtdb-azure:2.0.0-beta4
+----
+
+By default, it will use Azure Blob Storage for object storage and Kafka for transaction logs, including dependencies for both.
+
+=== Configuration
+
+The following environment variables configure the `xtdb-azure` image:
+
+[cols="2,3", options="header"]
+|===
+| Variable                          | Description
+
+| `KAFKA_BOOTSTRAP_SERVERS`
+| Kafka bootstrap server containing the XTDB topics.
+
+| `XTDB_TX_TOPIC`
+| Kafka topic to be used as the transaction log.
+
+| `XTDB_FILES_TOPIC`
+| Kafka topic to be used for node file notifications.
+
+| `XTDB_AZURE_STORAGE_ACCOUNT`
+| Name of the Azure Storage Account.
+
+| `XTDB_AZURE_STORAGE_CONTAINER`
+| Name of the Azure Storage Container.
+
+| `XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID`
+| Azure Client ID for the User Assigned Managed Identity used for authentication.
+
+| `XTDB_LOCAL_DISK_CACHE`
+| Path to the local disk cache for object storage.
+
+| `XTDB_LOGGING_LEVEL`
+| Sets the root logging level for the node - defaults to `INFO`. See link:troubleshooting/overview#loglevel["Increasing the Log Level"^] for more information.
+
+| `XTDB_NODE_ID`
+| Persistent node id for labelling Prometheus metrics.
+|===
+
+=== Using the "private auth" Configuration File
+
+For setups requiring private/authenticated Kafka instances, we provide the "private auth" configuration file. 
+
+To switch from the default configuration above to the authenticated Kafka configuration, update the `COMMAND` of the docker container as follows:
+
+[source, bash]
+----
+CMD ["-f", "azure_config_private_auth.yaml"]
+----
+
+In addition to the standard environment variables, the following environment variables are required for private/authenticated Kafka.
+
+[cols="2,3", options="header"]
+|===
+| Variable                          | Description
+
+| `KAFKA_SASL_MECHANISM`
+| SASL mechanism to use for Kafka authentication (e.g., `PLAIN`).
+
+| `KAFKA_SECURITY_PROTOCOL`
+| Security protocol for Kafka (e.g., `SASL_SSL`).
+
+| `KAFKA_SASL_JAAS_CONFIG`
+| JAAS configuration for Kafka SASL authentication, (e.g. `org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="password";`). 
+
+| `XTDB_AZURE_STORAGE_ACCOUNT_ENDPOINT`
+| The full endpoint of the storage account which has the storage container.
+
+|===
+
+NOTE: We would **strongly** recommend users mount the `KAFKA_SASL_JAAS_CONFIG` env as a secret on the container.
+
+=== Using a Custom Node Configuration
+
+For advanced usage, XTDB allows the above YAML configuration to be overridden to customize the running node's system/modules.
+
+In order to override the default configuration:
+
+. Mount a custom YAML configuration file to the container.
+. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
++
+[source, bash]
+----
+CMD ["-f", "/path/to/custom-config.yaml"]
+----
+
+[#storage]
+== Azure Blob Storage
+
+https://azure.microsoft.com/en-gb/products/storage/blobs[**Azure Blob Storage**^] can be used as a shared object-store for XTDB's link:config/storage#remote[remote storage^] module.
+
+=== Infrastructure Requirements
+
+To use Azure Blob Storage as the object store, the following infrastructure is required:
+
+. An **Azure Storage Account**, containing a **Storage Account Container**.
+. Appropriate **permissions** for the storage account:
+
+[source,json]
+----
+{
+  "permissions": [
+    {
+      "actions": [
+        "Microsoft.Storage/storageAccounts/blobServices/containers/write",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/read"
+      ],
+      "notActions": [],
+      "dataActions": [
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/move/action"
+      ],
+      "notDataActions": []
+    }
+  ]
+}
+----
+
+=== Authentication
+
+XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`. This supports multiple authentication methods, including Managed Identity. For more details, refer to the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation^].
+
+=== Configuration
+
+To use the Azure module, include the following in your node configuration:
+
+[source,yaml]
+----
+storage: !Remote
+  objectStore: !Azure
+    # -- required
+
+    # --- At least one of storageAccount or storageAccountEndpoint is required
+
+    # The name of the storage account which has the storage container
+    # (Can be set as an !Env value)
+    storageAccount: storage-account
+
+    # The full endpoint of the storage account which has the storage container
+    # (Can be set as an !Env value)
+    # storageAccountEndpoint: https://storage-account.privatelink.blob.core.windows.net
+    
+    # The name of the blob storage container to be used as the object store
+    # (Can be set as an !Env value)
+    container: xtdb-container
+
+    # -- optional
+    # A file path to prefix all of your files with
+    # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # (Can be set as an !Env value)
+    # prefix: my-xtdb-node
+    #
+    # Azure Client ID of a User Assigned Managed Identity -
+    # required when using them for authentication to Azure Services ie, inside of an Azure App Container.  
+    # (Can be set as an !Env value)
+    # userManagedIdentityClientId: user-managed-identity-client-id
+
+  localDiskCache: /var/cache/xtdb/object-store
+----
+
+[#monitoring]
+== Application Insights Monitoring
+
+XTDB supports reporting metrics to https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview[**Azure Application Insights**^] for performance and health monitoring.
+
+=== Configuration
+
+To enable Application Insights monitoring, include the following in your node configuration:
+
+[source,yaml]
+----
+modules:
+  - !AzureMonitor
+    instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
+----
+
+Providing a valid `instrumentationKey` linked to a pre-existing Application Insights resource is required.
+
+'''

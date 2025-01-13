@@ -20,6 +20,14 @@ application {
     mainClass.set("clojure.main")
 }
 
+tasks.jar {
+    manifest {
+        attributes(
+            "Implementation-Version" to project.version,
+        )
+    }
+}
+
 tasks.shadowJar {
     archiveBaseName.set("xtdb")
     archiveVersion.set("")

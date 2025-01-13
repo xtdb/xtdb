@@ -386,10 +386,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                  #xt/runtime-err [:xtdb.call/error-evaluating-tx-fn
                                                   "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
                                                   {:fn-id :tx-fn-fail, :args []}])
-             (xt/execute-tx tu/*node* [[:put-fn :tx-fn-fail
-                                        '(fn []
-                                           (throw (Exception. "boom")))]
-                                       [:call :tx-fn-fail]])))
+             (-> (xt/execute-tx tu/*node* [[:put-fn :tx-fn-fail
+                                            '(fn []
+                                               (throw (Exception. "boom")))]
+                                           [:call :tx-fn-fail]])
+
+                 ;; can't compare `:cause`, because Exceptions are identity-equal
+                 (update :error (comp read-string pr-str)))))
 
     (t/is (= #{{:tx-id 0, :system-time (time/->zdt #inst "2020-01-01"), :committed? true}
                {:tx-id 1, :system-time (time/->zdt #inst "2020-01-02"), :committed? false}
@@ -900,8 +903,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         "scan pred"))
 
 (t/deftest copes-with-log-time-going-backwards-3864
-  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]
-                                    :server {:port 0}})]
+  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]
     (t/is (= 0 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]])))
     (t/is (= 1 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
     (t/is (= 2 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))

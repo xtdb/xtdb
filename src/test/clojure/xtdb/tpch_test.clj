@@ -144,8 +144,6 @@
 (defn slurp-sql-query [query-no]
   (slurp (io/resource (str "xtdb/sql/tpch/" (format "q%02d.sql" query-no)))))
 
-;; TODO unable to decorr Q19, select stuck under this top/union exists thing
-
 (def tpch-table-info
   {"public/customer" #{"c_custkey" "c_name" "c_address" "c_nationkey" "c_phone" "c_acctbal" "c_mktsegment" "c_comment"}
    "public/lineitem" #{"l_orderkey" "l_partkey" "l_suppkey" "l_linenumber" "l_quantity" "l_extendedprice" "l_discount" "l_tax" "l_returnflag" "l_linestatus" "l_shipdate" "l_commitdate" "l_receiptdate" "l_shipinstruct" "l_shipmode" "l_comment"}

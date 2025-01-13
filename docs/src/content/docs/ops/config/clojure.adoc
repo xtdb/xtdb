@@ -127,7 +127,7 @@ Main article: link:/config/storage#remote[remote storage]
 [#s3]
 === S3
 
-Main article: link:/config/storage/s3[S3]
+Main article: link:/ops/aws#storage[S3]
 
 [source,clojure]
 ----
@@ -147,7 +147,7 @@ Main article: link:/config/storage/s3[S3]
 [#azure]
 === Azure Blob Storage
 
-Main article: link:/config/storage/azure[Azure Blob Storage]
+Main article: link:/ops/azure#storage[Azure Blob Storage]
 
 [source,clojure]
 ----
@@ -170,7 +170,7 @@ Main article: link:/config/storage/azure[Azure Blob Storage]
 [#google-cloud]
 === Google Cloud Storage
 
-Main article: link:/config/storage/google-cloud[Google Cloud Storage]
+Main article: link:/ops/google-cloud#storage[Google Cloud Storage]
 
 [source,clojure]
 ----

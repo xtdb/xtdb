@@ -703,3 +703,11 @@
             (reset! last-time now)
             (reset! last-value (apply f args)))
           @last-value)))))
+
+(defn implementation-version []
+  (let [manifest (-> (ClassLoader/getSystemResource "META-INF/MANIFEST.MF")
+                     .openStream
+                     java.util.jar.Manifest.)
+        attributes (.getMainAttributes manifest)]
+    (when attributes
+      (.getValue attributes "Implementation-Version"))))

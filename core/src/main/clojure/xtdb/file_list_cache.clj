@@ -1,13 +1,16 @@
 (ns xtdb.file-list-cache
   (:require [cognitect.transit :as transit]
-            [xtdb.util :as util]
-            xtdb.protocols)
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream] 
+            xtdb.protocols
+            [xtdb.util :as util])
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.nio.file Path]
            (xtdb.api.log FileListCache$Notification)))
 
 (defrecord FileNotification [added deleted]
   FileListCache$Notification)
+
+(defn addition [k size]
+  (FileNotification. [{:k k, :size size}] []))
 
 (def ^:private transit-write-handlers
   {FileNotification (transit/write-handler "xtdb/file-notification" #(into {} %))
