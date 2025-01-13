@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.vector.ValueVectorReader.from
-import xtdb.vector.toList
 import xtdb.vector.writerFor
 import java.util.*
 
