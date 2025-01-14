@@ -1,7 +1,6 @@
 (ns xtdb.expression
   (:require [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
             [xtdb.rewrite :refer [zmatch]]
@@ -1227,26 +1226,40 @@
    :->call-code (fn [[setting-name]]
                   `(current-setting (resolve-string ~setting-name)))})
 
-(defn sleep [^double seconds-expr]
-  (Thread/sleep (long (* 1000 seconds-expr))))
+(defn sleep [millis]
+  (Thread/sleep millis))
 
-;; (defn sleep [seconds-as-f64]
-;;   (Thread/sleep (.toMillis seconds-as-f64) #_(long (* 1000 seconds-as-f64))))
+(defmethod codegen-call [:sleep :f64] [_expr]
+  (let [{convert :->call-code} (codegen-cast {:source-type :f64 :target-type [:duration :milli]})]
+    {:return-type :null
+     :->call-code (fn [lit]
+                    `(sleep ~(convert lit)))}))
 
-;; (defmethod codegen-call [:sleep :duration] [_]
-;;   {:return-type :null
-;;    :->call-code (fn [[duration-seconds]]
-;;                   `(sleep ~duration-seconds))})
+(defn string->duration [input]
+  (if-let [[_ amount unit] (re-matches #"^'?(?i)([0-9.]+)\s+(microsecond|millisecond|second|minute|hour|day|week|month|year)s?'?$"
+                                       input)]
+    (let [amt (Double/parseDouble amount)
+          millis (long
+                  (case (str/lower-case unit)
+                    "microsecond" (/ amt 1000)
+                    "millisecond" amt
+                    "second" (* 1000 amt)
+                    "minute" (* 60 1000 amt)
+                    "hour" (* 3600 1000 amt)
+                    "day" (* 86400 1000 amt)
+                    "week" (* 604800 1000 amt)
+                    "month" (* 2628000 1000 amt)
+                    "year" (* 31536000 1000 amt)))]
+      millis)
+    (throw (err/illegal-arg :xtdb.expression/parse-error
+                            {::err/message (str "Interval must have a number followed by time units (eg: '2 seconds')" (pr-str input))
+                             :form input}))))
 
-
-
-(defn sleep-for [millis]
-  (Thread/sleep (long millis)))
-
-(defmethod codegen-call [:sleep_for :i64] [_]
-  {:return-type :null
-   :->call-code (fn [[millis]]
-                  `(sleep-for ~millis))})
+(defmethod codegen-call [:sleep_for :utf8] [{:keys [args]}]
+  (let [input (:literal (first args))]
+    {:return-type :null
+     :->call-code (fn [_]
+                    `(sleep (string->duration ~input)))}))
 
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)
