@@ -197,9 +197,9 @@ To enable Application Insights monitoring, include the following in your node co
 ----
 modules:
   - !AzureMonitor
-    instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
+    connectionString: !Env XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING
 ----
 
-Providing a valid `instrumentationKey` linked to a pre-existing Application Insights resource is required.
+Providing a valid `connectionString` linked to a pre-existing Application Insights resource is required.
 
 '''
