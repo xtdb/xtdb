@@ -1,6 +1,7 @@
 (ns xtdb.expression
   (:require [clojure.java.shell :as sh]
             [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
             [xtdb.rewrite :refer [zmatch]]
@@ -1229,10 +1230,15 @@
 (defn sleep [^double seconds-expr]
   (Thread/sleep (long (* 1000 seconds-expr))))
 
-(defmethod codegen-call [:sleep :f64] [_]
-  {:return-type :null
-   :->call-code (fn [[seconds-expr]]
-                  `(sleep ~seconds-expr))})
+;; (defn sleep [seconds-as-f64]
+;;   (Thread/sleep (.toMillis seconds-as-f64) #_(long (* 1000 seconds-as-f64))))
+
+;; (defmethod codegen-call [:sleep :duration] [_]
+;;   {:return-type :null
+;;    :->call-code (fn [[duration-seconds]]
+;;                   `(sleep ~duration-seconds))})
+
+
 
 (defn sleep-for [millis]
   (Thread/sleep (long millis)))

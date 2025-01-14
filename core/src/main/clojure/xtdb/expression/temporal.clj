@@ -1,5 +1,6 @@
 (ns xtdb.expression.temporal
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.macro :as macro]
@@ -593,12 +594,21 @@
               :arg-types [:utf8 :utf8 :int :utf8 :int]}]
     (expr/codegen-call expr)))
 
+(defn duration-from-seconds [^double seconds]
+  (log/warn "DUR-OF-SECS" seconds)
+  (Duration/ofMillis (long (* 1000 seconds))))
+
+(defmethod expr/codegen-cast [:f64 :duration] [_expr]
+  {:return-type :duration
+   :->call-code (fn [[x]]
+                  `(duration-from-seconds ~x))})
+
 (defmethod expr/codegen-cast [:utf8 :interval] [{interval-opts :cast-opts :as expr}]
   (if (empty? interval-opts)
     {:return-type [:interval :month-day-nano]
      :->call-code (fn [[x]]
                     `(iso8601-string-to-period-duration (expr/resolve-string ~x)))}
-    
+
     (if (nil? (:end-field interval-opts))
       (->single-field-interval-call expr)
       (->multi-field-interval-call expr))))
@@ -619,12 +629,14 @@
   ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))
 
   ([{[t1 t2] :arg-types, :as expr} cast1 cast2 f]
+   (log/warn "RECALL-WITH-CAST" expr cast1 cast2 f)
    (let [{ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type cast1})
          {ret2 :return-type, bb2 :batch-bindings, ->cc2 :->call-code} (expr/codegen-cast {:source-type t2, :target-type cast2})
          {ret :return-type, bb :batch-bindings, ->cc :->call-code} (f (assoc expr :arg-types [ret1 ret2]))]
      {:return-type ret
       :batch-bindings (concat bb1 bb2 bb)
       :->call-code (fn [[a1 a2]]
+                     (log/warn "RWC-CC" a1 a2 ret)
                      (->cc [(->cc1 [a1]) (->cc2 [a2])]))})))
 
 (defn- recall-with-flipped-args [expr]
@@ -767,6 +779,24 @@
 
 (defmethod expr/codegen-call [:- :date :duration] [{[_ [_dur dur-unit :as arg2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
+
+(defmethod expr/codegen-cast [:duration :milli] [_]
+  {:return-type :i64
+   :->call-code (fn [[duration]]
+                  (log/warn "DUR-TO-MILLIS" duration)
+                  `(when ~duration
+                     (.toMillis ~duration)))})
+
+(defmethod expr/codegen-call [:sleep :f64] [expr]
+  (log/warn "SLEEP" expr)
+  (let [emitted-args (first (:emitted-args expr))
+        args (first (:args expr))
+        expr (assoc expr
+                    :arg-types [:f64 :duration]
+                    :emitted-args [(assoc emitted-args :return-type :duration)]
+                    :args [(assoc args :return-type :duration)])]
+    (log/warn "SLEEP2 - ADJUSTED" expr)
+    (recall-with-cast expr :duration :milli (fn [ms] `(Thread/sleep ~ms)))))
 
 (defmethod expr/codegen-call [:- :timestamp-local :duration] [{[[_ts ts-unit], [_dur dur-unit]] :arg-types}]
   (with-arg-unit-conversion ts-unit dur-unit

@@ -1470,11 +1470,10 @@
   (visitPgGetExprFunction [_ _] nil)
   (visitPgGetIndexdefFunction [_ _] nil)
   (visitPgSleepFunction [this ctx]
-    (list 'sleep (-> (.sleepSeconds ctx) (.accept this))))
+    (list 'sleep (.accept (.sleepSeconds ctx) this)))
 
   (visitPgSleepForFunction [_ ctx]
     (let [period (.getText (.sleepPeriod ctx))]
-      ;; Would it be cleaner to do it in ANTLR? or EE maybe?
       (if-let [[_ amount unit] (re-matches #"^'?(?i)([0-9.]+)\s+(microsecond|millisecond|second|minute|hour|day|week|month|year)s?'?$"
                                            period)]
         (let [amt (try (Double/parseDouble amount)
