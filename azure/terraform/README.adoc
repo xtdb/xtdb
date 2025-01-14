@@ -1,0 +1,12 @@
+# XTDB Azure Terraform Sample
+
+Contained within this directory are sample terraform files for deploying XTDB to Azure. The samples are designed to be as simple as possible, and are intended to be used as a starting point for your own deployments.
+
+For more information on what is being deployed, how to use the templates and how to setup an XTDB cluster on Azure, see the link:https://docs.xtdb.com/ops/guides/starting-with-azure.html["Setting up a cluster on Azure"^] guide.
+
+## Pulling the files locally
+
+We can fetch the contents of this folder using the terraform CLI:
+```
+terraform init -from-module github.com/xtdb/xtdb.git//azure/terraform
+```  
