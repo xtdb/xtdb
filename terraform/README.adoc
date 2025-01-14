@@ -1,0 +1,9 @@
+# XTDB Terraform Samples
+
+Contained within this directory are sample terraform scripts that can be used to deploy infrastructure required by XTDB to various cloud providers.
+
+We provide samples for the following cloud providers:
+
+* AWS
+* Azure
+* GCP
