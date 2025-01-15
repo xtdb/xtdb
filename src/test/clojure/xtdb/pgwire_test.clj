@@ -2414,4 +2414,9 @@ ORDER BY t.oid DESC LIMIT 1"
   (with-open [conn (jdbc-conn)]
     (t/is (thrown-with-msg? PSQLException
                             #"Invalid value for MonthOfYear \(valid values 1 - 12\): 13"
-                            (q conn ["SELECT DATE '2025-13-01'"])))))
+                            (q conn ["SELECT DATE '2025-13-01'"])))
+
+    ;; also #4027
+    (t/is (thrown-with-msg? PSQLException
+                            #"Unsupported cast:"
+                            (jdbc/execute! conn ["SELECT CAST(DATE '2020-01-05' AS TIME) AS TS"])))))
