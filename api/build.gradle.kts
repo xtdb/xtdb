@@ -21,10 +21,10 @@ publishing {
 
 dependencies {
     compileOnlyApi(files("src/main/resources"))
-    api("org.clojure", "spec.alpha", "0.3.218")
+    api(libs.clojure.spec)
 
-    api("com.cognitect", "transit-clj", "1.0.333")
-    api("com.cognitect", "transit-java", "1.0.371")
+    api(libs.transit.clj)
+    api(libs.transit.java)
 
     api(libs.arrow.algorithm)
     api(libs.arrow.compression)
@@ -32,9 +32,9 @@ dependencies {
     api(libs.arrow.memory.netty)
 
     api(kotlin("stdlib-jdk8"))
-    api("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")
+    api(libs.kotlinx.serialization.json)
 
-    api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
+    api(libs.caffeine)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

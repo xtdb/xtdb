@@ -30,7 +30,7 @@ dependencies {
     api(libs.jetty.alpn.server)
 
     api(libs.muuntaja)
-    api("metosin", "jsonista", "0.3.3")
+    api(libs.jsonista)
     api(libs.reitit.core)
     api(libs.reitit.interceptors)
     api(libs.reitit.ring)
@@ -39,11 +39,11 @@ dependencies {
     api(libs.reitit.swagger)
     api(libs.reitit.spec)
 
-    api("com.cognitect", "transit-clj", "1.0.329")
+    api(libs.transit.clj)
 
     api(kotlin("stdlib-jdk8"))
     implementation(kotlin("reflect"))
-    implementation("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.0")
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(project(":"))
     testImplementation(project(":xtdb-http-client-jvm"))

@@ -38,17 +38,17 @@ dependencies {
     api(libs.arrow.memory.netty)
     api(libs.netty.common)
 
-    api("org.roaringbitmap", "RoaringBitmap", "1.0.1")
+    api(libs.roaring.bitmap)
 
     api(libs.integrant)
-    api("clj-commons", "clj-yaml", "1.0.27")
+    api(libs.clj.yaml)
 
-    api("org.babashka", "sci", "0.6.37")
-    api("commons-codec", "commons-codec", "1.15")
-    api("com.carrotsearch", "hppc", "0.9.1")
+    api(libs.sci)
+    api(libs.commons.codec)
+    api(libs.hppc)
 
-    api("com.github.ben-manes.caffeine", "caffeine", "3.1.8")
-    api("buddy", "buddy-hashers", "2.0.167")
+    api(libs.caffeine)
+    api(libs.buddy.hashers)
 
     // healthz server
     api(libs.ring.core)
@@ -67,16 +67,16 @@ dependencies {
     api(libs.micrometer.registry.prometheus)
 
     api(kotlin("stdlib-jdk8"))
-    api("com.charleskorn.kaml", "kaml", "0.56.0")
+    api(libs.kaml)
 
-    api("org.postgresql", "postgresql", "42.7.3")
+    api(libs.pgjdbc)
 
-    antlr("org.antlr:antlr4:4.13.1")
-    implementation("org.antlr:antlr4-runtime:4.13.1")
+    antlr(libs.antlr)
+    implementation(libs.antlr.runtime)
 
-    testImplementation("com.github.seancorfield", "next.jdbc", "1.3.939")
-    testImplementation("io.mockk", "mockk", "1.13.9")
-    testImplementation("org.clojure", "test.check", "1.1.1")
+    testImplementation(libs.next.jdbc)
+    testImplementation(libs.mockk)
+    testImplementation(libs.clojure.test.check)
     testImplementation(project(":"))
     testImplementation(project(":xtdb-http-client-jvm"))
     testImplementation(project(":xtdb-http-server"))
