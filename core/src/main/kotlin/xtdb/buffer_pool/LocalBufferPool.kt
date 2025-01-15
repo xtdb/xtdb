@@ -13,7 +13,7 @@ import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
-import xtdb.util.useAndCloseOnException
+import xtdb.util.closeOnCatch
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
@@ -137,8 +137,8 @@ class LocalBufferPool(
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = createTempPath(diskStore)
-        return Files.newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).useAndCloseOnException { fileChannel ->
-            rel.startUnload(fileChannel).useAndCloseOnException { unloader ->
+        return Files.newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->
+            rel.startUnload(fileChannel).closeOnCatch { unloader ->
                 object : xtdb.ArrowWriter {
                     override fun writeBatch() {
                         try {

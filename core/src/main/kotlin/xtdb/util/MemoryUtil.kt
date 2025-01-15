@@ -6,7 +6,7 @@ import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
-fun <T : AutoCloseable, R> T.useAndCloseOnException(block: (T) -> R): R =
+fun <T : AutoCloseable, R> T.closeOnCatch(block: (T) -> R): R =
     try {
         block(this)
     } catch (e: Throwable) {

@@ -11,7 +11,7 @@ import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toArrowBufView
 import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
 import xtdb.arrow.Relation
-import xtdb.util.useAndCloseOnException
+import xtdb.util.closeOnCatch
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels.newChannel
@@ -72,8 +72,8 @@ class MemoryBufferPool(
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val baos = ByteArrayOutputStream()
-        return newChannel(baos).useAndCloseOnException { writeChannel ->
-            rel.startUnload(writeChannel).useAndCloseOnException { unloader ->
+        return newChannel(baos).closeOnCatch { writeChannel ->
+            rel.startUnload(writeChannel).closeOnCatch { unloader ->
                 object : xtdb.ArrowWriter {
                     override fun writeBatch() {
                         unloader.writeBatch()

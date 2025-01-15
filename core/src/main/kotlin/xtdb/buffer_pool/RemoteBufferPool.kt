@@ -23,13 +23,12 @@ import xtdb.cache.PathSlice
 import xtdb.multipart.SupportsMultipart
 import xtdb.util.requiringResolve
 import xtdb.util.toMmapPath
-import xtdb.util.useAndCloseOnException
+import xtdb.util.closeOnCatch
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 import java.nio.file.StandardOpenOption.*
 import java.util.*
 import java.util.concurrent.CompletableFuture
@@ -202,8 +201,8 @@ class RemoteBufferPool(
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()
-        return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING).useAndCloseOnException { fileChannel ->
-            rel.startUnload(fileChannel).useAndCloseOnException { unloader ->
+        return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING).closeOnCatch { fileChannel ->
+            rel.startUnload(fileChannel).closeOnCatch { unloader ->
                 object : xtdb.ArrowWriter {
                     override fun writeBatch() {
                         unloader.writeBatch()
