@@ -593,12 +593,20 @@
               :arg-types [:utf8 :utf8 :int :utf8 :int]}]
     (expr/codegen-call expr)))
 
+(defn duration-from-seconds [^double seconds]
+  (Duration/ofMillis (long (* 1000 seconds))))
+
+(defmethod expr/codegen-cast [:f64 :duration] [_expr]
+  {:return-type :duration
+   :->call-code (fn [[x]]
+                  `(duration-from-seconds ~x))})
+
 (defmethod expr/codegen-cast [:utf8 :interval] [{interval-opts :cast-opts :as expr}]
   (if (empty? interval-opts)
     {:return-type [:interval :month-day-nano]
      :->call-code (fn [[x]]
                     `(iso8601-string-to-period-duration (expr/resolve-string ~x)))}
-    
+
     (if (nil? (:end-field interval-opts))
       (->single-field-interval-call expr)
       (->multi-field-interval-call expr))))

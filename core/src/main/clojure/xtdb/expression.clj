@@ -283,7 +283,10 @@
     :list Object, :set Object, :struct Object :transit Object})
 
 (defmethod read-value-code :null [_ & _args] nil)
-(defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
+
+(defmethod write-value-code :null [_ w & args]
+  ;; This evals the args to perform any side effects
+  `(do ~@args (.writeNull ~w)))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
            :timestamp-tz :timestamp-local :time-local :duration :tstz-range
@@ -1223,6 +1226,41 @@
    :->call-code (fn [[setting-name]]
                   `(current-setting (resolve-string ~setting-name)))})
 
+(defn sleep [millis]
+  (Thread/sleep millis))
+
+(defmethod codegen-call [:sleep :f64] [_expr]
+  (let [{convert :->call-code} (codegen-cast {:source-type :f64 :target-type [:duration :milli]})]
+    {:return-type :null
+     :->call-code (fn [lit]
+                    `(sleep ~(convert lit)))}))
+
+(defn string->duration [input]
+  (if-let [[_ amount unit] (re-matches #"^'?(?i)([0-9.]+)\s+(microsecond|millisecond|second|minute|hour|day|week|month|year)s?'?$"
+                                       input)]
+    (let [amt (Double/parseDouble amount)
+          millis (long
+                  (case (str/lower-case unit)
+                    "microsecond" (/ amt 1000)
+                    "millisecond" amt
+                    "second" (* 1000 amt)
+                    "minute" (* 60 1000 amt)
+                    "hour" (* 3600 1000 amt)
+                    "day" (* 86400 1000 amt)
+                    "week" (* 604800 1000 amt)
+                    "month" (* 2628000 1000 amt)
+                    "year" (* 31536000 1000 amt)))]
+      millis)
+    (throw (err/illegal-arg :xtdb.expression/parse-error
+                            {::err/message (str "Interval must have a number followed by time units (eg: '2 seconds')" (pr-str input))
+                             :form input}))))
+
+(defmethod codegen-call [:sleep_for :utf8] [{:keys [args]}]
+  (let [input (:literal (first args))]
+    {:return-type :null
+     :->call-code (fn [_]
+                    `(sleep (string->duration ~input)))}))
+
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)
          capacity (int 0)]
@@ -1598,11 +1636,11 @@
 (defmethod codegen-call [:length :list] [expr]
   (codegen-call (assoc expr :f :cardinality)))
 
-(defmethod codegen-call [:length :set] [_] 
+(defmethod codegen-call [:length :set] [_]
   {:return-type :i32
    :->call-code #(do `(count ~@%))})
 
-(defn count-non-empty [m] 
+(defn count-non-empty [m]
   (loop [n 0, xs (vals m)]
     (if (seq xs)
       (if (.isNull ^ValueReader (first xs))
@@ -1610,7 +1648,7 @@
         (recur (inc n) (rest xs)))
       n)))
 
-(defmethod codegen-call [:length :struct] [_] 
+(defmethod codegen-call [:length :struct] [_]
   {:return-type :i32
    :->call-code #(do `(count-non-empty ~@%))})
 
