@@ -86,14 +86,14 @@ allprojects {
             }
         }
 
-        tasks.create("integration-test", Test::class) {
+        tasks.register("integration-test", Test::class) {
             jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
             useJUnitPlatform {
                 includeTags("integration", "kafka")
             }
         }
 
-        tasks.create("nightly-test", Test::class) {
+        tasks.register("nightly-test", Test::class) {
             jvmArgs(defaultJvmArgs + sixGBJvmArgs)
             useJUnitPlatform {
                 includeTags("s3", "google-cloud", "azure")
@@ -301,7 +301,7 @@ if (hasProperty("fin")) {
 
 val codoxOpts = File("${projectDir}/codox.edn").readText()
 
-tasks.create("build-codox", JavaExec::class) {
+tasks.register("build-codox", JavaExec::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
@@ -320,7 +320,7 @@ fun createSltTask(
     testFiles: List<String> = emptyList(),
     extraArgs: List<String> = emptyList(),
 ) {
-    tasks.create(taskName, JavaExec::class) {
+    tasks.register(taskName, JavaExec::class) {
         classpath = sourceSets.test.get().runtimeClasspath
         mainClass.set("clojure.main")
         jvmArgs(defaultJvmArgs + sixGBJvmArgs)
@@ -385,7 +385,7 @@ createSltTask(
 )
 
 fun createBench(benchName: String, properties: Map<String, String>) {
-    tasks.create(benchName, JavaExec::class) {
+    tasks.register(benchName, JavaExec::class) {
         classpath = sourceSets.dev.get().runtimeClasspath
         mainClass.set("clojure.main")
         jvmArgs(defaultJvmArgs + sixGBJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
