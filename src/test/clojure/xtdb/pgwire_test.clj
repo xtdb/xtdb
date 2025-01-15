@@ -2420,3 +2420,29 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (thrown-with-msg? PSQLException
                             #"Unsupported cast:"
                             (jdbc/execute! conn ["SELECT CAST(DATE '2020-01-05' AS TIME) AS TS"])))))
+
+(t/deftest can-handle-errors-containing-instants-4025
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["BEGIN AT SYSTEM_TIME DATE '2020-01-01'"])
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
+    (jdbc/execute! conn ["COMMIT"])
+
+    (t/testing "earlier sys-time"
+      (jdbc/execute! conn ["BEGIN AT SYSTEM_TIME DATE '2019-01-01'"])
+      (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 2}"])
+      (t/is (thrown? PSQLException (jdbc/execute! conn ["COMMIT"]))))
+
+    (t/is (= [{:xt/id 0,
+               :committed true,
+               :error nil,
+               :system-time #inst "2020-01-01T00:00:00.000000000-00:00"}
+              {:xt/id 1,
+               :committed false,
+               :error {:tx-key {:tx-id 1, :system-time "2019-01-01T00:00Z"},
+                       :latest-completed-tx {:tx-id 0, :system-time "2020-01-01T00:00Z"},
+                       :error-key "invalid-system-time",
+                       :message "specified system-time older than current tx"},
+               :system-time #inst "2020-01-02T00:00:00.000000000-00:00"}]
+
+             (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
+                            {:builder-fn xt-jdbc/builder-fn})))))

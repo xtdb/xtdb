@@ -18,14 +18,14 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
-           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream BufferedInputStream BufferedOutputStream]
+           [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang AutoCloseable Thread$State]
            [java.net ServerSocket Socket SocketException URI]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
+           [java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
            [java.util List Map Set UUID]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
@@ -619,6 +619,7 @@
     ;; print offset instead of zoneprefix  otherwise printed representation may change depending on client
     ;; we might later revisit this if json printing remains
     (instance? ZonedDateTime obj) (recur (.toOffsetDateTime ^ZonedDateTime obj))
+    (instance? Instant obj) (recur (.atZone ^Instant obj #xt/zone "UTC"))
     (instance? Duration obj) (str obj)
     (instance? Period obj) (str obj)
 
