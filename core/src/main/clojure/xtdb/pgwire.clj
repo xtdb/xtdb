@@ -1389,20 +1389,21 @@
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf tx-system-time]} transaction
+        {:keys [failed dml-buf tx-system-time access-mode]} transaction
         {:keys [^Clock clock, parameters]} session]
 
     (if failed
       (throw (client-err "transaction failed"))
 
       (try
-        (let [{:keys [tx-id error]} (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                              :system-time tx-system-time
-                                                              :authn {:user (get parameters "user")}})]
+        (let [{:keys [tx-id error]} (when (= :read-write access-mode)
+                                      (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                                                :system-time tx-system-time
+                                                                :authn {:user (get parameters "user")}}))]
           (swap! conn-state (fn [conn-state]
                               (-> conn-state
                                   (dissoc :transaction)
-                                  (assoc :watermark-tx-id tx-id))))
+                                  (cond-> tx-id (assoc :watermark-tx-id tx-id)))))
 
           (when error
             (throw (client-err (ex-message error)))))

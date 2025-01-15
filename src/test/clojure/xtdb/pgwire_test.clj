@@ -2379,3 +2379,20 @@ ORDER BY t.oid DESC LIMIT 1"
     (q conn ["SET STANDARD_CONFORMING_STRINGS = ON"])
     (t/is (= [{:standard-conforming-strings true}] (q conn ["SHOW STANDARD_CONFORMING_STRINGS"])))
     (t/is (= [{:world "hello"}] (q conn ["SELECT 'hello' AS world"])))))
+
+(t/deftest psql-queries-shouldnt-create-txs-4024
+  (psql-session
+   (fn [send read]
+     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+     (t/is (= [["tx_count"] ["0"]] (read)))
+     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+     (t/is (= [["tx_count"] ["0"]] (read)))
+
+     (send "INSERT INTO foo RECORDS {_id: 1};\n")
+
+     (read)
+
+     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+     (t/is (= [["tx_count"] ["1"]] (read)))
+     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+     (t/is (= [["tx_count"] ["1"]] (read))))))
