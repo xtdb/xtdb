@@ -551,7 +551,7 @@
                                   (visitSettingSnapshotTime [_ ctx]
                                     [:snapshot-time (-> (.snapshotTime ctx)
                                                         (.accept (plan/->ExprPlanVisitor nil nil))
-                                                        time/->instant)])
+                                                        (time/->instant {:default-tz default-tz}))])
 
                                   (visitShowVariableStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})

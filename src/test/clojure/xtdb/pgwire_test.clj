@@ -994,10 +994,21 @@
     (is (= [{:version 2}]
            (q conn ["SELECT version FROM foo"])))
 
-    (is (= [{:version 0}]
-           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
+    (t/testing "for system-time cannot override snapshot"
+      (is (= [{:version 0}]
+             (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
                      SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
-        "for system-time cannot override snapshot")
+          "timestamp-tz")
+
+      (is (= [{:version 0}]
+             (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00'
+                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+          "timestamp-local")
+
+      (is (= [{:version 0}]
+             (q conn ["SETTING SNAPSHOT_TIME = DATE '2020-01-01'
+                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+          "date - #4034"))
 
     (is (= [{:version 1}]
            (q conn ["SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
