@@ -298,8 +298,8 @@
 
 (defn- client-err
   ([client-msg] (client-err client-msg nil))
-  ([client-msg _data]
-   (ex-info client-msg {::client-error (err-protocol-violation client-msg)})))
+  ([client-msg data]
+   (ex-info client-msg (assoc data ::client-error (err-protocol-violation client-msg)))))
 
 ;;TODO parse errors should return a PSQL parse error
 ;;this code is generic, but there are specific ones a well
@@ -1530,27 +1530,30 @@
                                                                                                    (map :typname)
                                                                                                    (distinct)))))))})))
 
-        (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
-              query-opts {:after-tx-id (or watermark-tx-id -1)
-                          :tx-timeout (Duration/ofSeconds 1)
-                          :param-types param-col-types
-                          :default-tz (.getZone clock)}
+        (try
+          (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
+                query-opts {:after-tx-id (or watermark-tx-id -1)
+                            :tx-timeout (Duration/ofSeconds 1)
+                            :param-types param-col-types
+                            :default-tz (.getZone clock)}
 
-              ^PreparedQuery pq (if ra-plan
-                                  (xtp/prepare-ra node ra-plan query-opts)
-                                  (xtp/prepare-sql node parsed-query query-opts))]
+                ^PreparedQuery pq (if ra-plan
+                                    (xtp/prepare-ra node ra-plan query-opts)
+                                    (xtp/prepare-sql node parsed-query query-opts))]
 
-          (when-let [warnings (.warnings pq)]
-            (doseq [warning warnings]
-              (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
+            (when-let [warnings (.warnings pq)]
+              (doseq [warning warnings]
+                (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
 
-          (assoc stmt
-                 :prepared-query pq
-                 :fields (mapv (partial types/field->pg-type fallback-output-format) (.columnFields pq))
-                 :param-fields (->> (.paramFields pq)
-                                    (map types/field->pg-type)
-                                    (map #(set/rename-keys % {:column-oid :oid}))
-                                    (resolve-defaulted-params param-types)))))
+            (assoc stmt
+                   :prepared-query pq
+                   :fields (mapv (partial types/field->pg-type fallback-output-format) (.columnFields pq))
+                   :param-fields (->> (.paramFields pq)
+                                      (map types/field->pg-type)
+                                      (map #(set/rename-keys % {:column-oid :oid}))
+                                      (resolve-defaulted-params param-types))))
+          (catch xtdb.IllegalArgumentException e
+            (throw (client-err (str "Error preparing statement: " (ex-message e)))))))
 
       ;; NOTE this means that for DML statments we assume the number and type of args is exactly
       ;; those specified by the client in param-types, irrelevant of the number featured in the query string.

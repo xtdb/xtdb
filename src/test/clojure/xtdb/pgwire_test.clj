@@ -2409,3 +2409,9 @@ ORDER BY t.oid DESC LIMIT 1"
      (t/is (= [["tx_count"] ["1"]] (read)))
      (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
      (t/is (= [["tx_count"] ["1"]] (read))))))
+
+(t/deftest date-error-propagating-to-client-4021
+  (with-open [conn (jdbc-conn)]
+    (t/is (thrown-with-msg? PSQLException
+                            #"Invalid value for MonthOfYear \(valid values 1 - 12\): 13"
+                            (q conn ["SELECT DATE '2025-13-01'"])))))
