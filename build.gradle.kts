@@ -194,6 +194,16 @@ allprojects {
                             url.set("https://xtdb.com")
                         }
                     }
+
+                    // see https://docs.gradle.org/current/userguide/publishing_maven.html#publishing_maven:resolved_dependencies
+                    versionMapping {
+                        usage("java-api") {
+                            fromResolutionOf("runtimeClasspath")
+                        }
+                        usage("java-runtime") {
+                            fromResolutionResult()
+                        }
+                    }
                 }
 
                 repositories {
