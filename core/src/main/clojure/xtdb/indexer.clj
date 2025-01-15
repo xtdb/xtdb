@@ -40,36 +40,18 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
            (xtdb.api.tx TxOp)
-           (xtdb.arrow RowCopier Vector)
+           (xtdb.arrow RowCopier)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)
-           (xtdb.watermark IWatermarkSource Watermark)))
+           (xtdb.watermark IWatermarkSource Watermark)
+           (xtdb.indexer IIndexer OpIndexer RelationIndexer)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IIndexer
-  (^xtdb.api.TransactionKey indexTx [^long txId, ^java.time.Instant msgTimestamp,
-                                     ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
-
-  (^xtdb.api.TransactionKey latestCompletedTx [])
-  (^xtdb.api.TransactionKey latestCompletedChunkTx [])
-
-  (^xtdb.api.TransactionKey awaitTx [^long txId, ^java.time.Duration timeout]
-   "_may_ return a TransactionResult if available.")
-
-  (^void forceFlush [^xtdb.api.TransactionKey txKey ^long expected-last-chunk-tx-id])
-  (^Throwable indexerError []))
-
 (def ^:private abort-exn (err/runtime-err :abort-exn))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface OpIndexer
-  (^org.apache.arrow.vector.complex.DenseUnionVector indexOp [^long tx-op-idx]
-   "returns a tx-ops-vec of more operations (mostly for `:call`)"))
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
                                                    ^IVectorReader tx-ops-rdr, ^Instant system-time]
@@ -312,10 +294,6 @@
           (catch Throwable t
             (reset! !last-tx-fn-error t)
             (throw t)))))))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface RelationIndexer
-  (^void indexOp [^xtdb.vector.RelationReader inRelation, queryOpts]))
 
 (defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx
                                                            {:keys [^Instant current-time]}]
