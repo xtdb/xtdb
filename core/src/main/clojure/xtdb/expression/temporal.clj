@@ -420,16 +420,6 @@
      :target-type [:timestamp-tz unit (str (.getZone expr/*clock*))]
      :cast-opts opts}))
 
-(defmethod expr/codegen-cast [:utf8 :duration] [{[_ tgt-tsunit :as target-type] :target-type  {:keys [precision]} :cast-opts}]
-  (when precision (ensure-fractional-precision-valid precision))
-  {:return-type target-type
-   :->call-code (fn [[s]]
-                  (-> `(->> (expr/resolve-string ~s)
-                            (parse-with-error-handling "duration" #(Duration/parse %))
-                            ~@(if precision (list `(alter-duration-precision ~precision)) '())
-                            (duration->nano))
-                      (with-conversion :nano tgt-tsunit)))})
-
 (defn mdn-interval->duration [^PeriodDuration x]
   (let [period (.getPeriod x)]
     (if (> (.toTotalMonths period) 0)
