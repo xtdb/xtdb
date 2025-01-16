@@ -7,8 +7,7 @@
   "
   (:require [clojure.walk :as w]
             [next.jdbc.result-set :as nj-rs]
-            [xtdb.serde :as serde]
-            [xtdb.util :as util])
+            [xtdb.serde :as serde])
   (:import clojure.lang.Keyword
            java.nio.charset.StandardCharsets
            [java.sql ResultSet]
@@ -28,8 +27,9 @@
                    (->> (w/postwalk (fn [v]
                                       (cond-> v
                                         (map? v) (update-keys (fn [k]
-                                                                (cond-> k
-                                                                  (keyword? k) util/kw->normal-form-kw)))))))
+                                                                (if (keyword? k)
+                                                                  (NormalForm/normalForm ^Keyword k)
+                                                                  k)))))))
                    (serde/write-transit :json)
                    (String. StandardCharsets/UTF_8)))))
 
