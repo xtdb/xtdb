@@ -16,6 +16,48 @@ In order to run an Azure based XTDB cluster, the following infrastructure is req
 ** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
 * XTDB nodes configured to communicate with the Kafka cluster and Azure Storage Account/Container.
 
+'''
+
+[#terraform]
+== Terraform Templates
+
+To set up a basic version of the required infrastructure, we provide a set of Terraform templates specifically designed for Azure.
+
+These can be fetched from the XTDB repository using the following command:
+
+```bash
+terraform init -from-module github.com/xtdb/xtdb.git//terraform/azure
+```
+
+=== Resources
+
+By default, running the templates will deploy the following infrastructure:
+
+* **XTDB Resource Group and User Assigned Managed Identity**
+* **Azure Storage Account**  (with a container for object storage)
+** Configured with associated resources using the link:https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest[**Azure/avm-res-storage-storageaccount**^] Terraform module.
+** Adds required permissions to the User Assigned Managed Identity.
+* **AKS Cluster**
+** Configured with associated resources using the link:https://registry.terraform.io/modules/Azure/aks/azurerm/latest[**Azure/aks**^] Terraform module.
+* **Federated Identity Credential**
+** Configures the AKS cluster to access the Azure Storage Account.
+** The credential is set up for the `kubernetes_service_account_name` within the `kubernetes_namespace`, both of which are defined in the `terraform.tfvars` file.
+
+=== Configuration
+
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
+
+For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
+
+'''
+
+[#helm]
+== `xtdb-azure` Helm Charts
+
+For setting up a production-ready XTDB cluster on Azure, we provide a set of **Helm** charts specifically designed for Azure environments.
+
+
 [#docker-image]
 == `xtdb-azure` Docker Image
 
@@ -61,7 +103,7 @@ The following environment variables configure the `xtdb-azure` image:
 
 === Using the "private auth" Configuration File
 
-For setups requiring private/authenticated Kafka instances, we provide the "private auth" configuration file. 
+For setups requiring private/authenticated Kafka instances, we provide the "private auth" configuration file.
 
 To switch from the default configuration above to the authenticated Kafka configuration, update the `COMMAND` of the docker container as follows:
 
@@ -83,7 +125,7 @@ In addition to the standard environment variables, the following environment var
 | Security protocol for Kafka (e.g., `SASL_SSL`).
 
 | `KAFKA_SASL_JAAS_CONFIG`
-| JAAS configuration for Kafka SASL authentication, (e.g. `org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="password";`). 
+| JAAS configuration for Kafka SASL authentication, (e.g. `org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="password";`).
 
 | `XTDB_AZURE_STORAGE_ACCOUNT_ENDPOINT`
 | The full endpoint of the storage account which has the storage container.
@@ -105,6 +147,8 @@ In order to override the default configuration:
 ----
 CMD ["-f", "/path/to/custom-config.yaml"]
 ----
+
+'''
 
 [#storage]
 == Azure Blob Storage
@@ -165,7 +209,7 @@ storage: !Remote
     # The full endpoint of the storage account which has the storage container
     # (Can be set as an !Env value)
     # storageAccountEndpoint: https://storage-account.privatelink.blob.core.windows.net
-    
+
     # The name of the blob storage container to be used as the object store
     # (Can be set as an !Env value)
     container: xtdb-container
@@ -177,12 +221,14 @@ storage: !Remote
     # prefix: my-xtdb-node
     #
     # Azure Client ID of a User Assigned Managed Identity -
-    # required when using them for authentication to Azure Services ie, inside of an Azure App Container.  
+    # required when using them for authentication to Azure Services ie, inside of an Azure App Container.
     # (Can be set as an !Env value)
     # userManagedIdentityClientId: user-managed-identity-client-id
 
   localDiskCache: /var/cache/xtdb/object-store
 ----
+
+'''
 
 [#monitoring]
 == Application Insights Monitoring
@@ -201,5 +247,3 @@ modules:
 ----
 
 Providing a valid `connectionString` linked to a pre-existing Application Insights resource is required.
-
-'''

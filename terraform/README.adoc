@@ -1,9 +1,10 @@
-# XTDB Terraform Samples
+= XTDB Terraform Samples
 
-Contained within this directory are sample terraform scripts that can be used to deploy infrastructure required by XTDB to various cloud providers.
+Contained within this directory are sample terraform scripts that can be used to deploy infrastructure required by XTDB on various cloud providers.
 
 We provide samples for the following cloud providers:
 
-* AWS
-* Azure
-* GCP
+* link:https://github.com/xtdb/xtdb/tree/main/terraform/azure[Azure^]
+
+The samples are designed to be as simple as possible, and are intended to be used as a starting point for your own deployments. The README for each directory contains some instructions for pulling them locally and what is deployed.
+
