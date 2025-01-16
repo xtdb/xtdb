@@ -2419,7 +2419,11 @@ ORDER BY t.oid DESC LIMIT 1"
     ;; also #4027
     (t/is (thrown-with-msg? PSQLException
                             #"Unsupported cast:"
-                            (jdbc/execute! conn ["SELECT CAST(DATE '2020-01-05' AS TIME) AS TS"])))))
+                            (jdbc/execute! conn ["SELECT CAST(DATE '2020-01-05' AS TIME) AS TS"])))
+
+    (t/is (thrown-with-msg? PSQLException
+                            #"Cannot parse timestamp: 2020-01-01"
+                            (jdbc/execute! conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01' SELECT 1"])))))
 
 (t/deftest can-handle-errors-containing-instants-4025
   (with-open [conn (jdbc-conn)]

@@ -2838,27 +2838,38 @@
    :table-info (xform-table-info table-info)
    :default-tz default-tz})
 
+(defprotocol PlanExpr
+  (-plan-expr [sql opts]))
+
+(extend-protocol PlanExpr
+  ParserRuleContext
+  (-plan-expr [ast {:keys [scope], :as opts}]
+    (let [{:keys [!errors !warnings] :as env} (->env opts)
+
+          plan (-> ast
+                   #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
+                   (.accept (->ExprPlanVisitor env scope)))]
+
+      (if-let [errs (not-empty @!errors)]
+        (throw (err/illegal-arg :xtdb/sql-error
+                                {::err/message (str "Errors planning SQL statement:\n  - "
+                                                    (str/join "\n  - " (map #(error-string %) errs)))
+                                 :errors errs}))
+        (do
+          (log-warnings !warnings)
+          plan))))
+
+  String
+  (-plan-expr [sql {:keys [ast-type], :or {ast-type :expr}, :as opts}]
+    (let [parser (antlr/->parser sql)]
+      (-plan-expr (case ast-type
+                    :expr (.expr parser)
+                    :where (.searchCondition (.whereClause parser)))
+                  opts))))
+
 (defn plan-expr
   ([sql] (plan-expr sql {}))
-
-  ([sql {:keys [scope ast-type], :or {ast-type :expr}, :as opts}]
-   (let [{:keys [!errors !warnings] :as env} (->env opts)
-         parser (antlr/->parser sql)
-         ^ParserRuleContext ast (case ast-type
-                                  :expr (.expr parser)
-                                  :where (.searchCondition (.whereClause parser)))
-         plan (-> ast
-                  #_(doto (-> (.toStringTree parser) read-string (clojure.pprint/pprint))) ; <<no-commit>>
-                  (.accept (->ExprPlanVisitor env scope)))]
-
-     (if-let [errs (not-empty @!errors)]
-       (throw (err/illegal-arg :xtdb/sql-error
-                               {::err/message (str "Errors planning SQL statement:\n  - "
-                                                   (str/join "\n  - " (map #(error-string %) errs)))
-                                :errors errs}))
-       (do
-         (log-warnings !warnings)
-         plan)))))
+  ([sql opts] (-plan-expr sql opts)))
 
 ;; eventually these data structures will be used as logical plans,
 ;; we won't need an adapter

@@ -431,7 +431,7 @@
                                     {:statement-type :set-session-parameter
                                      :parameter (session-param-name (.identifier ctx))
                                      :value (-> (.literal ctx)
-                                                (.accept (plan/->ExprPlanVisitor nil nil)))})
+                                                (plan/plan-expr {:default-tz default-tz}))})
 
                                   (visitSetSessionCharacteristicsStatement [this ctx]
                                     {:statement-type :set-session-characteristics
@@ -546,18 +546,19 @@
                                   (visitSettingDefaultSystemTime [_ _])
 
                                   (visitSettingCurrentTime [_ ctx]
-                                    [:current-time (time/->instant (.accept (.currentTime ctx) (plan/->ExprPlanVisitor nil nil)))])
+                                    [:current-time (-> (.currentTime ctx)
+                                                       (plan/plan-expr {:default-tz default-tz})
+                                                       (time/->instant))])
 
                                   (visitSettingSnapshotTime [_ ctx]
-                                    [:snapshot-time (-> (.snapshotTime ctx)
-                                                        (.accept (plan/->ExprPlanVisitor nil nil))
+                                    [:snapshot-time (-> (plan/plan-expr (.snapshotTime ctx) {:default-tz default-tz})
                                                         (time/->instant {:default-tz default-tz}))])
 
                                   (visitShowVariableStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})
 
                                   (visitSetWatermarkStatement [_ ctx]
-                                    (let [wm-tx-id (.accept (.literal ctx) (plan/->ExprPlanVisitor nil nil))]
+                                    (let [wm-tx-id (plan/plan-expr (.literal ctx))]
                                       (if (number? wm-tx-id)
                                         {:statement-type :set-watermark, :watermark-tx-id wm-tx-id}
                                         (throw (client-err "invalid watermark - expecting number")))))
