@@ -1,0 +1,11 @@
+= XTDB Helm Templates
+
+Contained within this directory are **Helm templates** that can be used to deploy cloud-backed XTDB clusters onto Kubernetes.
+
+We provide templates for the following cloud providers:
+
+* link:https://github.com/xtdb/xtdb/tree/main/helm/xtdb-azure[Azure^]
+
+The templates are designed to be as simple as possible, and are intended to be used as a starting point for your own deployments. The README for each directory containss some information on required infrastructure and what is deployed by each template.s
+
+
