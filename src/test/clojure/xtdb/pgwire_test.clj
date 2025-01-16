@@ -2450,3 +2450,8 @@ ORDER BY t.oid DESC LIMIT 1"
 
              (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))))
+
+(t/deftest test-runtime-errors-pgwire-3994
+  (with-open [conn (jdbc-conn)]
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["SELECT 'abc'::int;"])))
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["SELECT 1 / 0;"])))))

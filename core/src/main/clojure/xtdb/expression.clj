@@ -11,6 +11,7 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            [java.net URI]
+           (java.lang NumberFormatException)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
@@ -1824,7 +1825,9 @@
             (try
               (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e
-                (throw (arithmetic-ex->runtime-ex e))))
+                (throw (arithmetic-ex->runtime-ex e)))
+              (catch NumberFormatException e
+                (throw (err/runtime-err :xtdb.expression/number-format-error {::err/message (.getMessage e)} e))))
             (.setValueCount out-vec row-count)
             (vr/vec->reader out-vec)))))))
 
