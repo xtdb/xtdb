@@ -1,7 +1,0 @@
-= Azure Setup Guide
-
-Within this directory you will find the contents necessary for our "Getting started with XDTB on Azure" guide. It contains a nested `terraform` folder containing a base Terraform configuration for setting up the cluster.
-
-The guide itself can be found on our website at https://docs.xtdb.com/guides/starting-with-azure.html
-
-
