@@ -481,3 +481,37 @@
     (t/is (= #{"foo" nil 3}
              (->> (xt/q node "SELECT foo FROM foo")
                   (into #{} (map :foo)))))))
+
+(t/deftest test-compaction-with-erase-4017
+  (let [node-dir (util/->path "target/compactor/compaction-with-erase")]
+    (util/delete-dir node-dir)
+
+    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+
+      (let [[id-before id id-after] [#uuid "00000000-0000-0000-0000-000000000000"
+                                     #uuid "40000000-0000-0000-0000-000000000000"
+                                     #uuid "80000000-0000-0000-0000-000000000000"]]
+
+        (xt/submit-tx node [[:put-docs :foo {:xt/id id-before} {:xt/id id} {:xt/id id-after}]])
+        (tu/finish-chunk! node)
+        (c/compact-all! node #xt/duration "PT0.5S")
+
+        (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id id}]}]])
+        (tu/finish-chunk! node)
+        (c/compact-all! node #xt/duration "PT0.5S")
+
+        (t/is (= [{:xt/id id-before} {:xt/id id-after}]
+                 (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME")))
+
+        (xt/submit-tx node [[:put-docs :foo {:xt/id id}]])
+        (tu/finish-chunk! node)
+        (c/compact-all! node #xt/duration "PT0.5S")
+
+        (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after} ]
+                 (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"))))
+
+      (t/testing "an id where there is no previous data shouldn't show up in the compacted files"
+        (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id #uuid "20000000-0000-0000-0000-000000000000"}]}]]))
+
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
+                     (.resolve node-dir (tables-key "public$foo")) #"log-l01-(.+)\.arrow"))))
