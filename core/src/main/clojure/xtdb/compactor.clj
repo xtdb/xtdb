@@ -89,17 +89,25 @@
         (when (.isValid ev-ptr is-valid-ptr path)
           (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
 
-      (loop []
+      (loop [seen-erase? false]
         (when-let [{:keys [^EventRowPointer ev-ptr, ^RowCopier row-copier] :as q-obj} (.poll merge-q)]
-          (.copyRow row-copier (.getIndex ev-ptr))
+          (let [new-previous-polygon  (if-let [polygon (calculate-polygon ev-ptr)]
+                                        (do
+                                          (.copyRow row-copier (.getIndex ev-ptr))
+                                          (.writeLong recency-wtr (.getRecency ^IPolygonReader polygon))
+                                          false)
 
-          (.writeLong recency-wtr
-                      (.getRecency ^IPolygonReader (calculate-polygon ev-ptr)))
-
-          (.nextIndex ev-ptr)
-          (when (.isValid ev-ptr is-valid-ptr path)
-            (.add merge-q q-obj))
-          (recur))))
+                                        (do
+                                          ;; the first time we encounter an erase
+                                          (when-not seen-erase?
+                                            (.copyRow row-copier (.getIndex ev-ptr))
+                                            ;; TODO this can likely become system-time, but we wanted to play it safe for now
+                                            (.writeLong recency-wtr Long/MAX_VALUE))
+                                          true))]
+            (.nextIndex ev-ptr)
+            (when (.isValid ev-ptr is-valid-ptr path)
+              (.add merge-q q-obj))
+            (recur new-previous-polygon)))))
 
     nil))
 
@@ -386,4 +394,3 @@
 (defn compact-all!
   ([node] (compact-all! node nil))
   ([node timeout] (-compact-all! (util/component node :xtdb/compactor) timeout)))
-
