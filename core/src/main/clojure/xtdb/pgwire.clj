@@ -1554,7 +1554,11 @@
                                       (map types/field->pg-type)
                                       (map #(set/rename-keys % {:column-oid :oid}))
                                       (resolve-defaulted-params param-types))))
+          (catch java.lang.AbstractMethodError e
+            (log/error e "Error preparing statement")
+            (throw (client-err (str "Error preparing statement: " (ex-message e)))))
           (catch xtdb.IllegalArgumentException e
+            (log/error e "Error preparing statement")
             (throw (client-err (str "Error preparing statement: " (ex-message e)))))))
 
       ;; NOTE this means that for DML statments we assume the number and type of args is exactly
