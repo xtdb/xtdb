@@ -683,6 +683,7 @@
     (let [sl-ctx (.selectList ctx)
           !subqs (HashMap.)
           !aggs (HashMap.)
+          !agg-subqs (HashMap.)
           !windows (HashMap.)
 
           explicitly-projected-cols (->> (.selectSublist sl-ctx)
@@ -693,7 +694,7 @@
                                                                       (visitDerivedColumn [_ ctx]
                                                                         (let [expr-ctx (.expr ctx)]
                                                                           [(let [expr (.accept expr-ctx
-                                                                                               (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs :!windows !windows}))]
+                                                                                               (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs, :!aggs !aggs :!agg-subqs !agg-subqs :!windows !windows}))]
                                                                              (if-let [as-clause (.asClause ctx)]
                                                                                (let [col-name (->col-sym (identifier-sym as-clause))]
                                                                                  (->ProjectedCol {col-name expr} col-name))
@@ -747,6 +748,7 @@
 
                                     explicitly-projected-cols))
        :subqs (not-empty (into {} !subqs))
+       :agg-subqs (not-empty (into {} !agg-subqs))
        :aggs (not-empty (into {} !aggs))
        :windows (not-empty (into {} !windows))})))
 
@@ -1633,11 +1635,11 @@
     (let [ve (-> (.exprPrimary ctx) (.accept this))
           data-type (-> (.dataType ctx) (.accept (->CastArgsVisitor env)))]
       (handle-cast-expr ve data-type)))
-  
-  (visitAggregateFunctionExpr [{:keys [!aggs] :as this} ctx]
+
+  (visitAggregateFunctionExpr [{:keys [!aggs !agg-subqs] :as this} ctx]
     (if-not !aggs
       (add-err! env (->AggregatesDisallowed))
-      (-> (.aggregateFunction ctx) (.accept this))))
+      (-> (.aggregateFunction ctx) (.accept (assoc this :!subqs !agg-subqs)))))
 
   (visitCountStarFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs]} _ctx]
     (let [agg-sym (-> (->col-sym (str "_row_count_" (swap! !id-count inc)))
@@ -2131,8 +2133,8 @@
                          :subqs (not-empty (into {} !subqs))
                          :aggs (not-empty (into {} !aggs))}))
 
-        {:keys [projected-cols windows] :as select-plan} (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
 
+        {:keys [projected-cols windows agg-subqs] :as select-plan} (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
         aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
         grouped-table? (boolean (or aggs group-by-clause))
         group-invariant-cols (when grouped-table?
@@ -2165,6 +2167,9 @@
             [:map (mapv #(hash-map % nil) unresolved-cr)
              plan]
             plan)
+
+          (cond-> plan
+            agg-subqs (apply-sqs agg-subqs))
 
           (cond-> plan
             grouped-table? (wrap-aggs aggs group-invariant-cols))
