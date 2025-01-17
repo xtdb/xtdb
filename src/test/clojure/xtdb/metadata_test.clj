@@ -186,6 +186,8 @@
 
             (t/is (true? (.test page-idx-pred 0)))))))
 
+    (c/compact-all! tu/*node*)
+
     (t/testing "L1"
       (let [meta-file-path (trie/->table-meta-file-path (util/->path "tables/public$xt_docs") (trie/->log-l0-l1-trie-key 1 0 2 1))]
         (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
