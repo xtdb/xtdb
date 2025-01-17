@@ -1,0 +1,83 @@
+{{- $usermanagedidentity := .Values.xtdbConfig.userManagedIdentityClientId | required "xtdbConfig.userManagedIdentityClientId is required." -}}
+{{- $storageaccountname := .Values.xtdbConfig.storageAccountName | required "xtdbConfig.storageAccountName is required." -}}
+{{- $storagecontainername := .Values.xtdbConfig.storageContainerName  | required "xtdbConfig.storageContainerName is required." -}}
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: xtdb-statefulset
+  labels:
+    app: xtdb-statefulset
+spec:
+  serviceName: xtdb-service
+  replicas: {{ .Values.nodeCount }}
+  selector:
+    matchLabels:
+      app: xtdb-statefulset
+  template:
+    metadata:
+      labels:
+        app: xtdb-statefulset
+        azure.workload.identity/use: "true" 
+    spec:
+      # Requires the service account to be created & federated identity set up
+      serviceAccountName: xtdb-service-account
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      volumes: 
+        - name: "tmp"
+          emptyDir: {}
+      containers:
+        - name: xtdb-container
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: xtdb-persistent-storage
+              mountPath: /var/lib/xtdb/buffers
+            - name: "tmp"
+              mountPath: "/tmp"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+              value: "{{ $usermanagedidentity }}"
+            - name: XTDB_AZURE_STORAGE_ACCOUNT
+              value: "{{ $storageaccountname }}"
+            - name: XTDB_AZURE_STORAGE_CONTAINER
+              value: "{{ $storagecontainername }}"
+            - name: XTDB_LOCAL_DISK_CACHE
+              value: "/var/lib/xtdb/buffers/disk-cache"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "{{ .Values.xtdbConfig.kafkaBootstrapServers }}"
+            - name: XTDB_TX_TOPIC
+              value: "{{ .Values.xtdbConfig.kafkaTxTopic }}"
+            - name: XTDB_FILES_TOPIC
+              value: "{{ .Values.xtdbConfig.kafkaFilesTopic }}"
+            - name: XTDB_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- range $key, $value := .Values.xtdbConfig.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: xtdb-persistent-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.xtdbConfig.localDiskCache.size }}
+        storageClassName: {{ .Values.xtdbConfig.localDiskCache.storageClass }}

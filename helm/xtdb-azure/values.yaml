@@ -1,0 +1,70 @@
+nodeCount: 3
+
+image:
+  repository: ghcr.io/xtdb/xtdb-azure
+  tag: 2.0.0-beta5
+  pullPolicy: IfNotPresent
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "6Gi"
+  requests:
+    cpu: "1000m"
+    memory: "6Gi"
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+xtdbConfig:
+  # Require these to be set
+  storageAccountName: ""
+  storageContainerName: ""
+  userManagedIdentityClientId: ""
+
+  # Kafka config
+  kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
+  kafkaTxTopic: "xtdb-tx-log"
+  kafkaFilesTopic: "xtdb-file-changes"
+  
+  # Persisent Volume Claim settings for local disk cache
+  localDiskCache:
+    size: 100Gi
+    storageClass: "managed-csi"
+
+  # Extra Env:
+  # (Env_Var_Name: Value)
+  env:
+
+startupProbe:
+  httpGet:
+    path: /healthz/started
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  failureThreshold: 10 
+
+livenessProbe:
+  httpGet:
+    path: /healthz/alive
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+
+service:
+  type: LoadBalancer
+  httpServerPort: 3000
+  pgwirePort: 5432
