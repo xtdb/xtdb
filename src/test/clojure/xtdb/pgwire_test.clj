@@ -27,6 +27,7 @@
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util Arrays Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
+           (org.apache.kafka.common.errors RecordTooLargeException)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
            (org.pg.error PGErrorResponse)
@@ -2465,3 +2466,12 @@ ORDER BY t.oid DESC LIMIT 1"
                             (jdbc/execute! conn ["SELECT 1 / 0;"])))
     (t/is (thrown-with-msg? PSQLException #"ERROR: Negative substring length"
                             (jdbc/execute! conn ["SELECT SUBSTRING('asf' FROM 0 FOR -1);"])))))
+
+(t/deftest exception-message-test-4026
+  (with-open [conn (jdbc-conn)]
+    (with-redefs [pgwire/interpret-sql (fn [_ _]
+                                         (let [e (RecordTooLargeException. "the message is 7772320 bytes when serialized which is larger than 1048576, which is the value of the max.request.size configuration.")]
+                                           (log/error e "Interpret-sql - will throw...")
+                                           (throw e)))]
+      (t/is (thrown? PSQLException
+                     (q conn ["SELECT * FROM pg_type"]))))))
