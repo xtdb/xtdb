@@ -1,0 +1,85 @@
+nodeCount: 3
+
+image:
+  repository: ghcr.io/xtdb/xtdb-azure
+  # tag: 2.0.0-beta5
+  pullPolicy: IfNotPresent
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "6Gi"
+  requests:
+    cpu: "1000m"
+    memory: "6Gi"
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+xtdbConfig:
+  # Require these to be set
+  storageAccountName: ""
+  storageContainerName: ""
+  userManagedIdentityClientId: ""
+
+  # Kafka config
+  kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
+  kafkaTxTopic: "xtdb-tx-log"
+  kafkaFilesTopic: "xtdb-file-changes"
+  
+  # Persisent Volume Claim settings for local disk cache
+  localDiskCache:
+    size: 50Gi
+    storageClass: "managed-csi"
+
+  # Extra Env:
+  env:
+    # (ENV_VAR_NAME: Value)
+
+startupProbe:
+  httpGet:
+    path: /healthz/started
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  failureThreshold: 10 
+
+livenessProbe:
+  httpGet:
+    path: /healthz/alive
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+
+xtdbService:
+  type: LoadBalancer
+  httpServer:
+    # Port of the http server on the nodes
+    targetPort: 3000
+    # Port exposed by the service
+    servicePort: 3000
+  pgWireServer:
+    # Port of the pgwire server on the nodes
+    targetPort: 5432
+    # Port exposed by the service
+    servicePort: 5432
+
+metricService: 
+  type: ClusterIP
+  # Port of the metrics server on the nodes
+  targetPort: 8080
+  # Port exposed by the service
+  servicePort: 80

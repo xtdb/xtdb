@@ -1,0 +1,6 @@
+apiVersion: v2
+name: helm-xtdb-azure
+description: A Helm chart for setting up a simple XTDB cluster on Azure
+type: application
+version: 0.1.0
+appVersion: "2.0.0-beta5"
