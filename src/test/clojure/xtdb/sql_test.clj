@@ -2586,3 +2586,17 @@ UNION ALL
                             SELECT _id
                             ORDER BY _id"))
         "we can filter on window functions"))
+
+(t/deftest plan-agg-subqueries-before-group-by-3821
+  (xt/submit-tx tu/*node* [[:put-docs :docs
+                            {:xt/id 1 :name "alan" :sysadmin true}
+                            {:xt/id 2 :name "ada" :sysadmin true}
+                            {:xt/id 3 :name "claude" :sysadmin false}]])
+
+  (t/is (= 3 (-> (xt/q tu/*node* "SELECT COUNT((SELECT 1)) v FROM docs") first :v)))
+
+  (t/is (= 2 (-> (xt/q tu/*node* "SELECT COUNT(CASE WHEN _id IN (1, 2) THEN _id END) v FROM docs") first :v)))
+
+  (t/is (= [{:sysadmin true, :xt/column-2 ["ada" "alan"]}
+            {:sysadmin false, :xt/column-2 ["claude"]}]
+           (xt/q tu/*node* "SELECT sysadmin, ARRAY_AGG((SELECT name)) FROM docs GROUP BY sysadmin"))))
