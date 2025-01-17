@@ -2958,7 +2958,7 @@
   (plan-statement "WITH foo AS (SELECT id FROM bar WHERE id = 5)
                    SELECT foo.id, baz.id
                    FROM foo, foo AS baz"
-                  {:table-info {"bar" #{"id"}}}))
+                  {:table-info {"public/bar" #{"id"}}}))
 
 (defrecord SqlToStaticOpsVisitor [env scope arg-rows]
   SqlVisitor
