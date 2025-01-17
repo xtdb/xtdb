@@ -2166,6 +2166,8 @@
              plan]
             plan)
 
+          (-> plan (apply-sqs (:subqs select-plan)))
+
           (cond-> plan
             grouped-table? (wrap-aggs aggs group-invariant-cols))
 
@@ -2174,8 +2176,6 @@
                 (apply-sqs subqs)
                 (wrap-predicates predicate))
             plan)
-
-          (-> plan (apply-sqs (:subqs select-plan)))
 
           (cond-> plan
             windows (wrap-windows windows))
