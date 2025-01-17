@@ -1828,6 +1828,8 @@
                 (throw (arithmetic-ex->runtime-ex e)))
               (catch NumberFormatException e
                 (throw (err/runtime-err :xtdb.expression/number-format-error {::err/message (.getMessage e)} e)))
+              (catch ClassCastException e
+                (throw (err/runtime-err :xtdb.expression/class-cast-exception {::err/message (.getMessage e)} e)))
               (catch IllegalArgumentException e
                 (throw (err/illegal-arg :xtdb.expression/illegal-argument-exception {::err/message (.getMessage e)} e))))
             (.setValueCount out-vec row-count)
