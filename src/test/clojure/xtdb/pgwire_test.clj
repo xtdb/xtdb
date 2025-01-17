@@ -27,6 +27,7 @@
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            (java.util Arrays Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
+           (org.apache.kafka.common.errors RecordTooLargeException)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
            (org.pg.error PGErrorResponse)
@@ -2543,3 +2544,18 @@ ORDER BY 1,2;"]))))))
                  ["public" "schemata" "table" "xtdb"]
                  ["public" "tables" "table" "xtdb"]]
                 (read)))))))
+
+(t/deftest exception-message-test-4026
+  (with-open [conn (jdbc-conn)]
+    (with-redefs [pgwire/interpret-sql (fn [_ _]
+                                         (let [e (RecordTooLargeException. "the message is 7772320 bytes when serialized which is larger than 1048576, which is the value of the max.request.size configuration.")]
+                                           (log/error e "Interpret-sql - will throw...")
+                                           (throw e)))]
+      (t/is (thrown? PSQLException
+                     (q conn ["SELECT * FROM pg_type"]))))))
+
+(t/deftest test-illegal-statement-throws-error
+  (with-open [conn (jdbc-conn)]
+    (t/is (thrown-with-msg? PSQLException #"\+ not applicable to types tstz-range and interval"
+                            (jdbc/execute! conn ["SELECT (PERIOD(DATE '2024-01-01', DATE '2024-01-04') + INTERVAL '1' MINUTE)"] {:builder-fn result-set/as-arrays})
+                            (q conn ["SELECT (PERIOD(DATE '2024-01-01', DATE '2024-01-04') + INTERVAL '1' MINUTE)"])))))
