@@ -2379,7 +2379,7 @@ UNION ALL
            (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest test-no-column-name-list-insert-with-values-3752
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs VALUES(1, 'bar')"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs VALUES(1, 'bar')"]])
 
   (t/is (= #xt/illegal-arg [:xtdb/sql-error "Errors planning SQL statement:
   - INSERT with VALUES needs column name list
