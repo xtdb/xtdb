@@ -363,11 +363,12 @@
 
 (defn err-pg-exception
   "Returns a pg specific error for an XTDB exception"
-  [^Throwable ex generic-msg]
+  [^Throwable ex generic-msg happened-during]
+  (log/error ex (str happened-during " : " (.getMessage ex)))
   (if (or (instance? xtdb.IllegalArgumentException ex)
           (instance? xtdb.RuntimeException ex))
     (err-protocol-violation (.getMessage ex))
-    (err-internal generic-msg)))
+    (err-internal (str generic-msg " caused by: " (.getMessage ex)))))
 
 ;;; sql processing
 
@@ -580,9 +581,8 @@
                                                           [])]})))))))
 
           (catch Exception e
-            (log/debug e "Error parsing SQL")
             (throw (ex-info "error parsing sql"
-                            {::client-error (err-pg-exception e "error parsing sql")}
+                            {::client-error (err-pg-exception e "error parsing sql" "Error parsing SQL")}
                             e)))))))
 
 (defn- json-clj
@@ -1046,7 +1046,9 @@
       (log/trace "Client error:" (ex-message e) (ex-data e))
       (cmd-send-error conn client-err))
 
-    (log/error e "Uncaught exception processing message")))
+    (do
+      (log/error e "Uncaught exception processing message")
+      (cmd-send-error conn {:message (str "ERROR: [" (.getName (.getClass e)) "] " (.getMessage e))}))))
 
 (defn cmd-send-notice
   "Sends an notice message back to the client (e.g (cmd-send-notice conn (warning \"You are doing this wrong!\"))."
@@ -1221,9 +1223,8 @@
     (catch xtdb.IllegalArgumentException e
       (throw (client-err (ex-message e))))
     (catch Throwable e
-      (log/debug e "Error on execute-tx")
       (let [msg "unexpected error on tx submit (report as a bug)"]
-        (throw (ex-info msg {::client-error (err-pg-exception e msg)} e))))))
+        (throw (ex-info msg {::client-error (err-pg-exception e msg "Error on execute-tx")} e))))))
 
 (defn- ->xtify-arg [session {:keys [arg-format param-fields]}]
   (fn xtify-arg [arg-idx arg]
@@ -1342,7 +1343,7 @@
     (catch InterruptedException e (throw e))
     (catch Throwable e
       (log/error e)
-      (cmd-send-error conn (err-pg-exception e "unexpected server error during query execution")))))
+      (cmd-send-error conn (err-pg-exception e "unexpected server error during query execution" "Error executing query")))))
 
 (defn- cmd-send-row-description [conn cols]
   (let [defaults {:table-oid 0
@@ -1408,7 +1409,7 @@
                                   (cond-> tx-id (assoc :watermark-tx-id tx-id)))))
 
           (when error
-            (throw (client-err (ex-message error)))))
+            (throw (client-err (ex-message error) (ex-data error)))))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (swap! conn-state #(dissoc % :transaction))
