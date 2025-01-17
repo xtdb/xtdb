@@ -89,6 +89,9 @@
 (defn- jdbc-conn ^Connection [& params]
   (jdbc/get-connection (apply jdbc-url params)))
 
+(defn- exec [^Connection conn ^String sql]
+  (.execute (.createStatement conn) sql))
+
 (defn- stmt->warnings [^Statement stmt]
   (loop [warn (.getWarnings stmt) res []]
     (if-not warn
@@ -995,6 +998,7 @@
            (q conn ["SELECT version FROM foo"])))
 
     (t/testing "for system-time cannot override snapshot"
+      (exec conn "SET TIME ZONE 'UTC'")
       (is (= [{:version 0}]
              (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
                      SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
@@ -2336,55 +2340,55 @@ ORDER BY t.oid DESC LIMIT 1"
       (t/is (= [{:v "dollar $quoted$ string"}] (q conn ["SELECT $$dollar $quoted$ string$$ AS v"]))
             "dollar quoted string"))))
 
+
 (t/deftest test-patch
   (with-open [conn (jdbc-conn)]
-    (let [exec #(.execute (.createStatement ^Connection %1) ^String %2)]
-      (letfn [(q* [sql]
-                (->> (q conn [sql])
-                     (map (juxt #(select-keys % [:xt/id :a :b :c :tmp]) :xt/valid-from :xt/valid-to))))]
-        (exec conn "SET TIME ZONE 'UTC'")
+    (letfn [(q* [sql]
+              (->> (q conn [sql])
+                   (map (juxt #(select-keys % [:xt/id :a :b :c :tmp]) :xt/valid-from :xt/valid-to))))]
+      (exec conn "SET TIME ZONE 'UTC'")
 
-        (q conn ["INSERT INTO foo RECORDS {_id: 1, a: 1, b: 2}"])
-        (q conn ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
+      (q conn ["INSERT INTO foo RECORDS {_id: 1, a: 1, b: 2}"])
+      (q conn ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
 
-        (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-01" #inst "2020-01-02"]
-                  [{:xt/id 1, :a 1, :b 2, :c 3} #inst "2020-01-02" nil]
-                  [{:xt/id 2, :a 4, :b 5} #inst "2020-01-02" nil]]
-                 (q* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+      (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-01" #inst "2020-01-02"]
+                [{:xt/id 1, :a 1, :b 2, :c 3} #inst "2020-01-02" nil]
+                [{:xt/id 2, :a 4, :b 5} #inst "2020-01-02" nil]]
+               (q* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
 
-        (t/testing "for portion of valid_time"
-          (q conn ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
-          (q conn ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
-          (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"])
+      (t/testing "for portion of valid_time"
+        (q conn ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"])
 
-          (let [expected [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
-                          [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
-                          [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
-                          [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]]
+        (let [expected [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
+                        [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
+                        [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
+                        [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]]
+          (t/is (= expected
+                   (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+          (t/testing "parse error doesn't halt ingestion"
+            (t/is (thrown-with-msg? PSQLException
+                                    #"internal error conforming query plan"
+                                    (q conn ["PATCH INTO bar FOR VALID_TIME FROM '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])))
+
             (t/is (= expected
-                     (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+                     (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))
+                  "node continues"))))
 
-            (t/testing "parse error doesn't halt ingestion"
-              (t/is (thrown-with-msg? PSQLException
-                                      #"internal error conforming query plan"
-                                      (q conn ["PATCH INTO bar FOR VALID_TIME FROM '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])))
+      (t/testing "out-of-order updates"
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01T00:00:00Z' RECORDS {_id: 1, version: 1}"])
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2022-01-01T00:00:00Z' RECORDS {_id: 1, version: 2, patched: 2022}"]) ;
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2021-01-01T00:00:00Z' RECORDS {_id: 1, patched: 2021}"])
 
-              (t/is (= expected
-                       (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))
-                    "node continues"))))
-
-        (t/testing "out-of-order updates"
-          (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01T00:00:00Z' RECORDS {_id: 1, version: 1}"])
-          (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2022-01-01T00:00:00Z' RECORDS {_id: 1, version: 2, patched: 2022}"]) ;
-          (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2021-01-01T00:00:00Z' RECORDS {_id: 1, patched: 2021}"])
-
-          (t/is (= [{:xt/id 1, :version 1,
-                     :xt/valid-from #inst "2020", :xt/valid-to #inst "2021"}
-                    {:xt/id 1, :patched 2021, :version 1,
-                     :xt/valid-from #inst "2021", :xt/valid-to #inst "2022"}
-                    {:xt/id 1, :patched 2021, :version 2,
-                     :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
-                   (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"]))))))))
+        (t/is (= [{:xt/id 1, :version 1,
+                   :xt/valid-from #inst "2020", :xt/valid-to #inst "2021"}
+                  {:xt/id 1, :patched 2021, :version 1,
+                   :xt/valid-from #inst "2021", :xt/valid-to #inst "2022"}
+                  {:xt/id 1, :patched 2021, :version 2,
+                   :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
+                 (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"])))))))
 
 (t/deftest set-standard-conforming-strings-on-3972
   ;; this just has to no-op to appease the Ruby Sequel driver
@@ -2427,6 +2431,8 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (t/deftest can-handle-errors-containing-instants-4025
   (with-open [conn (jdbc-conn)]
+    (exec conn "SET TIME ZONE 'UTC'")
+
     (jdbc/execute! conn ["BEGIN AT SYSTEM_TIME DATE '2020-01-01'"])
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
     (jdbc/execute! conn ["COMMIT"])
