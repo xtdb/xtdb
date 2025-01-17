@@ -1,0 +1,33 @@
+
+# XTDB Service Access Instructions
+
+Thank you for installing the XTDB Helm Chart!
+
+Your deployment is now complete.
+
+To access the XTDB service:
+
+1. The service is running as a LoadBalancer service. Retrieve the external IP:
+   ```bash
+   kubectl get svc xtdb-service -n {{ .Release.Namespace }}
+   ```
+   Look for the `EXTERNAL-IP` column.
+
+2. Access the service via the Postgres Wire Server port:
+   ```
+   <EXTERNAL-IP>:{{ .Values.xtdbService.server.servicePort }}
+   ```
+3. If you are using the HTTP server port connect to the service at:
+   ```
+   http://<EXTERNAL-IP>:{{ .Values.xtdbService.httpServer.servicePort }}
+   ```
+
+## Additional Information
+
+Namespace: {{ .Release.Namespace }}
+Service Name: {{ .Release.Name }}
+
+To uninstall this chart:
+```bash
+helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+```

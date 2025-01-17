@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: xtdb-statefulset
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: xtdb-statefulset
+spec:
+  serviceName: xtdb-service
+  replicas: {{ .Values.nodeCount }}
+  selector:
+    matchLabels:
+      app: xtdb-statefulset
+  template:
+    metadata:
+      labels:
+        app: xtdb-statefulset
+        azure.workload.identity/use: "true" 
+    spec:
+      # Requires the service account to be created & federated identity set up
+      serviceAccountName: xtdb-service-account
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      volumes: 
+        - name: "tmp"
+          emptyDir: {}
+        - name: xtdb-yaml-config
+          configMap:
+            name: xtdb-yaml-config
+      containers:
+        - name: xtdb-container
+          image: {{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ['-f', '/var/lib/xtdb-config/xtdbconfig.yaml']
+          volumeMounts:
+            - name: xtdb-persistent-storage
+              mountPath: /var/lib/xtdb/buffers
+            - name: "tmp"
+              mountPath: "/tmp"
+            - mountPath: /var/lib/xtdb-config/xtdbconfig.yaml
+              name: xtdb-yaml-config
+              subPath: xtdbconfig.yaml
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: JDK_JAVA_OPTIONS
+              value: {{ .Values.xtdbConfig.jdkOptions }}
+            - name: XTDB_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- range $key, $value := .Values.xtdbConfig.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+  volumeClaimTemplates:
+    - {{- toYaml .Values.xtdbConfig.localDiskCache.volumeClaimTemplate | nindent 6 }}
