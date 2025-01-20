@@ -9,6 +9,7 @@
             xtdb.expression.temporal
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
+            [xtdb.metrics :as metrics]
             xtdb.operator.apply
             xtdb.operator.arrow
             xtdb.operator.csv
@@ -34,6 +35,7 @@
             [xtdb.xtql.plan :as xtql.plan])
   (:import clojure.lang.MapEntry
            (com.github.benmanes.caffeine.cache Cache Caffeine)
+           io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util HashMap)
@@ -246,25 +248,28 @@
           :allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref ::scan/scan-emitter)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
-          :live-idx (ig/ref :xtdb.indexer/live-index)}))
+          :live-idx (ig/ref :xtdb.indexer/live-index)
+          :metrics-registry (ig/ref :xtdb.metrics/registry)}))
 
 (defn ->caffeine-cache ^com.github.benmanes.caffeine.cache.Cache [size]
   (-> (Caffeine/newBuilder) (.maximumSize size) (.build)))
 
-(defmethod ig/init-key ::query-source [_ {:keys [plan-cache-size live-idx] :as deps}]
+(defmethod ig/init-key ::query-source [_ {:keys [plan-cache-size live-idx metrics-registry] :as deps}]
   (let [plan-cache (->caffeine-cache plan-cache-size)
         ref-ctr (RefCounter.)
-        deps (-> deps (assoc :ref-ctr ref-ctr))]
+        deps (-> deps (assoc :ref-ctr ref-ctr))
+        query-warning-counter ^Counter (metrics/add-counter metrics-registry "query.warning")]
     (reify
       IQuerySource
       (prepareRaQuery [this query query-opts]
         (.prepareRaQuery this query live-idx query-opts))
       (prepareRaQuery [_ query wm-src query-opts]
-        (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src))))
-
+        (let [prepared-query (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
+          (when (seq (.warnings prepared-query))
+            (.increment query-warning-counter))
+          prepared-query))
       (planQuery [this query query-opts]
         (.planQuery this query live-idx query-opts))
-
       (planQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src)
               plan-query-opts
@@ -309,13 +314,36 @@
                             (apply [_ k]
                               (.denormalize key-fn k))))))))
 
-(defn open-cursor-as-stream ^java.util.stream.Stream [^BoundQuery bound-query {:keys [key-fn]}]
-  (let [key-fn (cache-key-fn key-fn)]
-    (util/with-close-on-catch [cursor (.openCursor bound-query)]
-      (-> (StreamSupport/stream cursor false)
-          ^Stream (.onClose (fn []
-                              (util/close cursor)
-                              (util/close bound-query)))
-          (.flatMap (reify Function
-                      (apply [_ rel]
-                        (.stream (vr/rel->rows rel key-fn)))))))))
+(defn wrapping-error-count-cursor [^IResultCursor source ^Counter query-error-counter]
+  (reify IResultCursor
+    (tryAdvance [_ c]
+      (try
+        (.tryAdvance source c)
+        (catch Exception e
+          (when query-error-counter
+            (.increment query-error-counter))
+          (throw e))))
+
+    (characteristics [_] (.characteristics source))
+    (estimateSize [_] (.estimateSize source))
+    (getComparator [_] (.getComparator source))
+    (getExactSizeIfKnown [_] (.getExactSizeIfKnown source))
+    (hasCharacteristics [_ c] (.hasCharacteristics source c))
+    (trySplit [_] (.trySplit source))
+    (close [_] (.close source))
+    (columnFields [_] (.columnFields source))))
+
+(defn open-cursor-as-stream
+  (^java.util.stream.Stream [^BoundQuery bound-query query-opts]
+   (open-cursor-as-stream bound-query query-opts {}))
+  (^java.util.stream.Stream [^BoundQuery bound-query {:keys [key-fn]} {:keys [^Counter query-error-counter]}]
+   (let [key-fn (cache-key-fn key-fn)]
+     (util/with-close-on-catch [cursor (.openCursor bound-query)]
+       (-> (StreamSupport/stream (cond-> cursor
+                                   query-error-counter (wrapping-error-count-cursor query-error-counter)) false)
+           ^Stream (.onClose (fn []
+                               (util/close cursor)
+                               (util/close bound-query)))
+           (.flatMap (reify Function
+                       (apply [_ rel]
+                         (.stream (vr/rel->rows rel key-fn))))))))))
