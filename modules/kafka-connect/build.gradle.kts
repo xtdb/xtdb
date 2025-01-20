@@ -6,7 +6,7 @@ plugins {
     id("dev.clojurephant.clojure")
     kotlin("jvm")
     signing
-    id("com.github.johnrengelman.shadow")
+    id("com.gradleup.shadow")
 }
 
 ext {
