@@ -220,11 +220,11 @@ There is a helper script to do _all_ of the above, which can be run by:
 
 === Setup
 
-To monitor the benchmark, we can use Azure Application Insights. We set up an applications insights resource in the terraform configuration, and output an instrumentation key. 
+To monitor the benchmark, we can use Azure Application Insights. We set up an applications insights resource in the terraform configuration, and output a connection string.
 
 === Collecting metrics from node
 
-To see the benchmark metrics you need to supply an application insights instrumentation key via an environment variable in the `single-node-auctionmark.yaml` or `multi-node-auctionmark.yaml` file as below:
+To see the benchmark metrics you need to supply an application insights connection string via an environment variable in the `single-node-auctionmark.yaml` or `multi-node-auctionmark.yaml` file as below:
 
 ```yaml
 apiVersion: "v1"
@@ -232,14 +232,14 @@ kind: "ConfigMap"
 metadata:
   ...
 data:
-  XTDB_AZURE_INSTRUMENTATION_KEY: "<instrumentation-key>"
+  XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING: "<connection-string>"
   ...
 ```
 
-You can retrieve the instrumentation key from terraform state as follows:
+You can retrieve the connection_string from terraform state as follows:
 
 ```bash
-terraform output -raw insights_instrumentation_key
+terraform output -raw insights_connection_string
 ```
 
 After a while you should be able to see the metrics in the Azure portal under the Application Insights resource, navigating to Monitoring > Metrics and looking under Metric Namespace > Custom.
