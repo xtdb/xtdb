@@ -257,7 +257,7 @@ dependencies {
 
     projectDep(":modules:bench")
     projectDep(":modules:c1-import")
-    projectDep(":modules:datasets")
+    projectDep(":modules:xtdb-datasets")
     projectDep(":modules:xtdb-flight-sql")
     projectDep(":modules:xtdb-kafka-connect")
     projectDep(":cloud-benchmark")
