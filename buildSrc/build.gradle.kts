@@ -1,6 +1,6 @@
 plugins {
     `kotlin-dsl`
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 repositories {
@@ -9,9 +9,10 @@ repositories {
 }
 
 dependencies {
-    implementation("org.clojure", "clojure", "1.12.0-rc1")
+    implementation("org.clojure", "clojure", "1.12.0")
     implementation(gradleApi())
-    implementation("gradle.plugin.com.github.johnrengelman:shadow:7.1.2")
+    implementation("com.gradleup.shadow:shadow-gradle-plugin:8.3.5")
+    implementation("org.apache.ant:ant:1.10.13") // eugh. _all_ of Ant for the DataReaderTransformer?
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

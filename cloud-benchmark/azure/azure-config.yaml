@@ -22,4 +22,4 @@ storage: !Remote
 
 modules:
   - !AzureMonitor
-    instrumentationKey: !Env XTDB_AZURE_INSTRUMENTATION_KEY
+    connectionString: !Env XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING

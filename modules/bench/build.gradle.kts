@@ -3,7 +3,7 @@ import xtdb.DataReaderTransformer
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
-    id("com.github.johnrengelman.shadow")
+    id("com.gradleup.shadow")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

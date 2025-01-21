@@ -76,10 +76,10 @@ class YamlSerdeTest {
         val azureInput = """
         modules: 
           - !AzureMonitor
-            instrumentationKey: "azure.namespace" 
+            connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000;" 
         """.trimIndent()
 
-        assertEquals("azure.namespace", nodeConfig(azureInput).findModule<AzureMonitorMetrics>()?.instrumentationKey)
+        assertEquals("InstrumentationKey=00000000-0000-0000-0000-000000000000;", nodeConfig(azureInput).findModule<AzureMonitorMetrics>()?.connectionString)
     }
 
     @Test

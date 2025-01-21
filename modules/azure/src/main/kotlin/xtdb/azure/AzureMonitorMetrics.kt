@@ -12,7 +12,7 @@ import xtdb.api.Xtdb
 @Serializable
 @SerialName("!AzureMonitor")
 class AzureMonitorMetrics(
-    @Serializable(StringWithEnvVarSerde::class) val instrumentationKey: String = "xtdb.metrics",
+    @Serializable(StringWithEnvVarSerde::class) val connectionString: String,
 ) : XtdbModule.Factory {
 
     override val moduleKey = "xtdb.metrics.azure-monitor"
@@ -21,7 +21,7 @@ class AzureMonitorMetrics(
         val reg = AzureMonitorMeterRegistry(
             object : AzureMonitorConfig {
                 override fun get(key: String) = null
-                override fun instrumentationKey() = instrumentationKey
+                override fun connectionString() = connectionString
             },
             Clock.SYSTEM
         )

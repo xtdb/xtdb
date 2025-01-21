@@ -145,7 +145,7 @@ output "storage_account_container" {
 }
 
 
-output "insights_instrumentation_key" {
+output "insights_connection_string" {
   sensitive = true
-  value = azurerm_application_insights.cloud_benchmark.instrumentation_key
+  value = azurerm_application_insights.cloud_benchmark.connection_string
 }

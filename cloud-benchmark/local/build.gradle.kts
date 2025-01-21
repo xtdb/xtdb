@@ -3,7 +3,7 @@ import xtdb.DataReaderTransformer
 plugins {
     java
     application
-    id("com.github.johnrengelman.shadow")
+    id("com.gradleup.shadow")
 }
 
 dependencies {
