@@ -16,7 +16,7 @@
            (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            [java.util.concurrent.atomic AtomicLong]
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log FileListCache Log Logs Logs$LocalLogFactory TxLog$Record)
+           (xtdb.api.log FileLog Log Logs Logs$LocalLogFactory TxLog$Record)
            (xtdb.log INotifyingSubscriberHandler)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -26,7 +26,7 @@
 (deftype LocalDirectoryLog [^Path root-path, ^INotifyingSubscriberHandler subscriber-handler
                             ^ExecutorService pool, ^BlockingQueue queue, ^Future append-loop-future
                             ^:volatile-mutable ^FileChannel log-channel
-                            ^FileListCache file-list-cache
+                            ^FileLog file-log
                             ^AtomicLong !latest-submitted-tx-id]
   Log
   (latestSubmittedTxId [_] (.get !latest-submitted-tx-id))
@@ -78,8 +78,8 @@
   (subscribeTxs [this after-tx-id subscriber]
     (.subscribe subscriber-handler this after-tx-id subscriber))
 
-  (appendFileNotification [_ n] (.appendFileNotification file-list-cache n))
-  (subscribeFileNotifications [_ subscriber] (.subscribeFileNotifications file-list-cache subscriber))
+  (appendFileNotification [_ n] (.appendFileNotification file-log n))
+  (subscribeFileNotifications [_ subscriber] (.subscribeFileNotifications file-log subscriber))
 
   (close [_]
     (when log-channel
@@ -204,4 +204,4 @@
                                                                           {:buffer-size buffer-size
                                                                            :subscriber-handler subscriber-handler
                                                                            :!latest-submitted-tx-id !latest-submitted-tx-id}))]
-      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil FileListCache/SOLO !latest-submitted-tx-id))))
+      (->LocalDirectoryLog root-path subscriber-handler pool queue append-loop-future nil FileLog/SOLO !latest-submitted-tx-id))))

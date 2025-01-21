@@ -10,7 +10,7 @@ import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.slf4j.LoggerFactory
 import xtdb.IBufferPool
 import xtdb.IEvictBufferTest
-import xtdb.api.log.FileListCache
+import xtdb.api.log.FileLog
 import xtdb.api.storage.ObjectStore
 import xtdb.arrow.ArrowUtil
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
@@ -38,7 +38,7 @@ class RemoteBufferPool(
     private val memoryCache: MemoryCache,
     val diskCache: DiskCache,
     private val arrowFooterCache: Cache<Path, ArrowFooter>,
-    private val fileListCache: FileListCache,
+    private val fileLog: FileLog,
     val objectStore: ObjectStore,
     val osFiles: SortedMap<Path, Long>,
     private val osFilesSubscription: AutoCloseable,
@@ -55,7 +55,7 @@ class RemoteBufferPool(
             minMultipartPartSize = size
         }
 
-        private val FileNotificationAddition = requiringResolve("xtdb.file-list-cache/addition")
+        private val FileNotificationAddition = requiringResolve("xtdb.file-log/addition")
 
         private fun pathToSeekableByteChannel(path: Path) = SeekableReadChannel(Files.newByteChannel(path, READ))
 
@@ -214,8 +214,8 @@ class RemoteBufferPool(
 
                         uploadArrowFile(allocator, objectStore, key, tmpPath)
 
-                        fileListCache.appendFileNotification(
-                            FileNotificationAddition.invoke(key, tmpPath) as FileListCache.Notification
+                        fileLog.appendFileNotification(
+                            FileNotificationAddition.invoke(key, tmpPath) as FileLog.Notification
                         )
 
                         diskCache.put(key, tmpPath)
@@ -234,8 +234,8 @@ class RemoteBufferPool(
     override fun putObject(key: Path, buffer: ByteBuffer) {
         objectStore.putObject(key, buffer)
             .thenApply {
-                fileListCache.appendFileNotification(
-                    FileNotificationAddition.invoke(key, buffer.capacity()) as FileListCache.Notification
+                fileLog.appendFileNotification(
+                    FileNotificationAddition.invoke(key, buffer.capacity()) as FileLog.Notification
                 )
             }.get()
     }

@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.buffer-pool-test :as bp-test]
-            [xtdb.file-list-cache :as flc]
+            [xtdb.file-log :as fl]
             [xtdb.kafka]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -85,7 +85,7 @@
           (t/is (= true (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])))))
 
         (t/testing "Send & receive file change notification"
-          (.appendFileNotification log (flc/map->FileNotification {:added [{:k (util/->path "foo1"), :size 12}
+          (.appendFileNotification log (fl/map->FileNotification {:added [{:k (util/->path "foo1"), :size 12}
                                                                            {:k (util/->path "foo2"), :size 15}
                                                                            {:k (util/->path "foo3"), :size 8}]}))
           (Thread/sleep 1000)

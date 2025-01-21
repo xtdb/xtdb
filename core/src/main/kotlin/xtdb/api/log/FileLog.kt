@@ -2,7 +2,7 @@ package xtdb.api.log
 
 import java.util.concurrent.CompletableFuture
 
-interface FileListCache {
+interface FileLog {
     fun appendFileNotification(notification: Notification): CompletableFuture<Unit>
     fun subscribeFileNotifications(subscriber: Subscriber)
 
@@ -15,7 +15,7 @@ interface FileListCache {
 
     companion object {
         @JvmField
-        val SOLO = object : FileListCache {
+        val SOLO = object : FileLog {
             private var sub: Subscriber? = null
 
             override fun appendFileNotification(notification: Notification): CompletableFuture<Unit> {

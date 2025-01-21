@@ -13,7 +13,7 @@
            [org.apache.arrow.memory BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (xtdb IBufferPool)
-           (xtdb.api.log FileListCache FileListCache$Subscriber)
+           (xtdb.api.log FileLog FileLog$Subscriber)
            (xtdb.api.storage Storage Storage$Factory Storage$LocalStorageFactory Storage$RemoteStorageFactory)
            xtdb.api.Xtdb$Config
            (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
@@ -79,14 +79,14 @@
     (log/debugf "%s%% of total disk space on filestore %s is %s bytes" percentage (.name file-store) disk-size-limit)
     disk-size-limit))
 
-(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileListCache file-list-cache, ^MeterRegistry metrics-registry]
+(defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileLog file-log, ^MeterRegistry metrics-registry]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [!os-files (ConcurrentSkipListMap.)
           !os-file-name-subscription (promise)
           ^Path disk-cache-root (.getLocalDiskCache factory)]
 
-      (.subscribeFileNotifications file-list-cache
-                                   (reify FileListCache$Subscriber
+      (.subscribeFileNotifications file-log
+                                   (reify FileLog$Subscriber
                                      (accept [_ {:keys [added]}]
                                        (.putAll !os-files (->> added
                                                                (into {} (comp (filter map?) (map (juxt :k :size)))))))
@@ -108,7 +108,7 @@
                            memory-cache
                            disk-cache
                            (->arrow-footer-cache 1024)
-                           file-list-cache
+                           file-log
                            object-store
                            !os-files
                            @!os-file-name-subscription
@@ -159,11 +159,11 @@
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)
    :factory factory
-   :file-list-cache (ig/ref :xtdb/log)
+   :file-log (ig/ref :xtdb/log)
    :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileListCache file-list-cache metrics-registry]}]
-  (.openStorage factory allocator file-list-cache metrics-registry))
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileLog file-log metrics-registry]}]
+  (.openStorage factory allocator file-log metrics-registry))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^IBufferPool buffer-pool]
   (util/close buffer-pool))

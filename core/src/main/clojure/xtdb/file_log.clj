@@ -1,13 +1,13 @@
-(ns xtdb.file-list-cache
+(ns xtdb.file-log
   (:require [cognitect.transit :as transit]
             xtdb.protocols
             [xtdb.util :as util])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.nio.file Path]
-           (xtdb.api.log FileListCache$Notification)))
+           (xtdb.api.log FileLog$Notification)))
 
 (defrecord FileNotification [added deleted]
-  FileListCache$Notification)
+  FileLog$Notification)
 
 (defn addition [k size]
   (FileNotification. [{:k k, :size size}] []))

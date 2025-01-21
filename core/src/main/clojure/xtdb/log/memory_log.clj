@@ -6,11 +6,11 @@
            java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log FileListCache Log Logs Logs$InMemoryLogFactory TxLog$Record)
+           (xtdb.api.log FileLog Log Logs Logs$InMemoryLogFactory TxLog$Record)
            xtdb.log.INotifyingSubscriberHandler))
 
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^InstantSource instant-src
-                      ^FileListCache file-list-cache]
+                      ^FileLog file-log]
   Log
   (latestSubmittedTxId [_]
     (or (some-> @!records ^TxLog$Record peek .getTxId)
@@ -36,8 +36,8 @@
   (subscribeTxs [this after-tx-id subscriber]
     (.subscribe subscriber-handler this after-tx-id subscriber))
 
-  (appendFileNotification [_ n] (.appendFileNotification file-list-cache n))
-  (subscribeFileNotifications [_ subscriber] (.subscribeFileNotifications file-list-cache subscriber)))
+  (appendFileNotification [_ n] (.appendFileNotification file-log n))
+  (subscribeFileNotifications [_ subscriber] (.subscribeFileNotifications file-log subscriber)))
 
 (defmethod xtn/apply-config! :xtdb.log/memory-log [^Xtdb$Config config _ {:keys [instant-src]}]
   (doto config
@@ -46,4 +46,4 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-log [^Logs$InMemoryLogFactory factory]
-  (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) (.getInstantSource factory) FileListCache/SOLO))
+  (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) (.getInstantSource factory) FileLog/SOLO))

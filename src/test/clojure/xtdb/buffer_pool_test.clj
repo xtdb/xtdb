@@ -15,7 +15,7 @@
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
            (org.apache.arrow.vector.types.pojo Schema)
-           xtdb.api.log.FileListCache
+           xtdb.api.log.FileLog
            (xtdb.api.storage ObjectStore$Factory Storage)
            xtdb.arrow.Relation
            xtdb.buffer_pool.RemoteBufferPool
@@ -91,7 +91,7 @@
 (defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/open-remote-storage tu/*allocator*
                           (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
-                          FileListCache/SOLO
+                          FileLog/SOLO
                           (SimpleMeterRegistry.)))
 
 (defn get-remote-calls [^RemoteBufferPool test-bp]
@@ -116,12 +116,12 @@
 (t/deftest local-disk-cache-max-size
   (util/with-tmp-dirs #{local-disk-cache}
     (with-open [bp (bp/open-remote-storage
-                    tu/*allocator*
-                    (-> (Storage/remoteStorage (simulated-obj-store-factory) local-disk-cache)
-                        (.maxDiskCacheBytes 10)
-                        (.maxCacheBytes 12))
-                    FileListCache/SOLO
-                    (SimpleMeterRegistry.))]
+                     tu/*allocator*
+                     (-> (Storage/remoteStorage (simulated-obj-store-factory) local-disk-cache)
+                         (.maxDiskCacheBytes 10)
+                         (.maxCacheBytes 12))
+                     FileLog/SOLO
+                     (SimpleMeterRegistry.))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
@@ -147,24 +147,24 @@
     (util/with-tmp-dirs #{local-disk-cache}
       ;; Writing files to buffer pool & local-disk-cache
       (with-open [bp (bp/open-remote-storage
-                      tu/*allocator*
-                      (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
-                          (.maxDiskCacheBytes 10)
-                          (.maxCacheBytes 12))
-                      FileListCache/SOLO
-                      (SimpleMeterRegistry.))]
+                       tu/*allocator*
+                       (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
+                           (.maxDiskCacheBytes 10)
+                           (.maxCacheBytes 12))
+                       FileLog/SOLO
+                       (SimpleMeterRegistry.))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
       (with-open [bp (bp/open-remote-storage
-                      tu/*allocator*
-                      (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
-                          (.maxDiskCacheBytes 10)
-                          (.maxCacheBytes 12))
-                      FileListCache/SOLO
-                      (SimpleMeterRegistry.))]
+                       tu/*allocator*
+                       (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
+                           (.maxDiskCacheBytes 10)
+                           (.maxCacheBytes 12))
+                       FileLog/SOLO
+                       (SimpleMeterRegistry.))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
 
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))

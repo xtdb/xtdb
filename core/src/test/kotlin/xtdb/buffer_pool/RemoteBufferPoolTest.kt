@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.IBufferPool
-import xtdb.api.log.FileListCache
+import xtdb.api.log.FileLog
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage
@@ -21,7 +21,6 @@ import xtdb.api.storage.StoreOperation.UPLOAD
 import xtdb.arrow.I32_TYPE
 import xtdb.arrow.Relation
 import xtdb.util.requiringResolve
-import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -42,7 +41,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
                 },
                 Files.createTempDirectory("remote-buffer-pool-test")
                 ),
-            FileListCache.SOLO,
+            FileLog.SOLO,
             SimpleMeterRegistry()) as RemoteBufferPool
         // Mocking small value for MIN_MULTIPART_PART_SIZE
         RemoteBufferPool.setMinMultipartPartSize(320)

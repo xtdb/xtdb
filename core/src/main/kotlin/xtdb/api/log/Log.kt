@@ -5,7 +5,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 
-interface Log : TxLog, FileListCache, AutoCloseable {
+interface Log : TxLog, FileLog, AutoCloseable {
     interface Factory {
         fun openLog(): Log
     }
