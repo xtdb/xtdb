@@ -111,17 +111,17 @@
                nil)))
 
 (defn submit-dml-jdbc! [conn scale-factor]
-  (log/debug "Transacting TPC-H tables...")
+  (log/info "Transacting TPC-H tables...")
   (doseq [^TpchTable table (TpchTable/getTables)]
     (let [dml (tpch-table->dml table)
-          [last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
-                                   (partition-all 1000)
-                                   (reduce (fn [[_!last-tx last-doc-count] param-batch]
-                                             [(jdbc/execute-batch! conn dml param-batch {})
-                                              (+ last-doc-count (count param-batch))])
-                                           [nil 0]))]
-      (log/debug "Transacted" doc-count (.getTableName table))
-      last-tx)))
+          doc-count (->> (tpch-table->dml-params table scale-factor)
+                         (partition-all 1000)
+                         (transduce (map (fn [param-batch]
+                                           (jdbc/with-transaction [tx conn]
+                                             (jdbc/execute-batch! tx dml param-batch {}))
+                                           (count param-batch)))
+                                    + 0))]
+      (log/debug "Transacted" doc-count (.getTableName table)))))
 
 (comment
   (with-open [conn (jdbc/get-connection {:dbname "xtdb"
@@ -129,7 +129,7 @@
                                          :port 5432
                                          :classname "xtdb.jdbc.Driver"
                                          :dbtype "xtdb"})]
-    (submit-dml-jdbc! conn 0.01)))
+    (submit-dml-jdbc! conn 0.05)))
 
 (defn dump-tpch-log-files [^File root-dir {:keys [scale-factor tx-size seg-row-limit]
                                            :or {scale-factor 0.01
