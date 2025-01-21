@@ -1841,7 +1841,15 @@
               (when (= schema-name 'xt)
                 'xtdb/xtdb-server-version))
             'xtdb/postgres-server-version)
-        (vary-meta assoc :identifier (->col-sym 'version)))))
+        (vary-meta assoc :identifier (->col-sym 'version))))
+
+  (visitPostgresTableIsVisibleFunction [_ _ctx]
+    ;; FIXME - when we have authorization - need to check permissions
+    true)
+
+  (visitPostgresGetUserByIdFunction [_ _ctx]
+    ;; FIXME - when we have ownership - need to check owner
+    "xtdb"))
 
 (defn- wrap-predicates [plan predicate]
   (or (when (seq? predicate)

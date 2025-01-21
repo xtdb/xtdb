@@ -266,6 +266,9 @@ exprPrimary
 
     | (schemaName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
 
+    | (schemaName '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' # PostgresGetUserByIdFunction
+    | (schemaName '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' # PostgresTableIsVisibleFunction
+
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
     | 'EXTRACT' '(' extractField 'FROM' extractSource ')' # ExtractFunction
