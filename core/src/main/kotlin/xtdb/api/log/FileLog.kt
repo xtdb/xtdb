@@ -1,15 +1,16 @@
 package xtdb.api.log
 
+import xtdb.api.log.FileLog.Subscription
 import java.util.concurrent.CompletableFuture
 
 interface FileLog {
     fun appendFileNotification(notification: Notification): CompletableFuture<Unit>
-    fun subscribeFileNotifications(subscriber: Subscriber)
+    fun subscribeFileNotifications(subscriber: Subscriber): Subscription
 
     interface Notification
+    fun interface Subscription : AutoCloseable
 
     interface Subscriber {
-        fun onSubscribe(closeHook: AutoCloseable)
         fun accept(record: Notification)
     }
 
@@ -23,9 +24,9 @@ interface FileLog {
                 return CompletableFuture.completedFuture(Unit)
             }
 
-            override fun subscribeFileNotifications(subscriber: Subscriber) {
+            override fun subscribeFileNotifications(subscriber: Subscriber): Subscription {
                 sub = subscriber
-                subscriber.onSubscribe { sub = null }
+                return Subscription { sub = null }
             }
         }
     }

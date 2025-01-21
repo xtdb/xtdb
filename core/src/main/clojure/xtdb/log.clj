@@ -21,7 +21,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api.log Log Log$Factory TxLog$Record TxLog$Subscriber)
+           (xtdb.api.log Log Log$Factory TxLog$Record TxLog$Subscriber TxLog$Subscription)
            (xtdb.api.tx TxOp$Sql)
            (xtdb.arrow Relation VectorWriter Vector)
            (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PatchDocs PutDocs SqlByteArgs Update XtqlAndArgs)
@@ -43,37 +43,37 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^TxLog$Subscriber subscriber]
-  (doto (.newThread subscription-thread-factory
-                    (fn []
-                      (let [thread (Thread/currentThread)]
-                        (.setPriority thread Thread/MAX_PRIORITY)
-                        (.onSubscribe subscriber (reify AutoCloseable
-                                                   (close [_]
-                                                     (.interrupt thread)
-                                                     (.join thread)))))
-                      (try
-                        (loop [after-tx-id after-tx-id]
-                          (let [last-tx-id (reduce (tx-handler subscriber)
-                                                   after-tx-id
-                                                   (try
-                                                     (.readTxs log after-tx-id 100)
-                                                     (catch ClosedChannelException e (throw e))
-                                                     (catch InterruptedException e (throw e))
-                                                     (catch Exception e
-                                                       (log/warn e "Error polling for txs, will retry"))))]
-                            (when (Thread/interrupted)
-                              (throw (InterruptedException.)))
-                            (when (= after-tx-id last-tx-id)
-                              (Thread/sleep (.toMillis poll-sleep-duration)))
-                            (recur last-tx-id)))
-                        (catch InterruptedException _)
-                        (catch ClosedChannelException _))))
-    (.start)))
+  (let [thread (doto (.newThread subscription-thread-factory
+                                 (fn []
+                                   (try
+                                     (loop [after-tx-id after-tx-id]
+                                       (let [last-tx-id (reduce (tx-handler subscriber)
+                                                                after-tx-id
+                                                                (try
+                                                                  (.readTxs log after-tx-id 100)
+                                                                  (catch ClosedChannelException e (throw e))
+                                                                  (catch InterruptedException e (throw e))
+                                                                  (catch Exception e
+                                                                    (log/warn e "Error polling for txs, will retry"))))]
+                                         (when (Thread/interrupted)
+                                           (throw (InterruptedException.)))
+                                         (when (= after-tx-id last-tx-id)
+                                           (Thread/sleep (.toMillis poll-sleep-duration)))
+                                         (recur last-tx-id)))
+                                     (catch InterruptedException _)
+                                     (catch ClosedChannelException _))))
+                 (.setPriority Thread/MAX_PRIORITY)
+                 (.start))]
+
+    (reify TxLog$Subscription
+      (close [_]
+        (.interrupt thread)
+        (.join thread)))))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
   (notifyTx [^long txId])
-  (subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.TxLog$Subscriber subscriber]))
+  (^xtdb.api.log.TxLog$Subscription subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.TxLog$Subscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]
   INotifyingSubscriberHandler
@@ -84,51 +84,51 @@
 
   (subscribe [_ log after-tx-id subscriber]
     (let [semaphore (Semaphore. 0)
-          {:keys [latest-submitted-tx-id]} (swap! !state update :semaphores conj semaphore)]
+          {:keys [latest-submitted-tx-id]} (swap! !state update :semaphores conj semaphore)
+          thread (doto (.newThread subscription-thread-factory
+                                   (fn []
+                                     (try
+                                       (loop [after-tx-id after-tx-id]
+                                         (let [last-tx-id (reduce (tx-handler subscriber)
+                                                                  after-tx-id
+                                                                  (if (and latest-submitted-tx-id
+                                                                           (pos? ^long latest-submitted-tx-id)
+                                                                           (or (nil? after-tx-id)
+                                                                               (< ^long after-tx-id ^long latest-submitted-tx-id)))
+                                                                    ;; catching up
+                                                                    (->> (.readTxs log after-tx-id 100)
+                                                                         (take-while #(<= (.getTxId ^TxLog$Record %)
+                                                                                          ^long latest-submitted-tx-id)))
 
-      (doto (.newThread subscription-thread-factory
-                        (fn []
-                          (let [thread (Thread/currentThread)]
-                            (.setPriority thread Thread/MAX_PRIORITY)
-                            (.onSubscribe subscriber (reify AutoCloseable
-                                                       (close [_]
-                                                         (.interrupt thread)
-                                                         (.join thread)))))
-                          (try
-                            (loop [after-tx-id after-tx-id]
-                              (let [last-tx-id (reduce (tx-handler subscriber)
-                                                       after-tx-id
-                                                       (if (and latest-submitted-tx-id
-                                                                (pos? ^long latest-submitted-tx-id)
-                                                                (or (nil? after-tx-id)
-                                                                    (< ^long after-tx-id ^long latest-submitted-tx-id)))
-                                                         ;; catching up
-                                                         (->> (.readTxs log after-tx-id 100)
-                                                              (take-while #(<= (.getTxId ^TxLog$Record %)
-                                                                               ^long latest-submitted-tx-id)))
+                                                                    ;; running live
+                                                                    (let [permits (do
+                                                                                    (.acquire semaphore)
+                                                                                    (inc (.drainPermits semaphore)))]
+                                                                      (.readTxs log after-tx-id
+                                                                                (if (> permits 100)
+                                                                                  (do
+                                                                                    (.release semaphore (- permits 100))
+                                                                                    100)
+                                                                                  permits)))))]
+                                           (when-not (Thread/interrupted)
+                                             (recur last-tx-id))))
 
-                                                         ;; running live
-                                                         (let [permits (do
-                                                                         (.acquire semaphore)
-                                                                         (inc (.drainPermits semaphore)))]
-                                                           (.readTxs log after-tx-id
-                                                                     (if (> permits 100)
-                                                                           (do
-                                                                             (.release semaphore (- permits 100))
-                                                                             100)
-                                                                           permits)))))]
-                                (when-not (Thread/interrupted)
-                                  (recur last-tx-id))))
+                                       (catch InterruptedException _)
 
-                            (catch InterruptedException _)
+                                       (catch ClosedChannelException ex
+                                         (when-not (Thread/interrupted)
+                                           (throw ex)))
 
-                            (catch ClosedChannelException ex
-                              (when-not (Thread/interrupted)
-                                (throw ex)))
+                                       (finally
+                                         (swap! !state update :semaphores disj semaphore)))))
+                   (.setPriority Thread/MAX_PRIORITY)
+                   (.start))]
 
-                            (finally
-                              (swap! !state update :semaphores disj semaphore)))))
-        (.start)))))
+
+      (reify TxLog$Subscription
+        (close [_]
+          (.interrupt thread)
+          (.join thread))))))
 
 (defn ->notifying-subscriber-handler [latest-submitted-tx-id]
   (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id latest-submitted-tx-id

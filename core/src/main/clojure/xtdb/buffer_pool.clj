@@ -82,18 +82,12 @@
 (defn open-remote-storage ^xtdb.IBufferPool [^BufferAllocator allocator, ^Storage$RemoteStorageFactory factory, ^FileLog file-log, ^MeterRegistry metrics-registry]
   (util/with-close-on-catch [object-store (.openObjectStore (.getObjectStore factory))]
     (let [!os-files (ConcurrentSkipListMap.)
-          !os-file-name-subscription (promise)
-          ^Path disk-cache-root (.getLocalDiskCache factory)]
-
-      (.subscribeFileNotifications file-log
-                                   (reify FileLog$Subscriber
-                                     (accept [_ {:keys [added]}]
-                                       (.putAll !os-files (->> added
-                                                               (into {} (comp (filter map?) (map (juxt :k :size)))))))
-
-                                     (onSubscribe [_ subscription]
-                                       (deliver !os-file-name-subscription subscription))))
-
+          ^Path disk-cache-root (.getLocalDiskCache factory)
+          file-log-subscription (.subscribeFileNotifications file-log
+                                                             (reify FileLog$Subscriber
+                                                               (accept [_ {:keys [added]}]
+                                                                 (.putAll !os-files (->> added
+                                                                                         (into {} (comp (filter map?) (map (juxt :k :size)))))))))]
       (doseq [{:keys [k size]} (.listAllObjects object-store)]
         (.put !os-files k size))
 
@@ -111,7 +105,7 @@
                            file-log
                            object-store
                            !os-files
-                           @!os-file-name-subscription
+                           file-log-subscription
                            (metrics/add-counter metrics-registry "record-batch-requests")
                            (metrics/add-counter metrics-registry "memory-cache-misses")
                            (metrics/add-counter metrics-registry "disk-cache-misses"))))))

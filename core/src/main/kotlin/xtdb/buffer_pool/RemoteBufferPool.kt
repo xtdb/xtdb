@@ -41,7 +41,7 @@ class RemoteBufferPool(
     private val fileLog: FileLog,
     val objectStore: ObjectStore,
     val osFiles: SortedMap<Path, Long>,
-    private val osFilesSubscription: AutoCloseable,
+    private val osFilesSubscription: FileLog.Subscription,
     private val recordBatchRequests: Counter,
     private val memCacheMisses: Counter,
     private val diskCacheMisses: Counter

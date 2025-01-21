@@ -18,7 +18,7 @@
            [org.apache.kafka.common.errors InterruptException TopicAuthorizationException TopicExistsException UnknownTopicOrPartitionException]
            org.apache.kafka.common.TopicPartition
            [xtdb.api Xtdb$Config]
-           [xtdb.api.log FileLog FileLog$Subscriber Kafka Kafka$Factory Log TxLog$Record TxLog$Subscriber]))
+           [xtdb.api.log FileLog FileLog$Subscriber FileLog$Subscription Kafka Kafka$Factory Log TxLog$Record TxLog$Subscriber TxLog$Subscription]))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -72,29 +72,28 @@
   (TxLog$Record. (.offset record) (Instant/ofEpochMilli (.timestamp record)) (.value record)))
 
 (defn- handle-tx-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^TxLog$Subscriber subscriber]
-  (doto (.newThread log/subscription-thread-factory
-                    (fn []
-                      (let [thread (Thread/currentThread)]
-                        (.onSubscribe subscriber (reify AutoCloseable
-                                                   (close [_]
-                                                     (.interrupt thread)
-                                                     (.join thread)))))
+  (let [thread (doto (.newThread log/subscription-thread-factory
+                                 (fn []
+                                   (with-open [consumer (->tx-consumer kafka-config)]
+                                     (.assign consumer #{tp})
+                                     (seek-consumer consumer tp after-tx-id)
+                                     (try
+                                       (loop []
+                                         (doseq [record (poll-consumer consumer poll-duration)]
+                                           (when (Thread/interrupted)
+                                             (throw (InterruptedException.)))
+                                           (.accept subscriber (->log-record record)))
 
-                      (with-open [consumer (->tx-consumer kafka-config)]
-                        (.assign consumer #{tp})
-                        (seek-consumer consumer tp after-tx-id)
-                        (try
-                          (loop []
-                            (doseq [record (poll-consumer consumer poll-duration)]
-                              (when (Thread/interrupted)
-                                (throw (InterruptedException.)))
-                              (.accept subscriber (->log-record record)))
+                                         (when-not (Thread/interrupted)
+                                           (recur)))
 
-                            (when-not (Thread/interrupted)
-                              (recur)))
+                                       (catch InterruptedException _)))))
+                 (.start))]
 
-                          (catch InterruptedException _)))))
-    (.start)))
+    (reify TxLog$Subscription
+      (close [_]
+        (.interrupt thread)
+        (.join thread)))))
 
 (defrecord KafkaTxLog [kafka-config
                        ^KafkaProducer producer
@@ -136,29 +135,28 @@
     (util/try-close producer)))
 
 (defn- handle-file-notif-subscriber [{:keys [poll-duration tp kafka-config]} ^FileLog$Subscriber subscriber]
-  (doto (.newThread log/subscription-thread-factory
-                    (fn []
-                      (let [thread (Thread/currentThread)]
-                        (.onSubscribe subscriber (reify AutoCloseable
-                                                   (close [_]
-                                                     (.interrupt thread)
-                                                     (.join thread)))))
+  (let [thread (doto (.newThread log/subscription-thread-factory
+                                 (fn []
+                                   (with-open [consumer (->consumer kafka-config)]
+                                     (.assign consumer #{tp})
+                                     (.seekToEnd consumer #{tp})
+                                     (try
+                                       (loop []
+                                         (doseq [^ConsumerRecord record (poll-consumer consumer poll-duration)]
+                                           (when (Thread/interrupted)
+                                             (throw (InterruptedException.)))
+                                           (.accept subscriber (fl/transit->file-notification (.value record))))
 
-                      (with-open [consumer (->consumer kafka-config)]
-                        (.assign consumer #{tp})
-                        (.seekToEnd consumer #{tp})
-                        (try
-                          (loop []
-                            (doseq [^ConsumerRecord record (poll-consumer consumer poll-duration)]
-                              (when (Thread/interrupted)
-                                (throw (InterruptedException.)))
-                              (.accept subscriber (fl/transit->file-notification (.value record))))
+                                         (when-not (Thread/interrupted)
+                                           (recur)))
 
-                            (when-not (Thread/interrupted)
-                              (recur)))
+                                       (catch InterruptedException _)))))
+                 (.start))]
 
-                          (catch InterruptedException _)))))
-    (.start)))
+    (reify FileLog$Subscription
+      (close [_]
+        (.interrupt thread)
+        (.join thread)))))
 
 (defrecord KafkaFileLog [kafka-config
                          ^KafkaProducer producer
