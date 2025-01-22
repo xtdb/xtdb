@@ -34,7 +34,7 @@
               c.1
               [:scan
                {:table public/customer}
-               [c_phone c_custkey c_acctbal]]]
+               [c_phone c_acctbal c_custkey]]]
              [:project
               [{o_clerk o.10/o_clerk}
                {o_comment o.10/o_comment}
@@ -49,15 +49,15 @@
                o.10
                [:scan
                 {:table public/orders}
-                [o_custkey
-                 o_shippriority
-                 o_orderdate
-                 o_orderstatus
-                 o_orderkey
+                [o_orderpriority
                  o_clerk
-                 o_orderpriority
+                 o_orderstatus
                  o_totalprice
-                 o_comment]]]]]]]
+                 o_orderdate
+                 o_comment
+                 o_orderkey
+                 o_shippriority
+                 o_custkey]]]]]]]
           [:rename
            xt.values.3
            [:table

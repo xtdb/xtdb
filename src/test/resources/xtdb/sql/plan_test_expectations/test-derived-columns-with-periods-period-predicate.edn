@@ -1,10 +1,21 @@
 [:project
  [{_column_1
    (and
-    (< f.1/_valid_from (coalesce f.1/_system_to xtdb/end-of-time))
-    (> (coalesce f.1/_valid_to xtdb/end-of-time) f.1/_system_from))}]
+    (<
+     (lower f.1/_valid_time)
+     (coalesce (upper f.1/_system_time) xtdb/end-of-time))
+    (>
+     (coalesce (upper f.1/_valid_time) xtdb/end-of-time)
+     (lower f.1/_system_time)))}]
  [:rename
   f.1
-  [:scan
-   {:table public/foo}
-   [_valid_from _system_from _valid_to _system_to]]]]
+  [:project
+   [_valid_from
+    _valid_to
+    _system_from
+    _system_to
+    {_valid_time (period _valid_from _valid_to)}
+    {_system_time (period _system_from _system_to)}]
+   [:scan
+    {:table public/foo}
+    [_valid_from _valid_to _system_from _system_to]]]]]

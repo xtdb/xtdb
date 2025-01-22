@@ -26,20 +26,20 @@
          l.3
          [:scan
           {:table public/lineitem}
-          [{l_shipdate (> l_shipdate #xt/date "1995-03-15")}
-           l_discount
-           l_orderkey
-           l_extendedprice]]]
+          [l_orderkey
+           {l_shipdate (> l_shipdate #xt/date "1995-03-15")}
+           l_extendedprice
+           l_discount]]]
         [:rename
          c.1
          [:scan
           {:table public/customer}
-          [{c_mktsegment (= c_mktsegment "BUILDING")} c_custkey]]]
+          [c_custkey {c_mktsegment (= c_mktsegment "BUILDING")}]]]
         [:rename
          o.2
          [:scan
           {:table public/orders}
-          [o_custkey
+          [{o_orderdate (< o_orderdate #xt/date "1995-03-15")}
+           o_orderkey
            o_shippriority
-           {o_orderdate (< o_orderdate #xt/date "1995-03-15")}
-           o_orderkey]]]]]]]]]]]
+           o_custkey]]]]]]]]]]]

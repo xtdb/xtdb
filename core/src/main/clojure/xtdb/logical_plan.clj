@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.walk :as w]
+            [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.rewrite :as r]
             [xtdb.util :as util])
@@ -444,6 +445,77 @@
                                (set (keep #(when (and (map? %) (not (column? (val (first %)))))
                                              (key (first %)))
                                           projection-spec)))))
+
+(defn push-predicate-down-past-period-constructor [push-correlated? z]
+  ;;NOTE this could reasonably be extended to other/all extends projections if we decided
+  ;;that the cost of repeating the cost of the expression is worth it.
+  (r/zmatch z
+    [:select predicate
+     [:project projection
+      relation]]
+    ;;=>
+    (when (or push-correlated? (no-correlated-columns? predicate))
+      (let [period-projections (->> projection
+                                    (keep #(when (and (map? %) (= 'period (ffirst (vals %)))) %))
+                                    (into {}))
+            cols-referenced-in-predicate (set (expr-symbols predicate))]
+        (when (some #(contains? period-projections %) cols-referenced-in-predicate)
+          [:project projection
+           [:select (w/postwalk-replace period-projections predicate)
+            relation]])))))
+
+(defn remove-redudant-period-constructors [form]
+  (when (and (list? form)
+             (contains? #{'upper 'lower} (first form))
+             (list? (second form))
+             (= 'period (first (second form))))
+    (let [accessor (first form)
+          period (second form)
+          period-lower (second period)
+          period-upper (last period)]
+      (if (= 'upper accessor)
+        period-upper
+        period-lower))))
+
+(defn optimise-contains-period-predicate [form]
+  ;;TODO consider adding an optimised form for the point in time
+  ;;contains, would be possible to rewrite to that form given
+  ;;the second arg is a literal
+  (when (and (list? form)
+             (= 'contains? (first form))
+             (list? (second form))
+             (list? (last form)))
+    (let [[_ [inner-op f1 t1] [inner-op-2 f2 t2]] form]
+      (when (= 'period inner-op inner-op-2)
+        (xt/template
+         (and (<= ~f1 ~f2)
+              (>= (coalesce ~t1 xtdb/end-of-time)
+                  (coalesce ~t2 xtdb/end-of-time))))))))
+
+(defn optimise-expression [expr]
+  (let [rewrites-taken-place? (atom false)]
+    {:expr (w/prewalk (fn [form]
+                        (if-let [new-form
+                                 (some (fn [rewrite]
+                                         (when-let [new-form (rewrite form)]
+                                           (reset! rewrites-taken-place? true)
+                                           new-form))
+                                       [remove-redudant-period-constructors
+                                        optimise-contains-period-predicate])]
+                          new-form
+                          form))
+                      expr)
+     :rewrites-taken-place? @rewrites-taken-place?}))
+
+(defn- optimise-select-expressions [z]
+  (r/zmatch z
+    [:select predicate
+     relation]
+    ;;=>
+    (let [{:keys [expr rewrites-taken-place?]} (optimise-expression predicate)]
+      (when rewrites-taken-place?
+        [:select expr
+         relation]))))
 
 (defn- push-selection-down-past-project [push-correlated? z]
   (r/zmatch z
@@ -1183,12 +1255,14 @@
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def ^:private push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
+(def ^:private push-correlated-predicate-down-past-period-constructor (partial push-predicate-down-past-period-constructor true))
 (def ^:private push-correlated-selection-down-past-group-by (partial push-selection-down-past-group-by true))
 (def ^:private push-correlated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down true))
 
 (def ^:private push-decorrelated-selection-down-past-join (partial push-selection-down-past-join false))
 (def ^:private push-decorrelated-selection-down-past-rename (partial push-selection-down-past-rename false))
 (def ^:private push-decorrelated-selection-down-past-project (partial push-selection-down-past-project false))
+(def ^:private push-decorrelated-predicate-down-past-period-constructor (partial push-predicate-down-past-period-constructor false))
 (def ^:private push-decorrelated-selection-down-past-group-by (partial push-selection-down-past-group-by false))
 (def ^:private push-decorrelated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down false))
 
@@ -1204,6 +1278,8 @@
    #'push-correlated-selection-down-past-join
    #'push-correlated-selection-down-past-rename
    #'push-correlated-selection-down-past-project
+   #'push-correlated-predicate-down-past-period-constructor
+   #'optimise-select-expressions
    #'push-correlated-selection-down-past-group-by
    #'push-correlated-selections-with-fewer-variables-down
    #'remove-superseded-projects
@@ -1219,6 +1295,7 @@
    #'push-decorrelated-selection-down-past-join
    #'push-decorrelated-selection-down-past-rename
    #'push-decorrelated-selection-down-past-project
+   #'push-decorrelated-predicate-down-past-period-constructor
    #'push-decorrelated-selection-down-past-group-by
    #'push-decorrelated-selections-with-fewer-variables-down
    #'squash-correlated-selects

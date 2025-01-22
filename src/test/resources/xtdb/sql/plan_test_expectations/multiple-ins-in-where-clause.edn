@@ -8,7 +8,7 @@
     [{f.1/b xt.values.5/_column_1}]
     [:semi-join
      [{f.1/a xt.values.3/_column_1}]
-     [:rename f.1 [:scan {:table public/foo} [b {a (= a 42)}]]]
+     [:rename f.1 [:scan {:table public/foo} [{a (= a 42)} b]]]
      [:rename
       xt.values.3
       [:table [_column_1] [{:_column_1 1} {:_column_1 2}]]]]

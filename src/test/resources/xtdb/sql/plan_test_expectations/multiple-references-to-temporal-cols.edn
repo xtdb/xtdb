@@ -5,21 +5,37 @@
   {_system_to foo.1/_system_to}]
  [:rename
   foo.1
-  [:scan
-   {:table public/foo,
-    :for-system-time
-    [:in #xt/date "2001-01-01" #xt/date "2002-01-01"]}
-   [{_valid_from
-     (and
-      (<
-       _valid_from
-       (coalesce #xt/date "2004-01-01" xtdb/end-of-time))
-      (= _valid_from 4))}
-    {_system_from (= _system_from 20)}
-    {_valid_to
-     (and
-      (>
-       (coalesce _valid_to xtdb/end-of-time)
-       #xt/date "2000-01-01")
-      (> _valid_to 10))}
-    {_system_to (<= _system_to 23)}]]]]
+  [:project
+   [_valid_from
+    _system_from
+    _system_to
+    _valid_to
+    _valid_from
+    _valid_to
+    {_valid_time (period _valid_from _valid_to)}]
+   [:scan
+    {:table public/foo,
+     :for-system-time
+     [:in #xt/date "2001-01-01" #xt/date "2002-01-01"]}
+    [{_valid_from
+      (and
+       (<
+        _valid_from
+        (coalesce #xt/date "2004-01-01" xtdb/end-of-time))
+       (= _valid_from 4))}
+     {_system_from (= _system_from 20)}
+     {_system_to (<= _system_to 23)}
+     {_valid_to
+      (and
+       (> (coalesce _valid_to xtdb/end-of-time) #xt/date "2000-01-01")
+       (> _valid_to 10))}
+     {_valid_from
+      (and
+       (<
+        _valid_from
+        (coalesce #xt/date "2004-01-01" xtdb/end-of-time))
+       (= _valid_from 4))}
+     {_valid_to
+      (and
+       (> (coalesce _valid_to xtdb/end-of-time) #xt/date "2000-01-01")
+       (> _valid_to 10))}]]]]]

@@ -43,7 +43,7 @@
 (defn accept-visitor [visitor ^ParserRuleContext ctx]
   (.accept ctx visitor))
 
-(defn- ->col-sym
+(defn ->col-sym
   ([n]
    (cond
      (string? n) (recur (symbol n))
@@ -274,6 +274,19 @@
   PlanError
   (error-string [_] (format "Period specifications not allowed on CTE reference: %s" table-name)))
 
+
+(def ^:private temporal-period-columns #{'_valid_time '_system_time})
+
+(defn temporal-period-column? [col]
+  (contains? temporal-period-columns col))
+
+(defn wrap-temporal-periods [plan scan-cols valid-time-col? sys-time-col?]
+  [:project
+   (cond-> scan-cols
+     valid-time-col? (conj {(->col-sym '_valid_time) (list 'period (->col-sym '_valid_from) (->col-sym '_valid_to))})
+     sys-time-col? (conj {(->col-sym '_system_time) (list 'period (->col-sym '_system_from) (->col-sym '_system_to))}))
+   plan])
+
 (defrecord BaseTable [env, ^Sql$BaseTableContext ctx
                       schema-name table-name table-alias unique-table-alias cols
                       ^Map !reqd-cols]
@@ -284,7 +297,8 @@
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (nil? schema-name) (= schema-name (:schema-name this))))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name)
+                            (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]
@@ -294,7 +308,13 @@
 
   PlanRelation
   (plan-rel [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
-    (let [expr-visitor (->ExprPlanVisitor env this)]
+    (let [reqd-cols (set (.keySet !reqd-cols))
+          valid-time-col? (contains? reqd-cols '_valid_time)
+          sys-time-col? (contains? reqd-cols '_system_time)
+          scan-cols (cond-> (vec (disj reqd-cols '_valid_time '_system_time))
+                      valid-time-col? (into ['_valid_from '_valid_to])
+                      sys-time-col? (into ['_system_from '_system_to]))
+          expr-visitor (->ExprPlanVisitor env this)]
       (letfn [(<-table-time-period-specification [specs]
                 (case (count specs)
                   0 nil
@@ -306,13 +326,14 @@
                          sys-time-default)]
 
           [:rename unique-table-alias
-           [:scan (cond-> {:table (symbol (if schema-name
-                                            (str schema-name)
-                                            "public")
-                                          (str table-name))}
-                    for-vt (assoc :for-valid-time for-vt)
-                    for-st (assoc :for-system-time for-st))
-            (vec (.keySet !reqd-cols))]])))))
+           (cond-> [:scan (cond-> {:table (symbol (if schema-name
+                                                    (str schema-name)
+                                                    "public")
+                                                  (str table-name))}
+                            for-vt (assoc :for-valid-time for-vt)
+                            for-st (assoc :for-system-time for-st))
+                    scan-cols]
+             (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))])))))
 
 (defrecord JoinConditionScope [env l r]
   Scope
@@ -836,12 +857,6 @@
     (catch Exception e
       (add-err! env (->CannotParseBinaryHexString bin-str (.getMessage e))))))
 
-(defn- <-period-literal [expr]
-  (when (and (seq? expr)
-             (= 'period (first expr))
-             (= 3 (count expr)))
-    (rest expr)))
-
 (defrecord CannotParseUUID [u-str msg]
   PlanError
   (error-string [_] (format "Cannot parse UUID: %s - failed with message %s" u-str msg)))
@@ -1053,30 +1068,19 @@
   (visitColumnExpr [this ctx] (-> (.columnReference ctx) (.accept this)))
 
   (visitColumnReference [{{:keys [!id-count]} :env :keys [^Set !ob-col-refs ^Set !unresolved-cr]} ctx]
-    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
-      (case (first chain)
-        _valid_time
-        (-> (xt/template (period ~(find-col scope (into ['_valid_from] (rest chain)))
-                                 ~(find-col scope (into ['_valid_to] (rest chain)))))
-            (vary-meta assoc :identifier (->col-sym '_valid_time)))
+    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))
+          matches (find-cols scope chain)]
+      (when-let [sym (case (count matches)
+                       0 (do (add-warning! env (->ColumnNotFound chain))
+                             (when !unresolved-cr
+                               (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
+                                 (.add !unresolved-cr sym)
+                                 sym)))
+                       1 (first matches)
+                       (add-err! env (->AmbiguousColumnReference chain))) ]
+        (some-> !ob-col-refs (.add sym))
 
-        _system_time
-        (-> (xt/template (period ~(find-col scope (into ['_system_from] (rest chain)))
-                                 ~(find-col scope (into ['_system_to] (rest chain)))))
-            (vary-meta assoc :identifier (->col-sym '_system_time)))
-
-        (let [matches (find-cols scope chain)]
-          (when-let [sym (case (count matches)
-                           0 (do (add-warning! env (->ColumnNotFound chain))
-                                 (when !unresolved-cr
-                                   (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
-                                     (.add !unresolved-cr sym)
-                                     sym)))
-                           1 (first matches)
-                           (add-err! env (->AmbiguousColumnReference chain))) ]
-            (some-> !ob-col-refs (.add sym))
-
-         sym)))))
+        sym)))
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
@@ -1384,78 +1388,55 @@
   (visitPeriodOverlapsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[f1 t1] (<-period-literal p1)]
-            (when-let [[f2 t2] (<-period-literal p2)]
-              (xt/template
-               (and (< ~f1 (coalesce ~t2 xtdb/end-of-time))
-                    (> (coalesce ~t1 xtdb/end-of-time) ~f2)))))
-          (xt/template (overlaps? ~p1 ~p2)))))
+      (xt/template
+       (and (< (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time))
+            (> (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2))))))
 
   (visitOverlapsFunction [this ctx]
-    ;; HACK assumes all are period literals for now, won't be able to do this with first-class periods
-    (let [exprs (mapv (comp <-period-literal #(.accept ^ParserRuleContext % this)) (.expr ctx))]
+    (let [exprs (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
       (xt/template
-       (< (greatest ~@(map first exprs))
-          (least ~@(map (fn [[_ to]]
-                          (xt/template (coalesce ~to xtdb/end-of-time)))
-                        exprs))))))
+       (< (greatest
+           ~@(map
+              #(xt/template (lower ~%)) exprs))
+          (least
+           ~@(map #(xt/template (coalesce (upper ~%) xtdb/end-of-time))
+                  exprs))))))
 
   (visitPeriodEqualsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[f1 t1] (<-period-literal p1)]
-            (when-let [[f2 t2] (<-period-literal p2)]
-              (xt/template
-               (and (= ~f1 ~f2)
-                    (null-eq ~t1 ~t2)))))
-          (xt/template (equals? ~p1 ~p2)))))
+      (xt/template
+       (and (= (lower ~p1) (lower ~p2))
+            (null-eq (upper ~p1) (upper ~p2))))))
 
   (visitPeriodContainsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[f1 t1] (<-period-literal p1)]
-            (when-let [[f2 t2] (<-period-literal p2)]
-              (xt/template
-               (and (<= ~f1 ~f2)
-                    (>= (coalesce ~t1 xtdb/end-of-time)
-                        (coalesce ~t2 xtdb/end-of-time))))))
-          (xt/template (contains? ~p1 ~p2)))))
+      (xt/template (contains? ~p1 ~p2))))
 
   (visitPeriodPrecedesPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[_ t1] (<-period-literal p1)]
-            (when-let [[f2 _] (<-period-literal p2)]
-              (xt/template
-               (<= (coalesce ~t1 xtdb/end-of-time) ~f2))))
-          (xt/template (precedes? ~p1 ~p2)))))
+      (xt/template
+       (<= (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
 
   (visitPeriodSucceedsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[f1 _t1] (<-period-literal p1)]
-            (when-let [[_f2 t2] (<-period-literal p2)]
-              (xt/template
-               (>= ~f1 (coalesce ~t2 xtdb/end-of-time)))))
-          (xt/template (succeeds? ~p1 ~p2)))))
+      (xt/template
+       (>= (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
   (visitPeriodImmediatelyPrecedesPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[_f1 t1] (<-period-literal p1)]
-            (when-let [[f2 _t2] (<-period-literal p2)]
-              (xt/template
-               (= (coalesce ~t1 xtdb/end-of-time) ~f2))))
-          (xt/template (immediately-precedes? ~p1 ~p2)))))
+      (xt/template
+       (= (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
 
   (visitPeriodImmediatelySucceedsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
-      (or (when-let [[f1 _t1] (<-period-literal p1)]
-            (when-let [[_f2 t2] (<-period-literal p2)]
-              (xt/template
-               (= ~f1 (coalesce ~t2 xtdb/end-of-time)))))
-          (xt/template (immediately-succeeds? ~p1 ~p2)))))
+      (xt/template
+       (= (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
   (visitTsTzRangeConstructor [this ctx]
     (xt/template
@@ -1503,17 +1484,14 @@
 
   (visitRangeBinsFunction [this ctx]
     (let [p (-> (.rangeBinsSource ctx) (.expr) (.accept this))]
-      (if-let [[from to] (<-period-literal p)]
-        (xt/template
-         (range-bins ~(-> (.intervalLiteral ctx) (.accept this))
-                     ~from
-                     ~to
-                     ~@(some-> (.dateBinOrigin ctx)
-                               .expr
-                               (.accept this)
-                               vector)))
-
-        (throw (UnsupportedOperationException. "TODO")))))
+      (xt/template
+       (range-bins ~(-> (.intervalLiteral ctx) (.accept this))
+                   (lower ~p)
+                   (upper ~p)
+                   ~@(some-> (.dateBinOrigin ctx)
+                             .expr
+                             (.accept this)
+                             vector)))))
 
   (visitAgeFunction [this ctx]
     (let [ve1 (-> (.expr ctx 0) (.accept this))
@@ -2469,7 +2447,8 @@
   (-find-cols [this [col-name table-name] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name)
+                            (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]

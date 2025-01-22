@@ -28,25 +28,25 @@
      [:select
       (= ps.3/ps_supplycost _min_out_12)
       [:group-by
-       [p.1/p_partkey
-        p.1/p_type
-        p.1/p_size
+       [p.1/p_size
+        p.1/p_partkey
         p.1/p_mfgr
-        s.2/s_name
-        s.2/s_acctbal
-        s.2/s_address
-        s.2/s_nationkey
-        s.2/s_phone
+        p.1/p_type
         s.2/s_comment
+        s.2/s_name
+        s.2/s_address
+        s.2/s_phone
+        s.2/s_acctbal
         s.2/s_suppkey
+        s.2/s_nationkey
         ps.3/ps_partkey
-        ps.3/ps_suppkey
         ps.3/ps_supplycost
-        n.4/n_nationkey
+        ps.3/ps_suppkey
         n.4/n_name
         n.4/n_regionkey
-        r.5/r_name
+        n.4/n_nationkey
         r.5/r_regionkey
+        r.5/r_name
         _row_number_0
         {_min_out_12 (min ps.7/ps_supplycost)}]
        [:left-outer-join
@@ -62,36 +62,36 @@
             r.5
             [:scan
              {:table public/region}
-             [{r_name (= r_name "EUROPE")} r_regionkey]]]
+             [r_regionkey {r_name (= r_name "EUROPE")}]]]
            [:rename
             n.4
             [:scan
              {:table public/nation}
-             [n_nationkey n_name n_regionkey]]]
+             [n_name n_regionkey n_nationkey]]]
            [:rename
             ps.3
             [:scan
              {:table public/partsupp}
-             [ps_partkey ps_suppkey ps_supplycost]]]
+             [ps_partkey ps_supplycost ps_suppkey]]]
            [:rename
             p.1
             [:scan
              {:table public/part}
-             [p_partkey
-              {p_type (like p_type "%BRASS")}
-              {p_size (= p_size 15)}
-              p_mfgr]]]
+             [{p_size (= p_size 15)}
+              p_partkey
+              p_mfgr
+              {p_type (like p_type "%BRASS")}]]]
            [:rename
             s.2
             [:scan
              {:table public/supplier}
-             [s_name
-              s_acctbal
+             [s_comment
+              s_name
               s_address
-              s_nationkey
               s_phone
-              s_comment
-              s_suppkey]]]]]]
+              s_acctbal
+              s_suppkey
+              s_nationkey]]]]]]
         [:mega-join
          [{n.9/n_regionkey r.10/r_regionkey}
           {s.8/s_nationkey n.9/n_nationkey}
@@ -100,17 +100,17 @@
            r.10
            [:scan
             {:table public/region}
-            [{r_name (= r_name "EUROPE")} r_regionkey]]]
+            [r_regionkey {r_name (= r_name "EUROPE")}]]]
           [:rename
            n.9
-           [:scan {:table public/nation} [n_nationkey n_regionkey]]]
+           [:scan {:table public/nation} [n_regionkey n_nationkey]]]
           [:rename
            ps.7
            [:scan
             {:table public/partsupp}
-            [ps_partkey ps_suppkey ps_supplycost]]]
+            [ps_partkey ps_supplycost ps_suppkey]]]
           [:rename
            s.8
            [:scan
             {:table public/supplier}
-            [s_nationkey s_suppkey]]]]]]]]]]]]]
+            [s_suppkey s_nationkey]]]]]]]]]]]]]

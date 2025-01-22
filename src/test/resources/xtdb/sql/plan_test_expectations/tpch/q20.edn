@@ -14,7 +14,7 @@
         s.1
         [:scan
          {:table public/supplier}
-         [s_name s_address s_nationkey s_suppkey]]]
+         [s_name s_address s_suppkey s_nationkey]]]
        [:project
         [{ps_suppkey ps.4/ps_suppkey}]
         [:map
@@ -45,8 +45,7 @@
                l.8
                [:scan
                 {:table public/lineitem}
-                [l_partkey
-                 {l_shipdate
+                [{l_shipdate
                   (and
                    (<
                     l_shipdate
@@ -55,7 +54,8 @@
                      (single-field-interval "1" "YEAR" 2 6)))
                    (>= l_shipdate #xt/date "1994-01-01"))}
                  l_quantity
-                 l_suppkey]]]]]]]
+                 l_suppkey
+                 l_partkey]]]]]]]
           [:project
            [{p_partkey p.6/p_partkey}]
            [:rename
@@ -67,4 +67,4 @@
        n.2
        [:scan
         {:table public/nation}
-        [n_nationkey {n_name (= n_name "CANADA")}]]]]]]]]]
+        [{n_name (= n_name "CANADA")} n_nationkey]]]]]]]]]

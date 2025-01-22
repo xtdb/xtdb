@@ -17,4 +17,4 @@
        o.2
        [:scan
         {:table public/orders}
-        [o_custkey o_orderkey o_comment]]]]]]]]]
+        [o_comment o_orderkey o_custkey]]]]]]]]]
