@@ -38,7 +38,7 @@
   (alter-var-root #'node (constantly nil)))
 
 (def standalone-config
-  {::xtdb {:node-opts {:server {:port 5432
+  {::xtdb {:node-opts {:server {:port 0
                                 :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                       :keystore-password "password123"}}
                        :log [:local {:path (io/file dev-node-dir "log")}]
