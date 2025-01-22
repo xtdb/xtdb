@@ -43,10 +43,10 @@
           p.2
           [:scan
            {:table public/part}
-           [p_partkey
-            {p_type (not (like p_type "MEDIUM POLISHED%"))}
-            {p_brand (<> p_brand "Brand#45")}
-            p_size]]]
+           [{p_brand (<> p_brand "Brand#45")}
+            p_size
+            p_partkey
+            {p_type (not (like p_type "MEDIUM POLISHED%"))}]]]
          [:rename
           xt.values.4
           [:table

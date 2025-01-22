@@ -21,7 +21,7 @@
           n.4
           [:scan
            {:table public/nation}
-           [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]
+           [{n_name (= n_name "SAUDI ARABIA")} n_nationkey]]]
          [:rename
           o.3
           [:scan
@@ -31,7 +31,7 @@
           s.1
           [:scan
            {:table public/supplier}
-           [s_name s_nationkey s_suppkey]]]
+           [s_name s_suppkey s_nationkey]]]
          [:semi-join
           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
           [:anti-join
@@ -42,7 +42,7 @@
              (> l_receiptdate l_commitdate)
              [:scan
               {:table public/lineitem}
-              [l_receiptdate l_suppkey l_orderkey l_commitdate]]]]
+              [l_receiptdate l_commitdate l_orderkey l_suppkey]]]]
            [:project
             [{l_comment l3.10/l_comment}
              {l_commitdate l3.10/l_commitdate}
@@ -66,22 +66,22 @@
               (> l_receiptdate l_commitdate)
               [:scan
                {:table public/lineitem}
-               [l_partkey
-                l_shipinstruct
-                l_discount
+               [l_linestatus
                 l_receiptdate
-                l_orderkey
-                l_returnflag
                 l_commitdate
+                l_tax
+                l_orderkey
+                l_shipdate
+                l_comment
+                l_returnflag
                 l_extendedprice
                 l_linenumber
-                l_shipdate
                 l_quantity
-                l_comment
+                l_shipinstruct
                 l_suppkey
                 l_shipmode
-                l_linestatus
-                l_tax]]]]]]
+                l_discount
+                l_partkey]]]]]]
           [:project
            [{l_comment l2.6/l_comment}
             {l_commitdate l2.6/l_commitdate}
@@ -103,19 +103,19 @@
             l2.6
             [:scan
              {:table public/lineitem}
-             [l_partkey
-              l_shipinstruct
+             [l_linestatus
               l_receiptdate
-              l_discount
-              l_orderkey
-              l_returnflag
               l_commitdate
+              l_tax
+              l_orderkey
+              l_shipdate
+              l_comment
+              l_returnflag
               l_extendedprice
               l_linenumber
-              l_shipdate
               l_quantity
-              l_comment
+              l_shipinstruct
               l_suppkey
               l_shipmode
-              l_linestatus
-              l_tax]]]]]]]]]]]]]]
+              l_discount
+              l_partkey]]]]]]]]]]]]]]

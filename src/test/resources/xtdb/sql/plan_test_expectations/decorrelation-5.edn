@@ -6,12 +6,12 @@
    [{_sq_3 (+ _avg_out_8 1)}]
    [:group-by
     [s.1/name
-     s.1/major
      s.1/year
+     s.1/major
      s.1/id
      e.2/sid
-     e.2/course
      e.2/grade
+     e.2/course
      _row_number_0
      {_avg_out_8 (avg e2.4/grade)}]
     [:left-outer-join
@@ -27,12 +27,12 @@
          [:scan
           {:table public/students}
           [name
-           {major (or (= major "CS") (= major "Games Eng"))}
            year
+           {major (or (= major "CS") (= major "Games Eng"))}
            id]]]
         [:rename
          e.2
-         [:scan {:table public/exams} [sid course grade]]]]]]
+         [:scan {:table public/exams} [sid grade course]]]]]]
      [:rename
       e2.4
-      [:scan {:table public/exams} [sid grade date curriculum]]]]]]]]
+      [:scan {:table public/exams} [sid date curriculum grade]]]]]]]]

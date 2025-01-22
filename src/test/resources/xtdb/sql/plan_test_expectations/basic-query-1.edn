@@ -9,4 +9,4 @@
     ms.2
     [:scan
      {:table public/movie_star}
-     [name {birthdate (= birthdate 1960)}]]]]]]
+     [{birthdate (= birthdate 1960)} name]]]]]]

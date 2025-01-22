@@ -33,36 +33,36 @@
           r.8
           [:scan
            {:table public/region}
-           [{r_name (= r_name "AMERICA")} r_regionkey]]]
+           [r_regionkey {r_name (= r_name "AMERICA")}]]]
          [:rename
           n2.7
-          [:scan {:table public/nation} [n_nationkey n_name]]]
+          [:scan {:table public/nation} [n_name n_nationkey]]]
          [:rename
           n1.6
-          [:scan {:table public/nation} [n_nationkey n_regionkey]]]
+          [:scan {:table public/nation} [n_regionkey n_nationkey]]]
          [:rename
           c.5
-          [:scan {:table public/customer} [c_nationkey c_custkey]]]
+          [:scan {:table public/customer} [c_custkey c_nationkey]]]
          [:rename
           o.4
           [:scan
            {:table public/orders}
-           [o_custkey
-            {o_orderdate
+           [{o_orderdate
              (between
               o_orderdate
               #xt/date "1995-01-01"
               #xt/date "1996-12-31")}
-            o_orderkey]]]
+            o_orderkey
+            o_custkey]]]
          [:rename
           l.3
           [:scan
            {:table public/lineitem}
-           [l_partkey
-            l_discount
+           [l_orderkey
+            l_extendedprice
             l_suppkey
-            l_orderkey
-            l_extendedprice]]]
+            l_discount
+            l_partkey]]]
          [:rename
           p.1
           [:scan
@@ -72,4 +72,4 @@
           s.2
           [:scan
            {:table public/supplier}
-           [s_nationkey s_suppkey]]]]]]]]]]]]
+           [s_suppkey s_nationkey]]]]]]]]]]]]

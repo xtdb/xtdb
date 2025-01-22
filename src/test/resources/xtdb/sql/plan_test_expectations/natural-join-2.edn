@@ -3,4 +3,4 @@
  [:left-outer-join
   [{si.2/title m.1/title}]
   [:rename si.2 [:scan {:table public/stars_in} [title films]]]
-  [:rename m.1 [:scan {:table public/movie} [length title]]]]]
+  [:rename m.1 [:scan {:table public/movie} [title length]]]]]

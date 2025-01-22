@@ -14,7 +14,8 @@
        o.1
        [:scan
         {:table public/orders}
-        [{o_orderdate
+        [o_orderpriority
+         {o_orderdate
           (and
            (<
             o_orderdate
@@ -22,8 +23,7 @@
              #xt/date "1993-07-01"
              (single-field-interval "3" "MONTH" 2 6)))
            (>= o_orderdate #xt/date "1993-07-01"))}
-         o_orderkey
-         o_orderpriority]]]
+         o_orderkey]]]
       [:project
        [{l_comment l.3/l_comment}
         {l_commitdate l.3/l_commitdate}
@@ -47,19 +47,19 @@
          (< l_commitdate l_receiptdate)
          [:scan
           {:table public/lineitem}
-          [l_partkey
-           l_shipinstruct
-           l_discount
+          [l_linestatus
            l_receiptdate
-           l_orderkey
-           l_returnflag
            l_commitdate
+           l_tax
+           l_orderkey
+           l_shipdate
+           l_comment
+           l_returnflag
            l_extendedprice
            l_linenumber
-           l_shipdate
            l_quantity
-           l_comment
+           l_shipinstruct
            l_suppkey
            l_shipmode
-           l_linestatus
-           l_tax]]]]]]]]]]]
+           l_discount
+           l_partkey]]]]]]]]]]]

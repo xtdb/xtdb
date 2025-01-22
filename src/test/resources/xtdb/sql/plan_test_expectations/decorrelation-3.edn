@@ -3,9 +3,9 @@
  [:map
   [{_sq_4 _row_count_7}]
   [:group-by
-   [customers.1/name
+   [customers.1/country
     customers.1/custno
-    customers.1/country
+    customers.1/name
     _sq_2
     _row_number_0
     {_row_count_7 (count _dep_countable_1)}]
@@ -19,7 +19,7 @@
        [{customers.1/country country}]
        [:rename
         customers.1
-        [:scan {:table public/customers} [name custno country]]]
+        [:scan {:table public/customers} [country custno name]]]
        [:project
         [{country salesp.3/country}]
         [:rename salesp.3 [:scan {:table public/salesp} [country]]]]]]]

@@ -552,7 +552,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
  [{_id u.1/_id} {foo u.1/foo}]
  [:rename
   u.1
-  [:select (= (+ a b) 12) [:scan {:table public/users} [b foo a _id]]]]]
+  [:select (= (+ a b) 12) [:scan {:table public/users} [a _id foo b]]]]]
 ")}]
            (-> (xt/q tu/*node*
                      "SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12"

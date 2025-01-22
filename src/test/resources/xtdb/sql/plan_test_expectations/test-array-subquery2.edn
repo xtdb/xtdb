@@ -3,7 +3,7 @@
  [:apply
   :single-join
   {a.1/b ?_sq_b_3}
-  [:rename a.1 [:scan {:table public/a} [b {a (= a 42)}]]]
+  [:rename a.1 [:scan {:table public/a} [{a (= a 42)} b]]]
   [:group-by
    [{_sq_2 (vec_agg b1)}]
    [:project

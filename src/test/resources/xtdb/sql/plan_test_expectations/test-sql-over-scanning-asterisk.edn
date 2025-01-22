@@ -5,5 +5,5 @@
   {lastjame bar.2/lastjame}]
  [:mega-join
   []
-  [[:rename foo.1 [:scan {:table public/foo} [name lastname]]]
+  [[:rename foo.1 [:scan {:table public/foo} [lastname name]]]
    [:rename bar.2 [:scan {:table public/bar} [lastjame jame]]]]]]

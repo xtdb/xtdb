@@ -22,15 +22,15 @@
           n.3
           [:scan
            {:table public/nation}
-           [n_nationkey {n_name (= n_name "GERMANY")}]]]
+           [{n_name (= n_name "GERMANY")} n_nationkey]]]
          [:rename
           ps.1
           [:scan
            {:table public/partsupp}
-           [ps_partkey ps_availqty ps_suppkey ps_supplycost]]]
+           [ps_partkey ps_supplycost ps_availqty ps_suppkey]]]
          [:rename
           s.2
-          [:scan {:table public/supplier} [s_nationkey s_suppkey]]]]]]]
+          [:scan {:table public/supplier} [s_suppkey s_nationkey]]]]]]]
      [:project
       [{_sq_6 (* _sum_out_10 1.0E-4)}]
       [:group-by
@@ -44,14 +44,14 @@
            n.9
            [:scan
             {:table public/nation}
-            [n_nationkey {n_name (= n_name "GERMANY")}]]]
+            [{n_name (= n_name "GERMANY")} n_nationkey]]]
           [:rename
            ps.7
            [:scan
             {:table public/partsupp}
-            [ps_availqty ps_suppkey ps_supplycost]]]
+            [ps_supplycost ps_availqty ps_suppkey]]]
           [:rename
            s.8
            [:scan
             {:table public/supplier}
-            [s_nationkey s_suppkey]]]]]]]]]]]]]
+            [s_suppkey s_nationkey]]]]]]]]]]]]]

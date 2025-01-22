@@ -274,6 +274,19 @@
   PlanError
   (error-string [_] (format "Period specifications not allowed on CTE reference: %s" table-name)))
 
+
+(def ^:private temporal-period-columns #{'_valid_time '_system_time})
+
+(defn temporal-period-column? [col]
+  (contains? temporal-period-columns col))
+
+(defn wrap-temporal-periods [plan scan-cols valid-time-col? sys-time-col?]
+  [:project
+   (cond-> scan-cols
+     valid-time-col? (conj '{_valid_time (period _valid_from _valid_to)})
+     sys-time-col? (conj '{_system_time (period _system_from _system_to)}))
+   plan])
+
 (defrecord BaseTable [env, ^Sql$BaseTableContext ctx
                       schema-name table-name table-alias unique-table-alias cols
                       ^Map !reqd-cols]
@@ -284,7 +297,8 @@
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (nil? schema-name) (= schema-name (:schema-name this))))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name)
+                            (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]
@@ -294,7 +308,13 @@
 
   PlanRelation
   (plan-rel [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
-    (let [expr-visitor (->ExprPlanVisitor env this)]
+    (let [reqd-cols (set (.keySet !reqd-cols))
+          valid-time-col? (contains? reqd-cols '_valid_time)
+          sys-time-col? (contains? reqd-cols '_system_time)
+          scan-cols (cond-> (vec (disj reqd-cols '_valid_time '_system_time))
+                      valid-time-col? (into ['_valid_from '_valid_to])
+                      sys-time-col? (into ['_system_from '_system_to]))
+          expr-visitor (->ExprPlanVisitor env this)]
       (letfn [(<-table-time-period-specification [specs]
                 (case (count specs)
                   0 nil
@@ -306,13 +326,14 @@
                          sys-time-default)]
 
           [:rename unique-table-alias
-           [:scan (cond-> {:table (symbol (if schema-name
-                                            (str schema-name)
-                                            "public")
-                                          (str table-name))}
-                    for-vt (assoc :for-valid-time for-vt)
-                    for-st (assoc :for-system-time for-st))
-            (vec (.keySet !reqd-cols))]])))))
+           (cond-> [:scan (cond-> {:table (symbol (if schema-name
+                                                    (str schema-name)
+                                                    "public")
+                                                  (str table-name))}
+                            for-vt (assoc :for-valid-time for-vt)
+                            for-st (assoc :for-system-time for-st))
+                    scan-cols]
+             (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))])))))
 
 (defrecord JoinConditionScope [env l r]
   Scope
@@ -1048,30 +1069,22 @@
   (visitColumnExpr [this ctx] (-> (.columnReference ctx) (.accept this)))
 
   (visitColumnReference [{{:keys [!id-count]} :env :keys [^Set !ob-col-refs ^Set !unresolved-cr]} ctx]
-    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))]
-      (case (first chain)
-        _valid_time
-        (-> (xt/template (period ~(find-col scope (into ['_valid_from] (rest chain)))
-                                 ~(find-col scope (into ['_valid_to] (rest chain)))))
-            (vary-meta assoc :identifier (->col-sym '_valid_time)))
+    (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))
+          matches (find-cols scope chain)]
+      (when-let [sym (case (count matches)
+                       0 (do
+                           ;; (prn chain)
+                           ;; (throw (UnsupportedOperationException. "foo"))
+                           (add-warning! env (->ColumnNotFound chain))
+                           (when !unresolved-cr
+                             (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
+                               (.add !unresolved-cr sym)
+                               sym)))
+                       1 (first matches)
+                       (add-err! env (->AmbiguousColumnReference chain))) ]
+        (some-> !ob-col-refs (.add sym))
 
-        _system_time
-        (-> (xt/template (period ~(find-col scope (into ['_system_from] (rest chain)))
-                                 ~(find-col scope (into ['_system_to] (rest chain)))))
-            (vary-meta assoc :identifier (->col-sym '_system_time)))
-
-        (let [matches (find-cols scope chain)]
-          (when-let [sym (case (count matches)
-                           0 (do (add-warning! env (->ColumnNotFound chain))
-                                 (when !unresolved-cr
-                                   (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
-                                     (.add !unresolved-cr sym)
-                                     sym)))
-                           1 (first matches)
-                           (add-err! env (->AmbiguousColumnReference chain))) ]
-            (some-> !ob-col-refs (.add sym))
-
-         sym)))))
+        sym)))
 
   (visitParamExpr [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
@@ -2464,7 +2477,8 @@
   (-find-cols [this [col-name table-name] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                  (when (or (contains? cols col-name) (types/temporal-column? col-name)
+                            (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]

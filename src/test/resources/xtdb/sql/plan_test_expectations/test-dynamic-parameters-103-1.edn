@@ -2,4 +2,4 @@
  [{a foo.1/a}]
  [:rename
   foo.1
-  [:scan {:table public/foo} [{b (= b ?_0)} {c (= c ?_1)} a]]]]
+  [:scan {:table public/foo} [a {c (= c ?_1)} {b (= b ?_0)}]]]]

@@ -7,11 +7,11 @@
    [:map
     [{_sq_3 (* 0.2 _avg_out_6)}]
     [:group-by
-     [l.1/l_partkey
+     [l.1/l_extendedprice
       l.1/l_quantity
-      l.1/l_extendedprice
-      p.2/p_partkey
+      l.1/l_partkey
       p.2/p_brand
+      p.2/p_partkey
       p.2/p_container
       _row_number_0
       {_avg_out_6 (avg l.4/l_quantity)}]
@@ -25,14 +25,14 @@
           l.1
           [:scan
            {:table public/lineitem}
-           [l_partkey l_quantity l_extendedprice]]]
+           [l_extendedprice l_quantity l_partkey]]]
          [:rename
           p.2
           [:scan
            {:table public/part}
-           [p_partkey
-            {p_brand (= p_brand "Brand#23")}
+           [{p_brand (= p_brand "Brand#23")}
+            p_partkey
             {p_container (= p_container "MED BOX")}]]]]]]
       [:rename
        l.4
-       [:scan {:table public/lineitem} [l_partkey l_quantity]]]]]]]]]
+       [:scan {:table public/lineitem} [l_quantity l_partkey]]]]]]]]]

@@ -44,15 +44,15 @@
       l.1
       [:scan
        {:table public/lineitem}
-       [{l_shipdate
+       [l_linestatus
+        l_tax
+        {l_shipdate
          (<=
           l_shipdate
           (-
            #xt/date "1998-12-01"
            (single-field-interval "90" "DAY" 2 6)))}
-        l_discount
-        l_quantity
         l_returnflag
         l_extendedprice
-        l_linestatus
-        l_tax]]]]]]]]
+        l_quantity
+        l_discount]]]]]]]]
