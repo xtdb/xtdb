@@ -28,6 +28,8 @@
          exp-plan-file-path# (format "xtdb/sql/plan_test_expectations/%s.edn" exp-plan-file-name#)
          actual-plan# ~(nth form 2)]
      (binding [*print-namespace-maps* false]
+       (when regen-expected-files?
+         (spit (io/resource exp-plan-file-path#) (with-out-str (clojure.pprint/pprint actual-plan#))))
        (if-let [exp-plan-file# (io/resource exp-plan-file-path#)]
          (let [exp-plan# (read-string (slurp exp-plan-file#))
                result# (= exp-plan# actual-plan#)]
@@ -36,13 +38,10 @@
                            :message ~msg
                            :expected (list '~'= exp-plan-file-name# actual-plan#)
                            :actual (list '~'= exp-plan# actual-plan#)})
-             (do
-               (when regen-expected-files?
-                 (spit (io/resource exp-plan-file-path#) (with-out-str (clojure.pprint/pprint actual-plan#))))
-               (t/do-report {:type :fail
-                             :message ~msg
-                             :expected (list '~'= exp-plan-file-name# actual-plan#)
-                             :actual (list '~'not (list '~'= exp-plan# actual-plan#))})))
+             (t/do-report {:type :fail
+                           :message ~msg
+                           :expected (list '~'= exp-plan-file-name# actual-plan#)
+                           :actual (list '~'not (list '~'= exp-plan# actual-plan#))}))
            result#)
          (do
            (spit
