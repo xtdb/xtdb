@@ -211,19 +211,58 @@
   (t/is (= #{{:relkind "r",
               :relnamespace 1106696632,
               :oid 732573471,
-              :relname "baseball"}
+              :relname "baseball",
+              :relam 2,
+              :relchecks 0,
+              :relhasindex true,
+              :relhasrules false,
+              :relhastriggers false,
+              :relrowsecurity false,
+              :relforcerowsecurity false,
+              :relispartition false,
+              :reltablespace 0,
+              :reloftype 0,
+              :relpersistence "p",
+              :relreplident "d",
+              :reltoastrelid 0}
              {:relkind "r",
               :relnamespace 1106696632,
               :oid 598393539,
-              :relname "txs"}
+              :relname "txs",
+              :relam 2,
+              :relchecks 0,
+              :relhasindex true,
+              :relhasrules false,
+              :relhastriggers false,
+              :relrowsecurity false,
+              :relforcerowsecurity false,
+              :relispartition false,
+              :reltablespace 0,
+              :reloftype 0,
+              :relpersistence "p",
+              :relreplident "d",
+              :reltoastrelid 0}
              {:relkind "r",
               :relnamespace 1106696632,
               :oid 127091884,
-              :relname "beanie"}}
+              :relname "beanie",
+              :relam 2,
+              :relchecks 0,
+              :relhasindex true,
+              :relhasrules false,
+              :relhastriggers false,
+              :relrowsecurity false,
+              :relforcerowsecurity false,
+              :relispartition false,
+              :reltablespace 0,
+              :reloftype 0,
+              :relpersistence "p",
+              :relreplident "d",
+              :reltoastrelid 0}}
            (set (tu/query-ra '[:select (or (= relname "beanie") (= relname "baseball") (= relname "txs"))
                                [:scan
                                 {:table pg_catalog/pg_class}
-                                [oid relname relnamespace relkind]]]
+                                [reltablespace reloftype relhastriggers relchecks relpersistence relhasrules relispartition relname relforcerowsecurity oid relnamespace relreplident relhasindex reltoastrelid relkind relam relrowsecurity]]]
                              {:node tu/*node*})))))
 
 (deftest test-pg-type
