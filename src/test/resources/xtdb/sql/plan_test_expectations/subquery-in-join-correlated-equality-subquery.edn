@@ -8,9 +8,9 @@
     [:apply
      :single-join
      {bar.2/b ?_sq_b_4}
-     [:rename bar.2 [:scan {:table public/bar} [b c]]]
+     [:rename bar.2 [:scan {:table public/bar} [c b]]]
      [:project
       [{_sq_3 foo.4/b}]
       [:rename
        foo.4
-       [:scan {:table public/foo} [b {a (= a ?_sq_b_4)}]]]]]]]]]
+       [:scan {:table public/foo} [{a (= a ?_sq_b_4)} b]]]]]]]]]

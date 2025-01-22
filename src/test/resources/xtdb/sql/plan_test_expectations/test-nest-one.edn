@@ -12,4 +12,4 @@
      c.3
      [:scan
       {:table public/customers}
-      [name {_id (= _id ?_sq_customer_id_3)}]]]]]]]
+      [{_id (= _id ?_sq_customer_id_3)} name]]]]]]]

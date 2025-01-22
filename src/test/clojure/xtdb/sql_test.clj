@@ -2605,12 +2605,64 @@ UNION ALL
 
   (t/is (= [{:xt/id 1, :nest [1 2 3], :a [1 2 3]}]
            (xt/q tu/*node* "SELECT *
-              FROM nested_table nt,
-                   LATERAL (SELECT nt.nest) t(a)")))
+                            FROM nested_table nt,
+                            LATERAL (SELECT nt.nest) t(a)")))
 
   (t/is (= [{:xt/id 1, :nest [1 2 3], :a 1}
             {:xt/id 1, :nest [1 2 3], :a 2}
             {:xt/id 1, :nest [1 2 3], :a 3}]
            (xt/q tu/*node* "SELECT *
-              FROM nested_table nt,
-                   LATERAL (FROM UNNEST(nt.nest) AS foo(id)) t(a)"))))
+                            FROM nested_table nt,
+                            LATERAL (FROM UNNEST(nt.nest) AS foo(id)) t(a)"))))
+
+(t/deftest cte-exporting-valid-time-4054
+  (xt/submit-tx tu/*node* [[:put-docs {:into :docs :valid-from #inst "2020" :valid-to #inst "2050"} {:xt/id 1}]])
+
+  (t/is (= [{:xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" #xt/zoned-date-time "2050-01-01T00:00Z"]}]
+           (xt/q tu/*node*
+                 "SELECT _valid_time
+                  FROM (SELECT _valid_time
+                        FROM docs) t")))
+
+  (t/is (= [{:xt/system-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]}]
+           (xt/q tu/*node*
+                 "WITH data AS (
+                     SELECT _system_time
+                     FROM docs
+                  )
+                  SELECT _system_time
+                  FROM data"))))
+
+(t/deftest test-period-predicate-optimisations-4054
+  (t/testing "plans should only contain optimised versions of period predicates"
+    (t/is (=plan-file
+           "test-period-predicate-optimisations-4054-variadic-overlaps-2"
+           (plan-sql "SELECT foo.name
+                    FROM foo, bar, baz
+                    WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)"
+                     {:table-info {"public/foo" #{"name"}
+                                   "public/bar" #{"dog"}
+                                   "public/baz" #{"fish"}}})))
+    (t/is (=plan-file
+           "test-period-predicate-optimisations-4054-variadic-overlaps-3"
+           (plan-sql "SELECT foo.name
+                    FROM foo, bar
+                    WHERE OVERLAPS(foo._valid_time, bar._valid_time)"
+                     {:table-info {"public/foo" #{"name"}
+                                   "public/bar" #{"dog"}
+                                   "public/baz" #{"fish"}}})))
+    (t/is (=plan-file
+           "test-period-predicate-optimisations-4054-infix-overlaps"
+           (plan-sql "SELECT foo.name
+                    FROM foo
+                    WHERE foo._valid_time OVERLAPS
+                    PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+                     {:table-info {"public/foo" #{"name"}}})))
+
+    (t/is (=plan-file
+           "test-period-predicate-optimisations-4054-contains-with-period-literal"
+           (plan-sql "SELECT foo.name
+                    FROM foo
+                    WHERE foo._valid_time CONTAINS
+                    PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+                     {:table-info {"public/foo" #{"name"}}})))))

@@ -2,19 +2,31 @@
  [{_column_1 _sq_2}]
  [:apply
   :single-join
-  {bar.1/_valid_from ?_sq__valid_from_3,
-   bar.1/_valid_to ?_sq__valid_to_4}
-  [:rename bar.1 [:scan {:table public/bar} [_valid_from _valid_to]]]
+  {bar.1/_valid_time ?_sq__valid_time_3}
+  [:rename
+   bar.1
+   [:project
+    [_valid_from
+     _valid_to
+     {_valid_time (period _valid_from _valid_to)}]
+    [:scan {:table public/bar} [_valid_from _valid_to]]]]
   [:project
    [{_sq_2 foo.3/name}]
    [:rename
     foo.3
-    [:scan
-     {:table public/foo}
+    [:project
      [name
-      {_valid_from
-       (< _valid_from (coalesce ?_sq__valid_to_4 xtdb/end-of-time))}
-      {_valid_to
-       (>
-        (coalesce _valid_to xtdb/end-of-time)
-        ?_sq__valid_from_3)}]]]]]]
+      _valid_from
+      _valid_to
+      {_valid_time (period _valid_from _valid_to)}]
+     [:scan
+      {:table public/foo}
+      [name
+       {_valid_from
+        (<
+         _valid_from
+         (coalesce (upper ?_sq__valid_time_3) xtdb/end-of-time))}
+       {_valid_to
+        (>
+         (coalesce _valid_to xtdb/end-of-time)
+         (lower ?_sq__valid_time_3))}]]]]]]]

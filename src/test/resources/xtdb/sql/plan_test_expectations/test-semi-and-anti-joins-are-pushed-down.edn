@@ -16,13 +16,13 @@
         [:table [_column_1] [{:_column_1 792} {:_column_1 14}]]]]
       [:semi-join
        [{t1.1/b1 xt.values.5/_column_1}]
-       [:rename t1.1 [:scan {:table public/t1} [b1 a1]]]
+       [:rename t1.1 [:scan {:table public/t1} [a1 b1]]]
        [:rename
         xt.values.5
         [:table [_column_1] [{:_column_1 532} {:_column_1 593}]]]]
       [:semi-join
        [{t2.2/b1 xt.values.7/_column_1}]
-       [:rename t2.2 [:scan {:table public/t2} [b1 a2]]]
+       [:rename t2.2 [:scan {:table public/t2} [a2 b1]]]
        [:rename
         xt.values.7
         [:table [_column_1] [{:_column_1 808} {:_column_1 662}]]]]]]]]]]

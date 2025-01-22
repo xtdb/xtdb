@@ -6,13 +6,15 @@
    {_valid_to foo.1/_valid_to}
    {bar
     (and
-     (< foo.1/_system_from (coalesce foo.1/_valid_to xtdb/end-of-time))
+     (<
+      (lower foo.1/_system_time)
+      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time))
      (>
-      (coalesce foo.1/_system_to xtdb/end-of-time)
-      foo.1/_valid_from))}
+      (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
+      (lower foo.1/_valid_time)))}
    {baz foo.1/baz})
   [:rename
    foo.1
    [:scan
     {:table public/foo, :for-valid-time :all-time}
-    [_system_from _valid_to baz _valid_from _system_to _iid]]]]]
+    [_valid_to baz _system_time _valid_from _valid_time _iid]]]]]

@@ -58,17 +58,17 @@
              l.1
              [:scan
               {:table public/lineitem}
-              [l_partkey
-               l_discount
-               l_shipinstruct
+              [l_extendedprice
                l_quantity
-               l_extendedprice
-               l_shipmode]]]
+               l_shipinstruct
+               l_shipmode
+               l_discount
+               l_partkey]]]
             [:rename
              p.2
              [:scan
               {:table public/part}
-              [p_partkey p_brand p_size p_container]]]]]
+              [p_brand p_size p_partkey p_container]]]]]
           [:rename
            xt.values.10
            [:table

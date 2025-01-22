@@ -971,59 +971,132 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
 (t/deftest test-period-predicates
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
-    '(and (<= f/_valid_from #xt/zoned-date-time "2000-01-01T00:00Z")
-          (>= (coalesce f/_valid_to xtdb/end-of-time)
-              (coalesce #xt/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time)))
+    '(contains? f/_valid_time
+                (period #xt/zoned-date-time "2000-01-01T00:00Z"
+                        #xt/zoned-date-time "2001-01-01T00:00Z"))
     "foo._valid_time CONTAINS PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(contains? (period f/_valid_from f/_valid_to)
+    '(contains? f/_valid_time
                 #xt/zoned-date-time "2000-01-01T00:00Z")
     "foo._valid_time CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
 
     ;; also testing all period-predicate permutations
-    '(and (< f/_valid_from (coalesce #xt/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time))
-          (> (coalesce f/_valid_to xtdb/end-of-time) #xt/zoned-date-time "2000-01-01T00:00Z"))
+    '(and
+      (<
+       (lower f/_valid_time)
+       (coalesce
+        (upper
+         (period
+          #xt/zoned-date-time "2000-01-01T00:00Z"
+          #xt/zoned-date-time "2001-01-01T00:00Z"))
+        xtdb/end-of-time))
+      (>
+       (coalesce (upper f/_valid_time) xtdb/end-of-time)
+       (lower
+        (period
+         #xt/zoned-date-time "2000-01-01T00:00Z"
+         #xt/zoned-date-time "2001-01-01T00:00Z"))))
     "foo._valid_time OVERLAPS PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(and (< f/_valid_from (coalesce f/_valid_to xtdb/end-of-time))
-          (> (coalesce f/_valid_to xtdb/end-of-time) f/_valid_from))
+    '(and
+      (<
+       (lower f/_valid_time)
+       (coalesce (upper f/_valid_time) xtdb/end-of-time))
+      (>
+       (coalesce (upper f/_valid_time) xtdb/end-of-time)
+       (lower f/_valid_time)))
     "foo._valid_time OVERLAPS foo._valid_time"
 
-    '(and (< #xt/zoned-date-time "2000-01-01T00:00Z" (coalesce #xt/zoned-date-time "2003-01-01T00:00Z" xtdb/end-of-time))
-          (> (coalesce #xt/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time) #xt/zoned-date-time "2002-01-01T00:00Z"))
+    '(and
+      (<
+       (lower
+        (period
+         #xt/zoned-date-time "2000-01-01T00:00Z"
+         #xt/zoned-date-time "2001-01-01T00:00Z"))
+       (coalesce
+        (upper
+         (period
+          #xt/zoned-date-time "2002-01-01T00:00Z"
+          #xt/zoned-date-time "2003-01-01T00:00Z"))
+        xtdb/end-of-time))
+      (>
+       (coalesce
+        (upper
+         (period
+          #xt/zoned-date-time "2000-01-01T00:00Z"
+          #xt/zoned-date-time "2001-01-01T00:00Z"))
+        xtdb/end-of-time)
+       (lower
+        (period
+         #xt/zoned-date-time "2002-01-01T00:00Z"
+         #xt/zoned-date-time "2003-01-01T00:00Z"))))
     "PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')
     OVERLAPS PERIOD(TIMESTAMP '2002-01-01 00:00:00+00:00', TIMESTAMP '2003-01-01 00:00:00+00:00')"
 
-    '(and (= f/_system_from #xt/zoned-date-time "2000-01-01T00:00Z")
-          (null-eq f/_system_to #xt/zoned-date-time "2001-01-01T00:00Z"))
+    '(and
+      (=
+       (lower f/_system_time)
+       (lower
+        (period
+         #xt/zoned-date-time "2000-01-01T00:00Z"
+         #xt/zoned-date-time "2001-01-01T00:00Z")))
+      (null-eq
+       (upper f/_system_time)
+       (upper
+        (period
+         #xt/zoned-date-time "2000-01-01T00:00Z"
+         #xt/zoned-date-time "2001-01-01T00:00Z"))))
     "foo._SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(<= (coalesce f/_valid_to xtdb/end-of-time) #xt/zoned-date-time "2000-01-01T00:00Z")
+    '(<=
+      (coalesce (upper f/_valid_time) xtdb/end-of-time)
+      (lower
+       (period
+        #xt/zoned-date-time "2000-01-01T00:00Z"
+        #xt/zoned-date-time "2001-01-01T00:00Z")))
     "foo._VALID_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(>= f/_system_from (coalesce #xt/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time))
+    '(>=
+      (lower f/_system_time)
+      (coalesce
+       (upper
+        (period
+         #xt/zoned-date-time "2000-01-01T00:00Z"
+         #xt/zoned-date-time "2001-01-01T00:00Z"))
+       xtdb/end-of-time))
     "foo._SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(= (coalesce f/_valid_to xtdb/end-of-time) #xt/zoned-date-time "2000-01-01T00:00Z")
+    '(=
+      (coalesce (upper f/_valid_time) xtdb/end-of-time)
+      (lower
+       (period
+        #xt/zoned-date-time "2000-01-01T00:00Z"
+        #xt/zoned-date-time "2001-01-01T00:00Z")))
     "foo._VALID_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(= f/_valid_from (coalesce #xt/zoned-date-time "2001-01-01T00:00Z" xtdb/end-of-time))
+    '(=
+      (lower f/_valid_time)
+      (coalesce
+       (upper
+        (period
+         #xt/zoned-date-time "2000-01-01T00:00Z"
+         #xt/zoned-date-time "2001-01-01T00:00Z"))
+       xtdb/end-of-time))
     "foo._VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
 (t/deftest test-period-predicates-point-in-time
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
 
-    '(contains? (period f/_valid_from f/_valid_to) f/a)
+    '(contains? f/_valid_time f/a)
     "foo._valid_time CONTAINS foo.a"
 
-    '(contains? (period f/_valid_from f/_valid_to) #xt/zoned-date-time "2010-01-01T11:10:11Z")
+    '(contains? f/_valid_time #xt/zoned-date-time "2010-01-01T11:10:11Z")
     "foo._valid_time CONTAINS TIMESTAMP '2010-01-01T11:10:11Z'"
 
-    '(and (<= f/_valid_from f/a)
-          (>= (coalesce f/_valid_to xtdb/end-of-time) (coalesce f/a xtdb/end-of-time)))
+    '(contains? f/_valid_time (period f/a f/a))
     "foo._valid_time CONTAINS PERIOD(foo.a, foo.a)"
 
-    '(contains? (period f/_valid_from f/_valid_to) f/_system_from)
+    '(contains? f/_valid_time f/_system_from)
     "foo._valid_time CONTAINS foo._system_from"))
 
 (t/deftest test-lower-upper-period-fns-3660

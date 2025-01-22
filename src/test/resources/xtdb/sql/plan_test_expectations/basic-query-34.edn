@@ -22,4 +22,4 @@
     (+ t1.1/e 1)
     444
     555)}]
- [:rename t1.1 [:scan {:table public/t1} [e d b c a]]]]
+ [:rename t1.1 [:scan {:table public/t1} [a e c b d]]]]

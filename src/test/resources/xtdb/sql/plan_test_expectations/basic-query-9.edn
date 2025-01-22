@@ -11,4 +11,4 @@
     [[:rename me.1 [:scan {:table public/movie_exec} [name cert]]]
      [:rename
       m.2
-      [:scan {:table public/movie} [producer length year]]]]]]]]
+      [:scan {:table public/movie} [producer year length]]]]]]]]

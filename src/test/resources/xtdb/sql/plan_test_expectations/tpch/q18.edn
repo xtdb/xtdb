@@ -30,17 +30,17 @@
        [{o.2/o_orderkey l.3/l_orderkey} {c.1/c_custkey o.2/o_custkey}]
        [[:rename
          l.3
-         [:scan {:table public/lineitem} [l_quantity l_orderkey]]]
+         [:scan {:table public/lineitem} [l_orderkey l_quantity]]]
         [:rename
          c.1
-         [:scan {:table public/customer} [c_name c_custkey]]]
+         [:scan {:table public/customer} [c_custkey c_name]]]
         [:semi-join
          [{o.2/o_orderkey l_orderkey}]
          [:rename
           o.2
           [:scan
            {:table public/orders}
-           [o_custkey o_orderdate o_orderkey o_totalprice]]]
+           [o_totalprice o_orderdate o_orderkey o_custkey]]]
          [:project
           [{l_orderkey l.5/l_orderkey}]
           [:select
@@ -51,4 +51,4 @@
              l.5
              [:scan
               {:table public/lineitem}
-              [l_quantity l_orderkey]]]]]]]]]]]]]]]
+              [l_orderkey l_quantity]]]]]]]]]]]]]]]

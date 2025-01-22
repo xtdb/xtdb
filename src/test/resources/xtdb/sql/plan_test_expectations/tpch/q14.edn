@@ -15,8 +15,7 @@
       l.1
       [:scan
        {:table public/lineitem}
-       [l_partkey
-        {l_shipdate
+       [{l_shipdate
          (and
           (<
            l_shipdate
@@ -24,6 +23,7 @@
             #xt/date "1995-09-01"
             (single-field-interval "1" "MONTH" 2 6)))
           (>= l_shipdate #xt/date "1995-09-01"))}
+        l_extendedprice
         l_discount
-        l_extendedprice]]]
+        l_partkey]]]
      [:rename p.2 [:scan {:table public/part} [p_partkey p_type]]]]]]]]

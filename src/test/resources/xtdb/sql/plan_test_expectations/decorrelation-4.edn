@@ -8,8 +8,8 @@
     [s.1/name
      s.1/id
      e.2/sid
-     e.2/course
      e.2/grade
+     e.2/course
      _row_number_0
      {_min_out_6 (min e2.4/grade)}]
     [:left-outer-join
@@ -21,5 +21,5 @@
        [[:rename s.1 [:scan {:table public/students} [name id]]]
         [:rename
          e.2
-         [:scan {:table public/exams} [sid course grade]]]]]]
+         [:scan {:table public/exams} [sid grade course]]]]]]
      [:rename e2.4 [:scan {:table public/exams} [sid grade]]]]]]]]

@@ -43,9 +43,9 @@
                   #xt/date "1996-01-01"
                   (single-field-interval "3" "MONTH" 2 6)))
                 (>= l_shipdate #xt/date "1996-01-01"))}
-              l_discount
+              l_extendedprice
               l_suppkey
-              l_extendedprice]]]]]]]]]
+              l_discount]]]]]]]]]
      [:project
       [{_sq_6 _max_out_8}]
       [:group-by
@@ -70,6 +70,6 @@
                   #xt/date "1996-01-01"
                   (single-field-interval "3" "MONTH" 2 6)))
                 (>= l_shipdate #xt/date "1996-01-01"))}
-              l_discount
+              l_extendedprice
               l_suppkey
-              l_extendedprice]]]]]]]]]]]]]]
+              l_discount]]]]]]]]]]]]]]

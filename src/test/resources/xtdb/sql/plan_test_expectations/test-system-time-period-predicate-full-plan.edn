@@ -1,11 +1,25 @@
 [:project
  [{foo_name foo.1/name} {bar_name bar.2/name}]
  [:mega-join
-  [(< foo.1/_system_from (coalesce bar.2/_system_to xtdb/end-of-time))
-   (> (coalesce foo.1/_system_to xtdb/end-of-time) bar.2/_system_from)]
+  [(<
+    (lower foo.1/_system_time)
+    (coalesce (upper bar.2/_system_time) xtdb/end-of-time))
+   (>
+    (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
+    (lower bar.2/_system_time))]
   [[:rename
     foo.1
-    [:scan {:table public/foo} [name _system_from _system_to]]]
+    [:project
+     [name
+      _system_from
+      _system_to
+      {_system_time (period _system_from _system_to)}]
+     [:scan {:table public/foo} [name _system_from _system_to]]]]
    [:rename
     bar.2
-    [:scan {:table public/bar} [name _system_from _system_to]]]]]]
+    [:project
+     [name
+      _system_from
+      _system_to
+      {_system_time (period _system_from _system_to)}]
+     [:scan {:table public/bar} [name _system_from _system_to]]]]]]]

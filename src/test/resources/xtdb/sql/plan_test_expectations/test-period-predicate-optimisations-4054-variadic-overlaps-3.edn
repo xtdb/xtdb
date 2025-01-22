@@ -1,0 +1,23 @@
+[:project
+ [{name foo.1/name}]
+ [:mega-join
+  [(<
+    (greatest (lower foo.1/_valid_time) (lower bar.2/_valid_time))
+    (least
+     (coalesce (upper foo.1/_valid_time) xtdb/end-of-time)
+     (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)))]
+  [[:rename
+    foo.1
+    [:project
+     [name
+      _valid_from
+      _valid_to
+      {_valid_time (period _valid_from _valid_to)}]
+     [:scan {:table public/foo} [name _valid_from _valid_to]]]]
+   [:rename
+    bar.2
+    [:project
+     [_valid_from
+      _valid_to
+      {_valid_time (period _valid_from _valid_to)}]
+     [:scan {:table public/bar} [_valid_from _valid_to]]]]]]]

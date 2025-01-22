@@ -8,7 +8,7 @@
     customers.1
     [:scan
      {:table public/customers}
-     [custno {country (= country "Mexico")}]]]
+     [{country (= country "Mexico")} custno]]]
    [:project
     [{custno orders.3/custno}]
     [:rename orders.3 [:scan {:table public/orders} [custno]]]]]]]

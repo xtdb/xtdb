@@ -3,9 +3,9 @@
   {:skip nil, :limit 1}
   [:project
    [{_id bar.1/_id} {foo bar.1/foo}]
-   [:rename bar.1 [:scan {:table public/bar} [foo _id]]]]]
+   [:rename bar.1 [:scan {:table public/bar} [_id foo]]]]]
  [:top
   {:skip nil, :limit 1}
   [:project
    [{_id baz.2/_id} {foo baz.2/foo}]
-   [:rename baz.2 [:scan {:table public/baz} [foo _id]]]]]]
+   [:rename baz.2 [:scan {:table public/baz} [_id foo]]]]]]

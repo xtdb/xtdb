@@ -2,5 +2,5 @@
  [{movie_title si.2/movie_title}]
  [:left-outer-join
   [{m.1/title si.2/movie_title} {m.1/movie_year si.2/year}]
-  [:rename m.1 [:scan {:table public/movie} [title movie_year]]]
+  [:rename m.1 [:scan {:table public/movie} [movie_year title]]]
   [:rename si.2 [:scan {:table public/stars_in} [year movie_title]]]]]
