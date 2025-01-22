@@ -724,7 +724,7 @@
       "test-dynamic-parameters-temporal-filters-3068-between"
       (plan-sql "SELECT bar FROM foo FOR VALID_TIME BETWEEN ? AND ?"
                 {:table-info {"public/foo" #{"bar"}}}))))
-  
+
   (t/testing "AS OF SYSTEM TIME"
     (t/is
      (=plan-file
@@ -1663,11 +1663,11 @@
 (t/deftest test-generated-column-names
   (t/is (= [{:xt/column-1 1, :xt/column-2 3}]
            (xt/q tu/*node* "SELECT LEAST(1,2), LEAST(3,4) FROM (VALUES (1)) x")))
-  
+
   (t/testing "Aggregates"
     (t/is (= [{:xt/column-1 1}]
              (xt/q tu/*node* "SELECT COUNT(*) FROM (VALUES (1)) x"))))
-  
+
   (t/testing "ARRAY()"
     (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id 1 :a 42}]
                              [:put-docs :b {:xt/id 2 :b1 "one" :b2 42}]])
@@ -1678,10 +1678,10 @@
 (t/deftest test-select-without-from
   (t/is (= [{:xt/column-1 1}]
            (xt/q tu/*node* "SELECT 1")))
-  
+
   (t/is (= [{:xt/column-1 1 :xt/column-2 2}]
            (xt/q tu/*node* "SELECT 1, 2")))
-  
+
   (t/is (= [{:xt/column-1 "xtdb"}]
            (xt/q tu/*node* "SELECT current_user"))))
 
@@ -1795,7 +1795,7 @@
 
   (t/is (= [{:col1 "cat", :avg 2000.0} {:col1 "fish", :avg 1000.0}]
            (xt/q tu/*node* "SELECT T1.col1, AVG(t1.col2) avg FROM t1 GROUP BY T1.col1")))
-  
+
   (t/is (= [{:col2 3000}]
            (xt/q tu/*node*
                  "SELECT \"TEEONE\".col2 FROM \"T1\" AS \"TEEONE\" WHERE \"TEEONE\".\"CoL1\" IN ( SELECT t1.\"col1\" FROM T1 WHERE T1.col1 = \"TEEONE\".\"CoL1\" ) ORDER BY \"TEEONE\".col2")))
@@ -1822,18 +1822,18 @@
   (t/testing "Union"
     (xt/execute-tx tu/*node* [[:put-docs :foo1 {:xt/id 1 :x 1}]
                               [:put-docs :bar1 {:xt/id 1 :y 2}]])
-    
+
     (t/is (= [{:x 1} {:x 2}]
              (xt/q tu/*node* "SELECT x FROM foo1 UNION SELECT y FROM bar1"))))
-  
+
   (t/testing "Except"
     (xt/execute-tx tu/*node* [[:put-docs :foo2 {:xt/id 1 :x 1}]
                               [:put-docs :foo2 {:xt/id 2 :x 2}]
                               [:put-docs :bar2 {:xt/id 1 :y 1}]])
-    
+
     (t/is (= [{:x 2}]
              (xt/q tu/*node* "SELECT x FROM foo2 EXCEPT SELECT y FROM bar2"))))
-  
+
   (t/testing "Intersect"
     (xt/execute-tx tu/*node* [[:put-docs :foo3 {:xt/id 1 :x 1}]
                               [:put-docs :foo3 {:xt/id 2 :x 2}]
@@ -1878,9 +1878,9 @@
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 1}, {_id: 2, x: 2}"]
                             [:sql "INSERT INTO bar (_id, x) VALUES (1, 1), (2, 3)"]
                             [:sql "INSERT INTO baz (_id, x) VALUES (1, 2)"]])
-  (t/is (= [{:x 2, :bar-x 3} {:x 2, :bar-x 1} {:x 1}] 
+  (t/is (= [{:x 2, :bar-x 3} {:x 2, :bar-x 1} {:x 1}]
            (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON foo.x = (SELECT baz.x FROM baz)")))
-  
+
   (t/is (= [{:x 2}, {:x 1}]
            (xt/q tu/*node* "SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON bar.x = (SELECT baz.x FROM baz WHERE baz.x = foo.x)"))))
 
@@ -1897,10 +1897,10 @@
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :x 1}]
                             [:put-docs :bar {:xt/id 1 :y 1}]
                             [:put-docs :baz {:xt/id 1 :z 1}]])
-  
+
   (t/is (= [{:x 1, :y 1}]
            (xt/q tu/*node* "SELECT * EXCLUDE _id FROM ( foo LEFT JOIN bar ON true )")))
-  
+
   (t/is (= [{:x 1, :y 1, :z 1}]
            (xt/q tu/*node* "SELECT * EXCLUDE _id FROM ( foo JOIN (bar JOIN baz ON true) ON true )"))))
 
@@ -2485,10 +2485,10 @@ UNION ALL
            (xt/q tu/*node* "SELECT STR('hello, ', NULL, 42.0, ' at ', DATE '2020-01-01') str"))))
 
 (t/deftest test-unnest-error-doesnt-break-watermark-3924
-  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, col1: ['bar'], col2:' baz'};"]) 
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, col1: ['bar'], col2:' baz'};"])
   (t/testing "successful unnest works as expected"
     (t/is (= [{:b "bar", :xt/id 2, :col1 ["bar"], :col2 " baz"}]
-             (xt/q tu/*node* "FROM docs, UNNEST(docs.col1) AS a(b);")))) 
+             (xt/q tu/*node* "FROM docs, UNNEST(docs.col1) AS a(b);"))))
 
   (t/testing "failing unnest throws suitable error, doesn't break subsequent queries"
     (t/is (thrown-with-msg?
@@ -2600,3 +2600,18 @@ UNION ALL
   (t/is (= [{:sysadmin true, :xt/column-2 ["ada" "alan"]}
             {:sysadmin false, :xt/column-2 ["claude"]}]
            (xt/q tu/*node* "SELECT sysadmin, ARRAY_AGG((SELECT name)) FROM docs GROUP BY sysadmin"))))
+
+(t/deftest test-lateral-with-unnest-4009
+  (xt/submit-tx tu/*node* [[:put-docs :nested-table {:xt/id 1 :nest [1 2 3]}]])
+
+  (t/is (= [{:xt/id 1, :nest [1 2 3], :a [1 2 3]}]
+           (xt/q tu/*node* "SELECT *
+              FROM nested_table nt,
+                   LATERAL (SELECT nt.nest) t(a)")))
+
+  (t/is (= [{:xt/id 1, :nest [1 2 3], :a 1}
+            {:xt/id 1, :nest [1 2 3], :a 2}
+            {:xt/id 1, :nest [1 2 3], :a 3}]
+           (xt/q tu/*node* "SELECT *
+              FROM nested_table nt,
+                   LATERAL (FROM UNNEST(nt.nest) AS foo(id)) t(a)"))))

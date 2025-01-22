@@ -2094,7 +2094,8 @@
                              (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
                                        (let [!sq-refs (HashMap.)
                                              left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
-                                             right-table-ref (.accept table-ref (->TableRefVisitor env scope left-sq-scope))]
+                                             right-table-ref (.accept table-ref (->TableRefVisitor env scope (when left-table-ref
+                                                                                                               left-sq-scope)))]
                                          (if left-table-ref
                                            (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
                                            right-table-ref)))
