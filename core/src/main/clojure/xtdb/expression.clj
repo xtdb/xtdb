@@ -1228,7 +1228,7 @@
                   `(current-setting (resolve-string ~setting-name)))})
 
 (defn sleep [^long duration unit]
-  (Thread/sleep (long (* duration (/ (types/ts-units-per-second unit) 1000)))))
+  (Thread/sleep (long (* duration (quot (types/ts-units-per-second unit) 1000)))))
 
 (defmethod codegen-call [:sleep :duration] [{[{[_duration unit] :return-type} _] :args}]
   {:return-type :null
