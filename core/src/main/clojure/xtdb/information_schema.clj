@@ -45,7 +45,10 @@
                           typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
                           typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
                           typrelid :i32, typelem :i32}
-      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8}
+      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
+                           relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
+                           relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
+                           relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
       pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
       pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
       pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
@@ -65,7 +68,8 @@
       pg_catalog/pg_settings {name :utf8, setting :utf8}
 
       pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
-                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}})
+                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
+      pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}})
 
   (def ^:private pg-catalog-template-tables
     '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
@@ -140,7 +144,20 @@
     {:oid (name->oid table)
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (name table))
      :relnamespace (name->oid "public")
-     :relkind "r"}))
+     :relkind "r"
+     :relam (int 2)
+     :relchecks (int 0)
+     :relhasindex true
+     :relhasrules false
+     :relhastriggers false
+     :relrowsecurity false
+     :relforcerowsecurity false
+     :relispartition false
+     :reltablespace (int 0)
+     :reloftype (int 0)
+     :relpersistence "p"
+     :relreplident "d"
+     :reltoastrelid (int 0)}))
 
 (defn pg-type []
   (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (->> (vals types/pg-types)
@@ -198,6 +215,26 @@
      :nspname schema-name
      :nspowner nspowner
      :nspacl nil}))
+
+(def pg-ams [{:oid 2
+              :amname "heap"
+              :amhandler "heap_tableam_handler"
+              :amtype "t"}
+             {:oid 403
+              :amname "btree"
+              :amhandler "bthandler"
+              :amtype "i"}
+             {:oid 405
+              :amname "hash"
+              :amhandler "hashhandler"
+              :amtype "i"}])
+
+(defn pg-am []
+  (for [{:keys [oid amname amhandler amtype]} pg-ams]
+    {:oid (int oid)
+     :amname amname
+     :amhandler amhandler
+     :amtype amtype}))
 
 (do ; to eval them both
   (def procs
@@ -317,6 +354,7 @@
                                                    pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
                                                    pg_catalog/pg_settings (pg-settings)
                                                    pg_catalog/pg_range (pg-range)
+                                                   pg_catalog/pg_am (pg-am)
                                                    (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))
                                      (.syncRowCount)))]
 
