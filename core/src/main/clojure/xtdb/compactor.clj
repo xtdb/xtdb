@@ -7,6 +7,7 @@
             [xtdb.util :as util]
             [xtdb.metrics :as metrics])
   (:import (java.lang AutoCloseable)
+           [java.nio.channels ClosedByInterruptException]
            [java.nio.file Path]
            [java.time Duration]
            [java.util ArrayList Arrays Comparator HashSet LinkedList PriorityQueue]
@@ -153,6 +154,7 @@
 
     (log/debugf "compacted '%s' -> '%s'." table-path out-trie-key)
 
+    (catch ClosedByInterruptException _ (throw (InterruptedException.)))
     (catch InterruptedException e (throw e))
 
     (catch Throwable t
