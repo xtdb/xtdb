@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
+            [xtdb.compactor :as c]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
@@ -11,11 +11,11 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.compactor :as c])
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.metadata IMetadataManager)))
+           xtdb.api.storage.Storage
+           (xtdb.metadata IMetadataManager)
+           (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
@@ -213,7 +213,7 @@
             (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-                             (.resolve node-dir (str "objects/" bp/version "/tables/")))
+                             (.resolve node-dir (str "objects/" Storage/version "/tables/")))
 
               (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
                        (.columnNames table-metadata))))))
@@ -223,7 +223,7 @@
             (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-                             (.resolve node-dir (str "objects/" bp/version "/tables/")))
+                             (.resolve node-dir (str "objects/" Storage/version "/tables/")))
 
               (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
                        (.columnNames table-metadata))))))))))

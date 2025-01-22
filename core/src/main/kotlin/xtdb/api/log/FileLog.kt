@@ -1,16 +1,20 @@
 package xtdb.api.log
 
 import xtdb.api.log.FileLog.Subscription
+import xtdb.api.storage.ObjectStore.StoredObject
 import java.util.concurrent.CompletableFuture
 
 interface FileLog {
     fun appendFileNotification(notification: Notification): CompletableFuture<Unit>
     fun subscribeFileNotifications(subscriber: Subscriber): Subscription
 
-    interface Notification
+    interface Notification {
+        val added: List<StoredObject>
+    }
+
     fun interface Subscription : AutoCloseable
 
-    interface Subscriber {
+    fun interface Subscriber {
         fun accept(record: Notification)
     }
 

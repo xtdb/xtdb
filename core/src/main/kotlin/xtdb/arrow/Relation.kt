@@ -1,7 +1,6 @@
 package xtdb.arrow
 
 import clojure.lang.PersistentHashMap
-import org.apache.arrow.flatbuf.Footer
 import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -234,9 +233,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
 
             override fun load(rel: Relation) {
-                arrowBufToRecordBatch(
-                    buf, block.offset, block.metadataLength, block.bodyLength,
-                    "Failed to deserialize record batch $idx, offset ${block.offset}"
+                buf.arrowBufToRecordBatch(
+                    block.offset, block.metadataLength, block.bodyLength, "Failed to deserialize record batch $idx, offset ${block.offset}"
                 ).use { rel.load(it) }
             }
         }

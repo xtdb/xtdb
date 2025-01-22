@@ -85,9 +85,9 @@
           (t/is (= true (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])))))
 
         (t/testing "Send & receive file change notification"
-          (.appendFileNotification log (fl/map->FileNotification {:added [{:k (util/->path "foo1"), :size 12}
-                                                                           {:k (util/->path "foo2"), :size 15}
-                                                                           {:k (util/->path "foo3"), :size 8}]}))
+          (.appendFileNotification log (fl/map->FileNotification {:added [(fl/->StoredObject (util/->path "foo1") 12)
+                                                                          (fl/->StoredObject (util/->path "foo2") 15)
+                                                                          (fl/->StoredObject (util/->path "foo3") 8)]}))
           (Thread/sleep 1000)
           (t/is (= {(util/->path "foo1") 12
                     (util/->path "foo2") 15

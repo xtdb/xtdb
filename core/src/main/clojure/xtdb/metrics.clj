@@ -10,8 +10,7 @@
            io.micrometer.core.instrument.composite.CompositeMeterRegistry
            java.util.List
            (java.util.stream Stream)
-           (org.apache.arrow.memory BufferAllocator)
-           (xtdb.cache MemoryCacheStats Stats)))
+           (org.apache.arrow.memory BufferAllocator)))
 
 (defn add-counter
   ([reg name] (add-counter reg name {}))
@@ -46,49 +45,8 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
-(defn add-cache-gauges [reg meter-name get-stats]
-  (doto reg
-    (add-gauge (str meter-name ".pinnedBytes")
-               #(.getPinnedBytes ^Stats (get-stats))
-               {:unit "bytes"})
-    (add-gauge (str meter-name ".evictableBytes")
-               #(.getEvictableBytes ^Stats (get-stats))
-               {:unit "bytes"})
-    (add-gauge (str meter-name ".freeBytes")
-               #(.getFreeBytes ^Stats (get-stats))
-               {:unit "bytes"})))
-
-(defn add-mem-cache-gauges [reg meter-name get-stats]
-  (add-cache-gauges reg meter-name get-stats)
-  (doto reg
-    (add-gauge (str meter-name ".metaSliceCount")
-               #(.getSliceCount (.getMetaStats ^MemoryCacheStats (get-stats)))
-               {:tag ["type" "meta"]})
-    (add-gauge (str meter-name ".dataSliceCount")
-               #(.getSliceCount (.getDataStats ^MemoryCacheStats (get-stats)))
-               {:tag ["type" "data"]})
-    (add-gauge (str meter-name ".metaWeightBytes")
-               #(.getWeightBytes (.getMetaStats ^MemoryCacheStats (get-stats)))
-               {:unit "bytes" :tag ["type" "meta"]})
-    (add-gauge (str meter-name ".dataWeightBytes")
-               #(.getWeightBytes (.getDataStats ^MemoryCacheStats (get-stats)))
-               {:unit "bytes" :tag ["type" "data"]})
-    (add-gauge (str meter-name ".metaPinned")
-               #(.getPinned (.getMetaStats ^MemoryCacheStats (get-stats)))
-               {:tag ["type" "meta"]})
-    (add-gauge (str meter-name ".dataPinned")
-               #(.getPinned (.getDataStats ^MemoryCacheStats (get-stats)))
-               {:tag ["type" "data"]})
-    (add-gauge (str meter-name ".metaUnpinned")
-               #(.getUnpinned (.getMetaStats ^MemoryCacheStats (get-stats)))
-               {:tag ["type" "meta"]})
-    (add-gauge (str meter-name ".dataUnpinned")
-               #(.getUnpinned (.getDataStats ^MemoryCacheStats (get-stats)))
-               {:tag ["type" "data"]})))
-
 (defn random-node-id []
   (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
-
 
 (defn direct-memory-pool ^java.lang.management.BufferPoolMXBean []
   (->> (java.lang.management.ManagementFactory/getPlatformMXBeans java.lang.management.BufferPoolMXBean)

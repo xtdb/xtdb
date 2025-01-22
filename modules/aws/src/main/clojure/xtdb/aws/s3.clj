@@ -14,7 +14,7 @@
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedMultipartUpload CompletedPart CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object UploadPartRequest UploadPartResponse]
-           (xtdb.api.storage ObjectStore ObjectStore$StoredObject)
+           (xtdb.api.storage ObjectStore Storage)
            [xtdb.aws S3 S3$Factory]
            [xtdb.aws.s3 S3Configurator]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
@@ -28,16 +28,12 @@
         (doto (->> (.configureGet configurator)))
         ^GetObjectRequest (.build))))
 
-(defn list-objects [{:keys [^S3AsyncClient client bucket ^Path prefix] :as s3-opts} continuation-token]
-  )
-
 (defn- with-exception-handler [^CompletableFuture fut ^Path k]
-  (.exceptionally fut (reify Function
-                        (apply [_ e]
-                          (try
-                            (throw (.getCause ^Exception e))
-                            (catch NoSuchKeyException _
-                              (throw (os/obj-missing-exception k))))))))
+  (.exceptionally fut (fn [^Exception e]
+                        (try
+                          (throw (.getCause e))
+                          (catch NoSuchKeyException _
+                            (throw (os/obj-missing-exception k)))))))
 
 (defn single-object-upload
   [{:keys [^S3AsyncClient client ^S3Configurator configurator bucket ^Path prefix]} ^Path k ^ByteBuffer buf]
@@ -202,7 +198,7 @@
                       (doto (->> (.configureClient configurator)))
                       (.build))
         prefix (.getPrefix factory)
-        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)]
+        prefix-with-version (if prefix (.resolve prefix Storage/storageRoot) Storage/storageRoot)]
   
     (->S3ObjectStore configurator
                      s3-client

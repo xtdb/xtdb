@@ -8,7 +8,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.pathString
@@ -53,7 +52,7 @@ class MemoryCacheTest {
                 cache.get(PathSlice(Path.of("t1/100"), 0, 100)) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(1, b1.getByte(0))
 
-                    assertTrue(Stats.compareStats(Stats(100L, 0L, 150L), cache.stats))
+                    assertEquals(PinningCache.Stats(100L, 0L, 150L), cache.pinningCache.stats0)
                 }
 
                 cache.get(PathSlice(Path.of("t1/100"), 0, 100)) { completedFuture(it to onEvict) }.use { b1 ->
@@ -61,7 +60,7 @@ class MemoryCacheTest {
                 }
 
                 Thread.sleep(50)
-                assertTrue(Stats.compareStats(Stats(0L, 100L, 150L), cache.stats))
+                assertEquals(PinningCache.Stats(0L, 100L, 150L), cache.pinningCache.stats0)
                 assertFalse(t1Evicted)
             })
 
@@ -70,14 +69,15 @@ class MemoryCacheTest {
             assertAll("t2", {
                 val onEvict = AutoCloseable { t2Evicted = true }
 
-                cache.get(PathSlice(Path.of("t2/50"), 0, 50)) { completedFuture(it to onEvict) }.use { b1 ->
+                val pathSlice = PathSlice(Path.of("t2/50"), 0, 50)
+                cache.get(pathSlice) { completedFuture(it to onEvict) }.use { b1 ->
                     assertEquals(2, b1.getByte(0))
 
-                    assertTrue(Stats.compareStats(Stats(50L, 100L, 100L), cache.stats))
+                    assertEquals(PinningCache.Stats(50L, 100L, 100L), cache.pinningCache.stats0)
                 }
 
                 Thread.sleep(100)
-                assertTrue(Stats.compareStats(Stats(0L, 150L, 100L), cache.stats))
+                assertEquals(PinningCache.Stats(0L, 150L, 100L), cache.pinningCache.stats0)
             })
 
             assertFalse(t1Evicted)
@@ -89,13 +89,13 @@ class MemoryCacheTest {
                     assertTrue(t1Evicted)
 
                     // definitely needs to evict t1, may or may not evict t2
-                    val stats = cache.stats
+                    val stats = cache.pinningCache.stats0
                     assertEquals(170, stats.pinnedBytes)
                     assertEquals(80, stats.evictableBytes + stats.freeBytes)
                 }
 
                 Thread.sleep(100)
-                val stats = cache.stats
+                val stats = cache.pinningCache.stats0
                 assertEquals(0, stats.pinnedBytes)
                 assertEquals(250, stats.evictableBytes + stats.freeBytes)
             })

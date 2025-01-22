@@ -1,5 +1,7 @@
 package xtdb.util
 
+import java.lang.Integer.toUnsignedString
+import java.lang.Long.toUnsignedString
 import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
@@ -17,19 +19,12 @@ object StringUtil {
         while (true) {
             if (j == needle.remaining()) return i + 1
             if (i + j == haystack.remaining()) return 0
-            if (haystack[i + j] == needle[j]) {
-                j++
-            } else {
-                i++
-                j = 0
-            }
+            if (haystack[i + j] == needle[j]) j++ else { i++; j = 0 }
         }
     }
 
     @JvmStatic
-    fun isUtf8Char(b: Byte): Boolean {
-        return (b.toInt() and 0xc0) != 0x80
-    }
+    fun isUtf8Char(b: Byte) = (b.toInt() and 0xc0) != 0x80
 
     /**
      * In our SQL dialect &amp; arrow we operate always on utf8.
@@ -40,11 +35,8 @@ object StringUtil {
     @JvmOverloads
     fun utf8Length(buf: ByteBuffer, start: Int = 0, end: Int = buf.remaining()): Int {
         var len = 0
-        for (i in start until end) {
-            if (isUtf8Char(buf[i])) {
-                len++
-            }
-        }
+        for (i in start until end)
+            if (isUtf8Char(buf[i])) len++
         return len
     }
 
@@ -59,6 +51,7 @@ object StringUtil {
         return utf8Length(haystack, 0, bpos - 1) + 1
     }
 
+    @Suppress("NAME_SHADOWING")
     @JvmStatic
     fun sqlUtf8Substring(target: ByteBuffer, pos: Int, len: Int, useLen: Boolean): ByteBuffer {
         var len = len
@@ -67,9 +60,7 @@ object StringUtil {
         val zeroPos = pos - 1
         len = if (zeroPos < 0) max(0.0, (len + zeroPos).toDouble()).toInt() else len
 
-        if (useLen && len == 0) {
-            return ByteBuffer.allocate(0)
-        }
+        if (useLen && len == 0) return ByteBuffer.allocate(0)
 
         val startCodepoint = max(zeroPos.toDouble(), 0.0).toInt()
         var startIndex = 0
@@ -86,64 +77,44 @@ object StringUtil {
             }
         }
 
-        if (cp < startCodepoint) {
-            return ByteBuffer.allocate(0)
-        }
+        return when {
+            cp < startCodepoint -> ByteBuffer.allocate(0)
+            !useLen -> target.duplicate().apply { position(startIndex) }
+            else -> {
+                var charsConsumed = 0
+                for (i in startIndex until target.remaining()) {
+                    if (charsConsumed == len && isUtf8Char(target[i]))
+                        return target.duplicate().apply { position(startIndex); limit(i) }
 
-        if (!useLen) {
-            val ret = target.duplicate()
-            ret.position(startIndex)
-            return ret
-        }
+                    if (isUtf8Char(target[i])) charsConsumed++
+                }
 
-        var charsConsumed = 0
-        for (i in startIndex until target.remaining()) {
-            if (charsConsumed == len && isUtf8Char(target[i])) {
-                val ret = target.duplicate()
-                ret.position(startIndex)
-                ret.limit(i)
-                return ret
-            }
-
-            if (isUtf8Char(target[i])) {
-                charsConsumed++
+                target.duplicate().apply { position(startIndex) }
             }
         }
-
-        val ret = target.duplicate()
-        ret.position(startIndex)
-        return ret
     }
 
     @JvmStatic
+    @Suppress("NAME_SHADOWING")
     fun sqlBinSubstring(target: ByteBuffer, pos: Int, len: Int, useLen: Boolean): ByteBuffer {
         var len = len
+
         require(!(useLen && len < 0)) { "Negative substring length" }
 
         val zeroPos = pos - 1
         len = if (zeroPos < 0) max(0.0, (len + zeroPos).toDouble()).toInt() else len
         val startIndex = max(0.0, zeroPos.toDouble()).toInt()
 
-        if (useLen && len == 0) {
-            return ByteBuffer.allocate(0)
+        return when {
+            useLen && len == 0 -> ByteBuffer.allocate(0)
+            startIndex >= target.remaining() -> ByteBuffer.allocate(0)
+            !useLen -> target.slice().apply { position(startIndex) }
+            else -> {
+                val limit = min((startIndex + len).toDouble(), target.remaining().toDouble()).toInt()
+
+                target.slice().apply { position(startIndex); limit(limit) }
+            }
         }
-
-        if (startIndex >= target.remaining()) {
-            return ByteBuffer.allocate(0)
-        }
-
-        if (!useLen) {
-            val ret = target.slice()
-            ret.position(startIndex)
-            return ret
-        }
-
-        val limit = min((startIndex + len).toDouble(), target.remaining().toDouble()).toInt()
-
-        val ret = target.slice()
-        ret.position(startIndex)
-        ret.limit(limit)
-        return ret
     }
 
     @JvmStatic
@@ -151,12 +122,12 @@ object StringUtil {
         val s1 = sqlUtf8Substring(target, 1, start - 1, true)
         val s2 = sqlUtf8Substring(target, start + replaceLength, -1, false)
 
-        val newBuf = ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining())
-        newBuf.put(s1)
-        newBuf.put(placing.duplicate())
-        newBuf.put(s2)
-        newBuf.position(0)
-        return newBuf
+        return ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining()).apply {
+            put(s1)
+            put(placing.duplicate())
+            put(s2)
+            position(0)
+        }
     }
 
     @JvmStatic
@@ -164,12 +135,12 @@ object StringUtil {
         val s1 = sqlBinSubstring(target, 1, start - 1, true)
         val s2 = sqlBinSubstring(target, start + replaceLength, -1, false)
 
-        val newBuf = ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining())
-        newBuf.put(s1)
-        newBuf.put(placing.duplicate())
-        newBuf.put(s2)
-        newBuf.position(0)
-        return newBuf
+        return ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining()).apply {
+            put(s1)
+            put(placing.duplicate())
+            put(s2)
+            position(0)
+        }
     }
 
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
@@ -183,5 +154,11 @@ object StringUtil {
                 'x', 'u', 'U' -> Character.toChars(s.substring(2).toUInt(16).toInt()).concatToString()
                 else -> (s as java.lang.String).translateEscapes()
             }
+        }
+
+    val Long.asLexHex: String
+        get() {
+            val body = toUnsignedString(this, 16)
+            return "${toUnsignedString(body.length - 1, 16)}$body"
         }
 }

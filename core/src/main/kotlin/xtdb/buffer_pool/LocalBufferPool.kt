@@ -2,77 +2,87 @@ package xtdb.buffer_pool
 
 import com.github.benmanes.caffeine.cache.Cache
 import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.IBufferPool
 import xtdb.IEvictBufferTest
-import xtdb.arrow.ArrowUtil
+import xtdb.api.storage.Storage
+import xtdb.api.storage.Storage.LocalStorageFactory
+import xtdb.api.storage.Storage.arrowFooterCache
+import xtdb.api.storage.Storage.openStorageChildAllocator
+import xtdb.api.storage.Storage.registerMetrics
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
+import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
 import xtdb.util.closeOnCatch
+import xtdb.util.maxDirectMemory
+import xtdb.util.newSeekableByteChannel
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.file.Files
+import java.nio.file.Files.newByteChannel
+import java.nio.file.Files.newDirectoryStream
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
 import java.util.concurrent.CompletableFuture.completedFuture
-import kotlin.io.path.exists
-import kotlin.io.path.fileSize
+import kotlin.io.path.*
 
 class LocalBufferPool(
-    private val allocator: BufferAllocator,
-    private val memoryCache: MemoryCache,
-    private val diskStore: Path,
-    private val arrowFooterCache: Cache<Path, ArrowFooter>,
-    private val recordBatchRequests: Counter,
-    private val memCacheMisses: Counter
+    allocator: BufferAllocator,
+    factory: LocalStorageFactory,
+    meterRegistry: MeterRegistry = SimpleMeterRegistry()
 ) : IBufferPool, IEvictBufferTest, Closeable {
 
+    private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
+
+    private val memoryCache =
+        MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
+            .also { it.registerMetrics("memory-cache", meterRegistry) }
+
+    private val diskStore = factory.path.resolve(Storage.storageRoot).also { it.createDirectories() }
+
+    private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
+    private val recordBatchRequests: Counter = meterRegistry.counter("record-batch-requests")
+    private val memCacheMisses: Counter = meterRegistry.counter("mem-cache-misses")
+
     companion object {
-        private fun createTempPath(diskStore: Path): Path {
-            val tmpDir = diskStore.resolve(".tmp").also { path -> Files.createDirectories(path) }
-            return Files.createTempFile(tmpDir, "upload", ".arrow")
+        private fun Path.createTempUploadFile(): Path {
+            val tmpDir = resolve(".tmp").also { it.createDirectories() }
+            return createTempFile(tmpDir, "upload", ".arrow")
         }
 
-        private fun pathToSeekableByteChannel(path: Path) = SeekableReadChannel(Files.newByteChannel(path, READ))
-
         private fun objectMissingException(path: Path) = IllegalStateException("Object $path doesn't exist.")
+
+        private fun Path.orThrowIfMissing(key: Path) = takeIf { it.exists() } ?: throw objectMissingException(key)
     }
 
     override fun getByteArray(key: Path): ByteArray =
         memoryCache.get(PathSlice(key)) { pathSlice ->
             memCacheMisses.increment()
-            val bufferCachePath = diskStore.resolve(pathSlice.path)
-
-            if (!bufferCachePath.exists()) throw objectMissingException(key)
+            val bufferCachePath = diskStore.resolve(pathSlice.path).orThrowIfMissing(key)
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
-        }.use(ArrowUtil::arrowBufToByteArray)
+        }.use { it.toByteArray() }
 
-    override fun getFooter(key: Path): ArrowFooter {
-        val path = diskStore.resolve(key)
-        if (!path.exists()) throw objectMissingException(path)
+    override fun getFooter(key: Path): ArrowFooter =
+        arrowFooterCache.get(key) {
+            val path = diskStore.resolve(key).orThrowIfMissing(key)
 
-        return arrowFooterCache.get(key) {
-            Relation.readFooter(pathToSeekableByteChannel(path))
+            Relation.readFooter(path.newSeekableByteChannel())
         }
-    }
 
     override fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch {
         recordBatchRequests.increment()
-        val path = diskStore.resolve(key)
+        val path = diskStore.resolve(key).orThrowIfMissing(key)
 
-        if (!path.exists()) throw objectMissingException(path)
-
-        val footer = arrowFooterCache.get(key) {
-            Relation.readFooter(pathToSeekableByteChannel(path))
-        }
+        val footer = arrowFooterCache.get(key) { Relation.readFooter(path.newSeekableByteChannel()) }
 
         val block = footer.recordBatches.getOrNull(blockIdx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
@@ -81,35 +91,31 @@ class LocalBufferPool(
             PathSlice(key, block.offset, block.metadataLength + block.bodyLength)
         ) { pathSlice ->
             memCacheMisses.increment()
-            val bufferCachePath = diskStore.resolve(pathSlice.path)
-
-            if (!bufferCachePath.exists()) throw objectMissingException(path)
+            val bufferCachePath =
+                diskStore.resolve(pathSlice.path)
+                    .takeIf { it.exists() } ?: throw objectMissingException(path)
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
         }.use { arrowBuf ->
-            arrowBufToRecordBatch(
-                arrowBuf, 0, block.metadataLength, block.bodyLength,
-                "Failed opening record batch '$path' at block-idx $blockIdx"
+            arrowBuf.arrowBufToRecordBatch(
+                0, block.metadataLength, block.bodyLength, "Failed opening record batch '$path' at block-idx $blockIdx"
             )
         }
     }
 
-    private fun writeBufferToPath(buffer: ByteBuffer, path: Path) {
-        Files.newByteChannel(path, WRITE, TRUNCATE_EXISTING, CREATE).use { channel ->
-            while (buffer.hasRemaining()) {
-                channel.write(buffer)
-            }
+    private fun ByteBuffer.writeToPath(path: Path) {
+        newByteChannel(path, WRITE, TRUNCATE_EXISTING, CREATE).use { channel ->
+            while (hasRemaining()) channel.write(this)
         }
     }
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
         try {
-            val tmpPath = createTempPath(diskStore)
-            writeBufferToPath(buffer, tmpPath)
+            val tmpPath = diskStore.createTempUploadFile()
+            buffer.writeToPath(tmpPath)
 
-            val filePath = diskStore.resolve(key)
-            Files.createDirectories(filePath.parent)
-            Files.move(tmpPath, filePath, StandardCopyOption.ATOMIC_MOVE)
+            val filePath = diskStore.resolve(key).also { it.createParentDirectories() }
+            tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: ClosedByInterruptException) {
             throw InterruptedException()
         }
@@ -118,26 +124,23 @@ class LocalBufferPool(
     override fun listAllObjects(): List<Path> =
         Files.walk(diskStore).use { stream ->
             stream
-                .filter { path -> Files.isRegularFile(path) && !diskStore.relativize(path).startsWith(".tmp") }
-                .map { diskStore.relativize(it) }
+                .filter { Files.isRegularFile(it) && !diskStore.relativize(it).startsWith(".tmp") }
+                .map(diskStore::relativize)
                 .sorted()
                 .toList()
         }
 
-    override fun listObjects(dir: Path): List<Path> {
-        val dirPath = diskStore.resolve(dir)
-        return if (dirPath.exists()) {
-            Files.newDirectoryStream(dirPath).use { stream ->
-                stream.map { diskStore.relativize(it) }.sorted().toList()
-            }
-        } else emptyList()
-    }
+    override fun listObjects(dir: Path): List<Path> =
+        diskStore.resolve(dir)
+            .takeIf { it.exists() }
+            ?.let { dirPath -> newDirectoryStream(dirPath).use { it.map(diskStore::relativize).sorted() } }
+            .orEmpty()
 
     override fun objectSize(key: Path): Long = diskStore.resolve(key).fileSize()
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
-        val tmpPath = createTempPath(diskStore)
-        return Files.newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->
+        val tmpPath = diskStore.createTempUploadFile()
+        return newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->
             rel.startUnload(fileChannel).closeOnCatch { unloader ->
                 object : xtdb.ArrowWriter {
                     override fun writeBatch() {
@@ -152,15 +155,14 @@ class LocalBufferPool(
                         unloader.end()
                         fileChannel.close()
 
-                        val filePath = diskStore.resolve(key)
-                        Files.createDirectories(filePath.parent)
-                        Files.move(tmpPath, filePath, StandardCopyOption.ATOMIC_MOVE)
+                        val filePath = diskStore.resolve(key).also { it.createParentDirectories() }
+                        tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
                     }
 
                     override fun close() {
                         unloader.close()
                         if (fileChannel.isOpen) fileChannel.close()
-                        Files.deleteIfExists(tmpPath)
+                        tmpPath.deleteIfExists()
                     }
                 }
             }

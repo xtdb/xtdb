@@ -1,6 +1,7 @@
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
+import io.micrometer.core.instrument.MeterRegistry
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
@@ -24,6 +25,10 @@ class DiskCache(
     val pinningCache = PinningCache<Path, Entry>(maxSizeBytes)
 
     val stats get() = pinningCache.stats
+
+    fun registerMetrics(meterName: String, registry: MeterRegistry) {
+        pinningCache.registerMetrics(meterName, registry)
+    }
 
     inner class Entry(
         inner: PinningCache.IEntry<Path>,

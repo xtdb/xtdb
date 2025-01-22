@@ -1,5 +1,8 @@
+@file:JvmName("MemoryUtil")
 package xtdb.util
 
+import io.netty.util.internal.PlatformDependent
+import java.lang.Runtime.getRuntime
 import java.nio.MappedByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
@@ -14,7 +17,17 @@ fun <T : AutoCloseable, R> T.closeOnCatch(block: (T) -> R): R =
         throw e
     }
 
-fun toMmapPath(path : Path): MappedByteBuffer =
+val maxDirectMemory =
+    try {
+        PlatformDependent.maxDirectMemory()
+    } catch (e: Throwable) {
+        // otherwise we use as much direct memory as there was heap specified
+        getRuntime().maxMemory()
+    }
+
+val usedNettyMemory get() = PlatformDependent.usedDirectMemory()
+
+fun toMmapPath(path: Path): MappedByteBuffer =
     try {
         FileChannel.open(path, StandardOpenOption.READ).use { channel ->
             channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())

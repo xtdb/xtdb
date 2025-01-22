@@ -11,10 +11,11 @@ abstract class BufferPoolTest {
 
     @Test
     fun listObjectTests_3545() {
-        val bufferPool = bufferPool()
-        bufferPool.putObject(Path.of("a/b/c"), ByteBuffer.wrap(ByteArray(10)))
-        bufferPool.putObject(Path.of("a/b/d"), ByteBuffer.wrap(ByteArray(10)))
-        bufferPool.putObject(Path.of("a/e"), ByteBuffer.wrap(ByteArray(10)))
+        val bufferPool = bufferPool().apply {
+            putObject(Path.of("a/b/c"), ByteBuffer.wrap(ByteArray(10)))
+            putObject(Path.of("a/b/d"), ByteBuffer.wrap(ByteArray(10)))
+            putObject(Path.of("a/e"), ByteBuffer.wrap(ByteArray(10)))
+        }
 
         assertEquals(listOf(Path.of("a/b"), Path.of("a/e")), bufferPool.listObjects(Path.of("a")))
     }

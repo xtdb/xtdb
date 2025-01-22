@@ -3,6 +3,8 @@ package xtdb.cache
 import com.github.benmanes.caffeine.cache.AsyncCache
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.RemovalCause
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit.MILLISECONDS
@@ -10,6 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 
 class PinningCache<K, V : PinningCache.IEntry<K>>(
     @Suppress("MemberVisibilityCanBePrivate")
@@ -19,14 +23,34 @@ class PinningCache<K, V : PinningCache.IEntry<K>>(
     @Volatile
     private var pinnedBytes: Long = 0
 
-    data class PinningCacheStats(override val pinnedBytes: Long, override val evictableBytes: Long, override val freeBytes: Long) : Stats
+    data class Stats(val pinnedBytes: Long, val evictableBytes: Long, val freeBytes: Long)
 
-    val stats: Stats
+    internal val stats0: Stats
         get() {
-            val pinnedBytes =  pinnedBytes
+            val pinnedBytes = pinnedBytes
             val evictableBytes = eviction.weightedSize().asLong
-            return PinningCacheStats(pinnedBytes, evictableBytes, maxSizeBytes - pinnedBytes - evictableBytes)
+            return Stats(pinnedBytes, evictableBytes, maxSizeBytes - pinnedBytes - evictableBytes)
         }
+
+    private val statsCache =
+        Caffeine.newBuilder()
+            .expireAfterWrite(2.seconds.toJavaDuration())
+            .build<Unit, Stats> {
+                stats0
+            }
+
+    val stats: Stats get() = statsCache[Unit]
+
+    internal fun registerMetrics(meterName: String, registry: MeterRegistry) {
+        fun registerGauge(name: String, f: Stats.() -> Long) {
+            Gauge.builder(name, this) { it.stats.f().toDouble() }
+                .baseUnit("bytes").register(registry)
+        }
+
+        registerGauge("$meterName.pinnedBytes") { pinnedBytes }
+        registerGauge("$meterName.evictableBytes") { evictableBytes }
+        registerGauge("$meterName.freeBytes") { freeBytes }
+    }
 
     interface IEntry<K> {
         val weight: Long

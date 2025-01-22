@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
@@ -16,6 +15,7 @@
            [java.nio ByteBuffer]
            [java.time Duration]
            [xtdb IBufferPool]
+           xtdb.api.storage.Storage
            (xtdb.arrow Relation RelationReader)
            [xtdb.metadata IMetadataManager]
            [xtdb.trie HashTrie IDataRel MemoryHashTrie$Leaf]))
@@ -37,12 +37,12 @@
       (t/is (= [] (f [])))
 
       (t/is (= [{:trie-keys ["log-l00-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"]
-                 :out-trie-key "log-l01-fr00-nr114-rs14",} ]
+                 :out-trie-key "log-l01-fr00-nr114-rs14",}]
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10]]))
             "no L1s yet, merge L0s up to limit and stop")
 
       (t/is (= [{:trie-keys ["log-l01-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"],
-                 :out-trie-key "log-l01-fr00-nr114-rs14"            }]
+                 :out-trie-key "log-l01-fr00-nr114-rs14"}]
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10]
                    [1 0 10 10]]))
             "have a partial L1, merge into that until it's full")
@@ -52,14 +52,14 @@
             "all merged, nothing to do")
 
       (t/is (= [{:out-trie-key "log-l01-fr114-nr128-rs14",
-                 :trie-keys ["log-l00-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"]}
-                ]
+                 :trie-keys ["log-l00-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"]}]
+
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
                    [1 0 20 20]]))
             "have a full L1, start a new L1 til that's full")
 
       (t/is (= [{:trie-keys ["log-l01-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"],
-                 :out-trie-key "log-l01-fr114-nr128-rs14"} ]
+                 :out-trie-key "log-l01-fr114-nr128-rs14"}]
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
                    [1 0 20 20] [1 20 30 10]]))
             "have a full and a partial L1, merge into that til it's full")
@@ -268,7 +268,7 @@
             (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
                      (.getAsList recency-wtr)))))))))
 
-(defn tables-key ^String [table] (str "objects/" bp/version "/tables/" table))
+(defn tables-key ^String [table] (str "objects/" Storage/version "/tables/" table))
 
 (t/deftest test-l1-compaction
   (let [node-dir (util/->path "target/compactor/test-l1-compaction")]
@@ -507,7 +507,7 @@
         (tu/finish-chunk! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
-        (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after} ]
+        (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after}]
                  (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"))))
 
       (t/testing "an id where there is no previous data shouldn't show up in the compacted files"

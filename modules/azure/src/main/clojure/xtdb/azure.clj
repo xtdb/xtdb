@@ -5,7 +5,7 @@
             [xtdb.util :as util])
   (:import [com.azure.identity DefaultAzureCredentialBuilder]
            [com.azure.storage.blob BlobServiceClientBuilder]
-           [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory]))
+           [xtdb.api.storage AzureBlobStorage AzureBlobStorage$Factory Storage]))
 
 (defmethod bp/->object-store-factory ::object-store [_ {:keys [storage-account container
                                                                prefix user-managed-identity-client-id
@@ -29,7 +29,7 @@
                              user-managed-identity-id (.managedIdentityClientId user-managed-identity-id))) 
         container (.getContainer factory)
         prefix (.getPrefix factory)
-        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
+        prefix-with-version (if prefix (.resolve prefix Storage/storageRoot) Storage/storageRoot)
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint storage-account-endpoint)
                                         (.credential credential)

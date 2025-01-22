@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture
 
 interface ObjectStore : AutoCloseable {
 
-    interface Factory {
+    fun interface Factory {
         fun openObjectStore(): ObjectStore
     }
 

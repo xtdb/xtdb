@@ -3,7 +3,7 @@
             [xtdb.google-cloud.object-store :as os]
             [xtdb.util :as util])
   (:import [com.google.cloud.storage StorageOptions StorageOptions$Builder]
-           [xtdb.api.storage GoogleCloudStorage GoogleCloudStorage$Factory ObjectStore]))
+           [xtdb.api.storage GoogleCloudStorage GoogleCloudStorage$Factory ObjectStore Storage]))
 
 (defmethod bp/->object-store-factory ::object-store [_ {:keys [project-id bucket prefix]}]
   (cond-> (GoogleCloudStorage/googleCloudStorage project-id bucket)
@@ -13,7 +13,7 @@
   (let [project-id (.getProjectId factory)
         bucket (.getBucket factory)
         prefix (.getPrefix factory)
-        prefix-with-version (if prefix (.resolve prefix bp/storage-root) bp/storage-root)
+        prefix-with-version (if prefix (.resolve prefix Storage/storageRoot) Storage/storageRoot)
         storage-service (-> (StorageOptions/newBuilder)
                             ^StorageOptions$Builder (.setProjectId project-id)
                             ^StorageOptions (.build)
