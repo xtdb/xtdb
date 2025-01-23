@@ -14,7 +14,7 @@ buildscript {
 plugins {
     `java-library`
     id("dev.clojurephant.clojure") version "0.8.0-beta.7"
-    id("io.freefair.aggregate-javadoc") version "6.6"
+    id("io.freefair.aggregate-javadoc") version "8.11"
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
