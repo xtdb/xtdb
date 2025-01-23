@@ -76,8 +76,6 @@ class MemoryBufferPool(
                 .distinct()
         }
 
-    override fun objectSize(key: Path): Long = memoryStore[key]?.capacity() ?: 0
-
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val baos = ByteArrayOutputStream()
         return newChannel(baos).closeOnCatch { writeChannel ->

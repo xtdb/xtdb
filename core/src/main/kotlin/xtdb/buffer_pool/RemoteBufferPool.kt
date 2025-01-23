@@ -212,8 +212,6 @@ class RemoteBufferPool(
 
     override fun listObjects(dir: Path): List<Path> = osFiles.listFilesUnderPrefix(dir)
 
-    override fun objectSize(key: Path): Long = osFiles[key] ?: 0
-
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()
         return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING).closeOnCatch { fileChannel ->

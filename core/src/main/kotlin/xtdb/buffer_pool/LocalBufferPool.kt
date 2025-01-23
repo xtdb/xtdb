@@ -136,8 +136,6 @@ class LocalBufferPool(
             ?.let { dirPath -> newDirectoryStream(dirPath).use { it.map(diskStore::relativize).sorted() } }
             .orEmpty()
 
-    override fun objectSize(key: Path): Long = diskStore.resolve(key).fileSize()
-
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskStore.createTempUploadFile()
         return newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->

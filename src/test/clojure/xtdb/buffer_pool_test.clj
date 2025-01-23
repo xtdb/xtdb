@@ -205,14 +205,7 @@
 
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
     (t/is (= (mapv util/->path ["bar/baz/dan"])
-             (.listObjects buffer-pool (util/->path "bar/baz")))))
-
-  (t/testing "objectSize"
-    (t/is (= 6 (.objectSize buffer-pool (util/->path "bar/alice"))))
-    (t/is (= 5 (.objectSize buffer-pool (util/->path "foo/alan"))))
-    (t/is (= 4 (.objectSize buffer-pool (util/->path "bar/bob"))))
-    (t/is (= 4 (.objectSize buffer-pool (util/->path "bar/baz/dan"))))
-    (t/is (= 6 (.objectSize buffer-pool (util/->path "bar/baza/james"))))))
+             (.listObjects buffer-pool (util/->path "bar/baz"))))))
 
 (t/deftest test-memory-list-objs
   (with-open [bp (MemoryBufferPool. tu/*allocator* (SimpleMeterRegistry.))]
