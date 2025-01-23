@@ -44,6 +44,15 @@ val twelveGBJvmArgs = listOf(
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
+val buildEnv="standard"
+
+layout.buildDirectory.set(
+    when (buildEnv) {
+        "repl" -> layout.projectDirectory.dir("buildRepl")
+        else -> layout.projectDirectory.dir("build")
+    }
+)
+
 allprojects {
     val proj = this
 
@@ -126,6 +135,10 @@ allprojects {
             }
 
             tasks.clojureRepl {
+                doFirst {
+                    project.ext.set("buildEnv", "repl")
+                }
+
                 forkOptions.run {
                     val jvmArgs = defaultJvmArgs.toMutableList()
 
