@@ -66,5 +66,20 @@ livenessProbe:
 
 service:
   type: LoadBalancer
-  httpServerPort: 3000
-  pgwirePort: 5432
+  httpServer:
+    # Port of the http server on the nodes
+    targetPort: 3000
+    # Port exposed by the service
+    servicePort: 3000
+  pgwire:
+    # Port of the pgwire server on the nodes
+    targetPort: 5432
+    # Port exposed by the service
+    servicePort: 5432
+
+metricService: 
+  type: ClusterIP
+  # Port of the metrics server on the nodes
+  targetPort: 8080
+  # Port exposed by the service
+  servicePort: 80
