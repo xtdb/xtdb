@@ -4,7 +4,6 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.azure :as azure]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -14,12 +13,12 @@
             [xtdb.util :as util])
   (:import (com.azure.storage.blob BlobContainerClient)
            (com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions)
-           (java.io Closeable)
+           [java.lang AutoCloseable]
            (java.nio ByteBuffer)
            (java.nio.file Files Path)
            (java.time Duration)
-           (xtdb.api.storage AzureBlobStorage ObjectStore)
-           (xtdb.azure.object_store AzureBlobObjectStore)
+           (xtdb.api.storage ObjectStore)
+           (xtdb.azure BlobStorage)
            (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
@@ -51,10 +50,10 @@
 
 (t/use-fixtures :once run-if-auth-available)
 
-(defn object-store ^Closeable [prefix]
-  (let [factory (-> (AzureBlobStorage/azureBlobStorage storage-account container)
-                    (.prefix (util/->path (str prefix))))]
-    (azure/open-object-store factory)))
+(defn object-store ^AutoCloseable [prefix]
+  (-> (BlobStorage/azureBlobStorage storage-account container)
+      (.prefix (util/->path (str prefix)))
+      (.openObjectStore)))
 
 (t/deftest ^:azure put-delete-test
   (with-open [os (object-store (random-uuid))]
@@ -134,14 +133,15 @@
     (t/testing "neither storageAccount nor storageAccountEndpoint provided - should throw illegal-arg"
       (t/is (thrown-with-msg? IllegalArgumentException
                               #"At least one of storageAccount or storageAccountEndpoint must be provided."
-                              (azure/open-object-store (-> (AzureBlobStorage/azureBlobStorage nil container)
-                                                           (.prefix (util/->path (str prefix))))))))
+                              (-> (BlobStorage/azureBlobStorage nil container)
+                                  (.prefix (util/->path (str prefix)))
+                                  (.openObjectStore)))))
 
     (t/testing "storageAccountEndpoint specified - should work correctly"
-      (with-open [os ^AzureBlobObjectStore (azure/open-object-store 
-                                            (-> (AzureBlobStorage/azureBlobStorage nil container)
-                                                (.prefix (util/->path (str prefix)))
-                                                (.storageAccountEndpoint "https://xtdbteststorageaccount.blob.core.windows.net")))]
+      (with-open [os (-> (BlobStorage/azureBlobStorage nil container)
+                         (.prefix (util/->path (str prefix)))
+                         (.storageAccountEndpoint "https://xtdbteststorageaccount.blob.core.windows.net")
+                         (.openObjectStore))]
         (os-test/put-edn os (util/->path "alice") :alice)
         (t/is (= [(os/->StoredObject (util/->path "alice") 6)]
                  (.listAllObjects ^ObjectStore os)))))))
@@ -306,9 +306,7 @@
 
 (t/deftest ^:azure interrupt-multipart-upload
   (with-open [os (object-store (random-uuid))]
-    (let [blob-container-client (:blob-container-client os)
-          prefix (:prefix os)
-          parts (repeatedly 5 #(.flip (os-test/generate-random-byte-buffer 10000000)))
+    (let [parts (repeatedly 5 #(.flip (os-test/generate-random-byte-buffer 10000000)))
           upload-thread (Thread.
                          (fn []
                            (try
@@ -324,5 +322,5 @@
 
       (.interrupt upload-thread) 
 
-      (t/testing "no comitted blobs should be present"
-        (t/is (= #{} (list-filenames blob-container-client prefix (-> (ListBlobsOptions.) (.setPrefix (str prefix))))))))))
+      (t/testing "no committed blobs should be present"
+        (t/is (empty? (.listAllObjects os)))))))

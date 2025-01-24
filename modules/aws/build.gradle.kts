@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
@@ -32,4 +30,6 @@ dependencies {
     api("software.amazon.awssdk", "cloudwatch", "2.25.50")
 
     api(kotlin("stdlib-jdk8"))
+    api(libs.kotlinx.coroutines)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

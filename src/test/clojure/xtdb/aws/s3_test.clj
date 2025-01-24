@@ -1,14 +1,13 @@
 (ns xtdb.aws.s3-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.aws.s3 :as s3]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.io Closeable]
+  (:import [java.lang AutoCloseable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
@@ -25,10 +24,10 @@
   (or (System/getProperty "xtdb.aws.s3-test.bucket")
       "xtdb-object-store-iam-test"))
 
-(defn object-store ^Closeable [prefix]
-  (let [factory (-> (S3/s3 bucket)
-                    (.prefix (util/->path (str prefix))))]
-    (s3/open-object-store factory)))
+(defn object-store ^AutoCloseable [prefix]
+  (-> (S3/s3 bucket)
+      (.prefix (util/->path (str prefix)))
+      (.openObjectStore)))
 
 (t/deftest ^:s3 put-delete-test
   (with-open [os (object-store (random-uuid))]

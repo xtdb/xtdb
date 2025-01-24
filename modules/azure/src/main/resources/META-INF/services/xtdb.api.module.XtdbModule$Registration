@@ -1,2 +1,2 @@
-xtdb.api.storage.AzureBlobStorage$Registration
+xtdb.azure.BlobStorage$Registration
 xtdb.azure.AzureMonitorMetrics$Registration

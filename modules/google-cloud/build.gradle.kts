@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
@@ -36,4 +34,6 @@ dependencies {
     api("com.google.guava","guava","32.1.1-jre")
 
     api(kotlin("stdlib-jdk8"))
+    api(libs.kotlinx.coroutines)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

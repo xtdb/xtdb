@@ -43,15 +43,7 @@ class SimulatedObjectStore(
     }
 
     override fun listAllObjects(): List<ObjectStore.StoredObject> =
-        buffers.map { (key, buffer) ->
-            object : ObjectStore.StoredObject {
-                override val key: Path
-                    get() = key
-                override val size: Long
-                    get() = buffer.capacity().toLong()
-
-            }
-        }
+        buffers.map { (key, buffer) -> ObjectStore.StoredObject(key, buffer.capacity().toLong()) }
 
     override fun deleteObject(k: Path): CompletableFuture<*> =
         TODO("Not yet implemented")

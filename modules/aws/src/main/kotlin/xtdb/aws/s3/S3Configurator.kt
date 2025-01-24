@@ -10,6 +10,6 @@ interface S3Configurator {
     fun configureHead(builder: HeadObjectRequest.Builder) = Unit
     fun configurePut(builder: PutObjectRequest.Builder) = Unit
     fun configureClient(builder: S3AsyncClientBuilder) = Unit
-}
 
-data object DefaultS3Configurator: S3Configurator
+    data object Default: S3Configurator
+}

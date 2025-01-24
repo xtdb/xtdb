@@ -5,6 +5,7 @@
             [xtdb.file-log :as fl]
             [xtdb.kafka]
             [xtdb.node :as xtn]
+            [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import org.apache.kafka.common.KafkaException
@@ -85,9 +86,9 @@
           (t/is (= true (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])))))
 
         (t/testing "Send & receive file change notification"
-          (.appendFileNotification log (fl/map->FileNotification {:added [(fl/->StoredObject (util/->path "foo1") 12)
-                                                                          (fl/->StoredObject (util/->path "foo2") 15)
-                                                                          (fl/->StoredObject (util/->path "foo3") 8)]}))
+          (.appendFileNotification log (fl/map->FileNotification {:added [(os/->StoredObject (util/->path "foo1") 12)
+                                                                          (os/->StoredObject (util/->path "foo2") 15)
+                                                                          (os/->StoredObject (util/->path "foo3") 8)]}))
           (Thread/sleep 1000)
           (t/is (= {(util/->path "foo1") 12
                     (util/->path "foo2") 15

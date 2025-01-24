@@ -1,5 +1,6 @@
 (ns xtdb.file-log
   (:require [cognitect.transit :as transit]
+            [xtdb.object-store :as os]
             xtdb.protocols
             [xtdb.util :as util])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
@@ -7,22 +8,19 @@
            (xtdb.api.log FileLog$Notification)
            (xtdb.api.storage ObjectStore$StoredObject)))
 
-(defrecord StoredObject [k size]
-  ObjectStore$StoredObject
-  (getKey [_] k)
-  (getSize [_] size))
-
 (defrecord FileNotification [added deleted]
   FileLog$Notification
   (getAdded [_] added))
 
 (defn addition [k size]
-  (FileNotification. [(->StoredObject k size)] []))
+  (FileNotification. [(os/->StoredObject k size)] []))
 
 (def ^:private transit-write-handlers
   {FileNotification (transit/write-handler "xtdb/file-notification" #(into {} %))
-   Path (transit/write-handler "xtdb/path" (fn [^Path path]
-                                             (str path)))})
+   ObjectStore$StoredObject (transit/write-handler "xtdb/stored-object" (fn [^ObjectStore$StoredObject obj]
+                                                                          {:k (.getKey obj)
+                                                                           :size (.getSize obj)}))
+   Path (transit/write-handler "xtdb/path" str)})
 
 (defn file-notification->transit [n]
   (with-open [os (ByteArrayOutputStream.)]
@@ -31,10 +29,9 @@
     (.toByteArray os)))
 
 (def ^:private transit-read-handlers
-  {"xtdb/file-notification" (transit/read-handler (fn [{:keys [added deleted]}]
-                                                    (->FileNotification (->> added (mapv map->StoredObject)) deleted)))
-   "xtdb/path" (transit/read-handler (fn [path-str]
-                                       (util/->path path-str)))})
+  {"xtdb/file-notification" (transit/read-handler map->FileNotification)
+   "xtdb/stored-object" (transit/read-handler os/map->StoredObject)
+   "xtdb/path" (transit/read-handler util/->path)})
 
 (defn transit->file-notification [bytes]
   (with-open [in (ByteArrayInputStream. bytes)]
