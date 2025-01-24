@@ -10,3 +10,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+
+  helm:
+    uses: ./.github/workflows/helm.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      appVersion: edge
