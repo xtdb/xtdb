@@ -51,6 +51,7 @@ xtdbConfig:
   # Extra Env:
   env:
     # (ENV_VAR_NAME: Value)
+    XTDB_LOGGING_LEVEL: "info" # See https://docs.xtdb.com/ops/troubleshooting/overview.html
 
 startupProbe:
   httpGet:
