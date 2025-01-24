@@ -1,0 +1,34 @@
+name: Helm Charts
+
+on:
+  workflow_call:
+    inputs:
+      appVersion: 
+        required: true
+        type: string
+
+jobs:
+  build-charts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      APP_VERSION: ${{ inputs.appVersion }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Helm
+        uses: azure/setup-helm@v4.2.0
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Package & Push Azure Helm Chart
+        run: |
+          helm package azure/helm --app-version $APP_VERSION \
+          ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
+          helm push helm-xtdb-azure-*.tgz oci://ghcr.io/xtdb/
