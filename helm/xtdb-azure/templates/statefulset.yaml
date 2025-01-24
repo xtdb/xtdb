@@ -58,6 +58,8 @@ spec:
               value: "{{ .Values.xtdbConfig.kafkaTxTopic }}"
             - name: XTDB_FILES_TOPIC
               value: "{{ .Values.xtdbConfig.kafkaFilesTopic }}"
+            - name: JDK_JAVA_OPTIONS
+              value: {{ .Values.xtdbConfig.jdkOptions }}
             - name: XTDB_NODE_ID
               valueFrom:
                 fieldRef:

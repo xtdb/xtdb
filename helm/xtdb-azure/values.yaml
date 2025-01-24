@@ -34,6 +34,10 @@ xtdbConfig:
   storageContainerName: ""
   userManagedIdentityClientId: ""
 
+  # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
+  # See https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html
+  jdkOptions: "-Xmx2000m -Xms2000m -XX:MaxDirectMemorySize=2000m -XX:MaxMetaspaceSize=500m"
+  
   # Kafka config
   kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
   kafkaTxTopic: "xtdb-tx-log"
