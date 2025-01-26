@@ -7,3 +7,5 @@ import java.nio.file.StandardOpenOption.READ
 
 internal fun Path.newSeekableByteChannel() = SeekableReadChannel(Files.newByteChannel(this, READ))
 
+val String.asPath: Path
+    get() = Path.of(this)

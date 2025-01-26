@@ -1,8 +1,13 @@
 package xtdb.api.storage
 
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption.CREATE
+import java.nio.file.StandardOpenOption.WRITE
 import java.util.concurrent.CompletableFuture
+
+fun throwMissingKey(k: Path): Nothing = error("Object '$k' doesn't exist")
 
 interface ObjectStore : AutoCloseable {
 
@@ -10,10 +15,7 @@ interface ObjectStore : AutoCloseable {
         fun openObjectStore(): ObjectStore
     }
 
-    interface StoredObject {
-        val key: Path
-        val size: Long
-    }
+    data class StoredObject(val key: Path, val size: Long)
 
     /**
      * Asynchronously returns the given object in a ByteBuffer.
@@ -27,7 +29,11 @@ interface ObjectStore : AutoCloseable {
      *
      * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
      */
-    fun getObject(k: Path, outPath: Path): CompletableFuture<Path>
+    fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
+        getObject(k).thenApply { buf ->
+            FileChannel.open(outPath, CREATE, WRITE).use { it.write(buf) }
+            outPath
+        }
 
     /**
      * Stores an object in the object store.

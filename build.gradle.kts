@@ -304,10 +304,19 @@ dependencies {
     // For generating clojure docs
     testImplementation("codox", "codox", "0.10.8")
 
+    implementation(libs.kotlinx.coroutines)
+    testImplementation(libs.kotlinx.coroutines.test)
+    implementation(kotlin("stdlib-jdk8"))
+    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test-junit5"))
+
     // for AWS profiles (managing datasets)
     devImplementation("software.amazon.awssdk", "sts", "2.16.76")
     devImplementation("software.amazon.awssdk", "sso", "2.16.76")
     devImplementation("software.amazon.awssdk", "ssooidc", "2.16.76")
+
+    testImplementation("org.testcontainers", "minio", "1.20.0")
+    testImplementation("io.minio", "minio", "8.5.17")
 
     devImplementation("com.taoensso", "nippy", "3.3.0")
     testImplementation("com.taoensso", "nippy", "3.3.0")
