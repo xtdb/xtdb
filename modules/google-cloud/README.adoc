@@ -9,42 +9,49 @@ Within our XTDB node, we can make use of Google Cloud Services for certain purpo
 In order to use any of the Google Cloud services, you will need to include a dependency on the `xtdb-google-cloud` module.
 
 _deps.edn_
-```
+[source,clojure]
+----
 com.xtdb.labs/xtdb-google-cloud {:mvn/version "2.0.0-SNAPSHOT"}
-```
+----
 
 _pom.xml_
-```
+[source,xml]
+----
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-google-cloud</artifactId>
     <version>2.0.0-SNAPSHOT</version>
 </dependency>
-```
+----
 
 == Authentication
 
-Authentication for both the document store and checkpoint store components within the module is handled via Google’s "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[*relevant documentation*] to get set up. You will need to setup authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules. 
+Authentication for both the document store and checkpoint store components within the module is handled via Google’s "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[*relevant documentation*] to get set up.
+You will need to setup authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules.
 
-Whatever method used to authenticate, you will need to ensure it has the correct permissions. Alongside the various bits of infrastructure required for the object store, we create a custom XDTB IAM role. One can use this role to provide all necessary permissions for the object store and the resources it is using on Google cloud, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services.
+Whatever method used to authenticate, you will need to ensure it has the correct permissions.
+Alongside the various bits of infrastructure required for the object store, we create a custom XDTB IAM role.
+One can use this role to provide all necessary permissions for the object store and the resources it is using on Google cloud, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services.
 See the custom role definition in the link:cloud-deployment-manager/xtdb-object-store-stack.jinja[Google Cloud Deployment Manager stack] for what exactly that includes.
 
 == Google Cloud Storage Object Store
 
-We can swap out the implementation of the object store with one based on Google Cloud Blob Storage. To do so, we can add the `:google-cloud` object store and it's configuration map, within the remote storage module config for our node:
+We can swap out the implementation of the object store with one based on Google Cloud Blob Storage.
+To do so, we can add the `:google-cloud` object store and it's configuration map, within the remote storage module config for our node:
 
-We can swap out the implementation of the object store with one based on Google Cloud Blob Storage. To do so, we add the `xtdb.google-cloud/blob-object-store` key within the integrant config for our node, alongside any config:
+We can swap out the implementation of the object store with one based on Google Cloud Blob Storage.
+To do so, we add a `:google-cloud` section within the Integrant config for our node, alongside any config:
 ```clojure
 {:storage [:remote {:object-store [:google-cloud {:project-id "your-project-id"
                                                   :bucket "your-storage-bucket"}]
-                     :local-disk-cache local-disk-cache}]}
+                    :local-disk-cache local-disk-cache}]}
 ```
 
 Below follows the various parameters used by the module, and some notes around the provided <<deployment-manager, Google Cloud Deployment Manager configuration template>> which sets up all of the necessary infrastructure.
 
-### Parameters
+=== Parameters
 
-These are the following parameters that can be passed within the config for our `xtdb.google-cloud/blob-object-store`:
+These are the following parameters that can be passed within the config for the Google Cloud Storage object store:
 [cols="1,1,2,1"]
 |===
 | *Name* | *Type* | *Description* | *Required?*
@@ -67,7 +74,8 @@ These are the following parameters that can be passed within the config for our 
 [#deployment-manager]
 === Google Cloud Deployment Manager Configuration
 
-In order to handle the various bits of Google Cloud infrastructure required to use a Cloud Storage bukcet as an XTDB object store, we provide a link:cloud-deployment-manager/xtdb-stack.yaml[Google Cloud Deployment Manager Configuration] to setup everything that you should need. Read below for more details on what's required in your Google Cloud project, what the configuration sets up and how to customize it, and how to deploy the configuration.
+In order to handle the various bits of Google Cloud infrastructure required to use a Cloud Storage bucket as an XTDB object store, we provide a link:cloud-deployment-manager/xtdb-stack.yaml[Google Cloud Deployment Manager Configuration] to setup everything that you should need.
+Read below for more details on what's required in your Google Cloud project, what the configuration sets up and how to customize it, and how to deploy the configuration.
 
 ==== Requirements in the Google Cloud Project
 

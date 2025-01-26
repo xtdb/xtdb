@@ -3,6 +3,7 @@ antlr="4.13.2"
 arrow="18.1.0"
 arrow-adbc="0.15.0"
 clojure="1.12.0"
+kotlin-coroutines = "1.10.1"
 netty="4.1.117.Final"
 reitit="0.5.15"
 muuntaja="0.6.8"
@@ -45,6 +46,8 @@ buddy-hashers={ group="buddy", name="buddy-hashers", version="2.0.167" }
 
 pgjdbc={ group="org.postgresql", name="postgresql", version="42.7.3" }
 
+kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlin-coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
 kotlinx-serialization-json={ group="org.jetbrains.kotlinx", name="kotlinx-serialization-json", version="1.8.0" }
 mockk={ group="io.mockk", name="mockk", version="1.13.9" }
 kaml={ group="com.charleskorn.kaml", name="kaml", version="0.56.0" }

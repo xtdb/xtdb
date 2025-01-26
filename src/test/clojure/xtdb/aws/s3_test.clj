@@ -1,14 +1,13 @@
 (ns xtdb.aws.s3-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.aws.s3 :as s3]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.io Closeable]
+  (:import [java.lang AutoCloseable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
@@ -25,10 +24,10 @@
   (or (System/getProperty "xtdb.aws.s3-test.bucket")
       "xtdb-object-store-iam-test"))
 
-(defn object-store ^Closeable [prefix]
-  (let [factory (-> (S3/s3 bucket)
-                    (.prefix (util/->path (str prefix))))]
-    (s3/open-object-store factory)))
+(defn object-store ^AutoCloseable [prefix]
+  (-> (S3/s3 bucket)
+      (.prefix (util/->path (str prefix)))
+      (.openObjectStore)))
 
 (t/deftest ^:s3 put-delete-test
   (with-open [os (object-store (random-uuid))]
@@ -58,7 +57,7 @@
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
-          (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool)))))
+          (t/is (= (mapv util/->path ["alan" "alice"]) (vec (.listAllObjects buffer-pool))))))
 
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
@@ -81,41 +80,25 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (.listAllObjects buffer-pool-1)))
+                   (vec (.listAllObjects buffer-pool-1))))
 
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (.listAllObjects buffer-pool-2))))))))
+                   (vec (.listAllObjects buffer-pool-2)))))))))
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
-    (let [prefix (:prefix os)
-          multipart-key (util/->path "test-multi-created")
-          multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)
-          prefixed-key (str (.resolve ^Path prefix multipart-key))]
-      (t/testing "Call to start a multipart upload should work and be visible in multipart upload list"
-        (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
-                                                                      (-> (ListMultipartUploadsRequest/builder)
-                                                                          (.bucket bucket)
-                                                                          (.prefix (str prefix))
-                                                                          ^ListMultipartUploadsRequest (.build)))
-              [^MultipartUpload upload] (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
-          (t/is (= (.uploadId upload) (:upload-id multipart-upload)) "upload id should be present")
-          (t/is (= (.key upload) prefixed-key) "should be under the prefixed key")))
+    (let [multipart-key (util/->path "test-multi-created")
+          multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)]
+
+      (t/is (= #{multipart-key} (set (.listUploads os))) "multipart upload should be present in the list")
 
       (t/testing "Call to abort a multipart upload should work - should be removed from the upload list"
         @(.abort multipart-upload)
-        (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
-                                                                      (-> (ListMultipartUploadsRequest/builder)
-                                                                          (.bucket bucket)
-                                                                          (.prefix (str prefix))
-                                                                          ^ListMultipartUploadsRequest (.build)))
-              uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
-          (t/is (= [] uploads) "uploads should be empty"))))))
+        (t/is (empty? (.listUploads os)))))))
 
 (t/deftest ^:s3 multipart-put-test
   (with-open [os (object-store (random-uuid))]
-    (let [prefix (:prefix os)
-          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
+    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
           file-part-2 (os-test/generate-random-byte-buffer part-size)]
@@ -126,17 +109,11 @@
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
         @(.complete multipart-upload)
-        (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
-                                                                      (-> (ListMultipartUploadsRequest/builder)
-                                                                          (.bucket bucket)
-                                                                          (.prefix (str prefix))
-                                                                          ^ListMultipartUploadsRequest (.build)))
-              uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
-          (t/is (= [] uploads) "uploads should be empty")))
+        (t/is (empty? (.listUploads os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
-                 (.listAllObjects ^ObjectStore os)))
+                 (vec (.listAllObjects ^ObjectStore os))))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"

@@ -42,7 +42,8 @@
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
     (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:storage [:remote {:object-store [:in-memory {}]
-                                                                                    :local-disk-cache path}]}))]
+                                                                                    :local-disk-cache path}]
+                                                                 :compactor {:enabled? false}}))]
       (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
 
       (t/is (= [{:xt/id :foo}]

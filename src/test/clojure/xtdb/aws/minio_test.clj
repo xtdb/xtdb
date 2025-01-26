@@ -1,7 +1,6 @@
 (ns xtdb.aws.minio-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.aws.s3 :as s3]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
@@ -29,12 +28,12 @@
    :secret-key "test-password"})
 
 (defn object-store ^xtdb.api.storage.ObjectStore [prefix]
-  (let [{:keys [access-key secret-key]} test-creds
-        factory (-> (S3/s3 bucket)
-                    (.prefix (util/->path (str prefix)))
-                    (.credentials access-key secret-key)
-                    (.endpoint "http://127.0.0.1:9000"))]
-    (s3/open-object-store factory)))
+  (let [{:keys [access-key secret-key]} test-creds]
+    (-> (S3/s3 bucket)
+        (.prefix (util/->path (str prefix)))
+        (.credentials access-key secret-key)
+        (.endpoint "http://127.0.0.1:9000")
+        (.openObjectStore))))
 
 (t/deftest ^:minio put-delete-test
   (with-open [os (object-store (random-uuid))]
@@ -64,17 +63,18 @@
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
-          (Thread/sleep 1000)
+          (Thread/sleep 100)
           (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool)))))
 
       (util/with-open [node (start-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
+          (Thread/sleep 100)
             (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
-            (Thread/sleep 1000)
+            (Thread/sleep 100)
             (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listAllObjects buffer-pool)))))))))
 
 (t/deftest ^:minio multiple-node-list-test
@@ -155,19 +155,23 @@
         (t/is (seq (.listAllObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-#_
-(t/deftest ^:minio tpch-test-node
-  (util/with-tmp-dirs #{local-disk-cache}
-    (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
-      ;; Submit tpch docs
-      (-> (tpch/submit-docs! node 0.05)
-          (tu/then-await-tx node (Duration/ofHours 1)))
+(comment
+  (import [java.time Duration])
+  (require '[xtdb.datasets.tpch :as tpch]
+           '[integrant.core :as ig])
 
-      ;; Ensure finish-chunk! works
-      (t/is (nil? (tu/finish-chunk! node)))
+  (t/deftest ^:minio tpch-test-node
+    (util/with-tmp-dirs #{local-disk-cache}
+      (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
+        ;; Submit tpch docs
+        (-> (tpch/submit-docs! node 0.05)
+            (tu/then-await-tx node (Duration/ofHours 1)))
 
-      (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/storage)))]
-        (t/is (instance? RemoteBufferPool buffer-pool))
-        (t/is (instance? ObjectStore object-store))
-        ;; Ensure some files are written
-        (t/is (seq (.listAllObjects object-store)))))))
+        ;; Ensure finish-chunk! works
+        (t/is (nil? (tu/finish-chunk! node)))
+
+        (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/storage)))]
+          (t/is (instance? RemoteBufferPool buffer-pool))
+          (t/is (instance? ObjectStore object-store))
+          ;; Ensure some files are written
+          (t/is (seq (.listAllObjects object-store))))))))

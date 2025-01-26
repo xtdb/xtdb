@@ -14,14 +14,15 @@ import xtdb.api.log.Kafka
 import xtdb.api.log.Logs.InMemoryLogFactory
 import xtdb.api.log.Logs.LocalLogFactory
 import xtdb.api.module.XtdbModule
-import xtdb.api.storage.AzureBlobStorage.azureBlobStorage
-import xtdb.api.storage.GoogleCloudStorage
 import xtdb.api.storage.Storage.InMemoryStorageFactory
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.aws.CloudWatchMetrics
-import xtdb.aws.S3.s3
+import xtdb.aws.S3.Companion.s3
 import xtdb.azure.AzureMonitorMetrics
+import xtdb.azure.BlobStorage.Companion.azureBlobStorage
+import xtdb.gcp.CloudStorage
+import xtdb.gcp.CloudStorage.Companion.googleCloudStorage
 import java.nio.file.Paths
 
 class YamlSerdeTest {
@@ -172,7 +173,7 @@ class YamlSerdeTest {
 
         assertEquals(
             RemoteStorageFactory(
-                objectStore = GoogleCloudStorage.Factory(
+                objectStore = googleCloudStorage(
                     projectId = "xtdb-project",
                     bucket ="xtdb-bucket"
                 ),
