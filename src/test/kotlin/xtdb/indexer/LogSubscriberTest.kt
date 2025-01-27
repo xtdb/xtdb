@@ -8,7 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-class LogProcessorTest {
+class LogSubscriberTest {
 
     private fun inst(day: Int) =
         LocalDate.of(2020, 1, day).atStartOfDay().toInstant(ZoneOffset.UTC)

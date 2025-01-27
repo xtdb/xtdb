@@ -5,6 +5,8 @@ package xtdb.api.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.future
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -29,11 +31,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 
-class LocalLog(
-    rootPath: Path,
-    private val instantSource: InstantSource,
-    private val msgProcessor: Processor?,
-) : Log {
+class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
     companion object {
         private val Path.logFilePath get() = resolve("LOG")
 
@@ -104,7 +102,6 @@ class LocalLog(
     )
 
     private val appendCh = Channel<NewMessage>(capacity = 10)
-    private val committedCh = Channel<Record>(100)
 
     private val logFilePath = rootPath.logFilePath
 
@@ -150,24 +147,14 @@ class LocalLog(
     override var latestSubmittedOffset: LogOffset = readLatestSubmittedOffset(rootPath)
         private set
 
+    @Volatile
+    private var committedCh: Channel<Record>? = null
+
+    private val mutex = Mutex()
+
     init {
         scope.launch {
             try {
-                if (msgProcessor != null && logFilePath.exists()) {
-                    FileChannel.open(logFilePath).use { ch ->
-                        val latestCompleted = msgProcessor.latestCompletedOffset
-                        if (latestCompleted >= 0) {
-                            ch.position(latestCompleted)
-                            ch.readMessage()
-                        }
-
-                        val initialSize = ch.size()
-                        while (ch.position() < initialSize) {
-                            committedCh.send(ch.readMessage())
-                        }
-                    }
-                }
-
                 while (true) {
                     val msgs = mutableListOf(appendCh.receive())
 
@@ -178,9 +165,16 @@ class LocalLog(
 
                     val records = writeMessages(msgs)
 
-                    msgs.forEachIndexed { idx, msg -> msg.onCommit.complete(records[idx]) }
+                    msgs.forEachIndexed { idx, msg ->
+                        records[idx].also {
+                            msg.onCommit.complete(it)
 
-                    latestSubmittedOffset = records.last().logOffset
+                            mutex.withLock {
+                                committedCh?.send(it)
+                                latestSubmittedOffset = it.logOffset
+                            }
+                        }
+                    }
                 }
             } catch (e: ClosedByInterruptException) {
                 cancel()
@@ -190,10 +184,6 @@ class LocalLog(
         }
 
         scope.launch {
-            while (true) {
-                val msg = withTimeoutOrNull(1.minutes) { committedCh.receive() }
-                runInterruptible { msgProcessor?.processRecords(this@LocalLog, listOfNotNull(msg)) }
-            }
         }
     }
 
@@ -201,10 +191,45 @@ class LocalLog(
         scope.future {
             val onCommit = CompletableDeferred<Record>()
             appendCh.send(NewMessage(message, onCommit))
-            val record = onCommit.await()
-            committedCh.send(record)
-            record.logOffset
+            onCommit.await().logOffset
         }
+
+    override fun subscribe(subscriber: Subscriber): Subscription {
+        val (ch, targetOffset) = runBlocking {
+            mutex.withLock {
+                check(committedCh == null) { "LocalLog only supports one subscriber" }
+                val ch = Channel<Record>(100).also { committedCh = it }
+                Pair(ch, latestSubmittedOffset)
+            }
+        }
+
+        val job = scope.launch {
+            if (logFilePath.exists())
+                FileChannel.open(logFilePath).use { ch ->
+                    val latestCompleted = subscriber.latestCompletedOffset
+                    if (latestCompleted >= 0) {
+                        ch.position(latestCompleted)
+                        ch.readMessage()
+                    }
+
+                    while (ch.position() <= targetOffset) {
+                        subscriber.processRecords(listOf(ch.readMessage()))
+                    }
+                }
+
+            while (true) {
+                val msg = withTimeoutOrNull(1.minutes) { ch.receive() }
+                runInterruptible { subscriber.processRecords(listOfNotNull(msg)) }
+            }
+        }
+
+        return Subscription {
+            runBlocking {
+                job.cancelAndJoin()
+                mutex.withLock { committedCh = null }
+            }
+        }
+    }
 
     override fun close() {
         runBlocking { scope.coroutineContext.job.cancelAndJoin() }
@@ -236,8 +261,6 @@ class LocalLog(
         @Suppress("unused")
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
 
-        override fun openLog(msgProcessor: Processor?): LocalLog {
-            return LocalLog(path, instantSource, msgProcessor)
-        }
+        override fun openLog() = LocalLog(path, instantSource)
     }
 }

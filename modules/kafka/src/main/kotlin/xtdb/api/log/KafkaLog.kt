@@ -164,7 +164,6 @@ class KafkaFileLog(
 
 class KafkaLog internal constructor(
     private val kafkaConfigMap: KafkaConfigMap,
-    private val processor: Processor,
     private val topic: String,
     private val pollDuration: Duration,
 ) : Log {
@@ -173,8 +172,8 @@ class KafkaLog internal constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun close() {
-        producer.close()
         runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        producer.close()
     }
 
     private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -201,12 +200,12 @@ class KafkaLog internal constructor(
                 .also { offset -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(offset) } }
         }
 
-    init {
-        scope.launch {
+    override fun subscribe(subscriber: Subscriber): Subscription {
+        val job = scope.launch {
             kafkaConfigMap.openConsumer().use { c ->
                 TopicPartition(topic, 0).also { tp ->
                     c.assign(listOf(tp))
-                    c.seek(tp, processor.latestCompletedOffset + 1)
+                    c.seek(tp, subscriber.latestCompletedOffset + 1)
                 }
 
                 runInterruptible(Dispatchers.IO) {
@@ -217,8 +216,7 @@ class KafkaLog internal constructor(
                             throw InterruptedException()
                         }
 
-                        processor.processRecords(
-                            this@KafkaLog,
+                        subscriber.processRecords(
                             records.map { record ->
                                 Record(
                                     record.offset(),
@@ -231,6 +229,8 @@ class KafkaLog internal constructor(
                 }
             }
         }
+
+        return Subscription { runBlocking { job.cancelAndJoin() } }
     }
 
     companion object {
@@ -305,16 +305,14 @@ class KafkaLog internal constructor(
                 .plus(propertiesMap)
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
-        override fun openLog(msgProcessor: Processor?): KafkaLog {
-            require(msgProcessor != null) { "KafkaLog requires a message processor" }
-
+        override fun openLog(): KafkaLog {
             val configMap = this.configMap
 
             AdminClient.create(configMap).use { admin ->
                 admin.ensureTopicExists(txTopic, autoCreateTopics)
             }
 
-            return KafkaLog(configMap, msgProcessor, txTopic, pollDuration)
+            return KafkaLog(configMap, txTopic, pollDuration)
         }
 
         override fun openFileLog(): FileLog {

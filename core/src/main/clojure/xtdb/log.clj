@@ -306,12 +306,8 @@
                        :kafka :xtdb.kafka/log)
                      opts))
 
-(defmethod ig/prep-key :xtdb/log [_^Log$Factory factory]
-  {:factory factory
-   :processor (ig/ref :xtdb.log/processor)})
-
-(defmethod ig/init-key :xtdb/log [_ {:keys [^Log$Factory factory, processor]}]
-  (.openLog factory processor))
+(defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]
+  (.openLog factory))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
@@ -337,10 +333,11 @@
   (when opts
     (into {:allocator (ig/ref :xtdb/allocator)
            :indexer (ig/ref :xtdb/indexer)
+           :log (ig/ref :xtdb/log)
            :metrics-registry (ig/ref :xtdb.metrics/registry)
            :chunk-flush-duration #xt/duration "PT4H"}
           opts)))
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer metrics-registry chunk-flush-duration] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator, indexer, ^Log log, metrics-registry, chunk-flush-duration] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer metrics-registry chunk-flush-duration)))
+    (LogProcessor. allocator indexer log metrics-registry chunk-flush-duration)))

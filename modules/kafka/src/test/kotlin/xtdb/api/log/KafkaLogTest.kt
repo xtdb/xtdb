@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import java.nio.ByteBuffer
 import java.time.Duration
-import java.util.*
 import java.util.Collections.synchronizedList
 import kotlin.time.Duration.Companion.seconds
 
@@ -39,20 +38,22 @@ class KafkaLogTest {
     fun `round-trips messages`() = runTest(timeout = 5.seconds) {
         val msgs = synchronizedList(mutableListOf<List<Log.Record>>())
 
-        val processor = mockk<Log.Processor> {
-            every { processRecords(any(), capture(msgs)) } returns Unit
+        val subscriber = mockk<Log.Subscriber> {
+            every { processRecords(capture(msgs)) } returns Unit
             every { latestCompletedOffset } returns -1
         }
 
         KafkaLog.kafka(container.bootstrapServers, "test-tx-topic", "test-files-topic")
             .pollDuration(Duration.ofMillis(100))
-            .openLog(processor).use { log ->
-                val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
-                log.appendMessage(Log.Message.Tx(txPayload)).await()
+            .openLog().use { log ->
+                log.subscribe(subscriber).use { _ ->
+                    val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
+                    log.appendMessage(Log.Message.Tx(txPayload)).await()
 
-                log.appendMessage(Log.Message.FlushChunk(12)).await()
+                    log.appendMessage(Log.Message.FlushChunk(12)).await()
 
-                while(msgs.flatten().size < 2) delay(100)
+                    while(msgs.flatten().size < 2) delay(100)
+                }
             }
 
         assertEquals(2, msgs.flatten().size)

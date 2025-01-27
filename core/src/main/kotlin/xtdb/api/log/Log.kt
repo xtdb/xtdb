@@ -76,7 +76,7 @@ interface Log : AutoCloseable {
     }
 
     interface Factory {
-        fun openLog(msgProcessor: Processor?): Log
+        fun openLog(): Log
         fun openFileLog(): FileLog = FileLog.openInMemory()
     }
 
@@ -84,14 +84,19 @@ interface Log : AutoCloseable {
 
     fun appendMessage(message: Message): CompletableFuture<LogOffset>
 
+    fun subscribe(subscriber: Subscriber) : Subscription
+
+    @FunctionalInterface
+    fun interface Subscription : AutoCloseable
+
     class Record(
         val logOffset: LogOffset,
         val logTimestamp: Instant,
         val message: Message
     )
 
-    interface Processor {
+    interface Subscriber {
         val latestCompletedOffset: LogOffset
-        fun processRecords(log: Log, records: List<Record>)
+        fun processRecords(records: List<Record>)
     }
 }

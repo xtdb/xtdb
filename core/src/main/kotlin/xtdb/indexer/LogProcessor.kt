@@ -15,9 +15,10 @@ import java.time.Instant
 class LogProcessor(
     allocator: BufferAllocator,
     private val indexer: IIndexer,
+    private val log: Log,
     meterRegistry: MeterRegistry,
     flushTimeout: Duration
-) : Log.Processor {
+) : Log.Subscriber, AutoCloseable {
 
     data class Flusher(
         val flushTimeout: Duration,
@@ -25,12 +26,11 @@ class LogProcessor(
         var previousChunkTxId: Long,
         var flushedTxId: Long
     ) {
-        constructor(flushTimeout: Duration, indexer: IIndexer) :
-                this(
-                    flushTimeout, Instant.now(),
-                    previousChunkTxId = indexer.latestCompletedChunkTx()?.txId ?: -1,
-                    flushedTxId = -1
-                )
+        constructor(flushTimeout: Duration, indexer: IIndexer) : this(
+            flushTimeout, Instant.now(),
+            previousChunkTxId = indexer.latestCompletedChunkTx()?.txId ?: -1,
+            flushedTxId = -1
+        )
 
         fun checkChunkTimeout(now: Instant, currentChunkTxId: Long, latestCompletedTxId: Long): Log.Message? =
             when {
@@ -65,16 +65,23 @@ class LogProcessor(
 
     private val flusher = Flusher(flushTimeout, indexer)
 
+    private val subscription = log.subscribe(this)
+
+    override fun close() {
+        subscription.close()
+        allocator.close()
+    }
+
     override val latestCompletedOffset: LogOffset
         get() = indexer.latestCompletedTx()?.txId ?: -1
 
-    override fun processRecords(log: Log, records: List<Log.Record>) = runBlocking {
+    override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkChunkTimeout(indexer)?.let { flushMsg ->
             flusher.flushedTxId = log.appendMessage(flushMsg).await()
         }
 
         records.forEach { record ->
-            when(val msg = record.message) {
+            when (val msg = record.message) {
                 is Log.Message.Tx -> {
                     msg.payload.asChannel.use { txOpsCh ->
                         ArrowStreamReader(txOpsCh, allocator).use { reader ->
