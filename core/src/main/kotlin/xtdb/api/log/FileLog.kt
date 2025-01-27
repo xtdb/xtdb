@@ -1,37 +1,54 @@
 package xtdb.api.log
 
-import xtdb.api.log.FileLog.Subscription
-import xtdb.api.storage.ObjectStore.StoredObject
+import kotlinx.coroutines.*
+import kotlinx.coroutines.future.future
+import xtdb.api.storage.ObjectStore
 import java.util.concurrent.CompletableFuture
 
-interface FileLog {
-    fun appendFileNotification(notification: Notification): CompletableFuture<Unit>
-    fun subscribeFileNotifications(subscriber: Subscriber): Subscription
+interface FileLog : AutoCloseable {
 
-    interface Notification {
-        val added: List<StoredObject>
-    }
-
-    fun interface Subscription : AutoCloseable
-
-    fun interface Subscriber {
-        fun accept(record: Notification)
-    }
+    data class Notification(val added: Collection<ObjectStore.StoredObject>)
 
     companion object {
-        @JvmField
-        val SOLO = object : FileLog {
-            private var sub: Subscriber? = null
+        @JvmStatic
+        fun openInMemory() = InMemory()
+    }
 
-            override fun appendFileNotification(notification: Notification): CompletableFuture<Unit> {
-                sub?.accept(notification)
-                return CompletableFuture.completedFuture(Unit)
+    fun appendFileNotification(notification: Notification): CompletableFuture<Unit>
+    fun subscribeToFileNotifications(processor: Processor): AutoCloseable
+
+    @FunctionalInterface
+    fun interface Processor {
+        fun processNotification(notification: Notification)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
+    class InMemory : FileLog {
+        @Volatile
+        private var processor: Processor? = null
+
+        private val scope: CoroutineScope = CoroutineScope(newSingleThreadContext("log"))
+
+        override fun appendFileNotification(notification: Notification): CompletableFuture<Unit> =
+            scope.future {
+                processor?.processNotification(notification)
             }
 
-            override fun subscribeFileNotifications(subscriber: Subscriber): Subscription {
-                sub = subscriber
-                return Subscription { sub = null }
+        @Synchronized
+        override fun subscribeToFileNotifications(processor: Processor): AutoCloseable {
+            check(this.processor == null) { "Only one file notification processor can be subscribed" }
+
+            this.processor = processor
+
+            return AutoCloseable {
+                synchronized(this@InMemory) {
+                    this.processor = null
+                }
             }
+        }
+
+        override fun close() {
+            runBlocking { scope.coroutineContext.job.cancelAndJoin() }
         }
     }
 }

@@ -67,6 +67,8 @@ dependencies {
     api(libs.micrometer.registry.prometheus)
 
     api(kotlin("stdlib-jdk8"))
+    api(libs.kotlinx.coroutines)
+    testImplementation(libs.kotlinx.coroutines.test)
     api(libs.kaml)
 
     api(libs.pgjdbc)

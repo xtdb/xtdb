@@ -5,11 +5,10 @@
             xtdb.node.impl
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (org.apache.arrow.memory ArrowBuf)
-           (java.time InstantSource)
-           xtdb.IBufferPool
+  (:import (java.time InstantSource)
+           xtdb.api.log.Log
            xtdb.api.storage.Storage
-           xtdb.api.log.Logs))
+           xtdb.IBufferPool))
 
 (defn- random-maps [n]
   (let [nb-ks 5
@@ -39,10 +38,13 @@
 
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
-  (tu/with-system {:xtdb.metrics/registry nil
-                   :xtdb/allocator {}
-                   :xtdb/log (Logs/localLog (.resolve (.toPath node-dir) "logs"))
-                   :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))}
+  (tu/with-system (let [local-log (Log/localLog (.resolve (.toPath node-dir) "logs"))]
+                    {:xtdb.metrics/registry nil
+                     :xtdb/allocator {}
+                     :xtdb/log local-log
+                     :xtdb/file-log local-log
+                     :xtdb.log/processor nil
+                     :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))})
     (fn []
       (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
             objs (filter #(= "arrow" (tu/get-extension %)) (.listAllObjects buffer-pool))

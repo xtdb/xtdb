@@ -117,11 +117,11 @@
   (open-xtql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
       (-> (xtp/prepare-xtql this query query-opts)
-          (then-execute-prepared-query allocator query-timer query-opts))) )
+          (then-execute-prepared-query allocator query-timer query-opts))))
 
   xtp/PStatus
   (latest-completed-tx [_] (.latestCompletedTx indexer))
-  (latest-submitted-tx-id [_] (.latestSubmittedTxId log))
+  (latest-submitted-tx-id [_] (.getLatestSubmittedOffset log))
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
@@ -215,11 +215,12 @@
 
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
-        healthz (.getHealthz opts)]
+        healthz (.getHealthz opts)
+        indexer-cfg (.getIndexer opts)]
     (-> {:xtdb/node {}
          :xtdb/allocator {}
          :xtdb/indexer {}
-         :xtdb.log/watcher {}
+         :xtdb.log/processor {:chunk-flush-duration (.getFlushDuration indexer-cfg)}
          :xtdb.metadata/metadata-manager {}
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
@@ -227,12 +228,12 @@
          :xtdb.metrics/registry {}
          :xtdb/authn (.getAuthn opts)
 
-         :xtdb/log (.getTxLog opts)
+         :xtdb/log (.getLog opts)
+         :xtdb/file-log (.getLog opts)
          :xtdb/buffer-pool (.getStorage opts)
-         :xtdb.indexer/live-index (.getIndexer opts)
+         :xtdb.indexer/live-index indexer-cfg
          :xtdb/modules (.getModules opts)
-         :xtdb/default-tz (.getDefaultTz opts)
-         :xtdb.stagnant-log-flusher/flusher (.getIndexer opts)}
+         :xtdb/default-tz (.getDefaultTz opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
                 healthz (assoc :xtdb/healthz healthz))
         (doto ig/load-namespaces))))

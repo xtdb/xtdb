@@ -2,7 +2,6 @@
 
 package xtdb.http
 
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -15,11 +14,12 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import xtdb.*
 import xtdb.AnySerde.toValue
-import xtdb.api.log.TxId
 import xtdb.api.query.IKeyFn
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
+
+typealias TxId = Long
 
 @Serializable
 data class QueryOptions(
@@ -34,7 +34,6 @@ data class QueryOptions(
 ) {
 
     internal object ArgsSerde: KSerializer<Map<String, *>> {
-        @OptIn(ExperimentalSerializationApi::class)
         override val descriptor = SerialDescriptor("xtdb.ArgsSerde", JsonElement.serializer().descriptor)
 
         override fun serialize(encoder: Encoder, value: Map<String, *>) = AnySerde.serialize(encoder, value)

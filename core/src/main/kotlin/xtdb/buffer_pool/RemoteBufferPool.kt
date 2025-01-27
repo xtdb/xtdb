@@ -24,7 +24,10 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
 import xtdb.multipart.SupportsMultipart
-import xtdb.util.*
+import xtdb.util.closeOnCatch
+import xtdb.util.maxDirectMemory
+import xtdb.util.newSeekableByteChannel
+import xtdb.util.toMmapPath
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -48,15 +51,14 @@ class RemoteBufferPool(
     private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
 
     private val arrowFooterCache = arrowFooterCache()
-    val osFiles: SortedMap<Path, Long> = TreeMap()
+    val osFiles: SortedSet<Path> = TreeSet()
 
-    private val osFilesSubscription = fileLog.subscribeFileNotifications { msg ->
-        osFiles.putAll(msg.added.associate { it.key to it.size })
-    }
+    private val osFilesSubscription =
+        fileLog.subscribeToFileNotifications { n -> osFiles.addAll(n.added.map { it.key }) }
 
     init {
         // must come after the subscription is set up - at _least_ once processing.
-        osFiles.putAll(objectStore.listAllObjects().associate { it.key to it.size })
+        osFiles.addAll(objectStore.listAllObjects().map { it.key })
     }
 
     private val memoryCache =
@@ -78,11 +80,6 @@ class RemoteBufferPool(
         private const val MAX_MULTIPART_PER_UPLOAD_CONCURRENCY = 4
 
         private val Path.totalSpace get() = Files.getFileStore(this).totalSpace
-
-        private val FileNotificationAddition = requiringResolve("xtdb.file-log/addition")
-
-        private fun additionNotification(key: Path, size: Long) =
-            FileNotificationAddition(key, size) as FileLog.Notification
 
         private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
 
@@ -117,9 +114,9 @@ class RemoteBufferPool(
             }
         }
 
-        private fun SortedMap<Path, Long>.listFilesUnderPrefix(prefix: Path): List<Path> {
+        private fun SortedSet<Path>.listFilesUnderPrefix(prefix: Path): List<Path> {
             val prefixDepth = prefix.nameCount
-            return tailMap(prefix).keys
+            return tailSet(prefix)
                 .asSequence()
                 .takeWhile { it.startsWith(prefix) }
                 .mapNotNull { if (it.nameCount > prefixDepth) it.subpath(0, prefixDepth + 1) else null }
@@ -208,7 +205,7 @@ class RemoteBufferPool(
         }
     }
 
-    override fun listAllObjects(): List<Path> = osFiles.keys.toList()
+    override fun listAllObjects(): List<Path> = osFiles.toList()
 
     override fun listObjects(dir: Path): List<Path> = osFiles.listFilesUnderPrefix(dir)
 
@@ -225,7 +222,9 @@ class RemoteBufferPool(
 
                         objectStore.uploadArrowFile(key, tmpPath)
 
-                        fileLog.appendFileNotification(additionNotification(key, tmpPath.fileSize()))
+                        fileLog.appendFileNotification(
+                            FileLog.Notification(listOf(ObjectStore.StoredObject(key, tmpPath.fileSize())))
+                        )
 
                         diskCache.put(key, tmpPath)
                     }
@@ -242,7 +241,11 @@ class RemoteBufferPool(
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
         objectStore.putObject(key, buffer)
-            .thenApply { fileLog.appendFileNotification(additionNotification(key, buffer.capacity().toLong())) }
+            .thenApply {
+                fileLog.appendFileNotification(
+                    FileLog.Notification(listOf(ObjectStore.StoredObject(key, buffer.capacity().toLong())))
+                )
+            }
             .get()
     }
 

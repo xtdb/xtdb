@@ -10,9 +10,9 @@ import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
-import xtdb.api.log.Kafka
-import xtdb.api.log.Logs.InMemoryLogFactory
-import xtdb.api.log.Logs.LocalLogFactory
+import xtdb.api.log.KafkaLog
+import xtdb.api.log.LocalLog.Factory
+import xtdb.api.log.Log.Companion.inMemoryLog
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage.InMemoryStorageFactory
 import xtdb.api.storage.Storage.LocalStorageFactory
@@ -21,7 +21,6 @@ import xtdb.aws.CloudWatchMetrics
 import xtdb.aws.S3.Companion.s3
 import xtdb.azure.AzureMonitorMetrics
 import xtdb.azure.BlobStorage.Companion.azureBlobStorage
-import xtdb.gcp.CloudStorage
 import xtdb.gcp.CloudStorage.Companion.googleCloudStorage
 import java.nio.file.Paths
 
@@ -42,7 +41,7 @@ class YamlSerdeTest {
             ssl: 
                 keyStore: test-path
                 keyStorePassword: password
-        txLog: !InMemory
+        log: !InMemory
         storage: !Local
             path: local-storage
             maxCacheEntries: 1025
@@ -84,20 +83,20 @@ class YamlSerdeTest {
     }
 
     @Test
-    fun testTxLogDecoding() {
-        val inMemoryConfig = "txLog: !InMemory"
+    fun testLogDecoding() {
+        val inMemoryConfig = "log: !InMemory"
 
-        assertEquals(InMemoryLogFactory(), nodeConfig(inMemoryConfig).txLog)
+        assertEquals(inMemoryLog, nodeConfig(inMemoryConfig).log)
 
         val localConfig = """
-        txLog: !Local
+        log: !Local
             path: test-path
         """.trimIndent()
 
-        assertEquals(LocalLogFactory(path = Paths.get("test-path")), nodeConfig(localConfig).txLog)
+        assertEquals(Factory(path = Paths.get("test-path")), nodeConfig(localConfig).log)
 
         val kafkaConfig = """
-        txLog: !Kafka
+        log: !Kafka
             bootstrapServers: localhost:9092
             txTopic: xtdb_tx_topic
             filesTopic: xdtd_files_topic
@@ -105,8 +104,8 @@ class YamlSerdeTest {
         """.trimIndent()
 
         assertEquals(
-            Kafka.Factory(bootstrapServers = "localhost:9092", txTopic = "xtdb_tx_topic", filesTopic = "xdtd_files_topic"),
-            nodeConfig(kafkaConfig).txLog
+            KafkaLog.Factory(bootstrapServers = "localhost:9092", txTopic = "xtdb_tx_topic", filesTopic = "xdtd_files_topic"),
+            nodeConfig(kafkaConfig).log
         )
     }
 
@@ -205,7 +204,7 @@ class YamlSerdeTest {
     @Test
     fun testEnvVarsWithUnsetVariable() {
         val inputWithEnv = """
-        txLog: !Local
+        log: !Local
             path: !Env TX_LOG_PATH
         """.trimIndent()
 
@@ -222,13 +221,13 @@ class YamlSerdeTest {
         every { EnvironmentVariableProvider.getEnvVariable("TX_LOG_PATH") } returns "test-path"
 
         val inputWithEnv = """
-        txLog: !Local
+        log: !Local
             path: !Env TX_LOG_PATH
         """.trimIndent()
 
         assertEquals(
-            LocalLogFactory(path = Paths.get("test-path")),
-            nodeConfig(inputWithEnv).txLog
+            Factory(path = Paths.get("test-path")),
+            nodeConfig(inputWithEnv).log
         )
 
         unmockkObject(EnvironmentVariableProvider)
@@ -268,7 +267,7 @@ class YamlSerdeTest {
         every { EnvironmentVariableProvider.getEnvVariable("KAFKA_SASL_JAAS_CONFIG") } returns saslConfig
 
         val inputWithEnv = """
-        txLog: !Kafka
+        log: !Kafka
             bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
             txTopic: xtdb_tx_topic
             filesTopic: xdtd_files_topic
@@ -279,7 +278,7 @@ class YamlSerdeTest {
         """.trimIndent()
 
         assertEquals(
-            Kafka.Factory(
+            KafkaLog.Factory(
                 bootstrapServers = "localhost:9092",
                 txTopic = "xtdb_tx_topic",
                 filesTopic = "xdtd_files_topic",
@@ -289,7 +288,7 @@ class YamlSerdeTest {
                     "sasl.jaas.config" to saslConfig
                 )
             ),
-            nodeConfig(inputWithEnv).txLog
+            nodeConfig(inputWithEnv).log
         )
 
         unmockkObject(EnvironmentVariableProvider)

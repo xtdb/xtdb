@@ -1,7 +1,7 @@
 server:
   port: 5432
 
-txLog: !Local
+log: !Local
   path: !Env XTDB_GCP_LOCAL_LOG_PATH
 
 storage: !Remote

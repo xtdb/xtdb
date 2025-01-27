@@ -2,13 +2,13 @@ healthz:
   port: !Env XTDB_HEALTHZ_PORT
 
 # CONFIG FOR RUNNING WITH AZURE INFRA
-txLog: !Kafka
+log: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
   txTopic: !Env XTDB_TX_TOPIC
   filesTopic: !Env XTDB_FILES_TOPIC
 
 
-# txLog: !Local
+# log: !Local
 #   path: !Env XTDB_LOCAL_LOG_PATH
 
 storage: !Remote

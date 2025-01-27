@@ -8,7 +8,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
-import xtdb.api.log.Logs.inMemoryLog
+import xtdb.api.log.Log.Companion.inMemoryLog
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
@@ -31,7 +31,7 @@ interface Xtdb : AutoCloseable {
     @Serializable
     data class Config(
         var server: ServerConfig? = ServerConfig(),
-        var txLog: Log.Factory = inMemoryLog(),
+        var log: Log.Factory = inMemoryLog,
         var storage: Storage.Factory = inMemoryStorage(),
         var healthz: HealthzConfig? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
@@ -41,7 +41,7 @@ interface Xtdb : AutoCloseable {
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
-        fun txLog(txLog: Log.Factory) = apply { this.txLog = txLog }
+        fun log(log: Log.Factory) = apply { this.log = log }
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }
 
         @JvmSynthetic

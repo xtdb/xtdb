@@ -1,6 +1,5 @@
 (ns xtdb.log
   (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.error :as err]
@@ -11,19 +10,16 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import java.lang.AutoCloseable
-           (java.nio.channels ClosedChannelException)
-           (java.time Instant)
-           java.time.Duration
+  (:import (java.time Instant)
            (java.util ArrayList HashMap)
-           (java.util.concurrent Semaphore)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api.log Log Log$Factory TxLog$Record TxLog$Subscriber TxLog$Subscription)
+           (xtdb.api Xtdb$Config)
+           (xtdb.api.log Log Log$Factory)
            (xtdb.api.tx TxOp$Sql)
-           (xtdb.arrow Relation VectorWriter Vector)
+           (xtdb.arrow Relation Vector VectorWriter)
            (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PatchDocs PutDocs SqlByteArgs Update XtqlAndArgs)
            xtdb.types.ClojureForm))
 
@@ -31,108 +27,6 @@
 
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (util/->prefix-thread-factory "xtdb-tx-subscription"))
-
-(defn- tx-handler [^TxLog$Subscriber subscriber]
-  (fn [_last-tx-id ^TxLog$Record record]
-    (when (Thread/interrupted)
-      (throw (InterruptedException.)))
-
-    (.accept subscriber record)
-
-    (.getTxId record)))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(defn handle-polling-subscription [^Log log, after-tx-id, {:keys [^Duration poll-sleep-duration]}, ^TxLog$Subscriber subscriber]
-  (let [thread (doto (.newThread subscription-thread-factory
-                                 (fn []
-                                   (try
-                                     (loop [after-tx-id after-tx-id]
-                                       (let [last-tx-id (reduce (tx-handler subscriber)
-                                                                after-tx-id
-                                                                (try
-                                                                  (.readTxs log after-tx-id 100)
-                                                                  (catch ClosedChannelException e (throw e))
-                                                                  (catch InterruptedException e (throw e))
-                                                                  (catch Exception e
-                                                                    (log/warn e "Error polling for txs, will retry"))))]
-                                         (when (Thread/interrupted)
-                                           (throw (InterruptedException.)))
-                                         (when (= after-tx-id last-tx-id)
-                                           (Thread/sleep (.toMillis poll-sleep-duration)))
-                                         (recur last-tx-id)))
-                                     (catch InterruptedException _)
-                                     (catch ClosedChannelException _))))
-                 (.setPriority Thread/MAX_PRIORITY)
-                 (.start))]
-
-    (reify TxLog$Subscription
-      (close [_]
-        (.interrupt thread)
-        (.join thread)))))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface INotifyingSubscriberHandler
-  (notifyTx [^long txId])
-  (^xtdb.api.log.TxLog$Subscription subscribe [^xtdb.api.log.Log log, ^Long after-tx-id, ^xtdb.api.log.TxLog$Subscriber subscriber]))
-
-(defrecord NotifyingSubscriberHandler [!state]
-  INotifyingSubscriberHandler
-  (notifyTx [_ tx-id]
-    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id tx-id)]
-      (doseq [^Semaphore semaphore semaphores]
-        (.release semaphore))))
-
-  (subscribe [_ log after-tx-id subscriber]
-    (let [semaphore (Semaphore. 0)
-          {:keys [latest-submitted-tx-id]} (swap! !state update :semaphores conj semaphore)
-          thread (doto (.newThread subscription-thread-factory
-                                   (fn []
-                                     (try
-                                       (loop [after-tx-id after-tx-id]
-                                         (let [last-tx-id (reduce (tx-handler subscriber)
-                                                                  after-tx-id
-                                                                  (if (and latest-submitted-tx-id
-                                                                           (pos? ^long latest-submitted-tx-id)
-                                                                           (or (nil? after-tx-id)
-                                                                               (< ^long after-tx-id ^long latest-submitted-tx-id)))
-                                                                    ;; catching up
-                                                                    (->> (.readTxs log after-tx-id 100)
-                                                                         (take-while #(<= (.getTxId ^TxLog$Record %)
-                                                                                          ^long latest-submitted-tx-id)))
-
-                                                                    ;; running live
-                                                                    (let [permits (do
-                                                                                    (.acquire semaphore)
-                                                                                    (inc (.drainPermits semaphore)))]
-                                                                      (.readTxs log after-tx-id
-                                                                                (if (> permits 100)
-                                                                                  (do
-                                                                                    (.release semaphore (- permits 100))
-                                                                                    100)
-                                                                                  permits)))))]
-                                           (when-not (Thread/interrupted)
-                                             (recur last-tx-id))))
-
-                                       (catch InterruptedException _)
-
-                                       (catch ClosedChannelException ex
-                                         (when-not (Thread/interrupted)
-                                           (throw ex)))
-
-                                       (finally
-                                         (swap! !state update :semaphores disj semaphore)))))
-                   (.setPriority Thread/MAX_PRIORITY)
-                   (.start))]
-
-
-      (reify TxLog$Subscription
-        (close [_]
-          (.interrupt thread)
-          (.join thread))))))
-
-(defn ->notifying-subscriber-handler [latest-submitted-tx-id]
-  (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id latest-submitted-tx-id
-                                       :semaphores #{}})))
 
 ;; header bytes
 (def ^:const hb-user-arrow-transaction
@@ -419,24 +313,48 @@
 
       (.getAsArrowStream rel))))
 
+(defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src]}]
+  (doto config
+    (.setLog (cond-> (Log/getInMemoryLog)
+                   instant-src (.instantSource instant-src)))))
+
+(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src]}]
+  (doto config
+    (.setLog (cond-> (Log/localLog (util/->path path))
+                   instant-src (.instantSource instant-src)))))
+
 (defmethod xtn/apply-config! :xtdb/log [config _ [tag opts]]
   (xtn/apply-config! config
                      (case tag
-                       :in-memory :xtdb.log/memory-log
-                       :local :xtdb.log/local-directory-log
+                       :in-memory ::memory-log
+                       :local ::local-directory-log
                        :kafka :xtdb.kafka/log)
                      opts))
 
-(defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]
-  (.openLog factory))
+(defmethod ig/prep-key :xtdb/log [_^Log$Factory factory]
+  {:factory factory
+   :processor (ig/ref :xtdb.log/processor)})
+
+(defmethod ig/init-key :xtdb/log [_ {:keys [^Log$Factory factory, processor]}]
+  (.openLog factory processor))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
+  (util/close log))
+
+(defmethod ig/prep-key :xtdb/file-log [_^Log$Factory factory]
+  {:factory factory})
+
+(defmethod ig/init-key :xtdb/file-log [_ {:keys [^Log$Factory factory]}]
+  (.openFileLog factory))
+
+(defmethod ig/halt-key! :xtdb/file-log [_ ^Log log]
   (util/close log))
 
 (defn submit-tx& ^java.util.concurrent.CompletableFuture
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
-  (.appendTx log (serialize-tx-ops allocator tx-ops
-                                   (-> (select-keys opts [:authn])
-                                       (assoc :default-tz (:default-tz opts default-tz)
-                                              :system-time (some-> system-time time/expect-instant))))))
+  (.appendMessage log
+                  (serialize-tx-ops allocator tx-ops
+                                    (-> (select-keys opts [:authn])
+                                        (assoc :default-tz (:default-tz opts default-tz)
+                                               :system-time (some-> system-time time/expect-instant))))))
