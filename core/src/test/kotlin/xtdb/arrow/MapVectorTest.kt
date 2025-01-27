@@ -14,7 +14,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.arrow.RelationTest.ByteBufferChannel
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -91,7 +90,7 @@ class MapVectorTest {
             }
         }
 
-        Relation.loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+        Relation.loader(allocator, buf.toByteArray().asChannel).use { loader ->
             Relation(allocator, loader.schema).use { rel ->
                 val mapVec = rel["map"]!!
 
@@ -115,7 +114,7 @@ class MapVectorTest {
         }
 
         // reads back in with original Arrow
-        val rdr = ArrowFileReader(SeekableReadChannel(ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))), allocator)
+        val rdr = ArrowFileReader(SeekableReadChannel(buf.toByteArray().asChannel), allocator)
             .also { it.initialize() }
 
         rdr.vectorSchemaRoot.use { vsr ->

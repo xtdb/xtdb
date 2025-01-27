@@ -11,7 +11,6 @@ import xtdb.arrow.Relation.Companion.loader
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import java.nio.channels.SeekableByteChannel
 
 class RelationTest {
 
@@ -25,25 +24,6 @@ class RelationTest {
     @AfterEach
     fun tearDown() {
         allocator.close()
-    }
-
-    internal class ByteBufferChannel(private val buf: ByteBuffer) : SeekableByteChannel {
-        override fun read(dst: ByteBuffer): Int {
-            val src = buf.slice().limit(dst.remaining())
-            dst.put(src)
-            val srcPosition = src.position()
-            buf.position(buf.position() + srcPosition)
-            return srcPosition
-        }
-
-        override fun write(src: ByteBuffer) = throw UnsupportedOperationException()
-
-        override fun isOpen() = true
-        override fun close() {}
-        override fun position() = buf.position().toLong()
-        override fun position(newPosition: Long) = apply { buf.position(newPosition.toInt()) }
-        override fun size() = buf.limit().toLong()
-        override fun truncate(size: Long) = throw UnsupportedOperationException()
     }
 
     @Test
@@ -77,7 +57,7 @@ class RelationTest {
             }
         }
 
-        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+        loader(allocator, buf.toByteArray().asChannel).use { loader ->
             assertEquals(2, loader.batchCount)
 
             Relation(allocator, loader.schema).use { rel ->
@@ -141,7 +121,7 @@ class RelationTest {
                 }
         }
 
-        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+        loader(allocator, buf.toByteArray().asChannel).use { loader ->
             assertEquals(2, loader.batchCount)
 
             Relation(allocator, loader.schema).use { rel ->
@@ -199,7 +179,7 @@ class RelationTest {
             }
         }
 
-        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+        loader(allocator, buf.toByteArray().asChannel).use { loader ->
             loader.loadBatch(0, allocator).use { rel ->
                 assertEquals(duvValues, rel["duv"]!!.asList)
             }

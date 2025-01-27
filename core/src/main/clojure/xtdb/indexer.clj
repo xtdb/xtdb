@@ -39,6 +39,7 @@
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
+           xtdb.api.log.Log$Message$FlushChunk
            (xtdb.api.tx TxOp)
            (xtdb.arrow RowCopier)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
@@ -830,8 +831,11 @@
         (await/notify-ex t awaiters)
         (throw t))))
 
-  (forceFlush [_ tx-key expected-last-chunk-tx-id]
-    (li/force-flush! live-idx tx-key expected-last-chunk-tx-id))
+  (forceFlush [_ record]
+    (li/force-flush! live-idx
+                     (serde/->TxKey (.getLogOffset record)
+                                    (.getLogTimestamp record))
+                     (.getExpectedChunkTxId ^Log$Message$FlushChunk (.getMessage record))))
 
   IWatermarkSource
   (openWatermark [_] (.openWatermark live-idx))

@@ -17,39 +17,14 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log Log Log$Factory)
+           (xtdb.api.log Log Log$Factory Log$Message$Tx)
            (xtdb.api.tx TxOp$Sql)
            (xtdb.arrow Relation Vector VectorWriter)
+           xtdb.indexer.LogProcessor
            (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PatchDocs PutDocs SqlByteArgs Update XtqlAndArgs)
            xtdb.types.ClojureForm))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(def ^java.util.concurrent.ThreadFactory subscription-thread-factory
-  (util/->prefix-thread-factory "xtdb-tx-subscription"))
-
-;; header bytes
-(def ^:const hb-user-arrow-transaction
-  "Header byte for log records representing an arrow user transaction.
-
-  A standard arrow stream IPC buffer will contain this byte, so you do not need to prefix."
-  255)
-
-(def ^:const hb-flush-chunk
-  "Header byte for log records representing a signal to flush the live chunk to durable storage.
-
-  Can be useful to protect against data loss potential when a retention period is used for the log, so messages do not remain in the log forever.
-
-  TxRecord layout:
-
-  - header (byte=2)
-
-  - expected-last-tx-id in previous chunk (long)
-  If this tx-id match the last tx-id who has been indexed in durable storage, then this signal is ignored.
-  This is to avoid a herd effect in multi-node environments where multiple flush signals for the same chunk might be received.
-
-  See xtdb.stagnant-log-flusher"
-  2)
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense nil) false))
@@ -354,7 +329,18 @@
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
   (.appendMessage log
-                  (serialize-tx-ops allocator tx-ops
-                                    (-> (select-keys opts [:authn])
-                                        (assoc :default-tz (:default-tz opts default-tz)
-                                               :system-time (some-> system-time time/expect-instant))))))
+                  (Log$Message$Tx. (serialize-tx-ops allocator tx-ops
+                                                     (-> (select-keys opts [:authn])
+                                                         (assoc :default-tz (:default-tz opts default-tz)
+                                                                :system-time (some-> system-time time/expect-instant)))))))
+(defmethod ig/prep-key :xtdb.log/processor [_ opts]
+  (when opts
+    (into {:allocator (ig/ref :xtdb/allocator)
+           :indexer (ig/ref :xtdb/indexer)
+           :metrics-registry (ig/ref :xtdb.metrics/registry)
+           :chunk-flush-duration #xt/duration "PT4H"}
+          opts)))
+
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer metrics-registry chunk-flush-duration] :as deps}]
+  (when deps
+    (LogProcessor. allocator indexer metrics-registry chunk-flush-duration)))

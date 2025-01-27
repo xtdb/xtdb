@@ -151,7 +151,6 @@ class KafkaFileLog(
                     }
                 }
             }
-
         }
 
         return AutoCloseable { runBlocking { job.cancelAndJoin() } }
@@ -187,12 +186,12 @@ class KafkaLog internal constructor(
     private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
     override val latestSubmittedOffset get() = latestSubmittedOffset0.get()
 
-    override fun appendMessage(payload: ByteBuffer): CompletableFuture<LogOffset> =
+    override fun appendMessage(message: Message): CompletableFuture<LogOffset> =
         scope.future {
             CompletableDeferred<LogOffset>()
                 .also { res ->
                     producer.send(
-                        ProducerRecord(topic, null, Unit, payload),
+                        ProducerRecord(topic, null, Unit, message.encode()),
                         Callback { recordMetadata, e ->
                             if (e == null) res.complete(recordMetadata.offset()) else res.completeExceptionally(e)
                         }
@@ -224,7 +223,7 @@ class KafkaLog internal constructor(
                                 Record(
                                     record.offset(),
                                     Instant.ofEpochMilli(record.timestamp()),
-                                    ByteBuffer.wrap(record.value())
+                                    Message.parse(ByteBuffer.wrap(record.value()))
                                 )
                             }
                         )

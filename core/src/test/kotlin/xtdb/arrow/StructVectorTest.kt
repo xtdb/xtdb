@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation.Companion.loader
-import xtdb.arrow.RelationTest.ByteBufferChannel
 import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -147,7 +146,7 @@ class StructVectorTest {
                 }
         }
 
-        loader(allocator, ByteBufferChannel(ByteBuffer.wrap(buf.toByteArray()))).use { loader ->
+        loader(allocator, buf.toByteArray().asChannel).use { loader ->
             Relation(allocator, loader.schema).use { rel ->
                 val structVec = rel["struct"]!!
 

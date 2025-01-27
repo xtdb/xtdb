@@ -11,8 +11,7 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
-import xtdb.api.log.Log.Processor
-import xtdb.api.log.Log.Record
+import xtdb.api.log.Log.*
 import xtdb.util.asMicros
 import xtdb.util.microsToInstant
 import java.io.DataInputStream
@@ -90,7 +89,7 @@ class LocalLog(
             return Record(
                 pos,
                 microsToInstant(headerBuf.getLong()),
-                ByteBuffer.allocate(size).also { read(it); it.flip() }
+                Message.parse(ByteBuffer.allocate(size).also { read(it); it.flip() })
             ).also {
                 position(pos + messageSizeBytes(size))
             }
@@ -99,8 +98,8 @@ class LocalLog(
 
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 
-    internal class NewMessage(
-        val payload: ByteBuffer,
+    internal data class NewMessage(
+        val message: Message,
         val onCommit: CompletableDeferred<Record>
     )
 
@@ -117,9 +116,9 @@ class LocalLog(
 
         try {
             val res = Array(msgs.size) { idx ->
-                val msg = msgs[idx]
+                val (msg) = msgs[idx]
                 val ts = instantSource.instant().truncatedTo(MICROS)
-                val payload = msg.payload.duplicate()
+                val payload = msg.encode()
                 val size = payload.remaining()
                 val offset = logFileChannel.position()
 
@@ -135,7 +134,7 @@ class LocalLog(
                             flip()
                         })
 
-                Record(offset, ts, msg.payload)
+                Record(offset, ts, msg)
             }
 
             logFileChannel.force(true)
@@ -198,10 +197,10 @@ class LocalLog(
         }
     }
 
-    override fun appendMessage(payload: ByteBuffer) =
+    override fun appendMessage(message: Message) =
         scope.future {
             val onCommit = CompletableDeferred<Record>()
-            appendCh.send(NewMessage(payload, onCommit))
+            appendCh.send(NewMessage(message, onCommit))
             val record = onCommit.await()
             committedCh.send(record)
             record.logOffset

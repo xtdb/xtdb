@@ -8,7 +8,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import xtdb.api.log.Log.Processor
 import xtdb.api.log.Log.Record
-import java.nio.ByteBuffer
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
 import kotlin.time.Duration.Companion.minutes
@@ -36,8 +35,8 @@ class InMemoryLog(
 
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 
-    internal class NewMessage(
-        val payload: ByteBuffer,
+    internal data class NewMessage(
+        val message: Log.Message,
         val onCommit: CompletableDeferred<LogOffset>
     )
 
@@ -48,9 +47,9 @@ class InMemoryLog(
 
     init {
         scope.launch {
-            for (msg in appendCh) {
-                val record = Record(nextOffset++, instantSource.instant().truncatedTo(MICROS), msg.payload)
-                msg.onCommit.complete(record.logOffset)
+            for ((message, onCommit) in appendCh) {
+                val record = Record(nextOffset++, instantSource.instant().truncatedTo(MICROS), message)
+                onCommit.complete(record.logOffset)
                 committedCh.send(record)
             }
         }
@@ -63,10 +62,10 @@ class InMemoryLog(
         }
     }
 
-    override fun appendMessage(payload: ByteBuffer) =
+    override fun appendMessage(message: Log.Message) =
         scope.future {
             val res = CompletableDeferred<LogOffset>()
-            appendCh.send(NewMessage(payload, res))
+            appendCh.send(NewMessage(message, res))
             res.await()
         }
 
