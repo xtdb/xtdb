@@ -8,18 +8,19 @@
            (xtdb.api.log FileLog$Notification)
            (xtdb.api.storage ObjectStore$StoredObject)))
 
-(defrecord FileNotification [added deleted]
-  FileLog$Notification
-  (getAdded [_] added))
-
-(defn addition [k size]
-  (FileNotification. [(os/->StoredObject k size)] []))
+(defn map->FileNotification [{:keys [added]}]
+  (FileLog$Notification. added))
 
 (def ^:private transit-write-handlers
-  {FileNotification (transit/write-handler "xtdb/file-notification" #(into {} %))
-   ObjectStore$StoredObject (transit/write-handler "xtdb/stored-object" (fn [^ObjectStore$StoredObject obj]
-                                                                          {:k (.getKey obj)
-                                                                           :size (.getSize obj)}))
+  {FileLog$Notification (transit/write-handler "xtdb/file-notification"
+                                               (fn [^FileLog$Notification notification]
+                                                 {:added (.getAdded notification)
+                                                  :deleted nil}))
+
+   ObjectStore$StoredObject (transit/write-handler "xtdb/stored-object"
+                                                   (fn [^ObjectStore$StoredObject obj]
+                                                     {:k (.getKey obj)
+                                                      :size (.getSize obj)}))
    Path (transit/write-handler "xtdb/path" str)})
 
 (defn file-notification->transit [n]

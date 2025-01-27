@@ -1,6 +1,5 @@
 package xtdb.buffer_pool
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.pojo.Field
@@ -35,7 +34,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
 
         remoteBufferPool =
             remoteStorage(objectStore = { SimulatedObjectStore() }, createTempDirectory("remote-buffer-pool-test"))
-                .open(allocator, FileLog.SOLO)
+                .open(allocator, FileLog.openInMemory())
 
         // Mocking small value for MIN_MULTIPART_PART_SIZE
         RemoteBufferPool.minMultipartPartSize = 320

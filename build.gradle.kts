@@ -91,14 +91,14 @@ allprojects {
             // To stub an AWS region
             environment("AWS_REGION", "eu-west-1")
             useJUnitPlatform {
-                excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
+                excludeTags("integration", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
             }
         }
 
         tasks.register("integration-test", Test::class) {
             jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
             useJUnitPlatform {
-                includeTags("integration", "kafka")
+                includeTags("integration")
             }
         }
 

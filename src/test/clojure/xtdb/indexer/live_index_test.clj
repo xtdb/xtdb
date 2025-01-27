@@ -4,7 +4,6 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
-            [xtdb.metadata :as meta]
             xtdb.node.impl
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
@@ -16,30 +15,19 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           (xtdb.api CompactorConfig IndexerConfig)
-           xtdb.api.storage.Storage$InMemoryStorageFactory
-           xtdb.api.log.Logs
            (xtdb.arrow Relation VectorPosition)
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie MemoryHashTrie$Leaf)))
 
-(def with-live-index
-  (partial tu/with-system {:xtdb/allocator {}
-                           :xtdb.metrics/registry nil
-                           :xtdb.indexer/live-index (IndexerConfig.)
-                           :xtdb/log (Logs/inMemoryLog)
-                           :xtdb/buffer-pool Storage$InMemoryStorageFactory/INSTANCE
-                           ::meta/metadata-manager {}
-                           :xtdb/compactor (doto (CompactorConfig.)
-                                             (.enabled false))}))
-
-(t/use-fixtures :each tu/with-allocator with-live-index)
+(t/use-fixtures :each tu/with-allocator
+  (tu/with-opts {:compactor {:enabled? false}})
+  tu/with-node)
 
 (t/deftest test-chunk
-  (let [{^BufferAllocator allocator :xtdb/allocator
-         ^IBufferPool buffer-pool :xtdb/buffer-pool
-         ^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*
+  (let [^BufferAllocator allocator (tu/component tu/*node* :xtdb/allocator)
+        ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
+        ^ILiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)
 
         iids (let [rnd (Random. 0)]
                (repeatedly 12000 #(UUID. (.nextLong rnd) (.nextLong rnd))))
@@ -144,7 +132,7 @@
                        (.resolve node-dir "objects"))))))
 
 (t/deftest test-new-table-discarded-on-abort-2721
-  (let [{^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*]
+  (let [^ILiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)]
 
     (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})
           foo-table-tx (.liveTable live-tx0 "foo")

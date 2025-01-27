@@ -1,4 +1,4 @@
-txLog: !Local
+log: !Local
   path: "/var/lib/xtdb/log"
 
 storage: !Local

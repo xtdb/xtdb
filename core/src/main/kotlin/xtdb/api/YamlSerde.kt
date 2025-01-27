@@ -5,22 +5,17 @@ package xtdb.api
 import com.charleskorn.kaml.*
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.descriptors.PrimitiveKind
-import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.buildSerialDescriptor
-import kotlinx.serialization.descriptors.StructureKind
+import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
+import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
-import xtdb.api.log.Logs.InMemoryLogFactory
-import xtdb.api.log.Logs.LocalLogFactory
+import xtdb.api.log.LocalLog.Factory
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
-import xtdb.api.storage.ObjectStore.Factory
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.*
@@ -138,8 +133,8 @@ object IntWithEnvVarSerde : KSerializer<Int> {
 val YAML_SERDE = Yaml(
     serializersModule = SerializersModule {
         polymorphic(Log.Factory::class) {
-            subclass(InMemoryLogFactory::class)
-            subclass(LocalLogFactory::class)
+            subclass(InMemoryLog.Factory::class)
+            subclass(Factory::class)
         }
 
         polymorphic(Authenticator.Factory::class) {

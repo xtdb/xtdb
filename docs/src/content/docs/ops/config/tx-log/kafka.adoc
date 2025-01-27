@@ -46,7 +46,7 @@ To use the Kafka module, include the following in your node configuration:
 
 [source,yaml]
 ----
-txLog: !Kafka
+log: !Kafka
   # -- required
 
   # A comma-separated list of host:port pairs to use for establishing the
@@ -93,7 +93,7 @@ The following piece of node configuration demonstrates the following common use 
 
 [source,yaml]
 ----
-txLog: !Kafka
+log: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
   txTopic: !Env XTDB_TX_TOPIC_NAME
   filesTopic: !Env XTDB_FILES_TOPIC_NAME

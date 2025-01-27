@@ -1,7 +1,7 @@
 defaultTz: "America/Los_Angeles"
 server:
   port: 5433
-txLog: !Local
+log: !Local
   path: /tmp/test-log
 indexer:
   logLimit: 65

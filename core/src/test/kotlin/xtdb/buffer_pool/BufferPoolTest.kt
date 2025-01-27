@@ -17,6 +17,8 @@ abstract class BufferPoolTest {
             putObject(Path.of("a/e"), ByteBuffer.wrap(ByteArray(10)))
         }
 
+        Thread.sleep(100)
+
         assertEquals(listOf(Path.of("a/b"), Path.of("a/e")), bufferPool.listObjects(Path.of("a")))
     }
 }

@@ -71,7 +71,7 @@
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)
    :factory factory
-   :file-log (ig/ref :xtdb/log)
+   :file-log (ig/ref :xtdb/file-log)
    :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
 (defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileLog file-log metrics-registry]}]

@@ -1,4 +1,4 @@
-txLog: !InMemory
+log: !InMemory
 indexer:
   logLimit: 64
   flushDuration: PT4H

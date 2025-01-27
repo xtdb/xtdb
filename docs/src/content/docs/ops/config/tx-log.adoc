@@ -19,7 +19,7 @@ By default, the transaction log is a transient, in-memory log:
 [source,yaml]
 ----
 # default, no need to explicitly specify
-# txLog: !InMemory
+# log: !InMemory
 ----
 
 If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
@@ -30,7 +30,7 @@ A single-node persistent transaction log implementation that writes to a local d
 
 [source,yaml]
 ----
-txLog: !Local
+log: !Local
   # -- required
 
   # The path to the local directory to store the transaction log in.
