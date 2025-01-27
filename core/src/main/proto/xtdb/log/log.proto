@@ -1,0 +1,14 @@
+edition = "2023";
+package xtdb.log;
+
+option java_multiple_files = true;
+
+message LogMessage {
+    oneof message {
+        FlushChunk flush_chunk = 1;
+    }
+}
+
+message FlushChunk {
+    int64 expected_chunk_tx_id = 1;
+}

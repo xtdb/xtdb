@@ -9,6 +9,8 @@ plugins {
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
     antlr
+
+    alias(libs.plugins.protobuf)
 }
 
 publishing {
@@ -71,6 +73,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     api(libs.kaml)
 
+    api(libs.protobuf.kotlin)
+
     api(libs.pgjdbc)
 
     antlr(libs.antlr)
@@ -118,6 +122,20 @@ tasks.generateGrammarSource {
         "-Xexact-output-dir",
     )
     outputDirectory = file("${layout.buildDirectory.get().asFile}/generated-src/antlr/main/xtdb/antlr")
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }
 
 tasks.dokkaHtmlPartial {

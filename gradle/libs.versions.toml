@@ -5,6 +5,8 @@ arrow-adbc="0.15.0"
 clojure="1.12.0"
 kotlin-coroutines = "1.10.1"
 netty="4.1.117.Final"
+protobuf = "4.28.3"
+protobuf-plugin = "0.9.4"
 reitit="0.5.15"
 muuntaja="0.6.8"
 testcontainers="1.20.3"
@@ -52,6 +54,8 @@ kotlinx-serialization-json={ group="org.jetbrains.kotlinx", name="kotlinx-serial
 mockk={ group="io.mockk", name="mockk", version="1.13.9" }
 kaml={ group="com.charleskorn.kaml", name="kaml", version="0.56.0" }
 
+protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
+
 jsonista={ group="metosin", name="jsonista", version="0.3.3" }
 muuntaja={ group="metosin", name="muuntaja", version.ref="muuntaja" }
 reitit-core={ group="metosin", name="reitit-core", version.ref="reitit" }
@@ -74,3 +78,6 @@ micrometer-core={ group="io.micrometer", name="micrometer-core", version.ref="mi
 micrometer-registry-prometheus={ group="io.micrometer", name="micrometer-registry-prometheus", version.ref="micrometer" }
 micrometer-registry-cloudwatch2={ group="io.micrometer", name="micrometer-registry-cloudwatch2", version.ref="micrometer" }
 micrometer-registry-azuremonitor={ group="io.micrometer", name="micrometer-registry-azure-monitor", version.ref="micrometer" }
+
+[plugins]
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }

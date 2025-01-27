@@ -5,6 +5,10 @@ package xtdb.api.log
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
+import xtdb.log.LogMessage
+import xtdb.log.LogMessage.MessageCase
+import xtdb.log.flushChunk
+import xtdb.log.logMessage
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
@@ -29,12 +33,23 @@ interface Log : AutoCloseable {
 
         companion object {
             private const val TX_HEADER: Byte = -1
-            private const val FLUSH_CHUNK_HEADER: Byte = 2
+            private const val LEGACY_FLUSH_CHUNK_HEADER: Byte = 2
+            private const val PROTOBUF_HEADER: Byte = 3
 
             fun parse(buffer: ByteBuffer) =
                 when (buffer.get(0)) {
                     TX_HEADER -> Tx(buffer.duplicate())
-                    FLUSH_CHUNK_HEADER -> FlushChunk(buffer.getLong(1))
+                    LEGACY_FLUSH_CHUNK_HEADER -> FlushChunk(buffer.getLong(1))
+
+                    PROTOBUF_HEADER -> {
+                        val protoMsg = LogMessage.parseFrom(buffer.duplicate().position(1))
+
+                        when (val msgCase = protoMsg.messageCase) {
+                            MessageCase.FLUSH_CHUNK -> FlushChunk(protoMsg.flushChunk.expectedChunkTxId)
+                            else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
+                        }
+                    }
+
                     else -> throw IllegalArgumentException("Unknown message type: ${buffer.get()}")
                 }
         }
@@ -44,12 +59,17 @@ interface Log : AutoCloseable {
         }
 
         data class FlushChunk(val expectedChunkTxId: LogOffset) : Message {
-            override fun encode(): ByteBuffer =
-                ByteBuffer.allocate(1 + Long.SIZE_BYTES).run {
-                    put(FLUSH_CHUNK_HEADER)
-                    putLong(expectedChunkTxId)
+            override fun encode(): ByteBuffer {
+                val msg = logMessage {
+                    flushChunk = flushChunk { this.expectedChunkTxId = this@FlushChunk.expectedChunkTxId }
+                }
+
+                return ByteBuffer.allocate(1 + msg.serializedSize).run {
+                    put(PROTOBUF_HEADER)
+                    put(msg.toByteArray())
                     flip()
                 }
+            }
         }
 
         fun encode(): ByteBuffer
