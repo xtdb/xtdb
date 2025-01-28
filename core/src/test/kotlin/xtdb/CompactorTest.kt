@@ -6,6 +6,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.Compactor.Companion.iidPartitions
+import xtdb.Compactor.Companion.partitionSlices
 import xtdb.arrow.FixedSizeBinaryVector
 import xtdb.arrow.VectorReader
 import java.nio.ByteBuffer
