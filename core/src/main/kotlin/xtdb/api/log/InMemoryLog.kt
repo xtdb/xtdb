@@ -8,11 +8,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
-import xtdb.api.log.Log.Record
-import xtdb.api.log.Log.Subscriber
-import xtdb.api.log.Log.Subscription
+import xtdb.api.log.Log.*
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 class InMemoryLog(private val instantSource: InstantSource) : Log {
@@ -31,7 +30,7 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 
     internal data class NewMessage(
-        val message: Log.Message,
+        val message: Message,
         val onCommit: CompletableDeferred<LogOffset>
     )
 
@@ -54,7 +53,7 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
         }
     }
 
-    override fun appendMessage(message: Log.Message) =
+    override fun appendMessage(message: Message) =
         scope.future {
             val res = CompletableDeferred<LogOffset>()
             appendCh.send(NewMessage(message, res))
@@ -62,12 +61,13 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
         }
 
     override fun subscribe(subscriber: Subscriber): Subscription {
-        check(subscriber.latestCompletedOffset < 0) { "InMemoryLog cannot re-subscribe with existing subscriber" }
-
         val ch = runBlocking {
             mutex.withLock {
+                val latestCompletedOffset = subscriber.latestCompletedOffset
                 check(committedCh == null) { "InMemoryLog only supports one subscriber" }
-                check(nextOffset == 0L) { "InMemoryLog doesn't support replay (nextOffset: $nextOffset)" }
+                check(latestCompletedOffset == nextOffset - 1) {
+                    "InMemoryLog doesn't support replay (log next: $nextOffset, sub completed: $latestCompletedOffset)"
+                }
 
                 Channel<Record>(100).also { committedCh = it }
             }
@@ -82,10 +82,8 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
 
         return Subscription {
             runBlocking {
-                mutex.withLock {
-                    job.cancelAndJoin()
-                    committedCh = null
-                }
+                mutex.withLock { committedCh = null }
+                job.cancelAndJoin()
             }
         }
     }

@@ -225,8 +225,8 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
 
         return Subscription {
             runBlocking {
-                job.cancelAndJoin()
                 mutex.withLock { committedCh = null }
+                job.cancelAndJoin()
             }
         }
     }

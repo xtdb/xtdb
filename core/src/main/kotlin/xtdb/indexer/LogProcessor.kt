@@ -9,6 +9,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import xtdb.api.log.Log
 import xtdb.api.log.LogOffset
 import xtdb.arrow.asChannel
+import xtdb.api.log.Log.Message
 import java.time.Duration
 import java.time.Instant
 
@@ -32,9 +33,9 @@ class LogProcessor(
             flushedTxId = -1
         )
 
-        fun checkChunkTimeout(now: Instant, currentChunkTxId: Long, latestCompletedTxId: Long): Log.Message? =
+        fun checkChunkTimeout(now: Instant, currentChunkTxId: Long, latestCompletedTxId: Long): Message? =
             when {
-                lastFlushCheck.plus(flushTimeout) >= now || flushedTxId == latestCompletedTxId -> null
+                lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> null
                 currentChunkTxId != previousChunkTxId -> {
                     lastFlushCheck = now
                     previousChunkTxId = currentChunkTxId
@@ -43,7 +44,7 @@ class LogProcessor(
 
                 else -> {
                     lastFlushCheck = now
-                    Log.Message.FlushChunk(currentChunkTxId)
+                    Message.FlushChunk(currentChunkTxId)
                 }
             }
 
@@ -82,7 +83,7 @@ class LogProcessor(
 
         records.forEach { record ->
             when (val msg = record.message) {
-                is Log.Message.Tx -> {
+                is Message.Tx -> {
                     msg.payload.asChannel.use { txOpsCh ->
                         ArrowStreamReader(txOpsCh, allocator).use { reader ->
                             reader.vectorSchemaRoot.use { root ->
@@ -94,7 +95,7 @@ class LogProcessor(
                     }
                 }
 
-                is Log.Message.FlushChunk -> indexer.forceFlush(record)
+                is Message.FlushChunk -> indexer.forceFlush(record)
             }
         }
     }
