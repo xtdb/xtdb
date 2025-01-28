@@ -1,13 +1,22 @@
-package xtdb
+package xtdb.compactor
 
 import com.carrotsearch.hppc.IntArrayList
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.time.withTimeout
 import org.apache.arrow.memory.util.ArrowBufPointer
-import xtdb.Compactor.Companion.RecencyGranularity.*
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
+import xtdb.compactor.Compactor.Companion.RecencyGranularity.*
 import xtdb.trie.HashTrie
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.TrieWriter
+import xtdb.util.debug
+import xtdb.util.logger
+import xtdb.util.trace
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalTime.MIDNIGHT
 import java.time.OffsetDateTime
@@ -20,8 +29,23 @@ import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 private typealias InstantMicros = Long
 private typealias Selection = IntArray
 
-class Compactor {
+interface Compactor : AutoCloseable {
+
+    interface Job {
+        val outputTrieKey: String
+    }
+
+    interface Impl {
+        fun availableJobs(): Collection<Job>
+        fun executeJob(job: Job)
+    }
+
+    fun signalBlock()
+    fun compactAll(timeout: Duration? = null)
+
     companion object {
+        private val LOGGER = Compactor::class.logger
+
         internal fun Selection.partitionSlices(partIdxs: IntArray) =
             Array(LEVEL_WIDTH) { partition ->
                 val cur = partIdxs[partition]
@@ -59,10 +83,10 @@ class Compactor {
 
         private val YearMonth.startMicros get() = atDay(1).toEpochSecond(MIDNIGHT, UTC) * 1_000_000
 
-        internal fun InstantMicros.toDateTime() =
+        private fun InstantMicros.toDateTime() =
             OffsetDateTime.ofInstant(Instant.ofEpochSecond(this / 1_000_000, this % 1_000), UTC)
 
-        internal fun InstantMicros.recencyBucket(depth: RecencyGranularity): InstantMicros {
+        private fun InstantMicros.recencyBucket(depth: RecencyGranularity): InstantMicros {
             // TODO will likely need some caching here.
             if (this == MAX_LONG) return MAX_LONG
 
@@ -74,7 +98,7 @@ class Compactor {
             }.startMicros
         }
 
-        internal fun IntArray.recencyPartitions(
+        private fun IntArray.recencyPartitions(
             recencies: VectorReader,
             depth: RecencyGranularity,
         ): SortedMap<InstantMicros, Selection> {
@@ -88,7 +112,7 @@ class Compactor {
             return res.mapValuesTo(sortedMapOf()) { it.value.toArray() }
         }
 
-        internal fun IntArray.recencyPartitions(
+        private fun IntArray.recencyPartitions(
             recencies: VectorReader,
             pageLimit: Int,
         ): SortedMap<InstantMicros, Selection> {
@@ -174,7 +198,11 @@ class Compactor {
                                 else -> depth - 3
                             }
 
-                            if (iidDepth >= 64 || iidReader.getPointer(sel.first(), startPtr) == iidReader.getPointer(sel.last(), endPtr)) {
+                            if (iidDepth >= 64 || iidReader.getPointer(sel.first(), startPtr) == iidReader.getPointer(
+                                    sel.last(),
+                                    endPtr
+                                )
+                            ) {
                                 writeRecencyBranch(sel.recencyPartitions(recencies, pageLimit))
                             } else {
                                 trieWriter.writeIidBranch(
@@ -192,6 +220,96 @@ class Compactor {
             writeSubtree(0, IntArray(relation.rowCount) { idx -> idx })
 
             trieWriter.end()
+        }
+
+        @JvmStatic
+        fun open(impl: Impl, ignoreBlockSignal: Boolean = false, threadLimit: Int = 1) =
+            object : Compactor {
+                private val scope = CoroutineScope(Dispatchers.Default)
+
+                private val jobsScope =
+                    CoroutineScope(
+                        Dispatchers.Default.limitedParallelism(threadLimit, "compactor")
+                                + SupervisorJob(scope.coroutineContext.job)
+                    )
+
+                private val wakeup = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
+                private val idle = Channel<Unit>()
+
+                @Volatile
+                private var availableJobKeys = emptySet<String>()
+
+                private val queuedJobs = mutableSetOf<String>()
+
+                init {
+                    scope.launch {
+                        val doneCh = Channel<Job>()
+
+                        while (true) {
+                            val availableJobs = impl.availableJobs()
+                            availableJobKeys = availableJobs.map { it.outputTrieKey }.toSet()
+
+                            if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
+                                LOGGER.trace("sending idle")
+                                idle.trySend(Unit)
+                            }
+
+                            availableJobs.forEach {
+                                if (queuedJobs.add(it.outputTrieKey)) {
+                                    jobsScope.launch {
+                                        // check it's still required
+                                        if (it.outputTrieKey in availableJobKeys)
+                                            runInterruptible {
+                                                LOGGER.debug("executing job: ${it.outputTrieKey}")
+                                                impl.executeJob(it)
+                                                LOGGER.debug("done: ${it.outputTrieKey}")
+                                            }
+
+                                        doneCh.send(it)
+                                    }
+                                }
+                            }
+
+                            select {
+                                doneCh.onReceive {
+                                    queuedJobs.remove(it.outputTrieKey)
+                                    LOGGER.debug("Completed job ${it.outputTrieKey}")
+                                }
+
+                                wakeup.onReceive {
+                                    LOGGER.trace("wakey wakey")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                override fun signalBlock() {
+                    if (!ignoreBlockSignal) wakeup.trySend(Unit)
+                }
+
+                override fun compactAll(timeout: Duration?) {
+                    val job = scope.launch {
+                        LOGGER.trace("compactAll: waiting for idle")
+                        if (timeout == null) idle.receive() else withTimeout(timeout) { idle.receive() }
+                        LOGGER.trace("compactAll: idle")
+                    }
+
+                    wakeup.trySend(Unit)
+
+                    runBlocking { job.join() }
+                }
+
+                override fun close() {
+                    runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+                }
+            }
+
+        @JvmStatic
+        val noop = object : Compactor {
+            override fun signalBlock() {}
+            override fun compactAll(timeout: Duration?) {}
+            override fun close() {}
         }
     }
 }

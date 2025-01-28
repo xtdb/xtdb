@@ -27,9 +27,10 @@
             (->> (c/compaction-jobs (map ->trie-file-name tries)
                                     {:l1-file-size-rows (or l1-file-size-rows 16)})
 
-                 (mapv (fn [{:keys [path] :as job}]
-                         (cond-> job
-                           path (update :path vec))))))]
+                 (mapv (fn [{:keys [part] :as job}]
+                         (->> (cond-> job
+                                part (update :part vec))
+                              (into {} (filter (comp some? val))))))))]
 
     (->trie-file-name [0 10 20 10])
 
@@ -72,16 +73,16 @@
       (t/is (= (let [l1-trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
                                    "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"]]
                  [{:trie-keys l1-trie-keys,
-                   :path [0],
+                   :part [0],
                    :out-trie-key "log-l02-p0-nr150"}
                   {:trie-keys l1-trie-keys,
-                   :path [1],
+                   :part [1],
                    :out-trie-key "log-l02-p1-nr150"}
                   {:trie-keys l1-trie-keys,
-                   :path [2],
+                   :part [2],
                    :out-trie-key "log-l02-p2-nr150"}
                   {:trie-keys l1-trie-keys,
-                   :path [3],
+                   :part [3],
                    :out-trie-key "log-l02-p3-nr150"}])
                (f [[1 0 10 10] [1 0 20 20] [1 20 30 10] [1 20 40 20] [1 40 50 10] [1 40 60 20] [1 60 70 10] [1 60 80 20]]))
 
@@ -89,7 +90,7 @@
 
       (t/is (= [{:trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
                              "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"],
-                 :path [1],
+                 :part [1],
                  :out-trie-key "log-l02-p1-nr150"}]
                (f [[2 [0] 80] [2 [2] 80] [2 [3] 80]
                    [1 0 20 20] [1 20 40 20] [1 40 60 20] [1 60 80 20]
@@ -99,28 +100,28 @@
     (t/testing "L2+"
       (t/is (= [ ;; L2 [0] is full, compact L3 [0 2] and [0 3]
                 {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
-                 :path [0 0],
+                 :part [0 0],
                  :out-trie-key "log-l03-p00-nr120"}
                 {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
-                 :path [0 1],
+                 :part [0 1],
                  :out-trie-key "log-l03-p01-nr120"}
 
                 ;; L2 [0] has loads, merge from 0x24 onwards (but only 4)
                 {:trie-keys ["log-l01-fr120-nr122-rs2" "log-l01-fr122-nr124-rs2" "log-l01-fr124-nr126-rs2" "log-l01-fr126-nr128-rs2"],
-                 :path [0],
+                 :part [0],
                  :out-trie-key "log-l02-p0-nr128"}
 
                 ;; L2 [1] has nothing, choose the first four
                 {:trie-keys ["log-l01-fr00-nr02-rs2" "log-l01-fr02-nr04-rs2" "log-l01-fr04-nr06-rs2" "log-l01-fr06-nr08-rs2"],
-                 :path [1],
+                 :part [1],
                  :out-trie-key "log-l02-p1-nr08"}
 
                 ;; fill in the gaps in [2] and [3]
                 {:trie-keys ["log-l01-fr118-nr11a-rs2" "log-l01-fr11a-nr11c-rs2" "log-l01-fr11c-nr11e-rs2" "log-l01-fr11e-nr120-rs2"],
-                 :path [2],
+                 :part [2],
                  :out-trie-key "log-l02-p2-nr120"}
                 {:trie-keys ["log-l01-fr110-nr112-rs2" "log-l01-fr112-nr114-rs2" "log-l01-fr114-nr116-rs2" "log-l01-fr116-nr118-rs2"],
-                 :path [3],
+                 :part [3],
                  :out-trie-key "log-l02-p3-nr118"}]
 
                (f [[3 [0 2] 32]
@@ -144,16 +145,16 @@
 
 
       (t/is (= [{:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :path [0 3 0],
+                 :part [0 3 0],
                  :out-trie-key "log-l04-p030-nr180"}
                 {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :path [0 3 1],
+                 :part [0 3 1],
                  :out-trie-key "log-l04-p031-nr180"}
                 {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :path [0 3 2],
+                 :part [0 3 2],
                  :out-trie-key "log-l04-p032-nr180"}
                 {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :path [0 3 3],
+                 :part [0 3 3],
                  :out-trie-key "log-l04-p033-nr180"}]
 
                (f [[3 [0 2] 32]
@@ -319,10 +320,10 @@
               c/*l1-file-size-rows* 32]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
         (letfn [(submit! [xs]
-                  (doseq [batch (partition-all 6 xs)]
-                    (xt/submit-tx node [(into [:put-docs :foo]
-                                              (for [x batch]
-                                                {:xt/id x}))])))
+                  (last (for [batch (partition-all 6 xs)]
+                          (xt/submit-tx node [(into [:put-docs :foo]
+                                                    (for [x batch]
+                                                      {:xt/id x}))]))))
 
                 (q []
                   (->> (xt/q node
@@ -330,21 +331,21 @@
                                   (order-by id)))
                        (map :id)))]
 
-          (submit! (range 500))
-          (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 1))
+          (let [tx-id (submit! (range 500))]
+            (tu/then-await-tx tx-id node #xt/duration "PT1S")
+            (c/compact-all! node #xt/duration "PT1S"))
 
           (t/is (= (set (range 500)) (set (q))))
 
-          (submit! (range 500 1000))
-          (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 1))
+          (let [tx-id (submit! (range 500 1000))]
+            (tu/then-await-tx tx-id node #xt/duration "PT1S")
+            (c/compact-all! node #xt/duration "PT1S"))
 
           (t/is (= (set (range 1000)) (set (q))))
 
-          (submit! (range 1000 2000))
-          (tu/then-await-tx node)
-          (c/compact-all! node (Duration/ofSeconds 1))
+          (let [tx-id (submit! (range 1000 2000))]
+            (tu/then-await-tx tx-id node #xt/duration "PT2S")
+            (c/compact-all! node #xt/duration "PT2S"))
 
           (t/is (= (set (range 2000)) (set (q))))
 
