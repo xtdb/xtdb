@@ -119,32 +119,32 @@
                             nil)))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
-                            {:keys [page-size]} {:keys [^Path table-path part trie-keys out-trie-key]}]
+                            {:keys [page-size]} {:keys [table-name part trie-keys out-trie-key]}]
   (try
-    (log/debugf "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
+    (log/debugf "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
 
     (util/with-open [table-metadatas (LinkedList.)
-                     data-rels (trie/open-data-rels buffer-pool table-path trie-keys)]
-                    (doseq [trie-key trie-keys]
-        (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-path trie-key))))
+                     data-rels (trie/open-data-rels buffer-pool table-name trie-keys)]
+      (doseq [trie-key trie-keys]
+        (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-name trie-key))))
 
-                    (let [segments (mapv (fn [{:keys [trie] :as _table-metadata} data-rel]
+      (let [segments (mapv (fn [{:keys [trie] :as _table-metadata} data-rel]
                              (-> (trie/->Segment trie) (assoc :data-rel data-rel)))
                            table-metadatas
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))]
 
-                      (util/with-open [data-rel (Relation. allocator schema)
+        (util/with-open [data-rel (Relation. allocator schema)
                          recency-wtr (open-recency-wtr allocator)]
-                                      (merge-segments-into data-rel recency-wtr segments part)
+          (merge-segments-into data-rel recency-wtr segments part)
 
-                                      (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
-                                                           schema table-path out-trie-key
+          (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
+                                                           schema table-name out-trie-key
                                                            true)]
 
-                                                      (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))))
+            (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))))
 
-    (log/debugf "compacted '%s' -> '%s'." table-path out-trie-key)
+    (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
 
     (catch ClosedByInterruptException _ (throw (InterruptedException.)))
     (catch InterruptedException e (throw e))
@@ -260,10 +260,11 @@
       (Compactor/open
        (reify Compactor$Impl
          (availableJobs [_]
-           (for [table-path (.listObjects buffer-pool util/tables-dir)
-                 job (compaction-jobs (trie/list-meta-files buffer-pool table-path)
+           (for [^Path table-path (.listObjects buffer-pool util/tables-dir)
+                 :let [table-name (str (.getFileName table-path))]
+                 job (compaction-jobs (trie/list-meta-files buffer-pool table-name)
                                       {:l1-file-size-rows l1-file-size-rows})]
-             (assoc job :table-path table-path)))
+             (assoc job :table-name table-name)))
 
          (executeJob [_ job]
            (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)))

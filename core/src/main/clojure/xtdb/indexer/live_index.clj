@@ -183,8 +183,7 @@
     (let [row-count (.getPosition (.writerPosition live-rel))]
       (when (pos? row-count)
         (with-open [data-rel (.openAsRelation live-rel)]
-          (trie/write-live-trie! allocator buffer-pool
-                                 (util/table-name->table-path table-name)
+          (trie/write-live-trie! allocator buffer-pool table-name
                                  (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)
                                  live-trie data-rel)
 

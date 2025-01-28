@@ -350,7 +350,7 @@
 
 (def ^java.nio.file.Path tables-dir (->path "tables"))
 
-(defn table-name->table-path [^String table-name]
+(defn table-name->table-path ^java.nio.file.Path [^String table-name]
   (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
 
 (def ^Thread$UncaughtExceptionHandler uncaught-exception-handler

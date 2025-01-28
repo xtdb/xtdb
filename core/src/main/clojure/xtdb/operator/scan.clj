@@ -455,8 +455,7 @@
                                                      (fn [fvt]
                                                        (or fvt [:at [:now :now]]))))
                                ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
-                               table-path (util/table-name->table-path table-name)
-                               current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
+                               current-meta-files (->> (trie/list-meta-files buffer-pool table-name)
                                                        (trie/current-trie-files))
                                temporal-bounds (->temporal-bounds args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
@@ -465,7 +464,7 @@
                                                                                 (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
                                                                                   (.add table-metadatas table-metadata)
                                                                                   (into (trie/->Segment trie)
-                                                                                        {:data-file-path (trie/->table-data-file-path table-path
+                                                                                        {:data-file-path (trie/->table-data-file-path table-name
                                                                                                                                       (:trie-key (trie/parse-trie-file-path meta-file-path)))
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                   (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]

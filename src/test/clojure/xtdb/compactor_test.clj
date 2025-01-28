@@ -371,11 +371,11 @@
             (tu/then-await-tx node)
             (c/compact-all! node (Duration/ofSeconds 5))
 
-            (let [table-path (util/->path (str util/tables-dir "/foo"))
-                  meta-files (trie/list-meta-files bp table-path)]
+            (let [table-name "foo"
+                  meta-files (trie/list-meta-files bp table-name)]
               (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
-                (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-path trie-key))
-                                 ^IDataRel data-rel (first (trie/open-data-rels bp table-path [trie-key]))]
+                (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-name trie-key))
+                                 ^IDataRel data-rel (first (trie/open-data-rels bp table-name [trie-key]))]
 
                   ;; checking that every page relation has a positive row count
                   (t/is (empty? (->> (mapv #(.loadPage data-rel %) (.getLeaves trie))

@@ -35,14 +35,16 @@
           (str/join part)
           (util/->lex-hex-string next-row)))
 
-(defn ->table-data-file-path [^Path table-path trie-key]
-  (.resolve table-path (format "data/%s.arrow" trie-key)))
+(defn ->table-data-file-path [table-name trie-key]
+  (-> (util/table-name->table-path table-name)
+      (.resolve (format "data/%s.arrow" trie-key))))
 
-(defn ->table-meta-file-path [^Path table-path trie-key]
-  (.resolve table-path (format "meta/%s.arrow" trie-key)))
+(defn ->table-meta-file-path [table-name trie-key]
+  (-> (util/table-name->table-path table-name)
+      (.resolve (format "meta/%s.arrow" trie-key))))
 
-(defn list-meta-files [^IBufferPool buffer-pool ^Path table-path]
-  (.listObjects buffer-pool (.resolve table-path "meta")))
+(defn list-meta-files [^IBufferPool buffer-pool table-name]
+  (.listObjects buffer-pool (-> (util/table-name->table-path table-name) (.resolve "meta"))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 4))) false
@@ -75,10 +77,10 @@
      (vw/root->writer root))))
 
 (defn open-trie-writer ^TrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                                    ^Schema data-schema, ^Path table-path, trie-key
+                                    ^Schema data-schema, table-name, trie-key
                                     write-content-metadata?]
   (util/with-close-on-catch [data-rel (Relation. allocator data-schema)
-                             data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-path trie-key) data-rel)
+                             data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-name trie-key) data-rel)
                              meta-rel (Relation. allocator meta-rel-schema)]
 
     (let [node-wtr (.get meta-rel "nodes")
@@ -151,7 +153,7 @@
         (end [_]
           (.end data-file-wtr)
 
-          (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-path trie-key) meta-rel)]
+          (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-name trie-key) meta-rel)]
             (.writeBatch meta-file-wtr)
             (.end meta-file-wtr)))
 
@@ -184,9 +186,9 @@
       (write-node! node))))
 
 (defn write-live-trie! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                        ^Path table-path, trie-key,
+                        table-name, trie-key,
                         ^MemoryHashTrie trie, ^Relation data-rel]
-  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-path trie-key
+  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-name trie-key
                                               false)]
     (let [trie (.compactLogs trie)]
       (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
@@ -396,10 +398,10 @@
   (close [_]
     (util/close rels-to-close)))
 
-(defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys]
+(defn open-data-rels [^IBufferPool buffer-pool, table-name, trie-keys]
   (util/with-close-on-catch [data-rels (ArrayList.)]
     (doseq [trie-key trie-keys]
-      (let [data-file (->table-data-file-path table-path trie-key)
+      (let [data-file (->table-data-file-path table-name trie-key)
             footer (.getFooter buffer-pool data-file)]
         (.add data-rels (ArrowDataRel. buffer-pool data-file (.getSchema footer) (ArrayList.)))))
     (vec data-rels)))
