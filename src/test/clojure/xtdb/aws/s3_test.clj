@@ -7,11 +7,7 @@
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.lang AutoCloseable]
-           [java.nio ByteBuffer]
-           [java.nio.file Path]
-           [software.amazon.awssdk.services.s3 S3AsyncClient]
-           [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
+  (:import [java.nio ByteBuffer]
            [xtdb.api.storage ObjectStore]
            [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
@@ -24,7 +20,7 @@
   (or (System/getProperty "xtdb.aws.s3-test.bucket")
       "xtdb-object-store-iam-test"))
 
-(defn object-store ^AutoCloseable [prefix]
+(defn object-store ^xtdb.aws.S3 [prefix]
   (-> (S3/s3 bucket)
       (.prefix (util/->path (str prefix)))
       (.openObjectStore)))

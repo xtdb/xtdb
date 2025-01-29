@@ -1,7 +1,7 @@
 (ns xtdb.indexer.live-table-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.indexer.live-index :as live-index]
+            [xtdb.indexer.live-index :as li]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
@@ -15,12 +15,11 @@
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.VectorPosition
-           xtdb.compactor.Compactor
            xtdb.BufferPool
-           (xtdb.indexer.live_index ILiveIndex TestLiveTable)
+           xtdb.compactor.Compactor
+           (xtdb.indexer LiveIndex LiveTable$Watermark)
            (xtdb.trie MemoryHashTrie MemoryHashTrie$Leaf)
-           (xtdb.util RefCounter RowCounter)
-           xtdb.watermark.ILiveTableWatermark))
+           (xtdb.util RefCounter RowCounter)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -43,10 +42,10 @@
         (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial trie/->live-trie 2 4)})]
+                         live-table (li/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial trie/->live-trie 2 4)})]
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
-                doc-wtr (.docWriter live-table-tx)]
+                doc-wtr (.getDocWriter live-table-tx)]
             (let [wp (VectorPosition/build)]
               (dotimes [_n n]
                 (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
@@ -58,7 +57,7 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (.live-trie ^TestLiveTable live-table)))
+            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (li/live-trie live-table)))
                   leaf ^MemoryHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
@@ -81,9 +80,9 @@
         (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
+                         live-table (li/->live-table allocator bp (RowCounter. 0) "foo")]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
-                doc-wtr (.docWriter live-table-tx)]
+                doc-wtr (.getDocWriter live-table-tx)]
 
             (let [wp (VectorPosition/build)]
               (dotimes [_n n]
@@ -95,7 +94,7 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (.live-trie ^TestLiveTable live-table)))
+            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (li/live-trie live-table)))
                   leaf ^MemoryHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
@@ -115,7 +114,7 @@
                 (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
                 (.resolve path "objects")))))))))
 
-(defn live-table-wm->data [^ILiveTableWatermark live-table-wm]
+(defn live-table-wm->data [^LiveTable$Watermark live-table-wm]
   (let [live-rel-data (vr/rel->rows (.liveRelation live-table-wm))
         live-trie (.compactLogs (.liveTrie live-table-wm))
         live-trie-leaf-data (->> live-trie
@@ -134,9 +133,9 @@
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:enabled? false}}))
                 ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (live-index/->live-table allocator bp rc "foo")]
+                live-table (li/->live-table allocator bp rc "foo")]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
-            doc-wtr (.docWriter live-table-tx)]
+            doc-wtr (.getDocWriter live-table-tx)]
 
         (let [wp (VectorPosition/build)]
           (doseq [uuid uuids]
@@ -169,16 +168,16 @@
       (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
             mm (tu/component tu/*node* ::meta/metadata-manager)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm (Compactor/getNoop)
-                                                                        nil nil (HashMap.)
-                                                                        nil (StampedLock.)
-                                                                        (RefCounter.)
-                                                                        (RowCounter. 0) 102400
-                                                                        64 1024)]
+        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp mm (Compactor/getNoop)
+                                                               nil nil (HashMap.)
+                                                               nil (StampedLock.)
+                                                               (RefCounter.)
+                                                               (RowCounter. 0) 102400
+                                                               64 1024)]
           (let [tx-key (serde/->TxKey 0 (.toInstant #inst "2000"))
                 live-index-tx (.startTx live-index tx-key)
                 live-table-tx (.liveTable live-index-tx table-name)
-                doc-wtr (.docWriter live-table-tx)]
+                doc-wtr (.getDocWriter live-table-tx)]
 
             (let [wp (VectorPosition/build)]
               (doseq [uuid uuids]
@@ -191,10 +190,10 @@
             (.commit live-index-tx)
 
             (with-open [wm (.openWatermark live-index)]
-              (let [live-index-wm (.liveIndex wm)
+              (let [live-index-wm (.getLiveIndex wm)
                     live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 
-                (live-index/finish-chunk! live-index)
+                (.finishChunk live-index)
 
                 (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table-name))]
 

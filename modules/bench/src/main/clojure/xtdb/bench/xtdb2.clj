@@ -6,7 +6,6 @@
             [xtdb.bench :as b]
             [xtdb.bench.measurement :as bm]
             [xtdb.compactor :as c]
-            [xtdb.indexer]
             [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -29,7 +28,7 @@
              timeout)))
 
 (defn finish-chunk! [node]
-  (li/finish-chunk! (util/component node :xtdb.indexer/live-index)))
+  (li/finish-chunk! node))
 
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))

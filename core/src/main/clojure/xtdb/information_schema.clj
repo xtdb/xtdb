@@ -10,11 +10,11 @@
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
+           (xtdb.indexer Watermark)
            (xtdb.metadata IMetadataManager)
            xtdb.operator.SelectionSpec
            (xtdb.trie MemoryHashTrie)
-           (xtdb.vector IVectorReader RelationReader)
-           (xtdb.watermark Watermark)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
@@ -330,8 +330,8 @@
     ;;should be types/merge-fields as per scan-fields
     (let [schema-info (-> (merge-with merge
                                       (.allColumnFields metadata-mgr)
-                                      (some-> (.liveIndex wm)
-                                              (.allColumnFields)))
+                                      (some-> (.getLiveIndex wm)
+                                              (.getAllColumnFields)))
                           (update-keys symbol)
                           (merge meta-table-schemas))
 

@@ -43,12 +43,11 @@
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
-           xtdb.indexer.live_index.ILiveTable
+           (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader RelationReader)
-           (xtdb.watermark IWatermarkSource Watermark)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -198,7 +197,7 @@
 
 (defn finish-chunk! [node]
   (then-await-tx node)
-  (li/finish-chunk! (component node :xtdb.indexer/live-index)))
+  (li/finish-chunk! node))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
@@ -286,7 +285,7 @@
                              (let [^IQuerySource q-src (util/component node ::q/query-source)]
                                (.prepareRaQuery q-src query indexer query-opts))
                              (q/prepare-ra query {:ref-ctr (RefCounter.)
-                                                  :wm-src (reify IWatermarkSource
+                                                  :wm-src (reify Watermark$Source
                                                             (openWatermark [_]
                                                               (Watermark. nil nil {})))}))]
      (util/with-open [^RelationReader args-rel (if args
@@ -490,11 +489,11 @@
 (defn open-live-table [table-name]
   (li/->live-table *allocator* nil (RowCounter. 0) table-name))
 
-(defn index-tx! [^ILiveTable live-table, ^TransactionKey tx-key, docs]
+(defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)
         live-table-tx (.startTx live-table tx-key true)]
     (try
-      (let [doc-wtr (.docWriter live-table-tx)]
+      (let [doc-wtr (.getDocWriter live-table-tx)]
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],
                        :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]

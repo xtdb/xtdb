@@ -35,12 +35,12 @@
            (xtdb.bitemporal IRowConsumer Polygon)
            xtdb.BufferPool
            xtdb.ICursor
+           (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
-           (xtdb.watermark ILiveTableWatermark IWatermarkSource Watermark)))
+           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)))
 
 (s/def ::table symbol?)
 
@@ -56,7 +56,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
   (close [])
-  (scanFields [^xtdb.watermark.Watermark wm, scan-cols])
+  (scanFields [^xtdb.indexer.Watermark wm, scan-cols])
   (emitScan [scan-expr scan-fields param-fields]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -108,9 +108,9 @@
 
       bounds)))
 
-(defn tables-with-cols [^IWatermarkSource wm-src]
-  (with-open [^Watermark wm (.openWatermark wm-src)]
-    (.schema wm)))
+(defn tables-with-cols [^Watermark$Source wm-src]
+  (with-open [wm (.openWatermark wm-src)]
+    (.getSchema wm)))
 
 (defn temporal-column? [col-name]
   (contains? #{"_system_from" "_system_to" "_valid_from" "_valid_to"}
@@ -390,7 +390,7 @@
                             (or (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
                                 (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
                                 (types/merge-fields (.columnField metadata-mgr table col-name)
-                                                    (some-> (.liveIndex wm)
+                                                    (some-> (.getLiveIndex wm)
                                                             (.liveTable table)
                                                             (.columnField col-name)))))
                         (types/field-with-name col-name))))]
@@ -454,7 +454,7 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now :now]]))))
-                               ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable table-name))
+                               ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table-name))
                                current-meta-files (->> (trie/list-meta-files buffer-pool table-name)
                                                        (trie/current-trie-files))
                                temporal-bounds (->temporal-bounds args scan-opts snapshot-time)]

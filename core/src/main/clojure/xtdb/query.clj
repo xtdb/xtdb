@@ -30,8 +30,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.xtql.plan :as xtql.plan]
-            [xtdb.xtql :as xtql])
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.plan :as xtql.plan])
   (:import clojure.lang.MapEntry
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            java.lang.AutoCloseable
@@ -45,11 +45,11 @@
            (xtdb ICursor IResultCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
+           (xtdb.indexer Watermark$Source)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
-           xtdb.vector.IVectorReader
-           xtdb.watermark.IWatermarkSource))
+           xtdb.vector.IVectorReader))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
@@ -101,7 +101,7 @@
 
     (columnFields [_] fields)))
 
-(defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^IWatermarkSource wm-src]}
+(defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^Watermark$Source wm-src]}
                  conformed-query scan-cols default-tz param-fields]
   (.computeIfAbsent cache
                     {:scan-fields (when (and (seq scan-cols) scan-emitter)
@@ -137,7 +137,7 @@
 
   (^xtdb.query.PreparedQuery [query
                               {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
-                                      ^RefCounter ref-ctr ^IWatermarkSource wm-src] :as deps}
+                                      ^RefCounter ref-ctr ^Watermark$Source wm-src] :as deps}
                               {:keys [param-types default-tz table-info]}]
 
    (let [conformed-query (s/conform ::lp/logical-plan query)]
@@ -221,7 +221,7 @@
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :clock clock,
                                       :default-tz default-tz,
-                                      :snapshot-time (or snapshot-time (some-> wm .txBasis .getSystemTime))
+                                      :snapshot-time (or snapshot-time (some-> wm .getTxBasis .getSystemTime))
                                       :current-time current-time
                                       :args (or args vw/empty-args)
                                       :schema (scan/tables-with-cols wm-src)})

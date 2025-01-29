@@ -42,19 +42,17 @@
            xtdb.api.log.Log$Message$FlushChunk
            (xtdb.api.tx TxOp)
            (xtdb.arrow RowCopier)
-           (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
+           (xtdb.indexer IIndexer OpIndexer RelationIndexer LiveIndex LiveIndex$Tx LiveTable$Tx Watermark Watermark$Source)
            xtdb.metadata.IMetadataManager
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
-           (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)
-           (xtdb.watermark IWatermarkSource Watermark)
-           (xtdb.indexer IIndexer OpIndexer RelationIndexer)))
+           (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private abort-exn (err/runtime-err :abort-exn))
 
-(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx,
+(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx,
                                                    ^IVectorReader tx-ops-rdr, ^Instant system-time]
   (let [put-leg (.legReader tx-ops-rdr "put-docs")
         iids-rdr (.structKeyReader put-leg "iids")
@@ -92,12 +90,12 @@
 
                                                           :docs-rdr table-docs-rdr
 
-                                                          :doc-copier (-> (.docWriter live-table)
+                                                          :doc-copier (-> (.getDocWriter live-table)
                                                                           (.rowCopier table-rel-rdr))})))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [{:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^ILiveTableTx live-table, ^RowCopier doc-copier]}
+        (let [{:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^LiveTable$Tx live-table, ^RowCopier doc-copier]}
               (get tables (.getLeg docs-rdr tx-op-idx))
 
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
@@ -125,7 +123,7 @@
 
         nil))))
 
-(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
+(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time]
   (let [delete-leg (.legReader tx-ops-rdr "delete-docs")
         table-rdr (.structKeyReader delete-leg "table")
         iids-rdr (.structKeyReader delete-leg "iids")
@@ -158,7 +156,7 @@
 
         nil))))
 
-(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
+(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^IVectorReader tx-ops-rdr]
   (let [erase-leg (.legReader tx-ops-rdr "erase-docs")
         table-rdr (.structKeyReader erase-leg "table")
         iids-rdr (.structKeyReader erase-leg "iids")
@@ -296,7 +294,7 @@
             (reset! !last-tx-fn-error t)
             (throw t)))))))
 
-(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx
+(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx
                                                            {:keys [^Instant current-time]}]
 
   (let [current-time-µs (time/instant->micros current-time)]
@@ -315,7 +313,7 @@
               valid-to-rdr (.readerForName in-rel "_valid_to")
 
               live-idx-table (.liveTable live-idx-tx table)
-              live-idx-table-copier (-> (.docWriter live-idx-table)
+              live-idx-table-copier (-> (.getDocWriter live-idx-table)
                                         (.rowCopier content-rel))]
 
           (when-not id-col
@@ -339,7 +337,7 @@
               (when (< valid-from valid-to)
                 (.logPut live-idx-table (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
 
-(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
+(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (str table)
@@ -365,7 +363,7 @@
             (-> (.liveTable live-idx-tx table)
                 (.logDelete iid valid-from valid-to))))))))
 
-(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^ILiveIndexTx live-idx-tx]
+(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (str table)
@@ -430,9 +428,9 @@
             (aset selection 0 idx)
             (eval-query (-> param-rel (.select selection)))))))))
 
-(defn- patch-rel! [^ILiveTableTx live-table, ^RelationReader rel]
+(defn- patch-rel! [^LiveTable$Tx live-table, ^RelationReader rel]
   (let [iid-rdr (.readerForName rel "_iid")
-        doc-copier (.rowCopier (.readerForName rel "doc") (.docWriter live-table))
+        doc-copier (.rowCopier (.readerForName rel "doc") (.getDocWriter live-table))
         from-rdr (.readerForName rel "_valid_from")
         to-rdr (.readerForName rel "_valid_to")]
     (dotimes [idx (.rowCount rel)]
@@ -442,7 +440,7 @@
                (.getLong to-rdr idx)
                #(.copyRow doc-copier idx)))))
 
-(defn- ->patch-docs-indexer [^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr,
+(defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^IVectorReader tx-ops-rdr,
                              ^IQuerySource q-src, wm-src,
                              {:keys [snapshot-time] :as tx-opts}]
   (let [patch-leg (.legReader tx-ops-rdr "patch-docs")
@@ -537,11 +535,11 @@
 
 (def ^:private ^:const ^String user-table "pg_catalog/pg_user")
 
-(defn- update-pg-user! [^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, user, password]
+(defn- update-pg-user! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, user, password]
   (let [system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
         live-table (.liveTable live-idx-tx user-table)
-        doc-writer (.docWriter live-table)]
+        doc-writer (.getDocWriter live-table)]
 
     (.logPut live-table (util/->iid user) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
@@ -560,7 +558,7 @@
 
                (.endStruct doc-writer)))))
 
-(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
+(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
                                               {:keys [tx-key] :as tx-opts}]
   (let [sql-leg (.legReader tx-ops-rdr "sql")
@@ -637,7 +635,7 @@
          (vr/rel-reader (for [^IVectorReader col args]
                           (.withName col (str "?" (.getName col)))))))))
 
-(defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^ILiveIndexTx live-idx-tx
+(defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
                                                ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
                                                tx-opts]
   (let [xtql-leg (.legReader tx-ops-rdr "xtql")
@@ -682,12 +680,12 @@
 
 (def ^:private ^:const ^String txs-table "xt/txs")
 
-(defn- add-tx-row! [^ILiveIndexTx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
+(defn- add-tx-row! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.getTxId tx-key)
         system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
         live-table (.liveTable live-idx-tx txs-table)
-        doc-writer (.docWriter live-table)]
+        doc-writer (.getDocWriter live-table)]
 
     (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
@@ -715,7 +713,7 @@
 (deftype Indexer [^BufferAllocator allocator
                   ^IMetadataManager metadata-mgr
                   ^IQuerySource q-src
-                  ^ILiveIndex live-idx
+                  ^LiveIndex live-idx
 
                   ^:volatile-mutable indexer-error
 
@@ -757,7 +755,7 @@
               (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                                      (.getDataVector))
 
-                    wm-src (reify IWatermarkSource
+                    wm-src (reify Watermark$Source
                              (openWatermark [_]
                                (util/with-close-on-catch [live-index-wm (.openWatermark live-idx-tx)]
                                  (Watermark. nil live-index-wm
@@ -832,16 +830,16 @@
         (throw t))))
 
   (forceFlush [_ record]
-    (li/force-flush! live-idx
-                     (serde/->TxKey (.getLogOffset record)
-                                    (.getLogTimestamp record))
-                     (.getExpectedChunkTxId ^Log$Message$FlushChunk (.getMessage record))))
+    (.forceFlush live-idx
+                 (serde/->TxKey (.getLogOffset record)
+                                (.getLogTimestamp record))
+                 (.getExpectedChunkTxId ^Log$Message$FlushChunk (.getMessage record))))
 
-  IWatermarkSource
+  Watermark$Source
   (openWatermark [_] (.openWatermark live-idx))
 
-  (latestCompletedTx [_] (.latestCompletedTx live-idx))
-  (latestCompletedChunkTx [_] (.latestCompletedChunkTx live-idx))
+  (latestCompletedTx [_] (.getLatestCompletedTx live-idx))
+  (latestCompletedChunkTx [_] (.getLatestCompletedChunkTx live-idx))
 
   (awaitTx [this tx-id timeout]
     @(-> (if tx-id
