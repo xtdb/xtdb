@@ -7,22 +7,19 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.Types
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.arrow.VectorPosition
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorIndirection.Companion.selection
-import xtdb.toArrowType
-import xtdb.toLeg
+import xtdb.arrow.VectorPosition
 import org.apache.arrow.vector.types.Types.MinorType.DENSEUNION as DENSEUNION_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BOOL_TYPE
-import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
+import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 private val I32 = FieldType.notNullable(Types.MinorType.INT.type)
 

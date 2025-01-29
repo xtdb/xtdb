@@ -126,7 +126,7 @@
           (t/is (= [(os/->StoredObject "tables/public$foo/data/l00-b00-rs5.arrow" 2558)]
                    (.listAllObjects bp (util/->path "tables/public$foo/data"))))
 
-          (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-b00-rs5.arrow" 4350)]
+          (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-b00-rs5.arrow" 4390)]
                    (.listAllObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))

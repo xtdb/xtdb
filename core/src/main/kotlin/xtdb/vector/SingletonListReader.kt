@@ -1,7 +1,6 @@
 package xtdb.vector
 
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -10,6 +9,7 @@ import xtdb.arrow.ListValueReader
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorPosition
+import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
 class SingletonListReader(private val name: String, private val elReader: IVectorReader) : IVectorReader {
@@ -41,7 +41,7 @@ class SingletonListReader(private val name: String, private val elReader: IVecto
         }
     }
 
-    override fun hashCode(idx: Int, hasher: ArrowBufHasher?): Int {
+    override fun hashCode(idx: Int, hasher: Hasher): Int {
         var hash = 0
         for (i in 0 until valueCount()) {
             hash = ByteFunctionHelpers.combineHash(hash, elReader.hashCode(i, hasher))

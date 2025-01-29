@@ -1,6 +1,5 @@
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import java.nio.ByteBuffer
 
 class ValueBox : ValueWriter, ValueReader {

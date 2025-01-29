@@ -3,13 +3,13 @@ package xtdb.vector;
 import clojure.lang.PersistentVector;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.ArrowBufPointer;
-import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.RowCopier;
 import xtdb.arrow.ValueReader;
 import xtdb.arrow.VectorPosition;
+import xtdb.util.Hasher;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -31,7 +31,7 @@ public interface IVectorReader extends AutoCloseable {
 
     Field getField();
 
-    int hashCode(int idx, ArrowBufHasher hasher);
+    int hashCode(int idx, Hasher hasher);
 
     private static RuntimeException unsupported(IVectorReader rdr) {
         throw new UnsupportedOperationException(rdr.getClass().getName());

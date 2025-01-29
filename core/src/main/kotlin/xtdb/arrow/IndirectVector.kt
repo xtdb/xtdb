@@ -1,10 +1,10 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader {
@@ -37,7 +37,7 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun getListStartIndex(idx: Int) = inner.getListStartIndex(sel[idx])
     override fun getListCount(idx: Int) = inner.getListCount(sel[idx])
 
-    override fun hashCode(idx: Int, hasher: ArrowBufHasher) = inner.hashCode(sel[idx], hasher)
+    override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(sel[idx], hasher)
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val innerCopier = inner.rowCopier(dest)

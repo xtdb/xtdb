@@ -4,7 +4,6 @@ import com.carrotsearch.hppc.LongArrayList
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.Long.Companion.MAX_VALUE
 import com.carrotsearch.hppc.LongArrayList as longs
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG

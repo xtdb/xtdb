@@ -1,5 +1,6 @@
 (ns xtdb.expression.metadata
-  (:require [xtdb.bloom :as bloom]
+  (:require [clojure.set :as set]
+            [xtdb.bloom :as bloom]
             [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
             [xtdb.metadata :as meta]
@@ -27,32 +28,50 @@
   (letfn [(var-value-expr [f meta-value field value-type value-expr]
             ;; TODO adapt for boolean metadata writer
             (when-not (contains? bool-metadata-types value-type)
-              (let [base-col-types (-> (get col-types field)
-                                       types/flatten-union-types)]
-                (simplify-and-or-expr
-                 {:op :call
-                  :f :or
-                  ;; TODO this seems like it could make better use
-                  ;; of the polymorphic expr patterns?
-                  :args (vec
-                         (for [col-type (cond
-                                          (isa? types/col-type-hierarchy value-type :num)
-                                          (filterv types/num-types base-col-types)
+              (let [base-col-types (->> (get col-types field)
+                                        types/flatten-union-types)]
 
-                                          (and (vector? value-type) (isa? types/col-type-hierarchy (first value-type) :date-time))
-                                          (filterv (comp types/date-time-types types/col-type-head) base-col-types)
+                (if (= meta-value :bloom-filter)
+                  (let [base-col-types (->> (map types/col-type-head base-col-types) set)]
+                    ;; values that are equal according to the EE should hash to the same value
+                    ;; TODO add missing col-type hierarchy bits
+                    (when (or (and (isa? types/col-type-hierarchy value-type :num)
+                                   (seq (set/intersection types/num-types base-col-types)))
 
-                                          (contains? base-col-types value-type)
-                                          [value-type])]
+                              (and (vector? value-type) (isa? types/col-type-hierarchy (first value-type) :date-time)
+                                   (seq (set/intersection types/date-time-types base-col-types)))
 
-                           {:op :test-metadata,
-                            :f f
-                            :meta-value meta-value
-                            :col-type col-type
-                            :field field,
-                            :value-expr value-expr
-                            :bloom-hash-sym (when (= meta-value :bloom-filter)
-                                              (gensym 'bloom-hashes))}))}))))
+                              (contains? base-col-types value-type))
+                      {:op :test-metadata,
+                       :f f
+                       :meta-value meta-value
+                       :col-type value-type
+                       :field field,
+                       :value-expr value-expr
+                       :bloom-hash-sym (gensym 'bloom-hashes)}))
+
+                  (simplify-and-or-expr
+                   {:op :call
+                    :f :or
+                    ;; TODO this seems like it could make better use
+                    ;; of the polymorphic expr patterns?
+                    :args (vec
+                           (for [col-type (cond
+                                            (isa? types/col-type-hierarchy value-type :num)
+                                            (filterv types/num-types base-col-types)
+
+                                            (and (vector? value-type) (isa? types/col-type-hierarchy (first value-type) :date-time))
+                                            (filterv (comp types/date-time-types types/col-type-head) base-col-types)
+
+                                            (contains? base-col-types value-type)
+                                            [value-type])]
+
+                             {:op :test-metadata,
+                              :f f
+                              :meta-value meta-value
+                              :col-type col-type
+                              :field field,
+                              :value-expr value-expr}))})))))
 
           (bool-expr [var-value-f var-value-meta-fn
                       value-var-f value-var-meta-fn]

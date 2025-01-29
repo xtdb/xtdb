@@ -1,6 +1,6 @@
 package xtdb.util
 
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.util.StringUtil.parseCString
 

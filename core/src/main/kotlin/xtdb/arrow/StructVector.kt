@@ -15,6 +15,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.asKeyword
 import xtdb.toFieldType
+import xtdb.util.Hasher
 import xtdb.util.normalForm
 import java.util.*
 
@@ -128,7 +129,7 @@ class StructVector(
         }
     }
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+    override fun hashCode0(idx: Int, hasher: Hasher) =
         childWriters.values.fold(0) { hash, child ->
             ByteFunctionHelpers.combineHash(hash, child.hashCode(idx, hasher))
         }

@@ -3,8 +3,8 @@ package xtdb.vector
 import clojure.lang.Keyword
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
-import xtdb.arrow.VectorPosition
 import xtdb.arrow.RowCopier
+import xtdb.arrow.VectorPosition
 import xtdb.util.normalForm
 
 interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {

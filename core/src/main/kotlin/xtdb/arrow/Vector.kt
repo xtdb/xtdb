@@ -5,7 +5,6 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.DateUnit
@@ -20,6 +19,7 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
@@ -63,8 +63,8 @@ sealed class Vector : VectorReader, VectorWriter {
     override fun writeObject(value: Any?) =
         if (value == null) writeNull() else writeObject0(value)
 
-    abstract fun hashCode0(idx: Int, hasher: ArrowBufHasher): Int
-    final override fun hashCode(idx: Int, hasher: ArrowBufHasher) =
+    abstract fun hashCode0(idx: Int, hasher: Hasher): Int
+    final override fun hashCode(idx: Int, hasher: Hasher) =
         if (isNull(idx)) ArrowBufPointer.NULL_HASH_CODE else hashCode0(idx, hasher)
 
     internal abstract fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)

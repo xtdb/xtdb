@@ -1,12 +1,12 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.util.Hasher
 import xtdb.vector.IVectorReader
 import xtdb.vector.IVectorWriter
 import java.nio.ByteBuffer
@@ -37,7 +37,7 @@ interface VectorReader : AutoCloseable {
     fun getObject(idx: Int): Any? = getObject(idx) { it }
     fun getObject(idx: Int, keyFn: IKeyFn<*>): Any?
 
-    fun hashCode(idx: Int, hasher: ArrowBufHasher): Int
+    fun hashCode(idx: Int, hasher: Hasher): Int
 
     fun elementReader(): VectorReader = unsupported("elementReader")
     fun getListStartIndex(idx: Int): Int = unsupported("getListStartIndex")
@@ -98,7 +98,7 @@ interface VectorReader : AutoCloseable {
 
         internal class NewToOldAdapter(private val vector: VectorReader) : IVectorReader {
 
-            override fun hashCode(idx: Int, hasher: ArrowBufHasher) = vector.hashCode(idx, hasher)
+            override fun hashCode(idx: Int, hasher: Hasher) = vector.hashCode(idx, hasher)
 
             override fun valueCount() = vector.valueCount
 
@@ -169,7 +169,7 @@ interface VectorReader : AutoCloseable {
 
             override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer = old.getPointer(idx, reuse)
 
-            override fun hashCode(idx: Int, hasher: ArrowBufHasher) = old.hashCode(idx, hasher)
+            override fun hashCode(idx: Int, hasher: Hasher) = old.hashCode(idx, hasher)
 
             override val keys: Set<String>? get() = old.structKeys()?.toSet()
             override fun keyReader(name: String) = old.structKeyReader(name)?.let { OldToNewAdapter(it) }

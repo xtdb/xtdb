@@ -27,7 +27,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.RuntimeException
 import xtdb.arrow.*
-import xtdb.arrow.toLong
 import xtdb.types.*
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.*

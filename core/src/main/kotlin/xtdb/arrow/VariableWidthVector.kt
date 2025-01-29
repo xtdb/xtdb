@@ -3,12 +3,12 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.BaseVariableWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 abstract class VariableWidthVector(
@@ -65,12 +65,7 @@ abstract class VariableWidthVector(
         return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
     }
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher): Int {
-        val start = offsetBuffer.getInt(idx).toLong()
-        val end = offsetBuffer.getInt(idx + 1).toLong()
-
-        return dataBuffer.hashCode(hasher, start, end - start)
-    }
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByteArray(idx))
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is VariableWidthVector)

@@ -1,12 +1,12 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 internal val NULL_TYPE = ArrowType.Null.INSTANCE
@@ -29,7 +29,7 @@ class NullVector(override var name: String) : Vector() {
 
     override fun writeObject0(value: Any) = throw InvalidWriteObjectException(fieldType, value)
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = error("hashCode0 called on NullVector")
+    override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
 
     override fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)

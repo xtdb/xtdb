@@ -9,36 +9,35 @@
            java.util.function.IntBinaryOperator
            (java.util List Map)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
+           (org.apache.arrow.memory.util.hash MurmurHasher)
            (org.apache.arrow.vector NullVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            xtdb.arrow.RelationReader
+           (xtdb.util Hasher$Xx)
            (xtdb.vector IVectorReader)
            (com.carrotsearch.hppc IntObjectHashMap)))
-
-(def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
-  SimpleHasher/INSTANCE)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexHasher
   (^int hashCode [^int idx]))
 
 (defn ->hasher ^xtdb.expression.map.IIndexHasher [^List #_<IVectorReader> cols]
-  (case (.size cols)
-    1 (let [^IVectorReader col (.get cols 0)]
-        (reify IIndexHasher
-          (hashCode [_ idx]
-            (.hashCode col idx hasher))))
+  (let [hasher (Hasher$Xx.)]
+    (case (.size cols)
+      1 (let [^IVectorReader col (.get cols 0)]
+          (reify IIndexHasher
+            (hashCode [_ idx]
+              (.hashCode col idx hasher))))
 
-    (reify IIndexHasher
-      (hashCode [_ idx]
-        (loop [n 0
-               hash-code 0]
-          (if (< n (.size cols))
-            (let [^IVectorReader col (.get cols n)]
-              (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode col idx hasher))))
-            hash-code))))))
+      (reify IIndexHasher
+        (hashCode [_ idx]
+          (loop [n 0
+                 hash-code 0]
+            (if (< n (.size cols))
+              (let [^IVectorReader col (.get cols n)]
+                (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode col idx hasher))))
+              hash-code)))))))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRelationMapBuilder

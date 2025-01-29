@@ -1,9 +1,11 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.DateUnit.*
+import org.apache.arrow.vector.types.DateUnit.DAY
+import org.apache.arrow.vector.types.DateUnit.MILLISECOND
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 import java.time.Duration
 import java.time.LocalDate
 
@@ -22,6 +24,8 @@ class DateDayVector(
         if (value is LocalDate) writeInt(value.toEpochDay().toInt())
         else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx) * MILLIS_PER_DAY * 1_000_000L)
 }
 
 private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
@@ -41,4 +45,6 @@ class DateMilliVector(
         if (value is LocalDate) writeLong(value.toEpochDay() * MILLIS_PER_DAY)
         else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx) * 1_000_000L)
 }

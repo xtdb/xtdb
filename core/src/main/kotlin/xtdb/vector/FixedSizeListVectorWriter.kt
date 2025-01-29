@@ -10,7 +10,6 @@ import org.apache.arrow.vector.types.pojo.ArrowType.FixedSizeList
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.*
-import xtdb.arrow.InvalidWriteObjectException
 
 internal class FixedSizeListVectorWriter(
     override val vector: FixedSizeListVector,

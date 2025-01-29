@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 
 class DoubleVector(
     allocator: BufferAllocator,
@@ -18,4 +19,6 @@ class DoubleVector(
     override fun writeObject0(value: Any) {
         if (value is Double) writeDouble(value) else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getDouble(idx))
 }

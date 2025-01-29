@@ -8,10 +8,10 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ExtensionTypeRegistry
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.InvalidWriteObjectException
 import xtdb.arrow.ValueReader
 import xtdb.types.RegClass
 import xtdb.vector.ExtensionVectorWriter
-import xtdb.arrow.InvalidWriteObjectException
 import xtdb.vector.ValueVectorReader
 
 class RegClassVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :

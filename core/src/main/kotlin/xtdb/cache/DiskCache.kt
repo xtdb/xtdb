@@ -2,6 +2,7 @@ package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
 import io.micrometer.core.instrument.MeterRegistry
+import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
@@ -12,7 +13,6 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 import kotlin.math.max
-import org.slf4j.LoggerFactory
 
 private val LOGGER = LoggerFactory.getLogger(DiskCache::class.java)
 

@@ -20,7 +20,9 @@ internal const val NANO_HZ = 1_000_000_000
 
 internal val Long.secondsToMillis get() = multiplyExact(this, MILLI_HZ)
 internal val Long.secondsToMicros get() = multiplyExact(this, MICRO_HZ)
-internal val Long.secondsToNanos get() = multiplyExact(this, NANO_HZ)
+val Long.secondsToNanos get() = multiplyExact(this, NANO_HZ)
+val Long.millisToNanos get() = multiplyExact(this, (NANO_HZ / MILLI_HZ))
+val Long.microsToNanos get() = multiplyExact(this, (NANO_HZ / MICRO_HZ))
 
 internal val Long.millisToSecondsPart get() = this / MILLI_HZ
 internal val Long.microsToSecondsPart get() = this / MICRO_HZ

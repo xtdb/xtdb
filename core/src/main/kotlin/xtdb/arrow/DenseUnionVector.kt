@@ -2,7 +2,6 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.UnionMode.Dense
@@ -12,6 +11,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toFieldType
 import xtdb.toLeg
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
@@ -79,7 +79,7 @@ class DenseUnionVector(
         override val legs get() = inner.legs
         override fun legReader(name: String) = inner.legReader(name)?.let { LegReader(typeId, it) }
 
-        override fun hashCode(idx: Int, hasher: ArrowBufHasher) = inner.hashCode(getOffset(idx), hasher)
+        override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(getOffset(idx), hasher)
 
         override fun rowCopier(dest: VectorWriter): RowCopier {
             val innerCopier = inner.rowCopier(dest)
@@ -226,7 +226,7 @@ class DenseUnionVector(
         }
     }
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
+    override fun hashCode0(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
     override fun rowCopier0(src: VectorReader): RowCopier =
         when (src) {
