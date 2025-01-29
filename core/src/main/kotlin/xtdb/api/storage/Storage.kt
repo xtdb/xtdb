@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.Xtdb
 import xtdb.api.log.FileLog
@@ -38,7 +38,7 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
-        fun open(allocator: BufferAllocator, fileLog: FileLog, meterRegistry: MeterRegistry = SimpleMeterRegistry()): IBufferPool
+        fun open(allocator: BufferAllocator, fileLog: FileLog, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
     }
 
     internal fun BufferAllocator.openStorageChildAllocator() =

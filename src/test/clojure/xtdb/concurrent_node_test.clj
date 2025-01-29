@@ -8,7 +8,7 @@
   (:import (java.time InstantSource)
            xtdb.api.log.Log
            xtdb.api.storage.Storage
-           xtdb.IBufferPool))
+           xtdb.BufferPool))
 
 (defn- random-maps [n]
   (let [nb-ks 5
@@ -46,7 +46,7 @@
                      :xtdb.log/processor nil
                      :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))})
     (fn []
-      (let [^IBufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
+      (let [^BufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
             objs (filter #(= "arrow" (tu/get-extension %)) (.listAllObjects buffer-pool))
             get-item #(with-open [_rb (.getRecordBatch buffer-pool (rand-nth objs) 0)]
                         (Thread/sleep 10))

@@ -20,7 +20,7 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow Relation VectorReader VectorWriter Vector)
-           xtdb.IBufferPool
+           xtdb.BufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
@@ -354,7 +354,7 @@
 
 (def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IBufferPool buffer-pool ^Path file-path, ^Cache table-metadata-idx-cache]
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^BufferPool buffer-pool ^Path file-path, ^Cache table-metadata-idx-cache]
   (let [footer (.getFooter buffer-pool file-path)]
     (util/with-open [rb (.getRecordBatch buffer-pool file-path 0)]
       (let [alloc (.getAllocator (.getReferenceManager ^ArrowBuf (first (.getBuffers rb))))]
@@ -377,7 +377,7 @@
                 max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
             (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache min-rdr max-rdr)))))))
 
-(deftype MetadataManager [^IBufferPool buffer-pool
+(deftype MetadataManager [^BufferPool buffer-pool
                           ^Cache table-metadata-idx-cache
                           ^NavigableMap chunks-metadata
                           ^:volatile-mutable ^Map fields]
@@ -406,7 +406,7 @@
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
           (.getValue)))
 
-(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
+(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
     (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
       (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool cm-obj-key))]
@@ -425,7 +425,7 @@
   (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [cache-size ^IBufferPool buffer-pool], :or {cache-size 128} :as deps}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [cache-size ^BufferPool buffer-pool], :or {cache-size 128} :as deps}]
   (let [chunks-metadata (load-chunks-metadata deps)
         table-metadata-cache (-> (Caffeine/newBuilder)
                                  (.maximumSize cache-size)

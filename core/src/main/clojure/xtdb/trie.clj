@@ -14,7 +14,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.arrow Relation)
-           xtdb.IBufferPool
+           xtdb.BufferPool
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
            (xtdb.util TemporalBounds)))
 
@@ -43,7 +43,7 @@
   (-> (util/table-name->table-path table-name)
       (.resolve (format "meta/%s.arrow" trie-key))))
 
-(defn list-meta-files [^IBufferPool buffer-pool table-name]
+(defn list-meta-files [^BufferPool buffer-pool table-name]
   (.listObjects buffer-pool (-> (util/table-name->table-path table-name) (.resolve "meta"))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
@@ -76,7 +76,7 @@
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
      (vw/root->writer root))))
 
-(defn open-trie-writer ^TrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+(defn open-trie-writer ^TrieWriter [^BufferAllocator allocator, ^BufferPool buffer-pool,
                                     ^Schema data-schema, table-name, trie-key
                                     write-content-metadata?]
   (util/with-close-on-catch [data-rel (Relation. allocator data-schema)
@@ -185,7 +185,7 @@
 
       (write-node! node))))
 
-(defn write-live-trie! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+(defn write-live-trie! [^BufferAllocator allocator, ^BufferPool buffer-pool,
                         table-name, trie-key,
                         ^MemoryHashTrie trie, ^Relation data-rel]
   (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-name trie-key
@@ -317,7 +317,7 @@
   (getTrie [_] trie))
 
 (defprotocol MergePlanPage
-  (load-page [mpg ^IBufferPool buffer-pool vsr-cache])
+  (load-page [mpg ^BufferPool buffer-pool vsr-cache])
   (test-metadata [msg])
   (temporal-bounds [msg]))
 
@@ -380,7 +380,7 @@
   (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
   (^xtdb.arrow.RelationReader loadPage [trie-leaf]))
 
-(deftype ArrowDataRel [^IBufferPool buffer-pool
+(deftype ArrowDataRel [^BufferPool buffer-pool
                        ^Path data-file
                        ^Schema schema
                        ^List rels-to-close]
@@ -398,7 +398,7 @@
   (close [_]
     (util/close rels-to-close)))
 
-(defn open-data-rels [^IBufferPool buffer-pool, table-name, trie-keys]
+(defn open-data-rels [^BufferPool buffer-pool, table-name, trie-keys]
   (util/with-close-on-catch [data-rels (ArrayList.)]
     (doseq [trie-key trie-keys]
       (let [data-file (->table-data-file-path table-name trie-key)

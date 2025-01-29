@@ -6,7 +6,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.Storage.openStorageChildAllocator
 import xtdb.api.storage.Storage.registerMetrics
@@ -25,7 +25,7 @@ import java.util.*
 class MemoryBufferPool(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry = SimpleMeterRegistry()
-) : IBufferPool, IEvictBufferTest {
+) : BufferPool, IEvictBufferTest {
 
     private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
 

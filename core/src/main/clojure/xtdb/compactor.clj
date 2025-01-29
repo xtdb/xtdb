@@ -17,7 +17,7 @@
            (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
            xtdb.bitemporal.IPolygonReader
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
-           xtdb.IBufferPool
+           xtdb.BufferPool
            (xtdb.metadata IMetadataManager)
            (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask)
            (xtdb.util TemporalBounds)))
@@ -118,7 +118,7 @@
                             (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])
                             nil)))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr
+(defn exec-compaction-job! [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr
                             {:keys [page-size]} {:keys [table-name part trie-keys out-trie-key]}]
   (try
     (log/debugf "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
@@ -252,7 +252,7 @@
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defn- open-compactor [{:keys [allocator, ^IBufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
+(defn- open-compactor [{:keys [allocator, ^BufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (metrics/add-allocator-gauge metrics-registry "compactor.allocator.allocated_memory" allocator)
     (let [page-size *page-size*

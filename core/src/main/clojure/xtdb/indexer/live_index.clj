@@ -22,7 +22,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb.api IndexerConfig TransactionKey)
-           xtdb.IBufferPool
+           xtdb.BufferPool
            xtdb.metadata.IMetadataManager
            (xtdb.trie MemoryHashTrie)
            (xtdb.util RefCounter RowCounter)
@@ -110,7 +110,7 @@
       AutoCloseable
       (close [_] (util/close wm-live-rel)))))
 
-(deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
+(deftype LiveTable [^BufferAllocator allocator, ^BufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^MemoryHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr, ^IVectorWriter valid-from-wtr, ^IVectorWriter valid-to-wtr
                     ^IVectorWriter put-wtr, ^IVectorWriter delete-wtr, ^IVectorWriter erase-wtr]
@@ -242,7 +242,7 @@
                            (comp set keys))))
 
 
-(deftype LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr, compactor
+(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr, compactor
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
                     ^Map tables,

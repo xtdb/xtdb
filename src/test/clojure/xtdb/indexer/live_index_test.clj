@@ -16,7 +16,7 @@
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.arrow Relation VectorPosition)
-           xtdb.IBufferPool
+           xtdb.BufferPool
            xtdb.indexer.live_index.ILiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie MemoryHashTrie$Leaf)))
 
@@ -26,7 +26,7 @@
 
 (t/deftest test-chunk
   (let [^BufferAllocator allocator (tu/component tu/*node* :xtdb/allocator)
-        ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
+        ^BufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         ^ILiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)
 
         iids (let [rnd (Random. 0)]
@@ -115,7 +115,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
+        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
 
           (let [{:keys [tx-id]} (last (for [tx-ops txs] (xt/execute-tx node tx-ops)))]
             (tu/then-await-tx tx-id node (Duration/ofSeconds 2)))

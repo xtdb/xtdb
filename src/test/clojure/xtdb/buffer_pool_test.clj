@@ -20,7 +20,7 @@
            xtdb.arrow.Relation
            (xtdb.buffer_pool MemoryBufferPool LocalBufferPool RemoteBufferPool)
            xtdb.cache.DiskCache
-           xtdb.IBufferPool
+           xtdb.BufferPool
            (xtdb.api.storage SimulatedObjectStore StoreOperation)))
 
 (defonce tmp-dirs (atom []))
@@ -89,7 +89,7 @@
     (openObjectStore [_]
       (SimulatedObjectStore.))))
 
-(defn remote-test-buffer-pool ^xtdb.IBufferPool []
+(defn remote-test-buffer-pool ^xtdb.BufferPool []
   (-> (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
       (.open tu/*allocator* (FileLog/openInMemory) (SimpleMeterRegistry.))))
 
@@ -107,7 +107,7 @@
   (let [files (filter #(.isFile ^File %) (file-seq (.toFile dir)))]
     {:file-count (count files) :file-names (set (map #(.getName ^File %) files))}))
 
-(defn insert-utf8-to-local-cache [^IBufferPool bp k len]
+(defn insert-utf8-to-local-cache [^BufferPool bp k len]
   (.putObject bp k (utf8-buf (apply str (repeat len "a"))))
   ;; Add to local disk cache
   (.getByteArray bp k))
@@ -181,11 +181,11 @@
   [node]
   (val (first (ig/find-derived (:system node) :xtdb/buffer-pool))))
 
-(defn put-edn [^IBufferPool buffer-pool ^Path k obj]
+(defn put-edn [^BufferPool buffer-pool ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     (.putObject buffer-pool k buf)))
 
-(defn test-list-objects [^IBufferPool buffer-pool]
+(defn test-list-objects [^BufferPool buffer-pool]
   (put-edn buffer-pool (util/->path "bar/alice") :alice)
   (put-edn buffer-pool (util/->path "foo/alan") :alan)
   (put-edn buffer-pool (util/->path "bar/bob") :bob)

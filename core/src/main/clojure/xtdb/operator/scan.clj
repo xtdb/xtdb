@@ -33,7 +33,7 @@
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            (xtdb.arrow VectorIndirection VectorReader)
            (xtdb.bitemporal IRowConsumer Polygon)
-           xtdb.IBufferPool
+           xtdb.BufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
@@ -198,7 +198,7 @@
             (int-array 0)))))))
 
 
-(defrecord VSRCache [^IBufferPool buffer-pool, ^BufferAllocator allocator, ^Map free, ^Map used]
+(defrecord VSRCache [^BufferPool buffer-pool, ^BufferAllocator allocator, ^Map free, ^Map used]
   Closeable
   (close [_]
     (util/close free)
@@ -348,7 +348,7 @@
 (defrecord ArrowMergePlanPage [data-file-path ^IntPredicate page-idx-pred ^long page-idx ^ITableMetadata table-metadata]
   MergePlanPage
   (load-page [_mpg buffer-pool vsr-cache]
-    (let [^IBufferPool bp buffer-pool]
+    (let [^BufferPool bp buffer-pool]
       (util/with-open [rb (.getRecordBatch bp data-file-path page-idx)]
         (let [vsr (cache-vsr vsr-cache data-file-path)
               loader (VectorLoader. vsr)]
@@ -377,7 +377,7 @@
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :buffer-pool (ig/ref :xtdb/buffer-pool)}))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^BufferAllocator allocator]}]
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^BufferPool buffer-pool, ^BufferAllocator allocator]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (close [_] (->> table->template-rel+trie vals (map first) util/close))

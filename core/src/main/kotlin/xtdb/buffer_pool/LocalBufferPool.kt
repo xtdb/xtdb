@@ -7,7 +7,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.LocalStorageFactory
@@ -38,7 +38,7 @@ class LocalBufferPool(
     allocator: BufferAllocator,
     factory: LocalStorageFactory,
     meterRegistry: MeterRegistry = SimpleMeterRegistry()
-) : IBufferPool, IEvictBufferTest, Closeable {
+) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
 

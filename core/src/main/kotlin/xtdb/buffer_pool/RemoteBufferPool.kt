@@ -7,7 +7,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.slf4j.LoggerFactory
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.log.FileLog
 import xtdb.api.storage.ObjectStore
@@ -46,7 +46,7 @@ class RemoteBufferPool(
     private val fileLog: FileLog,
     val objectStore: ObjectStore,
     meterRegistry: MeterRegistry,
-) : IBufferPool, IEvictBufferTest, Closeable {
+) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
 

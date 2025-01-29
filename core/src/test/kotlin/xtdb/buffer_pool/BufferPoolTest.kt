@@ -2,12 +2,12 @@ package xtdb.buffer_pool
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import java.nio.ByteBuffer
 import java.nio.file.Path
 
 abstract class BufferPoolTest {
-    abstract fun bufferPool() : IBufferPool
+    abstract fun bufferPool() : BufferPool
 
     @Test
     fun listObjectTests_3545() {

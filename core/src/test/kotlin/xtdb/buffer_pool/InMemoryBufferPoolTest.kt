@@ -4,12 +4,12 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import xtdb.api.storage.Storage.localStorage
 import java.nio.file.Files.createTempDirectory
 
 class InMemoryBufferPoolTest : BufferPoolTest() {
-    override fun bufferPool(): IBufferPool = localBufferPool
+    override fun bufferPool(): BufferPool = localBufferPool
 
     private lateinit var allocator: BufferAllocator
     private lateinit var localBufferPool: LocalBufferPool

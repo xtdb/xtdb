@@ -6,7 +6,7 @@ import xtdb.arrow.Relation
 import java.nio.ByteBuffer
 import java.nio.file.Path
 
-interface IBufferPool : AutoCloseable {
+interface BufferPool : AutoCloseable {
     /**
      * Get the whole file as an on-heap byte array.
      *

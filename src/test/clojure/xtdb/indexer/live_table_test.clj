@@ -16,7 +16,7 @@
            (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.VectorPosition
            xtdb.compactor.Compactor
-           xtdb.IBufferPool
+           xtdb.BufferPool
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie MemoryHashTrie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)
@@ -41,7 +41,7 @@
           n 1000]
       (tu/with-tmp-dirs #{path}
         (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
-                         ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                         ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial trie/->live-trie 2 4)})]
 
@@ -79,7 +79,7 @@
           n 50000]
       (tu/with-tmp-dirs #{path}
         (util/with-open [node (tu/->local-node {:node-dir path :compactor? false})
-                         ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                         ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
                          live-table (live-index/->live-table allocator bp (RowCounter. 0) "foo")]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
@@ -132,7 +132,7 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         rc (RowCounter. 0)]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:enabled? false}}))
-                ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp rc "foo")]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
@@ -166,7 +166,7 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
     (util/with-open [allocator (RootAllocator.)]
-      (let [^IBufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
+      (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
             mm (tu/component tu/*node* ::meta/metadata-manager)
             live-index-allocator (util/->child-allocator allocator "live-index")]
         (util/with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp mm (Compactor/getNoop)

@@ -20,7 +20,7 @@
            (java.time Duration InstantSource)
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
-           xtdb.IBufferPool
+           xtdb.BufferPool
            (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -302,7 +302,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+      (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
             ^IMetadataManager mm (tu/component node ::meta/metadata-manager)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
@@ -365,7 +365,7 @@
             (.close node1)
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-              (let [^IBufferPool bp (util/component node2 :xtdb/buffer-pool)
+              (let [^BufferPool bp (util/component node2 :xtdb/buffer-pool)
                     ^IMetadataManager mm (util/component node2 ::meta/metadata-manager)
                     lc-tx (-> first-half-tx-id
                               (tu/then-await-tx node2 (Duration/ofSeconds 10)))]
@@ -406,7 +406,7 @@
                   (.close node2)
 
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
-                    (let [^IBufferPool bp (tu/component node3 :xtdb/buffer-pool)
+                    (let [^BufferPool bp (tu/component node3 :xtdb/buffer-pool)
                           ^IMetadataManager mm (tu/component node3 ::meta/metadata-manager)]
                       (t/is (<= first-half-tx-id
                                 (:tx-id (-> first-half-tx-id

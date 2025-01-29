@@ -6,7 +6,7 @@
            [java.nio.file Path]
            [org.apache.arrow.memory BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
-           (xtdb IBufferPool)
+           (xtdb BufferPool)
            (xtdb.api.log FileLog)
            (xtdb.api.storage Storage Storage$Factory)
            xtdb.api.Xtdb$Config
@@ -17,7 +17,7 @@
 ;; only used from tests now
 (defn dir->buffer-pool
   "Creates a local storage buffer pool from the given directory."
-  ^xtdb.IBufferPool [^BufferAllocator allocator, ^Path dir]
+  ^xtdb.BufferPool [^BufferAllocator allocator, ^Path dir]
   (let [bp-path (util/tmp-dir "tmp-buffer-pool")
         storage-root (.resolve bp-path Storage/storageRoot)]
     (util/copy-dir dir storage-root)
@@ -55,7 +55,7 @@
                      max-disk-cache-bytes (.maxDiskCacheBytes max-disk-cache-bytes)
                      max-disk-cache-percentage (.maxDiskCachePercentage max-disk-cache-percentage))))
 
-(defn open-vsr ^VectorSchemaRoot [^IBufferPool bp ^Path path allocator]
+(defn open-vsr ^VectorSchemaRoot [^BufferPool bp ^Path path allocator]
   (let [footer (.getFooter bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
@@ -77,5 +77,5 @@
 (defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileLog file-log metrics-registry]}]
   (.open factory allocator file-log metrics-registry))
 
-(defmethod ig/halt-key! :xtdb/buffer-pool [_ ^IBufferPool buffer-pool]
+(defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))

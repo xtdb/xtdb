@@ -4,10 +4,10 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import xtdb.IBufferPool
+import xtdb.BufferPool
 
 class MemoryBufferPoolTest : BufferPoolTest() {
-    override fun bufferPool(): IBufferPool  = memoryBufferPool
+    override fun bufferPool(): BufferPool  = memoryBufferPool
 
     private lateinit var allocator: BufferAllocator
     private lateinit var memoryBufferPool: MemoryBufferPool

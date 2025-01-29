@@ -14,7 +14,7 @@
   (:import java.lang.AutoCloseable
            [java.nio ByteBuffer]
            [java.time Duration]
-           [xtdb IBufferPool]
+           [xtdb BufferPool]
            xtdb.api.storage.Storage
            (xtdb.arrow Relation RelationReader)
            [xtdb.metadata IMetadataManager]
@@ -359,7 +359,7 @@
     (binding [c/*page-size* 8
               c/*l1-file-size-rows* 32]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
-        (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
               ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
           (letfn [(submit! [xs]
                     (doseq [batch (partition-all 8 xs)]

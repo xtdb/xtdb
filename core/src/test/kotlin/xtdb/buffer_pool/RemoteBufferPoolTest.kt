@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.IBufferPool
+import xtdb.BufferPool
 import xtdb.api.log.FileLog
 import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remoteStorage
@@ -23,7 +23,7 @@ import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 
 class RemoteBufferPoolTest : BufferPoolTest() {
-    override fun bufferPool(): IBufferPool = remoteBufferPool
+    override fun bufferPool(): BufferPool = remoteBufferPool
 
     private lateinit var allocator: BufferAllocator
     private lateinit var remoteBufferPool: RemoteBufferPool
