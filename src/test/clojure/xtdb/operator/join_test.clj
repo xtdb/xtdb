@@ -950,6 +950,7 @@
                                [:table [{:foo 2 :bar "woo"}
                                         {:foo 1 :bar "yay"}]]]])
                  {}))))
+
       (t/is (= [{:person 1, :bar "woo", :name 1, :foo 2}]
                (tu/query-ra
                 '[:mega-join
@@ -1025,7 +1026,7 @@
            (tu/query-ra
             '[:join [{id id}]
               [::tu/pages [[{:id [1 2], :foo 0}
-                              {:id [1 3], :foo 1}]]]
+                            {:id [1 3], :foo 1}]]]
               [::tu/pages [[{:id [1 2], :bar 5}]]]]))))
 
 (t/deftest can-join-on-structs-491
@@ -1033,7 +1034,7 @@
            (tu/query-ra
             '[:join [{id id}]
               [::tu/pages [[{:id {:a 1, :b 2}, :foo 0}
-                              {:id {:a 1, :b 3}, :foo 1}]]]
+                            {:id {:a 1, :b 3}, :foo 1}]]]
               [::tu/pages [[{:id {:a 1, :b 2}, :bar 5}]]]]))))
 
 (t/deftest test-non-joining-join-conditions

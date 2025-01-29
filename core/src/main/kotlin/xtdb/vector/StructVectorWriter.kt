@@ -11,8 +11,6 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.*
-import xtdb.arrow.InvalidCopySourceException
-import xtdb.arrow.InvalidWriteObjectException
 import xtdb.asKeyword
 import xtdb.toFieldType
 import xtdb.util.normalForm

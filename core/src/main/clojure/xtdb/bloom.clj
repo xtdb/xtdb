@@ -7,11 +7,11 @@
            java.nio.ByteBuffer
            (org.apache.arrow.memory RootAllocator)
            (org.apache.arrow.memory.util ArrowBufPointer)
-           (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector]
            (org.roaringbitmap RoaringBitmap)
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           (xtdb.arrow RelationReader VectorReader VectorWriter)))
+           (xtdb.arrow RelationReader VectorReader VectorWriter)
+           (xtdb.util Hasher$Xx Hasher$Murmur3)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -63,11 +63,13 @@
 (defn- ->bloom-builder
   (^xtdb.bloom.BloomBuilder [^VectorReader col] (->bloom-builder col bloom-k bloom-bit-mask))
   (^xtdb.bloom.BloomBuilder [^VectorReader col, ^long k, ^long mask]
-   (let [buf (IntArrayList. (* (.getValueCount col) k))]
+   (let [buf (IntArrayList. (* (.getValueCount col) k))
+         xx-hasher (Hasher$Xx.)
+         murmur3-hasher (Hasher$Murmur3.)]
      (reify BloomBuilder
        (add [_ idx]
-         (let [hash-1 (.hashCode col idx SimpleHasher/INSTANCE)
-               hash-2 (.hashCode col idx (MurmurHasher. hash-1))]
+         (let [hash-1 (.hashCode col idx xx-hasher)
+               hash-2 (.hashCode col idx murmur3-hasher)]
            (dotimes [n k]
              (.add buf (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))))
 
@@ -80,8 +82,8 @@
   (^ints [^VectorReader col ^long idx]
    (bloom-hashes col idx bloom-k bloom-bit-mask))
   (^ints [^VectorReader col ^long idx ^long k ^long mask]
-   (let [hash-1 (.hashCode col idx SimpleHasher/INSTANCE)
-         hash-2 (.hashCode col idx (MurmurHasher. hash-1))
+   (let [hash-1 (.hashCode col idx (Hasher$Xx.))
+         hash-2 (.hashCode col idx (Hasher$Murmur3.))
          acc (int-array k)]
      (dotimes [n k]
        (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))

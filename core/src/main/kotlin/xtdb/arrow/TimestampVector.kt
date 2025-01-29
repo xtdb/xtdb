@@ -5,6 +5,10 @@ import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.time.microsToNanos
+import xtdb.time.millisToNanos
+import xtdb.time.secondsToNanos
+import xtdb.util.Hasher
 import java.time.*
 import java.time.ZoneOffset.UTC
 import java.time.temporal.ChronoUnit
@@ -36,6 +40,14 @@ class TimestampLocalVector(
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
     )
+
+    override fun hashCode0(idx: Int, hasher: Hasher) =
+        hasher.hash(when (unit) {
+            SECOND -> getLong(idx) * 1_000_000_000L
+            MILLISECOND -> getLong(idx) * 1_000_000L
+            MICROSECOND ->  getLong(idx) * 1_000L
+            NANOSECOND -> getLong(idx)
+        })
 }
 
 class TimestampTzVector(
@@ -66,4 +78,12 @@ class TimestampTzVector(
         }.let {
             writeLong(unit.toLong(it.epochSecond, it.nano))
         }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) =
+        hasher.hash(when (unit) {
+            SECOND -> getLong(idx) * 1_000_000_000L
+            MILLISECOND -> getLong(idx) * 1_000_000L
+            MICROSECOND ->  getLong(idx) * 1_000L
+            NANOSECOND -> getLong(idx)
+        })
 }
