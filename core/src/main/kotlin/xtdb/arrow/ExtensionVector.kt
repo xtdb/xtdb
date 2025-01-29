@@ -2,10 +2,10 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.util.Hasher
 import xtdb.vector.extensions.XtExtensionVector
 import java.nio.ByteBuffer
 
@@ -44,7 +44,7 @@ abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
     override fun getListStartIndex(idx: Int) = inner.getListStartIndex(idx)
     override fun elementReader() = inner.elementReader()
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = inner.hashCode0(idx, hasher)
+    override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.unloadPage(nodes, buffers)

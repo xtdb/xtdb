@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 
 internal val I32_TYPE = MinorType.INT.type
 
@@ -20,4 +21,6 @@ class IntVector(
     override fun writeObject0(value: Any) {
         if (value is Int) writeInt(value) else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx).toDouble())
 }

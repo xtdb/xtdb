@@ -3,13 +3,13 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
 class FixedSizeListVector(
@@ -75,7 +75,7 @@ class FixedSizeListVector(
         writeNotNull()
     }
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+    override fun hashCode0(idx: Int, hasher: Hasher) =
         (0 until listSize).fold(0) { hash, elIdx ->
             ByteFunctionHelpers.combineHash(hash, elVector.hashCode(idx * listSize + elIdx, hasher))
         }

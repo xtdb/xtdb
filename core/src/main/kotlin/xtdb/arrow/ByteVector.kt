@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 
 class ByteVector(allocator: BufferAllocator, override var name: String, nullable: Boolean) :
     FixedWidthVector(allocator, nullable, MinorType.TINYINT.type, Byte.SIZE_BYTES) {
@@ -24,4 +25,6 @@ class ByteVector(allocator: BufferAllocator, override var name: String, nullable
                 valueCount.also { writeByte(src.getByte(srcIdx)) }
             }
         }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByte(idx).toDouble())
 }

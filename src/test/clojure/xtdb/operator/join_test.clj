@@ -1007,7 +1007,7 @@
            (tu/query-ra
             '[:join [{id id}]
               [::tu/pages [[{:id [1 2], :foo 0}
-                              {:id [1 3], :foo 1}]]]
+                            {:id [1 3], :foo 1}]]]
               [::tu/pages [[{:id [1 2], :bar 5}]]]]))))
 
 (t/deftest can-join-on-structs-491
@@ -1015,5 +1015,33 @@
            (tu/query-ra
             '[:join [{id id}]
               [::tu/pages [[{:id {:a 1, :b 2}, :foo 0}
-                              {:id {:a 1, :b 3}, :foo 1}]]]
+                            {:id {:a 1, :b 3}, :foo 1}]]]
               [::tu/pages [[{:id {:a 1, :b 2}, :bar 5}]]]]))))
+
+(t/deftest mega-join-with-equi-join-expr
+  (t/is (= [{:a 1, :c 1, :b 2, :d 2}]
+           (tu/query-ra
+            '[:mega-join [{(+ c 1) (+ a 1)}]
+              [[::tu/pages [[{:a 1, :b 2}
+                             {:a 2, :b 3}]]]
+               [::tu/pages [[{:c 1, :d 2}]]]]]))))
+
+(t/deftest join-on-different-timestamp-granularities-4061
+  (t/is (= [{:a #xt/zoned-date-time "2024-01-01T00:00Z",
+             :c #xt/zoned-date-time "2024-01-01T00:00Z",
+             :b "a1",
+             :d "c1"}]
+
+           (tu/query-ra
+            '[:join
+              [{a (+ c #xt/interval-mdn ["P0D" "PT0S"])}]
+              [::tu/pages [[{:a #xt/zoned-date-time "2024-01-01T00:00Z", :b "a1"}
+                            {:a #xt/zoned-date-time "2024-01-01T01:00Z", :b "a2"}]]]
+              [::tu/pages [[{:c #xt/zoned-date-time "2024-01-01T00:00Z", :d "c1"}]]]])
+
+           (tu/query-ra
+            '[:join
+              [(= a (+ c #xt/interval-mdn ["P0D" "PT0S"]))]
+              [::tu/pages [[{:a #xt/zoned-date-time "2024-01-01T00:00Z", :b "a1"}
+                            {:a #xt/zoned-date-time "2024-01-01T01:00Z", :b "a2"}]]]
+              [::tu/pages [[{:c #xt/zoned-date-time "2024-01-01T00:00Z", :d "c1"}]]]]))))
