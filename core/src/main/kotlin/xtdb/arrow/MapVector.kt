@@ -1,12 +1,12 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
 
@@ -39,7 +39,8 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
 
     // this should technically be an unsorted hash, because maps are unordered
     // but Arrow Java does it this way, so for now we'll be consistent with them.
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = listVector.hashCode(idx, hasher)
+    // this is no longer true as we are doing our own hashing
+    override fun hashCode0(idx: Int, hasher: Hasher) = listVector.hashCode(idx, hasher)
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is MapVector)

@@ -5,7 +5,6 @@ package xtdb.api
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import java.nio.file.Path
-import xtdb.api.IntWithEnvVarSerde
 
 @Serializable
 data class ServerConfig(

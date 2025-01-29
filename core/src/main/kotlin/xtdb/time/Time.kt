@@ -12,6 +12,9 @@ internal val Long.secondsToMillis get() = multiplyExact(this, MILLI_HZ)
 internal val Long.secondsToMicros get() = multiplyExact(this, MICRO_HZ)
 internal val Long.secondsToNanos get() = multiplyExact(this, NANO_HZ)
 
+internal val Long.millisToNanos get() = multiplyExact(this, MICRO_HZ)
+internal val Long.microsToNanos get() = multiplyExact(this, MILLI_HZ)
+
 internal val Long.millisToSecondsPart get() = this / MILLI_HZ
 internal val Long.microsToSecondsPart get() = this / MICRO_HZ
 internal val Long.nanosToSecondsPart get() = this / NANO_HZ

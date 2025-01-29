@@ -3,14 +3,17 @@ package xtdb.vector
 import clojure.lang.IFn
 import clojure.lang.RT
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.*
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
+import xtdb.arrow.VectorIndirection
+import xtdb.arrow.VectorPosition
 import xtdb.toLeg
+import xtdb.util.Hasher
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -54,9 +57,8 @@ class IndirectMultiVectorReader(
         return vectorField
     }
 
-    override fun hashCode(idx: Int, hasher: ArrowBufHasher): Int {
-        return safeReader(idx).hashCode(vectorIndirections[idx], hasher)
-    }
+    override fun hashCode(idx: Int, hasher: Hasher): Int =
+        safeReader(idx).hashCode(vectorIndirections[idx], hasher)
 
     override fun isNull(idx: Int): Boolean {
         val readerIdx = readerIndirection[idx]

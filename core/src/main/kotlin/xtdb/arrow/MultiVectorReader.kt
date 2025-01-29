@@ -3,12 +3,12 @@ package xtdb.arrow
 import clojure.lang.IFn
 import clojure.lang.RT
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toLeg
+import xtdb.util.Hasher
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -42,7 +42,7 @@ class MultiVectorReader(
 
     override val valueCount get() = readerIndirection.valueCount()
 
-    override fun hashCode(idx: Int, hasher: ArrowBufHasher): Int {
+    override fun hashCode(idx: Int, hasher: Hasher): Int {
         return reader(idx).hashCode(vectorIndirections[idx], hasher)
     }
 

@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.util.Hasher
 import java.time.Duration
 import java.time.temporal.ChronoUnit
 
@@ -31,4 +32,6 @@ class DurationVector(
         is Duration -> writeLong(unit.toLong(value.seconds, value.nano))
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getLong(idx))
 }

@@ -4,7 +4,6 @@ import clojure.lang.Keyword
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
@@ -14,6 +13,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.asKeyword
 import xtdb.toFieldType
+import xtdb.util.Hasher
 import xtdb.util.normalForm
 import java.util.*
 
@@ -127,7 +127,7 @@ class StructVector(
         }
     }
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+    override fun hashCode0(idx: Int, hasher: Hasher) =
         childWriters.values.fold(0) { hash, child ->
             ByteFunctionHelpers.combineHash(hash, child.hashCode(idx, hasher))
         }

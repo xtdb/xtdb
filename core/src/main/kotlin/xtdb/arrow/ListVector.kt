@@ -3,7 +3,6 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -11,6 +10,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toFieldType
+import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
@@ -94,7 +94,7 @@ class ListVector(
     override fun getListStartIndex(idx: Int) = offsetBuffer.getInt(idx)
     internal fun getListEndIndex(idx: Int) = offsetBuffer.getInt(idx + 1)
 
-    override fun hashCode0(idx: Int, hasher: ArrowBufHasher) =
+    override fun hashCode0(idx: Int, hasher: Hasher) =
         (getListStartIndex(idx) until getListEndIndex(idx)).fold(0) { hash, elIdx ->
             ByteFunctionHelpers.combineHash(hash, elVector.hashCode(elIdx, hasher))
         }

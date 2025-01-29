@@ -1,7 +1,6 @@
 package xtdb.vector
 
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -9,6 +8,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorPosition
+import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 class RelationAsStructReader(
@@ -44,7 +44,7 @@ class RelationAsStructReader(
         }
     }
 
-    override fun hashCode(idx: Int, hasher: ArrowBufHasher?): Int =
+    override fun hashCode(idx: Int, hasher: Hasher): Int =
         rel.fold(0) { hash, col -> ByteFunctionHelpers.combineHash(hash, col.hashCode(idx, hasher)) }
 
     override fun close() = rel.close()

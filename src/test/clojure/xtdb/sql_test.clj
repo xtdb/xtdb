@@ -2614,3 +2614,32 @@ UNION ALL
            (xt/q tu/*node* "SELECT *
               FROM nested_table nt,
                    LATERAL (FROM UNNEST(nt.nest) AS foo(id)) t(a)"))))
+
+(t/deftest joins-across-polymorphic-data-4061+4078
+  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :a 1} {:xt/id 2 :a 1.0}]
+                           [:put-docs :docs2 {:xt/id 1 :a 1.0}]])
+
+  (t/is (= [{:a1 1.0, :a2 1.0} {:a1 1, :a2 1.0}]
+           (xt/q tu/*node* "SELECT d1.a a1, d2.a a2 FROM docs d1, docs2 d2 WHERE d1.a = d2.a"))
+        "Testing joins with different num types")
+
+  (t/is (= [{:cnt 2}]
+           (xt/q tu/*node* "SELECT COUNT(*) cnt FROM docs d1 GROUP BY d1.a"))
+        "Testing group-by with different num types")
+
+  (t/is (= [{:xt/id 1 :a 1}]
+           (xt/q tu/*node* "SELECT * FROM docs INTERSECT SELECT * FROM docs2")))
+
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs3 RECORDS
+                                  {_id: 1, value: TIMESTAMP '2024-01-01T00:00:00Z'};"]
+                            [:put-docs :docs3 {:xt/id 2 :value #xt/date "2024-01-01"}]])
+
+  (t/is (= [#:xt{:id2 2, :id1 2}
+            #:xt{:id1 2, :id2 1}
+            #:xt{:id1 1, :id2 2}
+            #:xt{:id1 1, :id2 1}]
+           (xt/q tu/*node*  "FROM docs3 AS d1
+                             LEFT OUTER JOIN docs3 AS d2
+                             ON d1.value = d2.value + INTERVAL 'PT0M'
+                             SELECT d1._id AS _id1, d2._id AS _id2"))
+        "Testing joins with differnt temporal types"))
