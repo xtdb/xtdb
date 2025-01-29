@@ -80,6 +80,11 @@ interface Log : AutoCloseable {
         fun openFileLog(): FileLog = FileLog.openInMemory()
     }
 
+    /*
+     * We read this once from the existing log at startup,
+     * so that if we're starting up a new node it catches up to the latest offset,
+     * then it's the latest-submitted-offset of _this_ node.
+     */
     val latestSubmittedOffset: LogOffset
 
     fun appendMessage(message: Message): CompletableFuture<LogOffset>

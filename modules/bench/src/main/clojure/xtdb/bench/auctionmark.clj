@@ -5,12 +5,10 @@
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.xtdb2 :as bxt]
-            [xtdb.indexer :as idx])
+            [xtdb.log :as xt-log])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random UUID)
-           (java.util.concurrent ConcurrentHashMap)
-           (java.util.function BiFunction)
-           (xtdb.api TransactionKey)))
+           (java.util.concurrent ConcurrentHashMap)))
 
 (defn random-price [worker] (.nextDouble (b/rng worker)))
 
@@ -613,8 +611,7 @@
           (recur latest-completed-tx))))))
 
 (defn then-await-tx [node]
-  (let [{:keys [latest-submitted-tx-id]} (xt/status node)] 
-    (idx/await-tx latest-submitted-tx-id node nil)))
+  (xt-log/await-tx node))
 
 (defn load-phase-submit-tasks [sf]
   [{:t :call, :f (fn [_] (log/info "start submitting load stage"))}

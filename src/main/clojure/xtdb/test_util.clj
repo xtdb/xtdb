@@ -11,6 +11,7 @@
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
+            [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -146,16 +147,16 @@
 (defn latest-submitted-tx-id ^TransactionKey [node]
   (xtp/latest-submitted-tx-id node))
 
-;; TODO inline this now that we have `idx/await-tx`
+;; TODO inline this now that we have `log/await-tx`
 (defn then-await-tx
   (^TransactionKey [node]
-   (then-await-tx (latest-submitted-tx-id node) node nil))
+   (xt-log/await-tx node))
 
   (^TransactionKey [tx-id node]
-   (then-await-tx tx-id node nil))
+   (xt-log/await-tx node tx-id))
 
   (^TransactionKey [tx-id node timeout]
-   (idx/await-tx tx-id node timeout)))
+   (xt-log/await-tx node tx-id timeout)))
 
 (defn ->instants
   ([u] (->instants u 1))
@@ -279,7 +280,7 @@
          query-opts (-> query-opts
                         (assoc :allocator allocator)
                         (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
-                                         (doto (-> :after-tx-id (idx/await-tx node))))))
+                                         (doto (-> :after-tx-id (then-await-tx node))))))
 
          ^PreparedQuery pq (if node
                              (let [^IQuerySource q-src (util/component node ::q/query-source)]

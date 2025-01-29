@@ -26,7 +26,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
            [xtdb.api.tx TxOp]
-           xtdb.indexer.IIndexer
+           (xtdb.indexer IIndexer LogProcessor)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -45,7 +45,7 @@
       (update :snapshot-time #(some-> % (time/->instant)))
       (update :current-time #(some-> % (time/->instant)))))
 
-(defn- validate-snapshot-not-before [^TransactionKey latest-completed-tx snapshot-time]
+(defn- validate-snapshot-not-before [snapshot-time ^TransactionKey latest-completed-tx]
   (when (and snapshot-time (or (nil? latest-completed-tx) (neg? (compare (.getSystemTime latest-completed-tx) snapshot-time))))
     (throw (err/illegal-arg :xtdb/unindexed-tx
                             {::err/message (format "snapshot-time (%s) is after the latest completed tx (%s)"
@@ -69,6 +69,7 @@
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
                  ^Log log
+                 ^LogProcessor log-processor
                  ^IQuerySource q-src, wm-src, scan-emitter
                  ^CompositeMeterRegistry metrics-registry
                  default-tz
@@ -95,8 +96,9 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (or (let [tx-res (.awaitTx indexer tx-id nil)]
-            (when (and (instance? TransactionResult tx-res)
+      (or (let [^TransactionResult tx-res (-> @(.orTimeout (.awaitAsync log-processor tx-id) 3 java.util.concurrent.TimeUnit/SECONDS)
+                                              (util/rethrowing-cause))]
+            (when (and tx-res
                        (= (.getTxId tx-res) tx-id))
               tx-res))
 
@@ -135,8 +137,10 @@
                                               {::err/message (format "Unsupported SQL query type: %s" (type query))})))
 
           {:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-      (doto (.awaitTx indexer after-tx-id tx-timeout)
-        (validate-snapshot-not-before snapshot-time))
+
+      (xt-log/await-tx this after-tx-id tx-timeout)
+
+      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
       (let [plan (.planQuery q-src ast wm-src query-opts)]
         (.prepareRaQuery q-src plan wm-src query-opts))))
 
@@ -147,16 +151,16 @@
                (instance? XtqlQuery query) query
                :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                              {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
-     (doto (.awaitTx indexer after-tx-id tx-timeout)
-       (validate-snapshot-not-before snapshot-time))
+     (xt-log/await-tx this after-tx-id tx-timeout)
+     (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
      (let [plan (.planQuery q-src ast wm-src query-opts)]
        (.prepareRaQuery q-src plan wm-src query-opts))))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-      (doto (.awaitTx indexer after-tx-id tx-timeout)
-        (validate-snapshot-not-before snapshot-time))
+      (xt-log/await-tx this after-tx-id tx-timeout)
+     (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
      (.prepareRaQuery q-src plan wm-src query-opts)))
 
@@ -173,6 +177,7 @@
           :indexer (ig/ref :xtdb/indexer)
           :wm-src (ig/ref :xtdb/indexer)
           :log (ig/ref :xtdb/log)
+          :log-processor (ig/ref :xtdb.log/processor)
           :default-tz (ig/ref :xtdb/default-tz)
           :q-src (ig/ref :xtdb.query/query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)

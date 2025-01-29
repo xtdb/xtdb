@@ -1,7 +1,6 @@
 package xtdb.api
 
 import clojure.lang.Keyword
-import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.JSON_SERDE
@@ -14,14 +13,14 @@ class TransactionResultTest {
 
     @Test
     fun testTransactionResultSerialization() {
-        val committed = txCommitted(1, Instant.ofEpochMilli(0))
+        val committed = TransactionCommitted(1, Instant.ofEpochMilli(0))
 
         assertEquals(
             """{"txId":1,"systemTime":"1970-01-01T00:00:00Z","committed":true}""".trimJson(),
             JSON_SERDE.encodeToString(committed)
         )
 
-        val aborted = txAborted(1, Instant.ofEpochMilli(0), testError)
+        val aborted = TransactionAborted(1, Instant.ofEpochMilli(0), testError)
         assertEquals(
             """
             {
@@ -43,13 +42,13 @@ class TransactionResultTest {
 
     @Test
     fun testTransactionResultDeserialization() {
-        val committed = txCommitted(1, Instant.ofEpochMilli(0))
+        val committed = TransactionCommitted(1, Instant.ofEpochMilli(0))
         assertEquals(
             committed,
             JSON_SERDE.decodeFromString<TransactionResult>("""{"txId":1,"systemTime":"1970-01-01T00:00:00Z","committed":true}""")
         )
 
-        val aborted = txAborted(1, Instant.ofEpochMilli(0), testError)
+        val aborted = TransactionAborted(1, Instant.ofEpochMilli(0), testError)
         assertEquals(
             aborted,
             JSON_SERDE.decodeFromString<TransactionResult>(

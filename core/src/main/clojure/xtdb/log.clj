@@ -10,8 +10,9 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.time Instant)
+  (:import (java.time Duration Instant)
            (java.util ArrayList HashMap)
+           [java.util.concurrent TimeUnit]
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
@@ -329,6 +330,7 @@
                                                      (-> (select-keys opts [:authn])
                                                          (assoc :default-tz (:default-tz opts default-tz)
                                                                 :system-time (some-> system-time time/expect-instant)))))))
+
 (defmethod ig/prep-key :xtdb.log/processor [_ opts]
   (when opts
     (into {:allocator (ig/ref :xtdb/allocator)
@@ -341,3 +343,17 @@
 (defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator, indexer, ^Log log, metrics-registry, chunk-flush-duration] :as deps}]
   (when deps
     (LogProcessor. allocator indexer log metrics-registry chunk-flush-duration)))
+
+(defn await-tx
+  (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]}]
+   (-> @(.awaitAsync log-processor)
+       (util/rethrowing-cause)))
+
+  (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]} ^long tx-id]
+   (-> @(.awaitAsync log-processor tx-id)
+       (util/rethrowing-cause)))
+
+  (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]} ^long tx-id ^Duration timeout]
+   (-> @(cond-> (.awaitAsync log-processor tx-id)
+          timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
+       (util/rethrowing-cause))))

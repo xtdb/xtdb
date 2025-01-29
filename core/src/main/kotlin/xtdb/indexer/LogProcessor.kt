@@ -7,9 +7,10 @@ import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import xtdb.api.log.Log
-import xtdb.api.log.LogOffset
-import xtdb.arrow.asChannel
 import xtdb.api.log.Log.Message
+import xtdb.api.log.LogOffset
+import xtdb.api.log.Watchers
+import xtdb.arrow.asChannel
 import java.time.Duration
 import java.time.Instant
 
@@ -20,6 +21,10 @@ class LogProcessor(
     meterRegistry: MeterRegistry,
     flushTimeout: Duration
 ) : Log.Subscriber, AutoCloseable {
+
+    private val watchers = Watchers(indexer.latestCompletedTx()?.txId ?: -1)
+
+    val ingestionError get() = watchers.exception
 
     data class Flusher(
         val flushTimeout: Duration,
@@ -82,21 +87,35 @@ class LogProcessor(
         }
 
         records.forEach { record ->
-            when (val msg = record.message) {
-                is Message.Tx -> {
-                    msg.payload.asChannel.use { txOpsCh ->
-                        ArrowStreamReader(txOpsCh, allocator).use { reader ->
-                            reader.vectorSchemaRoot.use { root ->
-                                reader.loadNextBatch()
+            val offset = record.logOffset
 
-                                indexer.indexTx(record.logOffset, record.logTimestamp, root)
+            try {
+                val res = when (val msg = record.message) {
+                    is Message.Tx -> {
+                        msg.payload.asChannel.use { txOpsCh ->
+                            ArrowStreamReader(txOpsCh, allocator).use { reader ->
+                                reader.vectorSchemaRoot.use { root ->
+                                    reader.loadNextBatch()
+
+                                    indexer.indexTx(offset, record.logTimestamp, root)
+                                }
                             }
                         }
                     }
+
+                    is Message.FlushChunk -> {
+                        indexer.forceFlush(record)
+                        null
+                    }
                 }
 
-                is Message.FlushChunk -> indexer.forceFlush(record)
+                watchers.notify(offset, res)
+            } catch (e: Throwable) {
+                watchers.notify(offset, e)
             }
         }
     }
+
+    @JvmOverloads
+    fun awaitAsync(offset: LogOffset = log.latestSubmittedOffset) = watchers.awaitAsync(offset)
 }

@@ -26,10 +26,12 @@ internal class Serde : JsonContentPolymorphicSerializer<TransactionResult>(Trans
 }
 
 @Serializable(with = CommittedSerde::class)
-interface TransactionCommitted : TransactionResult
-
-fun txCommitted(txId: Long, systemTime: Instant) =
-    requiringResolve("xtdb.serde/->tx-committed").invoke(txId, systemTime) as TransactionCommitted
+interface TransactionCommitted : TransactionResult {
+    companion object {
+        operator fun invoke(txId: Long, systemTime: Instant) =
+            requiringResolve("xtdb.serde/->tx-committed").invoke(txId, systemTime) as TransactionCommitted
+    }
+}
 
 internal class CommittedSerde : KSerializer<TransactionCommitted> {
     override val descriptor = buildClassSerialDescriptor("xtdb.api.TransactionCommitted") {
@@ -53,7 +55,7 @@ internal class CommittedSerde : KSerializer<TransactionCommitted> {
             }
         }
 
-        return txCommitted(
+        return TransactionCommitted(
             txId ?: throw SerializationException("Missing txId"),
             systemTime ?: throw SerializationException("Missing systemTime")
         )
@@ -70,10 +72,12 @@ internal class CommittedSerde : KSerializer<TransactionCommitted> {
 @Serializable(with = AbortedSerde::class)
 interface TransactionAborted : TransactionResult {
     val error: Throwable
-}
 
-fun txAborted(txId: Long, systemTime: Instant, error: Throwable) =
-    requiringResolve("xtdb.serde/->tx-aborted").invoke(txId, systemTime, error) as TransactionAborted
+    companion object {
+        operator fun invoke(txId: Long, systemTime: Instant, error: Throwable) =
+            requiringResolve("xtdb.serde/->tx-aborted").invoke(txId, systemTime, error) as TransactionAborted
+    }
+}
 
 internal class AbortedSerde : KSerializer<TransactionAborted> {
     override val descriptor = buildClassSerialDescriptor("xtdb.api.TransactionAborted") {
@@ -100,7 +104,7 @@ internal class AbortedSerde : KSerializer<TransactionAborted> {
                 }
             }
         }
-        return txAborted(
+        return TransactionAborted(
             txId ?: throw SerializationException("Missing txId"),
             systemTime ?: throw SerializationException("Missing systemTime"),
             error ?: throw SerializationException("Missing error")

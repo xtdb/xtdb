@@ -14,7 +14,8 @@
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.protocols :as xtp])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration InstantSource)
@@ -286,8 +287,9 @@
         (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
+          (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
           (t/is (= last-tx-key
-                   (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))))
+                   (xtp/latest-completed-tx node)))
 
           (t/is (= last-tx-key (tu/latest-completed-tx node))))
 
@@ -506,8 +508,10 @@
                                          [0, 2, "hello", 12]
                                          [1, 1, "world", 3.3]]])))
 
+          (tu/then-await-tx 0 node (Duration/ofSeconds 1))
+
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
-                   (tu/then-await-tx 0 node (Duration/ofSeconds 1))))
+                   (xtp/latest-completed-tx node)))
 
           (tu/finish-chunk! node)
 

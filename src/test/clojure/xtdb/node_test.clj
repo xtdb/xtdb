@@ -747,9 +747,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                "changing table-info causes previous cache-hits to miss")))))
 
 (deftest test-prepared-statements
-  (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
-                                    [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])]
-    (tu/then-await-tx tx tu/*node*))
+  (-> (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
+                               [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
+      (tu/then-await-tx tu/*node* #xt/duration "PT2S"))
 
   (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
         column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]

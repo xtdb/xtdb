@@ -17,10 +17,10 @@
            (xtdb.api Xtdb$Config)
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
-           xtdb.indexer.IIndexer))
+           xtdb.indexer.LogProcessor))
 
-(defn get-indexer-error [^IIndexer indexer] 
-  (.indexerError indexer))
+(defn get-ingestion-error [^LogProcessor log-processor]
+  (.getIngestionError log-processor))
 
 (def router
   (http/router [["/metrics" {:name :metrics
@@ -39,9 +39,9 @@
                                                 {:status 200, :body "Started."})))}]
 
                 ["/healthz/alive" {:name :alive
-                                   :get (fn [{:keys [indexer]}]
-                                          (if-let [indexer-error (get-indexer-error indexer)]
-                                            {:status 503, :body (str "Indexer error - " indexer-error)}
+                                   :get (fn [{:keys [log-processor]}]
+                                          (if-let [ingestion-error (get-ingestion-error log-processor)]
+                                            {:status 503, :body (str "Ingestion error - " ingestion-error)}
                                             {:status 200, :body "Alive."}))}]
 
                 ["/healthz/ready" {:name :ready
@@ -69,13 +69,13 @@
 (defmethod ig/prep-key :xtdb/healthz [_ ^HealthzConfig config]
   {:port (.getPort config) 
    :metrics-registry (ig/ref :xtdb.metrics/registry)
-   :indexer (ig/ref :xtdb/indexer)
+   :log-processor (ig/ref :xtdb.log/processor)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, ^IIndexer indexer]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, log-processor]}]
   (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
         ^Server server (-> (handler {:prometheus-registry prometheus-registry
-                                     :indexer indexer
+                                     :log-processor log-processor
                                      :initial-target-tx-id (xtp/latest-submitted-tx-id node)
                                      :node node})
                            (j/run-jetty {:port port, :async? true, :join? false}))]
