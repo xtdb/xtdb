@@ -1461,8 +1461,21 @@
   (visitHasTablePrivilegePredicate [_ _] true)
   (visitHasSchemaPrivilegePredicate [_ _] true)
   (visitPgExpandArrayFunction [_ _] nil)
+
+  (visitPgFormatTypeFunction [_ _ctx]
+    ;; FIXME - when we return standard SQL types https://github.com/xtdb/xtdb/issues/3783
+    "character varying (256)")
+
+  (visitPgGetPartkeydefFunction [_ _] nil)
+  (visitPgRelationSizeFunction [_ _] 0)
+  (visitPgTotalRelationSizeFunction [_ _] 0)
+  (visitPgStatGetNumscansFunction [_ _] 0)
+  (visitPgGetConstraintdefFunction [_ _] nil)
   (visitPgGetExprFunction [_ _] nil)
   (visitPgGetIndexdefFunction [_ _] nil)
+  (visitPgGetRuledefFunction [_ _] nil)
+  (visitPgTablespaceLocationFunction [_ _] nil)
+
   (visitPgSleepFunction [this ctx]
     (list 'sleep (list 'cast (.accept (.sleepSeconds ctx) this) [:duration :milli])))
 

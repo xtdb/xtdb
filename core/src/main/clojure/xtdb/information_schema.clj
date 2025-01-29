@@ -52,6 +52,16 @@
       pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
       pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
       pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
+      pg_catalog/pg_inherits {inhrelid :i32, inhparent :i32, inhseqno :i32, inhdetachpending :bool}
+      pg_catalog/pg_roles {rolname :utf8, rolsuper :bool, rolinherit :bool,
+                           rolcreaterole :bool, rolcreatedb :bool, rolcanlogin :bool,
+                           rolreplication :bool, rolconnlimit :i32, rolpass :utf8,
+                           rolvaliduntil :utf8, rolbypassrls :bool, rolconfig :utf8, ;; FIXME rolvaliduntil should probably be :timestamp-tz
+                           oid :i32}
+      pg_catalog/pg_rewrite {oid :i32} ;; FIXME unsure how to handle 'pg_node_tree' type
+      pg_catalog/pg_constraint {oid :i32} ;; FIXME unsure how to handle 'pg_node_tree' type
+      pg_catalog/pg_index {indexrelid :i32} ;; FIXME unsure how to handle 'pg_node_tree' type
+      pg_catalog/pg_tablespace {oid :i32} ;; FIXME unsure how to handle 'aclitem' type
       pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
                                attlen :i32, attnum :i32
                                attisdropped :bool, attnotnull :bool
@@ -355,6 +365,12 @@
                                                    pg_catalog/pg_settings (pg-settings)
                                                    pg_catalog/pg_range (pg-range)
                                                    pg_catalog/pg_am (pg-am)
+                                                   pg_catalog/pg_inherits nil
+                                                   pg_catalog/pg_roles nil
+                                                   pg_catalog/pg_constraint nil
+                                                   pg_catalog/pg_rewrite nil
+                                                   pg_catalog/pg_index nil
+                                                   pg_catalog/pg_tablespace nil
                                                    (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))
                                      (.syncRowCount)))]
 
