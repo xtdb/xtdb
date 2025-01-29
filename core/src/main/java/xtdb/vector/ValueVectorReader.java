@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.time.temporal.ChronoUnit.MICROS;
+import static java.time.temporal.ChronoUnit.NANOS;
 
 public class ValueVectorReader implements IVectorReader {
 
@@ -600,7 +601,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-                return Instant.ofEpochSecond(0, v.get(idx)).atZone(zoneId(v));
+                return Instant.EPOCH.plus(getLong(idx), NANOS).atZone(zoneId(v));
             }
         };
     }
