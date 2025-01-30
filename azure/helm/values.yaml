@@ -1,0 +1,132 @@
+nodeCount: 3
+
+image:
+  repository: ghcr.io/xtdb/xtdb-azure
+  # tag: 2.0.0-beta5
+  pullPolicy: IfNotPresent
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "6Gi"
+  requests:
+    cpu: "1000m"
+    memory: "6Gi"
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+xtdbConfig:
+  # REQUIRED
+  # The user managed identity client ID must always be set.
+  userManagedIdentityClientId: ""
+
+  # We require these to be set when using default config file. 
+  storageAccountName: ""
+  storageContainerName: ""
+  kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
+  kafkaTxTopic: "xtdb-tx-log"
+  kafkaFilesTopic: "xtdb-file-changes"
+
+  # OPTIONAL
+  # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
+  # See https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html
+  jdkOptions: "-Xmx2000m -Xms2000m -XX:MaxDirectMemorySize=2000m -XX:MaxMetaspaceSize=500m"
+
+  # We mount and use a YAML file for configuring the XTDB nodes -
+  # We create a default file, setup wihin templates/xtdbyamlconfig.yaml using values set above.
+  #
+  # Setting `yamlConfigOverride/xtdbconfig.yaml` will override the contents of the config file 
+  # Ensure that you inline any values/set them using !Env tags
+  # See the XTDB configuration documentation for options: https://docs.xtdb.com/ops/config.html
+  yamlConfigOverride: 
+    # xtdbconfig.yaml: |-
+    #   server:
+    #     port: 5432
+
+    #   txLog: !Kafka
+    #     bootstrapServers: "<kafkaBootstrapServers>"
+    #     txTopic: "<kafkaTxTopic>"
+    #     filesTopic: "<kafkaFilesTopic>"
+
+    #   storage: !Remote
+    #     objectStore: !Azure
+    #       storageAccount: "<storageAccountName>"
+    #       container: "<storageContainerName>"
+    #       prefix: "xtdb-object-store"
+    #       userManagedIdentityClientId: "<userManagedIdentityClientId>"
+    #     localDiskCache: /var/lib/xtdb/buffers/disk-cache
+
+    #   healthz:
+    #     port: 8080
+
+    #   modules:
+    #   - !HttpServer
+    #     port: 3000
+      
+  # Persisent Volume Claim settings for XTDB local disk cache (one per node)
+  # By default, using Premium SSDs with managed-csi storage class -
+  # For more information, see https://learn.microsoft.com/en-us/azure/virtual-machines/disks-types#standard-hdds
+  localDiskCache:
+    volumeClaimTemplate:
+      metadata:
+        name: xtdb-persistent-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 50Gi
+        storageClassName: "managed-csi"
+
+  # Extra Env:
+  env:
+    # (ENV_VAR_NAME: Value)
+    XTDB_LOGGING_LEVEL: "info" # See https://docs.xtdb.com/ops/troubleshooting/overview.html
+
+startupProbe:
+  httpGet:
+    path: /healthz/started
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  failureThreshold: 10 
+
+livenessProbe:
+  httpGet:
+    path: /healthz/alive
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+
+xtdbService:
+  type: LoadBalancer
+  server:
+    # Port of the Postgres Wire Server on the nodes
+    targetPort: 5432
+    # Port exposed by the service
+    servicePort: 5432
+  httpServer:
+    # Port of the http server on the nodes
+    targetPort: 3000
+    # Port exposed by the service
+    servicePort: 3000
+
+metricService: 
+  type: ClusterIP
+  # Port of the metrics server on the nodes
+  targetPort: 8080
+  # Port exposed by the service
+  servicePort: 80
