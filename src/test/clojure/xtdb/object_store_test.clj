@@ -53,8 +53,7 @@
     (.putIfAbsent os k (.slice buf))
     (CompletableFuture/completedFuture nil))
 
-  (listAllObjects [_this]
-    (vec (.keySet os)))
+  (listObjects [_this] (vec (.keySet os)))
   
   (deleteObject [_this k]
     (.remove os k)

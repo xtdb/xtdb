@@ -136,7 +136,7 @@
 
         (t/testing "Call to abort a multipart upload should work - no file comitted"
           (t/is (nil? @(.abort multipart-upload)))
-          (t/is (= #{} (set (.listAllObjects os)))))))))
+          (t/is (= #{} (set (.listObjects os)))))))))
 
 (t/deftest ^:azure multipart-put-test
   (with-open [os (object-store (random-uuid))]
@@ -155,7 +155,7 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
-                 (vec (.listAllObjects ^ObjectStore os))))
+                 (vec (.listObjects ^ObjectStore os))))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -206,7 +206,7 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-larger-multi-put") (* 20 part-size))]
-                 (vec (.listAllObjects ^ObjectStore os))))
+                 (vec (.listObjects ^ObjectStore os))))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-larger-multi-put"))]
           (t/testing "capacity should be equal to total of 20 parts"
@@ -225,7 +225,7 @@
           @(.complete initial-multipart-upload)
 
           (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
-                   (vec (.listAllObjects ^ObjectStore os))))
+                   (vec (.listObjects ^ObjectStore os))))
 
           (t/is (empty? (.listUncommittedBlobs os)))))
 
@@ -241,7 +241,7 @@
 
       (t/testing "still has the original object"
         (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
-                 (vec (.listAllObjects ^ObjectStore os))))
+                 (vec (.listObjects ^ObjectStore os))))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multipart"))]
           (t/testing "capacity should be equal to total of 2 parts (ie, initial upload)"
@@ -263,7 +263,7 @@
       ;; Give it some time to start uploading
       (Thread/sleep 500)
 
-      (.interrupt upload-thread) 
+      (.interrupt upload-thread)
 
       (t/testing "no committed blobs should be present"
-        (t/is (empty? (.listAllObjects os)))))))
+        (t/is (empty? (.listObjects os)))))))

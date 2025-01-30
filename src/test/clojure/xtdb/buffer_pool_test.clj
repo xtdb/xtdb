@@ -52,7 +52,7 @@
 
       (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
             object-store (.getObjectStore buffer-pool)]
-        (t/is (seq (.listAllObjects object-store)))))))
+        (t/is (seq (.listObjects object-store)))))))
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 

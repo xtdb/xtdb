@@ -3,7 +3,6 @@
 package xtdb.azure
 
 import com.azure.core.util.BinaryData
-import com.azure.identity.AzureCliCredentialBuilder
 import com.azure.identity.DefaultAzureCredential
 import com.azure.identity.DefaultAzureCredentialBuilder
 import com.azure.storage.blob.BlobServiceClientBuilder
@@ -24,8 +23,8 @@ import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.Storage.storageRoot
-import xtdb.api.storage.throwMissingKey
 import xtdb.asBytes
 import xtdb.azure.BlobStorage.Factory
 import xtdb.multipart.IMultipartUpload
@@ -220,7 +219,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
         }
     }
 
-    fun listObjects(opts: ListBlobsOptions) = sequence {
+    private fun listObjects(opts: ListBlobsOptions) = sequence {
         client.listBlobs(opts, null)
             .iterableByPage().forEach {
                 yieldAll(it.value.map { blob ->
@@ -229,12 +228,12 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
             }
     }
 
-    override fun listAllObjects() = listObjects(ListBlobsOptions().setPrefix(prefix.toString())).asIterable()
+    override fun listObjects() = listObjects(ListBlobsOptions().setPrefix(prefix.toString())).asIterable()
 
     // test usage only
     @Suppress("unused")
     fun listUncommittedBlobs(): Iterable<Path> {
-        val committedBlobs = listAllObjects().map { it.key }.toSet()
+        val committedBlobs = listObjects().map { it.key }.toSet()
         val uncommittedOpts = ListBlobsOptions().setPrefix(prefix.toString())
             .setDetails(BlobListDetails().setRetrieveUncommittedBlobs(true))
         return listObjects(uncommittedOpts).map { it.key }.filter { it !in committedBlobs }.asIterable()

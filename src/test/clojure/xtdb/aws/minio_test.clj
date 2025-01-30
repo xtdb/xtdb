@@ -128,7 +128,7 @@
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put")
                                      (* 2 part-size))]
-                 (.listAllObjects ^ObjectStore os)))
+                 (.listObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -174,4 +174,4 @@
           (t/is (instance? RemoteBufferPool buffer-pool))
           (t/is (instance? ObjectStore object-store))
           ;; Ensure some files are written
-          (t/is (seq (.listAllObjects object-store))))))))
+          (t/is (seq (.listObjects object-store))))))))

@@ -11,6 +11,7 @@ import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.log.FileLog
 import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.api.storage.Storage.openStorageChildAllocator
@@ -58,7 +59,7 @@ class RemoteBufferPool(
 
     init {
         // must come after the subscription is set up - at _least_ once processing.
-        osFiles.addAll(objectStore.listAllObjects().map { it.key })
+        osFiles.addAll(objectStore.listObjects().map { it.key })
     }
 
     private val memoryCache =
@@ -201,39 +202,41 @@ class RemoteBufferPool(
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()
-        return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING).closeOnCatch { fileChannel ->
-            rel.startUnload(fileChannel).closeOnCatch { unloader ->
-                object : xtdb.ArrowWriter {
-                    override fun writeBatch() = unloader.writeBatch()
 
-                    override fun end() {
-                        unloader.end()
-                        fileChannel.close()
+        return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING)
+            .closeOnCatch { fileChannel ->
+                rel.startUnload(fileChannel).closeOnCatch { unloader ->
+                    object : xtdb.ArrowWriter {
+                        override fun writeBatch() = unloader.writeBatch()
 
-                        objectStore.uploadArrowFile(key, tmpPath)
+                        override fun end() {
+                            unloader.end()
+                            fileChannel.close()
 
-                        fileLog.appendFileNotification(
-                            FileLog.Notification(listOf(ObjectStore.StoredObject(key, tmpPath.fileSize())))
-                        )
+                            objectStore.uploadArrowFile(key, tmpPath)
 
-                        diskCache.put(key, tmpPath)
-                    }
+                            fileLog.appendFileNotification(
+                                FileLog.Notification(listOf(StoredObject(key, tmpPath.fileSize())))
+                            )
 
-                    override fun close() {
-                        unloader.close()
-                        if (fileChannel.isOpen) fileChannel.close()
-                        tmpPath.deleteIfExists()
+                            diskCache.put(key, tmpPath)
+                        }
+
+                        override fun close() {
+                            unloader.close()
+                            if (fileChannel.isOpen) fileChannel.close()
+                            tmpPath.deleteIfExists()
+                        }
                     }
                 }
             }
-        }
     }
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
         objectStore.putObject(key, buffer)
             .thenApply {
                 fileLog.appendFileNotification(
-                    FileLog.Notification(listOf(ObjectStore.StoredObject(key, buffer.capacity().toLong())))
+                    FileLog.Notification(listOf(StoredObject(key, buffer.capacity().toLong())))
                 )
             }
             .get()

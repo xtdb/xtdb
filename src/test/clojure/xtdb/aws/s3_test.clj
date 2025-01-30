@@ -109,7 +109,7 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
-                 (vec (.listAllObjects ^ObjectStore os))))
+                 (vec (.listObjects ^ObjectStore os))))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -124,19 +124,20 @@
                  (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
                                                    [:put-docs :bar {:xt/id "bar2"}]
                                                    [:put-docs :bar {:xt/id "bar3"}]]))))
-  
+
         ;; Ensure finish-chunk! works
         (t/is (nil? (tu/finish-chunk! node)))
-  
+
         ;; Ensure can query back out results
         (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                  (xt/q node '(from :bar [{:xt/id e}]))))
-  
+
         ;; Ensure some files written to buffer-pool
         (t/is (seq (.listObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-#_(t/deftest ^:s3 tpch-test-node
+#_
+(t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
                            {:storage [:remote
@@ -154,4 +155,4 @@
         (t/is (instance? RemoteBufferPool buffer-pool))
         (t/is (instance? ObjectStore object-store))
         ;; Ensure some files are written
-        (t/is (seq (.listAllObjects object-store)))))))
+        (t/is (seq (.listObjects object-store)))))))

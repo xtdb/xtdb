@@ -42,7 +42,7 @@ class SimulatedObjectStore(
         return CompletableFuture.completedFuture(null)
     }
 
-    override fun listAllObjects(): List<ObjectStore.StoredObject> =
+    override fun listObjects(): List<ObjectStore.StoredObject> =
         buffers.map { (key, buffer) -> ObjectStore.StoredObject(key, buffer.capacity().toLong()) }
 
     override fun deleteObject(k: Path): CompletableFuture<*> =

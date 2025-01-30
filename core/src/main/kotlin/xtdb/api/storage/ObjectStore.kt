@@ -7,9 +7,11 @@ import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.WRITE
 import java.util.concurrent.CompletableFuture
 
-fun throwMissingKey(k: Path): Nothing = error("Object '$k' doesn't exist")
-
 interface ObjectStore : AutoCloseable {
+
+    companion object {
+        fun throwMissingKey(k: Path): Nothing = error("Object '$k' doesn't exist")
+    }
 
     fun interface Factory {
         fun openObjectStore(): ObjectStore
@@ -45,7 +47,7 @@ interface ObjectStore : AutoCloseable {
      *
      * Objects are returned in lexicographic order of their path names.
      */
-    fun listAllObjects(): Iterable<StoredObject>
+    fun listObjects(): Iterable<StoredObject>
 
     /**
      * Deletes the object with the given path from the object store.
