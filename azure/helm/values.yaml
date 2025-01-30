@@ -56,7 +56,7 @@ xtdbConfig:
     #   server:
     #     port: 5432
 
-    #   txLog: !Kafka
+    #   log: !Kafka
     #     bootstrapServers: "<kafkaBootstrapServers>"
     #     txTopic: "<kafkaTxTopic>"
     #     filesTopic: "<kafkaFilesTopic>"
