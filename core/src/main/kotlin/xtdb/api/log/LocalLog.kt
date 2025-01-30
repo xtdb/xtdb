@@ -14,8 +14,8 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.log.Log.*
-import xtdb.util.asMicros
-import xtdb.util.microsToInstant
+import xtdb.time.InstantUtil.asMicros
+import xtdb.time.InstantUtil.fromMicros
 import java.io.DataInputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -86,7 +86,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
 
             return Record(
                 pos,
-                microsToInstant(headerBuf.getLong()),
+                fromMicros(headerBuf.getLong()),
                 Message.parse(ByteBuffer.allocate(size).also { read(it); it.flip() })
             ).also {
                 position(pos + messageSizeBytes(size))

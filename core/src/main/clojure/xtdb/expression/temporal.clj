@@ -12,7 +12,8 @@
            (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
            [xtdb DateTruncator]
-           (xtdb.arrow ListValueReader ValueBox ValueReader)))
+           (xtdb.arrow ListValueReader ValueBox ValueReader)
+           (xtdb.time LocalDateTimeUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -127,28 +128,19 @@
        (Math/addExact (Math/multiplyExact (epoch-second-from-zdt form#) ~(types/ts-units-per-second ts-unit))
                       (quot (nano-from-zdt form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
 
-(defn epoch-second-from-ldt ^long [^LocalDateTime ldt]
-  (.toEpochSecond ldt ZoneOffset/UTC))
-
-(defn nano-from-ldt ^long [^LocalDateTime ldt]
-  (.getNano ldt))
-
 (defn- ldt->ts [form ts-unit]
-  (if (= ts-unit :second)
-    `(epoch-second-from-ldt ~form)
-    `(let [^LocalDateTime form# ~form]
-       (Math/addExact (Math/multiplyExact (epoch-second-from-ldt form#) ~(types/ts-units-per-second ts-unit))
-                      (quot (nano-from-ldt form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
-
-(defn calc-fractional-units ^long [^Long ts ^Long ts-units-per-second]
-  (mod ts ts-units-per-second))
+  (case ts-unit
+    :second `(LocalDateTimeUtil/getAsSeconds ~form)
+    :milli `(LocalDateTimeUtil/getAsMillis ~form)
+    :micro `(LocalDateTimeUtil/getAsMicros ~form)
+    :nano `(LocalDateTimeUtil/getAsNanos ~form)))
 
 (defn- ts->ldt [form ts-unit]
-  `(let [form# ~form]
-     (LocalDateTime/ofEpochSecond (quot form# ~(types/ts-units-per-second ts-unit))
-                                  (* (calc-fractional-units form# ~(types/ts-units-per-second ts-unit))
-                                     ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))
-                                  ZoneOffset/UTC)))
+  (case ts-unit
+    :second `(LocalDateTimeUtil/fromSeconds ~form)
+    :milli `(LocalDateTimeUtil/fromMillis ~form)
+    :micro `(LocalDateTimeUtil/fromMicros ~form)
+    :nano `(LocalDateTimeUtil/fromNanos ~form)))
 
 ;;;; `CAST`
 
