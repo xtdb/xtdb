@@ -370,7 +370,7 @@
               (c/compact-all! node (Duration/ofSeconds 5)))
 
             (let [table-name "foo"
-                  meta-files (trie/list-meta-files bp table-name)]
+                  meta-files (.listObjects bp (trie/->table-meta-dir table-name))]
               (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-name trie-key))
                                  ^IDataRel data-rel (first (trie/open-data-rels bp table-name [trie-key]))]

@@ -169,7 +169,7 @@
   (let [!table-tries (ConcurrentHashMap.)]
     (doseq [table-name (.allTableNames metadata-mgr)]
       (.put !table-tries table-name
-            (->> (trie/list-meta-files buffer-pool table-name)
+            (->> (.listObjects buffer-pool (trie/->table-meta-dir table-name))
                  (transduce (map (fn [^Path path]
                                    (str (.getFileName path))))
                             apply-trie-notification))))

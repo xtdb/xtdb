@@ -114,15 +114,6 @@ class RemoteBufferPool(
             }
         }
 
-        private fun SortedSet<Path>.listFilesUnderPrefix(prefix: Path): List<Path> {
-            val prefixDepth = prefix.nameCount
-            return tailSet(prefix)
-                .asSequence()
-                .takeWhile { it.startsWith(prefix) }
-                .mapNotNull { if (it.nameCount > prefixDepth) it.subpath(0, prefixDepth + 1) else null }
-                .distinct().toList()
-        }
-
         private fun ArrowBuf.cuts(): List<Long> {
             val cuts = mutableListOf<Long>()
             var prevCut = 0L
@@ -205,9 +196,8 @@ class RemoteBufferPool(
         }
     }
 
-    override fun listAllObjects(): List<Path> = osFiles.toList()
-
-    override fun listObjects(dir: Path): List<Path> = osFiles.listFilesUnderPrefix(dir)
+    override fun listObjects() = osFiles.toList()
+    override fun listObjects(dir: Path) = osFiles.tailSet(dir).takeWhile { it.startsWith(dir) }
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()

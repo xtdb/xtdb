@@ -332,7 +332,7 @@
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (let [objs (mapv str (.listAllObjects bp))]
+          (let [objs (mapv str (.listObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
@@ -343,7 +343,8 @@
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
         node-opts {:node-dir node-dir, :rows-per-chunk 1000 :rows-per-block 100
-                   :instant-src (InstantSource/system)}]
+                   :instant-src (InstantSource/system)
+                   :compactor? false}]
     (util/delete-dir node-dir)
 
     (util/with-close-on-catch [node1 (tu/->local-node node-opts)]
@@ -384,7 +385,7 @@
 
                   (Thread/sleep 250)    ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                  (let [objs (mapv str (.listAllObjects bp))]
+                  (let [objs (mapv str (.listObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                     (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
@@ -425,7 +426,7 @@
 
                       (Thread/sleep 250); wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                      (let [objs (mapv str (.listAllObjects bp))]
+                      (let [objs (mapv str (.listObjects bp))]
                         (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                         (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00-.+.arrow" %) objs))))

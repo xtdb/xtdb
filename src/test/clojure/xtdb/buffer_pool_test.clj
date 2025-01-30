@@ -3,7 +3,6 @@
             [clojure.test :as t]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
@@ -17,11 +16,11 @@
            (org.apache.arrow.vector.types.pojo Schema)
            xtdb.api.log.FileLog
            (xtdb.api.storage ObjectStore$Factory Storage)
+           (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
-           (xtdb.buffer_pool MemoryBufferPool LocalBufferPool RemoteBufferPool)
-           xtdb.cache.DiskCache
+           (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
            xtdb.BufferPool
-           (xtdb.api.storage SimulatedObjectStore StoreOperation)))
+           xtdb.cache.DiskCache))
 
 (defonce tmp-dirs (atom []))
 
@@ -166,7 +165,7 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
       (t/testing "empty buffer pool"
-        (t/is (= [] (.listAllObjects bp)))
+        (t/is (= [] (.listObjects bp)))
         (t/is (= [] (.listObjects bp (.toPath (io/file "foo")))))))))
 
 (t/deftest dont-list-temporary-objects-3544
@@ -175,7 +174,7 @@
       (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))
                   rel (Relation. tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
-        (t/is (= [] (.listAllObjects bp)))))))
+        (t/is (= [] (.listObjects bp)))))))
 
 (defn fetch-buffer-pool-from-node
   [node]
@@ -194,7 +193,7 @@
   (Thread/sleep 1000)
 
   (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
-           (.listAllObjects buffer-pool)))
+           (.listObjects buffer-pool)))
 
   (t/is (= (mapv util/->path ["foo/alan"])
            (.listObjects buffer-pool (util/->path "foo"))))
@@ -203,8 +202,8 @@
     (t/is (= (mapv util/->path ["foo/alan"])
              (.listObjects buffer-pool (util/->path "foo/")))))
 
-  (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
-    (t/is (= (mapv util/->path ["bar/alice" "bar/baz" "bar/baza" "bar/bob"])
+  (t/testing "calling listObjects with prefix on directory with subdirectories - still lists recursively, and relative to the root"
+    (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob"])
              (.listObjects buffer-pool (util/->path "bar")))))
 
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "

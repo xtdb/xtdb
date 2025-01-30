@@ -86,17 +86,17 @@
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
-          (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool)))))
+          (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool)))))
 
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
-            (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool))))
+            (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
             (Thread/sleep 1000)
-            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listAllObjects buffer-pool)))))))))
+            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listObjects buffer-pool)))))))))
 
 (t/deftest ^:google-cloud multiple-node-list-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -109,10 +109,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (.listAllObjects buffer-pool-1)))
+                   (.listObjects buffer-pool-1)))
 
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (.listAllObjects buffer-pool-2))))))))
+                   (.listObjects buffer-pool-2))))))))
 
 (t/deftest ^:google-cloud put-object-twice-shouldnt-throw
   (util/with-tmp-dirs #{local-disk-cache}
@@ -125,10 +125,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alice") :alice)
           (Thread/sleep 1000)
           (t/is (= (mapv util/->path ["alice"])
-                   (.listAllObjects buffer-pool-1)))
+                   (.listObjects buffer-pool-1)))
   
           (t/is (= (mapv util/->path ["alice"])
-                   (.listAllObjects buffer-pool-2))))))))
+                   (.listObjects buffer-pool-2))))))))
 
 (t/deftest ^:google-cloud node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -148,7 +148,7 @@
                  (xt/q node '(from :bar [{:xt/id e}]))))
 
         ;; Ensure some files written to buffer-pool
-        (t/is (seq (.listAllObjects buffer-pool)))))))
+        (t/is (seq (.listObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:google-cloud tpch-test-node
@@ -163,4 +163,4 @@
 
       ;; Ensure some files written to buffer-pool 
       (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
-        (t/is (seq (.listAllObjects buffer-pool)))))))
+        (t/is (seq (.listObjects buffer-pool)))))))

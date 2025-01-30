@@ -8,7 +8,7 @@ import xtdb.BufferPool
 import xtdb.api.storage.Storage.localStorage
 import java.nio.file.Files.createTempDirectory
 
-class InMemoryBufferPoolTest : BufferPoolTest() {
+class LocalBufferPoolTest : BufferPoolTest() {
     override fun bufferPool(): BufferPool = localBufferPool
 
     private lateinit var allocator: BufferAllocator
