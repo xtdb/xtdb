@@ -13,6 +13,7 @@
             xtdb.object-store
             [xtdb.time :as time]
             [xtdb.trie :as trie :refer [MergePlanPage]]
+            [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -31,14 +32,13 @@
            (org.apache.arrow.vector VectorLoader)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
+           (xtdb BufferPool ICursor)
            (xtdb.arrow VectorIndirection VectorReader)
            (xtdb.bitemporal IRowConsumer Polygon)
-           xtdb.BufferPool
-           xtdb.ICursor
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)))
 
@@ -375,9 +375,11 @@
   (merge opts
          {:allocator (ig/ref :xtdb/allocator)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)}))
+          :buffer-pool (ig/ref :xtdb/buffer-pool)
+          :trie-catalog (ig/ref :xtdb/trie-catalog)}))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^BufferPool buffer-pool, ^BufferAllocator allocator]}]
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^BufferPool buffer-pool,
+                                                 ^TrieCatalog trie-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (close [_] (->> table->template-rel+trie vals (map first) util/close))
@@ -455,17 +457,15 @@
                                                      (fn [fvt]
                                                        (or fvt [:at [:now :now]]))))
                                ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table-name))
-                               current-meta-files (->> (trie/list-meta-files buffer-pool table-name)
-                                                       (trie/current-trie-files))
                                temporal-bounds (->temporal-bounds args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [table-metadatas (LinkedList.)]
-                                                 (let [segments (cond-> (mapv (fn [meta-file-path]
-                                                                                (let [{:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-file-path)]
+                                                 (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
+                                                                                (let [meta-path (trie/->table-meta-file-path table-name trie-key)
+                                                                                      {:keys [trie] :as table-metadata} (.openTableMetadata metadata-mgr meta-path)]
                                                                                   (.add table-metadatas table-metadata)
                                                                                   (into (trie/->Segment trie)
-                                                                                        {:data-file-path (trie/->table-data-file-path table-name
-                                                                                                                                      (:trie-key (trie/parse-trie-file-path meta-file-path)))
+                                                                                        {:data-file-path (trie/->table-data-file-path table-name trie-key)
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                   (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
                                                                                                                     (.and page-idx-pred bloom-page-idx-pred)
@@ -473,7 +473,8 @@
                                                                                                                 (.build metadata-pred table-metadata)
                                                                                                                 col-names)
                                                                                          :table-metadata table-metadata})))
-                                                                              current-meta-files)
+                                                                              (-> (cat/trie-state trie-catalog table-name)
+                                                                                  (cat/current-tries)))
 
                                                                   live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
                                                                                           (assoc :memory-rel (.liveRelation live-table-wm))))

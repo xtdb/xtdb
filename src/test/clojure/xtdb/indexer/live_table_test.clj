@@ -167,8 +167,12 @@
     (util/with-open [allocator (RootAllocator.)]
       (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
             mm (tu/component tu/*node* ::meta/metadata-manager)
+            log (tu/component tu/*node* :xtdb/log)
+            trie-catalog (tu/component tu/*node* :xtdb/trie-catalog)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp mm (Compactor/getNoop)
+        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp mm
+                                                               log trie-catalog
+                                                               (Compactor/getNoop)
                                                                nil nil (HashMap.)
                                                                nil (StampedLock.)
                                                                (RefCounter.)

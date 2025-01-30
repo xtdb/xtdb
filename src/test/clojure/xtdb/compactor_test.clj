@@ -9,7 +9,8 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
-            [xtdb.trie-test :refer [->trie-file-name]]
+            [xtdb.trie-catalog :as cat]
+            [xtdb.trie-catalog-test :as cat-test]
             [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            [java.nio ByteBuffer]
@@ -24,105 +25,103 @@
 
 (t/deftest test-compaction-jobs
   (letfn [(f [tries & {:keys [l1-file-size-rows]}]
-            (->> (c/compaction-jobs (map ->trie-file-name tries)
-                                    {:l1-file-size-rows (or l1-file-size-rows 16)})
-
-                 (mapv (fn [{:keys [part] :as job}]
-                         (->> (cond-> job
-                                part (update :part vec))
-                              (into {} (filter (comp some? val))))))))]
-
-    (->trie-file-name [0 10 20 10])
+            (-> tries
+                (->> (transduce (map cat-test/->trie-key) (completing cat/apply-trie-notification) {}))
+                (as-> trie-state (c/compaction-jobs "foo" trie-state {:l1-file-size-rows (or l1-file-size-rows 16)}))
+                (->> (into #{} (map (fn [{:keys [part] :as job}]
+                                      (-> job
+                                          (->> (into {} (filter val)))
+                                          (cond-> part (update :part vec))
+                                          (dissoc :table-name))))))))]
 
     (t/testing "l0 -> l1"
-      (t/is (= [] (f [])))
+      (t/is (= #{} (f [])))
 
-      (t/is (= [{:trie-keys ["log-l00-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"]
-                 :out-trie-key "log-l01-fr00-nr114-rs14",}]
+      (t/is (= #{{:trie-keys ["log-l00-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"]
+                  :out-trie-key "log-l01-fr00-nr114-rs14"}}
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10]]))
             "no L1s yet, merge L0s up to limit and stop")
 
-      (t/is (= [{:trie-keys ["log-l01-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"],
-                 :out-trie-key "log-l01-fr00-nr114-rs14"}]
+      (t/is (= #{{:trie-keys ["log-l01-fr00-nr0a-rsa" "log-l00-fr0a-nr114-rsa"]
+                  :out-trie-key "log-l01-fr00-nr114-rs14"}}
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10]
                    [1 0 10 10]]))
             "have a partial L1, merge into that until it's full")
 
-      (t/is (= [] (f [[0 0 10 10] [0 10 20 10]
-                      [1 0 20 20]]))
+      (t/is (= #{} (f [[0 0 10 10] [0 10 20 10]
+                       [1 0 20 20]]))
             "all merged, nothing to do")
 
-      (t/is (= [{:out-trie-key "log-l01-fr114-nr128-rs14",
-                 :trie-keys ["log-l00-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"]}]
-
+      (t/is (= #{{:out-trie-key "log-l01-fr114-nr128-rs14",
+                  :trie-keys ["log-l00-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"]}}
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
                    [1 0 20 20]]))
             "have a full L1, start a new L1 til that's full")
 
-      (t/is (= [{:trie-keys ["log-l01-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"],
-                 :out-trie-key "log-l01-fr114-nr128-rs14"}]
+      (t/is (= #{{:trie-keys ["log-l01-fr114-nr11e-rsa" "log-l00-fr11e-nr128-rsa"],
+                  :out-trie-key "log-l01-fr114-nr128-rs14"}}
                (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
                    [1 0 20 20] [1 20 30 10]]))
             "have a full and a partial L1, merge into that til it's full")
 
-      (t/is (= [] (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
-                      [1 0 20 20] [1 20 40 20] [1 40 50 10]]))
+      (t/is (= #{} (f [[0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10]
+                       [1 0 20 20] [1 20 40 20] [1 40 50 10]]))
             "all merged, nothing to do"))
 
     (t/testing "l1 -> l2"
       (t/is (= (let [l1-trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
                                    "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"]]
-                 [{:trie-keys l1-trie-keys,
-                   :part [0],
-                   :out-trie-key "log-l02-p0-nr150"}
-                  {:trie-keys l1-trie-keys,
-                   :part [1],
-                   :out-trie-key "log-l02-p1-nr150"}
-                  {:trie-keys l1-trie-keys,
-                   :part [2],
-                   :out-trie-key "log-l02-p2-nr150"}
-                  {:trie-keys l1-trie-keys,
-                   :part [3],
-                   :out-trie-key "log-l02-p3-nr150"}])
+                 #{{:trie-keys l1-trie-keys,
+                    :part [0],
+                    :out-trie-key "log-l02-p0-nr150"}
+                   {:trie-keys l1-trie-keys,
+                    :part [1],
+                    :out-trie-key "log-l02-p1-nr150"}
+                   {:trie-keys l1-trie-keys,
+                    :part [2],
+                    :out-trie-key "log-l02-p2-nr150"}
+                   {:trie-keys l1-trie-keys,
+                    :part [3],
+                    :out-trie-key "log-l02-p3-nr150"}})
                (f [[1 0 10 10] [1 0 20 20] [1 20 30 10] [1 20 40 20] [1 40 50 10] [1 40 60 20] [1 60 70 10] [1 60 80 20]]))
 
             "empty L2 and superseded L1 files get ignored")
 
-      (t/is (= [{:trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
-                             "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"],
-                 :part [1],
-                 :out-trie-key "log-l02-p1-nr150"}]
+      (t/is (= #{{:trie-keys ["log-l01-fr00-nr114-rs14" "log-l01-fr114-nr128-rs14"
+                              "log-l01-fr128-nr13c-rs14" "log-l01-fr13c-nr150-rs14"],
+                  :part [1],
+                  :out-trie-key "log-l02-p1-nr150"}}
                (f [[2 [0] 80] [2 [2] 80] [2 [3] 80]
                    [1 0 20 20] [1 20 40 20] [1 40 60 20] [1 60 80 20]
                    [0 0 10 10] [0 10 20 10] [0 20 30 10] [0 30 40 10] [0 40 50 10] [0 50 60 10] [0 60 70 10] [0 70 80 10]]))
             "still needs L2 [1]"))
 
     (t/testing "L2+"
-      (t/is (= [ ;; L2 [0] is full, compact L3 [0 2] and [0 3]
-                {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
-                 :part [0 0],
-                 :out-trie-key "log-l03-p00-nr120"}
-                {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
-                 :part [0 1],
-                 :out-trie-key "log-l03-p01-nr120"}
+      (t/is (= #{ ;; L2 [0] is full, compact L3 [0 2] and [0 3]
+                 {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
+                  :part [0 0],
+                  :out-trie-key "log-l03-p00-nr120"}
+                 {:trie-keys ["log-l02-p0-nr08" "log-l02-p0-nr110" "log-l02-p0-nr118" "log-l02-p0-nr120"],
+                  :part [0 1],
+                  :out-trie-key "log-l03-p01-nr120"}
 
-                ;; L2 [0] has loads, merge from 0x24 onwards (but only 4)
-                {:trie-keys ["log-l01-fr120-nr122-rs2" "log-l01-fr122-nr124-rs2" "log-l01-fr124-nr126-rs2" "log-l01-fr126-nr128-rs2"],
-                 :part [0],
-                 :out-trie-key "log-l02-p0-nr128"}
+                 ;; L2 [0] has loads, merge from 0x24 onwards (but only 4)
+                 {:trie-keys ["log-l01-fr120-nr122-rs2" "log-l01-fr122-nr124-rs2" "log-l01-fr124-nr126-rs2" "log-l01-fr126-nr128-rs2"],
+                  :part [0],
+                  :out-trie-key "log-l02-p0-nr128"}
 
-                ;; L2 [1] has nothing, choose the first four
-                {:trie-keys ["log-l01-fr00-nr02-rs2" "log-l01-fr02-nr04-rs2" "log-l01-fr04-nr06-rs2" "log-l01-fr06-nr08-rs2"],
-                 :part [1],
-                 :out-trie-key "log-l02-p1-nr08"}
+                 ;; L2 [1] has nothing, choose the first four
+                 {:trie-keys ["log-l01-fr00-nr02-rs2" "log-l01-fr02-nr04-rs2" "log-l01-fr04-nr06-rs2" "log-l01-fr06-nr08-rs2"],
+                  :part [1],
+                  :out-trie-key "log-l02-p1-nr08"}
 
-                ;; fill in the gaps in [2] and [3]
-                {:trie-keys ["log-l01-fr118-nr11a-rs2" "log-l01-fr11a-nr11c-rs2" "log-l01-fr11c-nr11e-rs2" "log-l01-fr11e-nr120-rs2"],
-                 :part [2],
-                 :out-trie-key "log-l02-p2-nr120"}
-                {:trie-keys ["log-l01-fr110-nr112-rs2" "log-l01-fr112-nr114-rs2" "log-l01-fr114-nr116-rs2" "log-l01-fr116-nr118-rs2"],
-                 :part [3],
-                 :out-trie-key "log-l02-p3-nr118"}]
+                 ;; fill in the gaps in [2] and [3]
+                 {:trie-keys ["log-l01-fr118-nr11a-rs2" "log-l01-fr11a-nr11c-rs2" "log-l01-fr11c-nr11e-rs2" "log-l01-fr11e-nr120-rs2"],
+                  :part [2],
+                  :out-trie-key "log-l02-p2-nr120"}
+                 {:trie-keys ["log-l01-fr110-nr112-rs2" "log-l01-fr112-nr114-rs2" "log-l01-fr114-nr116-rs2" "log-l01-fr116-nr118-rs2"],
+                  :part [3],
+                  :out-trie-key "log-l02-p3-nr118"}}
 
                (f [[3 [0 2] 32]
                    [3 [0 3] 32]
@@ -143,19 +142,18 @@
                   {:l1-file-size-rows 2}))
             "up to L3")
 
-
-      (t/is (= [{:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :part [0 3 0],
-                 :out-trie-key "log-l04-p030-nr180"}
-                {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :part [0 3 1],
-                 :out-trie-key "log-l04-p031-nr180"}
-                {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :part [0 3 2],
-                 :out-trie-key "log-l04-p032-nr180"}
-                {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
-                 :part [0 3 3],
-                 :out-trie-key "log-l04-p033-nr180"}]
+      (t/is (= #{{:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
+                  :part [0 3 0],
+                  :out-trie-key "log-l04-p030-nr180"}
+                 {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
+                  :part [0 3 1],
+                  :out-trie-key "log-l04-p031-nr180"}
+                 {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
+                  :part [0 3 2],
+                  :out-trie-key "log-l04-p032-nr180"}
+                 {:trie-keys ["log-l03-p03-nr120" "log-l03-p03-nr140" "log-l03-p03-nr160" "log-l03-p03-nr180"],
+                  :part [0 3 3],
+                  :out-trie-key "log-l04-p033-nr180"}}
 
                (f [[3 [0 2] 32]
                    [3 [0 3] 32] [3 [0 3] 64] [3 [0 3] 96] [3 [0 3] 128]]
@@ -362,14 +360,14 @@
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
               ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
           (letfn [(submit! [xs]
-                    (doseq [batch (partition-all 8 xs)]
-                      (xt/submit-tx node [(into [:put-docs :foo]
-                                                (for [x batch]
-                                                  {:xt/id x}))])))]
+                    (last (for [batch (partition-all 8 xs)]
+                            (xt/submit-tx node [(into [:put-docs :foo]
+                                                      (for [x batch]
+                                                        {:xt/id x}))]))))]
 
-            (submit! (take 512 (cycle (tu/bad-uuid-seq 8))))
-            (tu/then-await-tx node)
-            (c/compact-all! node (Duration/ofSeconds 5))
+            (let [tx-id (submit! (take 512 (cycle (tu/bad-uuid-seq 8))))]
+              (tu/then-await-tx tx-id node)
+              (c/compact-all! node (Duration/ofSeconds 5)))
 
             (let [table-name "foo"
                   meta-files (trie/list-meta-files bp table-name)]

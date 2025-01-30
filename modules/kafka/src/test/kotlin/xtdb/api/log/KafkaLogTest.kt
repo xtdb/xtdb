@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.log.AddedTrie
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.Collections.synchronizedList
@@ -43,6 +44,13 @@ class KafkaLogTest {
             every { latestCompletedOffset } returns -1
         }
 
+        fun addedTrie(key: String, size: Long) =
+            AddedTrie.newBuilder()
+                .setTableName("my-table").setTrieKey(key)
+                .build()
+
+        val addedTries = listOf(addedTrie("foo", 12), addedTrie("bar", 18))
+
         KafkaLog.kafka(container.bootstrapServers, "test-tx-topic", "test-files-topic")
             .pollDuration(Duration.ofMillis(100))
             .openLog().use { log ->
@@ -52,11 +60,13 @@ class KafkaLogTest {
 
                     log.appendMessage(Log.Message.FlushChunk(12)).await()
 
-                    while(msgs.flatten().size < 2) delay(100)
+                    log.appendMessage(Log.Message.TriesAdded(addedTries)).await()
+
+                    while (msgs.flatten().size < 3) delay(100)
                 }
             }
 
-        assertEquals(2, msgs.flatten().size)
+        assertEquals(3, msgs.flatten().size)
 
         val allMsgs = msgs.flatten()
 
@@ -68,6 +78,11 @@ class KafkaLogTest {
         allMsgs[1].message.let {
             check(it is Log.Message.FlushChunk)
             assertEquals(12, it.expectedChunkTxId)
+        }
+
+        allMsgs[2].message.let {
+            check(it is Log.Message.TriesAdded)
+            assertEquals(addedTries, it.tries)
         }
     }
 }

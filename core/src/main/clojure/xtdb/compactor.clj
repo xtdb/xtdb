@@ -4,22 +4,24 @@
             [xtdb.bitemporal :as bitemp]
             [xtdb.metrics :as metrics]
             [xtdb.trie :as trie]
+            [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import [java.nio.channels ClosedByInterruptException]
-           [java.nio.file Path]
-           [java.util ArrayList Arrays Comparator LinkedList PriorityQueue]
+           [java.util Arrays Comparator LinkedList PriorityQueue]
            (java.util.function Predicate)
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
+           (xtdb BufferPool)
            xtdb.api.CompactorConfig
+           (xtdb.api.log Log)
            (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
            xtdb.bitemporal.IPolygonReader
-           (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            xtdb.BufferPool
+           (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            (xtdb.metadata IMetadataManager)
-           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask)
+           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask TrieCatalog)
            (xtdb.util TemporalBounds)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -153,93 +155,56 @@
       (log/error t "Error running compaction job.")
       (throw t))))
 
-(defrecord Job [trie-keys part out-trie-key]
+(defrecord Job [table-name trie-keys ^bytes part out-trie-key]
   Compactor$Job
+  (getTableName [_] table-name)
   (getOutputTrieKey [_] out-trie-key))
 
-(defn- l0->l1-compaction-job [{l0-trie-keys 0, l1-trie-keys 1} {:keys [^long l1-file-size-rows]}]
-  (let [last-l1-file (last l1-trie-keys)
-        l1-compacted-row (long (if-let [{:keys [^long next-row]} last-l1-file]
-                                 next-row
-                                 -1))]
+(defn- l0->l1-compaction-job [table-name trie-state {:keys [^long l1-file-size-rows]}]
+  (when-let [live-l0 (seq (->> (get trie-state [0 []])
+                               (take-while #(= :live (:state %)))))]
+    (let [latest-l1 (->> (get trie-state [1 []])
+                         (take-while #(< (:rows %) l1-file-size-rows))
+                         first)]
+      (loop [rows (:rows latest-l1 0)
+             [{^long l0-rows :rows, :as l0-file} & more-l0s] (reverse live-l0)
+             res (cond-> [] latest-l1 (conj latest-l1))]
+        (if (and l0-file (< rows l1-file-size-rows))
+          (recur (+ rows l0-rows) more-l0s (conj res l0-file))
 
-    (when-let [current-l0-trie-keys (seq (->> l0-trie-keys
-                                              (drop-while (fn [{:keys [^long next-row]}]
-                                                            (<= next-row l1-compacted-row)))))]
+          (let [{:keys [first-row]} (first res)
+                {:keys [next-row]} (last res)]
+            (->Job table-name (mapv :trie-key res) nil
+                   (trie/->log-l0-l1-trie-key 1 first-row next-row rows))))))))
 
-      ;; if there are current L0 files, merge them into the latest l1 file until it's full
-      (let [{:keys [trie-keys ^long first-row ^long next-row ^long rows]}
-            (reduce (fn [{:keys [^long rows first-row trie-keys]}
-                         {^long l0-rows :rows, l0-first-row :first-row l0-trie-key :trie-key, :keys [^long next-row]}]
-                      (let [new-rows (+ rows l0-rows)]
-                        (cond-> {:first-row (or first-row l0-first-row)
-                                 :rows new-rows
-                                 :trie-keys (conj trie-keys l0-trie-key)
-                                 :next-row next-row}
-                          (>= new-rows l1-file-size-rows) reduced)))
+(defn- l1p-compaction-jobs [table-name trie-state {:keys [^long l1-file-size-rows]}]
+  (for [[[level part] files] trie-state
+        :when (> level 0)
+        :let [live-files (-> files
+                             (->> (remove #(= :garbage (:state %))))
+                             (cond->> (= level 1) (filter #(>= (:rows %) l1-file-size-rows))))]
+        :when (>= (count live-files) cat/branch-factor)
+        :let [live-files (reverse live-files)]
 
-                    (or (when-let [{:keys [^long rows first-row trie-key]} last-l1-file]
-                          (when (< rows l1-file-size-rows)
-                            {:first-row first-row :rows rows, :trie-keys [trie-key]}))
+        p (range cat/branch-factor)
+        :let [out-level (inc level)
+              out-part (conj part p)
+              {lnp1-next-row :next-row} (first (get trie-state [out-level out-part]))
 
-                        {:rows 0, :trie-keys []})
+              in-files (-> live-files
+                           (cond->> lnp1-next-row (drop-while #(<= (:next-row %) lnp1-next-row)))
+                           (->> (take cat/branch-factor)))]
 
-                    current-l0-trie-keys)]
+        :when (= cat/branch-factor (count in-files))
+        :let [trie-keys (mapv :trie-key in-files)
+              out-next-row (:next-row (last in-files))]]
+    (->Job table-name trie-keys (byte-array out-part)
+           (trie/->log-l2+-trie-key out-level out-part out-next-row))))
 
-        (->Job trie-keys nil (trie/->log-l0-l1-trie-key 1 first-row next-row rows))))))
-
-(defn compaction-jobs [meta-file-names {:keys [^long l1-file-size-rows] :as opts}]
-  (when (seq meta-file-names)
-    (let [!compaction-jobs (ArrayList.)
-
-          level-grouped-file-names (->> meta-file-names
-                                        (keep trie/parse-trie-file-path)
-                                        (group-by :level))]
-
-      (loop [level (long (last (sort (keys level-grouped-file-names))))
-             ^longs !compacted-rows-above (trie/path-array (inc level))]
-        (if (zero? level)
-          (when-let [job (l0->l1-compaction-job level-grouped-file-names opts)]
-            (.add !compaction-jobs job))
-            ;; exit `loop`
-
-
-          (let [!compacted-rows (trie/rows-covered-below !compacted-rows-above)
-                lvl-trie-keys (cond->> (get level-grouped-file-names level)
-                                (= level 1) (filter (fn [{:keys [^long rows]}]
-                                                      (>= rows l1-file-size-rows))))]
-
-            (doseq [[^long path-idx trie-keys] (->> lvl-trie-keys
-                                                    (group-by (if (= level 1)
-                                                                (constantly 0)
-                                                                (comp trie/path-array-idx :part))))
-
-                    :let [min-compacted-row (aget !compacted-rows path-idx)
-                          trie-keys (->> trie-keys
-                                         (drop-while (fn [{:keys [^long next-row]}]
-                                                       (<= next-row min-compacted-row))))]
-                    :when (seq trie-keys)]
-
-              (aset !compacted-rows path-idx (max min-compacted-row ^long (:next-row (last trie-keys))))
-
-              (when (= 4 (count (take 4 trie-keys)))
-                (dotimes [path-suffix 4]
-                  (let [compacted-row (aget !compacted-rows-above (+ (* path-idx 4) path-suffix))
-                        trie-keys (->> trie-keys
-                                       (drop-while (fn [{:keys [^long next-row]}]
-                                                     (<= next-row compacted-row)))
-                                       (take 4))]
-                    (when (= 4 (count trie-keys))
-                      (let [{:keys [part ^long next-row]} (last trie-keys)
-                            compaction-part (HashTrieKt/conjPath (or part (byte-array 0)) path-suffix)]
-                        (.add !compaction-jobs
-                              (->Job (mapv :trie-key trie-keys)
-                                     compaction-part
-                                     (trie/->log-l2+-trie-key (inc level) compaction-part next-row)))))))))
-
-            (recur (dec level) !compacted-rows))))
-
-      (vec !compaction-jobs))))
+(defn compaction-jobs [table-name trie-state opts]
+  (concat (when-let [job (l0->l1-compaction-job table-name trie-state opts)]
+            [job])
+          (l1p-compaction-jobs table-name trie-state opts)))
 
 (defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
   {:allocator (ig/ref :xtdb/allocator)
@@ -247,12 +212,15 @@
    :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
    :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))
    :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :log (ig/ref :xtdb/log)
+   :trie-catalog (ig/ref :xtdb/trie-catalog)
    :enabled? (.getEnabled config)})
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defn- open-compactor [{:keys [allocator, ^BufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
+(defn- open-compactor [{:keys [allocator, ^BufferPool buffer-pool, ^Log log, ^TrieCatalog trie-catalog, metadata-mgr,
+                               ^long threads metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (metrics/add-allocator-gauge metrics-registry "compactor.allocator.allocated_memory" allocator)
     (let [page-size *page-size*
@@ -260,16 +228,15 @@
       (Compactor/open
        (reify Compactor$Impl
          (availableJobs [_]
-           (for [^Path table-path (.listObjects buffer-pool util/tables-dir)
-                 :let [table-name (str (.getFileName table-path))]
-                 job (compaction-jobs (trie/list-meta-files buffer-pool table-name)
-                                      {:l1-file-size-rows l1-file-size-rows})]
-             (assoc job :table-name table-name)))
+           (->> (cat/table-names trie-catalog)
+                (into [] (mapcat (fn [table-name]
+                                   (compaction-jobs table-name (cat/trie-state trie-catalog table-name)
+                                                    {:l1-file-size-rows l1-file-size-rows}))))))
 
          (executeJob [_ job]
            (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)))
 
-       *ignore-signal-block?* threads))))
+       log trie-catalog *ignore-signal-block?* threads))))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [enabled?] :as opts}]
   (if enabled?

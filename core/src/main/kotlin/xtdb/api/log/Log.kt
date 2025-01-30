@@ -5,10 +5,8 @@ package xtdb.api.log
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
-import xtdb.log.LogMessage
+import xtdb.log.*
 import xtdb.log.LogMessage.MessageCase
-import xtdb.log.flushChunk
-import xtdb.log.logMessage
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
@@ -31,6 +29,8 @@ interface Log : AutoCloseable {
 
     sealed interface Message {
 
+        fun encode(): ByteBuffer
+
         companion object {
             private const val TX_HEADER: Byte = -1
             private const val LEGACY_FLUSH_CHUNK_HEADER: Byte = 2
@@ -40,15 +40,7 @@ interface Log : AutoCloseable {
                 when (buffer.get(0)) {
                     TX_HEADER -> Tx(buffer.duplicate())
                     LEGACY_FLUSH_CHUNK_HEADER -> FlushChunk(buffer.getLong(1))
-
-                    PROTOBUF_HEADER -> {
-                        val protoMsg = LogMessage.parseFrom(buffer.duplicate().position(1))
-
-                        when (val msgCase = protoMsg.messageCase) {
-                            MessageCase.FLUSH_CHUNK -> FlushChunk(protoMsg.flushChunk.expectedChunkTxId)
-                            else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
-                        }
-                    }
+                    PROTOBUF_HEADER -> ProtobufMessage.parse(buffer.duplicate().position(1))
 
                     else -> throw IllegalArgumentException("Unknown message type: ${buffer.get()}")
                 }
@@ -58,21 +50,42 @@ interface Log : AutoCloseable {
             override fun encode(): ByteBuffer = payload.duplicate()
         }
 
-        data class FlushChunk(val expectedChunkTxId: LogOffset) : Message {
-            override fun encode(): ByteBuffer {
-                val msg = logMessage {
-                    flushChunk = flushChunk { this.expectedChunkTxId = this@FlushChunk.expectedChunkTxId }
+        sealed class ProtobufMessage : Message {
+            abstract fun toLogMessage(): LogMessage
+
+            final override fun encode(): ByteBuffer =
+                toLogMessage().let {
+                    ByteBuffer.allocate(1 + it.serializedSize).apply {
+                        put(PROTOBUF_HEADER)
+                        put(it.toByteArray())
+                        flip()
+                    }
                 }
 
-                return ByteBuffer.allocate(1 + msg.serializedSize).run {
-                    put(PROTOBUF_HEADER)
-                    put(msg.toByteArray())
-                    flip()
-                }
+            companion object {
+                fun parse(buffer: ByteBuffer): ProtobufMessage =
+                    LogMessage.parseFrom(buffer.duplicate().position(1))
+                        .let {
+                            when (val msgCase = it.messageCase) {
+                                MessageCase.FLUSH_CHUNK -> FlushChunk(it.flushChunk.expectedChunkTxId)
+                                MessageCase.TRIES_ADDED -> TriesAdded(it.triesAdded.triesList)
+                                else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
+                            }
+                        }
             }
         }
 
-        fun encode(): ByteBuffer
+        data class FlushChunk(val expectedChunkTxId: LogOffset) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                flushChunk = flushChunk { expectedChunkTxId = this@FlushChunk.expectedChunkTxId }
+            }
+        }
+
+        data class TriesAdded(val tries: List<AddedTrie>) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                triesAdded = triesAdded { tries.addAll(this@TriesAdded.tries) }
+            }
+        }
     }
 
     interface Factory {

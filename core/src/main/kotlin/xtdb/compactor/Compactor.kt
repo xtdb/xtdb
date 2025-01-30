@@ -7,9 +7,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
 import org.apache.arrow.memory.util.ArrowBufPointer
+import xtdb.trie.TrieCatalog
+import xtdb.api.log.Log
+import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.compactor.Compactor.Companion.RecencyGranularity.*
+import xtdb.log.addedTrie
 import xtdb.trie.HashTrie
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.TrieWriter
@@ -32,6 +36,7 @@ private typealias Selection = IntArray
 interface Compactor : AutoCloseable {
 
     interface Job {
+        val tableName: String
         val outputTrieKey: String
     }
 
@@ -223,7 +228,10 @@ interface Compactor : AutoCloseable {
         }
 
         @JvmStatic
-        fun open(impl: Impl, ignoreBlockSignal: Boolean = false, threadLimit: Int = 1) =
+        fun open(
+            impl: Impl, log: Log, trieCatalog: TrieCatalog,
+            ignoreBlockSignal: Boolean = false, threadLimit: Int = 1
+        ) =
             object : Compactor {
                 private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -258,12 +266,24 @@ interface Compactor : AutoCloseable {
                                 if (queuedJobs.add(it.outputTrieKey)) {
                                     jobsScope.launch {
                                         // check it's still required
-                                        if (it.outputTrieKey in availableJobKeys)
-                                            runInterruptible {
-                                                LOGGER.debug("executing job: ${it.outputTrieKey}")
-                                                impl.executeJob(it)
-                                                LOGGER.debug("done: ${it.outputTrieKey}")
-                                            }
+                                        if (it.outputTrieKey in availableJobKeys) {
+                                            LOGGER.debug("executing job: ${it.outputTrieKey}")
+
+                                            runInterruptible { impl.executeJob(it) }
+
+                                            // add the trie to the catalog eagerly so that it's present
+                                            // next time we run `availableJobs` (it's idempotent)
+                                            trieCatalog.addTrie(it.tableName, it.outputTrieKey)
+
+                                            log.appendMessage(
+                                                TriesAdded(listOf(addedTrie {
+                                                    tableName = it.tableName
+                                                    trieKey = it.outputTrieKey
+                                                }))
+                                            )
+
+                                            LOGGER.debug("done: ${it.outputTrieKey}")
+                                        }
 
                                         doneCh.send(it)
                                     }
