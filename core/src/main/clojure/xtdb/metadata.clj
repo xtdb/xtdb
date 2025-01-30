@@ -63,7 +63,8 @@
   (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
-  (allColumnFields []))
+  (allColumnFields [])
+  (allTableNames []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
@@ -397,6 +398,7 @@
 
   (columnFields [_ table-name] (get fields table-name))
   (allColumnFields [_] fields)
+  (allTableNames [_] (set (keys fields)))
 
   AutoCloseable
   (close [_]

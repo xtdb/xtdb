@@ -642,10 +642,9 @@
                            [:put-docs :xt-docs {:xt/id "bar-start" :v "bar-start"}]])
 
   (t/is (= [#:xt{:id "foo-start"}]
-           (tu/query-ra
-            '[:scan
-              {:table public/xt_docs} [{_id (= "foo" (substring _id 1 3))}]]
-            {:node tu/*node*}))))
+           (tu/query-ra '[:scan {:table public/xt_docs}
+                          [{_id (= "foo" (substring _id 1 3))}]]
+                        {:node tu/*node*}))))
 
 (t/deftest test-iid-col-type-3016
   (xt/submit-tx tu/*node* [[:put-docs :comments {:xt/id 1}]])
