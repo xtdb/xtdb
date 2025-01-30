@@ -98,13 +98,12 @@ class YamlSerdeTest {
         val kafkaConfig = """
         log: !Kafka
             bootstrapServers: localhost:9092
-            txTopic: xtdb_tx_topic
-            filesTopic: xdtd_files_topic
+            topic: xtdb_topic
             
         """.trimIndent()
 
         assertEquals(
-            KafkaLog.Factory(bootstrapServers = "localhost:9092", txTopic = "xtdb_tx_topic", filesTopic = "xdtd_files_topic"),
+            KafkaLog.Factory(bootstrapServers = "localhost:9092", topic = "xtdb_topic"),
             nodeConfig(kafkaConfig).log
         )
     }
@@ -269,8 +268,7 @@ class YamlSerdeTest {
         val inputWithEnv = """
         log: !Kafka
             bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-            txTopic: xtdb_tx_topic
-            filesTopic: xdtd_files_topic
+            topic: xtdb_topic
             propertiesMap:
                 security.protocol: SASL_SSL
                 sasl.mechanism: PLAIN
@@ -280,8 +278,7 @@ class YamlSerdeTest {
         assertEquals(
             KafkaLog.Factory(
                 bootstrapServers = "localhost:9092",
-                txTopic = "xtdb_tx_topic",
-                filesTopic = "xdtd_files_topic",
+                topic = "xtdb_topic",
                 propertiesMap = mapOf(
                     "security.protocol" to "SASL_SSL",
                     "sasl.mechanism" to "PLAIN",

@@ -68,8 +68,7 @@
                                              :bucket test-bucket
                                              :prefix (str "xtdb.gcp-test." prefix)}]
                :local-disk-cache local-disk-cache}]
-    :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
-                  :files-topic (str "xtdb.kafka-test.files-" prefix)
+    :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]}))
 
 (t/deftest ^:google-cloud list-test

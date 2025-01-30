@@ -8,14 +8,14 @@ An XTDB node consists of a number of components.
 
 For information on how to configure these and switch out implementations, see their reference documents:
 
-* link:config/tx-log[Transaction Log]
+* link:config/log[Log]
 * link:config/storage[Storage]
 * link:config/modules[Optional Modules]
 
 == Configuring using YAML
 
 Currently, all of the examples within the reference docs are in YAML.
-Config for the components is done at the top level of the file, i.e. you can specify the following keys, not nested under anything else: `storage`, `txLog`, `modules`.
+Config for the components is done at the top level of the file, i.e. you can specify the following keys, not nested under anything else: `storage`, `log`, `modules`.
 
 Within the drivers, we offer the ability to provide and configure the node by passing the path to a YAML config file.
 

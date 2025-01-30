@@ -13,8 +13,7 @@ data:
 
     log: !Kafka
       bootstrapServers: {{ required "xtdbConfig.kafkaBootstrapServers is required." .Values.xtdbConfig.kafkaBootstrapServers }}
-      txTopic: {{ required "xtdbConfig.kafkaTxTopic is required." .Values.xtdbConfig.kafkaTxTopic }} 
-      filesTopic: {{ required "xtdbConfig.kafkaFilesTopic is required." .Values.xtdbConfig.kafkaFilesTopic }}
+      topic: {{ required "xtdbConfig.kafkaLogTopic is required." .Values.xtdbConfig.kafkaLogTopic }}
 
     storage: !Remote
       objectStore: !Azure

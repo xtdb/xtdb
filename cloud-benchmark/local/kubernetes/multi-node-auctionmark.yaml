@@ -19,8 +19,7 @@ data:
   CONFIG_FILE: "local-config-kafka.yaml"
   CLOUD_PLATFORM_NAME: "Local"
   KAFKA_BOOTSTRAP_SERVERS: "kafka-service.xtdb-benchmark.svc.cluster.local:9092"
-  XTDB_TX_TOPIC: "xtdb-tx-topic"
-  XTDB_FILES_TOPIC: "xtdb-files-topic"
+  XTDB_LOG_TOPIC: "xtdb-log"
   AUCTIONMARK_DURATION: "PT1H"
   AUCTIONMARK_SCALE_FACTOR: "0.1"
 ---

@@ -9,9 +9,7 @@ import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
-import xtdb.api.log.FileLog
 import xtdb.api.storage.ObjectStore
-import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.api.storage.Storage.openStorageChildAllocator
@@ -39,12 +37,10 @@ import java.util.*
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
-import kotlin.io.path.fileSize
 
 class RemoteBufferPool(
     factory: RemoteStorageFactory,
     allocator: BufferAllocator,
-    private val fileLog: FileLog,
     val objectStore: ObjectStore,
     meterRegistry: MeterRegistry,
 ) : BufferPool, IEvictBufferTest, Closeable {
@@ -52,15 +48,6 @@ class RemoteBufferPool(
     private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
 
     private val arrowFooterCache = arrowFooterCache()
-    val osFiles: SortedSet<Path> = TreeSet()
-
-    private val osFilesSubscription =
-        fileLog.subscribeToFileNotifications { n -> osFiles.addAll(n.added.map { it.key }) }
-
-    init {
-        // must come after the subscription is set up - at _least_ once processing.
-        osFiles.addAll(objectStore.listObjects().map { it.key })
-    }
 
     private val memoryCache =
         MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
@@ -197,8 +184,8 @@ class RemoteBufferPool(
         }
     }
 
-    override fun listObjects() = osFiles.toList()
-    override fun listObjects(dir: Path) = osFiles.tailSet(dir).takeWhile { it.startsWith(dir) }
+    override fun listObjects() = objectStore.listObjects().map { it.key }
+    override fun listObjects(dir: Path) = objectStore.listObjects(dir).map { it.key }
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()
@@ -215,10 +202,6 @@ class RemoteBufferPool(
 
                             objectStore.uploadArrowFile(key, tmpPath)
 
-                            fileLog.appendFileNotification(
-                                FileLog.Notification(listOf(StoredObject(key, tmpPath.fileSize())))
-                            )
-
                             diskCache.put(key, tmpPath)
                         }
 
@@ -233,13 +216,7 @@ class RemoteBufferPool(
     }
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
-        objectStore.putObject(key, buffer)
-            .thenApply {
-                fileLog.appendFileNotification(
-                    FileLog.Notification(listOf(StoredObject(key, buffer.capacity().toLong())))
-                )
-            }
-            .get()
+        objectStore.putObject(key, buffer).get()
     }
 
     override fun evictCachedBuffer(key: Path) {
@@ -248,7 +225,6 @@ class RemoteBufferPool(
 
     override fun close() {
         memoryCache.close()
-        osFilesSubscription.close()
         objectStore.close()
         allocator.close()
     }

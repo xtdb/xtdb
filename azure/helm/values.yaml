@@ -37,8 +37,7 @@ xtdbConfig:
   storageAccountName: ""
   storageContainerName: ""
   kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
-  kafkaTxTopic: "xtdb-tx-log"
-  kafkaFilesTopic: "xtdb-file-changes"
+  kafkaLogTopic: "xtdb-log"
 
   # OPTIONAL
   # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
@@ -58,8 +57,7 @@ xtdbConfig:
 
     #   log: !Kafka
     #     bootstrapServers: "<kafkaBootstrapServers>"
-    #     txTopic: "<kafkaTxTopic>"
-    #     filesTopic: "<kafkaFilesTopic>"
+    #     topic: "<kafkaLogTopic>"
 
     #   storage: !Remote
     #     objectStore: !Azure

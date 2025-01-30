@@ -46,8 +46,7 @@
                                            :credentials test-creds
                                            :endpoint "http://127.0.0.1:9000"}]
                        :local-disk-cache (.resolve node-dir "local-cache")}]
-    :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
-                  :files-topic (str "xtdb.kafka-test.files-" prefix)
+    :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]}))
 
 (t/deftest ^:minio list-test

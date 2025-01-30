@@ -13,7 +13,7 @@ Initial notes:
 ** 'pgwire' - a PostgreSQL wire-compatible server (preferred)
 ** In-process Clojure-only API
 ** HTTP (https://github.com/cognitect/transit-format[Transit^]) API
-* XTDB has two 'golden stores' - the tx-log and the object-store.
+* XTDB has two 'golden stores' - the log and the object-store.
   XTDB nodes do not currently communicate with each other except through these external services.
   Hence, they _must_ agree on the contents of any shared files - i.e. the process to create the files (even the decision of _when_ to cut a file) must be entirely deterministic.
 * The overall aim of the nodes in the XTDB cluster is to maintain a performant primary index for each table in the object-store.
@@ -32,21 +32,21 @@ On query, we then merge-sort the individual files of the LSM tree to re-construc
 (see `xtdb.log`)
 
 Transactions in XTDB are fundamentally asynchronous and non-interactive.
-Transaction 'operations' (e.g. put-docs, delete-docs, or a SQL query) are buffered into an atomic transaction as required, serialised into Arrow format, and submitted to the tx-log.
+Transaction 'operations' (e.g. put-docs, delete-docs, or a SQL query) are buffered into an atomic transaction as required, serialised into Arrow format, and submitted to the log.
 
 The client receives a 'ticket' containing the tx-id (essentially a log sequence number) and system-time of the transaction, which it later provides on query to ensure it observes the results of the submitted transactions.
 --
-2. *XTDB nodes continually index the tx-log*
+2. *XTDB nodes continually index the log*
 +
 --
 (see `xtdb.indexer`, `xtdb.live-index`)
 
-XTDB nodes read transactions from the tx-log, evaluate them if required, and upload blocks of transactions (~100k rows) as 'chunk' files to the object store.
+XTDB nodes read transactions from the log, evaluate them if required, and upload blocks of transactions (~100k rows) as 'chunk' files to the object store.
 These chunk files form the lowest level (L0) of the LSM tree.
 
 Before transactions are included in a block, they are held in the 'live index', which is included as part of queries' input sets, so that queries can observe recent transactions.
 
-The live-index is in-memory - so, when they start up, XTDB nodes check the latest transaction written as part of a chunk in the object store and start consuming the transaction log from there.
+The live-index is in-memory - so, when they start up, XTDB nodes check the latest transaction written as part of a chunk in the object store and start consuming the log from there.
 --
 3. *In the background, the compactors on each node share the compaction of the LSM tree*
 +

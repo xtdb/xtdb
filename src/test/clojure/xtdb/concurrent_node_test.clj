@@ -42,7 +42,6 @@
                     {:xtdb.metrics/registry nil
                      :xtdb/allocator {}
                      :xtdb/log local-log
-                     :xtdb/file-log local-log
                      :xtdb.log/processor nil
                      :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))})
     (fn []

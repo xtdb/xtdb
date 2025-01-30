@@ -9,8 +9,8 @@ XTDB provides modular support for Google Cloud environments, including a prebuil
 In order to run a Google Cloud based XTDB cluster, the following infrastructure is required:
 
 * A **Google Cloud Storage bucket** for remote storage.
-* A **Kafka cluster** for transaction logs.
-** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
+* A **Kafka cluster** for the message log.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/log/kafka[Kafka configuration^] docs.
 * A service account with the necessary permissions to access the storage bucket and Kafka cluster.
 * XTDB nodes configured to communicate with the Kafka cluster and Google Cloud Storage.
 
@@ -21,7 +21,7 @@ NOTE: We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluste
 
 The https://github.com/xtdb/xtdb/pkgs/container/xtdb-google-cloud[**xtdb-google-cloud**^] image is optimized for running XTDB in Google Cloud environments and is deployed on every release to XTDB.
 
-By default, it will use Google Cloud Storage for storage and Kafka for transaction logs, including dependencies for both.
+By default, it will use Google Cloud Storage for storage and Kafka for the message log, including dependencies for both.
 
 === Configuration
 
@@ -34,11 +34,8 @@ The following environment variables are used to configure the `xtdb-google-cloud
 | `KAFKA_BOOTSTRAP_SERVERS`
 | Kafka bootstrap server containing the XTDB topics.
 
-| `XTDB_TX_TOPIC`
-| Kafka topic to be used as the transaction log.
-
-| `XTDB_FILES_TOPIC`
-| Kafka topic to be used for node file notifications.
+| `XTDB_LOG_TOPIC`
+| Kafka topic to be used as the XTDB log.
 
 | `XTDB_GCP_PROJECT_ID`
 | GCP project ID containing the bucket.

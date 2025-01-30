@@ -1,7 +1,6 @@
 (ns xtdb.trie-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.buffer-pool :as bp]
             [xtdb.operator.scan :as scan]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -10,12 +9,16 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.nio.file Paths)
+  (:import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+           (java.nio.file Paths)
+           java.nio.file.Path
            (java.util.function IntPredicate Predicate)
-           (org.apache.arrow.memory RootAllocator)
+           (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
+           xtdb.api.storage.Storage
            xtdb.arrow.Relation
+           xtdb.buffer_pool.LocalBufferPool
            (xtdb.metadata ITableMetadata)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalDimension)
@@ -445,6 +448,14 @@
                              (reify ITableMetadata
                                (temporalBounds [_ _] (TemporalBounds.)))))
 
+(defn dir->buffer-pool
+  "Creates a local storage buffer pool from the given directory."
+  ^xtdb.BufferPool [^BufferAllocator allocator, ^Path dir]
+  (let [bp-path (util/tmp-dir "tmp-buffer-pool")
+        storage-root (.resolve bp-path Storage/storageRoot)]
+    (util/copy-dir dir storage-root)
+    (LocalBufferPool. allocator (Storage/localStorage bp-path) (SimpleMeterRegistry.))))
+
 (deftest test-trie-cursor-with-multiple-recency-nodes-from-same-file-3298
   (let [eid #uuid "00000000-0000-0000-0000-000000000000"]
     (util/with-tmp-dirs #{tmp-dir}
@@ -473,7 +484,7 @@
                                     {0 [[:put {:xt/id id :foo "bar3" :xt/system-from 3}]]}
                                     (.resolve tmp-dir t2-data-file))
 
-          (with-open [buffer-pool (bp/dir->buffer-pool al tmp-dir)]
+          (with-open [buffer-pool (dir->buffer-pool al tmp-dir)]
 
             (let [arrow-hash-trie1 (->arrow-hash-trie t1-rel)
                   arrow-hash-trie2 (->arrow-hash-trie t2-rel)

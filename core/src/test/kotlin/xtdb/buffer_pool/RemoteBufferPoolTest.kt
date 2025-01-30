@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.BufferPool
-import xtdb.api.log.FileLog
 import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remoteStorage
 import xtdb.api.storage.StoreOperation.COMPLETE
@@ -34,7 +33,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
 
         remoteBufferPool =
             remoteStorage(objectStore = { SimulatedObjectStore() }, createTempDirectory("remote-buffer-pool-test"))
-                .open(allocator, FileLog.openInMemory())
+                .open(allocator)
 
         // Mocking small value for MIN_MULTIPART_PART_SIZE
         RemoteBufferPool.minMultipartPartSize = 320

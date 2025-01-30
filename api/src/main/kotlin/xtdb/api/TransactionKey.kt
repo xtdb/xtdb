@@ -63,7 +63,7 @@ interface TransactionKey : Comparable<TransactionKey> {
     val txId: Long
 
     /**
-     * the time as recorded by the transaction log.
+     * the time as recorded by the log.
      */
     val systemTime: Instant
 

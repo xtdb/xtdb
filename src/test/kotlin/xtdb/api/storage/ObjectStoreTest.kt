@@ -69,6 +69,7 @@ abstract class ObjectStoreTest {
     }
 
     private fun ObjectStore.allObjects() = listObjects().map { it.key.toString() }.toSet()
+    private fun ObjectStore.objects(dir: Path) = listObjects(dir).map { it.key.toString() }.toSet()
 
     @Test
     fun `test list`() = runTest(timeout = 10.seconds) {
@@ -80,7 +81,20 @@ abstract class ObjectStoreTest {
 
         assertEquals(
             setOf("bar/alice", "bar/bob", "foo/alan", "bar/baz/dan", "bar/baza/james"),
-            objectStore.allObjects()
+            objectStore.allObjects(),
+            "all-objects lists recursively"
+        )
+
+        assertEquals(
+            setOf("bar/alice", "bar/bob", "bar/baz/dan", "bar/baza/james"),
+            objectStore.objects("bar".asPath),
+            "lists recursively"
+        )
+
+        assertEquals(
+            setOf("bar/baz/dan"),
+            objectStore.objects("bar/baz".asPath),
+            "doesn't include bar/baza"
         )
     }
 

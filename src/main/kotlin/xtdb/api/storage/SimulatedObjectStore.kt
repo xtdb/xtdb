@@ -1,9 +1,11 @@
 package xtdb.api.storage
 
+import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import java.util.*
 import java.util.concurrent.CompletableFuture
 
 enum class StoreOperation {
@@ -12,7 +14,7 @@ enum class StoreOperation {
 
 class SimulatedObjectStore(
     val calls: MutableList<StoreOperation> = mutableListOf(),
-    val buffers: MutableMap<Path, ByteBuffer> = mutableMapOf()
+    val buffers: NavigableMap<Path, ByteBuffer> = TreeMap()
 ) : ObjectStore, SupportsMultipart {
 
     private fun copyByteBuffer(buffer: ByteBuffer) =
@@ -42,8 +44,12 @@ class SimulatedObjectStore(
         return CompletableFuture.completedFuture(null)
     }
 
-    override fun listObjects(): List<ObjectStore.StoredObject> =
-        buffers.map { (key, buffer) -> ObjectStore.StoredObject(key, buffer.capacity().toLong()) }
+    override fun listObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
+
+    override fun listObjects(dir: Path): List<StoredObject> =
+        buffers.tailMap(dir).entries
+            .takeWhile { it.key.startsWith(dir) }
+            .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
     override fun deleteObject(k: Path): CompletableFuture<*> =
         TODO("Not yet implemented")

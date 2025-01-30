@@ -194,7 +194,7 @@ class S3(
             }.await()
         }
 
-    override fun listObjects(): Iterable<StoredObject> =
+    private fun listObjects0(listPrefix: Path) =
         sequence {
             var continuationToken: String? = null
 
@@ -202,7 +202,7 @@ class S3(
                 val listResp = runBlocking {
                     client.listObjectsV2 {
                         it.bucket(bucket)
-                        it.prefix(prefix.toString())
+                        it.prefix("$listPrefix/")
                         it.continuationToken(continuationToken)
                     }.await()
                 }
@@ -213,6 +213,9 @@ class S3(
                 continuationToken = listResp.nextContinuationToken()
             }
         }.asIterable()
+
+    override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
+    override fun listObjects() = listObjects0(prefix)
 
     // used for multipart upload testing
     fun listUploads(): Set<Path> = runBlocking {

@@ -12,8 +12,8 @@ In order to run an Azure based XTDB cluster, the following infrastructure is req
 
 * An **Azure Storage Account**, containing a **Storage Account Container**.
 * A **User Assigned Managed Identity** for authentication with Azure services.
-* A **Kafka cluster** for transaction logs.
-** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
+* A **Kafka cluster** for the message log.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/log/kafka[Kafka configuration^] docs.
 * XTDB nodes configured to communicate with the Kafka cluster and Azure Storage Account/Container.
 * (On Kubernetes) A **Federated Identity Credential** setup for the desired Kubernetes Namespace/Service account to give access to the **User Assigned Managed Identity**.
 
@@ -107,7 +107,7 @@ helm pull oci://ghcr.io/xtdb/helm-xtdb-azure \
 
 The https://github.com/xtdb/xtdb/pkgs/container/xtdb-azure[**xtdb-azure**^] image is optimized for running XTDB in Azure environments, and is deployed on every release to XTDB.
 
-By default, it will use Azure Blob Storage for object storage and Kafka for transaction logs, including dependencies for both.
+By default, it will use Azure Blob Storage for object storage and Kafka for the message log, including dependencies for both.
 
 === Configuration
 
@@ -120,11 +120,8 @@ The following environment variables configure the `xtdb-azure` image:
 | `KAFKA_BOOTSTRAP_SERVERS`
 | Kafka bootstrap server containing the XTDB topics.
 
-| `XTDB_TX_TOPIC`
-| Kafka topic to be used as the transaction log.
-
-| `XTDB_FILES_TOPIC`
-| Kafka topic to be used for node file notifications.
+| `XTDB_LOG_TOPIC`
+| Kafka topic to be used as the XTDB log.
 
 | `XTDB_AZURE_STORAGE_ACCOUNT`
 | Name of the Azure Storage Account.

@@ -11,6 +11,9 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.api.log.Log.Message
+import xtdb.api.log.Log.Record
+import xtdb.api.log.Log.Subscriber
 import xtdb.log.proto.AddedTrie
 import java.nio.ByteBuffer
 import java.time.Duration
@@ -37,9 +40,9 @@ class KafkaLogTest {
 
     @Test
     fun `round-trips messages`() = runTest(timeout = 10.seconds) {
-        val msgs = synchronizedList(mutableListOf<List<Log.Record>>())
+        val msgs = synchronizedList(mutableListOf<List<Record>>())
 
-        val subscriber = mockk<Log.Subscriber> {
+        val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
             every { latestCompletedOffset } returns -1
         }
@@ -51,16 +54,16 @@ class KafkaLogTest {
 
         val addedTries = listOf(addedTrie("foo", 12), addedTrie("bar", 18))
 
-        KafkaLog.kafka(container.bootstrapServers, "test-tx-topic", "test-files-topic")
+        KafkaLog.kafka(container.bootstrapServers, "test-topic")
             .pollDuration(Duration.ofMillis(100))
             .openLog().use { log ->
                 log.subscribe(subscriber).use { _ ->
                     val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
-                    log.appendMessage(Log.Message.Tx(txPayload)).await()
+                    log.appendMessage(Message.Tx(txPayload)).await()
 
-                    log.appendMessage(Log.Message.FlushChunk(12)).await()
+                    log.appendMessage(Message.FlushChunk(12)).await()
 
-                    log.appendMessage(Log.Message.TriesAdded(addedTries)).await()
+                    log.appendMessage(Message.TriesAdded(addedTries)).await()
 
                     while (msgs.flatten().size < 3) delay(100)
                 }
@@ -71,17 +74,17 @@ class KafkaLogTest {
         val allMsgs = msgs.flatten()
 
         allMsgs[0].message.let {
-            check(it is Log.Message.Tx)
+            check(it is Message.Tx)
             assertEquals(42, it.payload.getLong(1))
         }
 
         allMsgs[1].message.let {
-            check(it is Log.Message.FlushChunk)
+            check(it is Message.FlushChunk)
             assertEquals(12, it.expectedChunkTxId)
         }
 
         allMsgs[2].message.let {
-            check(it is Log.Message.TriesAdded)
+            check(it is Message.TriesAdded)
             assertEquals(addedTries, it.tries)
         }
     }

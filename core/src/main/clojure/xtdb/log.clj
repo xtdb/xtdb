@@ -313,15 +313,6 @@
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
 
-(defmethod ig/prep-key :xtdb/file-log [_^Log$Factory factory]
-  {:factory factory})
-
-(defmethod ig/init-key :xtdb/file-log [_ {:keys [^Log$Factory factory]}]
-  (.openFileLog factory))
-
-(defmethod ig/halt-key! :xtdb/file-log [_ ^Log log]
-  (util/close log))
-
 (defn submit-tx& ^java.util.concurrent.CompletableFuture
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 

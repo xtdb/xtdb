@@ -23,7 +23,7 @@ This will require:
 * `kubectl` - see link:https://kubernetes.io/docs/tasks/tools/[here]
 * `minikube` - see link:https://minikube.sigs.k8s.io/docs/start/?arch=%2Flinux%2Fx86-64%2Fstable%2Fbinary+download[here] 
 
-The nodes ran here will use Kafka for the shared Transaction Log - we will run/deploy Kafka on Kubernetes.
+The nodes here will use Kafka for the shared Log - we will run/deploy Kafka on Kubernetes.
 
 NOTE: This will use "local-config-kafka.yaml" to storage the Kafka configuration - you can update this file to change the configuration of the XTDB nodes ran on Kubernetes.
 

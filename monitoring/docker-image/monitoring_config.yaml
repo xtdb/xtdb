@@ -3,9 +3,8 @@ server:
 
 log: !Kafka
   bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-  txTopic: !Env XTDB_TX_TOPIC
-  filesTopic: !Env XTDB_FILES_TOPIC
-  
+  topic: !Env XTDB_LOG_TOPIC
+
 storage: !Local
   path: "/var/lib/xtdb/buffers"
 

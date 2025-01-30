@@ -11,9 +11,9 @@ NOTE: For more information on setting up an XTDB cluster on AWS, see the link:gu
 In order to run an AWS based XTDB cluster, the following infrastructure is required:
 
 * An **S3 bucket** for remote storage.
-* A **Kafka cluster** for transaction logs/file notifications.
+* A **Kafka cluster** for the message log.
 ** Within AWS, you can use the https://aws.amazon.com/msk/[Amazon Managed Streaming for Apache Kafka (MSK)^] service.
-** For more information on setting up Kafka for usage with XTDB, see the link:config/tx-log/kafka[Kafka configuration^] docs.
+** For more information on setting up Kafka for usage with XTDB, see the link:config/log/kafka[Kafka configuration^] docs.
 * IAM policies which grant XTDB permission to the S3 bucket and Kafka cluster.
 * XTDB nodes configured to communicate with the Kafka cluster and S3 bucket.
 
@@ -22,7 +22,7 @@ In order to run an AWS based XTDB cluster, the following infrastructure is requi
 
 The https://github.com/xtdb/xtdb/pkgs/container/xtdb-aws[**xtdb-aws**^] image is optimized for running XTDB in AWS environments, and is deployed on every release to XTDB. 
 
-By default, it will use **S3** for storage and **Kafka** for transaction logs, including dependencies for both.
+By default, it will use **S3** for storage and **Kafka** for the message log, including dependencies for both.
 
 === Configuration
 
@@ -35,11 +35,8 @@ The following environment variables are used to configure the `xtdb-aws` image:
 | `KAFKA_BOOTSTRAP_SERVERS`
 | Kafka bootstrap server containing the XTDB topics.
 
-| `XTDB_TX_TOPIC`
-| Kafka topic to be used as the transaction log.
-
-| `XTDB_FILES_TOPIC`
-| Kafka topic to be used for node file notifications.
+| `XTDB_LOG_TOPIC`
+| Kafka topic to be used as the XTDB log.
 
 | `XTDB_S3_BUCKET`
 | Name of the S3 bucket used for remote storage.

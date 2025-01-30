@@ -103,10 +103,13 @@ class CloudStorage(
         }
     }
 
-    override fun listObjects(): Iterable<StoredObject> =
-        client.list(bucket, BlobListOption.prefix(prefix.toString()))
+    private fun listObjects0(listPrefix: Path) =
+        client.list(bucket, BlobListOption.prefix("$listPrefix/"))
             .iterateAll()
             .map { blob -> StoredObject(prefix.relativize(blob.name.asPath), blob.size) }
+
+    override fun listObjects() = listObjects0(prefix)
+    override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
 
     override fun close() {
         runBlocking { scope.coroutineContext.job.cancelAndJoin() }

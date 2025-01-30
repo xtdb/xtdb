@@ -50,6 +50,13 @@ interface ObjectStore : AutoCloseable {
     fun listObjects(): Iterable<StoredObject>
 
     /**
+     * Recursively lists all objects in the object store under the given directory.
+     *
+     * Objects are returned in lexicographic order of their path names.
+     */
+    fun listObjects(dir: Path): Iterable<StoredObject>
+
+    /**
      * Deletes the object with the given path from the object store.
      */
     fun deleteObject(k: Path): CompletableFuture<*>
