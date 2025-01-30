@@ -629,8 +629,8 @@
                        (string->byte-buffer)))})
 
 ;;;; SQL:2011 Operations involving datetimes and intervals
-(defn- recall-with-cast
-  ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-call))
+(defn- recall-with-cast2
+  ([expr cast1 cast2] (recall-with-cast2 expr cast1 cast2 expr/codegen-call))
 
   ([{[t1 t2] :arg-types, :as expr} cast1 cast2 f]
    (let [{ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type cast1})
@@ -641,6 +641,19 @@
       :->call-code (fn [[a1 a2]]
                      (->cc [(->cc1 [a1]) (->cc2 [a2])]))})))
 
+(defn- recall-with-cast3
+  ([expr cast1 cast2 cast3] (recall-with-cast3 expr cast1 cast2 cast3 expr/codegen-call))
+
+  ([{[t1 t2 t3] :arg-types, :as expr} cast1 cast2 cast3 f]
+   (let [{ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type cast1})
+         {ret2 :return-type, bb2 :batch-bindings, ->cc2 :->call-code} (expr/codegen-cast {:source-type t2, :target-type cast2})
+         {ret3 :return-type, bb3 :batch-bindings, ->cc3 :->call-code} (expr/codegen-cast {:source-type t3, :target-type cast3})
+         {ret :return-type, bb :batch-bindings, ->cc :->call-code} (f (assoc expr :arg-types [ret1 ret2 ret3]))]
+     {:return-type ret
+      :batch-bindings (concat bb1 bb2 bb3 bb)
+      :->call-code (fn [[a1 a2 a3]]
+                     (->cc [(->cc1 [a1]) (->cc2 [a2]) (->cc3 [a3])]))})))
+
 (defn- recall-with-flipped-args [expr]
   (let [{ret :return-type, bb :batch-bindings, ->cc :->call-code} (expr/codegen-call (update expr :arg-types (comp vec rseq)))]
     {:return-type ret, :batch-bindings bb, :->call-code (comp ->cc vec rseq)}))
@@ -648,7 +661,7 @@
 ;;; addition
 
 (defmethod expr/codegen-call [:+ :date :time-local] [{[_ [_ time-unit :as arg2]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:timestamp-local time-unit] arg2)))
+  (-> expr (recall-with-cast2 [:timestamp-local time-unit] arg2)))
 
 (defmethod expr/codegen-call [:+ :timestamp-local :time-local] [{[[_ ts-unit], [_ time-unit]] :arg-types}]
   (with-arg-unit-conversion ts-unit time-unit
@@ -659,7 +672,7 @@
     #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%))))
 
 (defmethod expr/codegen-call [:+ :date :duration] [{[_ [_ dur-unit :as arg2]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
+  (-> expr (recall-with-cast2 [:timestamp-local dur-unit] arg2)))
 
 (defmethod expr/codegen-call [:+ :timestamp-local :duration] [{[[_ ts-unit], [_ dur-unit]] :arg-types}]
   (with-arg-unit-conversion ts-unit dur-unit
@@ -680,8 +693,8 @@
       :year-month {:return-type dt-type
                    :->call-code (fn [[x-arg y-arg]]
                                   `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
-      :day-time (recall-with-cast expr [:timestamp-local :milli] itype)
-      :month-day-nano (recall-with-cast expr [:timestamp-local :nano] itype)))
+      :day-time (recall-with-cast2 expr [:timestamp-local :milli] itype)
+      :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] itype)))
 
   (defmethod expr/codegen-call [f-kw :timestamp-local :interval] [{[[_ ts-unit :as ts-type], [_ iunit]] :arg-types}]
     (letfn [(codegen-call [unit-lower-bound]
@@ -752,10 +765,10 @@
     #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
 
 (defmethod expr/codegen-call [:- :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast x [:timestamp-local y-unit])))
+  (-> expr (recall-with-cast2 x [:timestamp-local y-unit])))
 
 (defmethod expr/codegen-call [:- :timestamp-tz :timestamp-local] [{[[_ x-unit] y] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
+  (-> expr (recall-with-cast2 [:timestamp-local x-unit] y)))
 
 (defmethod expr/codegen-call [:- :date :date] [_expr]
   ;; FIXME this assumes date-unit :day
@@ -763,24 +776,24 @@
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:- :date t] [{[_ t2] :arg-types, :as expr}]
-    (-> expr (recall-with-cast [:timestamp-local :micro] t2)))
+    (-> expr (recall-with-cast2 [:timestamp-local :micro] t2)))
 
   (defmethod expr/codegen-call [:- t :date] [{[t1 _] :arg-types, :as expr}]
-    (-> expr (recall-with-cast t1 [:timestamp-local :micro]))))
+    (-> expr (recall-with-cast2 t1 [:timestamp-local :micro]))))
 
 (defmethod expr/codegen-call [:- :time-local :time-local] [{[[_ time-unit1] [_ time-unit2]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))
+  (-> expr (recall-with-cast2 [:duration time-unit1] [:duration time-unit2])))
 
 (doseq [th [:date :timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:- th :time-local] [{[t [_ time-unit]] :arg-types, :as expr}]
-    (-> expr (recall-with-cast t [:duration time-unit]))))
+    (-> expr (recall-with-cast2 t [:duration time-unit]))))
 
 (defmethod expr/codegen-call [:- :timestamp-tz :duration] [{[[_ts ts-unit tz], [_dur dur-unit]] :arg-types}]
   (with-arg-unit-conversion ts-unit dur-unit
     #(do [:timestamp-tz % tz]) #(do `(Math/subtractExact ~@%))))
 
 (defmethod expr/codegen-call [:- :date :duration] [{[_ [_dur dur-unit :as arg2]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
+  (-> expr (recall-with-cast2 [:timestamp-local dur-unit] arg2)))
 
 (defmethod expr/codegen-call [:- :timestamp-local :duration] [{[[_ts ts-unit], [_dur dur-unit]] :arg-types}]
   (with-arg-unit-conversion ts-unit dur-unit
@@ -795,8 +808,8 @@
     :year-month {:return-type dt-type
                  :->call-code (fn [[x-arg y-arg]]
                                 `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
-    :day-time (recall-with-cast expr [:timestamp-local :milli] itype)
-    :month-day-nano (recall-with-cast expr [:timestamp-local :nano] itype)))
+    :day-time (recall-with-cast2 expr [:timestamp-local :milli] itype)
+    :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] itype)))
 
 ;;; multiply, divide
 
@@ -826,7 +839,7 @@
                   `(quot ~@emitted-args))})
 
 (defmethod expr/codegen-call [:/ :duration :interval] [{[d-type _i-type] :arg-types, :as expr}]
-  (recall-with-cast expr d-type d-type))
+  (recall-with-cast2 expr d-type d-type))
 
 (defmethod expr/codegen-call [:/ :duration :duration] [{[[_ x-unit] [_ y-unit]] :arg-types}]
   (with-arg-unit-conversion x-unit y-unit
@@ -843,23 +856,23 @@
     (constantly :i32) #(do `(Long/compare ~@%))))
 
 (defmethod expr/codegen-call [:compare :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast x [:timestamp-local y-unit])))
+  (-> expr (recall-with-cast2 x [:timestamp-local y-unit])))
 
 (defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-local] [{[[_ x-unit] y] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
+  (-> expr (recall-with-cast2 [:timestamp-local x-unit] y)))
 
 (defmethod expr/codegen-call [:compare :date :date] [expr]
-  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
+  (-> expr (recall-with-cast2 [:timestamp-local :micro] [:timestamp-local :micro])))
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:compare :date t] [{[_ t2] :arg-types, :as expr}]
-    (-> expr (recall-with-cast [:timestamp-local :micro] t2)))
+    (-> expr (recall-with-cast2 [:timestamp-local :micro] t2)))
 
   (defmethod expr/codegen-call [:compare t :date] [{[t1 _] :arg-types, :as expr}]
-    (-> expr (recall-with-cast t1 [:timestamp-local :micro]))))
+    (-> expr (recall-with-cast2 t1 [:timestamp-local :micro]))))
 
 (defmethod expr/codegen-call [:compare :time-local :time-local] [{[[_ time-unit1] [_ time-unit2]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))
+  (-> expr (recall-with-cast2 [:duration time-unit1] [:duration time-unit2])))
 
 (defmethod expr/codegen-call [:compare :duration :duration] [{[[_x x-unit] [_y y-unit]] :arg-types}]
   (with-arg-unit-conversion x-unit y-unit
@@ -1466,18 +1479,18 @@
         y [:timestamp-tz :timestamp-local]]
   (when-not (= x y :timestamp-local)
     (defmethod expr/codegen-call [:age x y] [{[[_ x-unit _], [_ y-unit _]] :arg-types, :as expr}]
-      (-> expr (recall-with-cast [:timestamp-local x-unit] [:timestamp-local y-unit])))))
+      (-> expr (recall-with-cast2 [:timestamp-local x-unit] [:timestamp-local y-unit])))))
 
 ;; Cast and call age for date and mixed types with date
 (defmethod expr/codegen-call [:age :date :date] [expr]
-  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
+  (-> expr (recall-with-cast2 [:timestamp-local :micro] [:timestamp-local :micro])))
 
 (doseq [x [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-call [:age x :date] [{[[_ x-unit _] _] :arg-types, :as expr}]
-    (-> expr (recall-with-cast [:timestamp-local x-unit] [:timestamp-local :micro])))
+    (-> expr (recall-with-cast2 [:timestamp-local x-unit] [:timestamp-local :micro])))
 
   (defmethod expr/codegen-call [:age :date x] [{[_ [_ y-unit _]] :arg-types, :as expr}]
-    (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local y-unit]))))
+    (-> expr (recall-with-cast2 [:timestamp-local :micro] [:timestamp-local y-unit]))))
 
 (defn- bound-precision ^long [^long precision]
   (-> precision (max 0) (min 9)))
@@ -1623,10 +1636,10 @@
                              Long/MAX_VALUE))})
 
 (defmethod expr/codegen-call [:period :date-time :date-time] [expr]
-  (recall-with-cast expr types/temporal-col-type types/temporal-col-type))
+  (recall-with-cast2 expr types/temporal-col-type types/temporal-col-type))
 
 (defmethod expr/codegen-call [:period :date-time :null] [expr]
-  (recall-with-cast expr types/temporal-col-type :null))
+  (recall-with-cast2 expr types/temporal-col-type :null))
 
 (defn from ^long [^ListValueReader period]
   (.readLong ^ValueReader (.nth period 0)))
@@ -1668,10 +1681,10 @@
                   `(temporal-contains-point? ~p1-code ~ts-code))})
 
 (defmethod expr/codegen-call [:contains? :tstz-range :timestamp-local] [{[arg1 [_ arg2-unit]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast arg1 [:timestamp-tz arg2-unit (str (.getZone expr/*clock*))])))
+  (-> expr (recall-with-cast2 arg1 [:timestamp-tz arg2-unit (str (.getZone expr/*clock*))])))
 
 (defmethod expr/codegen-call [:contains? :tstz-range :date] [{[arg1 _arg2] :arg-types, :as expr}]
-  (-> expr (recall-with-cast arg1 [:timestamp-local :micro])))
+  (-> expr (recall-with-cast2 arg1 [:timestamp-local :micro])))
 
 (defn temporal-contains? [p1 p2]
   (and (<= (from p1) (from p2))
@@ -1848,3 +1861,114 @@
      :batch-bindings (concat bb-from bb-to bb-origin bb)
      :->call-code (fn [[i-code from-code to-code origin-code]]
                     (->call-code [i-code (->from-code [from-code]) (->to-code [to-code]) (->origin-code [origin-code])]))}))
+
+(defn date-series [^LocalDate from, ^LocalDate to, ^PeriodDuration stride]
+  (assert (= Duration/ZERO (.getDuration stride))
+          "date-series only supports zero-duration strides")
+
+  (let [period (.getPeriod stride)
+        months (+ (* (.getYears period) 12) (.getMonths period))
+        el-box (ValueBox.)
+
+        ;; we eagerly evaluate here because (unlike the ints version)
+        ;; every entry will need to calculate the one before anyway
+        res (->> (iterate (fn [^LocalDate acc]
+                            (.plusMonths acc months))
+                          from)
+                 (into [] (take-while #(neg? (compare % to)))))]
+
+    (reify ListValueReader
+      (size [_]
+        (count res))
+
+      (nth [_ idx]
+        (doto el-box
+          (.writeLong (.toEpochDay ^LocalDate (nth res idx))))))))
+
+(defmethod expr/codegen-call [:generate_series :date :date :interval] [{[from-type to-type [_interval i-unit :as i-type]] :arg-types, :as expr}]
+  (when-not (= from-type [:date :day])
+    (throw (UnsupportedOperationException. "generate_series with date-from of type date-milli")))
+
+  (when-not (= to-type [:date :day])
+    (throw (UnsupportedOperationException. "generate_series with date-to of type date-milli")))
+
+  (case i-unit
+    :year-month {:return-type [:list [:date :day]]
+                 :->call-code (fn [[x-arg y-arg stride]]
+                                `(date-series (LocalDate/ofEpochDay ~x-arg) (LocalDate/ofEpochDay ~y-arg) ~stride))}
+    :day-time (recall-with-cast3 expr [:timestamp-local :milli] [:timestamp-local :milli] i-type)
+    :month-day-nano (recall-with-cast3 expr [:timestamp-local :nano] [:timestamp-local :nano] i-type)))
+
+(defn ts-series [^LocalDateTime from, ^LocalDateTime to, ^PeriodDuration stride, write-ldt]
+  (let [period (.getPeriod stride)
+        duration (.getDuration stride)
+        el-box (ValueBox.)
+
+        ;; we eagerly evaluate here because (unlike the ints version)
+        ;; every entry will need to calculate the one before anyway
+        res (->> (iterate (fn [^LocalDateTime acc]
+                            (-> acc (.plus period) (.plus duration)))
+                          from)
+                 (into [] (take-while #(neg? (compare % to)))))]
+
+    (reify ListValueReader
+      (size [_] (count res))
+
+      (nth [_ idx]
+        (doto el-box
+          (write-ldt (nth res idx)))))))
+
+(defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval] [{[[_from-ts from-unit] [_to-ts to-unit] [_interval i-unit]] :arg-types}]
+  (let [out-unit (types/smallest-ts-unit from-unit to-unit
+                                         (case i-unit
+                                           :year-month :second
+                                           :day-time :milli
+                                           :month-day-nano :nano))]
+    {:return-type [:list [:timestamp-local out-unit]]
+     :->call-code (fn [[from-arg to-arg i-arg]]
+                    (-> `(ts-series ~(ts->ldt from-arg from-unit)
+                                    ~(ts->ldt to-arg to-unit)
+                                    ~i-arg
+                                    ~(let [ldt-sym (gensym 'ldt)]
+                                       `(fn ~'write-ldt [^ValueBox box#, ~(-> ldt-sym (expr/with-tag LocalDateTime))]
+                                          (.writeLong box# ~(ldt->ts ldt-sym out-unit)))))))}))
+
+(defn tstz-series [^ZonedDateTime from, ^ZonedDateTime to, ^PeriodDuration stride, write-zdt]
+  (let [period (.getPeriod stride)
+        duration (.getDuration stride)
+        el-box (ValueBox.)
+
+        ;; we eagerly evaluate here because (unlike the ints version)
+        ;; every entry will need to calculate the one before anyway
+        res (->> (iterate (fn [^ZonedDateTime acc]
+                            (-> acc (.plus period) (.plus duration)))
+                          from)
+                 (into [] (take-while #(neg? (compare % to)))))]
+
+    (reify ListValueReader
+      (size [_] (count res))
+
+      (nth [_ idx]
+        (doto el-box
+          (write-zdt (nth res idx)))))))
+
+(defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval] [{[[_from-ts from-unit from-tz] [_to-ts to-unit to-tz] [_interval i-unit]] :arg-types}]
+  (let [out-unit (types/smallest-ts-unit from-unit to-unit
+                                         (case i-unit
+                                           :year-month :second
+                                           :day-time :milli
+                                           :month-day-nano :nano))
+        out-tz-sym (gensym 'out-tz)
+        out-tz (if (= from-tz to-tz) from-tz "UTC")]
+    {:return-type [:list [:timestamp-tz out-unit out-tz]]
+     :batch-bindings [[out-tz-sym (ZoneId/of out-tz)]]
+     :->call-code (fn [[from-arg to-arg i-arg]]
+                    (-> `(tstz-series ~(ts->zdt from-arg from-unit out-tz-sym)
+                                      ~(ts->zdt to-arg to-unit out-tz-sym)
+                                      ~i-arg
+                                      ~(let [zdt-sym (gensym 'zdt)]
+                                         `(fn ~'write-zdt [^ValueBox box#, ~(-> zdt-sym (expr/with-tag ZonedDateTime))]
+                                            (.writeLong box# ~(zdt->ts zdt-sym out-unit)))))))}))
+
+
+(.plusDays #xt/zoned-date-time "2020-03-29T00:00Z[Europe/London]" 1)

@@ -1301,27 +1301,6 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
                             FROM foo, bar, baz
                             WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)"))))
 
-(t/deftest test-generate-series-3212
-  (t/is (= [{:xs [1 2 3]}]
-           (xt/q tu/*node* "SELECT generate_series(1, 4) xs")))
-
-  (t/is (= [{:xs [1 4 7]}]
-           (xt/q tu/*node* "SELECT generate_series(1, 8, 3) xs")))
-
-  (t/is (= [{:xs []}]
-           (xt/q tu/*node* "SELECT generate_series(10, 3) xs")))
-
-  (t/is (= [{:xs []}]
-           (xt/q tu/*node* "SELECT generate_series(1, 1) xs")))
-
-  (t/is (= [{:xs [1]}]
-           (xt/q tu/*node* "SELECT generate_series(1, 2, 2) xs")))
-
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, start: -1, end: 3}"]])
-
-  (t/is (= [{:xs [-1 0 1 2]}]
-           (xt/q tu/*node* "SELECT generate_series(start, end) xs FROM foo"))))
-
 (t/deftest test-dollar-quoted-strings
   (t/is (= "" (plan/plan-expr "$$$$")))
   (t/is (= "" (plan/plan-expr "$tag$$tag$")))

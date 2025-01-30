@@ -181,6 +181,35 @@ Field must be one of `HOUR`, `MINUTE` or `SECOND`.
 +
 Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or `SECOND`.
 
+`GENERATE_SERIES(start, end, stride)`::
++
+--
+Generates a series of timestamps from the given start (inclusive) to the given end (exclusive), with the given stride interval.
+
+e.g.
+
+* `GENERATE_SERIES(DATE '2020-01-01', DATE '2020-01-04', INTERVAL '1' DAY)` yields:
++
+`[DATE '2020-01-01', DATE '2020-01-02', DATE '2020-01-03']`
+
+* `GENERATE_SERIES(TIMESTAMP '2020-01-01T00:00:00Z', TIMESTAMP '2020-01-01T01:00:00Z', INTERVAL 'PT15M')` yields:
++
+`[TIMESTAMP '2020-01-01T00:00:00Z', TIMESTAMP '2020-01-01T00:15:00Z', TIMESTAMP '2020-01-01T00:30:00Z', TIMESTAMP '2020-01-01T00:45:00Z']`
+
+* `GENERATE_SERIES(TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'P1D')` yields:
++
+`[TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-30T00:00:00+01:00[Europe/London]']`
++
+Note that, if a time-zone is specified, the series will honour any daylight savings transitions that occur within the series.
+* `GENERATE_SERIES(TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'PT24')` yields:
++
+`[TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-29T23:00:00+01:00[Europe/London]']`
++
+Note the difference between adding 24 hours and adding 1 day when there are DST boundaries!
+
+This timezone-aware behaviour is an extension to PostgreSQL's `generate_series` function - XTDB maintains and stores any TZ information you provide.
+--
+
 `RANGE_BINS(stride, period [, origin])`::
 +
 --

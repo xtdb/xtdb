@@ -428,10 +428,14 @@
     :micro #=(long 1e6)
     :nano #=(long 1e9)))
 
-(defn smallest-ts-unit [x-unit y-unit]
-  (if (> (ts-units-per-second x-unit) (ts-units-per-second y-unit))
-    x-unit
-    y-unit))
+(defn smallest-ts-unit
+  ([x-unit y-unit]
+   (if (> (ts-units-per-second x-unit) (ts-units-per-second y-unit))
+     x-unit
+     y-unit))
+
+  ([x-unit y-unit & more]
+   (reduce smallest-ts-unit (smallest-ts-unit x-unit y-unit) more)))
 
 ;;; multis
 

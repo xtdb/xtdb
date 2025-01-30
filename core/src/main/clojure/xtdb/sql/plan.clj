@@ -635,10 +635,12 @@
                    (.accept (->ExprPlanVisitor env (or left-scope scope))))
 
           table-projection (->table-projection (.tableProjection ctx))
-          table-alias (identifier-sym (.tableAlias ctx))]
+          table-alias (identifier-sym (.tableAlias ctx))
+          with-ordinality? (boolean (.withOrdinality ctx))]
 
       (assert (or (nil? table-projection)
-                  (= 1 (count table-projection))))
+                  (= (+ 1 (if with-ordinality? 1 0))
+                     (count table-projection))))
 
       (->UnnestTable env table-alias
                      (symbol (str table-alias "." (swap! !id-count inc)))
@@ -646,7 +648,10 @@
                          (-> (->col-sym (str "_genseries." (swap! !id-count inc)))
                              (vary-meta assoc :unnamed-unnest-col? true)))
                      expr
-                     nil)))
+                     (when with-ordinality?
+                       (or (->col-sym (second table-projection))
+                           (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
+                               (vary-meta assoc :unnamed-unnest-col? true)))))))
 
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
 
