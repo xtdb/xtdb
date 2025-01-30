@@ -96,7 +96,7 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (or (let [^TransactionResult tx-res (-> @(.orTimeout (.awaitAsync log-processor tx-id) 3 java.util.concurrent.TimeUnit/SECONDS)
+      (or (let [^TransactionResult tx-res (-> @(.awaitAsync log-processor tx-id)
                                               (util/rethrowing-cause))]
             (when (and tx-res
                        (= (.getTxId tx-res) tx-id))
