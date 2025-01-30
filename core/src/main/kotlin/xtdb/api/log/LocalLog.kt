@@ -23,6 +23,7 @@ import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
+import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
 import kotlin.io.path.createParentDirectories
@@ -114,7 +115,9 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
         try {
             val res = Array(msgs.size) { idx ->
                 val (msg) = msgs[idx]
-                val ts = instantSource.instant().truncatedTo(MICROS)
+                // we only use the instantSource for Tx messages so that the tests
+                // that check files can be deterministic
+                val ts = if (msg is Message.Tx) instantSource.instant() else Instant.now()
                 val payload = msg.encode()
                 val size = payload.remaining()
                 val offset = logFileChannel.position()

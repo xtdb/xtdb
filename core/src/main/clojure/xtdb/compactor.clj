@@ -7,19 +7,20 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import [java.nio.channels ClosedByInterruptException]
-           [java.nio.file Path]
            [java.util ArrayList Arrays Comparator LinkedList PriorityQueue]
            (java.util.function Predicate)
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector.types.pojo Field FieldType)
+           (xtdb BufferPool)
            xtdb.api.CompactorConfig
+           (xtdb.api.log Log)
            (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
            xtdb.bitemporal.IPolygonReader
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            xtdb.BufferPool
            (xtdb.metadata IMetadataManager)
-           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask)
+           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask TrieCatalog)
            (xtdb.util TemporalBounds)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -153,11 +154,12 @@
       (log/error t "Error running compaction job.")
       (throw t))))
 
-(defrecord Job [trie-keys part out-trie-key]
+(defrecord Job [table-name trie-keys part out-trie-key]
   Compactor$Job
+  (getTableName [_] table-name)
   (getOutputTrieKey [_] out-trie-key))
 
-(defn- l0->l1-compaction-job [{l0-trie-keys 0, l1-trie-keys 1} {:keys [^long l1-file-size-rows]}]
+(defn- l0->l1-compaction-job [table-name {l0-trie-keys 0, l1-trie-keys 1} {:keys [^long l1-file-size-rows]}]
   (let [last-l1-file (last l1-trie-keys)
         l1-compacted-row (long (if-let [{:keys [^long next-row]} last-l1-file]
                                  next-row
@@ -186,9 +188,9 @@
 
                     current-l0-trie-keys)]
 
-        (->Job trie-keys nil (trie/->log-l0-l1-trie-key 1 first-row next-row rows))))))
+        (->Job table-name trie-keys nil (trie/->log-l0-l1-trie-key 1 first-row next-row rows))))))
 
-(defn compaction-jobs [meta-file-names {:keys [^long l1-file-size-rows] :as opts}]
+(defn compaction-jobs [table-name meta-file-names {:keys [^long l1-file-size-rows] :as opts}]
   (when (seq meta-file-names)
     (let [!compaction-jobs (ArrayList.)
 
@@ -199,7 +201,7 @@
       (loop [level (long (last (sort (keys level-grouped-file-names))))
              ^longs !compacted-rows-above (trie/path-array (inc level))]
         (if (zero? level)
-          (when-let [job (l0->l1-compaction-job level-grouped-file-names opts)]
+          (when-let [job (l0->l1-compaction-job table-name level-grouped-file-names opts)]
             (.add !compaction-jobs job))
             ;; exit `loop`
 
@@ -233,8 +235,7 @@
                       (let [{:keys [part ^long next-row]} (last trie-keys)
                             compaction-part (HashTrieKt/conjPath (or part (byte-array 0)) path-suffix)]
                         (.add !compaction-jobs
-                              (->Job (mapv :trie-key trie-keys)
-                                     compaction-part
+                              (->Job table-name (mapv :trie-key trie-keys) compaction-part
                                      (trie/->log-l2+-trie-key (inc level) compaction-part next-row)))))))))
 
             (recur (dec level) !compacted-rows))))
@@ -247,12 +248,15 @@
    :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
    :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))
    :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :log (ig/ref :xtdb/log)
+   :trie-catalog (ig/ref :xtdb/trie-catalog)
    :enabled? (.getEnabled config)})
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
 
-(defn- open-compactor [{:keys [allocator, ^BufferPool buffer-pool, metadata-mgr, ^long threads metrics-registry]}]
+(defn- open-compactor [{:keys [allocator, ^BufferPool buffer-pool, ^Log log, ^TrieCatalog trie-catalog, metadata-mgr,
+                               ^long threads metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (metrics/add-allocator-gauge metrics-registry "compactor.allocator.allocated_memory" allocator)
     (let [page-size *page-size*
@@ -260,16 +264,15 @@
       (Compactor/open
        (reify Compactor$Impl
          (availableJobs [_]
-           (for [^Path table-path (.listObjects buffer-pool util/tables-dir)
-                 :let [table-name (str (.getFileName table-path))]
-                 job (compaction-jobs (trie/list-meta-files buffer-pool table-name)
+           (for [table-name (.getTableNames trie-catalog)
+                 job (compaction-jobs table-name (trie/list-meta-files buffer-pool table-name)
                                       {:l1-file-size-rows l1-file-size-rows})]
-             (assoc job :table-name table-name)))
+             job))
 
          (executeJob [_ job]
            (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)))
 
-       *ignore-signal-block?* threads))))
+       log trie-catalog *ignore-signal-block?* threads))))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [enabled?] :as opts}]
   (if enabled?

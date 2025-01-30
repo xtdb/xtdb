@@ -716,7 +716,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                    :rows-per-chunk 16}]
     (util/delete-dir node-dir)
     (dotimes [_ 5]
-      (with-open [node (tu/->local-node node-opts)]
+      (util/with-open [node (tu/->local-node node-opts)]
         (doseq [tx (->> (random-maps 32)
                         (map #(vector :put-docs :docs %))
                         (partition-all 16))]

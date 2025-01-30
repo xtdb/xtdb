@@ -24,8 +24,10 @@
            (xtdb.api IndexerConfig TransactionKey)
            xtdb.BufferPool
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
+           (xtdb.api.log Log Log$Message$TriesAdded)
+           (xtdb.log AddedTrie)
            xtdb.metadata.IMetadataManager
-           (xtdb.trie MemoryHashTrie)
+           (xtdb.trie MemoryHashTrie TrieCatalog)
            (xtdb.util RefCounter RowCounter)
            (xtdb.vector IRelationWriter IVectorWriter)))
 
@@ -141,14 +143,15 @@
     (.syncRowCount live-rel)
     (let [row-count (.getPosition (.writerPosition live-rel))]
       (when (pos? row-count)
-        (with-open [data-rel (.openAsRelation live-rel)]
-          (trie/write-live-trie! allocator buffer-pool table-name
-                                 (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)
-                                 live-trie data-rel)
+        (let [trie-key (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)]
+          (with-open [data-rel (.openAsRelation live-rel)]
+            (trie/write-live-trie! allocator buffer-pool table-name trie-key
+                                   live-trie data-rel)
 
-          (MapEntry/create table-name
-                           {:fields (live-rel->fields live-rel)
-                            :row-count row-count})))))
+            (MapEntry/create table-name
+                             {:fields (live-rel->fields live-rel)
+                              :trie-key trie-key
+                              :row-count row-count}))))))
 
   (openWatermark [this] (live-table-wm live-rel (.live-trie this)))
 
@@ -201,7 +204,8 @@
                            (comp set keys))))
 
 
-(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr, compactor
+(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr
+                    ^Log log, ^TrieCatalog trie-catalog, compactor
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
                     ^Map tables,
@@ -244,9 +248,7 @@
 
               (let [^Watermark old-wm (.shared-wm this-idx)
                     ^Watermark shared-wm (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
-                                           (Watermark. (.getLatestCompletedTx this-idx)
-                                                       live-index-wm
-                                                       (->schema live-index-wm metadata-mgr)))]
+                                           (Watermark. tx-key live-index-wm (->schema live-index-wm metadata-mgr)))]
                 (set! (.shared-wm this-idx) shared-wm)
                 (some-> old-wm .close))
 
@@ -302,16 +304,26 @@
                                           (.finishChunk table chunk-idx next-chunk-idx)))))]
           (.join scope)
 
-          (let [table-metadata (-> (into {} (keep #(try
-                                                     (.get ^StructuredTaskScope$Subtask %)
-                                                     (catch Exception _
-                                                       (throw (.exception ^StructuredTaskScope$Subtask %)))))
-                                         tasks)
+          (let [table-metadata (-> tasks
+                                   (->> (into {} (keep #(try
+                                                          (.get ^StructuredTaskScope$Subtask %)
+                                                          (catch Exception _
+                                                            (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                    (util/rethrowing-cause))]
             (.finishChunk metadata-mgr chunk-idx
                           {:latest-completed-tx latest-completed-tx
                            :next-chunk-idx next-chunk-idx
-                           :tables table-metadata}))))
+                           :tables table-metadata})
+
+            (doseq [[table-name {:keys [trie-key]}] table-metadata]
+              (.addTrie trie-catalog table-name trie-key))
+
+            @(.appendMessage log (Log$Message$TriesAdded.
+                                  (for [[table-name {:keys [trie-key]}] table-metadata]
+                                    (-> (AddedTrie/newBuilder)
+                                        (.setTableName table-name)
+                                        (.setTrieKey trie-key)
+                                        (.build))))))))
 
       (.nextChunk row-counter)
 
@@ -356,15 +368,17 @@
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :metadata-mgr (ig/ref ::meta/metadata-manager)
    :compactor (ig/ref :xtdb/compactor)
+   :log (ig/ref :xtdb/log)
+   :trie-catalog (ig/ref :xtdb/trie-catalog)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr compactor ^IndexerConfig config metrics-registry]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
-        (->LiveIndex allocator buffer-pool metadata-mgr compactor
+        (->LiveIndex allocator buffer-pool metadata-mgr log trie-catalog compactor
                      latest-completed-tx latest-completed-tx
                      tables
 

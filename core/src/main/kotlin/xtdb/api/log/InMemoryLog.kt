@@ -9,9 +9,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import xtdb.api.log.Log.*
+import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 class InMemoryLog(private val instantSource: InstantSource) : Log {
@@ -45,7 +45,11 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
         scope.launch {
             for ((message, onCommit) in appendCh) {
                 mutex.withLock {
-                    val record = Record(nextOffset++, instantSource.instant().truncatedTo(MICROS), message)
+                    // we only use the instantSource for Tx messages so that the tests
+                    // that check files can be deterministic
+                    val ts = if (message is Message.Tx) instantSource.instant() else Instant.now()
+
+                    val record = Record(nextOffset++, ts.truncatedTo(MICROS), message)
                     onCommit.complete(record.logOffset)
                     committedCh?.send(record)
                 }

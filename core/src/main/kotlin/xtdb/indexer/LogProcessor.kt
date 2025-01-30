@@ -11,6 +11,7 @@ import xtdb.api.log.Log.Message
 import xtdb.api.log.LogOffset
 import xtdb.api.log.Watchers
 import xtdb.arrow.asChannel
+import xtdb.trie.TrieCatalog
 import java.time.Duration
 import java.time.Instant
 
@@ -18,6 +19,7 @@ class LogProcessor(
     allocator: BufferAllocator,
     private val indexer: IIndexer,
     private val log: Log,
+    private val trieCatalog: TrieCatalog,
     meterRegistry: MeterRegistry,
     flushTimeout: Duration
 ) : Log.Subscriber, AutoCloseable {
@@ -105,6 +107,11 @@ class LogProcessor(
 
                     is Message.FlushChunk -> {
                         indexer.forceFlush(record)
+                        null
+                    }
+
+                    is Message.TriesAdded -> {
+                        msg.tries.forEach { trieCatalog.addTrie(it.tableName, it.trieKey) }
                         null
                     }
                 }

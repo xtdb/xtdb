@@ -24,13 +24,14 @@
 
 (t/deftest test-compaction-jobs
   (letfn [(f [tries & {:keys [l1-file-size-rows]}]
-            (->> (c/compaction-jobs (map ->trie-file-name tries)
+            (->> (c/compaction-jobs "foo-table"
+                                    (map ->trie-file-name tries)
                                     {:l1-file-size-rows (or l1-file-size-rows 16)})
 
                  (mapv (fn [{:keys [part] :as job}]
-                         (->> (cond-> job
-                                part (update :part vec))
-                              (into {} (filter (comp some? val))))))))]
+                         (-> (cond-> job part (update :part vec))
+                             (->> (into {} (filter (comp some? val))))
+                             (dissoc :table-name))))))]
 
     (->trie-file-name [0 10 20 10])
 
@@ -362,14 +363,14 @@
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
               ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
           (letfn [(submit! [xs]
-                    (doseq [batch (partition-all 8 xs)]
-                      (xt/submit-tx node [(into [:put-docs :foo]
-                                                (for [x batch]
-                                                  {:xt/id x}))])))]
+                    (last (for [batch (partition-all 8 xs)]
+                            (xt/submit-tx node [(into [:put-docs :foo]
+                                                      (for [x batch]
+                                                        {:xt/id x}))]))))]
 
-            (submit! (take 512 (cycle (tu/bad-uuid-seq 8))))
-            (tu/then-await-tx node)
-            (c/compact-all! node (Duration/ofSeconds 5))
+            (let [tx-id (submit! (take 512 (cycle (tu/bad-uuid-seq 8))))]
+              (tu/then-await-tx tx-id node)
+              (c/compact-all! node (Duration/ofSeconds 5)))
 
             (let [table-name "foo"
                   meta-files (trie/list-meta-files bp table-name)]

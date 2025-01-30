@@ -225,6 +225,7 @@
     (-> {:xtdb/node {}
          :xtdb/allocator {}
          :xtdb/indexer {}
+         :xtdb/trie-catalog {}
          :xtdb.log/processor {:chunk-flush-duration (.getFlushDuration indexer-cfg)}
          :xtdb.metadata/metadata-manager {}
          :xtdb.operator.scan/scan-emitter {}
