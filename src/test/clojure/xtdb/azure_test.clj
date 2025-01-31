@@ -96,17 +96,20 @@
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
-          (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool)))))
+          (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
+                   (vec (.listObjects buffer-pool))))))
       
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
-            (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool))))
+            (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
+                     (vec (.listObjects buffer-pool)))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
             (Thread/sleep 1000)
-            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listObjects buffer-pool)))))))))
+            (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alex" 5) (os/->StoredObject "alice" 6)]
+                     (vec (.listObjects buffer-pool))))))))))
 
 (t/deftest ^:azure multiple-node-list-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -118,10 +121,10 @@
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
-          (t/is (= (mapv util/->path ["alan" "alice"])
+          (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
                    (vec (.listObjects buffer-pool-1))))
 
-          (t/is (= (mapv util/->path ["alan" "alice"])
+          (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
                    (vec (.listObjects buffer-pool-2)))))))))
 
 (t/deftest ^:azure multipart-start-and-cancel

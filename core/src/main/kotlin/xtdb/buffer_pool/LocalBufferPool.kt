@@ -9,6 +9,8 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
+import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
@@ -120,12 +122,12 @@ class LocalBufferPool(
     }
 
     private fun Path.listAll() = walk()
-        .map(diskStore::relativize)
-        .filter { it.getName(0).toString() != ".tmp" }
-        .sorted()
+        .map { StoredObject(diskStore.relativize(it), it.fileSize()) }
+        .filter { it.key.getName(0).toString() != ".tmp" }
+        .sortedBy { it.key }
         .toList()
 
-    override fun listObjects() = diskStore.listAll()
+    override fun listObjects(): Iterable<StoredObject> = diskStore.listAll()
     override fun listObjects(dir: Path) = diskStore.resolve(dir).listAll()
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {

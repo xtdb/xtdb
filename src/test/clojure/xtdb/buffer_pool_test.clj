@@ -4,6 +4,7 @@
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
+            [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util])
@@ -172,9 +173,8 @@
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
         (t/is (= [] (.listObjects bp)))))))
 
-(defn fetch-buffer-pool-from-node
-  [node]
-  (val (first (ig/find-derived (:system node) :xtdb/buffer-pool))))
+(defn fetch-buffer-pool-from-node [node]
+  (util/component node :xtdb/buffer-pool))
 
 (defn put-edn [^BufferPool buffer-pool ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
@@ -188,23 +188,30 @@
   (put-edn buffer-pool (util/->path "bar/baza/james") :james)
   (Thread/sleep 1000)
 
-  (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
-           (.listObjects buffer-pool)))
+  (t/is (= [(os/->StoredObject "bar/alice" 6)
+            (os/->StoredObject "bar/baz/dan" 4)
+            (os/->StoredObject "bar/baza/james" 6)
+            (os/->StoredObject "bar/bob" 4)
+            (os/->StoredObject "foo/alan" 5)]
+           (vec (.listObjects buffer-pool))))
 
-  (t/is (= (mapv util/->path ["foo/alan"])
-           (.listObjects buffer-pool (util/->path "foo"))))
+  (t/is (= [(os/->StoredObject "foo/alan" 5)]
+           (vec (.listObjects buffer-pool (util/->path "foo")))))
 
   (t/testing "call listObjects with a prefix ended with a slash - should work the same"
-    (t/is (= (mapv util/->path ["foo/alan"])
-             (.listObjects buffer-pool (util/->path "foo/")))))
+    (t/is (= [(os/->StoredObject "foo/alan" 5)]
+             (vec (.listObjects buffer-pool (util/->path "foo/"))))))
 
   (t/testing "calling listObjects with prefix on directory with subdirectories - still lists recursively, and relative to the root"
-    (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob"])
-             (.listObjects buffer-pool (util/->path "bar")))))
+    (t/is (= [(os/->StoredObject "bar/alice" 6)
+              (os/->StoredObject "bar/baz/dan" 4)
+              (os/->StoredObject "bar/baza/james" 6)
+              (os/->StoredObject "bar/bob" 4)]
+             (vec (.listObjects buffer-pool (util/->path "bar"))))))
 
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
-    (t/is (= (mapv util/->path ["bar/baz/dan"])
-             (.listObjects buffer-pool (util/->path "bar/baz"))))))
+    (t/is (= [(os/->StoredObject "bar/baz/dan" 4)]
+             (vec (.listObjects buffer-pool (util/->path "bar/baz")))))))
 
 (t/deftest test-memory-list-objs
   (with-open [bp (MemoryBufferPool. tu/*allocator* (SimpleMeterRegistry.))]

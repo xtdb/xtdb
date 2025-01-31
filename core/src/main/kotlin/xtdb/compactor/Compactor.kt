@@ -273,7 +273,11 @@ interface Compactor : AutoCloseable {
 
                                             // add the trie to the catalog eagerly so that it's present
                                             // next time we run `availableJobs` (it's idempotent)
-                                            trieCatalog.addTrie(it.tableName, it.outputTrieKey)
+                                            trieCatalog.addTrie(
+                                                addedTrie {
+                                                    tableName = it.tableName
+                                                    trieKey = it.outputTrieKey
+                                                })
 
                                             log.appendMessage(
                                                 TriesAdded(listOf(addedTrie {

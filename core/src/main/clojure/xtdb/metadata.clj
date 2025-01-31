@@ -5,11 +5,11 @@
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
+            [xtdb.object-store :as os]
             [xtdb.serde :as serde]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (com.cognitect.transit TransitFactory)
-           (com.github.benmanes.caffeine.cache Cache Caffeine)
+  (:import (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
@@ -19,7 +19,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow Relation VectorReader VectorWriter Vector)
+           (xtdb.arrow Relation Vector VectorReader VectorWriter)
            xtdb.BufferPool
            (xtdb.metadata ITableMetadata PageIndexKey)
            (xtdb.trie ArrowHashTrie HashTrie)
@@ -410,7 +410,8 @@
 
 (defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
-    (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
+    (doseq [cm-obj (.listObjects buffer-pool chunk-metadata-path)
+            :let [{cm-obj-key :key} (os/<-StoredObject cm-obj)]]
       (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))

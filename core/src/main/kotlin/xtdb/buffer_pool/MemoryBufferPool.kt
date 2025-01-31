@@ -8,12 +8,14 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
+import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.openStorageChildAllocator
 import xtdb.api.storage.Storage.registerMetrics
-import xtdb.arrow.ArrowUtil.toByteArray
-import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.openArrowBufView
+import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
+import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.util.closeOnCatch
 import java.io.ByteArrayOutputStream
@@ -62,12 +64,16 @@ class MemoryBufferPool(
         }
     }
 
-    override fun listObjects() = synchronized(memoryStore) { memoryStore.keys.toList() }
+    override fun listObjects() =
+        synchronized(memoryStore) {
+            memoryStore.entries.map { StoredObject(it.key, it.value.capacity()) }
+        }
 
     override fun listObjects(dir: Path) =
         synchronized(memoryStore) {
-            memoryStore.tailMap(dir).keys
-                .takeWhile { it.startsWith(dir) }
+            memoryStore.tailMap(dir).entries
+                .takeWhile { it.key.startsWith(dir) }
+                .map { StoredObject(it.key, it.value.capacity()) }
         }
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {

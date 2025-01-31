@@ -11,7 +11,8 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.trie-catalog-test :as cat-test]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.object-store :as os])
   (:import java.lang.AutoCloseable
            [java.nio ByteBuffer]
            [java.time Duration]
@@ -26,7 +27,7 @@
 (t/deftest test-compaction-jobs
   (letfn [(f [tries & {:keys [l1-file-size-rows]}]
             (-> tries
-                (->> (transduce (map cat-test/->trie-key) (completing cat/apply-trie-notification) {}))
+                (->> (transduce (map cat-test/->added-trie) (completing cat/apply-trie-notification) {}))
                 (as-> trie-state (c/compaction-jobs "foo" trie-state {:l1-file-size-rows (or l1-file-size-rows 16)}))
                 (->> (into #{} (map (fn [{:keys [part] :as job}]
                                       (-> job
@@ -370,7 +371,8 @@
               (c/compact-all! node (Duration/ofSeconds 5)))
 
             (let [table-name "foo"
-                  meta-files (.listObjects bp (trie/->table-meta-dir table-name))]
+                  meta-files (->> (.listObjects bp (trie/->table-meta-dir table-name))
+                                  (mapv (comp :key os/<-StoredObject)))]
               (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-name trie-key))
                                  ^IDataRel data-rel (first (trie/open-data-rels bp table-name [trie-key]))]

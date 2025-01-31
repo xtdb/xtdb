@@ -8,6 +8,7 @@
             [xtdb.metrics :as metrics]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
+            [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -22,9 +23,9 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb.api IndexerConfig TransactionKey)
+           (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.BufferPool
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
-           (xtdb.api.log Log Log$Message$TriesAdded)
            (xtdb.log.proto AddedTrie)
            xtdb.metadata.IMetadataManager
            (xtdb.trie MemoryHashTrie TrieCatalog)
@@ -151,6 +152,8 @@
             (MapEntry/create table-name
                              {:fields (live-rel->fields live-rel)
                               :trie-key trie-key
+                              ;; TODO file size
+                              :data-file-size -1
                               :row-count row-count}))))))
 
   (openWatermark [this] (live-table-wm live-rel (.live-trie this)))
@@ -322,7 +325,7 @@
                            :tables table-metadata})
 
             (doseq [[table-name {:keys [trie-key]}] table-metadata]
-              (.addTrie trie-catalog table-name trie-key))
+              (.addTrie trie-catalog (cat/->added-trie table-name trie-key)))
 
             @(.appendMessage log (Log$Message$TriesAdded.
                                   (for [[table-name {:keys [trie-key]}] table-metadata]

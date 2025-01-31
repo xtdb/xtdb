@@ -1,5 +1,8 @@
 package xtdb.trie
 
+import xtdb.log.proto.AddedTrie
+
 interface TrieCatalog {
-    fun addTrie(tableName: String, trieKey: String)
+    fun addTrie(addedTrie: AddedTrie)
 }
+

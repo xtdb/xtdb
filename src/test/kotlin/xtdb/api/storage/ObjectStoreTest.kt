@@ -44,7 +44,8 @@ abstract class ObjectStoreTest {
                 bytes.decodeToString()
             }
 
-    protected fun randomByteBuffer(size: Int) = ByteBuffer.wrap(ByteArray(size) { Random.nextInt().toByte() })
+    protected fun randomByteBuffer(size: Int): ByteBuffer =
+        ByteBuffer.wrap(ByteArray(size) { Random.nextInt().toByte() })
 
     @OptIn(ExperimentalPathApi::class)
     @Test

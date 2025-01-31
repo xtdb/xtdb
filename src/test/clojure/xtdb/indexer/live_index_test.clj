@@ -5,6 +5,7 @@
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
             xtdb.node.impl
+            [xtdb.object-store :as os]
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -122,10 +123,10 @@
 
           (tu/finish-chunk! node)
 
-          (t/is (= (mapv util/->path ["tables/public$foo/data/log-l00-fr00-nr110-rs5.arrow"])
+          (t/is (= [(os/->StoredObject "tables/public$foo/data/log-l00-fr00-nr110-rs5.arrow" 2558)]
                    (.listObjects bp (util/->path "tables/public$foo/data"))))
 
-          (t/is (= (mapv util/->path ["tables/public$foo/meta/log-l00-fr00-nr110-rs5.arrow"])
+          (t/is (= [(os/->StoredObject "tables/public$foo/meta/log-l00-fr00-nr110-rs5.arrow" 4350)]
                    (.listObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))

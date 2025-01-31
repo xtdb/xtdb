@@ -7,7 +7,8 @@
             [integrant.core :as ig]
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
-           (java.io ByteArrayOutputStream File)
+           (io.netty.buffer Unpooled)
+           (java.io ByteArrayOutputStream File Writer)
            java.lang.AutoCloseable
            (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
@@ -17,16 +18,15 @@
            java.nio.file.attribute.FileAttribute
            [java.security MessageDigest]
            (java.util Arrays Collections LinkedHashMap Map UUID WeakHashMap)
-           (java.util.concurrent ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
+           (java.util.concurrent ExecutionException Executors ThreadFactory)
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
            (org.apache.arrow.memory ArrowBuf BufferAllocator ForeignAllocation)
-           (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
+           (org.apache.arrow.memory.util ByteFunctionHelpers)
            (org.apache.arrow.vector BaseFixedWidthVector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector UnionVector)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
-           (io.netty.buffer Unpooled)
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -181,6 +181,10 @@
   (Long/parseLong (subs s 1) 16))
 
 ;;; Common specs
+
+(defmethod print-method Path [^Path p, ^Writer w]
+  (.write w "#xt/path ")
+  (print-method (.toString p) w))
 
 (defn ->path ^Path [path-ish]
   (cond

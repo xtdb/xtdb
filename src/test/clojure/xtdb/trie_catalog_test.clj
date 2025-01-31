@@ -6,19 +6,19 @@
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util]))
 
-(defn ->trie-key
+(defn ->added-trie
   " L0/L1 keys are submitted as [level first-row next-row rows]; L2+ as [level part-vec next-row]"
   [[level & args]]
-
-  (case (long level)
-    (0 1) (let [[first-row next-row rows] args]
-            (trie/->log-l0-l1-trie-key level first-row next-row (or rows 0)))
-    (let [[part next-row] args]
-      (trie/->log-l2+-trie-key level (byte-array part) next-row))))
+  (cat/->added-trie "foo"
+                    (case (long level)
+                      (0 1) (let [[first-row next-row rows] args]
+                              (trie/->log-l0-l1-trie-key level first-row next-row (or rows 0)))
+                      (let [[part next-row] args]
+                        (trie/->log-l2+-trie-key level (byte-array part) next-row)))))
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]
-            (-> (transduce (map ->trie-key) cat/apply-trie-notification trie-keys)
+            (-> (transduce (map ->added-trie) cat/apply-trie-notification trie-keys)
                 (cat/current-tries)
                 (->> (sort-by (juxt (comp - :level) :part :next-row))
                      (mapv (juxt :level (comp #(some-> % vec) :part) :next-row)))))]

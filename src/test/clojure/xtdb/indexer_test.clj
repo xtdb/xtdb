@@ -8,14 +8,15 @@
             [xtdb.compactor :as c]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
+            [xtdb.object-store :as os]
+            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.protocols :as xtp])
+            [xtdb.util :as util])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration InstantSource)
@@ -332,7 +333,7 @@
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (let [objs (mapv str (.listObjects bp))]
+          (let [objs (mapv (comp str :key os/<-StoredObject) (.listObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
@@ -385,7 +386,7 @@
 
                   (Thread/sleep 250)    ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                  (let [objs (mapv str (.listObjects bp))]
+                  (let [objs (mapv (comp str :key os/<-StoredObject) (.listObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                     (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
@@ -426,7 +427,7 @@
 
                       (Thread/sleep 250); wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                      (let [objs (mapv str (.listObjects bp))]
+                      (let [objs (mapv (comp str :key os/<-StoredObject) (.listObjects bp))]
                         (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                         (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00-.+.arrow" %) objs))))

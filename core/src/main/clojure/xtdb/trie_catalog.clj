@@ -3,10 +3,11 @@
             [xtdb.metadata :as meta]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
-  (:import [java.nio.file Path]
-           [java.util Map]
+  (:import [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            (xtdb BufferPool)
+           xtdb.api.storage.ObjectStore$StoredObject
+           xtdb.log.proto.AddedTrie
            xtdb.metadata.IMetadataManager))
 
 (defprotocol PTrieCatalog
@@ -14,6 +15,12 @@
   (trie-state [trie-cat table-name]))
 
 (def ^:const branch-factor 4)
+
+(defn ->added-trie [table-name, trie-key]
+  (.. (AddedTrie/newBuilder)
+      (setTableName table-name)
+      (setTrieKey trie-key)
+      (build)))
 
 (defn- superseded-l0-trie? [table-tries {:keys [next-row]}]
   (or (when-let [{l0-next-row :next-row} (first (get table-tries [0 []]))]
@@ -136,11 +143,13 @@
 
 (defn apply-trie-notification
   ([] {})
-  ([tries trie-key]
-   (let [trie (-> (trie/parse-trie-key trie-key)
+
+  ([tries ^AddedTrie added-trie]
+   (let [trie (-> (trie/parse-trie-key (.getTrieKey added-trie))
                   (update :part vec))]
      (cond-> tries
        (not (superseded-trie? tries trie)) (conj-trie trie))))
+
   ([tries] tries))
 
 (defn current-tries [tries]
@@ -150,10 +159,10 @@
 
 (defrecord TrieCatalog [^Map !table-tries]
   xtdb.trie.TrieCatalog
-  (addTrie [_ table-name trie-key]
-    (.compute !table-tries table-name
+  (addTrie [_ added-trie]
+    (.compute !table-tries (.getTableName added-trie)
               (fn [_table-name tries]
-                (apply-trie-notification tries trie-key))))
+                (apply-trie-notification tries added-trie))))
 
   PTrieCatalog
   (table-names [_] (set (keys !table-tries)))
@@ -170,8 +179,9 @@
     (doseq [table-name (.allTableNames metadata-mgr)]
       (.put !table-tries table-name
             (->> (.listObjects buffer-pool (trie/->table-meta-dir table-name))
-                 (transduce (map (fn [^Path path]
-                                   (str (.getFileName path))))
+                 (transduce (map (fn [^ObjectStore$StoredObject obj]
+                                   (->added-trie table-name
+                                                 (str (.getFileName (.getKey obj))))))
                             apply-trie-notification))))
 
     (->TrieCatalog !table-tries)))
