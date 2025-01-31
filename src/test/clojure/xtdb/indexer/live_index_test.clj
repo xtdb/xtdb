@@ -21,7 +21,7 @@
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie MemoryHashTrie$Leaf)))
 
 (t/use-fixtures :each tu/with-allocator
-  (tu/with-opts {:compactor {:enabled? false}})
+  (tu/with-opts {:compactor {:threads 0}})
   tu/with-node)
 
 (t/deftest test-chunk

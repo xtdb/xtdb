@@ -4,11 +4,14 @@ package xtdb.api
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import xtdb.api.BooleanWithEnvVarSerde
 import xtdb.DurationSerde
-import java.time.Duration
+import java.lang.Runtime.getRuntime
 
 @Serializable
-data class CompactorConfig(var enabled: Boolean = true) {
-    fun enabled(enabled: Boolean) = apply { this.enabled = enabled }
+data class CompactorConfig(var threads: Int = DEFAULT_THREADS) {
+    companion object {
+        private val DEFAULT_THREADS = (getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    }
+
+    fun threads(threads: Int) = apply { this.threads = threads }
 }

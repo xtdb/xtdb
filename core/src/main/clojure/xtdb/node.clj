@@ -43,9 +43,9 @@
     log-limit (.logLimit log-limit)
     flush-duration (.flushDuration (time/->duration flush-duration))))
 
-(defmethod apply-config! :compactor [^Xtdb$Config config _ {:keys [enabled?]}]
+(defmethod apply-config! :compactor [^Xtdb$Config config _ {:keys [threads]}]
   (cond-> (.getCompactor config)
-    (some? enabled?) (.enabled enabled?)))
+    (some? threads) (.threads threads)))
 
 (defmethod apply-config! :authn [config _ opts]
   (apply-config! config :xtdb/authn opts))

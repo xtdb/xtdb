@@ -23,6 +23,3 @@ healthz:
 modules:
 - !HttpServer
   port: 3000
-
-compactor:
-  enabled: !Env XTDB_COMPACTOR_ENABLED

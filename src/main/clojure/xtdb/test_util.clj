@@ -316,8 +316,8 @@
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
                                            rows-per-chunk log-limit page-limit instant-src
-                                           compactor? healthz-port]
-                                    :or {compactor? true buffers-dir "objects" healthz-port 8080}}]
+                                           compactor-threads healthz-port]
+                                    :or {buffers-dir "objects" healthz-port 8080}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
     (xtn/start-node {:healthz {:port healthz-port}
@@ -325,7 +325,8 @@
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
                      :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
                                    (into {} (filter val)))
-                     :compactor {:enabled? compactor?}})))
+                     :compactor (->> {:threads compactor-threads}
+                                     (into {} (filter val)))})))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

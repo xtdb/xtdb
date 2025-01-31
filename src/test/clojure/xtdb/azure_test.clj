@@ -80,7 +80,7 @@
                :local-disk-cache local-disk-cache}]
     :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]
-    :compactor {:enabled? false}}))
+    :compactor {:threads 0}}))
 
 (t/deftest ^:azure list-test
   (util/with-tmp-dirs #{local-disk-cache}

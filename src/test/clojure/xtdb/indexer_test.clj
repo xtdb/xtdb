@@ -301,7 +301,7 @@
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini")]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300, :compactor? false})
+    (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300, :compactor-threads 0})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
@@ -344,7 +344,7 @@
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
         node-opts {:node-dir node-dir, :rows-per-chunk 1000 :rows-per-block 100
                    :instant-src (InstantSource/system)
-                   :compactor? false}]
+                   :compactor-threads 0}]
     (util/delete-dir node-dir)
 
     (util/with-close-on-catch [node1 (tu/->local-node node-opts)]

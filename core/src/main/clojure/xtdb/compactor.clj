@@ -210,11 +210,10 @@
   {:allocator (ig/ref :xtdb/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
-   :threads (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))
+   :threads (.getThreads config)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :log (ig/ref :xtdb/log)
-   :trie-catalog (ig/ref :xtdb/trie-catalog)
-   :enabled? (.getEnabled config)})
+   :trie-catalog (ig/ref :xtdb/trie-catalog)})
 
 (def ^:dynamic *page-size* 1024)
 (def ^:dynamic *l1-file-size-rows* (bit-shift-left 1 18))
@@ -238,8 +237,8 @@
 
        log trie-catalog *ignore-signal-block?* threads))))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [enabled?] :as opts}]
-  (if enabled?
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
+  (if (pos? threads)
     (open-compactor opts)
     (Compactor/getNoop)))
 
