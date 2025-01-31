@@ -9,7 +9,6 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
-import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.LocalStorageFactory
@@ -21,6 +20,7 @@ import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
+import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import xtdb.util.maxDirectMemory
 import xtdb.util.newSeekableByteChannel
@@ -143,12 +143,13 @@ class LocalBufferPool(
                         }
                     }
 
-                    override fun end() {
+                    override fun end(): FileSize {
                         unloader.end()
                         fileChannel.close()
 
                         val filePath = diskStore.resolve(key).also { it.createParentDirectories() }
                         tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
+                        return filePath.fileSize()
                     }
 
                     override fun close() {

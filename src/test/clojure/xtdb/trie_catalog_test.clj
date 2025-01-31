@@ -14,7 +14,8 @@
                       (0 1) (let [[first-row next-row rows] args]
                               (trie/->log-l0-l1-trie-key level first-row next-row (or rows 0)))
                       (let [[part next-row] args]
-                        (trie/->log-l2+-trie-key level (byte-array part) next-row)))))
+                        (trie/->log-l2+-trie-key level (byte-array part) next-row)))
+                    -1))
 
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]

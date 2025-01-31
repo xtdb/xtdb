@@ -4,18 +4,20 @@ import com.carrotsearch.hppc.IntArrayList
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
 import org.apache.arrow.memory.util.ArrowBufPointer
-import xtdb.trie.TrieCatalog
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.compactor.Compactor.Companion.RecencyGranularity.*
-import xtdb.log.proto.addedTrie
+import xtdb.log.proto.AddedTrie
+import xtdb.trie.FileSize
 import xtdb.trie.HashTrie
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
+import xtdb.trie.TrieCatalog
 import xtdb.trie.TrieWriter
 import xtdb.util.debug
 import xtdb.util.logger
@@ -42,7 +44,7 @@ interface Compactor : AutoCloseable {
 
     interface Impl {
         fun availableJobs(): Collection<Job>
-        fun executeJob(job: Job)
+        fun executeJob(job: Job): AddedTrie
     }
 
     fun signalBlock()
@@ -152,7 +154,7 @@ interface Compactor : AutoCloseable {
             relation: RelationReader,
             recencies: VectorReader,
             pageLimit: Int = 256,
-        ) {
+        ): FileSize {
             val trieDataRel = trieWriter.dataRel
             val rowCopier = trieDataRel.rowCopier(relation)
             val iidReader = relation["_iid"]!!
@@ -224,7 +226,7 @@ interface Compactor : AutoCloseable {
 
             writeSubtree(0, IntArray(relation.rowCount) { idx -> idx })
 
-            trieWriter.end()
+            return trieWriter.end()
         }
 
         @JvmStatic
@@ -269,22 +271,12 @@ interface Compactor : AutoCloseable {
                                         if (it.outputTrieKey in availableJobKeys) {
                                             LOGGER.debug("executing job: ${it.outputTrieKey}")
 
-                                            runInterruptible { impl.executeJob(it) }
+                                            val res = runInterruptible { impl.executeJob(it) }
 
                                             // add the trie to the catalog eagerly so that it's present
                                             // next time we run `availableJobs` (it's idempotent)
-                                            trieCatalog.addTrie(
-                                                addedTrie {
-                                                    tableName = it.tableName
-                                                    trieKey = it.outputTrieKey
-                                                })
-
-                                            log.appendMessage(
-                                                TriesAdded(listOf(addedTrie {
-                                                    tableName = it.tableName
-                                                    trieKey = it.outputTrieKey
-                                                }))
-                                            )
+                                            trieCatalog.addTrie(res)
+                                            log.appendMessage(TriesAdded(listOf(res))).await()
 
                                             LOGGER.debug("done: ${it.outputTrieKey}")
                                         }

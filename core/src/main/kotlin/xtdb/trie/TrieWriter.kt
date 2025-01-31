@@ -13,7 +13,10 @@ interface TrieWriter : AutoCloseable {
     fun writeIidBranch(idxs: IntArray): RowIndex
     fun writeRecencyBranch(idxBuckets: SortedMap<InstantMicros, RowIndex>): RowIndex
 
-    fun end()
+    /**
+     * @return the size of the data file
+     */
+    fun end(): FileSize
 
     override fun close()
 }

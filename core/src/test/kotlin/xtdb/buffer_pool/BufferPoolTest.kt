@@ -1,9 +1,12 @@
 package xtdb.buffer_pool
 
+import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.BufferPool
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.arrow.IntVector
+import xtdb.arrow.Relation
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 
@@ -30,5 +33,20 @@ abstract class BufferPoolTest {
             listOf(storedObj("a/b/c"), storedObj("a/b/d")),
             bufferPool.listObjects("a/b".asPath)
         )
+    }
+
+    @Test
+    fun testArrowFileSize() {
+        val bp = bufferPool()
+        RootAllocator().use { al ->
+            IntVector(al, "foo", false).use { fooVec ->
+                fooVec.apply { writeInt(10); writeInt(42); writeInt(15) }
+                val relation = Relation(listOf(fooVec), fooVec.valueCount)
+                bp.openArrowWriter("foo".asPath, relation).use { writer ->
+                    writer.writeBatch()
+                    assertEquals(534, writer.end())
+                }
+            }
+        }
     }
 }

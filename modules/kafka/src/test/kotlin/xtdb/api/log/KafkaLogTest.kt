@@ -50,6 +50,7 @@ class KafkaLogTest {
         fun addedTrie(key: String, size: Long) =
             AddedTrie.newBuilder()
                 .setTableName("my-table").setTrieKey(key)
+                .setDataFileSize(size)
                 .build()
 
         val addedTries = listOf(addedTrie("foo", 12), addedTrie("bar", 18))

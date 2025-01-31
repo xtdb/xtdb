@@ -146,15 +146,13 @@
       (when (pos? row-count)
         (let [trie-key (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)]
           (with-open [data-rel (.openAsRelation live-rel)]
-            (trie/write-live-trie! allocator buffer-pool table-name trie-key
-                                   live-trie data-rel)
-
-            (MapEntry/create table-name
-                             {:fields (live-rel->fields live-rel)
-                              :trie-key trie-key
-                              ;; TODO file size
-                              :data-file-size -1
-                              :row-count row-count}))))))
+            (let [data-file-size (trie/write-live-trie! allocator buffer-pool table-name trie-key
+                                                        live-trie data-rel)]
+              (MapEntry/create table-name
+                               {:fields (live-rel->fields live-rel)
+                                :trie-key trie-key
+                                :data-file-size data-file-size
+                                :row-count row-count})))))))
 
   (openWatermark [this] (live-table-wm live-rel (.live-trie this)))
 
@@ -324,15 +322,12 @@
                            :next-chunk-idx next-chunk-idx
                            :tables table-metadata})
 
-            (doseq [[table-name {:keys [trie-key]}] table-metadata]
-              (.addTrie trie-catalog (cat/->added-trie table-name trie-key)))
+            (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
+                                (cat/->added-trie table-name trie-key data-file-size))]
+              (doseq [added-trie added-tries]
+                (.addTrie trie-catalog added-trie))
 
-            @(.appendMessage log (Log$Message$TriesAdded.
-                                  (for [[table-name {:keys [trie-key]}] table-metadata]
-                                    (-> (AddedTrie/newBuilder)
-                                        (.setTableName table-name)
-                                        (.setTrieKey trie-key)
-                                        (.build))))))))
+              @(.appendMessage log (Log$Message$TriesAdded. added-tries))))))
 
       (.nextChunk row-counter)
 
@@ -403,4 +398,4 @@
   (util/close live-idx))
 
 (defn finish-chunk! [node]
-  (.finishChunk ^LiveIndex (util/component node :xtdb.indexer/live-index)))
+  (.finishChunk ^xtdb.indexer.LiveIndex (util/component node :xtdb.indexer/live-index)))

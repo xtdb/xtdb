@@ -8,7 +8,6 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
-import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.openStorageChildAllocator
 import xtdb.api.storage.Storage.registerMetrics
@@ -17,6 +16,7 @@ import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
+import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -85,10 +85,12 @@ class MemoryBufferPool(
                         unloader.writeBatch()
                     }
 
-                    override fun end() {
+                    override fun end(): FileSize {
                         unloader.end()
                         writeChannel.close()
-                        putObject(key, ByteBuffer.wrap(baos.toByteArray()))
+                        val bytes = baos.toByteArray()
+                        putObject(key, ByteBuffer.wrap(bytes))
+                        return bytes.size.toLong()
                     }
 
                     override fun close() {

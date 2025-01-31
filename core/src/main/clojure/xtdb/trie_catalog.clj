@@ -16,10 +16,13 @@
 
 (def ^:const branch-factor 4)
 
-(defn ->added-trie [table-name, trie-key]
+(defn ->added-trie
+  [table-name, trie-key, ^long data-file-size]
+
   (.. (AddedTrie/newBuilder)
       (setTableName table-name)
       (setTrieKey trie-key)
+      (setDataFileSize data-file-size)
       (build)))
 
 (defn- superseded-l0-trie? [table-tries {:keys [next-row]}]
@@ -143,10 +146,10 @@
 
 (defn apply-trie-notification
   ([] {})
-
   ([tries ^AddedTrie added-trie]
    (let [trie (-> (trie/parse-trie-key (.getTrieKey added-trie))
-                  (update :part vec))]
+                  (update :part vec)
+                  (assoc :data-file-size (.getDataFileSize added-trie)))]
      (cond-> tries
        (not (superseded-trie? tries trie)) (conj-trie trie))))
 
@@ -181,7 +184,8 @@
             (->> (.listObjects buffer-pool (trie/->table-meta-dir table-name))
                  (transduce (map (fn [^ObjectStore$StoredObject obj]
                                    (->added-trie table-name
-                                                 (str (.getFileName (.getKey obj))))))
+                                                 (str (.getFileName (.getKey obj)))
+                                                 (.getSize obj))))
                             apply-trie-notification))))
 
     (->TrieCatalog !table-tries)))

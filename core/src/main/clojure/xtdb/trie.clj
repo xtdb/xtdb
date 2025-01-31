@@ -157,11 +157,13 @@
             pos))
 
         (end [_]
-          (.end data-file-wtr)
+          (let [data-file-size (.end data-file-wtr)]
 
-          (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-name trie-key) meta-rel)]
-            (.writeBatch meta-file-wtr)
-            (.end meta-file-wtr)))
+            (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-name trie-key) meta-rel)]
+              (.writeBatch meta-file-wtr)
+              (.end meta-file-wtr))
+
+            data-file-size))
 
         AutoCloseable
         (close [_]

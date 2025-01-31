@@ -28,6 +28,7 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
 import xtdb.multipart.SupportsMultipart
+import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import xtdb.util.maxDirectMemory
 import xtdb.util.newSeekableByteChannel
@@ -40,6 +41,7 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
+import kotlin.io.path.fileSize
 
 class RemoteBufferPool(
     factory: RemoteStorageFactory,
@@ -195,13 +197,15 @@ class RemoteBufferPool(
                     object : xtdb.ArrowWriter {
                         override fun writeBatch() = unloader.writeBatch()
 
-                        override fun end() {
+                        override fun end(): FileSize {
                             unloader.end()
                             fileChannel.close()
 
+                            val size = tmpPath.fileSize()
                             objectStore.uploadArrowFile(key, tmpPath)
 
                             diskCache.put(key, tmpPath)
+                            return size
                         }
 
                         override fun close() {
