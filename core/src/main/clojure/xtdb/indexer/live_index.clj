@@ -303,8 +303,10 @@
                            (.fork scope (fn []
                                           (try
                                             (.finishChunk table chunk-idx next-chunk-idx)
+                                            (catch InterruptedException e
+                                              (throw e))
                                             (catch Exception e
-                                              (log/error e "Error finishing chunk for table" table)
+                                              (log/warn e "Error finishing chunk for table" table)
                                               (throw e)))))))]
           (.join scope)
 
