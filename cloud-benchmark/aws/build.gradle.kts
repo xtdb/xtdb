@@ -22,6 +22,7 @@ tasks.shadowJar {
     archiveBaseName.set("xtdb")
     archiveVersion.set("")
     archiveClassifier.set("aws-bench")
+    setProperty("zip64", true)
     mergeServiceFiles()
     transform(DataReaderTransformer())
 }

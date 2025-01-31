@@ -22,6 +22,7 @@ tasks.shadowJar {
     archiveBaseName.set("xtdb")
     archiveVersion.set("")
     archiveClassifier.set("google-cloud-bench")
+    setProperty("zip64", true)
     mergeServiceFiles()
     transform(DataReaderTransformer())
     isZip64 = true
