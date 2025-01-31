@@ -97,7 +97,7 @@ class CloudStorage(
         }
     }
 
-    override fun deleteObject(k: Path) = scope.future {
+    override fun deleteObject(k: Path) = scope.future<Unit> {
         runInterruptible {
             client.delete(bucket, prefix.resolve(k).toString())
         }

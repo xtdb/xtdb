@@ -40,7 +40,7 @@ interface ObjectStore : AutoCloseable {
     /**
      * Stores an object in the object store.
      */
-    fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<*>
+    fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit>
 
     /**
      * Recursively lists all objects in the object store.
@@ -59,7 +59,7 @@ interface ObjectStore : AutoCloseable {
     /**
      * Deletes the object with the given path from the object store.
      */
-    fun deleteObject(k: Path): CompletableFuture<*>
+    fun deleteObject(k: Path): CompletableFuture<Unit>
 
     override fun close() {
     }

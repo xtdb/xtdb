@@ -96,14 +96,13 @@
     (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
-          file-part-2 (os-test/generate-random-byte-buffer part-size)]
-
-      ;; Uploading parts to multipart upload
-      @(.uploadPart multipart-upload file-part-1)
-      @(.uploadPart multipart-upload file-part-2)
+          file-part-2 (os-test/generate-random-byte-buffer part-size)
+          parts [;; Uploading parts to multipart upload
+                 (.uploadPart multipart-upload file-part-1)
+                 (.uploadPart multipart-upload file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
-        @(.complete multipart-upload)
+        @(.complete multipart-upload (mapv deref parts))
         (t/is (empty? (.listUploads os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"

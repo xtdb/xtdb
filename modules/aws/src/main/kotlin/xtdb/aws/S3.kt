@@ -62,7 +62,7 @@ class S3(
     factory: Factory,
     private val bucket: String,
     private val prefix: Path,
-) : ObjectStore, SupportsMultipart {
+) : ObjectStore, SupportsMultipart<CompletedPart> {
 
     private val configurator = factory.s3Configurator
 
@@ -86,7 +86,7 @@ class S3(
         client.close()
     }
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload> = scope.future {
+    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<CompletedPart>> = scope.future {
         val s3Key = prefix.resolve(k).toString()
         val initResp = client.createMultipartUpload {
             it.bucket(bucket)
@@ -95,43 +95,45 @@ class S3(
 
         val uploadId = initResp.uploadId()
 
-        object : IMultipartUpload {
+        object : IMultipartUpload<CompletedPart> {
             val partNum = AtomicInteger(1)
-            val parts = Channel<CompletedPart>(UNLIMITED)
 
             fun S3AsyncClient.uploadPart(body: AsyncRequestBody, configure: Consumer<UploadPartRequest.Builder>) =
                 uploadPart(configure, body)
 
-            override fun uploadPart(buf: ByteBuffer) = scope.future {
-                val contentLength = buf.remaining().toLong()
-                val partNum = partNum.getAndIncrement()
+            /*
+             * part-numbers have to be in ascending order, so we increment the counter synchronously.
+             * caller therefore needs to call this method in order.
+             */
+            override fun uploadPart(buf: ByteBuffer) =
+                partNum.getAndIncrement().let { partNum ->
+                    scope.future {
+                        val contentLength = buf.remaining().toLong()
 
-                val partResp = client.uploadPart(AsyncRequestBody.fromByteBuffer(buf)) {
-                    it.bucket(bucket)
-                    it.key(s3Key)
-                    it.uploadId(uploadId)
-                    it.partNumber(partNum)
-                    it.contentLength(contentLength)
-                }.await()
+                        val partResp = client.uploadPart(AsyncRequestBody.fromByteBuffer(buf)) {
+                            it.bucket(bucket)
+                            it.key(s3Key)
+                            it.uploadId(uploadId)
+                            it.partNumber(partNum)
+                            it.contentLength(contentLength)
+                        }.await()
 
-                parts.send(
-                    CompletedPart.builder().apply {
-                        partNumber(partNum)
-                        eTag(partResp.eTag())
-                    }.build()
-                )
-            }
+                        CompletedPart.builder().apply {
+                            partNumber(partNum)
+                            eTag(partResp.eTag())
+                        }.build()
+                    }
+                }
 
-            override fun complete() = scope.future {
-                parts.close()
-                val parts = parts.toList().sortedBy { it.partNumber() }
-
+            override fun complete(parts: List<CompletedPart>) = scope.future {
                 client.completeMultipartUpload { req ->
                     req.bucket(bucket)
                     req.key(s3Key)
                     req.uploadId(uploadId)
                     req.multipartUpload { it.parts(parts) }
                 }.await()
+
+                Unit
             }
 
             override fun abort() = scope.future {
@@ -140,6 +142,8 @@ class S3(
                     it.key(s3Key)
                     it.uploadId(uploadId)
                 }.await()
+
+                Unit
             }
         }
     }
@@ -228,11 +232,15 @@ class S3(
             .toSet()
     }
 
-    override fun deleteObject(k: Path): CompletableFuture<*> =
+    override fun deleteObject(k: Path) = scope.future {
         client.deleteObject {
             it.bucket(bucket)
             it.key(prefix.resolve(k).toString())
         }
+
+        Unit
+    }
+
 
     companion object {
         @JvmStatic

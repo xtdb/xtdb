@@ -71,7 +71,7 @@ import kotlin.io.path.deleteIfExists
  * }
  * ```
  */
-class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, SupportsMultipart {
+class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, SupportsMultipart<String> {
 
     private val client =
         BlobServiceClientBuilder().run {
@@ -144,23 +144,21 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
         }
     }
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload> = scope.future {
+    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<String>> = scope.future {
         val prefixedKey = prefix.resolve(k).toString()
         val blockBlobClient = client.getBlobClient(prefixedKey).blockBlobClient
 
-        object : IMultipartUpload {
+        object : IMultipartUpload<String> {
 
             private val b64 = Base64.getEncoder()
             private val newBlockId get() = randomUUID().asBytes.let { b64.encodeToString(it) }
-
-            private val stagedBlockIds: Channel<String> = Channel(UNLIMITED)
 
             override fun uploadPart(buf: ByteBuffer) = scope.future {
                 try {
                     unwrappingReactorException {
                         val blockId = newBlockId
                         runInterruptible { blockBlobClient.stageBlock(blockId, BinaryData.fromByteBuffer(buf)) }
-                        stagedBlockIds.send(blockId)
+                        blockId
                     }
                 } catch (e: InterruptedException) {
                     throw e
@@ -170,12 +168,10 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
                 }
             }
 
-            override fun complete() = scope.future {
+            override fun complete(parts: List<String>) = scope.future<Unit> {
                 try {
                     unwrappingReactorException {
-                        stagedBlockIds.close()
-                        val blockIds = stagedBlockIds.toList()
-                        runInterruptible { blockBlobClient.commitBlockList(blockIds) }
+                        runInterruptible { blockBlobClient.commitBlockList(parts) }
                     }
                 } catch (e: BlobStorageException) {
                     if (e.statusCode == 409)
@@ -192,7 +188,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
                 }
             }
 
-            override fun abort() = completedFuture(null)
+            override fun abort() = completedFuture(Unit)
         }
     }
 
@@ -249,7 +245,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
             .asIterable()
     }
 
-    override fun deleteObject(k: Path) = scope.future {
+    override fun deleteObject(k: Path) = scope.future<Unit> {
         val prefixedKey = prefix.resolve(k).toString()
 
         runInterruptible {

@@ -7,6 +7,8 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletableFuture.completedFuture
+import java.util.concurrent.CompletableFuture.failedFuture
 
 enum class StoreOperation {
     PUT, UPLOAD, COMPLETE, ABORT
@@ -15,7 +17,7 @@ enum class StoreOperation {
 class SimulatedObjectStore(
     val calls: MutableList<StoreOperation> = mutableListOf(),
     val buffers: NavigableMap<Path, ByteBuffer> = TreeMap()
-) : ObjectStore, SupportsMultipart {
+) : ObjectStore, SupportsMultipart<ByteBuffer> {
 
     private fun copyByteBuffer(buffer: ByteBuffer) =
         ByteBuffer.allocate(buffer.remaining()).put(buffer.duplicate()).flip()
@@ -28,20 +30,20 @@ class SimulatedObjectStore(
     }
 
     override fun getObject(k: Path): CompletableFuture<ByteBuffer> =
-        CompletableFuture.completedFuture(buffers[k])
+        completedFuture(buffers[k])
 
     override fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
         buffers[k]?.let { buffer ->
             val bytes = ByteArray(buffer.remaining())
             buffer.duplicate().get(bytes)
             outPath.toFile().writeBytes(bytes)
-            CompletableFuture.completedFuture(outPath)
-        } ?: CompletableFuture.failedFuture(IllegalStateException("Object $k doesn't exist"))
+            completedFuture(outPath)
+        } ?: failedFuture(IllegalStateException("Object $k doesn't exist"))
 
-    override fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Void?> {
+    override fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit> {
         buffers[k] = buf
         calls.add(StoreOperation.PUT)
-        return CompletableFuture.completedFuture(null)
+        return completedFuture(Unit)
     }
 
     override fun listObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
@@ -51,31 +53,28 @@ class SimulatedObjectStore(
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    override fun deleteObject(k: Path): CompletableFuture<*> =
+    override fun deleteObject(k: Path): CompletableFuture<Unit> =
         TODO("Not yet implemented")
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload> {
-        val parts = mutableListOf<ByteBuffer>()
-
-        val upload = object : IMultipartUpload {
-            override fun uploadPart(buf: ByteBuffer): CompletableFuture<Void?> {
+    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> {
+        val upload = object : IMultipartUpload<ByteBuffer> {
+            override fun uploadPart(buf: ByteBuffer): CompletableFuture<ByteBuffer> {
                 calls.add(StoreOperation.UPLOAD)
-                parts.add(copyByteBuffer(buf))
-                return CompletableFuture.completedFuture(null)
+                return completedFuture(copyByteBuffer(buf))
             }
 
-            override fun complete(): CompletableFuture<Void?> {
+            override fun complete(parts: List<ByteBuffer>): CompletableFuture<Unit> {
                 calls.add(StoreOperation.COMPLETE)
                 buffers[k] = concatByteBuffers(parts)
-                return CompletableFuture.completedFuture(null)
+                return completedFuture(Unit)
             }
 
-            override fun abort(): CompletableFuture<Void?> {
+            override fun abort(): CompletableFuture<Unit> {
                 calls.add(StoreOperation.ABORT)
-                return CompletableFuture.completedFuture(null)
+                return completedFuture(Unit)
             }
         }
 
-        return CompletableFuture.completedFuture(upload)
+        return completedFuture(upload)
     }
 }

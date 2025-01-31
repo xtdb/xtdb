@@ -2,6 +2,11 @@ package xtdb.buffer_pool
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
@@ -33,8 +38,6 @@ import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
-import java.util.*
-import java.util.concurrent.CompletableFuture
 import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 
@@ -65,31 +68,27 @@ class RemoteBufferPool(
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
-        private const val MAX_MULTIPART_PER_UPLOAD_CONCURRENCY = 4
+        private const val MAX_CONCURRENT_PART_UPLOADS = 4
 
         private val Path.totalSpace get() = Files.getFileStore(this).totalSpace
 
         private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
 
+        private val multipartUploadDispatcher =
+            Dispatchers.IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
+
         @JvmStatic
-        fun ObjectStore.uploadMultipartBuffers(key: Path, nioBuffers: List<ByteBuffer>) {
-            val upload = (this as SupportsMultipart).startMultipart(key).get()
+        fun <P> SupportsMultipart<P>.uploadMultipartBuffers(key: Path, nioBuffers: List<ByteBuffer>) = runBlocking {
+            val upload = startMultipart(key).await()
 
             try {
-                val partQueue = ArrayDeque(nioBuffers)
-                val waitingParts = mutableListOf<CompletableFuture<*>>()
-
-                while (partQueue.isNotEmpty()) {
-                    if (waitingParts.size < MAX_MULTIPART_PER_UPLOAD_CONCURRENCY) {
-                        waitingParts.add(upload.uploadPart(partQueue.removeFirst()))
-                    } else {
-                        CompletableFuture.anyOf(*waitingParts.toTypedArray()).get()
-                        waitingParts.removeAll { it.isDone }
+                val waitingParts = nioBuffers.map {
+                    async(multipartUploadDispatcher) {
+                        upload.uploadPart(it).await()
                     }
                 }
 
-                CompletableFuture.allOf(*waitingParts.toTypedArray()).get()
-                upload.complete().get()
+                upload.complete(waitingParts.awaitAll()).await()
             } catch (e: Throwable) {
                 try {
                     LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
@@ -139,7 +138,7 @@ class RemoteBufferPool(
     private fun ObjectStore.uploadArrowFile(key: Path, tmpPath: Path) {
         val mmapBuffer = toMmapPath(tmpPath)
 
-        if (this !is SupportsMultipart || mmapBuffer.remaining() <= minMultipartPartSize) {
+        if (this !is SupportsMultipart<*> || mmapBuffer.remaining() <= minMultipartPartSize) {
             putObject(key, mmapBuffer).get()
         } else {
             mmapBuffer.openArrowBufView(allocator).use { uploadMultipartBuffers(key, it.toParts()) }

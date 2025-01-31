@@ -134,7 +134,7 @@
           (= #{"test-multi-created"} (set (.listUncommittedBlobs os))))
 
         (t/testing "Call to abort a multipart upload should work - no file comitted"
-          (t/is (nil? @(.abort multipart-upload)))
+          @(.abort multipart-upload)
           (t/is (= #{} (set (.listObjects os)))))))))
 
 (t/deftest ^:azure multipart-put-test
@@ -142,14 +142,14 @@
     (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size 500
           file-part-1 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
-          file-part-2 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+          file-part-2 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
 
-      ;; Uploading parts to multipart upload
-      @(.uploadPart multipart-upload file-part-1)
-      @(.uploadPart multipart-upload file-part-2)
+          parts [;; Uploading parts to multipart upload
+                 @(.uploadPart multipart-upload file-part-1)
+                 @(.uploadPart multipart-upload file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
-        @(.complete multipart-upload)
+        @(.complete multipart-upload parts)
         (t/is (empty? (.listUncommittedBlobs os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
@@ -194,13 +194,15 @@
 (t/deftest ^:azure multipart-uploads-with-more-parts-work-correctly
   (with-open [os (object-store (random-uuid))]
     (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-larger-multi-put"))
-          part-size 500]
-      (dotimes [_ 20]
-        (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-          @(.uploadPart multipart-upload file-part)))
+          part-size 500
+          parts (doall
+                 (for [_ (range 20)]
+                   (let [buf ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+                     {:buf buf
+                      :!part (.uploadPart multipart-upload buf)})))]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
-        @(.complete multipart-upload)
+        @(.complete multipart-upload (mapv (comp deref :!part) parts))
         (t/is (empty? (.listUncommittedBlobs os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
@@ -216,12 +218,13 @@
     (let [part-size 500]
 
       (t/testing "Initial multipart works correctly"
-        (let [initial-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))]
-          (dotimes [_ 2]
-            (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-              @(.uploadPart initial-multipart-upload file-part)))
+        (let [initial-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))
+              parts (doall
+                     (for [_ (range 2)]
+                       (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+                         (.uploadPart initial-multipart-upload file-part))))]
 
-          @(.complete initial-multipart-upload)
+          @(.complete initial-multipart-upload (mapv deref parts))
 
           (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
                    (vec (.listObjects ^ObjectStore os))))
@@ -229,12 +232,13 @@
           (t/is (empty? (.listUncommittedBlobs os)))))
 
       (t/testing "Attempt to multipart upload to an existing object shouldn't throw, should abort and remove uncomitted blobs"
-        (let [second-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))]
-          (dotimes [_ 3]
-            (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-              (t/is @(.uploadPart second-multipart-upload file-part))))
+        (let [second-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))
+              parts (doall
+                     (for [_ (range 3)]
+                       (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+                         (.uploadPart second-multipart-upload file-part))))]
 
-          @(.complete second-multipart-upload)
+          @(.complete second-multipart-upload (mapv deref parts))
 
           (t/is (empty? (.listUncommittedBlobs os)))))
 
