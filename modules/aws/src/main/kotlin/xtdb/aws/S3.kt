@@ -22,9 +22,9 @@ import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.storageRoot
-import xtdb.api.storage.throwMissingKey
 import xtdb.aws.s3.S3Configurator
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
@@ -194,7 +194,7 @@ class S3(
             }.await()
         }
 
-    override fun listAllObjects(): Iterable<StoredObject> =
+    private fun listObjects0(listPrefix: Path) =
         sequence {
             var continuationToken: String? = null
 
@@ -202,7 +202,7 @@ class S3(
                 val listResp = runBlocking {
                     client.listObjectsV2 {
                         it.bucket(bucket)
-                        it.prefix(prefix.toString())
+                        it.prefix("$listPrefix/")
                         it.continuationToken(continuationToken)
                     }.await()
                 }
@@ -213,6 +213,9 @@ class S3(
                 continuationToken = listResp.nextContinuationToken()
             }
         }.asIterable()
+
+    override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
+    override fun listObjects() = listObjects0(prefix)
 
     // used for multipart upload testing
     fun listUploads(): Set<Path> = runBlocking {

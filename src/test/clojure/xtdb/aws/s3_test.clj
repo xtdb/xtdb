@@ -35,8 +35,7 @@
               {:object-store [:s3 {:bucket bucket
                                    :prefix (util/->path (str "xtdb.s3-test." prefix))}]
                :local-disk-cache local-disk-cache}]
-    :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
-                  :files-topic (str "xtdb.kafka-test.files-" prefix)
+    :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]}))
 
 (t/deftest ^:s3 list-test
@@ -53,17 +52,17 @@
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
-          (t/is (= (mapv util/->path ["alan" "alice"]) (vec (.listAllObjects buffer-pool))))))
+          (t/is (= (mapv util/->path ["alan" "alice"]) (vec (.listObjects buffer-pool))))))
 
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
-            (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool))))
+            (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
             (Thread/sleep 1000)
-            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listAllObjects buffer-pool)))))))))
+            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listObjects buffer-pool)))))))))
 
 (t/deftest ^:s3 multiple-node-list-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -76,10 +75,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (vec (.listAllObjects buffer-pool-1))))
+                   (vec (.listObjects buffer-pool-1))))
 
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (vec (.listAllObjects buffer-pool-2)))))))))
+                   (vec (.listObjects buffer-pool-2)))))))))
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
@@ -109,7 +108,7 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
-                 (vec (.listAllObjects ^ObjectStore os))))
+                 (vec (.listObjects ^ObjectStore os))))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -124,19 +123,20 @@
                  (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
                                                    [:put-docs :bar {:xt/id "bar2"}]
                                                    [:put-docs :bar {:xt/id "bar3"}]]))))
-  
+
         ;; Ensure finish-chunk! works
         (t/is (nil? (tu/finish-chunk! node)))
-  
+
         ;; Ensure can query back out results
         (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                  (xt/q node '(from :bar [{:xt/id e}]))))
-  
+
         ;; Ensure some files written to buffer-pool
-        (t/is (seq (.listAllObjects buffer-pool)))))))
+        (t/is (seq (.listObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-#_(t/deftest ^:s3 tpch-test-node
+#_
+(t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (xtn/start-node
                            {:storage [:remote
@@ -154,4 +154,4 @@
         (t/is (instance? RemoteBufferPool buffer-pool))
         (t/is (instance? ObjectStore object-store))
         ;; Ensure some files are written
-        (t/is (seq (.listAllObjects object-store)))))))
+        (t/is (seq (.listObjects object-store)))))))

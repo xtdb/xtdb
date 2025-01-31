@@ -62,18 +62,12 @@ class MemoryBufferPool(
         }
     }
 
-    override fun listAllObjects(): List<Path> =
-        synchronized(memoryStore) {
-            memoryStore.keys.toList()
-        }
+    override fun listObjects() = synchronized(memoryStore) { memoryStore.keys.toList() }
 
-    override fun listObjects(dir: Path): List<Path> =
+    override fun listObjects(dir: Path) =
         synchronized(memoryStore) {
-            val dirDepth = dir.nameCount
             memoryStore.tailMap(dir).keys
                 .takeWhile { it.startsWith(dir) }
-                .mapNotNull { path -> if (path.nameCount > dirDepth) path.subpath(0, dirDepth + 1) else null }
-                .distinct()
         }
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {

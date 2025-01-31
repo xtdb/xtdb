@@ -187,7 +187,7 @@ A key distinction between interacting with Postgres and interacting with XTDB (e
 1. forces all writes to be fully serialized into a single, system-wide log of durably-recorded transactions and, consequently,
 2. precludes the use of 'interactive transactions' (i.e. clients can't run queries in the middle of multi-statement transactions)
 
-The complete transaction log history is permanently stored within the system-maintained `xt.txs` table:
+The complete transaction history is permanently stored within the system-maintained `xt.txs` table:
 
 <TabbedExample>
   <Fiddle magicContext="my-context" slot="1">
@@ -207,7 +207,7 @@ user=> SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20;
   </Card>
 </TabbedExample>
 
-XTDB relies on the immutable, append-only nature of the transaction log and its timestamps to automatically record all changes across the database. This approach means that queries can use the **reliable ordering** of the log to query **previous states** of the database using nothing more than a timestamp. More on that next!
+XTDB relies on the immutable, append-only nature of the log and its timestamps to automatically record all changes across the database. This approach means that queries can use the **reliable ordering** of the log to query **previous states** of the database using nothing more than a timestamp. More on that next!
 
 ## Query the past
 
@@ -578,7 +578,7 @@ XTDB implements a SQL API that closely follows the ISO standard specifications a
 
 * does not require an explicit schema to be declared before inserting data (i.e. there's no explicit `CREATE TABLE` [DDL](https://en.wikipedia.org/wiki/Data_definition_language) statement) - tables may be created dynamically via an initial INSERT statement, along with any supplied columns and inferrable type information - schema automatically evolves over time as data changes
 * handles semi-structured 'document' data natively, with deeply nested union types ('objects') and arrays
-* operates on top of a durable transaction log to help underpin scalable and reliable information systems
+* operates on top of a durable log to help underpin scalable and reliable information systems
 * maintains various 'bitemporal' columns globally across all tables to preserve history
 * offers powerful temporal query syntax for rich analysis of historical data
 

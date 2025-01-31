@@ -1,0 +1,97 @@
+---
+title: Kafka
+---
+https://kafka.apache.org/[Apache Kafka] can be used as an XTDB message log.
+
+== Setup
+
+1. Add a dependency to the `com.xtdb/xtdb-kafka` module in your dependency manager.
+2. On your Kafka cluster, XTDB requires a Kafka topic to use as its message log:
++
+--
+* This can be created manually and provided to the node config, or XTDB can create it automatically.
+* If allowing XTDB to create the topic **automatically**, ensure that the connection properties supplied to the XTDB node have the appropriate permissions to create topics - XTDB will create the topic with some expected configuration values.
+--
+3. The log topic should be configured with the following properties:
++
+--
+* **A single partition** - this ensures that the message log is strictly ordered.
+* `message.timestamp.type` set to `LogAppendTime` - this ensures that the timestamp of the message is the time it was appended to the log, rather than the time it was sent by the producer.
+* The XTDB log is generally set up using the default values for configuration. A few key values to consider:
+** `retention.ms`: as messages are not required to be permanently on the log, this value does not need to be particularly high. The default value of **1 day** is sufficient for most use cases. When extra precaution should be taken to prevent any data loss on certain environments, a larger value is recommended, with **1 week** as a starting point.
+** `max.message.bytes`: generally, this is using the default value of **1MB**, which is fit for purpose for most log messages. This will depend on the overall size of transactions that are being sent into XTDB.
+** `cleanup.policy`: The Kafka module within XTDB does not make use of compacted messages, so it is recommended that the topic cleanup policy should use the default value of **delete**. 
+--
+4. XTDB should be configured to use the log topic, and the Kafka cluster the topic is hosted on.
+   It should also be authorised to perform all of the necessary operations the topic.
++
+--
+* For configuring the kafka module to authenticate with the Kafka cluster, the `propertiesFile` or `propertiesMap` configuration options to supply the necessary connection properties. See the <<auth_example,example configuration>> below.
+* If using the Kafka cluster is using **ACLs**, ensure that the XTDB node has the following permissions on the topic:
+** `Describe`
+** `Read`
+** `Write`
+-- 
+
+== Configuration
+
+To use the Kafka module, include the following in your node configuration:
+
+[source,yaml]
+----
+log: !Kafka
+  # -- required
+
+  # A comma-separated list of host:port pairs to use for establishing the
+  # initial connection to the Kafka cluster.
+  # (Can be set as an !Env value)
+  bootstrapServers: "localhost:9092"
+
+  # Name of the Kafka topic to use for the log.
+  # (Can be set as an !Env value)
+  topic: "xtdb-log"
+
+  # -- optional
+
+  # Whether or not to automatically create the topic, if it does not already exist.
+  # autoCreateTopic: true
+
+  # The maximum time to block waiting for records to be returned by the Kafka consumer.
+  # pollDuration: "PT1S"
+
+  # Path to a Java properties file containing Kafka connection properties,
+  # supplied directly to the Kafka client.
+  # (Can be set as an !Env value)
+  # propertiesFile: "kafka.properties"
+
+  # A map of Kafka connection properties, supplied directly to the Kafka client.
+  # propertiesMap:
+----
+
+[#auth_example]
+=== SASL Authenticated Kafka Example
+
+The following piece of node configuration demonstrates the following common use case:
+
+* Cluster is secured with SASL - authentication is required from the module.
+* Topic has already been created manually.
+* Configuration values are being passed in as environment variables.
+
+[source,yaml]
+----
+log: !Kafka
+  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  topic: !Env XTDB_LOG_TOPIC
+  autoCreateTopic: false
+  propertiesMap:
+    sasl.mechanism: PLAIN
+    security.protocol: SASL_SSL
+    sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
+----
+
+The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a string similar to the following, and should be passed in as a secret value:
+
+[source]
+----
+org.apache.kafka.common.security.plain.PlainLoginModule required username="username" password="password";
+----

@@ -37,8 +37,7 @@ services:
     environment:
       XTDB_NODE_ID: xtdb-node-1 # persistent node id for labelling grafana metrics
       KAFKA_BOOTSTRAP_SERVERS: kafka:29094
-      XTDB_TX_TOPIC: xtdbTxTopic
-      XTDB_FILES_TOPIC: xtdbFilesTopic
+      XTDB_LOG_TOPIC: xtdb-log
     volumes:
       - xtdb-log:/var/lib/xtdb/log
       - xtdb-storage-1:/var/lib/xtdb/buffers
@@ -54,8 +53,7 @@ services:
     environment:
       XTDB_NODE_ID: xtdb-node-2 # persistent node id for labelling grafana metrics
       KAFKA_BOOTSTRAP_SERVERS: kafka:29094
-      XTDB_TX_TOPIC: xtdbTxTopic
-      XTDB_FILES_TOPIC: xtdbFilesTopic
+      XTDB_LOG_TOPIC: xtdb-log
     volumes:
       - xtdb-log:/var/lib/xtdb/log
       - xtdb-storage-2:/var/lib/xtdb/buffers

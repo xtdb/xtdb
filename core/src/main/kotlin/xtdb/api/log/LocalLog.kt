@@ -240,7 +240,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
     }
 
     /**
-     * Used to set configuration options for a local directory based XTDB Transaction Log.
+     * Used to set configuration options for a local directory based XTDB Log.
      *
      * Example usage, as part of a node config:
      * ```kotlin

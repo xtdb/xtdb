@@ -8,12 +8,12 @@
 
 (defmethod xtn/apply-config! ::log
   [^Xtdb$Config config _ {:keys [bootstrap-servers
-                                 tx-topic files-topic create-topics?
+                                 topic create-topic?
                                  poll-duration
                                  properties-map properties-file]}]
   (doto config
-    (.setLog (cond-> (KafkaLog/kafka bootstrap-servers tx-topic files-topic)
-               create-topics? (.autoCreateTopics create-topics?)
+    (.setLog (cond-> (KafkaLog/kafka bootstrap-servers topic)
+               create-topic? (.autoCreateTopic create-topic?)
                poll-duration (.pollDuration (time/->duration poll-duration))
                properties-map (.propertiesMap properties-map)
                properties-file (.propertiesFile (util/->path properties-file))))))

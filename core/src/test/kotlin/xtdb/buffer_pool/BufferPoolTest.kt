@@ -3,6 +3,7 @@ package xtdb.buffer_pool
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.BufferPool
+import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 
@@ -19,6 +20,7 @@ abstract class BufferPoolTest {
 
         Thread.sleep(100)
 
-        assertEquals(listOf(Path.of("a/b"), Path.of("a/e")), bufferPool.listObjects(Path.of("a")))
+        assertEquals(listOf("a/b/c".asPath, "a/b/d".asPath, "a/e".asPath), bufferPool.listObjects("a".asPath))
+        assertEquals(listOf("a/b/c".asPath, "a/b/d".asPath), bufferPool.listObjects("a/b".asPath))
     }
 }

@@ -2,26 +2,13 @@
   (:require [integrant.core :as ig]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import [io.micrometer.core.instrument.simple SimpleMeterRegistry]
-           [java.nio.file Path]
-           [org.apache.arrow.memory BufferAllocator]
+  (:import [java.nio.file Path]
            (org.apache.arrow.vector VectorSchemaRoot)
            (xtdb BufferPool)
-           (xtdb.api.log FileLog)
            (xtdb.api.storage Storage Storage$Factory)
-           xtdb.api.Xtdb$Config
-           (xtdb.buffer_pool LocalBufferPool)))
+           xtdb.api.Xtdb$Config))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-;; only used from tests now
-(defn dir->buffer-pool
-  "Creates a local storage buffer pool from the given directory."
-  ^xtdb.BufferPool [^BufferAllocator allocator, ^Path dir]
-  (let [bp-path (util/tmp-dir "tmp-buffer-pool")
-        storage-root (.resolve bp-path Storage/storageRoot)]
-    (util/copy-dir dir storage-root)
-    (LocalBufferPool. allocator (Storage/localStorage bp-path) (SimpleMeterRegistry.))))
 
 (defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
   (.storage config (cond-> (Storage/localStorage (util/->path path))
@@ -71,11 +58,10 @@
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)
    :factory factory
-   :file-log (ig/ref :xtdb/file-log)
    :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, ^FileLog file-log metrics-registry]}]
-  (.open factory allocator file-log metrics-registry))
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, metrics-registry]}]
+  (.open factory allocator metrics-registry))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))

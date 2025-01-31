@@ -35,16 +35,22 @@
           (str/join part)
           (util/->lex-hex-string next-row)))
 
-(defn ->table-data-file-path [table-name trie-key]
-  (-> (util/table-name->table-path table-name)
+(def ^java.nio.file.Path tables-dir (util/->path "tables"))
+
+(defn- table-name->table-path ^java.nio.file.Path [^String table-name]
+  (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
+
+(defn ->table-data-file-path ^java.nio.file.Path [table-name trie-key]
+  (-> (table-name->table-path table-name)
       (.resolve (format "data/%s.arrow" trie-key))))
 
-(defn ->table-meta-file-path [table-name trie-key]
-  (-> (util/table-name->table-path table-name)
-      (.resolve (format "meta/%s.arrow" trie-key))))
+(defn ->table-meta-dir ^java.nio.file.Path [table-name]
+  (-> (table-name->table-path table-name)
+      (.resolve "meta")))
 
-(defn list-meta-files [^BufferPool buffer-pool table-name]
-  (.listObjects buffer-pool (-> (util/table-name->table-path table-name) (.resolve "meta"))))
+(defn ->table-meta-file-path [table-name trie-key]
+  (-> (->table-meta-dir table-name)
+      (.resolve (format "%s.arrow" trie-key))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 4))) false

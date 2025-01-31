@@ -25,9 +25,7 @@ import xtdb.util.newSeekableByteChannel
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
-import java.nio.file.Files
 import java.nio.file.Files.newByteChannel
-import java.nio.file.Files.newDirectoryStream
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
@@ -121,20 +119,14 @@ class LocalBufferPool(
         }
     }
 
-    override fun listAllObjects(): List<Path> =
-        Files.walk(diskStore).use { stream ->
-            stream
-                .filter { Files.isRegularFile(it) && !diskStore.relativize(it).startsWith(".tmp") }
-                .map(diskStore::relativize)
-                .sorted()
-                .toList()
-        }
+    private fun Path.listAll() = walk()
+        .map(diskStore::relativize)
+        .filter { it.getName(0).toString() != ".tmp" }
+        .sorted()
+        .toList()
 
-    override fun listObjects(dir: Path): List<Path> =
-        diskStore.resolve(dir)
-            .takeIf { it.exists() }
-            ?.let { dirPath -> newDirectoryStream(dirPath).use { it.map(diskStore::relativize).sorted() } }
-            .orEmpty()
+    override fun listObjects() = diskStore.listAll()
+    override fun listObjects(dir: Path) = diskStore.resolve(dir).listAll()
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskStore.createTempUploadFile()

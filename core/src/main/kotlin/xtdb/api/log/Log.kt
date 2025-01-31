@@ -91,7 +91,6 @@ interface Log : AutoCloseable {
 
     interface Factory {
         fun openLog(): Log
-        fun openFileLog(): FileLog = FileLog.openInMemory()
     }
 
     /*

@@ -5,7 +5,7 @@ title: Setting up a cluster on Azure
 This guide will walk you through the process of configuring and running an XTDB Cluster on Azure. This setup includes:
 
 * Using **Azure Blob Storage** as the remote storage implementation.
-* Utilizing **Apache Kafka** as the shared transaction log implementation.
+* Utilizing **Apache Kafka** as the shared message log implementation.
 * Exposing the cluster to the internet via a Postgres wire-compatible server and HTTP.
  
 The required Azure infrastructure is provisioned using **Terraform**, and the XTDB cluster and it's resources are deployed on link:https://azure.microsoft.com/en-us/products/kubernetes-service[**Azure Managed Kubernetes Service (AKS)**^] using **Helm**, 
@@ -157,7 +157,7 @@ helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
 
 This command will create:
 
-* A simple, **unauthenticated** Kafka deployment on the AKS cluster, which XTDB will use as its Transaction Log, along with its dependent infrastructure and persistent storage.
+* A simple, **unauthenticated** Kafka deployment on the AKS cluster, which XTDB will use as its message log, along with its dependent infrastructure and persistent storage.
 * A Kubernetes service to expose the Kafka instance to the XTDB cluster.
 
 ==== Considerations of the Kafka Deployment
@@ -174,7 +174,7 @@ For production environments, consider the following:
 Additional resources:
 
 * For further configuration options for the Helm chart, refer to the link:https://artifacthub.io/packages/helm/bitnami/kafka[**Bitnami Kafka Chart Documentation**^].
-* For detailed configuration guidance when using Kafka with XTDB, see the link:https://docs.xtdb.com/ops/config/tx-log/kafka.html#_setup[**XTDB Kafka Setup Documentation**^].
+* For detailed configuration guidance when using Kafka with XTDB, see the link:https://docs.xtdb.com/ops/config/log/kafka.html#_setup[**XTDB Kafka Setup Documentation**^].
 
 === Verifying the Kafka Deployment
 

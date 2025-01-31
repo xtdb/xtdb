@@ -15,7 +15,6 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import xtdb.BufferPool
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.Xtdb
-import xtdb.api.log.FileLog
 import xtdb.buffer_pool.LocalBufferPool
 import xtdb.buffer_pool.MemoryBufferPool
 import xtdb.buffer_pool.RemoteBufferPool
@@ -38,7 +37,7 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
-        fun open(allocator: BufferAllocator, fileLog: FileLog, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
+        fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
     }
 
     internal fun BufferAllocator.openStorageChildAllocator() =
@@ -61,7 +60,7 @@ object Storage {
     @SerialName("!InMemory")
     data object InMemoryStorageFactory : Factory {
 
-        override fun open(allocator: BufferAllocator, fileLog: FileLog, meterRegistry: MeterRegistry) =
+        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
             MemoryBufferPool(allocator, meterRegistry)
     }
 
@@ -95,7 +94,7 @@ object Storage {
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun open(allocator: BufferAllocator, fileLog: FileLog, meterRegistry: MeterRegistry) =
+        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
             LocalBufferPool(allocator, this, meterRegistry)
     }
 
@@ -152,9 +151,9 @@ object Storage {
 
         fun maxDiskCacheBytes(maxDiskCacheBytes: Long) = apply { this.maxDiskCacheBytes = maxDiskCacheBytes }
 
-        override fun open(allocator: BufferAllocator, fileLog: FileLog, meterRegistry: MeterRegistry) =
+        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
             objectStore.openObjectStore().closeOnCatch { objectStore ->
-                RemoteBufferPool(this, allocator, fileLog, objectStore, meterRegistry)
+                RemoteBufferPool(this, allocator, objectStore, meterRegistry)
             }
     }
 

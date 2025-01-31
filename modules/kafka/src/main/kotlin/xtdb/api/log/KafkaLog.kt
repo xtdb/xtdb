@@ -32,7 +32,6 @@ import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.Xtdb
 import xtdb.api.log.Log.*
 import xtdb.api.module.XtdbModule
-import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Duration
@@ -102,63 +101,6 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
         }
 
         else -> error("Topic $topic does not exist, auto-create set to false")
-    }
-}
-
-class KafkaFileLog(
-    private val kafkaConfigMap: KafkaConfigMap,
-    private val topic: String,
-    private val pollDuration: Duration
-) : FileLog {
-
-    private val producer = kafkaConfigMap.openProducer()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    companion object {
-        private fun FileLog.Notification.encode(): ByteArray =
-            requiringResolve("xtdb.file-log/file-notification->transit")(this) as ByteArray
-
-        private fun ByteArray.decodeNotification(): FileLog.Notification =
-            requiringResolve("xtdb.file-log/transit->file-notification")(this) as FileLog.Notification
-    }
-
-    override fun appendFileNotification(notification: FileLog.Notification) = scope.future {
-        val res = CompletableDeferred<Unit>()
-        val producerRecord = ProducerRecord(topic, null, Unit, ByteBuffer.wrap(notification.encode()))
-        producer.send(producerRecord) { _, e -> if (e == null) res.complete(Unit) else res.completeExceptionally(e) }
-        res.await()
-    }
-
-    override fun subscribeToFileNotifications(processor: FileLog.Processor): AutoCloseable {
-        val job = scope.launch {
-            kafkaConfigMap.openConsumer().use { c ->
-                TopicPartition(topic, 0).also { tp ->
-                    c.assign(listOf(tp))
-                    c.seekToEnd(listOf(tp))
-                }
-
-                runInterruptible(Dispatchers.IO) {
-                    while (true) {
-                        val records = try {
-                            c.poll(pollDuration).records(topic)
-                        } catch (e: InterruptException) {
-                            throw InterruptedException()
-                        }
-
-                        records.forEach { record ->
-                            processor.processNotification(record.value().decodeNotification())
-                        }
-                    }
-                }
-            }
-        }
-
-        return AutoCloseable { runBlocking { job.cancelAndJoin() } }
-    }
-
-    override fun close() {
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
-        producer.close()
     }
 }
 
@@ -235,25 +177,24 @@ class KafkaLog internal constructor(
 
     companion object {
         @JvmStatic
-        fun kafka(bootstrapServers: String, txTopic: String, filesTopic: String) =
-            Factory(bootstrapServers, txTopic, filesTopic)
+        fun kafka(bootstrapServers: String, topic: String) =
+            Factory(bootstrapServers, topic)
 
         @JvmSynthetic
         fun Xtdb.Config.kafka(
             bootstrapServers: String,
-            txTopic: String,
-            filesTopic: String,
+            topic: String,
             configure: Factory.() -> Unit = {}
         ) {
-            log = KafkaLog.kafka(bootstrapServers, txTopic, filesTopic).also(configure)
+            log = KafkaLog.kafka(bootstrapServers, topic).also(configure)
         }
     }
 
     /**
-     * Used to set configuration options for Kafka as an XTDB Transaction Log.
+     * Used to set configuration options for Kafka as an XTDB Log.
      *
-     * For more info on setting up the necessary infrastructure to be able to use Kafka as an XTDB Transaction Log, see the
-     * section on infrastructure within our [Kafka Module Reference](https://docs.xtdb.com/config/tx-log/kafka.html).
+     * For more info on setting up the necessary infrastructure to be able to use Kafka as an XTDB Log, see the
+     * section on infrastructure within our [Kafka Module Reference](https://docs.xtdb.com/config/log/kafka.html).
      *
      * Example usage, as part of a node config:
      * ```kotlin
@@ -269,8 +210,8 @@ class KafkaLog internal constructor(
      * ```
      *
      * @property bootstrapServers A comma-separated list of host:port pairs to use for establishing the initial connection to the Kafka cluster.
-     * @property txTopic Name of the Kafka topic to use for the log.
-     * @property autoCreateTopics Whether to automatically create the topics, if it does not already exist.
+     * @property topic Name of the Kafka topic to use for the log.
+     * @property autoCreateTopic Whether to automatically create the topics, if it does not already exist.
      * @property pollDuration The maximum amount of time to block waiting for records to be returned by the Kafka consumer.
      * @property propertiesMap A map of Kafka connection properties, supplied directly to the Kafka client.
      * @property propertiesFile Path to a Java properties file containing Kafka connection properties, supplied directly to the Kafka client.
@@ -279,15 +220,14 @@ class KafkaLog internal constructor(
     @SerialName("!Kafka")
     data class Factory(
         val bootstrapServers: String,
-        val txTopic: String,
-        val filesTopic: String,
-        var autoCreateTopics: Boolean = true,
+        val topic: String,
+        var autoCreateTopic: Boolean = true,
         var pollDuration: Duration = Duration.ofSeconds(1),
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null
     ) : Log.Factory {
 
-        fun autoCreateTopics(autoCreateTopics: Boolean) = apply { this.autoCreateTopics = autoCreateTopics }
+        fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
 
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
 
@@ -309,20 +249,10 @@ class KafkaLog internal constructor(
             val configMap = this.configMap
 
             AdminClient.create(configMap).use { admin ->
-                admin.ensureTopicExists(txTopic, autoCreateTopics)
+                admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return KafkaLog(configMap, txTopic, pollDuration)
-        }
-
-        override fun openFileLog(): FileLog {
-            val configMap = this.configMap
-
-            AdminClient.create(configMap).use { admin ->
-                admin.ensureTopicExists(filesTopic, autoCreateTopics)
-            }
-
-            return KafkaFileLog(configMap, filesTopic, pollDuration)
+            return KafkaLog(configMap, topic, pollDuration)
         }
     }
 

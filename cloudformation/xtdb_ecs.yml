@@ -169,10 +169,8 @@ Resources:
           Environment:
             - Name: KAFKA_BOOTSTRAP_SERVERS
               Value: !Ref MSKBootstrapServers
-            - Name: XTDB_TX_TOPIC
-              Value: xtdb-tx-log
-            - Name: XTDB_FILES_TOPIC
-              Value: xtdb-file-notifs
+            - Name: XTDB_LOG_TOPIC
+              Value: xtdb-log
             - Name: XTDB_S3_BUCKET
               Value: !Ref S3BucketName
       Volumes:

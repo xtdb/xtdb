@@ -13,8 +13,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
-import xtdb.api.storage.throwMissingKey
+import xtdb.api.storage.Storage.storageRoot
 import xtdb.gcp.CloudStorage.Factory
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -53,10 +54,7 @@ class CloudStorage(
     private val prefix: Path,
 ) : ObjectStore {
 
-    private val client = StorageOptions.newBuilder().run {
-        setProjectId(projectId)
-        build()
-    }.service
+    private val client = StorageOptions.newBuilder().run { setProjectId(projectId); build() }.service
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -105,10 +103,13 @@ class CloudStorage(
         }
     }
 
-    override fun listAllObjects(): Iterable<StoredObject> =
-        client.list(bucket, BlobListOption.prefix(prefix.toString()))
+    private fun listObjects0(listPrefix: Path) =
+        client.list(bucket, BlobListOption.prefix("$listPrefix/"))
             .iterateAll()
             .map { blob -> StoredObject(prefix.relativize(blob.name.asPath), blob.size) }
+
+    override fun listObjects() = listObjects0(prefix)
+    override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
 
     override fun close() {
         runBlocking { scope.coroutineContext.job.cancelAndJoin() }
@@ -121,11 +122,8 @@ class CloudStorage(
 
         @Suppress("unused")
         @JvmSynthetic
-        fun googleCloudStorage(
-            projectId: String,
-            bucket: String,
-            configure: Factory.() -> Unit = {},
-        ) = googleCloudStorage(projectId, bucket).also(configure)
+        fun googleCloudStorage(projectId: String, bucket: String, configure: Factory.() -> Unit = {}) =
+            googleCloudStorage(projectId, bucket).also(configure)
     }
 
     /**
@@ -143,15 +141,8 @@ class CloudStorage(
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
-        override fun openObjectStore(): CloudStorage {
-            val prefix = this.prefix
-
-            return CloudStorage(
-                projectId, bucket,
-                if (prefix != null) prefix.resolve(xtdb.api.storage.Storage.storageRoot) else xtdb.api.storage.Storage.storageRoot
-            )
-        }
-    }
+        override fun openObjectStore() =
+            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot) }
 
     /**
      * @suppress

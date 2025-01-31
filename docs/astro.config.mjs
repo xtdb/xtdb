@@ -135,10 +135,10 @@ export default defineConfig({
                                 'ops/config/clojure',
 
                                 {
-                                    label: 'Transaction Log',
+                                    label: 'Log',
                                     items: [
-                                        { label: 'Overview', link: '/ops/config/tx-log' },
-                                        { label: 'Kafka', link: '/ops/config/tx-log/kafka' },
+                                        { label: 'Overview', link: '/ops/config/log' },
+                                        { label: 'Kafka', link: '/ops/config/log/kafka' },
                                     ],
                                 },
 

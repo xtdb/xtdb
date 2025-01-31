@@ -3,7 +3,6 @@
             [clojure.test :as t]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
@@ -15,13 +14,12 @@
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
            (org.apache.arrow.vector.types.pojo Schema)
-           xtdb.api.log.FileLog
            (xtdb.api.storage ObjectStore$Factory Storage)
+           (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
-           (xtdb.buffer_pool MemoryBufferPool LocalBufferPool RemoteBufferPool)
-           xtdb.cache.DiskCache
+           (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
            xtdb.BufferPool
-           (xtdb.api.storage SimulatedObjectStore StoreOperation)))
+           xtdb.cache.DiskCache))
 
 (defonce tmp-dirs (atom []))
 
@@ -53,7 +51,7 @@
 
       (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
             object-store (.getObjectStore buffer-pool)]
-        (t/is (seq (.listAllObjects object-store)))))))
+        (t/is (seq (.listObjects object-store)))))))
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
@@ -91,7 +89,7 @@
 
 (defn remote-test-buffer-pool ^xtdb.BufferPool []
   (-> (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
-      (.open tu/*allocator* (FileLog/openInMemory) (SimpleMeterRegistry.))))
+      (.open tu/*allocator* (SimpleMeterRegistry.))))
 
 (defn get-remote-calls [^RemoteBufferPool test-bp]
   (.getCalls ^SimulatedObjectStore (.getObjectStore test-bp)))
@@ -114,11 +112,10 @@
 
 (t/deftest local-disk-cache-max-size
   (util/with-tmp-dirs #{local-disk-cache}
-    (with-open [file-log (FileLog/openInMemory)
-                bp (-> (Storage/remoteStorage (simulated-obj-store-factory) local-disk-cache)
+    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory) local-disk-cache)
                        (.maxDiskCacheBytes 10)
                        (.maxCacheBytes 12)
-                       (.open tu/*allocator* file-log (SimpleMeterRegistry.)))]
+                       (.open tu/*allocator* (SimpleMeterRegistry.)))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
@@ -143,21 +140,19 @@
         path-b (util/->path "b")]
     (util/with-tmp-dirs #{local-disk-cache}
       ;; Writing files to buffer pool & local-disk-cache
-      (with-open [file-log (FileLog/openInMemory)
-                  bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
+      (with-open [bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
                          (.maxDiskCacheBytes 10)
                          (.maxCacheBytes 12)
-                         (.open tu/*allocator* file-log (SimpleMeterRegistry.)))]
+                         (.open tu/*allocator* (SimpleMeterRegistry.)))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
-      (with-open [file-log (FileLog/openInMemory)
-                  bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
+      (with-open [bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
                          (.maxDiskCacheBytes 10)
                          (.maxCacheBytes 12)
-                         (.open tu/*allocator* file-log (SimpleMeterRegistry.)))]
+                         (.open tu/*allocator* (SimpleMeterRegistry.)))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
 
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))
@@ -166,7 +161,7 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
       (t/testing "empty buffer pool"
-        (t/is (= [] (.listAllObjects bp)))
+        (t/is (= [] (.listObjects bp)))
         (t/is (= [] (.listObjects bp (.toPath (io/file "foo")))))))))
 
 (t/deftest dont-list-temporary-objects-3544
@@ -175,7 +170,7 @@
       (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))
                   rel (Relation. tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
-        (t/is (= [] (.listAllObjects bp)))))))
+        (t/is (= [] (.listObjects bp)))))))
 
 (defn fetch-buffer-pool-from-node
   [node]
@@ -194,7 +189,7 @@
   (Thread/sleep 1000)
 
   (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
-           (.listAllObjects buffer-pool)))
+           (.listObjects buffer-pool)))
 
   (t/is (= (mapv util/->path ["foo/alan"])
            (.listObjects buffer-pool (util/->path "foo"))))
@@ -203,8 +198,8 @@
     (t/is (= (mapv util/->path ["foo/alan"])
              (.listObjects buffer-pool (util/->path "foo/")))))
 
-  (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
-    (t/is (= (mapv util/->path ["bar/alice" "bar/baz" "bar/baza" "bar/bob"])
+  (t/testing "calling listObjects with prefix on directory with subdirectories - still lists recursively, and relative to the root"
+    (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob"])
              (.listObjects buffer-pool (util/->path "bar")))))
 
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "

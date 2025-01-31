@@ -1,0 +1,57 @@
+---
+title: Log
+---
+One of the key components of an XTDB node is the log - this is a totally ordered log of all operations that have been applied to the database, generally persistent & shared between nodes.
+
+== Implementations
+
+We offer a number of separate implementations of the log, currently:
+
+* Single-node log implementations, within `xtdb-core`:
+** <<In memory>>: transient in-memory log.
+** <<Local disk>>: log using the local filesystem.
+* <<Remote>>: multi-node log implementations using a remote service.
+
+== In memory
+
+By default, the log is a transient, in-memory log:
+
+[source,yaml]
+----
+# default, no need to explicitly specify
+# log: !InMemory
+----
+
+If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each message.
+
+== Local disk
+
+A single-node persistent log implementation that writes to a local directory.
+
+[source,yaml]
+----
+log: !Local
+  # -- required
+
+  # The path to the local directory to store the log in.
+  # (Can be set as an !Env value)
+  path: /var/lib/xtdb/log
+
+  # -- optional
+
+  # The number of entries of the buffer to use when writing to the log.
+  # bufferSize: 4096
+
+  # The duration to sleep for when polling for new messages written to the log.
+  # pollSleepDuration: PT0.1S
+----
+
+If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
+
+== Remote
+
+A multi-node persistent log implementation that uses a remote service to store the log.
+
+We currently offer the following remote log implementations, available in their own modules:
+
+* link:log/kafka[Kafka]: a log implementation that uses a Apache Kafka topic to store the log.

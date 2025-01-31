@@ -4,14 +4,14 @@ title: Clojure Configuration Cookbook
 
 This document provides examples for the EDN configuration of XTDB components, to be supplied to `xtdb.api/start-node`.
 
-== Transaction Log 
+== Log
 
-Main article: link:/config/tx-log[Transaction Log]
+Main article: link:/config/log[Log]
 
 [#in-memory-log]
 === In-Memory
 
-Main article: link:/config/tx-log#_in_memory[in-memory transaction log]
+Main article: link:/config/log#_in_memory[in-memory log]
 
 This is the default, and can be omitted.
 
@@ -27,14 +27,14 @@ This is the default, and can be omitted.
 [#local-log]
 === Local disk
 
-Main article: link:/config/tx-log#_local_disk[local-disk transaction log]
+Main article: link:/config/log#_local_disk[local-disk log]
 
 [source,clojure]
 ----
 {:log [:local
        {;; -- required
         ;; accepts `String`, `File` or `Path`
-        :path "/tmp/tx-log"
+        :path "/tmp/log"
 
         ;; -- optional
 
@@ -49,7 +49,7 @@ Main article: link:/config/tx-log#_local_disk[local-disk transaction log]
 [#kafka]
 === Kafka
 
-Main article: link:/config/tx-log/kafka[Kafka]
+Main article: link:/config/log/kafka[Kafka]
 
 [source,clojure]
 ----

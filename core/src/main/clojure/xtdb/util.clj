@@ -314,19 +314,11 @@
 (defn delete-file [^Path file]
   (Files/deleteIfExists file))
 
-(defn size-on-disk [^Path file]
-  (Files/size file))
-
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
 
 (defn is-file? [^Path path]
   (Files/isRegularFile path (make-array LinkOption 0)))
-
-(defn create-parents [^Path path]
-  (let [parents (.getParent path)]
-    (when-not (path-exists parents)
-      (mkdirs parents))))
 
 (defn file-extension [^File f]
   (second (re-find #"\.(.+?)$" (.getName f))))
@@ -339,19 +331,6 @@
   (with-open [file-ch (->file-channel to-path write-truncate-open-opts)
               buf-ch (->seekable-byte-channel from-buffer)]
     (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
-
-(defn atomic-move [^Path from-path ^Path to-path]
-  (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
-  to-path)
-
-(defn prefix-key [^Path prefix ^Path k]
-  (cond->> k
-    prefix (.resolve prefix)))
-
-(def ^java.nio.file.Path tables-dir (->path "tables"))
-
-(defn table-name->table-path ^java.nio.file.Path [^String table-name]
-  (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
 
 (def ^Thread$UncaughtExceptionHandler uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
@@ -370,14 +349,6 @@
           (doto t
             (.setName (str prefix "-" (.getName t)))
             (.setUncaughtExceptionHandler uncaught-exception-handler)))))))
-
-(defn shutdown-pool
-  ([^ExecutorService pool]
-   (shutdown-pool pool 60))
-  ([^ExecutorService pool ^long timeout-seconds]
-   (.shutdownNow pool)
-   (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
-     (log/warn "pool did not terminate" pool))))
 
 ;;; Arrow
 

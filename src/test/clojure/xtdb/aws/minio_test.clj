@@ -46,8 +46,7 @@
                                            :credentials test-creds
                                            :endpoint "http://127.0.0.1:9000"}]
                        :local-disk-cache (.resolve node-dir "local-cache")}]
-    :log [:kafka {:tx-topic (str "xtdb.kafka-test.tx-" prefix)
-                  :files-topic (str "xtdb.kafka-test.files-" prefix)
+    :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]}))
 
 (t/deftest ^:minio list-test
@@ -64,18 +63,18 @@
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 100)
-          (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool)))))
+          (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool)))))
 
       (util/with-open [node (start-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
           (Thread/sleep 100)
-            (t/is (= (mapv util/->path ["alan" "alice"]) (.listAllObjects buffer-pool))))
+            (t/is (= (mapv util/->path ["alan" "alice"]) (.listObjects buffer-pool))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
             (Thread/sleep 100)
-            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listAllObjects buffer-pool)))))))))
+            (t/is (= (mapv util/->path ["alan" "alex" "alice"]) (.listObjects buffer-pool)))))))))
 
 (t/deftest ^:minio multiple-node-list-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -88,10 +87,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (.listAllObjects buffer-pool-1)))
+                   (.listObjects buffer-pool-1)))
 
           (t/is (= (mapv util/->path ["alan" "alice"])
-                   (.listAllObjects buffer-pool-2))))))))
+                   (.listObjects buffer-pool-2))))))))
 
 (t/deftest ^:minio multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
@@ -128,7 +127,7 @@
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put")
                                      (* 2 part-size))]
-                 (.listAllObjects ^ObjectStore os)))
+                 (.listObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -152,7 +151,7 @@
                  (xt/q node '(from :bar [{:xt/id e}]))))
   
         ;; Ensure some files written to buffer-pool
-        (t/is (seq (.listAllObjects buffer-pool)))))))
+        (t/is (seq (.listObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (comment
@@ -174,4 +173,4 @@
           (t/is (instance? RemoteBufferPool buffer-pool))
           (t/is (instance? ObjectStore object-store))
           ;; Ensure some files are written
-          (t/is (seq (.listAllObjects object-store))))))))
+          (t/is (seq (.listObjects object-store))))))))

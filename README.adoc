@@ -27,7 +27,7 @@ Major features:
 
 == Inside-out Architecture
 
-XTDB embraces the transaction log as the central point of coordination when running as a distributed system.
+XTDB embraces a log as the central point of coordination when running as a distributed system.
 
 [quote,Martin Kleppmann]
 ____

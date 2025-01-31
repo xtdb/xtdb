@@ -67,7 +67,7 @@ class BlobStorageTest : ObjectStoreTest() {
 
         assertEquals(
             setOf("test-multipart"),
-            objectStore.listAllObjects().map { it.key.toString() }.toSet()
+            objectStore.listObjects().map { it.key.toString() }.toSet()
         )
 
         val downloaded = objectStore.getObject("test-multipart".asPath).await()
