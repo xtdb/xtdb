@@ -15,6 +15,7 @@ For local development, you will need the following:
 
 * To run the various scripts and commands within this folder, you will need the `az` command line tool, and to be authenticated with it.
 * `docker` available on your machine.
+* `docker buildx` configured.
 * `terraform` available on your machine.
 * `kubectl` available on your machine.
 
@@ -29,22 +30,6 @@ After this, you want to ensure that you are using the correct subscription - in 
 ```bash
 az account set --subscription "XTDB long-run reliability"
 ```
-
-== Creating the Docker Image
-
-Included within this directory is a subdirectory of scripts. To build an image for azure, you can run the following script:
-```bash
-./scripts/build-azure-bench.sh
-```
-
-This will:
-
-* Creates a Shadow JAR of the `cloud-benchmark:azure` project.
-** This contains the compiled `cloud-benchmark` project, which has a main file that runs auctionmark & configures it with provided node config, and also any of the dependencies we require to run the Azure module.
-* Creates a docker image, copying in the Shadow JAR and the `azure-config.yaml` file with the node config.
-** If you want to set any JVM opts - do it by editing the Dockerfile's `ENTRYPOINT`.
-
-It will build the local image as `xtdb-azure-bench:latest`.
 
 == Setting up the Azure Infra
 
@@ -80,7 +65,7 @@ terraform apply
 
 This will setup all of the azure resources we use and a base 
 
-== Pushing the Docker Image to Azure
+== Building & Pushing the Docker Image to Azure
 
 To push the docker image to Azure, you will need to use the Azure Container Registry.
 
@@ -89,15 +74,20 @@ To login to the Azure Container Registry, you can run:
 az acr login --name cloudbenchmarkregistry
 ```
 
-You can then tag the image you built earlier:
+You can then build & push the docker image for azure by running the following script:
+
 ```bash
-docker tag xtdb-azure-bench cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench
+./scripts/build-azure-bench.sh
 ```
 
-Finally, to push the image to the Azure Container Registry, you can run:
-```bash
-docker push cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench
-```
+This will:
+
+* Creates a Shadow JAR of the `cloud-benchmark:azure` project.
+** This contains the compiled `cloud-benchmark` project, which has a main file that runs auctionmark & configures it with provided node config, and also any of the dependencies we require to run the Azure module.
+* Creates a docker image, copying in the Shadow JAR and the `azure-config.yaml` file with the node config.
+** If you want to set any JVM opts - do it by editing the Dockerfile's `ENTRYPOINT`.
+* Pushes the docker image to the Azure Container Registry.
+
 
 == Deploying the Benchmark Containers
 
