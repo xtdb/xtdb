@@ -35,6 +35,7 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Consumer
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Used to set configuration options for an S3 Object Store, which can be used as implementation of objectStore within a [xtdb.api.storage.Storage.RemoteStorageFactory].
@@ -82,7 +83,7 @@ class S3(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun close() {
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         client.close()
     }
 

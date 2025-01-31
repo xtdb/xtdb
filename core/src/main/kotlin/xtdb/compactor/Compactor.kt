@@ -30,6 +30,7 @@ import java.time.YearMonth
 import java.time.ZoneOffset.UTC
 import java.util.*
 import kotlin.math.ceil
+import kotlin.time.Duration.Companion.seconds
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
 private typealias InstantMicros = Long
@@ -317,7 +318,7 @@ interface Compactor : AutoCloseable {
                 }
 
                 override fun close() {
-                    runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+                    runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
                 }
             }
 

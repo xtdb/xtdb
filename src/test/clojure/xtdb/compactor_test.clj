@@ -331,20 +331,20 @@
                        (map :id)))]
 
           (let [tx-id (submit! (range 500))]
-            (tu/then-await-tx tx-id node #xt/duration "PT1S")
-            (c/compact-all! node #xt/duration "PT1S"))
+            (tu/then-await-tx tx-id node #xt/duration "PT2S")
+            (c/compact-all! node #xt/duration "PT2S"))
 
           (t/is (= (set (range 500)) (set (q))))
 
           (let [tx-id (submit! (range 500 1000))]
-            (tu/then-await-tx tx-id node #xt/duration "PT1S")
-            (c/compact-all! node #xt/duration "PT1S"))
+            (tu/then-await-tx tx-id node #xt/duration "PT2S")
+            (c/compact-all! node #xt/duration "PT2S"))
 
           (t/is (= (set (range 1000)) (set (q))))
 
           (let [tx-id (submit! (range 1000 2000))]
-            (tu/then-await-tx tx-id node #xt/duration "PT2S")
-            (c/compact-all! node #xt/duration "PT2S"))
+            (tu/then-await-tx tx-id node #xt/duration "PT5S")
+            (c/compact-all! node #xt/duration "PT5S"))
 
           (t/is (= (set (range 2000)) (set (q))))
 

@@ -20,6 +20,7 @@ import xtdb.gcp.CloudStorage.Factory
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Used to set configuration options for a Google Cloud Storage Object Store, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
@@ -112,7 +113,7 @@ class CloudStorage(
     override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
 
     override fun close() {
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         client.close()
     }
 

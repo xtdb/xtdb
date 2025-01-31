@@ -4,6 +4,7 @@ package xtdb.api.log
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,10 +26,10 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import java.time.Instant
 import java.time.InstantSource
-import java.time.temporal.ChronoUnit.MICROS
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 
@@ -151,7 +152,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
         private set
 
     @Volatile
-    private var committedCh: Channel<Record>? = null
+    private var committedCh = MutableSharedFlow<Record>(extraBufferCapacity = 100)
 
     private val mutex = Mutex()
 
@@ -173,7 +174,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
                             msg.onCommit.complete(it)
 
                             mutex.withLock {
-                                committedCh?.send(it)
+                                committedCh.emit(it)
                                 latestSubmittedOffset = it.logOffset
                             }
                         }
@@ -198,27 +199,40 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
         }
 
     override fun subscribe(subscriber: Subscriber): Subscription {
-        val (ch, targetOffset) = runBlocking {
-            mutex.withLock {
-                check(committedCh == null) { "LocalLog only supports one subscriber" }
-                val ch = Channel<Record>(100).also { committedCh = it }
-                Pair(ch, latestSubmittedOffset)
+        var latestCompletedOffset = subscriber.latestCompletedOffset
+
+        val ch = Channel<Record>(100)
+
+        val subscription = scope.launch(SupervisorJob()) {
+            launch {
+                committedCh
+                    .onSubscription {
+                        val targetOffset = mutex.withLock { latestSubmittedOffset }
+                        if (targetOffset < 0) return@onSubscription
+
+                        runInterruptible {
+                            FileChannel.open(logFilePath).use { ch ->
+                                val latestCompleted = subscriber.latestCompletedOffset
+                                if (latestCompleted >= 0) {
+                                    ch.position(latestCompleted)
+                                    ch.readMessage()
+                                }
+
+                                while (ch.position() <= targetOffset) {
+                                    subscriber.processRecords(listOf(ch.readMessage()))
+                                }
+                            }
+                        }
+                    }
+                    .onEach {
+                        if (it.logOffset > latestCompletedOffset) {
+                            latestCompletedOffset = it.logOffset
+                            ch.send(it)
+                        }
+                    }
+                    .onCompletion { ch.close() }
+                    .collect()
             }
-        }
-
-        val job = scope.launch {
-            if (logFilePath.exists())
-                FileChannel.open(logFilePath).use { ch ->
-                    val latestCompleted = subscriber.latestCompletedOffset
-                    if (latestCompleted >= 0) {
-                        ch.position(latestCompleted)
-                        ch.readMessage()
-                    }
-
-                    while (ch.position() <= targetOffset) {
-                        subscriber.processRecords(listOf(ch.readMessage()))
-                    }
-                }
 
             while (true) {
                 val msg = withTimeoutOrNull(1.minutes) { ch.receive() }
@@ -226,16 +240,11 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
             }
         }
 
-        return Subscription {
-            runBlocking {
-                mutex.withLock { committedCh = null }
-                job.cancelAndJoin()
-            }
-        }
+        return Subscription { runBlocking { withTimeout(5.seconds) { subscription.cancelAndJoin() } } }
     }
 
     override fun close() {
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         logFileChannel.close()
     }
 

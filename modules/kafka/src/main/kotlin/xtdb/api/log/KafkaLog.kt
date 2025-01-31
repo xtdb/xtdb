@@ -41,6 +41,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.inputStream
+import kotlin.time.Duration.Companion.seconds
 
 private typealias KafkaConfigMap = Map<String, String>
 
@@ -114,7 +115,7 @@ class KafkaLog internal constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun close() {
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         producer.close()
     }
 
@@ -172,7 +173,7 @@ class KafkaLog internal constructor(
             }
         }
 
-        return Subscription { runBlocking { job.cancelAndJoin() } }
+        return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
     }
 
     companion object {

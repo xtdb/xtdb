@@ -44,6 +44,7 @@ import java.util.UUID.randomUUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.deleteIfExists
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Used to set configuration options for Azure Blob Storage, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
@@ -263,7 +264,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
     }
 
     override fun close() {
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 
     companion object {

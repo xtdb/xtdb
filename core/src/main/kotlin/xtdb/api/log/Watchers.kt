@@ -6,6 +6,7 @@ import kotlinx.coroutines.future.future
 import xtdb.api.TransactionResult
 import xtdb.api.log.Watchers.Event.*
 import java.util.concurrent.PriorityBlockingQueue
+import kotlin.time.Duration.Companion.seconds
 
 class Watchers(currentOffset: LogOffset) : AutoCloseable {
     private class Watcher(val offset: LogOffset, val onDone: CompletableDeferred<TransactionResult?>)
@@ -71,7 +72,7 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
 
     override fun close() {
         channel.close()
-        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 
     fun notify(offset: LogOffset, result: TransactionResult?) {
