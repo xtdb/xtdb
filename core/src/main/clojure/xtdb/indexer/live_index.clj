@@ -301,7 +301,11 @@
       (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
         (let [tasks (vec (for [^LiveTable table (.values tables)]
                            (.fork scope (fn []
-                                          (.finishChunk table chunk-idx next-chunk-idx)))))]
+                                          (try
+                                            (.finishChunk table chunk-idx next-chunk-idx)
+                                            (catch Exception e
+                                              (log/error e "Error finishing chunk for table" table)
+                                              (throw e)))))))]
           (.join scope)
 
           (let [table-metadata (-> tasks
