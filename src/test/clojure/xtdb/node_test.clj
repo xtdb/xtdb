@@ -917,3 +917,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Port value out of range: 99999"
                           (xtn/start-node {:server {:port 99999}}))))
+
+(t/deftest test-ts-tz-zone-first-wins-3723
+  (xt/execute-tx tu/*node*
+                 [[:put-docs :docs
+                   {:xt/id 1 :ts #xt/zoned-date-time "2021-10-21T12:00+00:00[America/Los_Angeles]"}
+                   {:xt/id 2 :ts #xt/zoned-date-time "2021-10-21T12:00+04:00"}
+                   {:xt/id 3 :ts #xt/offset-date-time "2021-10-21T12:00+02:00"}]])
+
+  (t/is (= [{:xt/id 1, :tz -7} {:xt/id 2, :tz 4} {:xt/id 3, :tz 2}]
+           (xt/q tu/*node* "SELECT _id, EXTRACT(TIMEZONE_HOUR FROM ts) as tz from docs ORDER BY _id"))))

@@ -55,8 +55,12 @@ class TimestampTzVector(
     override fun writeObject0(value: Any): Unit =
         when (value) {
             is Instant -> value
-            is ZonedDateTime -> value.toInstant()
-            is OffsetDateTime -> value.toInstant()
+            is ZonedDateTime ->
+                if (value.zone == zone) value.toInstant()
+                else throw InvalidWriteObjectException(fieldType, value)
+            is OffsetDateTime ->
+                if (value.offset == zone) value.toInstant()
+                else throw InvalidWriteObjectException(fieldType, value)
             is Date -> value.toInstant()
             else -> throw InvalidWriteObjectException(fieldType, value)
         }.let {
