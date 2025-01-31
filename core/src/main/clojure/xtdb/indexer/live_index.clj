@@ -25,7 +25,7 @@
            xtdb.BufferPool
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
            (xtdb.api.log Log Log$Message$TriesAdded)
-           (xtdb.log AddedTrie)
+           (xtdb.log.proto AddedTrie)
            xtdb.metadata.IMetadataManager
            (xtdb.trie MemoryHashTrie TrieCatalog)
            (xtdb.util RefCounter RowCounter)

@@ -6,7 +6,8 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.log.*
-import xtdb.log.LogMessage.MessageCase
+import xtdb.log.proto.*
+import xtdb.log.proto.LogMessage.MessageCase
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant

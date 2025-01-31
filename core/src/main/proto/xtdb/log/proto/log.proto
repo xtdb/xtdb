@@ -1,6 +1,6 @@
 edition = "2023";
 
-package xtdb.log;
+package xtdb.log.proto;
 
 option java_multiple_files = true;
 

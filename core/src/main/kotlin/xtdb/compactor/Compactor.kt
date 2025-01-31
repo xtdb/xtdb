@@ -13,7 +13,7 @@ import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.compactor.Compactor.Companion.RecencyGranularity.*
-import xtdb.log.addedTrie
+import xtdb.log.proto.addedTrie
 import xtdb.trie.HashTrie
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.TrieWriter

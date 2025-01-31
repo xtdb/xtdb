@@ -11,7 +11,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
-import xtdb.log.AddedTrie
+import xtdb.log.proto.AddedTrie
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.Collections.synchronizedList
