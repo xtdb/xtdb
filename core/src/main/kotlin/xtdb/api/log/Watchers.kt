@@ -5,7 +5,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.future
 import xtdb.api.TransactionResult
 import xtdb.api.log.Watchers.Event.*
-import java.util.*
+import java.util.concurrent.PriorityBlockingQueue
 
 class Watchers(currentOffset: LogOffset) : AutoCloseable {
     private class Watcher(val offset: LogOffset, val onDone: CompletableDeferred<TransactionResult?>)
@@ -27,7 +27,7 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
 
     private val channel = Channel<Event>(Channel.UNLIMITED)
 
-    private val watchers = PriorityQueue<Watcher> { a, b -> a.offset.compareTo(b.offset) }
+    private val watchers = PriorityBlockingQueue<Watcher>(16) { a, b -> a.offset.compareTo(b.offset) }
 
     private suspend fun processEvents() {
         for (event in channel) {
