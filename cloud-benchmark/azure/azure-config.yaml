@@ -21,3 +21,6 @@ storage: !Remote
 modules:
   - !AzureMonitor
     connectionString: !Env XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING
+
+compactor:
+  threads: !Env XTDB_COMPACTOR_THREADS
