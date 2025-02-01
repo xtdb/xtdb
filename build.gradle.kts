@@ -93,6 +93,14 @@ allprojects {
             useJUnitPlatform {
                 excludeTags("integration", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
             }
+
+            /*
+              // this one logs every test start/finish - useful if there's a hanging test
+              testLogging {
+                  events("started", "passed", "skipped", "failed")
+              }
+            */
+
         }
 
         tasks.register("integration-test", Test::class) {
