@@ -497,4 +497,36 @@
         (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id #uuid "20000000-0000-0000-0000-000000000000"}]}]]))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
-                     (.resolve node-dir (tables-key "public$foo")) #"l01-(.+)\.arrow"))))
+                     (.resolve node-dir (tables-key "public$foo")) #"log-l01-(.+)\.arrow"))))
+
+(t/deftest recency-bucketing-bug
+  (let [node-dir (util/->path "target/compactor/recency-bucketing-bug")]
+    (util/delete-dir node-dir)
+
+    (binding [c/*page-size* 2
+              c/*ignore-signal-block?* true]
+
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+
+        (dotimes [x 2]
+          (xt/submit-tx node
+                        [[:put-docs {:into :docs
+                                     :valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]" ,
+                                     :valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]" }
+                          {:xt/id x :col1 "yes"}]])
+          (xt/submit-tx node [[:put-docs {:into :docs
+                                          :valid-from #xt/zoned-date-time "2024-01-03T00:00Z[UTC]" ,
+                                          :valid-to #xt/zoned-date-time "2024-01-04T00:00Z[UTC]"}
+                               {:xt/id x :col1 "no"}]]))
+        (tu/finish-block! node)
+        (c/compact-all! node)
+
+        (t/is (= [{:xt/id 0,
+                   :col1 "yes",
+                   :xt/valid-time
+                   #xt/tstz-range [#xt/zoned-date-time "2024-01-01T00:00Z" #xt/zoned-date-time "2024-01-03T00:00Z"]}
+                  {:xt/id 0,
+                   :col1 "yes",
+                   :xt/valid-time
+                   #xt/tstz-range [#xt/zoned-date-time "2024-01-04T00:00Z" #xt/zoned-date-time "2025-01-01T00:00Z"]}]
+                 (xt/q node "SELECT *, _valid_time FROM docs FOR ALL VALID_TIME WHERE _id = 0 AND col1 = 'yes'")))))))

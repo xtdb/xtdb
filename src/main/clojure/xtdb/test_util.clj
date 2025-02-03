@@ -356,9 +356,10 @@
 
 (defn ->min-max-page-bounds
   ([min max] (->min-max-page-bounds min max min))
-  ([vt-min vt-max st-min] (->min-max-page-bounds vt-min vt-max st-min Long/MAX_VALUE))
-  ([vt-min vt-max st-min st-max]
-   (TemporalBounds. (TemporalDimension. vt-min vt-max) (TemporalDimension. st-min st-max))))
+  ([vf-min vt-max sf-min] (->min-max-page-bounds vf-min vt-max sf-min Long/MAX_VALUE sf-min))
+  ([vf-min vt-max sf-min st-max] (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max)))
+  ([vf-min vt-max sf-min st-max max-valid-from]
+   (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max) max-valid-from)))
 
 (defn ->page-bounds-fn [page-idx-pred->bounds]
   (let [page-idx-pred->bounds (update-vals page-idx-pred->bounds #(apply ->min-max-page-bounds %))]

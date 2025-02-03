@@ -341,7 +341,8 @@
           ^long valid-from-idx (.get page-idx-cache (PageIndexKey. "_valid_from" page-idx))
           ^long valid-to-idx (.get page-idx-cache (PageIndexKey. "_valid_to" page-idx))]
       (TemporalBounds. (TemporalDimension. (.getLong min-rdr valid-from-idx) (.getLong max-rdr valid-to-idx))
-                       (TemporalDimension. (.getLong min-rdr system-from-idx) Long/MAX_VALUE))))
+                       (TemporalDimension. (.getLong min-rdr system-from-idx) Long/MAX_VALUE)
+                       (.getLong max-rdr system-from-idx))))
 
   AutoCloseable
   (close [_]
