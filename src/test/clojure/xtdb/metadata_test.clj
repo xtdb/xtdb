@@ -167,7 +167,7 @@
     (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt/instant "2020-01-01T00:00:00.000000Z")
             temporal-dimension (TemporalDimension. sys-time-micros Long/MAX_VALUE)
-            metadata-bounds (TemporalBounds. temporal-dimension temporal-dimension)]
+            metadata-bounds (TemporalBounds. temporal-dimension temporal-dimension sys-time-micros)]
         (t/is (= metadata-bounds (.temporalBounds table-metadata 0)))))))
 
 (t/deftest test-boolean-metadata

@@ -14,7 +14,7 @@
            (xtdb.arrow Relation)
            xtdb.BufferPool
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
-           (xtdb.util TemporalBounds)))
+           (xtdb.util TemporalBounds TemporalDimension)))
 
 (defn ->l0-l1-trie-key [^long level, ^long block-idx]
   (assert (<= 0 level 1))
@@ -134,13 +134,21 @@
 (defn min-valid-from ^long [^TemporalBounds tb]
   (.getLower (.getValidTime tb)))
 
+(defn min-system-from ^long [^TemporalBounds tb]
+  (.getLower (.getSystemTime tb)))
+
+(defn max-system-from ^long [^TemporalBounds tb]
+  (.getMaxSystemFrom tb))
+
 (defn ->merge-task
   ([mp-pages] (->merge-task mp-pages (TemporalBounds.)))
   ([mp-pages ^TemporalBounds query-bounds]
    (let [leaves (ArrayList.)]
      (loop [[mp-page & more-mp-pages] mp-pages
             node-taken? false
+            smallest-valid-from Long/MAX_VALUE
             largest-valid-to Long/MIN_VALUE
+            smallest-system-from Long/MAX_VALUE
             non-taken-pages []]
        (if mp-page
          (let [^TemporalBounds page-bounds (temporal-bounds mp-page)
@@ -152,28 +160,30 @@
                (.add leaves mp-page)
                (recur more-mp-pages
                       true
+                      (min smallest-valid-from (min-valid-from page-bounds))
                       (max largest-valid-to (max-valid-to page-bounds))
+                      (min smallest-system-from (min-system-from page-bounds))
                       non-taken-pages))
 
              (recur more-mp-pages
                     node-taken?
+                    smallest-valid-from
                     largest-valid-to
+                    smallest-system-from
                     (cond-> non-taken-pages
-                      (let [page-valid-time (.getValidTime page-bounds)]
-                        (and node-taken?
-                             (.intersects (.getSystemTime page-bounds) (.getSystemTime query-bounds))
-                             ;; this page can bound a page in the query set
-                             (< (.getLower (.getValidTime query-bounds)) (.getUpper page-valid-time))
-                             (< (.getLower page-valid-time) largest-valid-to)))
+                      (.intersects (.getSystemTime page-bounds) (.getSystemTime query-bounds))
                       (conj mp-page)))))
 
          (when node-taken?
-           (loop [[page & more-pages] non-taken-pages]
-             (when page
-               (let [smallest-valid-from (min-valid-from (temporal-bounds page))]
-                 (when (< smallest-valid-from largest-valid-to)
-                   (.add leaves page))
-                 (recur more-pages))))
+           (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
+             (loop [[page & more-pages] non-taken-pages]
+               (when page
+                 (let [page-valid-time (.getValidTime ^TemporalBounds (temporal-bounds page))
+                       page-largest-system-from (max-system-from (temporal-bounds page))]
+                   (when (and (<= smallest-system-from page-largest-system-from)
+                              (.intersects valid-time page-valid-time))
+                     (.add leaves page))
+                   (recur more-pages)))))
            (vec leaves)))))))
 
 (definterface IDataRel
