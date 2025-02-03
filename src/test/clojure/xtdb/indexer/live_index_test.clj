@@ -124,10 +124,10 @@
           (tu/finish-chunk! node)
 
           (t/is (= [(os/->StoredObject "tables/public$foo/data/log-l00-fr00-nr110-rs5.arrow" 2558)]
-                   (.listObjects bp (util/->path "tables/public$foo/data"))))
+                   (.listAllObjects bp (util/->path "tables/public$foo/data"))))
 
           (t/is (= [(os/->StoredObject "tables/public$foo/meta/log-l00-fr00-nr110-rs5.arrow" 4350)]
-                   (.listObjects bp (util/->path "tables/public$foo/meta")))))
+                   (.listAllObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                        (.resolve node-dir "objects"))))))

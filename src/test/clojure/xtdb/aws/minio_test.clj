@@ -64,20 +64,20 @@
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 100)
           (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool)))))
+                   (.listAllObjects buffer-pool)))))
 
       (util/with-open [node (start-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
           (Thread/sleep 100)
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                     (.listObjects buffer-pool))))
+                     (.listAllObjects buffer-pool))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
             (Thread/sleep 100)
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alex" 5) (os/->StoredObject "alice" 6)]
-                     (.listObjects buffer-pool)))))))))
+                     (.listAllObjects buffer-pool)))))))))
 
 (t/deftest ^:minio multiple-node-list-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -90,10 +90,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool-1)))
+                   (.listAllObjects buffer-pool-1)))
 
           (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool-2))))))))
+                   (.listAllObjects buffer-pool-2))))))))
 
 (t/deftest ^:minio multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
@@ -130,7 +130,7 @@
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put")
                                      (* 2 part-size))]
-                 (.listObjects ^ObjectStore os)))
+                 (.listAllObjects ^ObjectStore os)))
 
         (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
@@ -154,7 +154,7 @@
                  (xt/q node '(from :bar [{:xt/id e}]))))
   
         ;; Ensure some files written to buffer-pool
-        (t/is (seq (.listObjects buffer-pool)))))))
+        (t/is (seq (.listAllObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (comment
@@ -164,16 +164,16 @@
 
   (t/deftest ^:minio tpch-test-node
     (util/with-tmp-dirs #{local-disk-cache}
-      (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
-        ;; Submit tpch docs
-        (-> (tpch/submit-docs! node 0.05)
+                        (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
+                                        ;; Submit tpch docs
+                                        (-> (tpch/submit-docs! node 0.05)
             (tu/then-await-tx node (Duration/ofHours 1)))
 
-        ;; Ensure finish-chunk! works
-        (t/is (nil? (tu/finish-chunk! node)))
+                                        ;; Ensure finish-chunk! works
+                                        (t/is (nil? (tu/finish-chunk! node)))
 
-        (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/storage)))]
-          (t/is (instance? RemoteBufferPool buffer-pool))
-          (t/is (instance? ObjectStore object-store))
-          ;; Ensure some files are written
-          (t/is (seq (.listObjects object-store))))))))
+                                        (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/storage)))]
+                                          (t/is (instance? RemoteBufferPool buffer-pool))
+                                          (t/is (instance? ObjectStore object-store))
+                                          ;; Ensure some files are written
+                                          (t/is (seq (.listAllObjects object-store))))))))

@@ -11,9 +11,6 @@ import com.azure.storage.blob.models.BlobStorageException
 import com.azure.storage.blob.models.ListBlobsOptions
 import com.azure.storage.common.StorageSharedKeyCredential
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
-import kotlinx.coroutines.channels.toList
 import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -223,18 +220,18 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
             .forEach { yieldAll(it.value) }
     }
 
-    private fun listObjects0(listPrefix: Path) =
+    private fun listAllObjects0(listPrefix: Path) =
         listObjects(ListBlobsOptions().setPrefix("$listPrefix/"))
             .map { StoredObject(prefix.relativize(it.name.asPath), it.properties.contentLength) }
             .asIterable()
 
-    override fun listObjects() = listObjects0(prefix)
-    override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
+    override fun listAllObjects() = listAllObjects0(prefix)
+    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir))
 
     // test usage only
     @Suppress("unused")
     fun listUncommittedBlobs(): Iterable<Path> {
-        val committedBlobs = listObjects().map { it.key }.toSet()
+        val committedBlobs = listAllObjects().map { it.key }.toSet()
         val uncommittedOpts =
             ListBlobsOptions()
                 .setPrefix(prefix.toString())

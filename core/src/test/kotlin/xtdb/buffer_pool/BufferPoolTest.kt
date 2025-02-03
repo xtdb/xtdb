@@ -27,11 +27,11 @@ abstract class BufferPoolTest {
 
         assertEquals(
             listOf(storedObj("a/b/c"), storedObj("a/b/d"), storedObj("a/e")),
-            bufferPool.listObjects("a".asPath)
+            bufferPool.listAllObjects("a".asPath)
         )
         assertEquals(
             listOf(storedObj("a/b/c"), storedObj("a/b/d")),
-            bufferPool.listObjects("a/b".asPath)
+            bufferPool.listAllObjects("a/b".asPath)
         )
     }
 

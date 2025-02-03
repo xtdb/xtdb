@@ -46,9 +46,9 @@ class SimulatedObjectStore(
         return completedFuture(Unit)
     }
 
-    override fun listObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
+    override fun listAllObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    override fun listObjects(dir: Path): List<StoredObject> =
+    override fun listAllObjects(dir: Path): List<StoredObject> =
         buffers.tailMap(dir).entries
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }

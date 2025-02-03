@@ -3,9 +3,6 @@
 package xtdb.aws
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
-import kotlinx.coroutines.channels.toList
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
@@ -199,7 +196,7 @@ class S3(
             }.await()
         }
 
-    private fun listObjects0(listPrefix: Path) =
+    private fun listAllObjects0(listPrefix: Path) =
         sequence {
             var continuationToken: String? = null
 
@@ -219,8 +216,8 @@ class S3(
             }
         }.asIterable()
 
-    override fun listObjects(dir: Path) = listObjects0(prefix.resolve(dir))
-    override fun listObjects() = listObjects0(prefix)
+    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir))
+    override fun listAllObjects() = listAllObjects0(prefix)
 
     // used for multipart upload testing
     fun listUploads(): Set<Path> = runBlocking {

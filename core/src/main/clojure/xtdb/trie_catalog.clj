@@ -181,7 +181,7 @@
   (let [!table-tries (ConcurrentHashMap.)]
     (doseq [table-name (.allTableNames metadata-mgr)]
       (.put !table-tries table-name
-            (->> (.listObjects buffer-pool (trie/->table-meta-dir table-name))
+            (->> (.listAllObjects buffer-pool (trie/->table-meta-dir table-name))
                  (transduce (map (fn [^ObjectStore$StoredObject obj]
                                    (->added-trie table-name
                                                  (str (.getFileName (.getKey obj)))

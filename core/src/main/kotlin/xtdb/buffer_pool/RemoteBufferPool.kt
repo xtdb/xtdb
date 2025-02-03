@@ -185,8 +185,8 @@ class RemoteBufferPool(
         }
     }
 
-    override fun listObjects() = objectStore.listObjects()
-    override fun listObjects(dir: Path) = objectStore.listObjects(dir)
+    override fun listAllObjects() = objectStore.listAllObjects()
+    override fun listAllObjects(dir: Path) = objectStore.listAllObjects(dir)
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()

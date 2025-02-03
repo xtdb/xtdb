@@ -69,8 +69,8 @@ abstract class ObjectStoreTest {
         assertFailsWith(IllegalStateException::class) { objectStore.getString("alice") }
     }
 
-    private fun ObjectStore.allObjects() = listObjects().map { it.key.toString() }.toSet()
-    private fun ObjectStore.objects(dir: Path) = listObjects(dir).map { it.key.toString() }.toSet()
+    private fun ObjectStore.allObjects() = listAllObjects().map { it.key.toString() }.toSet()
+    private fun ObjectStore.objects(dir: Path) = listAllObjects(dir).map { it.key.toString() }.toSet()
 
     @Test
     fun `test list`() = runTest(timeout = 10.seconds) {

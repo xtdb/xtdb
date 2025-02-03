@@ -410,7 +410,7 @@
 
 (defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
-    (doseq [cm-obj (.listObjects buffer-pool chunk-metadata-path)
+    (doseq [cm-obj (.listAllObjects buffer-pool chunk-metadata-path)
             :let [{cm-obj-key :key} (os/<-StoredObject cm-obj)]]
       (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]

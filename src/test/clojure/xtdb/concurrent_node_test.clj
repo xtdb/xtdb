@@ -47,7 +47,7 @@
                      :xtdb/buffer-pool (Storage/localStorage (.resolve (.toPath node-dir) "objects"))})
     (fn []
       (let [^BufferPool buffer-pool (:xtdb/buffer-pool tu/*sys*)
-            objs (->> (.listObjects buffer-pool)
+            objs (->> (.listAllObjects buffer-pool)
                       (map (comp :key os/<-StoredObject))
                       (filter #(= "arrow" (tu/get-extension %))))
             get-item #(with-open [_rb (.getRecordBatch buffer-pool (rand-nth objs) 0)]

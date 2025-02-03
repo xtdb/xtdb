@@ -127,8 +127,8 @@ class LocalBufferPool(
         .sortedBy { it.key }
         .toList()
 
-    override fun listObjects(): Iterable<StoredObject> = diskStore.listAll()
-    override fun listObjects(dir: Path) = diskStore.resolve(dir).listAll()
+    override fun listAllObjects(): Iterable<StoredObject> = diskStore.listAll()
+    override fun listAllObjects(dir: Path) = diskStore.resolve(dir).listAll()
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskStore.createTempUploadFile()

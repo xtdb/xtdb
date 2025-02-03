@@ -3,7 +3,6 @@ package xtdb.azure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
@@ -73,7 +72,7 @@ class BlobStorageTest : ObjectStoreTest() {
 
         assertEquals(
             setOf("test-multipart"),
-            objectStore.listObjects().map { it.key.toString() }.toSet()
+            objectStore.listAllObjects().map { it.key.toString() }.toSet()
         )
 
         val downloaded = objectStore.getObject("test-multipart".asPath).await()
@@ -109,7 +108,7 @@ class BlobStorageTest : ObjectStoreTest() {
 
         assertEquals(
             listOf(StoredObject("test-20-parts".asPath, totalSize)),
-            objectStore.listObjects().toList()
+            objectStore.listAllObjects().toList()
         )
 
         val downloaded = objectStore.getObject("test-20-parts".asPath).await()

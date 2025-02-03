@@ -2,7 +2,6 @@ package xtdb
 
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.Relation
 import java.nio.ByteBuffer
@@ -37,14 +36,14 @@ interface BufferPool : AutoCloseable {
      *
      * Objects are returned in lexicographic order of their path names.
      */
-    fun listObjects(): Iterable<StoredObject>
+    fun listAllObjects(): Iterable<StoredObject>
 
     /**
      * Recursively lists all objects in the buffer pool, under the given directory.
      *
      * Objects are returned in lexicographic order of their path names.
      */
-    fun listObjects(dir: Path): Iterable<StoredObject>
+    fun listAllObjects(dir: Path): Iterable<StoredObject>
 
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
 }

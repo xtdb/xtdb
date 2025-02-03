@@ -40,19 +40,19 @@
 
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
-    (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:storage [:remote {:object-store [:in-memory {}]
-                                                                                    :local-disk-cache path}]
-                                                                 :compactor {:threads 0}}))]
-      (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
+                      (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:storage [:remote {:object-store [:in-memory {}]
+                                                                                                      :local-disk-cache path}]
+                                                                                   :compactor {:threads 0}}))]
+                                                        (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
 
-      (t/is (= [{:xt/id :foo}]
-               (xt/q node '(from :foo [xt/id]))))
+                                                        (t/is (= [{:xt/id :foo}]
+                                                                 (xt/q node '(from :foo [xt/id]))))
 
-      (tu/finish-chunk! node)
+                                                        (tu/finish-chunk! node)
 
-      (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
-            object-store (.getObjectStore buffer-pool)]
-        (t/is (seq (.listObjects object-store)))))))
+                                                        (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
+                                                              object-store (.getObjectStore buffer-pool)]
+                                                          (t/is (seq (.listAllObjects object-store)))))))
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
@@ -162,8 +162,8 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
       (t/testing "empty buffer pool"
-        (t/is (= [] (.listObjects bp)))
-        (t/is (= [] (.listObjects bp (.toPath (io/file "foo")))))))))
+        (t/is (= [] (.listAllObjects bp)))
+        (t/is (= [] (.listAllObjects bp (.toPath (io/file "foo")))))))))
 
 (t/deftest dont-list-temporary-objects-3544
   (tu/with-tmp-dirs #{tmp-dir}
@@ -171,7 +171,7 @@
       (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))
                   rel (Relation. tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
-        (t/is (= [] (.listObjects bp)))))))
+        (t/is (= [] (.listAllObjects bp)))))))
 
 (defn fetch-buffer-pool-from-node [node]
   (util/component node :xtdb/buffer-pool))
@@ -193,25 +193,25 @@
             (os/->StoredObject "bar/baza/james" 6)
             (os/->StoredObject "bar/bob" 4)
             (os/->StoredObject "foo/alan" 5)]
-           (vec (.listObjects buffer-pool))))
+           (vec (.listAllObjects buffer-pool))))
 
   (t/is (= [(os/->StoredObject "foo/alan" 5)]
-           (vec (.listObjects buffer-pool (util/->path "foo")))))
+           (vec (.listAllObjects buffer-pool (util/->path "foo")))))
 
-  (t/testing "call listObjects with a prefix ended with a slash - should work the same"
+  (t/testing "call listAllObjects with a prefix ended with a slash - should work the same"
     (t/is (= [(os/->StoredObject "foo/alan" 5)]
-             (vec (.listObjects buffer-pool (util/->path "foo/"))))))
+             (vec (.listAllObjects buffer-pool (util/->path "foo/"))))))
 
-  (t/testing "calling listObjects with prefix on directory with subdirectories - still lists recursively, and relative to the root"
+  (t/testing "calling listAllObjects with prefix on directory with subdirectories - still lists recursively, and relative to the root"
     (t/is (= [(os/->StoredObject "bar/alice" 6)
               (os/->StoredObject "bar/baz/dan" 4)
               (os/->StoredObject "bar/baza/james" 6)
               (os/->StoredObject "bar/bob" 4)]
-             (vec (.listObjects buffer-pool (util/->path "bar"))))))
+             (vec (.listAllObjects buffer-pool (util/->path "bar"))))))
 
-  (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
+  (t/testing "calling listAllObjects with prefix with common prefix - should only return that which is a complete match against a directory "
     (t/is (= [(os/->StoredObject "bar/baz/dan" 4)]
-             (vec (.listObjects buffer-pool (util/->path "bar/baz")))))))
+             (vec (.listAllObjects buffer-pool (util/->path "bar/baz")))))))
 
 (t/deftest test-memory-list-objs
   (with-open [bp (MemoryBufferPool. tu/*allocator* (SimpleMeterRegistry.))]

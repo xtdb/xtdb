@@ -64,12 +64,12 @@ class MemoryBufferPool(
         }
     }
 
-    override fun listObjects() =
+    override fun listAllObjects() =
         synchronized(memoryStore) {
             memoryStore.entries.map { StoredObject(it.key, it.value.capacity()) }
         }
 
-    override fun listObjects(dir: Path) =
+    override fun listAllObjects(dir: Path) =
         synchronized(memoryStore) {
             memoryStore.tailMap(dir).entries
                 .takeWhile { it.key.startsWith(dir) }

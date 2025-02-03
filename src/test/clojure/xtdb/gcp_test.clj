@@ -87,19 +87,19 @@
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool)))))
+                   (.listAllObjects buffer-pool)))))
 
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
         (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                     (.listObjects buffer-pool))))
+                     (.listAllObjects buffer-pool))))
 
           (t/testing "should be able to add new objects and have that reflected in list objects output"
             (bp-test/put-edn buffer-pool (util/->path "alex") :alex)
             (Thread/sleep 1000)
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alex" 5) (os/->StoredObject "alice" 6)]
-                     (.listObjects buffer-pool)))))))))
+                     (.listAllObjects buffer-pool)))))))))
 
 (t/deftest ^:google-cloud multiple-node-list-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -112,10 +112,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
           (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool-1)))
+                   (.listAllObjects buffer-pool-1)))
 
           (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool-2))))))))
+                   (.listAllObjects buffer-pool-2))))))))
 
 (t/deftest ^:google-cloud put-object-twice-shouldnt-throw
   (util/with-tmp-dirs #{local-disk-cache}
@@ -128,10 +128,10 @@
           (bp-test/put-edn buffer-pool-2 (util/->path "alice") :alice)
           (Thread/sleep 1000)
           (t/is (= [(os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool-1)))
+                   (.listAllObjects buffer-pool-1)))
   
           (t/is (= [(os/->StoredObject "alice" 6)]
-                   (.listObjects buffer-pool-2))))))))
+                   (.listAllObjects buffer-pool-2))))))))
 
 (t/deftest ^:google-cloud node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
@@ -151,7 +151,7 @@
                  (xt/q node '(from :bar [{:xt/id e}]))))
 
         ;; Ensure some files written to buffer-pool
-        (t/is (seq (.listObjects buffer-pool)))))))
+        (t/is (seq (.listAllObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (t/deftest ^:google-cloud tpch-test-node
@@ -166,4 +166,4 @@
 
       ;; Ensure some files written to buffer-pool 
       (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
-        (t/is (seq (.listObjects buffer-pool)))))))
+        (t/is (seq (.listAllObjects buffer-pool)))))))

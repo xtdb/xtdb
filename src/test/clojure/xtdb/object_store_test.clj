@@ -54,9 +54,9 @@
     (CompletableFuture/completedFuture nil))
 
   ;; these two should be returning StoredObjects, but for some reason this seems fine
-  (listObjects [_this] (vec (.keySet os)))
+  (listAllObjects [_this] (vec (.keySet os)))
 
-  (listObjects [_ prefix]
+  (listAllObjects [_ prefix]
     (->> (.tailMap os prefix)
          (take-while #(-> ^Path (key %) (.startsWith prefix)))
          (map key)))

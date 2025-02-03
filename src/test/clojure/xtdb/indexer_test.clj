@@ -333,7 +333,7 @@
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (let [objs (mapv (comp str :key os/<-StoredObject) (.listObjects bp))]
+          (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
@@ -386,7 +386,7 @@
 
                   (Thread/sleep 250)    ; wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                  (let [objs (mapv (comp str :key os/<-StoredObject) (.listObjects bp))]
+                  (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                     (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
@@ -427,7 +427,7 @@
 
                       (Thread/sleep 250); wait for the chunk to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
-                      (let [objs (mapv (comp str :key os/<-StoredObject) (.listObjects bp))]
+                      (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
                         (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                         (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00-.+.arrow" %) objs))))
