@@ -38,10 +38,7 @@
 
   node)
 
-(defn- node->table-info [node]
-  (scan/tables-with-cols (util/component node :xtdb/indexer)))
-
-(defn- execute-sql-query [node sql-statement variables {:keys [direct-sql] :as opts}]
+(defn- execute-sql-query [{:keys [live-idx] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
   (let [!cache (atom {})
         plan-stmt plan/plan-statement]
 
@@ -61,7 +58,7 @@
             ;; we grab the projection afterwards so that xt/q has awaited the tx
             ;; TODO hoping that there'll be a better means of getting hold of this soon
             projection (->> (:col-syms (or (get @!cache sql-statement)
-                                           (plan/plan-statement sql-statement {:table-info (node->table-info node)})))
+                                           (plan/plan-statement sql-statement {:table-info (scan/tables-with-cols live-idx)})))
                             (mapv (comp #(.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) %) str)))]
         (vec
          (for [row res]

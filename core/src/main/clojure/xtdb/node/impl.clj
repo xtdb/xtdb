@@ -26,7 +26,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
            [xtdb.api.tx TxOp]
-           (xtdb.indexer IIndexer LogProcessor)
+           (xtdb.indexer IIndexer LiveIndex LogProcessor)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -68,9 +68,10 @@
 
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer
+                 ^LiveIndex live-idx
                  ^Log log
                  ^LogProcessor log-processor
-                 ^IQuerySource q-src, wm-src, scan-emitter
+                 ^IQuerySource q-src, scan-emitter
                  ^CompositeMeterRegistry metrics-registry
                  default-tz
                  system, close-fn,
@@ -122,10 +123,10 @@
           (then-execute-prepared-query allocator query-timer query-opts))))
 
   xtp/PStatus
-  (latest-completed-tx [_] (.latestCompletedTx indexer))
+  (latest-completed-tx [_] (.getLatestCompletedTx live-idx))
   (latest-submitted-tx-id [_] (.getLatestSubmittedOffset log))
   (status [this]
-    {:latest-completed-tx (.latestCompletedTx indexer)
+    {:latest-completed-tx (.getLatestCompletedTx live-idx)
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
 
   xtp/PLocalNode
@@ -141,8 +142,8 @@
       (xt-log/await-tx this after-tx-id tx-timeout)
 
       (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
-      (let [plan (.planQuery q-src ast wm-src query-opts)]
-        (.prepareRaQuery q-src plan wm-src query-opts))))
+      (let [plan (.planQuery q-src ast query-opts)]
+        (.prepareRaQuery q-src plan query-opts))))
 
   (prepare-xtql [this query query-opts]
    (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
@@ -154,15 +155,15 @@
      (xt-log/await-tx this after-tx-id tx-timeout)
      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
-     (let [plan (.planQuery q-src ast wm-src query-opts)]
-       (.prepareRaQuery q-src plan wm-src query-opts))))
+     (let [plan (.planQuery q-src ast query-opts)]
+       (.prepareRaQuery q-src plan query-opts))))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-tx this after-tx-id tx-timeout)
      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
-     (.prepareRaQuery q-src plan wm-src query-opts)))
+     (.prepareRaQuery q-src plan query-opts)))
 
   Closeable
   (close [_]
@@ -175,7 +176,7 @@
 (defmethod ig/prep-key :xtdb/node [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
           :indexer (ig/ref :xtdb/indexer)
-          :wm-src (ig/ref :xtdb/indexer)
+          :live-idx (ig/ref :xtdb.indexer/live-index)
           :log (ig/ref :xtdb/log)
           :log-processor (ig/ref :xtdb.log/processor)
           :default-tz (ig/ref :xtdb/default-tz)

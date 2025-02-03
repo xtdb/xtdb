@@ -276,7 +276,7 @@
   ([query {:keys [allocator node args preserve-blocks? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)
                 allocator *allocator*}}]
-   (let [indexer (util/component node :xtdb/indexer)
+   (let [{:keys [live-idx]} node
          query-opts (-> query-opts
                         (assoc :allocator allocator)
                         (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
@@ -284,7 +284,7 @@
 
          ^PreparedQuery pq (if node
                              (let [^IQuerySource q-src (util/component node ::q/query-source)]
-                               (.prepareRaQuery q-src query indexer query-opts))
+                               (.prepareRaQuery q-src query live-idx query-opts))
                              (q/prepare-ra query {:ref-ctr (RefCounter.)
                                                   :wm-src (reify Watermark$Source
                                                             (openWatermark [_]

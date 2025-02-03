@@ -18,13 +18,14 @@ import java.time.Instant
 class LogProcessor(
     allocator: BufferAllocator,
     private val indexer: IIndexer,
+    private val liveIndex: LiveIndex,
     private val log: Log,
     private val trieCatalog: TrieCatalog,
     meterRegistry: MeterRegistry,
     flushTimeout: Duration
 ) : Log.Subscriber, AutoCloseable {
 
-    private val watchers = Watchers(indexer.latestCompletedTx()?.txId ?: -1)
+    private val watchers = Watchers(liveIndex.latestCompletedTx?.txId ?: -1)
 
     val ingestionError get() = watchers.exception
 
@@ -34,9 +35,9 @@ class LogProcessor(
         var previousChunkTxId: Long,
         var flushedTxId: Long
     ) {
-        constructor(flushTimeout: Duration, indexer: IIndexer) : this(
+        constructor(flushTimeout: Duration, liveIndex: LiveIndex) : this(
             flushTimeout, Instant.now(),
-            previousChunkTxId = indexer.latestCompletedChunkTx()?.txId ?: -1,
+            previousChunkTxId = liveIndex.latestCompletedChunkTx?.txId ?: -1,
             flushedTxId = -1
         )
 
@@ -55,11 +56,11 @@ class LogProcessor(
                 }
             }
 
-        fun checkChunkTimeout(indexer: IIndexer) =
+        fun checkChunkTimeout(liveIndex: LiveIndex) =
             checkChunkTimeout(
                 Instant.now(),
-                currentChunkTxId = indexer.latestCompletedChunkTx()?.txId ?: -1,
-                latestCompletedTxId = indexer.latestCompletedTx()?.txId ?: -1
+                currentChunkTxId = liveIndex.latestCompletedChunkTx?.txId ?: -1,
+                latestCompletedTxId = liveIndex.latestCompletedTx?.txId ?: -1
             )
     }
 
@@ -71,7 +72,7 @@ class LogProcessor(
                     .register(meterRegistry)
             }
 
-    private val flusher = Flusher(flushTimeout, indexer)
+    private val flusher = Flusher(flushTimeout, liveIndex)
 
     private val subscription = log.subscribe(this)
 
@@ -81,10 +82,10 @@ class LogProcessor(
     }
 
     override val latestCompletedOffset: LogOffset
-        get() = indexer.latestCompletedTx()?.txId ?: -1
+        get() = liveIndex.latestCompletedTx?.txId ?: -1
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
-        flusher.checkChunkTimeout(indexer)?.let { flushMsg ->
+        flusher.checkChunkTimeout(liveIndex)?.let { flushMsg ->
             flusher.flushedTxId = log.appendMessage(flushMsg).await()
         }
 
@@ -106,7 +107,7 @@ class LogProcessor(
                     }
 
                     is Message.FlushChunk -> {
-                        indexer.forceFlush(record)
+                        liveIndex.forceFlush(record, msg)
                         null
                     }
 

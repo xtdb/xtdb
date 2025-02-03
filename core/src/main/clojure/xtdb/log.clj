@@ -326,15 +326,16 @@
   (when opts
     (into {:allocator (ig/ref :xtdb/allocator)
            :indexer (ig/ref :xtdb/indexer)
+           :live-idx (ig/ref :xtdb.indexer/live-index)
            :log (ig/ref :xtdb/log)
            :trie-catalog (ig/ref :xtdb/trie-catalog)
            :metrics-registry (ig/ref :xtdb.metrics/registry)
            :chunk-flush-duration #xt/duration "PT4H"}
           opts)))
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log trie-catalog metrics-registry chunk-flush-duration] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx trie-catalog metrics-registry chunk-flush-duration] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer log trie-catalog metrics-registry chunk-flush-duration)))
+    (LogProcessor. allocator indexer live-idx log trie-catalog metrics-registry chunk-flush-duration)))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))

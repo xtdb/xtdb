@@ -6,6 +6,7 @@
             [xtdb.compactor :as c]
             [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
+            [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
@@ -26,7 +27,6 @@
            (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.BufferPool
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
-           (xtdb.log.proto AddedTrie)
            xtdb.metadata.IMetadataManager
            (xtdb.trie MemoryHashTrie TrieCatalog)
            (xtdb.util RefCounter RowCounter)
@@ -352,12 +352,15 @@
       (c/signal-block! compactor)
       (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
 
-  (forceFlush [this tx-key expected-last-chunk-tx-id]
-    (let [latest-chunk-tx-id (some-> (.getLatestCompletedChunkTx this) (.getTxId))]
+  (forceFlush [this record msg]
+    (let [expected-last-chunk-tx-id (.getExpectedChunkTxId msg)
+          latest-chunk-tx-id (some-> latest-completed-chunk-tx (.getTxId))]
       (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
         (.finishChunk this)))
 
-    (set! (.latest-completed-tx this) tx-key))
+    (set! (.latest-completed-tx this)
+          (serde/->TxKey (.getLogOffset record)
+                         (.getLogTimestamp record))))
 
   AutoCloseable
   (close [_]

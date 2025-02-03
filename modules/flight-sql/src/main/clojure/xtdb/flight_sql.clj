@@ -265,7 +265,7 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator indexer q-src wm-src] :as node}
+(defn open-server [{:keys [allocator indexer q-src live-idx] :as node}
                    ^FlightSqlServer$Factory factory]
   (let [host (.getHost factory)
         port (.getPort factory)
@@ -274,7 +274,7 @@
         tickets (ConcurrentHashMap.)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
                                server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                                                      (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :q-src q-src, :wm-src wm-src
+                                                                      (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :q-src q-src, :wm-src live-idx
                                                                                         :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                                                 #_(doto with-error-logging-middleware)

@@ -73,7 +73,10 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IQuerySource
+  (^xtdb.query.PreparedQuery prepareRaQuery [ra-query query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-query wm-src query-opts])
+
+  (^clojure.lang.PersistentVector planQuery [query query-opts])
   (^clojure.lang.PersistentVector planQuery [query wm-src query-opts]))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
@@ -242,19 +245,26 @@
           :plan-cache-size 1000
           :allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref ::scan/scan-emitter)
-          :metadata-mgr (ig/ref ::meta/metadata-manager)}))
+          :metadata-mgr (ig/ref ::meta/metadata-manager)
+          :live-idx (ig/ref :xtdb.indexer/live-index)}))
 
 (defn ->caffeine-cache ^com.github.benmanes.caffeine.cache.Cache [size]
   (-> (Caffeine/newBuilder) (.maximumSize size) (.build)))
 
-(defmethod ig/init-key ::query-source [_ {:keys [plan-cache-size] :as deps}]
+(defmethod ig/init-key ::query-source [_ {:keys [plan-cache-size live-idx] :as deps}]
   (let [plan-cache (->caffeine-cache plan-cache-size)
         ref-ctr (RefCounter.)
         deps (-> deps (assoc :ref-ctr ref-ctr))]
     (reify
       IQuerySource
+      (prepareRaQuery [this query query-opts]
+        (.prepareRaQuery this query live-idx query-opts))
       (prepareRaQuery [_ query wm-src query-opts]
         (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src))))
+
+      (planQuery [this query query-opts]
+        (.planQuery this query live-idx query-opts))
+
       (planQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src)
               plan-query-opts

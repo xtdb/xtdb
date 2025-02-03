@@ -35,7 +35,6 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.api.log Log$Message$FlushChunk)
            xtdb.api.TransactionKey
            (xtdb.api.tx TxOp)
            (xtdb.arrow RowCopier)
@@ -713,8 +712,8 @@
                   ^LiveIndex live-idx
                   ^Timer tx-timer]
   IIndexer
-  (indexTx [this tx-id msg-ts tx-root]
-    (let [lc-tx (.latestCompletedTx this)
+  (indexTx [_ tx-id msg-ts tx-root]
+    (let [lc-tx (.getLatestCompletedTx live-idx)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                     (when-not (neg? (compare lc-sys-time msg-ts))
                                       (.plusNanos lc-sys-time 1000)))
@@ -729,10 +728,10 @@
               err (err/illegal-arg :invalid-system-time
                                    {::err/message "specified system-time older than current tx"
                                     :tx-key (serde/->TxKey tx-id system-time)
-                                    :latest-completed-tx (.latestCompletedTx this)})]
+                                    :latest-completed-tx (.getLatestCompletedTx live-idx)})]
           (log/warnf "specified system-time '%s' older than current tx '%s'"
                      (pr-str system-time)
-                     (pr-str (.latestCompletedTx this)))
+                     (pr-str (.getLatestCompletedTx live-idx)))
 
           (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
             (add-tx-row! live-idx-tx tx-key err)
@@ -812,18 +811,6 @@
                       (add-tx-row! live-idx-tx tx-key nil)
                       (.commit live-idx-tx)
                       (serde/->tx-committed tx-id system-time)))))))))))
-
-  (forceFlush [_ record]
-    (.forceFlush live-idx
-                 (serde/->TxKey (.getLogOffset record)
-                                (.getLogTimestamp record))
-                 (.getExpectedChunkTxId ^Log$Message$FlushChunk (.getMessage record))))
-
-  Watermark$Source
-  (openWatermark [_] (.openWatermark live-idx))
-
-  (latestCompletedTx [_] (.getLatestCompletedTx live-idx))
-  (latestCompletedChunkTx [_] (.getLatestCompletedChunkTx live-idx))
 
   Closeable
   (close [_]

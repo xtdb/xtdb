@@ -2,8 +2,11 @@ package xtdb.indexer
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
+import xtdb.api.log.Log
+import xtdb.api.log.Log.Message
+import xtdb.api.log.Log.Record
 
-interface LiveIndex : AutoCloseable {
+interface LiveIndex : Watermark.Source, AutoCloseable {
 
     interface Watermark : AutoCloseable {
         val allColumnFields: Map<String, Map<String, Field>>
@@ -26,10 +29,11 @@ interface LiveIndex : AutoCloseable {
     // N.B. LiveIndex.Watermark and xtdb.indexer.Watermark are different classes
     // there used to be quite a lot of difference between them
     // now - not so much, they could probably be combined
-    fun openWatermark(): xtdb.indexer.Watermark
+    override fun openWatermark(): xtdb.indexer.Watermark
 
     fun startTx(txKey: TransactionKey): Tx
 
     fun finishChunk()
-    fun forceFlush(txKey: TransactionKey, expectedTxId: Long)
+
+    fun forceFlush(record: Record, msg: Message.FlushChunk)
 }
