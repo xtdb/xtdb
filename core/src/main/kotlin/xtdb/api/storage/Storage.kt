@@ -26,7 +26,7 @@ object Storage {
 
     // bump this if the storage format changes in a backwards-incompatible way
     @JvmField
-    val version = "v${5L.asLexHex}"
+    val version = "v${6L.asLexHex}"
 
     @JvmField
     val storageRoot: Path = Path.of(version)
