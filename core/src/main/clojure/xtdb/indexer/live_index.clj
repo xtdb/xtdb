@@ -140,11 +140,11 @@
         AutoCloseable
         (close [_]))))
 
-  (finishBlock [_ first-row next-row]
+  (finishBlock [_ block-idx]
     (.syncRowCount live-rel)
     (let [row-count (.getPosition (.writerPosition live-rel))]
       (when (pos? row-count)
-        (let [trie-key (trie/->log-l0-l1-trie-key 0 first-row next-row row-count)]
+        (let [trie-key (trie/->l0-l1-trie-key 0 block-idx row-count)]
           (with-open [data-rel (.openAsRelation live-rel)]
             (let [data-file-size (trie/write-live-trie! allocator buffer-pool table-name trie-key
                                                         live-trie data-rel)]
@@ -296,16 +296,15 @@
           (.unlock wm-lock wm-read-stamp)))))
 
   (finishBlock [this]
-    (let [block-idx (.getBlockIdx row-counter)
-          next-block-idx (+ block-idx (.getBlockRowCount row-counter))]
+    (let [block-idx (.getBlockIdx row-counter)]
 
-      (log/debugf "finishing block 'rf%s-nr%s'..." (util/->lex-hex-string block-idx) (util/->lex-hex-string next-block-idx))
+      (log/debugf "finishing block '%s'..." (util/->lex-hex-string block-idx))
 
       (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
         (let [tasks (vec (for [^LiveTable table (.values tables)]
                            (.fork scope (fn []
                                           (try
-                                            (.finishBlock table block-idx next-block-idx)
+                                            (.finishBlock table block-idx)
                                             (catch InterruptedException e
                                               (throw e))
                                             (catch Exception e
@@ -321,9 +320,6 @@
                                    (util/rethrowing-cause))]
             (.finishBlock metadata-mgr block-idx
                           {:latest-completed-tx latest-completed-tx
-
-                           ;; TODO: :next-chunk-idx until we have a breaking index change
-                           :next-chunk-idx next-block-idx
                            :tables table-metadata})
 
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
@@ -353,13 +349,12 @@
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
-      (c/signal-block! compactor) 
-      
-      (log/debugf "finished block 'rf%s-nr%s'." (util/->lex-hex-string block-idx) (util/->lex-hex-string next-block-idx))
-      
+      (c/signal-block! compactor)
+      (log/debugf "finished block 'b%s'." (util/->lex-hex-string block-idx))
+
       (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
         #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-        (defonce log-msg
+        (defonce -log-skip-txs-once
           (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable.")))))
 
   (forceFlush [this record msg]

@@ -18,22 +18,21 @@
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
            (xtdb.util TemporalBounds)))
 
-(defn ->log-l0-l1-trie-key [^long level, ^long first-row ,^long next-row, ^long row-count]
+(defn ->l0-l1-trie-key [^long level, ^long block-idx, ^long row-count]
   (assert (<= 0 level 1))
 
-  (format "log-l%s-fr%s-nr%s-rs%s"
+  (format "l%s-b%s-rs%s"
           (util/->lex-hex-string level)
-          (util/->lex-hex-string first-row)
-          (util/->lex-hex-string next-row)
+          (util/->lex-hex-string block-idx)
           (Long/toString row-count 16)))
 
-(defn ->log-l2+-trie-key [^long level, ^bytes part, ^long next-row]
+(defn ->l2+-trie-key [^long level, ^bytes part, ^long block-idx]
   (assert (>= level 2))
 
-  (format "log-l%s-p%s-nr%s"
+  (format "l%s-p%s-b%s"
           (util/->lex-hex-string level)
           (str/join part)
-          (util/->lex-hex-string next-row)))
+          (util/->lex-hex-string block-idx)))
 
 (def ^java.nio.file.Path tables-dir (util/->path "tables"))
 
@@ -204,15 +203,14 @@
       (.end trie-wtr))))
 
 (def ^:private trie-file-path-regex
-  ;; e.g. `log-l01-fr0-nr12e-rs20.arrow` or `log-l04-p0010-nr12e.arrow`
-  #"(log-l(\p{XDigit}+)(?:-p(\p{XDigit}+))?(?:-fr(\p{XDigit}+))?-nr(\p{XDigit}+)(?:-rs(\p{XDigit}+))?)(\.arrow)?$")
+  ;; e.g. `l01-b00-rs20.arrow` or `l04-p0010-b12e.arrow`
+  #"(l(\p{XDigit}+)(?:-p(\p{XDigit}+))?(?:-b(\p{XDigit}+))(?:-rs(\p{XDigit}+))?)(\.arrow)?$")
 
 (defn parse-trie-key [trie-key]
-  (when-let [[_ trie-key level-str part-str first-row next-row-str rows-str] (re-find trie-file-path-regex trie-key)]
+  (when-let [[_ trie-key level-str part-str block-idx-str rows-str] (re-find trie-file-path-regex trie-key)]
     (cond-> {:trie-key trie-key
              :level (util/<-lex-hex-string level-str)
-             :next-row (util/<-lex-hex-string next-row-str)}
-      first-row (assoc :first-row (util/<-lex-hex-string first-row))
+             :block-idx  (util/<-lex-hex-string block-idx-str)}
       part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str)))
       rows-str (assoc :rows (Long/parseLong rows-str 16)))))
 

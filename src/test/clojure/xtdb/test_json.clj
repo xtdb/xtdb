@@ -5,7 +5,6 @@
             [cognitect.transit :as transit]
             [jsonista.core :as json]
             [xtdb.metadata :as meta]
-            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry

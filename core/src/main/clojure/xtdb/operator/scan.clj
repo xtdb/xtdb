@@ -440,7 +440,6 @@
           {:fields fields
            :stats {:row-count row-count}
            :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
-
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
                            (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args metadata-mgr watermark))

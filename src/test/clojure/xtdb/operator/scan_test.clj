@@ -10,7 +10,8 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.trie-catalog :as cat])
   (:import (java.util.function IntPredicate)
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
@@ -680,7 +681,7 @@
 
 (deftest test-recency-filtering
   (binding [c/*page-size* 1
-            c/*l1-file-size-rows* 256
+            cat/*l1-row-count-limit* 256
             c/*ignore-signal-block?* true]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
       ;; 2020 - 2025
@@ -736,7 +737,7 @@
 
 (deftest test-range-query-earlier-filtering
   (binding [c/*page-size* 1
-            c/*l1-file-size-rows* 256
+            cat/*l1-row-count-limit* 256
             c/*ignore-signal-block?* true]
     (let [insts (tu/->instants :year)]
       (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock insts)}]}))]
