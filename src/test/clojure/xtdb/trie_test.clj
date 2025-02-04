@@ -30,9 +30,9 @@
   (letfn [(parse [trie-key]
             (-> (trie/parse-trie-file-path (util/->path (str trie-key ".arrow")))
                 (update :part #(some-> % vec))
-                (mapv [:level :part :first-row :next-row :rows])))]
-    (t/is (= [0 nil 22 46 32] (parse (trie/->log-l0-l1-trie-key 0 22 46 32))))
-    (t/is (= [2 [0 0 1 3] nil 120 nil] (parse (trie/->log-l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
+                (mapv [:level :part :block-idx :rows])))]
+    (t/is (= [0 nil 4 32] (parse (trie/->l0-l1-trie-key 0 4 32))))
+    (t/is (= [2 [0 0 1 3] 120 nil] (parse (trie/->l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
 
 (defn- ->arrow-hash-trie [^Relation meta-rel]
   (ArrowHashTrie. (.get meta-rel "nodes")))
@@ -409,17 +409,6 @@
                                              (assoc :seg :t2
                                                     :page-bounds-fn (tu/->page-bounds-fn t2-page-bounds)))]
                                         query-bounds-no-sys-time-filter)))))))))))
-
-(defn ->trie-file-name
-  " L0/L1 keys are submitted as [level first-row next-row rows]; L2+ as [level part-vec next-row]"
-  [[level & args]]
-
-  (case (long level)
-    (0 1) (let [[first-row next-row rows] args]
-            (util/->path (str (trie/->log-l0-l1-trie-key level first-row next-row (or rows 0)) ".arrow")))
-
-    (let [[part next-row] args]
-      (util/->path (str (trie/->log-l2+-trie-key level (byte-array part) next-row) ".arrow")))))
 
 (deftest test-data-file-writing
   (let [page-idx->documents

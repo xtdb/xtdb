@@ -73,15 +73,14 @@
 (defn- obj-key->block-idx [^Path obj-key]
   (some->> (.getFileName obj-key)
            (str)
-           (re-matches #"(\p{XDigit}+).transit.json")
+           (re-matches #"b(\p{XDigit}+).transit.json")
            (second)
            (util/<-lex-hex-string)))
 
-;; NOTE: `chunk-metadata` until we have a breaking index change
-(def ^Path block-metadata-path (util/->path "chunk-metadata"))
+(def ^Path block-metadata-path (util/->path "blocks"))
 
 (defn- ->block-metadata-obj-key [block-idx]
-  (.resolve block-metadata-path (format "%s.transit.json" (util/->lex-hex-string block-idx))))
+  (.resolve block-metadata-path (format "b%s.transit.json" (util/->lex-hex-string block-idx))))
 
 (defn- write-block-metadata ^java.nio.ByteBuffer [block-meta]
   (with-open [os (ByteArrayOutputStream.)]

@@ -18,9 +18,8 @@
       (xt/submit-tx node [[:put-docs :foo {:xt/id "foo2"}]
                           [:put-docs :baz {:xt/id "baz1"}]])
 
-      (-> (xt/submit-tx node [[:put-docs :foo {:xt/id "foo3"}]
-                              [:put-docs :bar {:xt/id "bar2"}]])
-          (tu/then-await-tx node))
+      (xt/execute-tx node [[:put-docs :foo {:xt/id "foo3"}]
+                           [:put-docs :bar {:xt/id "bar2"}]])
 
       (t/is (= {:row-count 3}
                (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table public/foo}, :columns [[:column id]]}

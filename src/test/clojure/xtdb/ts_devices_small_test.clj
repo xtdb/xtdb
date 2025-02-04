@@ -25,10 +25,9 @@
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
             (tu/finish-block! node)
 
-            (t/is (= {:latest-completed-tx last-tx-key
-                      :next-chunk-idx 1001000}
+            (t/is (= {:latest-completed-tx last-tx-key}
                      (-> (meta/latest-block-metadata (tu/component ::meta/metadata-manager))
-                         (select-keys [:latest-completed-tx :next-chunk-idx])))))
+                         (select-keys [:latest-completed-tx])))))
 
           (f))))))
 
