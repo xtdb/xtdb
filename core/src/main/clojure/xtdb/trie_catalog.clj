@@ -16,6 +16,8 @@
 
 (def ^:const branch-factor 4)
 
+(def ^:dynamic *l1-row-count-limit* (* 100 1024))
+
 (defn ->added-trie
   [table-name, trie-key, ^long data-file-size]
 
@@ -25,34 +27,33 @@
       (setDataFileSize data-file-size)
       (build)))
 
-(defn- superseded-l0-trie? [table-tries {:keys [next-row]}]
-  (or (when-let [{l0-next-row :next-row} (first (get table-tries [0 []]))]
-        (>= l0-next-row next-row))
+(defn- superseded-l0-trie? [table-tries {:keys [block-idx]}]
+  (or (when-let [{l0-block-idx :block-idx} (first (get table-tries [0 []]))]
+        (>= l0-block-idx block-idx))
 
-      (when-let [{l1-next-row :next-row} (first (get table-tries [1 []]))]
-        (>= l1-next-row next-row))))
+      (when-let [{l1-block-idx :block-idx} (first (get table-tries [1 []]))]
+        (>= l1-block-idx block-idx))))
 
-(defn- superseded-l1-trie? [table-tries {:keys [next-row first-row]}]
-  (or (when-let [{l1-next-row :next-row, l1-first-row :first-row} (first (get table-tries [1 []]))]
-        (or (> l1-first-row first-row)
-            (>= l1-next-row next-row)))
+(defn- superseded-l1-trie? [table-tries {:keys [block-idx]}]
+  (or (when-let [{l1-block-idx :block-idx} (first (get table-tries [1 []]))]
+        (>= l1-block-idx block-idx))
 
       (->> (map table-tries (for [p (range branch-factor)]
                               [2 [p]]))
-           (every? (comp (fn [{l2-next-row :next-row, :as l2-trie}]
+           (every? (comp (fn [{l2-block-idx :block-idx, :as l2-trie}]
                            (and l2-trie
-                                (>= l2-next-row next-row)))
+                                (>= l2-block-idx block-idx)))
                          first)))))
 
-(defn superseded-ln-trie [table-tries {:keys [level next-row part]}]
-  (or (when-let [{ln-next-row :next-row} (first (get table-tries [level part]))]
-        (>= ln-next-row next-row))
+(defn superseded-ln-trie [table-tries {:keys [level block-idx part]}]
+  (or (when-let [{ln-block-idx :block-idx} (first (get table-tries [level part]))]
+        (>= ln-block-idx block-idx))
 
       (->> (map table-tries (for [p (range branch-factor)]
                               [(inc level) (conj part p)]))
-           (every? (comp (fn [{lnp1-next-row :next-row, :as lnp1-trie}]
+           (every? (comp (fn [{lnp1-block-idx :block-idx, :as lnp1-trie}]
                            (when lnp1-trie
-                             (>= lnp1-next-row next-row)))
+                             (>= lnp1-block-idx block-idx)))
                          first)))))
 
 (defn- superseded-trie? [table-tries {:keys [level] :as trie}]
@@ -61,20 +62,20 @@
     1 (superseded-l1-trie? table-tries trie)
     (superseded-ln-trie table-tries trie)))
 
-(defn- supersede-partial-l1-tries [l1-tries {:keys [first-row next-row]}]
+(defn- supersede-partial-l1-tries [l1-tries {:keys [block-idx]} {:keys [l1-row-count-limit]}]
   (->> l1-tries
-       (map (fn [{l1-first-row :first-row, l1-next-row :next-row, l1-state :state, :as l1-trie}]
+       (map (fn [{l1-block-idx :block-idx, l1-rows :rows, l1-state :state, :as l1-trie}]
               (cond-> l1-trie
                 (and (= l1-state :live)
-                     (= first-row l1-first-row)
-                     (>= next-row l1-next-row))
+                     (< l1-rows l1-row-count-limit)
+                     (>= block-idx l1-block-idx))
                 (assoc :state :garbage))))))
 
-(defn- supersede-l0-tries [l0-tries {:keys [next-row]}]
+(defn- supersede-l0-tries [l0-tries {:keys [block-idx]}]
   (->> l0-tries
-       (map (fn [{l0-next-row :next-row, :as l0-trie}]
+       (map (fn [{l0-block-idx :block-idx, :as l0-trie}]
               (cond-> l0-trie
-                (<= l0-next-row next-row)
+                (<= l0-block-idx block-idx)
                 (assoc :state :garbage))))))
 
 (defn- conj-nascent-ln-trie [table-tries {:keys [level part] :as trie}]
@@ -84,45 +85,45 @@
                       (conj ln-part-tries (assoc trie :state :nascent)))
                     '()))))
 
-(defn- completed-ln-group? [table-tries {:keys [level next-row part]}]
+(defn- completed-ln-group? [table-tries {:keys [level block-idx part]}]
   (->> (let [pop-part (pop part)]
          (for [p (range branch-factor)]
            [level (conj pop-part p)]))
        (map (comp first table-tries))
 
-       (every? (fn [{ln-next-row :next-row, ln-state :state, :as ln-trie}]
+       (every? (fn [{ln-block-idx :block-idx, ln-state :state, :as ln-trie}]
                  (and ln-trie
-                      (or (> ln-next-row next-row)
+                      (or (> ln-block-idx block-idx)
                           (= :nascent ln-state)))))))
 
-(defn- mark-ln-group-live [table-tries {:keys [next-row level part]}]
+(defn- mark-ln-group-live [table-tries {:keys [block-idx level part]}]
   (reduce (fn [table-tries part]
             (-> table-tries
                 (update part
                         (fn [ln-tries]
                           (->> ln-tries
-                               (map (fn [{ln-state :state, ln-next-row :next-row, :as ln-trie}]
+                               (map (fn [{ln-state :state, ln-block-idx :block-idx, :as ln-trie}]
                                       (cond-> ln-trie
                                         (and (= ln-state :nascent)
-                                             (= ln-next-row next-row))
+                                             (= ln-block-idx block-idx))
                                         (assoc :state :live)))))))))
           table-tries
           (let [pop-part (pop part)]
             (for [p (range branch-factor)]
               [level (conj pop-part p)]))))
 
-(defn- supersede-lnm1-tries [table-tries {:keys [next-row level part]}]
+(defn- supersede-lnm1-tries [table-tries {:keys [block-idx level part]}]
   (-> table-tries
       (update [(dec level) (pop part)]
               (fn [lnm1-tries]
                 (->> lnm1-tries
-                     (map (fn [{lnm1-state :state, lnm1-next-row :next-row, :as lnm1-trie}]
+                     (map (fn [{lnm1-state :state, lnm1-block-idx :block-idx, :as lnm1-trie}]
                             (cond-> lnm1-trie
                               (and (= lnm1-state :live)
-                                   (<= lnm1-next-row next-row))
+                                   (<= lnm1-block-idx block-idx))
                               (assoc :state :garbage)))))))))
 
-(defn- conj-trie [table-tries {:keys [level] :as trie}]
+(defn- conj-trie [table-tries {:keys [level] :as trie} trie-cat]
   (case (long level)
     0 (-> table-tries
           (update [0 []] (fnil conj '())
@@ -131,7 +132,7 @@
     1 (-> table-tries
           (update [1 []] (fnil (fn [l1-tries trie]
                                  (-> l1-tries
-                                     (supersede-partial-l1-tries trie)
+                                     (supersede-partial-l1-tries trie trie-cat)
                                      (conj (assoc trie :state :live))))
                                '())
                   trie)
@@ -145,27 +146,27 @@
                                                    (supersede-lnm1-tries trie))))))
 
 (defn apply-trie-notification
-  ([] {})
-  ([tries ^AddedTrie added-trie]
+  ([_trie-cat] {})
+  ([trie-cat tries ^AddedTrie added-trie]
    (let [trie (-> (trie/parse-trie-key (.getTrieKey added-trie))
                   (update :part vec)
                   (assoc :data-file-size (.getDataFileSize added-trie)))]
      (cond-> tries
-       (not (superseded-trie? tries trie)) (conj-trie trie))))
+       (not (superseded-trie? tries trie)) (conj-trie trie trie-cat))))
 
-  ([tries] tries))
+  ([_trie-cat tries] tries))
 
 (defn current-tries [tries]
   (->> tries
        (into [] (comp (mapcat val)
                       (filter #(= (:state %) :live))))))
 
-(defrecord TrieCatalog [^Map !table-tries]
+(defrecord TrieCatalog [^Map !table-tries, ^long l1-row-count-limit]
   xtdb.trie.TrieCatalog
-  (addTrie [_ added-trie]
+  (addTrie [this added-trie]
     (.compute !table-tries (.getTableName added-trie)
               (fn [_table-name tries]
-                (apply-trie-notification tries added-trie))))
+                (apply-trie-notification this tries added-trie))))
 
   PTrieCatalog
   (table-names [_] (set (keys !table-tries)))
@@ -178,7 +179,9 @@
         opts))
 
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
-  (let [!table-tries (ConcurrentHashMap.)]
+  (let [!table-tries (ConcurrentHashMap.)
+        trie-cat (->TrieCatalog !table-tries *l1-row-count-limit*)]
+
     (doseq [table-name (.allTableNames metadata-mgr)]
       (.put !table-tries table-name
             (->> (.listAllObjects buffer-pool (trie/->table-meta-dir table-name))
@@ -186,9 +189,9 @@
                                    (->added-trie table-name
                                                  (str (.getFileName (.getKey obj)))
                                                  (.getSize obj))))
-                            apply-trie-notification))))
+                            (partial apply-trie-notification trie-cat)))))
 
-    (->TrieCatalog !table-tries)))
+    trie-cat))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
   (util/component node :xtdb/trie-catalog))

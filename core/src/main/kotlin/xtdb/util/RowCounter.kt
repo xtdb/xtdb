@@ -5,7 +5,7 @@ class RowCounter(var blockIdx: Long) {
         private set
 
     fun nextBlock() {
-        blockIdx += blockRowCount
+        blockIdx += 1
         blockRowCount = 0
     }
 
