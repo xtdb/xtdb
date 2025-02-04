@@ -40,7 +40,7 @@
                                [:put-docs :xt_docs {:num 2.0 :xt/id "f"}]])
       (tu/then-await-tx tu/*node*))
 
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (t/is (= [{:num 1} {:num 1.0}]
            (tu/query-ra '[:scan {:table public/xt_docs}
@@ -70,7 +70,7 @@
                     {:default-tz #xt/zone "Z"})
       (tu/then-await-tx tu/*node*))
 
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
@@ -99,7 +99,7 @@
                     {:default-tz #xt/zone "Z"})
       (tu/then-await-tx tu/*node*))
 
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (t/is (= [{:time #xt/time "04:05:06"}]
            (tu/query-ra '[:scan {:table public/xt_docs}
@@ -112,7 +112,7 @@
       (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
           (tu/then-await-tx node))
 
-      (tu/finish-chunk! node)
+      (tu/finish-block! node)
       (c/compact-all! node)
 
       (let [first-buckets (map (comp first tu/byte-buffer->path util/->iid) (range 20))
@@ -160,7 +160,7 @@
 (deftest test-temporal-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1}]])
 
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->log-l0-l1-trie-key 0 0 2 1))]
@@ -172,7 +172,7 @@
 
 (t/deftest test-boolean-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]])
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
@@ -204,7 +204,7 @@
 
       (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
 
-      (tu/finish-chunk! node)
+      (tu/finish-block! node)
       (c/compact-all! node)
 
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]

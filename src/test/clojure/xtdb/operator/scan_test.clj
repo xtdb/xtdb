@@ -46,8 +46,8 @@
            (tu/query-ra '[:scan {:table public/xt_docs} [_id _id]]
                         {:node tu/*node*}))))
 
-(t/deftest test-chunk-boundary
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 20}}))]
+(t/deftest test-block-boundary
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (->> (for [i (range 110)]
            [:put-docs :xt_docs {:xt/id i}])
          (partition-all 10)
@@ -57,8 +57,8 @@
              (set (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
                                {:node node}))))))
 
-(t/deftest test-chunk-boundary-different-struct-types
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 20}}))]
+(t/deftest test-block-boundary-different-struct-types
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (xt/submit-tx node (for [i (range 20)]
                          [:put-docs :xt_docs {:xt/id i :foo {:bar 42}}]))
 
@@ -79,8 +79,8 @@
                              [:scan {:table public/xt_docs} [foo]]]
                            {:node node}))))))
 
-(t/deftest test-row-copying-different-struct-types-between-chunk-boundaries-3338
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 20}}))]
+(t/deftest test-row-copying-different-struct-types-between-block-boundaries-3338
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (xt/submit-tx node (for [i (range 20)]
                          [:put-docs :xt_docs {:xt/id i :foo {:bar 42}}]))
 
@@ -99,14 +99,14 @@
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
     (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
-    (tu/finish-chunk! node)
+    (tu/finish-block! node)
 
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
              (set (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
                                {:node node}))))))
 
 (t/deftest test-metadata
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 20}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (->> (for [i (range 100)]
            [:put-docs :xt_docs {:xt/id i}])
          (partition-all 20)
@@ -118,14 +118,14 @@
                                {:node node})))
           "testing only getting some trie matches"))
 
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 20}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
     (xt/submit-tx node (for [i (range 20)] [:delete-docs :xt_docs i]))
 
     (t/is (= []
              (tu/query-ra '[:scan {:table public/xt_docs} [{_id (< _id 20)}]]
                           {:node node}))
-          "testing newer chunks relevant even if not matching")
+          "testing newer blocks relevant even if not matching")
 
     (t/is (= []
              (tu/query-ra '[:scan {:table public/xt_docs} [toto]]
@@ -135,7 +135,7 @@
   (t/testing "testing boolean metadata"
     (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]
                              [:put-docs :xt_docs {:xt/id 2 :boolean-or-int 2}]])
-    (tu/finish-chunk! tu/*node*)
+    (tu/finish-block! tu/*node*)
 
     (t/is (= [{:boolean-or-int true}]
              (tu/query-ra '[:scan {:table public/xt_docs} [{boolean_or_int (= boolean_or_int true)}]]
@@ -303,7 +303,7 @@
 
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
 
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (t/is (= #{{:last-updated "tx2",
               :xt/valid-from #xt/zoned-date-time "3001-01-01T00:00Z[UTC]",
@@ -354,7 +354,7 @@
     (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
         (tu/then-await-tx tu/*node*))
 
-    (tu/finish-chunk! tu/*node*)
+    (tu/finish-block! tu/*node*)
 
     (t/is (= '{_id :keyword}
              (->col-type '_id)))
@@ -502,13 +502,13 @@
                                ['version {'_id (list '= '_id search-uuid)}]]
                               {:node tu/*node*})))))))
 
-(t/deftest test-iid-fast-path-chunk-boundary
+(t/deftest test-iid-fast-path-block-boundary
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
         search-uuid #uuid "80000000-0000-0000-0000-000000000000"
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
         uuids [before-uuid search-uuid after-uuid]
         !search-uuid-versions (atom [])]
-    (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 20 :page-limit 16}}))]
+    (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20 :page-limit 16}}))]
       (->> (for [i (range 110)]
              (let [uuid (rand-nth uuids)]
                (when (= uuid search-uuid)
@@ -533,9 +533,9 @@
     (let [uuids (tu/uuid-seq 40)
           search-uuid (rand-nth uuids)]
       (xt/submit-tx node (for [uuid (take 20 uuids)] [:put-docs :xt_docs {:xt/id uuid}]))
-      (tu/finish-chunk! node)
+      (tu/finish-block! node)
       (xt/submit-tx node (for [uuid (drop 20 uuids)] [:put-docs :xt_docs {:xt/id uuid}]))
-      (tu/finish-chunk! node)
+      (tu/finish-block! node)
 
       (t/is (= [{:xt/id search-uuid}]
                (tu/query-ra [:scan '{:table public/xt_docs} [{'_id (list '= '_id search-uuid)}]]
@@ -591,9 +591,9 @@
 (deftest test-pushdown-blooms
   (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
                            [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]])
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
   (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
 
   (let [!page-idxs-cnt (atom 0)
         old-filter-trie-match scan/filter-pushdown-bloom-page-idx-pred]
@@ -622,7 +622,7 @@
         (xt/submit-tx node (for [uuid (concat first-page second-page)]
                              [:put-docs :docs {:xt/id uuid}]))
         (tu/then-await-tx node)
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
         (xt/submit-tx node [[:put-docs :docs {:xt/id uuid}]])
         (tu/then-await-tx node)
 
@@ -670,7 +670,7 @@
 
       (dotimes [i 2]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version i}]]))
-      (tu/finish-chunk! node)
+      (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT2S")
 
       (t/is (= [{:xt/id 1,
@@ -688,7 +688,7 @@
                            (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :col i}]])))]
 
 
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
         ;; compaction happens in 2026
         (c/compact-all! node)
 
@@ -751,7 +751,7 @@
                                                    {:xt/id 1 :version i}]])))]
 
 
-          (tu/finish-chunk! node)
+          (tu/finish-block! node)
           ;; compaction happens in 2026
           (c/compact-all! node #xt/duration "PT2S")
 

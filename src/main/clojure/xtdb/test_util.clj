@@ -196,9 +196,9 @@
 (defn ->tstz-range ^xtdb.types.ZonedDateTimeRange [from to]
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
-(defn finish-chunk! [node]
+(defn finish-block! [node]
   (then-await-tx node)
-  (li/finish-chunk! node))
+  (li/finish-block! node))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
@@ -315,7 +315,7 @@
           (t/is (= pages (<-cursor cursor))))))))
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
-                                           rows-per-chunk log-limit page-limit instant-src
+                                           rows-per-block log-limit page-limit instant-src
                                            compactor-threads healthz-port]
                                     :or {buffers-dir "objects" healthz-port 8080}}]
   (let [instant-src (or instant-src (->mock-clock))
@@ -323,7 +323,7 @@
     (xtn/start-node {:healthz {:port healthz-port}
                      :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
                                    (into {} (filter val)))
                      :compactor (->> {:threads compactor-threads}
                                      (into {} (filter val)))})))

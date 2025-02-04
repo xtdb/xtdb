@@ -48,7 +48,7 @@
                                                         (t/is (= [{:xt/id :foo}]
                                                                  (xt/q node '(from :foo [xt/id]))))
 
-                                                        (tu/finish-chunk! node)
+                                                        (tu/finish-block! node)
 
                                                         (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
                                                               object-store (.getObjectStore buffer-pool)]

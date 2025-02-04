@@ -140,7 +140,7 @@
         AutoCloseable
         (close [_]))))
 
-  (finishChunk [_ first-row next-row]
+  (finishBlock [_ first-row next-row]
     (.syncRowCount live-rel)
     (let [row-count (.getPosition (.writerPosition live-rel))]
       (when (pos? row-count)
@@ -208,19 +208,19 @@
 (deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr
                     ^Log log, ^TrieCatalog trie-catalog, compactor
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
-                    ^:volatile-mutable ^TransactionKey latest-completed-chunk-tx
+                    ^:volatile-mutable ^TransactionKey latest-completed-block-tx
                     ^Map tables,
 
                     ^:volatile-mutable ^Watermark shared-wm
                     ^StampedLock wm-lock
                     ^RefCounter wm-cnt,
 
-                    ^RowCounter row-counter, ^long rows-per-chunk
+                    ^RowCounter row-counter, ^long rows-per-block
 
                     ^long log-limit, ^long page-limit]
   xtdb.indexer.LiveIndex
   (getLatestCompletedTx [_] latest-completed-tx)
-  (getLatestCompletedChunkTx [_] latest-completed-chunk-tx)
+  (getLatestCompletedBlockTx [_] latest-completed-block-tx)
 
   (liveTable [_ table-name] (.get tables table-name))
 
@@ -256,8 +256,8 @@
               (finally
                 (.unlock wm-lock wm-lock-stamp))))
 
-          (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
-            (.finishChunk this-idx)))
+          (when (>= (.getBlockRowCount row-counter) rows-per-block)
+            (.finishBlock this-idx)))
 
         (abort [_]
           (doseq [^LiveTable$Tx live-table-tx (.values table-txs)]
@@ -265,8 +265,8 @@
 
           (set! (.-latest-completed-tx this-idx) tx-key)
 
-          (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
-            (.finishChunk this-idx)))
+          (when (>= (.getBlockRowCount row-counter) rows-per-block)
+            (.finishBlock this-idx)))
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
@@ -293,21 +293,21 @@
         (finally
           (.unlock wm-lock wm-read-stamp)))))
 
-  (finishChunk [this]
-    (let [chunk-idx (.getChunkIdx row-counter)
-          next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))]
+  (finishBlock [this]
+    (let [block-idx (.getBlockIdx row-counter)
+          next-block-idx (+ block-idx (.getBlockRowCount row-counter))]
 
-      (log/debugf "finishing chunk 'rf%s-nr%s'..." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))
+      (log/debugf "finishing block 'rf%s-nr%s'..." (util/->lex-hex-string block-idx) (util/->lex-hex-string next-block-idx))
 
       (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
         (let [tasks (vec (for [^LiveTable table (.values tables)]
                            (.fork scope (fn []
                                           (try
-                                            (.finishChunk table chunk-idx next-chunk-idx)
+                                            (.finishBlock table block-idx next-block-idx)
                                             (catch InterruptedException e
                                               (throw e))
                                             (catch Exception e
-                                              (log/warn e "Error finishing chunk for table" table)
+                                              (log/warn e "Error finishing block for table" table)
                                               (throw e)))))))]
           (.join scope)
 
@@ -317,9 +317,11 @@
                                                           (catch Exception _
                                                             (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                    (util/rethrowing-cause))]
-            (.finishChunk metadata-mgr chunk-idx
+            (.finishBlock metadata-mgr block-idx
                           {:latest-completed-tx latest-completed-tx
-                           :next-chunk-idx next-chunk-idx
+
+                           ;; TODO: :next-chunk-idx until we have a breaking index change
+                           :next-chunk-idx next-block-idx
                            :tables table-metadata})
 
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
@@ -329,9 +331,9 @@
 
               @(.appendMessage log (Log$Message$TriesAdded. added-tries))))))
 
-      (.nextChunk row-counter)
+      (.nextBlock row-counter)
 
-      (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
+      (set! (.-latest_completed_block_tx this) latest-completed-tx)
 
       (let [wm-lock-stamp (.writeLock wm-lock)]
         (try
@@ -350,13 +352,13 @@
             (.unlock wm-lock wm-lock-stamp))))
 
       (c/signal-block! compactor)
-      (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
+      (log/debugf "finished block 'rf%s-nr%s'." (util/->lex-hex-string block-idx) (util/->lex-hex-string next-block-idx))))
 
   (forceFlush [this record msg]
-    (let [expected-last-chunk-tx-id (.getExpectedChunkTxId msg)
-          latest-chunk-tx-id (some-> latest-completed-chunk-tx (.getTxId))]
-      (when (= (or latest-chunk-tx-id -1) expected-last-chunk-tx-id)
-        (.finishChunk this)))
+    (let [expected-last-block-tx-id (.getExpectedBlockTxId msg)
+          latest-block-tx-id (some-> latest-completed-block-tx (.getTxId))]
+      (when (= (or latest-block-tx-id -1) expected-last-block-tx-id)
+        (.finishBlock this)))
 
     (set! (.latest-completed-tx this)
           (serde/->TxKey (.getLogOffset record)
@@ -381,7 +383,8 @@
    :config config})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
-  (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
+  ;; TODO: :next-chunk-idx until we have a breaking index change
+  (let [{next-block-idx :next-chunk-idx, :keys [latest-completed-tx], :or {next-block-idx 0}} (meta/latest-block-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
@@ -393,12 +396,12 @@
                      (StampedLock.)
                      (RefCounter.)
 
-                     (RowCounter. next-chunk-idx) (.getRowsPerChunk config)
+                     (RowCounter. next-block-idx) (.getRowsPerBlock config)
 
                      (.getLogLimit config) (.getPageLimit config))))))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
 
-(defn finish-chunk! [node]
-  (.finishChunk ^xtdb.indexer.LiveIndex (util/component node :xtdb.indexer/live-index)))
+(defn finish-block! [node]
+  (.finishBlock ^xtdb.indexer.LiveIndex (util/component node :xtdb.indexer/live-index)))

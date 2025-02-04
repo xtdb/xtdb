@@ -36,9 +36,9 @@
 (defmethod apply-config! :storage [config _ opts]
   (apply-config! config :xtdb.buffer-pool/storage opts))
 
-(defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-chunk page-limit log-limit flush-duration]}]
+(defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-block page-limit log-limit flush-duration]}]
   (cond-> (.getIndexer config)
-    rows-per-chunk (.rowsPerChunk rows-per-chunk)
+    rows-per-block (.rowsPerBlock rows-per-block)
     page-limit (.pageLimit page-limit)
     log-limit (.logLimit log-limit)
     flush-duration (.flushDuration (time/->duration flush-duration))))

@@ -25,7 +25,7 @@
   (tu/with-opts {:compactor {:threads 0}})
   tu/with-node)
 
-(t/deftest test-chunk
+(t/deftest test-block
   (let [^BufferAllocator allocator (tu/component tu/*node* :xtdb/allocator)
         ^BufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         ^LiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)
@@ -60,8 +60,8 @@
                         (mapcat (fn [^MemoryHashTrie$Leaf leaf]
                                   (mapv #(vec (.getObject iid-vec %)) (.getData leaf))))))))))
 
-    (t/testing "finish chunk"
-      (.finishChunk live-index)
+    (t/testing "finish block"
+      (.finishBlock live-index)
 
       (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/log-l00-fr00-nr32ee0-rs2ee0.arrow"))
             leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/log-l00-fr00-nr32ee0-rs2ee0.arrow"))]
@@ -121,7 +121,7 @@
           (let [{:keys [tx-id]} (last (for [tx-ops txs] (xt/execute-tx node tx-ops)))]
             (tu/then-await-tx tx-id node (Duration/ofSeconds 2)))
 
-          (tu/finish-chunk! node)
+          (tu/finish-block! node)
 
           (t/is (= [(os/->StoredObject "tables/public$foo/data/log-l00-fr00-nr110-rs5.arrow" 2558)]
                    (.listAllObjects bp (util/->path "tables/public$foo/data"))))

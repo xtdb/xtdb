@@ -58,7 +58,7 @@
           "default nulls last")))
 
 (t/deftest test-order-by-spill
-  (binding [order-by/*chunk-size* 10]
+  (binding [order-by/*block-size* 10]
     (let [data (map-indexed (fn [i d] {:a d :b i}) (repeatedly 1000 #(rand-int 1000000)))
           batches (mapv vec (partition-all 13 data))
           sorted (sort-by (juxt :a :b) data)]

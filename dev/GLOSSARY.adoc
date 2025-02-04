@@ -1,9 +1,8 @@
 = Glossary
 
-|===========================================================================================================================================================================================================================================================================================================================================================================================================================
+|===
+| block                  | A group of (~100k) transactions that the DB holds in memory before it flushes them to disk.
 | buffer pool            | A pool of (Arrow) buffers that gets managed for reuse and reference counted. Fetches things from the object store.
-| chunk                  | A certain number of rows/documents the DB holds in memory before it flushes them to disk. As of the writing of this document the number is 102400. The content is split into chunks.
-| chunk boundary         | The number of rows hold in memory before a flush gets triggered (102400 as of the writing of this document)
 | document (or 'row')    | A particular state of an entity. A document describes the state of an entity at a particular point in time.
 | entity (or 'record')   | Referring to a unique item in the database that may have different versions (in form of different documents) across time.
 | expression             | Think of this like a predicate, test or an if statement in the query languages (SQL/XTQL) that acts on one or multiple columns/variables.
@@ -12,14 +11,13 @@
 | indexer                | Indexes new data or updates to existing data into the underlying storage.
 | ingester               | Retrieves newly arrived transactions from the log and submits them to the indexer.
 | live index             | The part of the db (data) that has not been written to disk and will be flushed
-| log                    | Holds all transactions monotonically across system time. In XTDB V2 this is not strictly needed forever as transactions also get indexed into a log (see log indexer) per chunk.
-| log indexer            | It's a golden store of temporal information in a format that's relatively easy to replay from. When a transaction gets indexed we also keep a log of the temporal information + some ids to associate with content. Some parts of the kd-tree (or another temporal solution) might only live in memory until we commit the full chunk. This logs assures us that we can recover this ifnormation.
+| log                    | Holds all transactions monotonically across system time. In XTDB V2 this is not strictly needed forever as transactions also get indexed into a log (see log indexer) per block.
+| log indexer            | It's a golden store of temporal information in a format that's relatively easy to replay from. When a transaction gets indexed we also keep a log of the temporal information + some ids to associate with content. Some parts of the kd-tree (or another temporal solution) might only live in memory until we commit the full block. This logs assures us that we can recover this ifnormation.
 | logical plan           | A relational algebra representation of a query or update. The logical plan is represented as a nested clojure sturcture. This is an XTDB internal representation of a query/update that the engine might do optimizations on (for example an sematically equivalent but more efficient rewrite).
-| metadata               | We associate metadata on a per chunk and page level with data. This allows to quickly rule out chunks/pages that don't satisfy certain conditions. Be that temporal or content related.
-| metadata manager       | Manages metadata information (reading/writing).
-| object-store           | Think of this as something like S3. This is where long lived data resides (doesn't mean it does not get rewritten). Pages are fetched from here. There is also a in-memory version, but that is more for testing purposes. It also contains a caching layer.
+| metadata               | We associate metadata on a per block and page level with data. This allows to quickly rule out blocks/pages that don't satisfy certain conditions (be that temporal or content related).
+| object-store           | A core component of XTDB that manages the long-term, durable storage of data. e.g. S3, Google Cloud Storage, Azure Blob Storage.
 | operator               | A relational algebra operator (or some extension thereof). The simplest example is a join.
 | page                   | A group of (ideally ~1024) rows. Where possible, we process rows in page batches to amortize the overhead of parsing data, setting up copiers, etc.
 | transaction            | Referring to an atomic sequence of operations (put, delete etc...) to be performed on the db. Or alternatively a SQL transaction string.
 | watermark              | Holds the resources of the system at a particular point in time.
-|===========================================================================================================================================================================================================================================================================================================================================================================================================================
+|===

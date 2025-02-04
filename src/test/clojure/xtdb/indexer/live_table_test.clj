@@ -67,7 +67,7 @@
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
 
-            (.finishChunk live-table 0 n)
+            (.finishBlock live-table 0 n)
 
             (tu/with-allocator
               #(tj/check-json
@@ -107,7 +107,7 @@
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
 
-            (.finishChunk live-table 0 n)
+            (.finishBlock live-table 0 n)
 
             (tu/with-allocator
               #(tj/check-json
@@ -150,7 +150,7 @@
         (with-open [live-table-wm (.openWatermark live-table)]
           (let [live-table-before (live-table-wm->data live-table-wm)]
 
-            (.finishChunk live-table 0 (.getChunkRowCount rc))
+            (.finishBlock live-table 0 (.getBlockRowCount rc))
             (.close live-table)
 
             (let [live-table-after (live-table-wm->data live-table-wm)]
@@ -197,7 +197,7 @@
               (let [live-index-wm (.getLiveIndex wm)
                     live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 
-                (.finishChunk live-index)
+                (.finishBlock live-index)
 
                 (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table-name))]
 

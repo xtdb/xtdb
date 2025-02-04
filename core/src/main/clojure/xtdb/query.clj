@@ -111,8 +111,8 @@
                                     (with-open [wm (.openWatermark wm-src)]
                                       (.scanFields scan-emitter wm scan-cols)))
                      :default-tz default-tz
-                     :last-known-chunk (when metadata-mgr
-                                         (.lastEntry (.chunksMetadata metadata-mgr)))
+                     :last-known-block (when metadata-mgr
+                                         (.lastEntry (.blocksMetadata metadata-mgr)))
                      :param-fields param-fields}
                     (reify Function
                       (apply [_ emit-opts]

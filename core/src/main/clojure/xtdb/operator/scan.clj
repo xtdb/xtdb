@@ -433,7 +433,7 @@
                                        :when (not (types/temporal-column? col-name))]
                                    select))
 
-              row-count (->> (for [{:keys [tables]} (vals (.chunksMetadata metadata-mgr))
+              row-count (->> (for [{:keys [tables]} (vals (.blocksMetadata metadata-mgr))
                                    :let [{:keys [row-count]} (get tables table-name)]
                                    :when row-count]
                                row-count)

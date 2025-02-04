@@ -7,7 +7,7 @@ When evaluating indexing strategies, we consider a matrix of query categories fo
 
 Given that we store the entire history of every table, we need to be able to rule out large proportions of that history quickly to achieve low-latency queries.
 This means that data on disk needs to be grouped in a way where a small amount of metadata about a group can be used to rule it out.
-Metadata, as a heuristic, has competing concerns: for correctness, it must err on the side of being pessimistic - if we cannot entirely rule a chunk/page out then we have to read it fully - but, for performance, should rule out as much as possible.
+Metadata, as a heuristic, has competing concerns: for correctness, it must err on the side of being pessimistic - if we cannot entirely rule a block/page out then we have to read it fully - but, for performance, should rule out as much as possible.
 
 == Query categories
 

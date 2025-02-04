@@ -62,7 +62,7 @@ class KafkaLogTest {
                     val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
                     log.appendMessage(Message.Tx(txPayload)).await()
 
-                    log.appendMessage(Message.FlushChunk(12)).await()
+                    log.appendMessage(Message.FlushBlock(12)).await()
 
                     log.appendMessage(Message.TriesAdded(addedTries)).await()
 
@@ -80,8 +80,8 @@ class KafkaLogTest {
         }
 
         allMsgs[1].message.let {
-            check(it is Message.FlushChunk)
-            assertEquals(12, it.expectedChunkTxId)
+            check(it is Message.FlushBlock)
+            assertEquals(12, it.expectedBlockTxId)
         }
 
         allMsgs[2].message.let {

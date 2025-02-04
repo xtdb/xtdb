@@ -6,13 +6,13 @@ option java_multiple_files = true;
 
 message LogMessage {
     oneof message {
-        FlushChunk flush_chunk = 1;
+        FlushBlock flush_block = 1;
         TriesAdded tries_added = 2;
     }
 }
 
-message FlushChunk {
-    int64 expected_chunk_tx_id = 1;
+message FlushBlock {
+    int64 expected_block_tx_id = 1;
 }
 
 message TriesAdded {

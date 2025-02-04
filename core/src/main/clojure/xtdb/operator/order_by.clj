@@ -38,7 +38,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:dynamic *chunk-size* (int 102400))
+(def ^:dynamic *block-size* (int 102400))
 
 (defn- ->file [tmp-dir batch-idx file-idx]
   (io/file tmp-dir (format "temp-sort-%d-%d.arrow" batch-idx file-idx)))
@@ -79,7 +79,7 @@
          file-idx 1]
     (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
                         (let [pos (.writerPosition rel-writer)]
-                          (while (and (<= (.getPosition pos) ^int *chunk-size*)
+                          (while (and (<= (.getPosition pos) ^int *block-size*)
                                       (.tryAdvance in-cursor
                                                    (reify Consumer
                                                      (accept [_ src-rel]
@@ -172,8 +172,8 @@
                     (when (load-next-rel i)
                       (.add pq i)))
 
-                  ;; spill next chunk
-                  (when (< ^int *chunk-size* (.getRowCount out-rel))
+                  ;; spill next block
+                  (when (< ^int *block-size* (.getRowCount out-rel))
                     (.writePage out-unl)
                     (.clear out-rel)))))
 
@@ -231,13 +231,13 @@
           (with-open [rel-writer (RelationWriter. allocator (for [^Field field static-fields]
                                                               (vw/->writer (.createVector field allocator))))]
             (let [pos (.writerPosition rel-writer)]
-              (while (and (<= (.getPosition pos) ^int *chunk-size*)
+              (while (and (<= (.getPosition pos) ^int *block-size*)
                           (.tryAdvance in-cursor
                                        (reify Consumer
                                          (accept [_ src-rel]
                                            (vw/append-rel rel-writer src-rel))))))
               (let [read-rel (vw/rel-wtr->rdr rel-writer)]
-                (if (<= (.getPosition pos) ^int *chunk-size*)
+                (if (<= (.getPosition pos) ^int *block-size*)
                   ;; in memory case
                   (if (zero? (.getPosition pos))
                     (do (set! (.consumed? this) true)

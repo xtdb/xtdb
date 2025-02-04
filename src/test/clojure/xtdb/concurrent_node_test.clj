@@ -29,7 +29,7 @@
                       (map #(do [:put-docs :docs %]))
                       (partition-all 1024))]
         (xt/submit-tx node tx))
-      (tu/finish-chunk! node))))
+      (tu/finish-block! node))))
 
 (comment
   (util/delete-dir (.toPath node-dir))
