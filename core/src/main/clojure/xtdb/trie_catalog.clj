@@ -16,7 +16,7 @@
 
 (def ^:const branch-factor 4)
 
-(def ^:dynamic *l1-row-count-limit* (* 100 1024))
+(def ^:dynamic *l1-size-limit* (* 100 1024 1024))
 
 (defn ->added-trie
   [table-name, trie-key, ^long data-file-size]
@@ -62,12 +62,12 @@
     1 (superseded-l1-trie? table-tries trie)
     (superseded-ln-trie table-tries trie)))
 
-(defn- supersede-partial-l1-tries [l1-tries {:keys [block-idx]} {:keys [l1-row-count-limit]}]
+(defn- supersede-partial-l1-tries [l1-tries {:keys [block-idx]} {:keys [l1-size-limit]}]
   (->> l1-tries
-       (map (fn [{l1-block-idx :block-idx, l1-rows :rows, l1-state :state, :as l1-trie}]
+       (map (fn [{l1-block-idx :block-idx, l1-size :data-file-size, l1-state :state, :as l1-trie}]
               (cond-> l1-trie
                 (and (= l1-state :live)
-                     (< l1-rows l1-row-count-limit)
+                     (< l1-size l1-size-limit)
                      (>= block-idx l1-block-idx))
                 (assoc :state :garbage))))))
 
@@ -161,7 +161,7 @@
        (into [] (comp (mapcat val)
                       (filter #(= (:state %) :live))))))
 
-(defrecord TrieCatalog [^Map !table-tries, ^long l1-row-count-limit]
+(defrecord TrieCatalog [^Map !table-tries, ^long l1-size-limit]
   xtdb.trie.TrieCatalog
   (addTrie [this added-trie]
     (.compute !table-tries (.getTableName added-trie)
@@ -180,7 +180,7 @@
 
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
   (let [!table-tries (ConcurrentHashMap.)
-        trie-cat (->TrieCatalog !table-tries *l1-row-count-limit*)]
+        trie-cat (->TrieCatalog !table-tries *l1-size-limit*)]
 
     (doseq [table-name (.allTableNames metadata-mgr)]
       (.put !table-tries table-name

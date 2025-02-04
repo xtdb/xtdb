@@ -681,7 +681,7 @@
 
 (deftest test-recency-filtering
   (binding [c/*page-size* 1
-            cat/*l1-row-count-limit* 256
+            cat/*l1-size-limit* (* 16 1024)
             c/*ignore-signal-block?* true]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
       ;; 2020 - 2025
@@ -737,7 +737,7 @@
 
 (deftest test-range-query-earlier-filtering
   (binding [c/*page-size* 1
-            cat/*l1-row-count-limit* 256
+            cat/*l1-size-limit* (* 16 1024)
             c/*ignore-signal-block?* true]
     (let [insts (tu/->instants :year)]
       (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock insts)}]}))]

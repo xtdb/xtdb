@@ -25,8 +25,8 @@
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-compaction-jobs
-  (letfn [(f [tries & {:keys [l1-row-count-limit]}]
-            (let [opts {:l1-row-count-limit (or l1-row-count-limit 16)}]
+  (letfn [(f [tries & {:keys [l1-size-limit]}]
+            (let [opts {:l1-size-limit (or l1-size-limit 16)}]
               (-> tries
                   (->> (transduce (map cat-test/->added-trie)
                                   (partial cat/apply-trie-notification opts)))
@@ -40,13 +40,13 @@
     (t/testing "l0 -> l1"
       (t/is (= #{} (f [])))
 
-      (t/is (= #{{:trie-keys ["l00-b00-rsa" "l00-b01-rsa"],
-                  :out-trie-key "l01-b01-rs14"}}
+      (t/is (= #{{:trie-keys ["l00-b00" "l00-b01"],
+                  :out-trie-key "l01-b01"}}
                (f [[0 0 10] [0 1 10] [0 2 10]]))
             "no L1s yet, merge L0s up to limit and stop")
 
-      (t/is (= #{{:trie-keys ["l01-b00-rsa" "l00-b01-rsa"],
-                  :out-trie-key "l01-b01-rs14"}}
+      (t/is (= #{{:trie-keys ["l01-b00" "l00-b01"],
+                  :out-trie-key "l01-b01"}}
                (f [[0 0 10] [0 1 10] [0 2 10]
                    [1 0 10]]))
             "have a partial L1, merge into that until it's full")
@@ -55,14 +55,14 @@
                         [1 1 20]]))
             "all merged, nothing to do")
 
-      (t/is (= #{{:trie-keys ["l00-b02-rsa" "l00-b03-rsa"],
-                  :out-trie-key "l01-b03-rs14"}}
+      (t/is (= #{{:trie-keys ["l00-b02" "l00-b03"],
+                  :out-trie-key "l01-b03"}}
                (f [[0 0 10] [0 1 10] [0 2 10] [0 3 10] [0 4 10]
                    [1 1 20]]))
             "have a full L1, start a new L1 til that's full")
 
-      (t/is (= #{{:trie-keys ["l01-b02-rsa" "l00-b03-rsa"],
-                  :out-trie-key "l01-b03-rs14"}}
+      (t/is (= #{{:trie-keys ["l01-b02" "l00-b03"],
+                  :out-trie-key "l01-b03"}}
                (f [[0 0 10] [0 1 10] [0 2 10] [0 3 10] [0 4 10]
                    [1 1 20] [1 2 10]]))
             "have a full and a partial L1, merge into that til it's full")
@@ -72,7 +72,7 @@
             "all merged, nothing to do"))
 
     (t/testing "l1 -> l2"
-      (t/is (= (let [l1-trie-keys ["l01-b01-rs14" "l01-b03-rs14" "l01-b05-rs14" "l01-b07-rs14"]]
+      (t/is (= (let [l1-trie-keys ["l01-b01" "l01-b03" "l01-b05" "l01-b07"]]
                  #{{:trie-keys l1-trie-keys, :part [0], :out-trie-key "l02-p0-b07"}
                    {:trie-keys l1-trie-keys, :part [1], :out-trie-key "l02-p1-b07"}
                    {:trie-keys l1-trie-keys, :part [2], :out-trie-key "l02-p2-b07"}
@@ -81,7 +81,7 @@
 
             "empty L2 and superseded L1 files get ignored")
 
-      (t/is (= #{{:trie-keys ["l01-b01-rs14" "l01-b03-rs14" "l01-b05-rs14" "l01-b07-rs14"],
+      (t/is (= #{{:trie-keys ["l01-b01" "l01-b03" "l01-b05" "l01-b07"],
                   :part [1],
                   :out-trie-key "l02-p1-b07"}}
                (f [[2 [0] 7] [2 [2] 7] [2 [3] 7]
@@ -98,18 +98,18 @@
                   :part [0 1], :out-trie-key "l03-p01-b0f"}
 
                  ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
-                 {:trie-keys ["l01-b110-rs2" "l01-b111-rs2" "l01-b112-rs2" "l01-b113-rs2"],
+                 {:trie-keys ["l01-b110" "l01-b111" "l01-b112" "l01-b113"],
                   :part [0], :out-trie-key "l02-p0-b113"}
 
                  ;; L2 [1] has nothing, choose the first four
-                 {:trie-keys ["l01-b00-rs2" "l01-b01-rs2" "l01-b02-rs2" "l01-b03-rs2"],
+                 {:trie-keys ["l01-b00" "l01-b01" "l01-b02" "l01-b03"],
                   :part [1], :out-trie-key "l02-p1-b03"}
 
                  ;; fill in the gaps in [2] and [3]
-                 {:trie-keys ["l01-b0c-rs2" "l01-b0d-rs2" "l01-b0e-rs2" "l01-b0f-rs2"],
+                 {:trie-keys ["l01-b0c" "l01-b0d" "l01-b0e" "l01-b0f"],
                   :part [2], :out-trie-key "l02-p2-b0f"}
 
-                 {:trie-keys ["l01-b08-rs2" "l01-b09-rs2" "l01-b0a-rs2" "l01-b0b-rs2"],
+                 {:trie-keys ["l01-b08" "l01-b09" "l01-b0a" "l01-b0b"],
                   :part [3], :out-trie-key "l02-p3-b0b"}}
 
                (f [[3 [0 2] 0xf]
@@ -126,7 +126,7 @@
                    ;; superseded ones
                    [1 0 1] [1 2 1] [1 9 1] [1 0xd 1]]
 
-                  {:l1-row-count-limit 2}))
+                  {:l1-size-limit 2}))
             "up to L3")
 
       (t/is (= (let [l2-keys ["l03-p03-b0f" "l03-p03-b11f" "l03-p03-b12f" "l03-p03-b13f"]]
@@ -253,7 +253,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32
-              cat/*l1-row-count-limit* 256
+              cat/*l1-size-limit* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
@@ -272,14 +272,12 @@
           (tu/then-await-tx node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
-          #_
           (t/is (= (range 100) (q)))
 
           (submit! (range 100 200))
           (tu/then-await-tx node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
-          #_
           (t/is (= (range 200) (q)))
 
           (submit! (range 200 500))
@@ -296,7 +294,8 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-row-count-limit* 32]
+              cat/*l1-size-limit* (* 16 1024)
+              c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
                   (last (for [batch (partition-all 6 xs)]
@@ -336,7 +335,8 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-row-count-limit* 32]
+              cat/*l1-size-limit* (* 16 1024)
+              c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
               ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
@@ -367,7 +367,8 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-row-count-limit* 32]
+              cat/*l1-size-limit* (* 16 1024)
+              c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
@@ -404,7 +405,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-row-count-limit* 32
+              cat/*l1-size-limit* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (dotimes [n 100]
@@ -419,7 +420,8 @@
 
 (t/deftest losing-data-when-compacting-3459
   (binding [c/*page-size* 8
-            cat/*l1-row-count-limit* 32]
+            cat/*l1-size-limit* (* 16 1024)
+            c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/compactor/lose-data-on-compaction")]
       (util/delete-dir node-dir)
 

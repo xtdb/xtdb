@@ -18,13 +18,10 @@
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
            (xtdb.util TemporalBounds)))
 
-(defn ->l0-l1-trie-key [^long level, ^long block-idx, ^long row-count]
+(defn ->l0-l1-trie-key [^long level, ^long block-idx]
   (assert (<= 0 level 1))
 
-  (format "l%s-b%s-rs%s"
-          (util/->lex-hex-string level)
-          (util/->lex-hex-string block-idx)
-          (Long/toString row-count 16)))
+  (format "l%s-b%s" (util/->lex-hex-string level) (util/->lex-hex-string block-idx)))
 
 (defn ->l2+-trie-key [^long level, ^bytes part, ^long block-idx]
   (assert (>= level 2))
@@ -204,15 +201,14 @@
 
 (def ^:private trie-file-path-regex
   ;; e.g. `l01-b00-rs20.arrow` or `l04-p0010-b12e.arrow`
-  #"(l(\p{XDigit}+)(?:-p(\p{XDigit}+))?(?:-b(\p{XDigit}+))(?:-rs(\p{XDigit}+))?)(\.arrow)?$")
+  #"(l(\p{XDigit}+)(?:-p(\p{XDigit}+))?(?:-b(\p{XDigit}+)))(\.arrow)?$")
 
 (defn parse-trie-key [trie-key]
-  (when-let [[_ trie-key level-str part-str block-idx-str rows-str] (re-find trie-file-path-regex trie-key)]
+  (when-let [[_ trie-key level-str part-str block-idx-str] (re-find trie-file-path-regex trie-key)]
     (cond-> {:trie-key trie-key
              :level (util/<-lex-hex-string level-str)
              :block-idx  (util/<-lex-hex-string block-idx-str)}
-      part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str)))
-      rows-str (assoc :rows (Long/parseLong rows-str 16)))))
+      part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str))))))
 
 (defn parse-trie-file-path [^Path file-path]
   (-> (parse-trie-key (str (.getFileName file-path)))
@@ -281,7 +277,6 @@
                  (recur more-pages))))
            (vec leaves)))))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDataRel
   (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
   (^xtdb.arrow.RelationReader loadPage [trie-leaf]))
