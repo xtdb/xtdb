@@ -144,7 +144,7 @@
     (.syncRowCount live-rel)
     (let [row-count (.getPosition (.writerPosition live-rel))]
       (when (pos? row-count)
-        (let [trie-key (trie/->l0-l1-trie-key 0 block-idx row-count)]
+        (let [trie-key (trie/->l0-l1-trie-key 0 block-idx)]
           (with-open [data-rel (.openAsRelation live-rel)]
             (let [data-file-size (trie/write-live-trie! allocator buffer-pool table-name trie-key
                                                         live-trie data-rel)]

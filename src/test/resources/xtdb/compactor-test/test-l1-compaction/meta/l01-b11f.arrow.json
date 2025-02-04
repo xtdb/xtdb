@@ -1,0 +1,322 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "nodes",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "nil",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "branch-iid",
+        "nullable" : false,
+        "type" : {
+          "name" : "list"
+        },
+        "children" : [{
+          "name" : "union",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 32,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "branch-recency",
+        "nullable" : false,
+        "type" : {
+          "name" : "map",
+          "keysSorted" : true
+        },
+        "children" : [{
+          "name" : "recency-el",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "recency",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "idx",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 32,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
+        }]
+      },{
+        "name" : "leaf",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "data-page-idx",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 32,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "columns",
+          "nullable" : false,
+          "type" : {
+            "name" : "list"
+          },
+          "children" : [{
+            "name" : "struct",
+            "nullable" : false,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "col-name",
+              "nullable" : false,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            },{
+              "name" : "root-col?",
+              "nullable" : false,
+              "type" : {
+                "name" : "bool"
+              },
+              "children" : [ ]
+            },{
+              "name" : "count",
+              "nullable" : false,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            },{
+              "name" : "types",
+              "nullable" : false,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "timestamp-tz-micro-utc",
+                "nullable" : true,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "fixed-size-binary",
+                "nullable" : true,
+                "type" : {
+                  "name" : "bool"
+                },
+                "children" : [ ]
+              },{
+                "name" : "i64",
+                "nullable" : true,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                }]
+              }]
+            },{
+              "name" : "bloom",
+              "nullable" : true,
+              "type" : {
+                "name" : "binary"
+              },
+              "children" : [ ]
+            }]
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "nodes",
+      "count" : 1,
+      "TYPE_ID" : [3],
+      "OFFSET" : [0],
+      "children" : [{
+        "name" : "nil",
+        "count" : 0
+      },{
+        "name" : "branch-iid",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "union",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        }]
+      },{
+        "name" : "branch-recency",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "recency-el",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "recency",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "idx",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        }]
+      },{
+        "name" : "leaf",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "children" : [{
+          "name" : "data-page-idx",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [0]
+        },{
+          "name" : "columns",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,5],
+          "children" : [{
+            "name" : "struct",
+            "count" : 5,
+            "VALIDITY" : [1,1,1,1,1],
+            "children" : [{
+              "name" : "col-name",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "OFFSET" : [0,12,23,32,36,39],
+              "DATA" : ["_system_from","_valid_from","_valid_to","_iid","_id"]
+            },{
+              "name" : "root-col?",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : [1,1,1,1,1]
+            },{
+              "name" : "count",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : ["28","28","28","28","28"]
+            },{
+              "name" : "types",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "children" : [{
+                "name" : "timestamp-tz-micro-utc",
+                "count" : 5,
+                "VALIDITY" : [1,1,1,0,0],
+                "children" : [{
+                  "name" : "min",
+                  "count" : 5,
+                  "VALIDITY" : [1,1,1,0,0],
+                  "DATA" : [1583020800000000,1583020800000000,9223372036854775807,0,0]
+                },{
+                  "name" : "max",
+                  "count" : 5,
+                  "VALIDITY" : [1,1,1,0,0],
+                  "DATA" : [1583280000000000,1583280000000000,9223372036854775807,0,0]
+                }]
+              },{
+                "name" : "fixed-size-binary",
+                "count" : 5,
+                "VALIDITY" : [0,0,0,1,0],
+                "DATA" : [0,0,0,1,0]
+              },{
+                "name" : "i64",
+                "count" : 5,
+                "VALIDITY" : [0,0,0,0,1],
+                "children" : [{
+                  "name" : "min",
+                  "count" : 5,
+                  "VALIDITY" : [0,0,0,0,1],
+                  "DATA" : ["0","0","0","0","472"]
+                },{
+                  "name" : "max",
+                  "count" : 5,
+                  "VALIDITY" : [0,0,0,0,1],
+                  "DATA" : ["0","0","0","0","499"]
+                }]
+              }]
+            },{
+              "name" : "bloom",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "OFFSET" : [0,88,176,214,518,822],
+              "DATA" : ["3a300000070000000300010004000100070000000a0001000b0002000e0000000f0000004000000044000000480000004a0000004e0000005400000056000000663bd3af77438c675fc16c4d9466a7342542ebd25a207c5a","3a300000070000000300010004000100070000000a0001000b0002000e0000000f0000004000000044000000480000004a0000004e0000005400000056000000663bd3af77438c675fc16c4d9466a7342542ebd25a207c5a","3a3000000300000002000000070000000d0000002000000022000000240000002338d440722f","3a30000010000000000005000100060002000300030006000400050005000500060005000700030008000400090006000a0006000b0003000c0004000d0001000e0006000f0000008800000094000000a2000000aa000000b8000000c4000000d0000000dc000000e4000000ee000000fc0000000a010000120100001c010000200100002e010000892eab3b5b42c65015b3f8b7691fd8275a4dda86c19506a375d44905f4051954b0ba2a43bf4f6362d0c479cc7ef203fc840d0955eca890b244c180caff2e44460475ed7f5e9c1dbb8e3595351b890a9ab3e33eed4fa3f9a600b31ac2bf02672aa64787927bd1f02d5d407a89a589b0becfd679deee377a89e0a82eab62e6e3e8d3f4e25d6e862ba69bc25f3f227c32a2d9f914fd3340d1b2613bb7476b86efb247c105e572ec69d0","3a30000010000000000004000100070002000100030003000400060005000600060002000700050008000700090003000a0000000b0002000c0005000d0001000e000a000f0006008800000092000000a2000000a6000000ae000000bc000000ca000000d0000000dc000000ec000000f4000000f6000000fc000000080100000c0100002201000081027015b865f38042f3b932ee43824edf802fb423b817bcd5fddd1c1c53c6239983f6b2a0ba2625323682631f65d3be06d34fdef01c0f269839e03bad65aec561f8440a811d2933d958997adb7e08a006aeb8cdee311537765153565a56fc561c7aeeea3605251ab652a6ba2c107d015c9409a5da4cb35410a32ce40be7e1ff2f0297c1570d7e14ba391a4e405c168d8fa433b7b3c976e8e6ef5719d52b4b47196443893cc986f2"]
+            }]
+          }]
+        }]
+      }]
+    }]
+  }]
+}

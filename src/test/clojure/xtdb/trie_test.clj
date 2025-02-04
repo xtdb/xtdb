@@ -30,9 +30,9 @@
   (letfn [(parse [trie-key]
             (-> (trie/parse-trie-file-path (util/->path (str trie-key ".arrow")))
                 (update :part #(some-> % vec))
-                (mapv [:level :part :block-idx :rows])))]
-    (t/is (= [0 nil 4 32] (parse (trie/->l0-l1-trie-key 0 4 32))))
-    (t/is (= [2 [0 0 1 3] 120 nil] (parse (trie/->l2+-trie-key 2 (byte-array [0 0 1 3]) 120))))))
+                (mapv [:level :part :block-idx])))]
+    (t/is (= [0 nil 4] (parse (trie/->l0-l1-trie-key 0 4))))
+    (t/is (= [6 [0 0 1 3] 120] (parse (trie/->l2+-trie-key 6 (byte-array [0 0 1 3]) 120))))))
 
 (defn- ->arrow-hash-trie [^Relation meta-rel]
   (ArrowHashTrie. (.get meta-rel "nodes")))
