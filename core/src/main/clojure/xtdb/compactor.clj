@@ -134,21 +134,21 @@
                              (-> (trie/->Segment trie) (assoc :data-rel data-rel)))
                            table-metadatas
                            data-rels)
-            schema (->log-data-rel-schema (map :data-rel segments))]
+            schema (->log-data-rel-schema (map :data-rel segments))
 
-        (util/with-open [data-rel (Relation. allocator schema)
-                         recency-wtr (open-recency-wtr allocator)]
-          (merge-segments-into data-rel recency-wtr segments part)
+            file-size (util/with-open [data-rel (Relation. allocator schema)
+                                       recency-wtr (open-recency-wtr allocator)]
+                        (merge-segments-into data-rel recency-wtr segments part)
 
-          (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
-                                                           schema table-name out-trie-key
-                                                           true)]
+                        (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
+                                                                         schema table-name out-trie-key
+                                                                         true)]
 
-            (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))))
+                          (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))]
 
-    (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
+        (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
 
-    (cat/->added-trie table-name out-trie-key -1)
+        (cat/->added-trie table-name out-trie-key file-size)))
 
     (catch ClosedByInterruptException _ (throw (InterruptedException.)))
     (catch InterruptedException e (throw e))
@@ -162,28 +162,28 @@
   (getTableName [_] table-name)
   (getOutputTrieKey [_] out-trie-key))
 
-(defn- l0->l1-compaction-job [table-name trie-state {:keys [l1-row-count-limit]}]
+(defn- l0->l1-compaction-job [table-name trie-state {:keys [^long l1-size-limit]}]
   (when-let [live-l0 (seq (->> (get trie-state [0 []])
                                (take-while #(= :live (:state %)))))]
     (let [latest-l1 (->> (get trie-state [1 []])
-                         (take-while #(< (:rows %) l1-row-count-limit))
+                         (take-while #(< (:data-file-size %) l1-size-limit))
                          first)]
-      (loop [rows (:rows latest-l1 0)
-             [{^long l0-rows :rows, :as l0-file} & more-l0s] (reverse live-l0)
+      (loop [size (:data-file-size latest-l1 0)
+             [{^long l0-size :data-file-size, :as l0-file} & more-l0s] (reverse live-l0)
              res (cond-> [] latest-l1 (conj latest-l1))]
-        (if (and l0-file (< rows l1-row-count-limit))
-          (recur (+ rows l0-rows) more-l0s (conj res l0-file))
+        (if (and l0-file (< size l1-size-limit))
+          (recur (+ size l0-size) more-l0s (conj res l0-file))
 
           (let [{:keys [block-idx]} (last res)]
             (->Job table-name (mapv :trie-key res) nil
-                   (trie/->l0-l1-trie-key 1 block-idx rows))))))))
+                   (trie/->l0-l1-trie-key 1 block-idx))))))))
 
-(defn- l1p-compaction-jobs [table-name trie-state {:keys [l1-row-count-limit]}]
+(defn- l1p-compaction-jobs [table-name trie-state {:keys [^long l1-size-limit]}]
   (for [[[level part] files] trie-state
         :when (> level 0)
         :let [live-files (-> files
                              (->> (remove #(= :garbage (:state %))))
-                             (cond->> (= level 1) (filter #(>= (:rows %) l1-row-count-limit))))]
+                             (cond->> (= level 1) (filter #(>= (:data-file-size %) l1-size-limit))))]
         :when (>= (count live-files) cat/branch-factor)
         :let [live-files (reverse live-files)]
 
@@ -246,7 +246,6 @@
 (defn signal-block! [^Compactor compactor]
   (.signalBlock compactor))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn compact-all!
   ([node] (compact-all! node nil))
   ([node timeout] (.compactAll ^Compactor (util/component node :xtdb/compactor) timeout)))
