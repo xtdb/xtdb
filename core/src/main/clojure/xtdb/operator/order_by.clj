@@ -136,8 +136,8 @@
             (aset copiers i (.rowCopier out-rel ^Relation (nth rels i))))
 
           (letfn [(load-next-rel [i]
-                    (when (.loadNextBatch ^Relation$Loader (nth loaders i)
-                                          ^Relation (nth rels i))
+                    (when (.loadNextPage ^Relation$Loader (nth loaders i)
+                                         ^Relation (nth rels i))
                       (aset positions i 0)
                       true))]
             (let [cmps (HashMap.)
@@ -174,12 +174,12 @@
 
                   ;; spill next chunk
                   (when (< ^int *chunk-size* (.getRowCount out-rel))
-                    (.writeBatch out-unl)
+                    (.writePage out-unl)
                     (.clear out-rel)))))
 
             ;; spill remaining rows
             (when (pos? (.getRowCount out-rel))
-              (.writeBatch out-unl))
+              (.writePage out-unl))
             (.end out-unl)
             out-file))))))
 

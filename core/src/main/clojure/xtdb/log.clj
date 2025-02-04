@@ -64,8 +64,8 @@
 
           (.writeBytes args-writer
                        (util/build-arrow-ipc-byte-buffer (VectorSchemaRoot. ^Iterable (seq (.getVector args-wtr))) :stream
-                         (fn [write-batch!]
-                           (write-batch!))))))
+                         (fn [write-page!]
+                           (write-page!))))))
 
       (.endStruct xtql-writer))))
 
@@ -95,8 +95,8 @@
 
         (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count arg-rows)))]
           (util/build-arrow-ipc-byte-buffer root :stream
-                                            (fn [write-batch!]
-                                              (write-batch!))))
+                                            (fn [write-page!]
+                                              (write-page!))))
 
         (finally
           (run! util/try-close vecs))))))

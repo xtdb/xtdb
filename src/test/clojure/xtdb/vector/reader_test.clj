@@ -12,7 +12,7 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(deftest dynamic-relation-copier-test-different-blocks
+(deftest dynamic-relation-copier-test-different-pages
   (t/testing "copying rows from different simple col-types from different relations"
     (util/with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                      rel-wtr2 (vw/->rel-writer tu/*allocator*)

@@ -153,7 +153,7 @@ Decorrelation rules attempt to replace this N+1 query plan with a query plan tha
 4. *The optimised query plan is executed*
 +
 --
-Execution of a query plan is a pull-based pipeline of relational operators - the outermost operator pulling batches of rows (all in Arrow format) from its input relations, all the way down to the source operators.
+Execution of a query plan is a pull-based pipeline of relational operators - the outermost operator pulling pages of rows (all in Arrow format) from its input relations, all the way down to the source operators.
 
 Because the query plan forms an https://en.wikipedia.org/wiki/Abstract_algebra[algebra^], each of the operators can be reasoned about relatively independently.
 

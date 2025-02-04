@@ -104,7 +104,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         val nodes = mutableListOf<ArrowFieldNode>()
         val buffers = mutableListOf<ArrowBuf>()
 
-        vectors.values.forEach { it.unloadBatch(nodes, buffers) }
+        vectors.values.forEach { it.unloadPage(nodes, buffers) }
 
         return ArrowRecordBatch(rowCount, nodes, buffers)
     }
@@ -120,7 +120,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     inner class RelationUnloader(private val ch: WriteChannel, private val mode: UnloadMode) : AutoCloseable {
 
         private val schema = Schema(this@Relation.vectors.values.map { it.field })
-        private val recordBlocks = mutableListOf<ArrowBlock>()
+        private val arrowBlocks = mutableListOf<ArrowBlock>()
 
         init {
             try {
@@ -131,11 +131,11 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             }
         }
 
-        fun writeBatch() {
+        fun writePage() {
             try {
                 openArrowRecordBatch().use { recordBatch ->
                     MessageSerializer.serialize(ch, recordBatch)
-                        .also { recordBlocks.add(it) }
+                        .also { arrowBlocks.add(it) }
                 }
             } catch (_: ClosedByInterruptException) {
                 throw InterruptedException()
@@ -143,7 +143,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         }
 
         fun end() {
-            mode.end(ch, schema, recordBlocks)
+            mode.end(ch, schema, arrowBlocks)
         }
 
         override fun close() {
@@ -159,7 +159,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         get() {
             val baos = ByteArrayOutputStream()
             startUnload(Channels.newChannel(baos), STREAM).use { unl ->
-                unl.writeBatch()
+                unl.writePage()
             }
 
             return ByteBuffer.wrap(baos.toByteArray())
@@ -168,7 +168,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     private fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
         val buffers = recordBatch.buffers.toMutableList()
-        vectors.values.forEach { it.loadBatch(nodes, buffers) }
+        vectors.values.forEach { it.loadPage(nodes, buffers) }
 
         require(nodes.isEmpty()) { "Unconsumed nodes: $nodes" }
         require(buffers.isEmpty()) { "Unconsumed buffers: $buffers" }
@@ -177,27 +177,27 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     }
 
     sealed class Loader : AutoCloseable {
-        protected interface Batch {
+        protected interface Page {
             fun load(rel: Relation)
         }
 
         abstract val schema: Schema
-        protected abstract val batches: List<Batch>
-        val batchCount get() = batches.size
+        protected abstract val pages: List<Page>
+        val pageCount get() = pages.size
 
-        private var lastBatchIdx = -1
+        private var lastPageIndex = -1
 
-        fun loadBatch(idx: Int, al: BufferAllocator) = Relation(al, schema).also { loadBatch(idx, it) }
+        fun loadPage(idx: Int, al: BufferAllocator) = Relation(al, schema).also { loadPage(idx, it) }
 
-        fun loadBatch(idx: Int, rel: Relation) {
-            batches[idx].load(rel)
-            lastBatchIdx = idx
+        fun loadPage(idx: Int, rel: Relation) {
+            pages[idx].load(rel)
+            lastPageIndex = idx
         }
 
-        fun loadNextBatch(rel: Relation): Boolean {
-            if (lastBatchIdx + 1 >= batchCount) return false
+        fun loadNextPage(rel: Relation): Boolean {
+            if (lastPageIndex + 1 >= pageCount) return false
 
-            loadBatch(++lastBatchIdx, rel)
+            loadPage(++lastPageIndex, rel)
             return true
         }
     }
@@ -207,19 +207,19 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         private val ch: SeekableReadChannel,
         footer: ArrowFooter
     ) : Loader() {
-        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
+        inner class Page(private val idx: Int, private val arrowBlock: ArrowBlock) : Loader.Page {
             override fun load(rel: Relation) {
-                ch.setPosition(block.offset)
+                ch.setPosition(arrowBlock.offset)
 
-                (MessageSerializer.deserializeRecordBatch(ch, block, al)
-                    ?: error("Failed to deserialize record batch $idx, offset ${block.offset}"))
+                (MessageSerializer.deserializeRecordBatch(ch, arrowBlock, al)
+                    ?: error("Failed to deserialize record batch $idx, offset ${arrowBlock.offset}"))
 
-                    .use { batch -> rel.load(batch) }
+                    .use { rel.load(it) }
             }
         }
 
         override val schema: Schema = footer.schema
-        override val batches = footer.recordBatches.mapIndexed(::Batch)
+        override val pages = footer.recordBatches.mapIndexed(::Page)
 
         override fun close() = ch.close()
     }
@@ -230,16 +230,16 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     ) : Loader() {
         override val schema: Schema = footer.schema
 
-        inner class Batch(private val idx: Int, private val block: ArrowBlock) : Loader.Batch {
+        inner class Page(private val idx: Int, private val arrowBlock: ArrowBlock) : Loader.Page {
 
             override fun load(rel: Relation) {
                 buf.arrowBufToRecordBatch(
-                    block.offset, block.metadataLength, block.bodyLength, "Failed to deserialize record batch $idx, offset ${block.offset}"
+                    arrowBlock.offset, arrowBlock.metadataLength, arrowBlock.bodyLength, "Failed to deserialize record batch $idx, offset ${arrowBlock.offset}"
                 ).use { rel.load(it) }
             }
         }
 
-        override val batches = footer.recordBatches.mapIndexed(::Batch)
+        override val pages = footer.recordBatches.mapIndexed(::Page)
 
         override fun close() = buf.close()
     }

@@ -144,18 +144,18 @@ class StructVector(
         }
     }
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
 
-        childWriters.sequencedValues().forEach { it.unloadBatch(nodes, buffers) }
+        childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers) }
     }
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst() ?: error("missing node")
 
         validityBuffer.loadBuffer(buffers.removeFirst() ?: error("missing validity buffer"))
-        childWriters.sequencedValues().forEach { it.loadBatch(nodes, buffers) }
+        childWriters.sequencedValues().forEach { it.loadPage(nodes, buffers) }
 
         valueCount = node.length
     }

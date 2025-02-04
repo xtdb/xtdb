@@ -43,7 +43,7 @@ abstract class BufferPoolTest {
                 fooVec.apply { writeInt(10); writeInt(42); writeInt(15) }
                 val relation = Relation(listOf(fooVec), fooVec.valueCount)
                 bp.openArrowWriter("foo".asPath, relation).use { writer ->
-                    writer.writeBatch()
+                    writer.writePage()
                     assertEquals(534, writer.end())
                 }
             }

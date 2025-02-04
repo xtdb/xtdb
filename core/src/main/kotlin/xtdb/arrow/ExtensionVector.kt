@@ -46,11 +46,11 @@ abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
 
     override fun hashCode0(idx: Int, hasher: ArrowBufHasher) = inner.hashCode0(idx, hasher)
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        inner.unloadBatch(nodes, buffers)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        inner.unloadPage(nodes, buffers)
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        inner.loadBatch(nodes, buffers)
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        inner.loadPage(nodes, buffers)
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is XtExtensionVector<*>)

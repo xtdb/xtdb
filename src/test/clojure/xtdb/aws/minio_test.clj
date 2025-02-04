@@ -108,17 +108,17 @@
 (t/deftest ^:minio multipart-put-test
   (with-open [os (object-store (random-uuid))]
     (let [prefix (:prefix os)
-          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
+          ^IMultipartUpload multipart-upload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
-          file-part-2 (os-test/generate-random-byte-buffer part-size)]
+          file-part-2 (os-test/generate-random-byte-buffer part-size)
 
-      ;; Uploading parts to multipart upload
-      @(.uploadPart multipart-upload file-part-1)
-      @(.uploadPart multipart-upload file-part-2)
+          parts [;; Uploading parts to multipart upload
+                 (.uploadPart multipart-upload file-part-1)
+                 (.uploadPart multipart-upload file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
-        @(.complete multipart-upload)
+        @(.complete multipart-upload (mapv deref parts))
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
                                                                           (.bucket bucket)

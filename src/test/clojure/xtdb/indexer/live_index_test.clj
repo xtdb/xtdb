@@ -69,7 +69,7 @@
                          trie-rel (Relation. allocator (.getSchema trie-loader))
                          leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)) allocator)]
           (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "_iid")]
-            (.loadBatch trie-loader 0 trie-rel)
+            (.loadPage trie-loader 0 trie-rel)
             (t/is (= iid-bytes
                      (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
                           (mapcat (fn [^ArrowHashTrie$Leaf leaf]

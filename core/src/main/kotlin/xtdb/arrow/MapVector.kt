@@ -92,11 +92,11 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun mapValueWriter() = elementWriter().mapValueWriter()
     override fun mapValueWriter(fieldType: FieldType) = elementWriter().mapValueWriter(fieldType)
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        listVector.unloadBatch(nodes, buffers)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.unloadPage(nodes, buffers)
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        listVector.loadBatch(nodes, buffers)
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.loadPage(nodes, buffers)
 
     override fun loadFromArrow(vec: ValueVector) = listVector.loadFromArrow(vec)
 

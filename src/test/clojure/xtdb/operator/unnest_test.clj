@@ -19,8 +19,8 @@
                      {:a 4, :b [6 7 8], :b* 7}
                      {:a 4, :b [6 7 8], :b* 8}]]}
              (tu/query-ra [:unnest '{b* b}
-                           [::tu/blocks '{a :i64, b [:list :i64]} in-vals]]
-                          {:preserve-blocks? true
+                           [::tu/pages '{a :i64, b [:list :i64]} in-vals]]
+                          {:preserve-pages? true
                            :with-col-types? true})))
 
     (t/is (= {:col-types '{a :i64, b [:list :i64], b* :i64, ordinal :i32}
@@ -33,8 +33,8 @@
                      {:a 4, :b [6 7 8], :b* 7, :ordinal 2}
                      {:a 4, :b [6 7 8], :b* 8, :ordinal 3}]]}
              (tu/query-ra [:unnest '{b* b} '{:ordinality-column ordinal}
-                           [::tu/blocks '{a :i64, b [:list :i64]} in-vals]]
-                          {:preserve-blocks? true
+                           [::tu/pages '{a :i64, b [:list :i64]} in-vals]]
+                          {:preserve-pages? true
                            :with-col-types? true
                            :key-fn :snake-case-keyword})))))
 

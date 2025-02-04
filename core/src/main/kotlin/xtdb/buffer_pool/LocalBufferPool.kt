@@ -78,17 +78,17 @@ class LocalBufferPool(
             Relation.readFooter(path.newSeekableByteChannel())
         }
 
-    override fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch {
+    override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests.increment()
         val path = diskStore.resolve(key).orThrowIfMissing(key)
 
         val footer = arrowFooterCache.get(key) { Relation.readFooter(path.newSeekableByteChannel()) }
 
-        val block = footer.recordBatches.getOrNull(blockIdx)
+        val arrowBlock = footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            PathSlice(key, block.offset, block.metadataLength + block.bodyLength)
+            PathSlice(key, arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
         ) { pathSlice ->
             memCacheMisses.increment()
             val bufferCachePath =
@@ -98,7 +98,7 @@ class LocalBufferPool(
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
-                0, block.metadataLength, block.bodyLength, "Failed opening record batch '$path' at block-idx $blockIdx"
+                0, arrowBlock.metadataLength, arrowBlock.bodyLength, "Failed opening record batch '$path' at block-idx $idx"
             )
         }
     }
@@ -135,9 +135,9 @@ class LocalBufferPool(
         return newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->
             rel.startUnload(fileChannel).closeOnCatch { unloader ->
                 object : xtdb.ArrowWriter {
-                    override fun writeBatch() {
+                    override fun writePage() {
                         try {
-                            unloader.writeBatch()
+                            unloader.writePage()
                         } catch (e: ClosedByInterruptException) {
                             throw InterruptedException()
                         }

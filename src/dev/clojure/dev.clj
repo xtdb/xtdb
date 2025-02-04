@@ -145,7 +145,7 @@
               ^StructVector struct-vec (data->struct-vec al data)]
     (let [rel (Relation. ^List (into [] (.getChildren struct-vec)) (.getValueCount struct-vec))]
       (with-open [unloader (.startUnload rel ch)]
-        (.writeBatch unloader)
+        (.writePage unloader)
         (.end unloader)))))
 
 (defn read-arrow-file [^Path path]

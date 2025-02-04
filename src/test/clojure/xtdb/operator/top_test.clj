@@ -44,14 +44,14 @@
     (t/is (nil? (top/offset+length 20 15 35 10)))))
 
 (t/deftest test-top
-  (let [blocks [[{:idx 0}, {:idx 1}]
-                [{:idx 2}, {:idx 3}]]]
+  (let [batches [[{:idx 0}, {:idx 1}]
+                 [{:idx 2}, {:idx 3}]]]
     (letfn [(top [offset length]
               (tu/query-ra [:top (->> {:skip offset, :limit length}
                                       (into {} (filter (comp some? val))))
-                            [::tu/blocks '{idx :i64} blocks]]
-                           {:preserve-blocks? true}))]
-      (t/is (= blocks (top nil nil)))
+                            [::tu/pages '{idx :i64} batches]]
+                           {:preserve-pages? true}))]
+      (t/is (= batches (top nil nil)))
 
       (t/is (= [[{:idx 0}, {:idx 1}]
                 [{:idx 2}]]
@@ -72,19 +72,19 @@
                  (top 3 nil)))))))
 
 (t/deftest test-param-3699
-  (let [blocks '[::tu/blocks {idx :i64}
-                 [[{:idx 0}, {:idx 1}]
-                  [{:idx 2}, {:idx 3}]]]]
+  (let [batches '[::tu/pages {idx :i64}
+                  [[{:idx 0}, {:idx 1}]
+                   [{:idx 2}, {:idx 3}]]]]
 
     (t/is (= [{:idx 1}, {:idx 2}]
-             (tu/query-ra [:top '{:skip ?_0, :limit ?_1} blocks]
+             (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]
                           {:args [1 2]})))
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: null"
-                            (tu/query-ra [:top '{:skip ?_0, :limit ?_1} blocks]))
+                            (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]))
           "missing args")
 
     (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: 1"
-                            (tu/query-ra [:top '{:limit ?_0} blocks]
+                            (tu/query-ra [:top '{:limit ?_0} batches]
                                          {:args ["1"]}))
           "got a string")))

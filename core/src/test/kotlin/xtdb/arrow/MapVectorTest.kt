@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
@@ -79,13 +78,13 @@ class MapVectorTest {
                 map.writeObject(m2)
                 rel.endRow()
 
-                unloader.writeBatch()
+                unloader.writePage()
                 rel.clear()
 
                 map.writeObject(m3)
                 rel.endRow()
 
-                unloader.writeBatch()
+                unloader.writePage()
                 unloader.end()
             }
         }
@@ -94,19 +93,19 @@ class MapVectorTest {
             Relation(allocator, loader.schema).use { rel ->
                 val mapVec = rel["map"]!!
 
-                assertEquals(2, loader.batchCount)
+                assertEquals(2, loader.pageCount)
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(listOf(m1, m2), mapVec.asList)
 
-                loader.loadBatch(1, rel)
+                loader.loadPage(1, rel)
 
                 assertEquals(1, rel.rowCount)
                 assertEquals(listOf(m3), mapVec.asList)
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(listOf(m1, m2), mapVec.asList)

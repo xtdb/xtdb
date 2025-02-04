@@ -6,13 +6,13 @@
 
 (deftest test-window-operator
   (letfn [(run-test
-            [window-spec projection-specs blocks]
+            [window-spec projection-specs batches]
             (let [window-name (gensym "window")]
               (-> (tu/query-ra [:window {:windows {window-name window-spec}
                                          :projections (mapv (fn [[col-name projection]]
                                                               {col-name {:window-name window-name
                                                                          :window-agg projection}}) projection-specs) }
-                                [::tu/blocks '{a :i64, b :i64} blocks]])
+                                [::tu/pages '{a :i64, b :i64} batches]])
                   set)))]
 
     (t/is (= #{} (run-test '{:partition-cols [a]

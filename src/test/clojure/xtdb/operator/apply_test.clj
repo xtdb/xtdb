@@ -7,12 +7,12 @@
 (t/deftest test-apply-operator
   (letfn [(q [mode]
             (tu/query-ra [:apply mode '{c-id ?c-id}
-                          [::tu/blocks
+                          [::tu/pages
                            [[{:c-id "c1", :c-name "Alan"}
                              {:c-id "c2", :c-name "Bob"}
                              {:c-id "c3", :c-name "Charlie"}]]]
                           [:select '(= o-customer-id ?c-id)
-                           [::tu/blocks
+                           [::tu/pages
                             [[{:o-customer-id "c1", :o-value 12.34}
                               {:o-customer-id "c1", :o-value 14.80}]
                              [{:o-customer-id "c2", :o-value 91.46}
@@ -44,11 +44,11 @@
                   {:c-id "c3", :c-name "Charlie", :match false}]
             :col-types '{c-id :utf8, c-name :utf8, match [:union #{:null :bool}]}}
            (-> (tu/query-ra [:apply '{:mark-join {match (= ?c-id o-customer-id)}} '{c-id ?c-id}
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:c-id "c1", :c-name "Alan"}
                                 {:c-id "c2", :c-name "Bob"}
                                 {:c-id "c3", :c-name "Charlie"}]]]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:o-customer-id "c1"}
                                 {:o-customer-id "c1"}
                                 {:o-customer-id "c2"}

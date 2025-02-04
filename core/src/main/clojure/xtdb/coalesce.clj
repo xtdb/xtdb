@@ -6,13 +6,13 @@
            xtdb.ICursor
            (xtdb.vector RelationReader)))
 
-;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full block to return rows.
-;; Then, we coalesce small blocks together into blocks of at least 100, to share the per-block costs.
+;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full page to return rows.
+;; Then, we coalesce small pages together into pages of at least 100, to share the per-page costs.
 
 (deftype CoalescingCursor [^ICursor cursor
                            ^BufferAllocator allocator
                            ^int pass-through
-                           ^int ideal-min-block-size
+                           ^int ideal-min-page-size
                            ^:unsynchronized-mutable ^int seen-rows]
   ICursor
   (tryAdvance [this c]
@@ -34,9 +34,9 @@
                                                         (.accept c read-rel)
                                                         (vreset! !passed-on? true))
 
-                                                      ;; this block is big enough, and we don't have rows waiting
+                                                      ;; this page is big enough, and we don't have rows waiting
                                                       ;; send it straight through, no copy.
-                                                      (and (>= row-count ideal-min-block-size)
+                                                      (and (>= row-count ideal-min-page-size)
                                                            (nil? @!rel-writer))
                                                       (do
                                                         (.accept c read-rel)
@@ -50,11 +50,11 @@
                 rows-appended @!rows-appended]
 
             (cond
-              ;; we've already passed on a block, return straight out
+              ;; we've already passed on a page, return straight out
               (true? @!passed-on?) true
 
               ;; not enough rows yet, but more in the source - go around again
-              (and advanced? (< rows-appended ideal-min-block-size)) (recur)
+              (and advanced? (< rows-appended ideal-min-page-size)) (recur)
 
               ;; we've got rows, and either the source is done or there's enough already - send them through
               (pos? rows-appended) (do
@@ -73,6 +73,6 @@
 (defn ->coalescing-cursor
   (^xtdb.ICursor [cursor allocator] (->coalescing-cursor cursor allocator {}))
 
-  (^xtdb.ICursor [cursor allocator {:keys [pass-through ideal-min-block-size]
-                                    :or {pass-through 100, ideal-min-block-size 100}}]
-   (CoalescingCursor. cursor allocator pass-through ideal-min-block-size 0)))
+  (^xtdb.ICursor [cursor allocator {:keys [pass-through ideal-min-page-size]
+                                    :or {pass-through 100, ideal-min-page-size 100}}]
+   (CoalescingCursor. cursor allocator pass-through ideal-min-page-size 0)))

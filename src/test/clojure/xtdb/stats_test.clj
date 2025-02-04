@@ -39,9 +39,9 @@
                '{:op :project,
                  :projections [[:column foo]],
                  :relation
-                 {:op :xtdb.test-util/blocks,
+                 {:op ::tu/pages
                   :stats {:row-count 5}
-                  :blocks [[{:foo 1}]]}}
+                  :pages [[{:foo 1}]]}}
                {})))))
 
 (deftest test-rename
@@ -51,7 +51,7 @@
                '{:op :rename,
                  :columns {foo bar}
                  :relation
-                 {:op :xtdb.test-util/blocks,
+                 {:op ::tu/pages,
                   :stats {:row-count 12}
-                  :blocks [[{:foo 1}]]}}
+                  :pages [[{:foo 1}]]}}
                {})))))

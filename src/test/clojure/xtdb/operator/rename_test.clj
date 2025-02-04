@@ -5,15 +5,15 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-rename
-  (let [blocks-expr [::tu/blocks
-                     [[{:a 12, :b 10}, {:a 0, :b 15}]
-                      [{:a 100, :b 83}]]]]
+  (let [batches-expr [::tu/pages
+                      [[{:a 12, :b 10}, {:a 0, :b 15}]
+                       [{:a 100, :b 83}]]]]
     (t/is (= {:col-types '{b :i64, c :i64}
               :res [[{:c 12, :b 10}, {:c 0, :b 15}]
                     [{:c 100, :b 83}]]}
              (tu/query-ra [:rename '{a c}
-                           blocks-expr]
-                          {:preserve-blocks? true
+                           batches-expr]
+                          {:preserve-pages? true
                            :with-col-types? true})))
 
     (t/testing "prefix"
@@ -21,8 +21,8 @@
                 :res [[{:r/c 12, :r/b 10}, {:r/c 0, :r/b 15}]
                       [{:r/c 100, :r/b 83}]]}
                (tu/query-ra [:rename 'r '{a c}
-                             blocks-expr]
-                            {:preserve-blocks? true
+                             batches-expr]
+                            {:preserve-pages? true
                              :with-col-types? true
                              :key-fn :snake-case-keyword}))))
 
@@ -31,7 +31,7 @@
                 :res [[{:r/a 12, :r/b 10}, {:r/a 0, :r/b 15}]
                       [{:r/a 100, :r/b 83}]]}
                (tu/query-ra [:rename 'r
-                             blocks-expr]
-                            {:preserve-blocks? true
+                             batches-expr]
+                            {:preserve-pages? true
                              :with-col-types? true
                              :key-fn :snake-case-keyword}))))))

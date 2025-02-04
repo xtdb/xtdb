@@ -67,8 +67,8 @@ sealed class Vector : VectorReader, VectorWriter {
     final override fun hashCode(idx: Int, hasher: ArrowBufHasher) =
         if (isNull(idx)) ArrowBufPointer.NULL_HASH_CODE else hashCode0(idx, hasher)
 
-    internal abstract fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
-    internal abstract fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
+    internal abstract fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
+    internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
     override val asList get() = (0 until valueCount).map { getObject(it) }
