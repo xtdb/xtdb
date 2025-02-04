@@ -29,6 +29,7 @@
                       (map #(do [:put-docs :docs %]))
                       (partition-all 1024))]
         (xt/submit-tx node tx))
+      (tu/then-await-tx node)
       (tu/finish-block! node))))
 
 (comment
