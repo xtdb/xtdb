@@ -95,10 +95,9 @@
 
           (tu/finish-block! node)
 
-          (t/is (= {:latest-completed-tx last-tx-key
-                    :next-chunk-idx 6}
+          (t/is (= {:latest-completed-tx last-tx-key}
                    (-> (meta/latest-block-metadata mm)
-                       (select-keys [:latest-completed-tx :next-chunk-idx]))))
+                       (dissoc :tables))))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
                          (.resolve node-dir "objects")))))))
@@ -328,18 +327,17 @@
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-block! node)
 
-          (t/is (= {:latest-completed-tx last-tx-key
-                    :next-chunk-idx 11110}
+          (t/is (= {:latest-completed-tx last-tx-key}
                    (-> (meta/latest-block-metadata mm)
-                       (select-keys [:latest-completed-tx :next-chunk-idx]))))
+                       (dissoc :tables))))
 
           (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-            (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-            (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/meta/log-l00.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00.+?\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))))))
+            (t/is (= 4 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))
+            (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00.+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/l00.+?\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -378,21 +376,19 @@
                          (tu/latest-completed-tx node2)))
 
 
-                (let [{:keys [latest-completed-tx, next-chunk-idx]}
-                      (meta/latest-block-metadata mm)]
+                (let [{:keys [latest-completed-tx]} (meta/latest-block-metadata mm)]
 
                   (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
-                  (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                   (Thread/sleep 250)    ; wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                   (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-                    (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                    (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00.+\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/meta/log-l00.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00.+?\.arrow" %) objs))))
-                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00.+?\.arrow" %) objs))))))
+                    (t/is (= 5 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))
+                    (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00.+\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/l00.+?\.arrow" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))
 
                 (t/is (= :utf8
                          (types/field->col-type (.columnField mm "public/device_readings" "_id"))))
@@ -428,12 +424,12 @@
                       (Thread/sleep 250); wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                       (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-                        (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                        (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/log-l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/log-l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/meta/log-l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l00-.+.arrow" %) objs)))))
+                        (t/is (= 11 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))
+                        (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/l00-.+.arrow" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
 
                       (t/is (= :utf8
                                (types/field->col-type (.columnField mm "public/device_info" "_id")))))))))))))))

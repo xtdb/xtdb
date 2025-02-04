@@ -29,5 +29,5 @@ interface LiveTable : AutoCloseable {
 
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean): Tx
     fun openWatermark(): Watermark
-    fun finishBlock(firstRow: Long, nextRow: Long): Collection<Map.Entry<String, *>>
+    fun finishBlock(blockIdx: BlockIndex): Collection<Map.Entry<String, *>>
 }
