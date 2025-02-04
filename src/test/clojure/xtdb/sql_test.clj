@@ -2666,3 +2666,11 @@ UNION ALL
                     WHERE foo._valid_time CONTAINS
                     PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
                      {:table-info {"public/foo" #{"name"}}})))))
+
+(t/deftest interval-read-write-bug-4066
+  (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'PT1H'};"])
+
+  (t/is (= [{:xt/id 1,
+             :tx-interval #xt/interval-mdn ["P0D" "PT1H"],
+             :q-interval #xt/interval-mdn ["P0D" "PT1H"]}]
+           (xt/q tu/*node* "FROM docs SELECT *, INTERVAL 'PT1H' AS q_interval"))))

@@ -7,6 +7,7 @@ import xtdb.types.IntervalDayTime
 import xtdb.types.IntervalMonthDayNano
 import xtdb.types.IntervalYearMonth
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.Duration
 import java.time.Period
 
@@ -32,22 +33,27 @@ class IntervalDayTimeVector(
     nullable: Boolean
 ) : FixedWidthVector(al, nullable, MinorType.INTERVALDAY.type, Long.SIZE_BYTES) {
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
-        IntervalDayTime(
-            Period.ofDays(getInt0(idx * 2)),
-            Duration.ofMillis(getInt0(idx * 2 + 1).toLong())
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): IntervalDayTime {
+        val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        return IntervalDayTime(
+            Period.ofDays(buf.getInt()),
+            Duration.ofMillis(buf.getInt().toLong())
         )
+    }
 
-    private val buf: ByteBuffer = ByteBuffer.allocate(8)
+    // Java Arrow uses little endian byte order in underlying BasedFixedWidthVector
+    private val buf: ByteBuffer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
 
     override fun writeObject0(value: Any) =
-        if (value is IntervalMonthDayNano) {
+        if (value is IntervalDayTime) {
             require(value.period.toTotalMonths() == 0L) { "non-zero months in DayTime interval" }
-            buf.clear()
-            buf.putInt(value.period.days)
-            buf.putInt(value.duration.toMillis().toInt())
-            buf.flip()
-            writeBytes(buf)
+            buf.run {
+                clear()
+                putInt(value.period.days)
+                putInt(value.duration.toMillis().toInt())
+                flip()
+                writeBytes(this)
+            }
         } else throw InvalidWriteObjectException(fieldType, value)
 }
 
@@ -57,21 +63,26 @@ class IntervalMonthDayNanoVector(
     nullable: Boolean
 ) : FixedWidthVector(al, nullable, MinorType.INTERVALMONTHDAYNANO.type, 16) {
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
-        IntervalMonthDayNano(
-            Period.of(0, getInt0(idx * 4), getInt0(idx * 4 + 1)),
-            Duration.ofNanos(getLong0(idx * 2 + 1))
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): IntervalMonthDayNano {
+        val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        return IntervalMonthDayNano(
+            Period.of(0, buf.getInt(), buf.getInt()),
+            Duration.ofNanos(buf.getLong())
         )
+    }
 
-    private val buf: ByteBuffer = ByteBuffer.allocate(16)
+    // Java Arrow uses little endian byte order in underlying BasedFixedWidthVector
+    private val buf: ByteBuffer = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
 
     override fun writeObject0(value: Any) =
         if (value is IntervalMonthDayNano) {
-            buf.clear()
-            buf.putInt(value.period.toTotalMonths().toInt())
-            buf.putInt(value.period.days)
-            buf.putLong(value.duration.toNanos())
-            buf.flip()
-            writeBytes(buf)
+            buf.run {
+                clear()
+                putInt(value.period.toTotalMonths().toInt())
+                putInt(value.period.days)
+                putLong(value.duration.toNanos())
+                flip()
+                writeBytes(this)
+            }
         } else throw InvalidWriteObjectException(fieldType, value)
 }
