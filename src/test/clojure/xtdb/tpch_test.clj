@@ -29,7 +29,7 @@
           :dml (tpch/submit-dml! node scale-factor))
 
         (tu/then-await-tx node)
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
 
         (c/compact-all! node (Duration/ofMinutes 5))
 

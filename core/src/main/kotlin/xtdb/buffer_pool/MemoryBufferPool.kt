@@ -45,14 +45,14 @@ class MemoryBufferPool(
     override fun getFooter(key: Path): ArrowFooter =
         (memoryStore.lockAndGet(key) ?: throw objectMissingException(key)).readArrowFooter()
 
-    override fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch {
+    override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         try {
             val arrowBuf = memoryStore.lockAndGet(key) ?: throw objectMissingException(key)
 
-            val block = arrowBuf.readArrowFooter().recordBatches.getOrNull(blockIdx)
+            val arrowBlock = arrowBuf.readArrowFooter().recordBatches.getOrNull(idx)
                 ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
-            return arrowBuf.toArrowRecordBatchView(block)
+            return arrowBuf.toArrowRecordBatchView(arrowBlock)
         } catch (e: Exception) {
             throw IllegalStateException("Failed opening record batch '$key'", e)
         }
@@ -81,8 +81,8 @@ class MemoryBufferPool(
         return newChannel(baos).closeOnCatch { writeChannel ->
             rel.startUnload(writeChannel).closeOnCatch { unloader ->
                 object : xtdb.ArrowWriter {
-                    override fun writeBatch() {
-                        unloader.writeBatch()
+                    override fun writePage() {
+                        unloader.writePage()
                     }
 
                     override fun end(): FileSize {

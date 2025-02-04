@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation.Companion.loader
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
 import java.nio.channels.Channels
 
 class RelationTest {
@@ -43,14 +42,14 @@ class RelationTest {
                         utf8.writeNull()
                         rel.endRow()
 
-                        unloader.writeBatch()
+                        unloader.writePage()
                         rel.clear()
 
                         i32.writeInt(3)
                         utf8.writeObject("world!")
                         rel.endRow()
 
-                        unloader.writeBatch()
+                        unloader.writePage()
 
                         unloader.end()
                     }
@@ -58,13 +57,13 @@ class RelationTest {
         }
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
-            assertEquals(2, loader.batchCount)
+            assertEquals(2, loader.pageCount)
 
             Relation(allocator, loader.schema).use { rel ->
                 val i32 = rel["i32"]!!
                 val utf8 = rel["utf8"]!!
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(1, i32.getInt(0))
@@ -72,13 +71,13 @@ class RelationTest {
                 assertEquals(2, i32.getInt(1))
                 assertTrue(utf8.isNull(1))
 
-                loader.loadBatch(1, rel)
+                loader.loadPage(1, rel)
 
                 assertEquals(1, rel.rowCount)
                 assertEquals(3, i32.getInt(0))
                 assertEquals("world!", utf8.getObject(0))
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(1, i32.getInt(0))
@@ -109,36 +108,36 @@ class RelationTest {
                     listVec.writeObject(list1)
                     rel.endRow()
 
-                    unloader.writeBatch()
+                    unloader.writePage()
                     rel.clear()
 
                     listVec.writeObject(list2)
                     rel.endRow()
 
-                    unloader.writeBatch()
+                    unloader.writePage()
 
                     unloader.end()
                 }
         }
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
-            assertEquals(2, loader.batchCount)
+            assertEquals(2, loader.pageCount)
 
             Relation(allocator, loader.schema).use { rel ->
                 val listVec = rel["list"]!!
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(list0, listVec.getObject(0))
                 assertEquals(list1, listVec.getObject(1))
 
-                loader.loadBatch(1, rel)
+                loader.loadPage(1, rel)
 
                 assertEquals(1, rel.rowCount)
                 assertEquals(list2, listVec.getObject(0))
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(list0, listVec.getObject(0))
@@ -174,13 +173,13 @@ class RelationTest {
 
         Relation(listOf(duv), duv.valueCount).use { rel ->
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
-                unloader.writeBatch()
+                unloader.writePage()
                 unloader.end()
             }
         }
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
-            loader.loadBatch(0, allocator).use { rel ->
+            loader.loadPage(0, allocator).use { rel ->
                 assertEquals(duvValues, rel["duv"]!!.asList)
             }
         }

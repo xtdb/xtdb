@@ -196,9 +196,9 @@
 (defn ->tstz-range ^xtdb.types.ZonedDateTimeRange [from to]
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
-(defn finish-chunk! [node]
+(defn finish-block! [node]
   (then-await-tx node)
-  (li/finish-chunk! node))
+  (li/finish-block! node))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
@@ -222,16 +222,16 @@
     root))
 
 (defn ->cursor
-  (^xtdb.ICursor [^Schema schema, blocks] (->cursor *allocator* schema blocks))
+  (^xtdb.ICursor [^Schema schema, pages] (->cursor *allocator* schema pages))
 
-  (^xtdb.ICursor [^BufferAllocator allocator ^Schema schema, blocks]
-   (let [blocks (LinkedList. blocks)
+  (^xtdb.ICursor [^BufferAllocator allocator ^Schema schema, pages]
+   (let [pages (LinkedList. pages)
          root (VectorSchemaRoot/create schema allocator)]
      (reify ICursor
        (tryAdvance [_ c]
-         (if-let [block (some-> (.poll blocks) vec)]
+         (if-let [page (some-> (.poll pages) vec)]
            (do
-             (populate-root root block)
+             (populate-root root page)
              (.accept c (vr/<-root root))
              true)
            false))
@@ -239,20 +239,20 @@
        (close [_]
          (.close root))))))
 
-(defmethod lp/ra-expr ::blocks [_]
-  (s/cat :op #{::blocks}
+(defmethod lp/ra-expr ::pages [_]
+  (s/cat :op #{::pages}
          :col-types (s/? (s/map-of simple-symbol? some?))
-         :blocks vector?))
+         :pages vector?))
 
-(defmethod lp/emit-expr ::blocks [{:keys [col-types blocks stats]} _args]
+(defmethod lp/emit-expr ::pages [{:keys [col-types pages stats]} _args]
   (let [fields (or (some-> col-types (update-vals types/col-type->field))
-                   (vw/rows->fields (into [] cat blocks)))
+                   (vw/rows->fields (into [] cat pages)))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]
     {:fields fields
      :stats stats
      :->cursor (fn [{:keys [allocator]}]
-                 (->cursor allocator schema blocks))}))
+                 (->cursor allocator schema pages))}))
 
 (defn <-reader
   ([^IVectorReader col] (<-reader col #xt/key-fn :kebab-case-keyword))
@@ -273,7 +273,7 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [allocator node args preserve-blocks? with-col-types? key-fn] :as query-opts
+  ([query {:keys [allocator node args preserve-pages? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)
                 allocator *allocator*}}]
    (let [{:keys [live-idx]} node
@@ -296,7 +296,7 @@
                                        (assoc :args args-rel, :close-args? false)))
                       res (.openCursor bq)]
        (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
-                      (cond->> (not preserve-blocks?) (into [] cat)))]
+                      (cond->> (not preserve-pages?) (into [] cat)))]
          (if with-col-types?
            {:res rows, :col-types (->> (.columnFields bq)
                                        (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))}
@@ -305,17 +305,17 @@
 (t/deftest round-trip-cursor
   (with-allocator
     (fn []
-      (let [blocks [[{:name "foo", :age 20}
-                     {:name "bar", :age 25}]
-                    [{:name "baz", :age 30}]]]
+      (let [pages [[{:name "foo", :age 20}
+                    {:name "bar", :age 25}]
+                   [{:name "baz", :age 30}]]]
         (with-open [cursor (->cursor (Schema. [(types/col-type->field "name" :utf8)
                                                (types/col-type->field "age" :i64)])
-                                     blocks)]
+                                     pages)]
 
-          (t/is (= blocks (<-cursor cursor))))))))
+          (t/is (= pages (<-cursor cursor))))))))
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
-                                           rows-per-chunk log-limit page-limit instant-src
+                                           rows-per-block log-limit page-limit instant-src
                                            compactor-threads healthz-port]
                                     :or {buffers-dir "objects" healthz-port 8080}}]
   (let [instant-src (or instant-src (->mock-clock))
@@ -323,7 +323,7 @@
     (xtn/start-node {:healthz {:port healthz-port}
                      :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
                      :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-chunk rows-per-chunk}
+                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
                                    (into {} (filter val)))
                      :compactor (->> {:threads compactor-threads}
                                      (into {} (filter val)))})))

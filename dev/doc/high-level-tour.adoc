@@ -41,12 +41,12 @@ The client receives a 'ticket' containing the tx-id (essentially a log sequence 
 --
 (see `xtdb.indexer`, `xtdb.live-index`)
 
-XTDB nodes read transactions from the log, evaluate them if required, and upload blocks of transactions (~100k rows) as 'chunk' files to the object store.
-These chunk files form the lowest level (L0) of the LSM tree.
+XTDB nodes read transactions from the log, evaluate them if required, and upload blocks of transactions (~100k rows) as files to the object store.
+These block files form the lowest level (L0) of the LSM tree.
 
 Before transactions are included in a block, they are held in the 'live index', which is included as part of queries' input sets, so that queries can observe recent transactions.
 
-The live-index is in-memory - so, when they start up, XTDB nodes check the latest transaction written as part of a chunk in the object store and start consuming the log from there.
+The live-index is in-memory - so, when they start up, XTDB nodes check the latest transaction written as part of a block in the object store and start consuming the log from there.
 --
 3. *In the background, the compactors on each node share the compaction of the LSM tree*
 +
@@ -153,7 +153,7 @@ Decorrelation rules attempt to replace this N+1 query plan with a query plan tha
 4. *The optimised query plan is executed*
 +
 --
-Execution of a query plan is a pull-based pipeline of relational operators - the outermost operator pulling batches of rows (all in Arrow format) from its input relations, all the way down to the source operators.
+Execution of a query plan is a pull-based pipeline of relational operators - the outermost operator pulling pages of rows (all in Arrow format) from its input relations, all the way down to the source operators.
 
 Because the query plan forms an https://en.wikipedia.org/wiki/Abstract_algebra[algebra^], each of the operators can be reasoned about relatively independently.
 

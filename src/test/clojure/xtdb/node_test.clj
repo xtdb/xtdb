@@ -503,13 +503,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (set (xt/q tu/*node* "FROM bing")))))
 
 (deftest test-scan-all-table-col-names
-  (t/testing "testing scan.allTableColNames combines table info from both live and past chunks"
+  (t/testing "testing scan.allTableColNames combines table info from both live and past blocks"
     (-> (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo1" :a 1}]
                                  [:put-docs :bar {:xt/id "bar1"}]
                                  [:put-docs :bar {:xt/id "bar2" :b 2}]])
         (tu/then-await-tx tu/*node*))
 
-    (tu/finish-chunk! tu/*node*)
+    (tu/finish-block! tu/*node*)
 
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo2" :c 3}]
                              [:put-docs :baz {:xt/id "foo1" :a 4}]])
@@ -713,7 +713,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (deftest resources-are-correctly-closed-on-interrupt-2800
   (let [node-dir (.toPath (io/file "target/incoming-puts-dont-cause-memory-leak"))
         node-opts {:node-dir node-dir
-                   :rows-per-chunk 16}]
+                   :rows-per-block 16}]
     (util/delete-dir node-dir)
     (dotimes [_ 5]
       (util/with-open [node (tu/->local-node node-opts)]

@@ -10,9 +10,9 @@
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-group-by
-  (letfn [(run-test [group-by-spec blocks]
+  (letfn [(run-test [group-by-spec batches]
             (-> (tu/query-ra [:group-by group-by-spec
-                              [::tu/blocks '{a :i64, b :i64} blocks]]
+                              [::tu/pages '{a :i64, b :i64} batches]]
                              {:with-col-types? true})
                 (update :res set)))]
 
@@ -65,7 +65,7 @@
                                             {var-samp (var-samp b)}
                                             {stddev-pop (stddev-pop b)}
                                             {stddev-samp (stddev-samp b)}]
-                                [::tu/blocks '{a :i64, b [:union #{:null :i64}]}
+                                [::tu/pages '{a :i64, b [:union #{:null :i64}]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}
                                    {:a 2 :b 30}
@@ -136,55 +136,55 @@
 (t/deftest test-row-count
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (row-count)}]
-                          [::tu/blocks {a [:union #{:null :i64}]}
+                          [::tu/pages {a [:union #{:null :i64}]}
                            []]])))
 
   (t/is (= [{:n 2}]
            (tu/query-ra '[:group-by [{n (row_count)}]
-                          [::tu/blocks {a [:union #{:null :i64}]}
+                          [::tu/pages {a [:union #{:null :i64}]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
            (tu/query-ra '[:group-by [a {n (row-count)}]
-                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                          [::tu/pages {a :i64, b [:union #{:null :i64}]}
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
            (tu/query-ra '[:group-by [a {bs (row-count)}]
-                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                          [::tu/pages {a :i64, b [:union #{:null :i64}]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-count-empty-null-behaviour
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/blocks {a [:union #{:null :i64}]}
+                          [::tu/pages {a [:union #{:null :i64}]}
                            []]])))
 
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/blocks {a [:union #{:null :i64}]}
+                          [::tu/pages {a [:union #{:null :i64}]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 1}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/blocks {a [:union #{:null :i64}]}
+                          [::tu/pages {a [:union #{:null :i64}]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 0}, {:a 2, :n 1}]
            (tu/query-ra '[:group-by [a {n (count b)}]
-                          [::tu/blocks
+                          [::tu/pages
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
            (tu/query-ra '[:group-by [a {bs (count b)}]
-                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                          [::tu/pages {a :i64, b [:union #{:null :i64}]}
                            []]]))
         "empty if there's a grouping key"))
 
@@ -397,7 +397,7 @@
             :col-types '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}}
 
            (-> (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "tn", :v true} {:k "tn", :v nil} {:k "tn", :v true}
@@ -409,17 +409,17 @@
 
   (t/is (= []
            (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
-                         [::tu/blocks '{k :utf8, v [:union #{:bool :null}]}
+                         [::tu/pages '{k :utf8, v [:union #{:bool :null}]}
                           []]])))
 
   (t/is (= [{}]
            (tu/query-ra [:group-by '[{all-vs (bool-and v)} {any-vs (bool-or v)}]
-                         [::tu/blocks '{v [:union #{:bool :null}]}
+                         [::tu/pages '{v [:union #{:bool :null}]}
                           []]])))
 
   (t/is (= [{}]
            (tu/query-ra '[:group-by [{n (bool-and b)}]
-                          [::tu/blocks
+                          [::tu/pages
                            [[{:b nil}]]]]))))
 
 (t/deftest test-distinct
@@ -450,7 +450,7 @@
                                          {avg-distinct (avg-distinct v)}
                                          {array-agg (array-agg v)}
                                          {array-agg-distinct (array-agg-distinct v)}]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:k :a, :v 10}
                                 {:k :b, :v 12}
                                 {:k :b, :v 15}

@@ -27,7 +27,7 @@
             (->> (tu/query-ra
                   [:patch-gaps {:valid-from (time/->instant #inst "2020-01-02")
                                 :valid-to (time/->instant #inst "2020-01-04")}
-                   [::tu/blocks {'_iid :uuid
+                   [::tu/pages {'_iid :uuid
                                  '_valid_from types/temporal-col-type
                                  '_valid_to types/nullable-temporal-type
                                  'doc :i64}

@@ -126,7 +126,7 @@
             (.endStruct leaf-wtr)
             (.endRow meta-rel)
 
-            (.writeBatch data-file-wtr)
+            (.writePage data-file-wtr)
             (.clear data-rel)
 
             meta-pos))
@@ -160,7 +160,7 @@
           (let [data-file-size (.end data-file-wtr)]
 
             (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-name trie-key) meta-rel)]
-              (.writeBatch meta-file-wtr)
+              (.writePage meta-file-wtr)
               (.end meta-file-wtr))
 
             data-file-size))

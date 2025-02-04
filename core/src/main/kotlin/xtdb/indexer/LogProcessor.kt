@@ -32,34 +32,34 @@ class LogProcessor(
     data class Flusher(
         val flushTimeout: Duration,
         var lastFlushCheck: Instant,
-        var previousChunkTxId: Long,
+        var previousBlockTxId: Long,
         var flushedTxId: Long
     ) {
         constructor(flushTimeout: Duration, liveIndex: LiveIndex) : this(
             flushTimeout, Instant.now(),
-            previousChunkTxId = liveIndex.latestCompletedChunkTx?.txId ?: -1,
+            previousBlockTxId = liveIndex.latestCompletedBlockTx?.txId ?: -1,
             flushedTxId = -1
         )
 
-        fun checkChunkTimeout(now: Instant, currentChunkTxId: Long, latestCompletedTxId: Long): Message? =
+        fun checkBlockTimeout(now: Instant, currentBlockTxId: Long, latestCompletedTxId: Long): Message? =
             when {
                 lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> null
-                currentChunkTxId != previousChunkTxId -> {
+                currentBlockTxId != previousBlockTxId -> {
                     lastFlushCheck = now
-                    previousChunkTxId = currentChunkTxId
+                    previousBlockTxId = currentBlockTxId
                     null
                 }
 
                 else -> {
                     lastFlushCheck = now
-                    Message.FlushChunk(currentChunkTxId)
+                    Message.FlushBlock(currentBlockTxId)
                 }
             }
 
-        fun checkChunkTimeout(liveIndex: LiveIndex) =
-            checkChunkTimeout(
+        fun checkBlockTimeout(liveIndex: LiveIndex) =
+            checkBlockTimeout(
                 Instant.now(),
-                currentChunkTxId = liveIndex.latestCompletedChunkTx?.txId ?: -1,
+                currentBlockTxId = liveIndex.latestCompletedBlockTx?.txId ?: -1,
                 latestCompletedTxId = liveIndex.latestCompletedTx?.txId ?: -1
             )
     }
@@ -85,7 +85,7 @@ class LogProcessor(
         get() = liveIndex.latestCompletedTx?.txId ?: -1
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
-        flusher.checkChunkTimeout(liveIndex)?.let { flushMsg ->
+        flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
             flusher.flushedTxId = log.appendMessage(flushMsg).await()
         }
 
@@ -106,7 +106,7 @@ class LogProcessor(
                         }
                     }
 
-                    is Message.FlushChunk -> {
+                    is Message.FlushBlock -> {
                         liveIndex.forceFlush(record, msg)
                         null
                     }

@@ -77,15 +77,15 @@
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
   4749)
 
-(t/deftest can-build-chunk-as-arrow-ipc-file-format
+(t/deftest can-build-block-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
-    (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
+    (let [node-dir (util/->path "target/can-build-block-as-arrow-ipc-file-format")
           last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (let [mm (tu/component node ::meta/metadata-manager)]
-          (t/is (nil? (meta/latest-chunk-metadata mm)))
+          (t/is (nil? (meta/latest-block-metadata mm)))
 
           (t/is (= magic-last-tx-id
                    (last (for [tx-ops txs]
@@ -93,14 +93,14 @@
 
           (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
 
-          (tu/finish-chunk! node)
+          (tu/finish-block! node)
 
           (t/is (= {:latest-completed-tx last-tx-key
                     :next-chunk-idx 6}
-                   (-> (meta/latest-chunk-metadata mm)
+                   (-> (meta/latest-block-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-chunk-as-arrow-ipc-file-format")))
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
                          (.resolve node-dir "objects")))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
@@ -166,7 +166,7 @@
         (-> (xt/submit-tx node tx-ops)
             (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
                        (.resolve node-dir "objects"))))))
@@ -186,13 +186,13 @@
                                     :struct {:a true, :b {:c "c", :d "d"}}}]]]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-page 3})]
         (xt/submit-tx node tx0)
 
         (-> (xt/submit-tx node tx1)
             (tu/then-await-tx node (Duration/ofMillis 200)))
 
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
                        (.resolve node-dir "objects"))
@@ -239,7 +239,7 @@
       (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :uuid uuid}]])
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-      (tu/finish-chunk! node)
+      (tu/finish-block! node)
 
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (xt/q node '(from :xt_docs [{:xt/id id} uuid]))))))
@@ -265,13 +265,13 @@
                                  {:xt/id "bar", :month "april"}]])
             (tu/then-await-tx node))
 
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
                        (.resolve node-dir "objects"))))))
 
-(t/deftest can-stop-node-without-writing-chunks
-  (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
+(t/deftest can-stop-node-without-writing-blocks
+  (let [node-dir (util/->path "target/can-stop-node-without-writing-blocks")
         last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
     (util/delete-dir node-dir)
 
@@ -302,7 +302,7 @@
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini")]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300, :compactor-threads 0})
+    (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3000, :rows-per-page 300, :compactor-threads 0})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
@@ -326,11 +326,11 @@
 
           (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
-          (tu/finish-chunk! node)
+          (tu/finish-block! node)
 
           (t/is (= {:latest-completed-tx last-tx-key
                     :next-chunk-idx 11110}
-                   (-> (meta/latest-chunk-metadata mm)
+                   (-> (meta/latest-block-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
           (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
@@ -343,7 +343,7 @@
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
-        node-opts {:node-dir node-dir, :rows-per-chunk 1000 :rows-per-block 100
+        node-opts {:node-dir node-dir, :rows-per-block 1000 :rows-per-page 100
                    :instant-src (InstantSource/system)
                    :compactor-threads 0}]
     (util/delete-dir node-dir)
@@ -379,12 +379,12 @@
 
 
                 (let [{:keys [latest-completed-tx, next-chunk-idx]}
-                      (meta/latest-chunk-metadata mm)]
+                      (meta/latest-block-metadata mm)]
 
                   (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
                   (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
-                  (Thread/sleep 250)    ; wait for the chunk to finish writing to disk
+                  (Thread/sleep 250)    ; wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                   (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
@@ -425,7 +425,7 @@
                         (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
                                  (tu/latest-completed-tx node3))))
 
-                      (Thread/sleep 250); wait for the chunk to finish writing to disk
+                      (Thread/sleep 250); wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                       (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
                         (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
@@ -440,7 +440,7 @@
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
-        node-opts {:node-dir node-dir, :rows-per-chunk 1000, :rows-per-block 100}]
+        node-opts {:node-dir node-dir, :rows-per-block 1000, :rows-per-page 100}]
     (util/delete-dir node-dir)
 
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
@@ -449,7 +449,7 @@
         (-> (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 0, :v "foo"}]])
             (tu/then-await-tx node1 (Duration/ofSeconds 1)))
 
-        (tu/finish-chunk! node1)
+        (tu/finish-block! node1)
 
         (t/is (= :utf8
                  (types/field->col-type (.columnField mm1 "public/xt_docs" "v"))))
@@ -459,7 +459,7 @@
                                        [:put-docs :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
-          (tu/finish-chunk! node1)
+          (tu/finish-block! node1)
 
           (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
                    (types/field->col-type (.columnField mm1 "public/xt_docs" "v"))))
@@ -503,7 +503,7 @@
       (with-open [node (tu/->local-node {:node-dir node-dir
                                          :instant-src (tu/->mock-clock)})]
         (let [mm (tu/component node ::meta/metadata-manager)]
-          (t/is (nil? (meta/latest-chunk-metadata mm)))
+          (t/is (nil? (meta/latest-block-metadata mm)))
 
           (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
@@ -515,7 +515,7 @@
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
                    (xtp/latest-completed-tx node)))
 
-          (tu/finish-chunk! node)
+          (tu/finish-block! node)
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                          (.resolve node-dir "objects")))))))

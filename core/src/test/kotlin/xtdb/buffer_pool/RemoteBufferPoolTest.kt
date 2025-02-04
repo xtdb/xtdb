@@ -54,7 +54,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]!!
                 for (i in 0 until 10) v.writeInt(i)
-                writer.writeBatch()
+                writer.writePage()
                 writer.end()
             }
         }
@@ -76,7 +76,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
             remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
                 val v = relation["a"]!!
                 for (i in 0 until 10) v.writeInt(i)
-                writer.writeBatch()
+                writer.writePage()
                 writer.end()
             }
         }
@@ -91,7 +91,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
 
                     val v = relation["a"]!!
                     for (i in 0 until 10) v.writeInt(i)
-                    writer.writeBatch()
+                    writer.writePage()
                     writer.end()
                     throw Exception("Test exception")
                 }

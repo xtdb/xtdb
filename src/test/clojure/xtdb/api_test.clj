@@ -760,7 +760,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))
 
     (when (= tu/*node-type* :in-memory)
-      (tu/finish-chunk! tu/*node*)
+      (tu/finish-block! tu/*node*)
       (c/compact-all! tu/*node* #xt/duration "PT2S")
 
       (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo")))))))

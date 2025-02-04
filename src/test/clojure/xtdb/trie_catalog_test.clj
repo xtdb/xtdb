@@ -92,9 +92,9 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (cat/trie-catalog node)]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
 
         (t/is (= #{"public/foo" "xt/txs"} (cat/table-names cat)))
         (t/is (= [{:trie-key "log-l00-fr02-nr04-rs1",

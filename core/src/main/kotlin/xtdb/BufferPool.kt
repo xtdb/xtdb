@@ -27,7 +27,7 @@ interface BufferPool : AutoCloseable {
      *
      * Throws if not an arrow file or the record batch is out of bounds.
      */
-    fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch
+    fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch
 
     fun putObject(key: Path, buffer: ByteBuffer)
 

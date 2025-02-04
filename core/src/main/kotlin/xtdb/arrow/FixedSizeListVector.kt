@@ -96,17 +96,17 @@ class FixedSizeListVector(
         }
     }
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
-        elVector.unloadBatch(nodes, buffers)
+        elVector.unloadPage(nodes, buffers)
     }
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
 
         validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
-        elVector.loadBatch(nodes, buffers)
+        elVector.loadPage(nodes, buffers)
 
         valueCount = node.length
     }

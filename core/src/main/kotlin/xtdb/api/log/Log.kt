@@ -5,7 +5,6 @@ package xtdb.api.log
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
-import xtdb.log.*
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import java.nio.ByteBuffer
@@ -34,13 +33,13 @@ interface Log : AutoCloseable {
 
         companion object {
             private const val TX_HEADER: Byte = -1
-            private const val LEGACY_FLUSH_CHUNK_HEADER: Byte = 2
+            private const val LEGACY_FLUSH_BLOCK_HEADER: Byte = 2
             private const val PROTOBUF_HEADER: Byte = 3
 
             fun parse(buffer: ByteBuffer) =
                 when (buffer.get(0)) {
                     TX_HEADER -> Tx(buffer.duplicate())
-                    LEGACY_FLUSH_CHUNK_HEADER -> FlushChunk(buffer.getLong(1))
+                    LEGACY_FLUSH_BLOCK_HEADER -> FlushBlock(buffer.getLong(1))
                     PROTOBUF_HEADER -> ProtobufMessage.parse(buffer.duplicate().position(1))
 
                     else -> throw IllegalArgumentException("Unknown message type: ${buffer.get()}")
@@ -68,7 +67,7 @@ interface Log : AutoCloseable {
                     LogMessage.parseFrom(buffer.duplicate().position(1))
                         .let {
                             when (val msgCase = it.messageCase) {
-                                MessageCase.FLUSH_CHUNK -> FlushChunk(it.flushChunk.expectedChunkTxId)
+                                MessageCase.FLUSH_BLOCK -> FlushBlock(it.flushBlock.expectedBlockTxId)
                                 MessageCase.TRIES_ADDED -> TriesAdded(it.triesAdded.triesList)
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
@@ -76,9 +75,9 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class FlushChunk(val expectedChunkTxId: LogOffset) : ProtobufMessage() {
+        data class FlushBlock(val expectedBlockTxId: LogOffset) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
-                flushChunk = flushChunk { expectedChunkTxId = this@FlushChunk.expectedChunkTxId }
+                flushBlock = flushBlock { expectedBlockTxId = this@FlushBlock.expectedBlockTxId }
             }
         }
 

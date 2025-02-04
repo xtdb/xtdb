@@ -13,20 +13,15 @@
            (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
            (java.nio.channels Channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
-           java.nio.charset.StandardCharsets
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
            [java.security MessageDigest]
            (java.util Arrays Collections LinkedHashMap Map UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
-           (org.apache.arrow.compression CommonsCompressionFactory)
-           (org.apache.arrow.flatbuf Footer Message RecordBatch)
-           (org.apache.arrow.memory ArrowBuf BufferAllocator ForeignAllocation)
-           (org.apache.arrow.memory.util ByteFunctionHelpers)
-           (org.apache.arrow.vector BaseFixedWidthVector ValueVector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.memory BufferAllocator ForeignAllocation)
+           (org.apache.arrow.vector BaseFixedWidthVector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector UnionVector)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
-           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -393,7 +388,7 @@
 
       (.start sw)
 
-      (f (fn write-batch! []
+      (f (fn write-page! []
            (.writeBatch sw)))
 
       (.end sw)
@@ -401,31 +396,6 @@
       (ByteBuffer/wrap (.toByteArray baos)))
     (catch ClosedByInterruptException e
       (throw (InterruptedException. (.getMessage e))))))
-
-(defn root->arrow-ipc-byte-buffer ^java.nio.ByteBuffer [^VectorSchemaRoot root ipc-type]
-  (build-arrow-ipc-byte-buffer root ipc-type
-    (fn [write-batch!]
-      (write-batch!))))
-
-(def ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
-
-(defn- validate-arrow-magic [^ArrowBuf ipc-file-format-buffer]
-  (when-not (zero? (ByteFunctionHelpers/compare ipc-file-format-buffer
-                                                (- (.capacity ipc-file-format-buffer) (alength arrow-magic))
-                                                (.capacity ipc-file-format-buffer)
-                                                arrow-magic
-                                                0
-                                                (alength arrow-magic)))
-    (throw (err/illegal-arg ::invalid-arrow-ipc-file
-                            {::err/message "invalid Arrow IPC file format"}))))
-
-(defn read-arrow-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^ArrowBuf ipc-file-format-buffer]
-  (validate-arrow-magic ipc-file-format-buffer)
-  (let [footer-size-offset (- (.capacity ipc-file-format-buffer) (+ Integer/BYTES (alength arrow-magic)))
-        footer-size (.getInt ipc-file-format-buffer footer-size-offset)
-        footer-position (- footer-size-offset footer-size)
-        footer-bb (.nioBuffer ipc-file-format-buffer footer-position footer-size)]
-    (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
 (defn ->arrow-buf-view
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
@@ -446,35 +416,6 @@
                                  (.release netty-buf)
                                  (when release-fn
                                    (release-fn))))))))
-
-(defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ArrowBuf buffer]
-  (let [prefix-size (if (= (.getInt buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
-                      8
-                      4)
-        ^RecordBatch batch (.header (Message/getRootAsMessage
-                                     (.nioBuffer buffer
-                                                 (+ (.getOffset block) prefix-size)
-                                                 (- (.getMetadataLength block) prefix-size)))
-                                    (RecordBatch.))
-        body-buffer (doto (.slice buffer
-                                  (+ (.getOffset block)
-                                     (.getMetadataLength block))
-                                  (.getBodyLength block))
-                      (-> (.getReferenceManager) (.retain)))]
-    (MessageSerializer/deserializeRecordBatch batch body-buffer)))
-
-(defn read-arrow-buf [^ArrowBuf ipc-file-format-buffer]
-  (let [footer (read-arrow-footer ipc-file-format-buffer)
-        root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
-    {:arrow-blocks (.getRecordBatches footer)
-     :root root
-     :loader (VectorLoader. root CommonsCompressionFactory/INSTANCE)}))
-
-(defn arrow-buf->root+loader [^ArrowBuf ipc-file-format-buffer]
-  (let [footer (read-arrow-footer ipc-file-format-buffer)
-        root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
-    {:root root
-     :loader (VectorLoader. root CommonsCompressionFactory/INSTANCE)}))
 
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)

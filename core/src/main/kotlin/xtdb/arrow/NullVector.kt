@@ -45,11 +45,11 @@ class NullVector(override var name: String) : Vector() {
         return RowCopier { valueCount.also { writeNull() } }
     }
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
     }
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst() ?: error("missing node")
         valueCount = node.length
     }

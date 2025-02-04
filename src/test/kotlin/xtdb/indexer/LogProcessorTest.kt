@@ -13,18 +13,18 @@ class LogProcessorTest {
     private fun inst(day: Int) =
         LocalDate.of(2020, 1, day).atStartOfDay().toInstant(ZoneOffset.UTC)
 
-    private fun flusher(prevChunkTxId: Long, flushedTxId: Long) = LogProcessor.Flusher(
+    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = LogProcessor.Flusher(
         Duration.ofDays(2),
         inst(1),
-        previousChunkTxId = prevChunkTxId,
+        previousBlockTxId = prevBlockTxId,
         flushedTxId = flushedTxId
     )
 
     @Test
-    fun `test checkChunkTimeout`() {
-        flusher(prevChunkTxId = -1, flushedTxId = -1).run {
+    fun `test checkBlockTimeout`() {
+        flusher(prevBlockTxId = -1, flushedTxId = -1).run {
             assertNull(
-                checkChunkTimeout(inst(2), currentChunkTxId = -1, latestCompletedTxId = 0),
+                checkBlockTimeout(inst(2), currentBlockTxId = -1, latestCompletedTxId = 0),
                 "checked recently, don't check again"
             )
 
@@ -32,19 +32,19 @@ class LogProcessorTest {
         }
 
 
-        flusher(prevChunkTxId = 10, flushedTxId = 32).run {
+        flusher(prevBlockTxId = 10, flushedTxId = 32).run {
             assertEquals(
-                Log.Message.FlushChunk(10),
-                checkChunkTimeout(inst(4), currentChunkTxId = 10, latestCompletedTxId = 40),
+                Log.Message.FlushBlock(10),
+                checkBlockTimeout(inst(4), currentBlockTxId = 10, latestCompletedTxId = 40),
                 "we've not flushed recently, we have new txs, submit msg"
             )
 
             assertEquals(inst(4), lastFlushCheck)
         }
 
-        flusher(prevChunkTxId = 10, flushedTxId = 32).run {
+        flusher(prevBlockTxId = 10, flushedTxId = 32).run {
             assertNull(
-                checkChunkTimeout(inst(4), currentChunkTxId = 10, latestCompletedTxId = 32),
+                checkBlockTimeout(inst(4), currentBlockTxId = 10, latestCompletedTxId = 32),
                 "we've not flushed recently, no new txs, don't submit msg"
             )
 

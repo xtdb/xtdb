@@ -27,8 +27,8 @@
              (xtp/latest-submitted-tx-id node)
              timeout)))
 
-(defn finish-chunk! [node]
-  (li/finish-chunk! node))
+(defn finish-block! [node]
+  (li/finish-block! node))
 
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))
@@ -37,8 +37,8 @@
   ([worker table f n]
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
          partition-count 512]
-     (doseq [chunk (partition-all partition-count doc-seq)]
-       (xt/submit-tx (:sut worker) [(into [:put-docs table] chunk)])))))
+     (doseq [batch (partition-all partition-count doc-seq)]
+       (xt/submit-tx (:sut worker) [(into [:put-docs table] batch)])))))
 
 (defn run-benchmark [{:keys [node-opts benchmark-type benchmark-opts]}]
   (let [benchmark (case benchmark-type

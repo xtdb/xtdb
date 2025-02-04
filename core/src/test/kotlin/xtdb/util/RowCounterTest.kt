@@ -8,13 +8,13 @@ internal class RowCounterTest {
     fun testRowCounter() {
         val rc = RowCounter(24)
 
-        assertEquals(24, rc.chunkIdx)
-        assertEquals(0, rc.chunkRowCount)
+        assertEquals(24, rc.blockIdx)
+        assertEquals(0, rc.blockRowCount)
 
         rc.addRows(15)
-        assertEquals(15, rc.chunkRowCount)
+        assertEquals(15, rc.blockRowCount)
 
         rc.addRows(15)
-        assertEquals(30, rc.chunkRowCount)
+        assertEquals(30, rc.blockRowCount)
     }
 }

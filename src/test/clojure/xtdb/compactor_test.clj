@@ -277,7 +277,7 @@
     (binding [c/*page-size* 32
               c/*l1-file-size-rows* 256
               c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
                     (xt/submit-tx node [(into [:put-docs :foo]
@@ -317,7 +317,7 @@
 
     (binding [c/*page-size* 8
               c/*l1-file-size-rows* 32]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
                   (last (for [batch (partition-all 6 xs)]
                           (xt/submit-tx node [(into [:put-docs :foo]
@@ -357,7 +357,7 @@
 
     (binding [c/*page-size* 8
               c/*l1-file-size-rows* 32]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
               ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
           (letfn [(submit! [xs]
@@ -388,7 +388,7 @@
 
     (binding [c/*page-size* 8
               c/*l1-file-size-rows* 32]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
                     (xt/submit-tx node [(into [:put-docs :foo]
@@ -426,7 +426,7 @@
     (binding [c/*page-size* 8
               c/*l1-file-size-rows* 32
               c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (dotimes [n 100]
           (xt/submit-tx node [[:put-docs :foo {:xt/id "foo", :v n}]]))
         (tu/then-await-tx node)
@@ -444,7 +444,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir
-                                              :rows-per-chunk 32
+                                              :rows-per-block 32
                                               :page-limit 8
                                               :log-limit 4})]
 
@@ -463,11 +463,11 @@
 
 (t/deftest test-compaction-promotion-bug-3673
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT0.5S")
 
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2, :foo 24} {:xt/id 3, :foo 28.1} {:xt/id 4}]])
-  (tu/finish-chunk! tu/*node*)
+  (tu/finish-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT0.5S")
 
   (t/is (= #{12.0 nil 24 28.1}
@@ -476,7 +476,7 @@
 
   (util/with-open [node (xtn/start-node tu/*node-opts*)]
     (xt/submit-tx node [[:put-docs :foo {:xt/id 1} {:foo "foo", :xt/id 0} {:foo 3, :xt/id 2}]])
-    (tu/finish-chunk! node)
+    (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT0.5S")
 
     (t/is (= #{"foo" nil 3}
@@ -494,18 +494,18 @@
                                      #uuid "80000000-0000-0000-0000-000000000000"]]
 
         (xt/submit-tx node [[:put-docs :foo {:xt/id id-before} {:xt/id id} {:xt/id id-after}]])
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id id}]}]])
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (t/is (= [{:xt/id id-before} {:xt/id id-after}]
                  (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME")))
 
         (xt/submit-tx node [[:put-docs :foo {:xt/id id}]])
-        (tu/finish-chunk! node)
+        (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after}]

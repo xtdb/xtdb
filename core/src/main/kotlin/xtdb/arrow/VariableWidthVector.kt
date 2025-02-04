@@ -82,14 +82,14 @@ abstract class VariableWidthVector(
         }
     }
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         validityBuffer.unloadBuffer(buffers)
         offsetBuffer.unloadBuffer(buffers)
         dataBuffer.unloadBuffer(buffers)
     }
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
 
         validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))

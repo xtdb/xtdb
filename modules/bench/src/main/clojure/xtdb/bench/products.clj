@@ -68,8 +68,8 @@
                     :stage :sync
                     :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofHours 5)))}]}
                    {:t :do
-                    :stage :finish-chunk
-                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-chunk! sut))}]}
+                    :stage :finish-block
+                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-block! sut))}]}
                    {:t :do
                     :stage :compact
                     :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/compact! sut))}]}])}]})

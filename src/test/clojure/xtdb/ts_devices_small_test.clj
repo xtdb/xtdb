@@ -23,11 +23,11 @@
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofMinutes 15))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
-            (tu/finish-chunk! node)
+            (tu/finish-block! node)
 
             (t/is (= {:latest-completed-tx last-tx-key
                       :next-chunk-idx 1001000}
-                     (-> (meta/latest-chunk-metadata (tu/component ::meta/metadata-manager))
+                     (-> (meta/latest-block-metadata (tu/component ::meta/metadata-manager))
                          (select-keys [:latest-completed-tx :next-chunk-idx])))))
 
           (f))))))

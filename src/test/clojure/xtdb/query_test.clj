@@ -21,11 +21,11 @@
       (f table-metadata))))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk! node)
+    (tu/finish-block! node)
     (c/compact-all! node)
 
     (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan}]
@@ -35,7 +35,7 @@
                             [:put-docs :xt_docs {:name "Jon", :xt/id :jon}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk! node)
+    (tu/finish-block! node)
     (c/compact-all! node)
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
@@ -48,10 +48,10 @@
                          (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
                                            {:node node, :args {:name "Ivan"}})))))]
 
-        (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
+        (t/is (= #{0 2} (set (keys (.blocksMetadata metadata-mgr)))))
 
         (util/with-open [args (tu/open-args {:name "Ivan"})]
-          (t/testing "only needs to scan chunk 1, page 1"
+          (t/testing "only needs to scan block 1, page 1"
             (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-args)
                   param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} args)]
               (t/testing "L0 files don't have content metadata, so we have to match them"
@@ -87,25 +87,25 @@
                            {:xt/id :jdt, :name "Jeremy"}})))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
                             [:put-docs :xt_docs {:name "James", :xt/id :jms}]
                             [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk! node)
+    (tu/finish-block! node)
     (c/compact-all! node)
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
 
                             [:put-docs :xt_docs {:name "James", :xt/id :jms}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk! node)
+    (tu/finish-block! node)
     (c/compact-all! node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-      (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
+      (t/is (= #{0 4} (set (keys (.blocksMetadata metadata-mgr)))))
 
-      (t/testing "only needs to scan chunk 1, page 1"
+      (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]
           (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-args)
                 param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} args)]
@@ -382,13 +382,13 @@
                   {{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 100, :b 100, :c {:foo 2}} 1}]
             :col-types '{a :i64, c [:union #{[:struct {foo :i64}] :null}], b [:union #{:null :i64}]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 12}, {:a 100}]]]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:b 12, :c {:foo 1}}, {:b 2, :c {:foo 1}}]
                                [{:b 12, :c {:foo 2}}, {:b 100, :c {:foo 2}}]]]]
-                            {:preserve-blocks? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-col-types? true})
                (update :res (partial mapv frequencies))))
         "testing left-outer-join with structs")
 
@@ -396,12 +396,12 @@
                   {{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 100, :c [4], :b 100} 1}]
             :col-types '{a :i64, c [:union #{[:list :i64] :null}], b [:union #{:null :i64}]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 12}, {:a 100}]]]
-                             [::tu/blocks
+                             [::tu/pages
                               [[{:b 12, :c (list 1)}, {:b 2, :c (list 3)}]
                                [{:b 12, :c (list 2)}, {:b 100, :c (list 4)}]]]]
-                            {:preserve-blocks? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-col-types? true})
                (update :res (partial mapv frequencies))))
         "testing left-outer-join with lists"))

@@ -143,8 +143,8 @@
                                                    [:put-docs :bar {:xt/id "bar2"}]
                                                    [:put-docs :bar {:xt/id "bar3"}]]))))
 
-        ;; Ensure finish-chunk! works
-        (t/is (nil? (tu/finish-chunk! node)))
+        ;; Ensure finish-block! works
+        (t/is (nil? (tu/finish-block! node)))
 
         ;; Ensure can query back out results
         (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
@@ -161,8 +161,8 @@
       (tpch/submit-docs! node 0.05)
       (tu/then-await-tx (:latest-submitted-tx-id (xt/status node)) node (Duration/ofHours 1))
 
-      ;; Ensure finish-chunk! works
-      (t/is (nil? (tu/finish-chunk! node)))
+      ;; Ensure finish-block! works
+      (t/is (nil? (tu/finish-block! node)))
 
       ;; Ensure some files written to buffer-pool 
       (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]

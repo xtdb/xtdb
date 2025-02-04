@@ -29,7 +29,7 @@
                            a-double :f64
                            an-inst :timestamp}
                          {:batch-size 3}]
-                        {:preserve-blocks? true
+                        {:preserve-pages? true
                          :with-col-types? true}))))
 
 (def ^:private arrow-stream-url
@@ -42,9 +42,9 @@
   (let [expected {:col-types '{_id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
                   :res example-data}]
     (t/is (= expected (tu/query-ra [:arrow arrow-file-url]
-                                   {:preserve-blocks? true, :with-col-types? true})))
+                                   {:preserve-pages? true, :with-col-types? true})))
     (t/is (= expected (tu/query-ra [:arrow arrow-stream-url]
-                                   {:preserve-blocks? true, :with-col-types? true})))))
+                                   {:preserve-pages? true, :with-col-types? true})))))
 
 (comment
   (let  [arrow-path (-> (io/resource "xtdb/operator/arrow-cursor-test.arrows")
@@ -57,8 +57,8 @@
                                                         (types/col-type->field "an-inst" [:timestamp-tz :micro "UTC"])])
                                               al)]
       (doto (util/build-arrow-ipc-byte-buffer root :file
-              (fn [write-batch!]
-                (doseq [block example-data]
-                  (tu/populate-root root block)
-                  (write-batch!))))
+              (fn [write-page!]
+                (doseq [page example-data]
+                  (tu/populate-root root page)
+                  (write-page!))))
         (util/write-buffer-to-path arrow-path)))))

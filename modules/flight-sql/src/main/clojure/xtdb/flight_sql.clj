@@ -63,11 +63,11 @@
 
 (defn- flight-stream->bytes ^ByteBuffer [^FlightStream flight-stream]
   (util/build-arrow-ipc-byte-buffer (.getRoot flight-stream) :stream
-                                    (fn [write-batch!]
+                                    (fn [write-page!]
                                       (while (.next flight-stream)
-                                        (write-batch!)))))
+                                        (write-page!)))))
 
-(defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IQuerySource q-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
+(defn- ->fsql-producer [{:keys [allocator node, ^IQuerySource q-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets]}]
   (letfn [(exec-dml [dml fsql-tx-id]
             (if fsql-tx-id
               (when-not (.computeIfPresent fsql-txs fsql-tx-id
@@ -265,7 +265,7 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator indexer q-src live-idx] :as node}
+(defn open-server [{:keys [allocator q-src live-idx] :as node}
                    ^FlightSqlServer$Factory factory]
   (let [host (.getHost factory)
         port (.getPort factory)
@@ -274,7 +274,7 @@
         tickets (ConcurrentHashMap.)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
                                server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                                                      (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :q-src q-src, :wm-src live-idx
+                                                                      (->fsql-producer {:allocator allocator, :node node, :q-src q-src, :wm-src live-idx
                                                                                         :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                                                 #_(doto with-error-logging-middleware)

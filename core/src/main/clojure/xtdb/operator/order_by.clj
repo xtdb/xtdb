@@ -38,7 +38,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:dynamic *chunk-size* (int 102400))
+(def ^:dynamic *block-size* (int 102400))
 
 (defn- ->file [tmp-dir batch-idx file-idx]
   (io/file tmp-dir (format "temp-sort-%d-%d.arrow" batch-idx file-idx)))
@@ -79,7 +79,7 @@
          file-idx 1]
     (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
                         (let [pos (.writerPosition rel-writer)]
-                          (while (and (<= (.getPosition pos) ^int *chunk-size*)
+                          (while (and (<= (.getPosition pos) ^int *block-size*)
                                       (.tryAdvance in-cursor
                                                    (reify Consumer
                                                      (accept [_ src-rel]
@@ -136,8 +136,8 @@
             (aset copiers i (.rowCopier out-rel ^Relation (nth rels i))))
 
           (letfn [(load-next-rel [i]
-                    (when (.loadNextBatch ^Relation$Loader (nth loaders i)
-                                          ^Relation (nth rels i))
+                    (when (.loadNextPage ^Relation$Loader (nth loaders i)
+                                         ^Relation (nth rels i))
                       (aset positions i 0)
                       true))]
             (let [cmps (HashMap.)
@@ -172,14 +172,14 @@
                     (when (load-next-rel i)
                       (.add pq i)))
 
-                  ;; spill next chunk
-                  (when (< ^int *chunk-size* (.getRowCount out-rel))
-                    (.writeBatch out-unl)
+                  ;; spill next block
+                  (when (< ^int *block-size* (.getRowCount out-rel))
+                    (.writePage out-unl)
                     (.clear out-rel)))))
 
             ;; spill remaining rows
             (when (pos? (.getRowCount out-rel))
-              (.writeBatch out-unl))
+              (.writePage out-unl))
             (.end out-unl)
             out-file))))))
 
@@ -231,13 +231,13 @@
           (with-open [rel-writer (RelationWriter. allocator (for [^Field field static-fields]
                                                               (vw/->writer (.createVector field allocator))))]
             (let [pos (.writerPosition rel-writer)]
-              (while (and (<= (.getPosition pos) ^int *chunk-size*)
+              (while (and (<= (.getPosition pos) ^int *block-size*)
                           (.tryAdvance in-cursor
                                        (reify Consumer
                                          (accept [_ src-rel]
                                            (vw/append-rel rel-writer src-rel))))))
               (let [read-rel (vw/rel-wtr->rdr rel-writer)]
-                (if (<= (.getPosition pos) ^int *chunk-size*)
+                (if (<= (.getPosition pos) ^int *block-size*)
                   ;; in memory case
                   (if (zero? (.getPosition pos))
                     (do (set! (.consumed? this) true)

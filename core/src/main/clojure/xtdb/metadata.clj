@@ -58,8 +58,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
-  (^void finishChunk [^long chunkIdx, newChunkMetadata])
-  (^java.util.NavigableMap chunksMetadata [])
+  (^void finishBlock [^long blockIdx, newBlockMetadata])
+  (^java.util.NavigableMap blocksMetadata [])
   (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
@@ -70,22 +70,23 @@
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
-(defn- obj-key->chunk-idx [^Path obj-key]
+(defn- obj-key->block-idx [^Path obj-key]
   (some->> (.getFileName obj-key)
            (str)
            (re-matches #"(\p{XDigit}+).transit.json")
            (second)
            (util/<-lex-hex-string)))
 
-(def ^Path chunk-metadata-path (util/->path "chunk-metadata"))
+;; NOTE: `chunk-metadata` until we have a breaking index change
+(def ^Path block-metadata-path (util/->path "chunk-metadata"))
 
-(defn- ->chunk-metadata-obj-key [chunk-idx]
-  (.resolve chunk-metadata-path (format "%s.transit.json" (util/->lex-hex-string chunk-idx))))
+(defn- ->block-metadata-obj-key [block-idx]
+  (.resolve block-metadata-path (format "%s.transit.json" (util/->lex-hex-string block-idx))))
 
-(defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
+(defn- write-block-metadata ^java.nio.ByteBuffer [block-meta]
   (with-open [os (ByteArrayOutputStream.)]
     (let [w (transit/writer os :json {:handlers metadata-write-handler-map})]
-      (transit/write w chunk-meta))
+      (transit/write w block-meta))
     (ByteBuffer/wrap (.toByteArray os))))
 
 (defn- merge-fields [fields {:keys [tables]}]
@@ -380,18 +381,18 @@
 
 (deftype MetadataManager [^BufferPool buffer-pool
                           ^Cache table-metadata-idx-cache
-                          ^NavigableMap chunks-metadata
+                          ^NavigableMap blocks-metadata
                           ^:volatile-mutable ^Map fields]
   IMetadataManager
-  (finishChunk [this chunk-idx new-chunk-metadata]
-    (.putObject buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
-    (set! (.fields this) (merge-fields fields new-chunk-metadata))
-    (.put chunks-metadata chunk-idx new-chunk-metadata))
+  (finishBlock [this block-idx new-block-metadata]
+    (.putObject buffer-pool (->block-metadata-obj-key block-idx) (write-block-metadata new-block-metadata))
+    (set! (.fields this) (merge-fields fields new-block-metadata))
+    (.put blocks-metadata block-idx new-block-metadata))
 
   (openTableMetadata [_ file-path]
     (->table-metadata buffer-pool file-path table-metadata-idx-cache))
 
-  (chunksMetadata [_] chunks-metadata)
+  (blocksMetadata [_] blocks-metadata)
   (columnField [_ table-name col-name]
     (some-> (get fields table-name)
             (get col-name (types/->field col-name #xt.arrow/type :null true))))
@@ -402,20 +403,20 @@
 
   AutoCloseable
   (close [_]
-    (.clear chunks-metadata)))
+    (.clear blocks-metadata)))
 
-(defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
-  (some-> (.lastEntry (.chunksMetadata metadata-mgr))
+(defn latest-block-metadata [^IMetadataManager metadata-mgr]
+  (some-> (.lastEntry (.blocksMetadata metadata-mgr))
           (.getValue)))
 
-(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
-  (let [cm (TreeMap.)]
-    (doseq [cm-obj (.listAllObjects buffer-pool chunk-metadata-path)
-            :let [{cm-obj-key :key} (os/<-StoredObject cm-obj)]]
-      (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool cm-obj-key))]
+(defn- load-blocks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
+  (let [bm (TreeMap.)]
+    (doseq [bm-obj (.listAllObjects buffer-pool block-metadata-path)
+            :let [{bm-obj-key :key} (os/<-StoredObject bm-obj)]]
+      (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool bm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
-          (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
-    cm))
+          (.put bm (obj-key->block-idx bm-obj-key) (transit/read rdr)))))
+    bm))
 
 (comment
   (require '[clojure.java.io :as io])
@@ -429,14 +430,14 @@
          opts))
 
 (defmethod ig/init-key ::metadata-manager [_ {:keys [cache-size ^BufferPool buffer-pool], :or {cache-size 128} :as deps}]
-  (let [chunks-metadata (load-chunks-metadata deps)
+  (let [blocks-metadata (load-blocks-metadata deps)
         table-metadata-cache (-> (Caffeine/newBuilder)
                                  (.maximumSize cache-size)
                                  (.build))]
     (MetadataManager. buffer-pool
                       table-metadata-cache
-                      chunks-metadata
-                      (->> (vals chunks-metadata) (reduce merge-fields {})))))
+                      blocks-metadata
+                      (->> (vals blocks-metadata) (reduce merge-fields {})))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))

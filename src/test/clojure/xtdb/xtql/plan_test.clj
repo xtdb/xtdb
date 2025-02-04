@@ -921,7 +921,7 @@
 
 
 (t/deftest bug-non-string-table-names-599
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1000}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 1000}}))]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put-docs :t1 {:xt/id id,
@@ -943,7 +943,7 @@
         (t/is (= 160 (count-table tx)))))))
 
 (t/deftest bug-dont-throw-on-non-existing-column-597
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1000}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 1000}}))]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put-docs :t1 {:xt/id id,
@@ -965,7 +965,7 @@
 
 
 (t/deftest add-better-metadata-support-for-keywords
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1000}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 1000}}))]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put-docs :t1 {:xt/id id,
@@ -973,7 +973,7 @@
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))]
       (xt/submit-tx node [[:put-docs :docs {:xt/id :some-doc}]])
-      ;; going over the chunk boundary
+      ;; going over the block boundary
       (submit-ops! (range 200))
 
       (t/is (= [{:xt/id :some-doc}]
@@ -1928,7 +1928,7 @@
                  '(from :foo [xt/id])))))
 
 (t/deftest test-metadata-filtering-for-time-data-607
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 1}}))]
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 1}}))]
     (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :from-date #xt/date "2000-01-01"}]
                         [:put-docs :docs {:xt/id 2 :from-date #xt/date "3000-01-01"}]])
     (t/is (= [{:id 1}]
@@ -2062,7 +2062,7 @@
                              :d (= #xt/time "08:12:13.366" #xt/time "08:12:13.366")}))))))
 
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-chunk 10}
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}
                                                           :log [:in-memory {:instant-src (tu/->mock-clock)}]}))]
     (doseq [i (range 10)]
       (xt/submit-tx node [[:put-docs :ints {:xt/id 0 :n i}]]))

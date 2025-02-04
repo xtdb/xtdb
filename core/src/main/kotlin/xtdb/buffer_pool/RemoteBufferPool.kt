@@ -165,14 +165,14 @@ class RemoteBufferPool(
             .use { entry -> Relation.readFooter(entry.path.newSeekableByteChannel()) }
     }
 
-    override fun getRecordBatch(key: Path, blockIdx: Int): ArrowRecordBatch {
+    override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests.increment()
 
         val footer = getFooter(key)
-        val block = footer.recordBatches.getOrNull(blockIdx)
+        val arrowBlock = footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
-        return memoryCache.get(PathSlice(key, block.offset, block.metadataLength + block.bodyLength)) { pathSlice ->
+        return memoryCache.get(PathSlice(key, arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)) { pathSlice ->
             memCacheMisses.increment()
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses.increment()
@@ -180,7 +180,8 @@ class RemoteBufferPool(
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
-                0, block.metadataLength, block.bodyLength, "Failed opening record batch '$key' at block-idx $blockIdx"
+                0, arrowBlock.metadataLength, arrowBlock.bodyLength,
+                "Failed opening record batch '$key' at block-idx $idx"
             )
         }
     }
@@ -195,7 +196,7 @@ class RemoteBufferPool(
             .closeOnCatch { fileChannel ->
                 rel.startUnload(fileChannel).closeOnCatch { unloader ->
                     object : xtdb.ArrowWriter {
-                        override fun writeBatch() = unloader.writeBatch()
+                        override fun writePage() = unloader.writePage()
 
                         override fun end(): FileSize {
                             unloader.end()

@@ -8,24 +8,24 @@
   (t/is (= [[{:a 12, :b 10}]
             [{:a 100, :b 83}]]
            (tu/query-ra [:select '(> a b)
-                         [::tu/blocks
+                         [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
                            [{:a 100, :b 83}]
                            [{:a 83, :b 100}]]]]
-                        {:preserve-blocks? true})))
+                        {:preserve-pages? true})))
 
   (t/testing "param"
     (t/is (= [[{:a 100, :b 83}]
               [{:a 83, :b 100}]]
              (tu/query-ra [:select '(> a ?b)
-                           [::tu/blocks
+                           [::tu/pages
                             [[{:a 12, :b 10}
                               {:a 0, :b 15}]
                              [{:a 100, :b 83}]
                              [{:a 83, :b 100}]]]]
                           {:args {:b 50}
-                           :preserve-blocks? true})))))
+                           :preserve-pages? true})))))
 
 (deftest test-no-column-relation
   (t/is (= [{}]

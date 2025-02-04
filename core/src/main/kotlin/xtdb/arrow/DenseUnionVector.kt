@@ -269,20 +269,20 @@ class DenseUnionVector(
             LegWriter(0, legVectors.first()).rowCopier(dest)
         }
 
-    override fun unloadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
         typeBuffer.unloadBuffer(buffers)
         offsetBuffer.unloadBuffer(buffers)
 
-        legVectors.forEach { it.unloadBatch(nodes, buffers) }
+        legVectors.forEach { it.unloadPage(nodes, buffers) }
     }
 
-    override fun loadBatch(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
 
         typeBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing type buffer"))
         offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing offset buffer"))
-        legVectors.forEach { it.loadBatch(nodes, buffers) }
+        legVectors.forEach { it.loadPage(nodes, buffers) }
 
         valueCount = node.length
     }

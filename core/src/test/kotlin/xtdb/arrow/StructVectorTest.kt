@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
 import java.nio.channels.Channels
 
 class StructVectorTest {
@@ -134,13 +133,13 @@ class StructVectorTest {
                     structVec.writeObject(m2)
                     rel.endRow()
 
-                    unloader.writeBatch()
+                    unloader.writePage()
                     rel.clear()
 
                     structVec.writeObject(m3)
                     rel.endRow()
 
-                    unloader.writeBatch()
+                    unloader.writePage()
 
                     unloader.end()
                 }
@@ -150,20 +149,20 @@ class StructVectorTest {
             Relation(allocator, loader.schema).use { rel ->
                 val structVec = rel["struct"]!!
 
-                assertEquals(2, loader.batchCount)
+                assertEquals(2, loader.pageCount)
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(m1, structVec.getObject(0))
                 assertEquals(m2, structVec.getObject(1))
 
-                loader.loadBatch(1, rel)
+                loader.loadPage(1, rel)
 
                 assertEquals(1, rel.rowCount)
                 assertEquals(m3, structVec.getObject(0))
 
-                loader.loadBatch(0, rel)
+                loader.loadPage(0, rel)
 
                 assertEquals(2, rel.rowCount)
                 assertEquals(m1, structVec.getObject(0))
