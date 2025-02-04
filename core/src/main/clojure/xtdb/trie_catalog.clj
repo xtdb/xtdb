@@ -148,9 +148,9 @@
 (defn apply-trie-notification
   ([_trie-cat] {})
   ([trie-cat tries ^AddedTrie added-trie]
-   (let [trie (-> (trie/parse-trie-key (.getTrieKey added-trie))
-                  (update :part vec)
-                  (assoc :data-file-size (.getDataFileSize added-trie)))]
+   (when-let [trie (some-> (trie/parse-trie-key (.getTrieKey added-trie))
+                           (update :part vec)
+                           (assoc :data-file-size (.getDataFileSize added-trie)))]
      (cond-> tries
        (not (superseded-trie? tries trie)) (conj-trie trie trie-cat))))
 
