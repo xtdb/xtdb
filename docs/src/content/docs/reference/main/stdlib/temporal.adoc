@@ -53,7 +53,7 @@ XTDB allows fine-grained control over user requests for the 'current time', to a
 
 * The wall-clock time of a query is fixed when the query starts.
   It can be explicitly specified by prefixing the query with `SETTING CURRENT_TIME TO TIMESTAMP '...'`; otherwise, it will snapshot the current-time of the XTDB node.
-* The wall-clock time of a query within a transaction is fixed to the system-time of the transaction, as recorded by the log (or overridden by starting the transaction with `BEGIN AT SYSTEM_TIME TIMESTAMP '...'`).
+* The wall-clock time of a query within a transaction is fixed to the system-time of the transaction, as recorded by the log (or overridden by starting the transaction with `BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '...')`).
 * The time zone of the connection can be set with `SET TIME ZONE TO '...'`
 
 The following functions are available for retrieving the current time:

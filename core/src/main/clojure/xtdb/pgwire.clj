@@ -460,25 +460,29 @@
                                   (visitIsolationLevel [_ _] {})
                                   (visitSessionIsolationLevel [_ _] {})
 
-                                  (visitReadWriteTransaction [_ _] {:access-mode :read-write})
+                                  (visitReadWriteTransaction [this ctx]
+                                    (into {:access-mode :read-write}
+                                          (mapcat (partial plan/accept-visitor this) (.readWriteTxOption ctx))))
+
                                   (visitReadOnlyTransaction [_ _] {:access-mode :read-only})
 
                                   (visitReadWriteSession [_ _] {:access-mode :read-write})
+
                                   (visitReadOnlySession [_ _] {:access-mode :read-only})
 
-                                  (visitTransactionSystemTime [_ ctx]
-                                    {:tx-system-time (.accept (.dateTimeLiteral ctx)
-                                                              (reify SqlVisitor
-                                                                (visitDateLiteral [_ ctx]
-                                                                  (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
-                                                                      (.atStartOfDay)
-                                                                      (.atZone ^ZoneId default-tz)))
+                                  (visitSystemTimeTxOption [_ ctx]
+                                    {:system-time (.accept (.dateTimeLiteral ctx)
+                                                           (reify SqlVisitor
+                                                             (visitDateLiteral [_ ctx]
+                                                               (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
+                                                                   (.atStartOfDay)
+                                                                   (.atZone ^ZoneId default-tz)))
 
-                                                                (visitTimestampLiteral [_ ctx]
-                                                                  (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
-                                                                    (cond
-                                                                      (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
-                                                                      (instance? ZonedDateTime ts) ts)))))})
+                                                             (visitTimestampLiteral [_ ctx]
+                                                               (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
+                                                                 (cond
+                                                                   (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
+                                                                   (instance? ZonedDateTime ts) ts)))))})
 
                                   (visitCommitStatement [_ _] {:statement-type :commit})
                                   (visitRollbackStatement [_ _] {:statement-type :rollback})
@@ -1396,7 +1400,7 @@
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf tx-system-time access-mode]} transaction
+        {:keys [failed dml-buf system-time access-mode]} transaction
         {:keys [^Clock clock, parameters]} session]
 
     (if failed
@@ -1405,7 +1409,7 @@
       (try
         (let [{:keys [tx-id error]} (when (= :read-write access-mode)
                                       (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                :system-time tx-system-time
+                                                                :system-time system-time
                                                                 :authn {:user (get parameters "user")}}))]
           (swap! conn-state (fn [conn-state]
                               (-> conn-state

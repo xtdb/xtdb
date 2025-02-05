@@ -870,10 +870,13 @@ sessionTxMode
 transactionCharacteristics : transactionMode (',' transactionMode)* ;
 
 transactionMode
-    : 'ISOLATION' 'LEVEL' levelOfIsolation  # IsolationLevel
+    : 'ISOLATION' 'LEVEL' levelOfIsolation # IsolationLevel
     | 'READ' 'ONLY' # ReadOnlyTransaction
-    | 'READ' 'WRITE' # ReadWriteTransaction
-    | 'AT' 'SYSTEM_TIME' dateTimeLiteral #TransactionSystemTime
+    | 'READ' 'WRITE' ('WITH' '(' readWriteTxOption? (',' readWriteTxOption?)* ')')? # ReadWriteTransaction
+    ;
+
+readWriteTxOption
+    : 'SYSTEM_TIME' ('=')? dateTimeLiteral # SystemTimeTxOption
     ;
 
 levelOfIsolation

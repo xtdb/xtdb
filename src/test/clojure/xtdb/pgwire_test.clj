@@ -1023,7 +1023,7 @@
     (let [sql #(q conn [%])]
       (t/testing "as part of START TRANSACTION"
         (sql "SET TIME ZONE 'Europe/London'")
-        (sql "START TRANSACTION READ WRITE, AT SYSTEM_TIME DATE '2021-08-01'")
+        (sql "START TRANSACTION READ WRITE WITH (SYSTEM_TIME DATE '2021-08-01')")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 0)")
         (sql "COMMIT")
 
@@ -1032,7 +1032,7 @@
                (q conn ["SELECT version, _system_from FROM foo"]))))
 
       (t/testing "with BEGIN"
-        (sql "BEGIN READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00'")
+        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00')")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 1)")
         (sql "COMMIT")
 
@@ -1043,7 +1043,7 @@
                (q conn ["SELECT version, _system_from FROM foo FOR ALL VALID_TIME ORDER BY version"]))))
 
       (t/testing "past system time"
-        (sql "BEGIN READ WRITE, AT SYSTEM_TIME TIMESTAMP '2021-08-02T00:00:00Z'")
+        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-02T00:00:00Z')")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 2)")
         (t/is (thrown-with-msg? PSQLException #"specified system-time older than current tx"
                                 (sql "COMMIT")))))))
@@ -2433,12 +2433,12 @@ ORDER BY t.oid DESC LIMIT 1"
   (with-open [conn (jdbc-conn)]
     (exec conn "SET TIME ZONE 'UTC'")
 
-    (jdbc/execute! conn ["BEGIN AT SYSTEM_TIME DATE '2020-01-01'"])
+    (jdbc/execute! conn ["BEGIN READ WRITE WITH (SYSTEM_TIME = DATE '2020-01-01')"])
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
     (jdbc/execute! conn ["COMMIT"])
 
     (t/testing "earlier sys-time"
-      (jdbc/execute! conn ["BEGIN AT SYSTEM_TIME DATE '2019-01-01'"])
+      (jdbc/execute! conn ["BEGIN READ WRITE WITH (SYSTEM_TIME = DATE '2019-01-01')"])
       (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 2}"])
       (t/is (thrown? PSQLException (jdbc/execute! conn ["COMMIT"]))))
 
