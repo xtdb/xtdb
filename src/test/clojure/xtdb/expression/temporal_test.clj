@@ -4,6 +4,7 @@
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
+            [xtdb.expression :as expr]
             [xtdb.expression-test :as et]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
@@ -549,70 +550,71 @@
   (t/is (= #xt/interval-mdn ["P0D" "PT0S"] (age #xt/date-time "2021-01-01T00:00" #xt/date-time "2021-01-01T00:00"))))
 
 (t/deftest test-age-fn
-  (t/testing "testing with local date times"
-    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P0D" "PT2H"] #xt/date-time "2022-05-02T01:00" #xt/date-time "2022-05-01T23:00"
-      #xt/interval-mdn ["P6M" "PT0S"] #xt/date-time "2022-11-01T00:00" #xt/date-time "2022-05-01T00:00"
-      #xt/interval-mdn ["P-6M" "PT0S"] #xt/date-time "2022-05-01T00:00" #xt/date-time "2022-11-01T00:00"
-      #xt/interval-mdn ["P0D" "PT0S"] #xt/date-time "2023-01-01T00:00" #xt/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P30D" "PT12H"] #xt/date-time "2023-02-01T12:00" #xt/date-time "2023-01-02T00:00"
-      #xt/interval-mdn ["P-12M" "PT0S"] #xt/date-time "2022-01-01T00:00" #xt/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P0D" "PT1H"] #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P24M" "PT3H"] #xt/date-time "2025-01-01T03:00" #xt/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P0D" "PT-23H"] #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-02T00:00"
-      #xt/interval-mdn ["P48M" "PT6M"] #xt/date-time "2027-01-01T00:06" #xt/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P-48M" "PT-6M"] #xt/date-time "2023-01-01T00:00" #xt/date-time "2027-01-01T00:06"
-      #xt/interval-mdn ["P29D" "PT23H"] #xt/date-time "2023-02-28T23:00" #xt/date-time "2023-01-30T00:00"
-      #xt/interval-mdn ["P28D" "PT23H"] #xt/date-time "2023-03-29T23:00" #xt/date-time "2023-03-01T00:00"
-      #xt/interval-mdn ["P0D" "PT-1M"] #xt/date-time "2023-04-01T00:00" #xt/date-time "2023-04-01T00:01"
-      #xt/interval-mdn ["P0D" "PT0.001S"] #xt/date-time "2023-07-01T12:00:30.501" #xt/date-time "2023-07-01T12:00:30.500"
-      #xt/interval-mdn ["P0D" "PT-0.001S"] #xt/date-time "2023-07-01T12:00:30.499" #xt/date-time "2023-07-01T12:00:30.500"
-      #xt/interval-mdn ["P25M3D" "PT4H5M6.007S"] #xt/date-time "2025-02-04T18:06:07.007" #xt/date-time "2023-01-01T14:01:01.000"))
+  (binding [expr/*default-tz* #xt/zone "UTC"]
+    (t/testing "testing with local date times"
+      (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+        #xt/interval-mdn ["P0D" "PT2H"] #xt/date-time "2022-05-02T01:00" #xt/date-time "2022-05-01T23:00"
+        #xt/interval-mdn ["P6M" "PT0S"] #xt/date-time "2022-11-01T00:00" #xt/date-time "2022-05-01T00:00"
+        #xt/interval-mdn ["P-6M" "PT0S"] #xt/date-time "2022-05-01T00:00" #xt/date-time "2022-11-01T00:00"
+        #xt/interval-mdn ["P0D" "PT0S"] #xt/date-time "2023-01-01T00:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval-mdn ["P30D" "PT12H"] #xt/date-time "2023-02-01T12:00" #xt/date-time "2023-01-02T00:00"
+        #xt/interval-mdn ["P-12M" "PT0S"] #xt/date-time "2022-01-01T00:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval-mdn ["P0D" "PT1H"] #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval-mdn ["P24M" "PT3H"] #xt/date-time "2025-01-01T03:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval-mdn ["P0D" "PT-23H"] #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-02T00:00"
+        #xt/interval-mdn ["P48M" "PT6M"] #xt/date-time "2027-01-01T00:06" #xt/date-time "2023-01-01T00:00"
+        #xt/interval-mdn ["P-48M" "PT-6M"] #xt/date-time "2023-01-01T00:00" #xt/date-time "2027-01-01T00:06"
+        #xt/interval-mdn ["P29D" "PT23H"] #xt/date-time "2023-02-28T23:00" #xt/date-time "2023-01-30T00:00"
+        #xt/interval-mdn ["P28D" "PT23H"] #xt/date-time "2023-03-29T23:00" #xt/date-time "2023-03-01T00:00"
+        #xt/interval-mdn ["P0D" "PT-1M"] #xt/date-time "2023-04-01T00:00" #xt/date-time "2023-04-01T00:01"
+        #xt/interval-mdn ["P0D" "PT0.001S"] #xt/date-time "2023-07-01T12:00:30.501" #xt/date-time "2023-07-01T12:00:30.500"
+        #xt/interval-mdn ["P0D" "PT-0.001S"] #xt/date-time "2023-07-01T12:00:30.499" #xt/date-time "2023-07-01T12:00:30.500"
+        #xt/interval-mdn ["P25M3D" "PT4H5M6.007S"] #xt/date-time "2025-02-04T18:06:07.007" #xt/date-time "2023-01-01T14:01:01.000"))
 
-  (t/testing "testing with zoned date times"
-    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P0D" "PT1H"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT0H"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT0S"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT1M"] #xt/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT-1H-59M"] #xt/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
-      #xt/interval-mdn ["P-1D" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
-      #xt/interval-mdn ["P1D" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
-      #xt/interval-mdn ["P0D" "PT0S"] #xt/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #xt/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
-      #xt/interval-mdn ["P12M" "PT0S"] #xt/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT3H"] #xt/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P1D" "PT2H"] #xt/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT3H"] #xt/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
-      #xt/interval-mdn ["P0D" "PT0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT-0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P25M3D" "PT3H5M6.007S"] #xt/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #xt/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
+    (t/testing "testing with zoned date times"
+      (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+        #xt/interval-mdn ["P0D" "PT1H"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT0H"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT0S"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT1M"] #xt/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT-1H-59M"] #xt/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
+        #xt/interval-mdn ["P-1D" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
+        #xt/interval-mdn ["P1D" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
+        #xt/interval-mdn ["P0D" "PT0S"] #xt/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #xt/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
+        #xt/interval-mdn ["P12M" "PT0S"] #xt/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT3H"] #xt/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P1D" "PT2H"] #xt/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT3H"] #xt/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
+        #xt/interval-mdn ["P0D" "PT0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT-0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P25M3D" "PT3H5M6.007S"] #xt/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #xt/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
 
-  (t/testing "testing with dates"
-    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P1D" "PT0S"] #xt/date "2023-01-02" #xt/date "2023-01-01"
-      #xt/interval-mdn ["P-1D" "PT0S"] #xt/date "2023-01-01" #xt/date "2023-01-02"
-      #xt/interval-mdn ["P30D" "PT0S"] #xt/date "2023-01-31" #xt/date "2023-01-01"
-      #xt/interval-mdn ["P2D" "PT0S"] #xt/date "2020-03-01" #xt/date "2020-02-28"
-      #xt/interval-mdn ["P1D" "PT0S"] #xt/date "2021-03-01" #xt/date "2021-02-28"
-      #xt/interval-mdn ["P12M" "PT0S"] #xt/date "2024-01-01" #xt/date "2023-01-01"
-      #xt/interval-mdn ["P-12M" "PT0S"] #xt/date "2023-01-01" #xt/date "2024-01-01"
-      #xt/interval-mdn ["P13M" "PT0S"] #xt/date "2024-02-01" #xt/date "2023-01-01"
-      #xt/interval-mdn ["P-13M" "PT0S"] #xt/date "2023-01-01" #xt/date "2024-02-01"
-      #xt/interval-mdn ["P0D" "PT0S"] #xt/date "2023-01-01" #xt/date "2023-01-01"))
-  
-  (t/testing "test with mixed types"
-    (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-      #xt/interval-mdn ["P1D" "PT0S"] #xt/date "2023-01-02" #xt/date-time "2023-01-01T00:00"
-      #xt/interval-mdn ["P-1D" "PT0S"] #xt/date-time "2023-01-01T00:00" #xt/date "2023-01-02"
-      #xt/interval-mdn ["P12M" "PT0S"] #xt/date "2024-01-01" #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
-      #xt/interval-mdn ["P-12M" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #xt/date "2024-01-01"
-      #xt/interval-mdn ["P0D" "PT2H"] #xt/date-time "2023-06-01T12:00" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
-      #xt/interval-mdn ["P0D" "PT2H"] #xt/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #xt/date-time "2023-06-01T12:00"
-      #xt/interval-mdn ["P6M" "PT0S"] #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #xt/date "2022-05-01"
-      #xt/interval-mdn ["P5M30D" "PT23H"] #xt/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #xt/date "2022-05-01"
-      #xt/interval-mdn ["P-6M" "PT0S"] #xt/date "2022-05-01" #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
-      #xt/interval-mdn ["P0D" "PT2H0.001S"] #xt/date-time "2023-07-01T12:00:30.501" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-      #xt/interval-mdn ["P0D" "PT-2H-0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/date-time "2023-07-01T12:00:30.500")))
+    (t/testing "testing with dates"
+      (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+        #xt/interval-mdn ["P1D" "PT0S"] #xt/date "2023-01-02" #xt/date "2023-01-01"
+        #xt/interval-mdn ["P-1D" "PT0S"] #xt/date "2023-01-01" #xt/date "2023-01-02"
+        #xt/interval-mdn ["P30D" "PT0S"] #xt/date "2023-01-31" #xt/date "2023-01-01"
+        #xt/interval-mdn ["P2D" "PT0S"] #xt/date "2020-03-01" #xt/date "2020-02-28"
+        #xt/interval-mdn ["P1D" "PT0S"] #xt/date "2021-03-01" #xt/date "2021-02-28"
+        #xt/interval-mdn ["P12M" "PT0S"] #xt/date "2024-01-01" #xt/date "2023-01-01"
+        #xt/interval-mdn ["P-12M" "PT0S"] #xt/date "2023-01-01" #xt/date "2024-01-01"
+        #xt/interval-mdn ["P13M" "PT0S"] #xt/date "2024-02-01" #xt/date "2023-01-01"
+        #xt/interval-mdn ["P-13M" "PT0S"] #xt/date "2023-01-01" #xt/date "2024-02-01"
+        #xt/interval-mdn ["P0D" "PT0S"] #xt/date "2023-01-01" #xt/date "2023-01-01"))
+
+    (t/testing "test with mixed types"
+      (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
+        #xt/interval-mdn ["P1D" "PT0S"] #xt/date "2023-01-02" #xt/date-time "2023-01-01T00:00"
+        #xt/interval-mdn ["P-1D" "PT0S"] #xt/date-time "2023-01-01T00:00" #xt/date "2023-01-02"
+        #xt/interval-mdn ["P12M" "PT0S"] #xt/date "2024-01-01" #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
+        #xt/interval-mdn ["P-12M" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #xt/date "2024-01-01"
+        #xt/interval-mdn ["P0D" "PT2H"] #xt/date-time "2023-06-01T12:00" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
+        #xt/interval-mdn ["P0D" "PT2H"] #xt/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #xt/date-time "2023-06-01T12:00"
+        #xt/interval-mdn ["P6M" "PT0S"] #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #xt/date "2022-05-01"
+        #xt/interval-mdn ["P5M30D" "PT23H"] #xt/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #xt/date "2022-05-01"
+        #xt/interval-mdn ["P-6M" "PT0S"] #xt/date "2022-05-01" #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
+        #xt/interval-mdn ["P0D" "PT2H0.001S"] #xt/date-time "2023-07-01T12:00:30.501" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+        #xt/interval-mdn ["P0D" "PT-2H-0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/date-time "2023-07-01T12:00:30.500"))))
 
 (def ^:private instant-gen
   (->> (tcg/tuple (tcg/choose (.getEpochSecond #xt/instant "2020-01-01T00:00:00Z")

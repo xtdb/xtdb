@@ -35,7 +35,7 @@
   (:import clojure.lang.MapEntry
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            java.lang.AutoCloseable
-           (java.time Clock Duration)
+           (java.time Duration InstantSource)
            (java.util HashMap)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Function)
@@ -51,14 +51,12 @@
            xtdb.util.RefCounter
            xtdb.vector.IVectorReader))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
   (^java.util.List columnFields [])
   (^xtdb.ICursor openCursor [])
   (^void close []
    "optional: if you close this BoundQuery it'll close any closed-over args relation"))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface PreparedQuery
   (^java.util.List paramFields [])
   (^java.util.List columnFields [])
@@ -71,7 +69,6 @@
     args :: RelationReader
       N.B. `args` will be closed when this BoundQuery closes"))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IQuerySource
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-query query-opts])
   (^xtdb.query.PreparedQuery prepareRaQuery [ra-query wm-src query-opts])
@@ -80,13 +77,14 @@
   (^clojure.lang.PersistentVector planQuery [query wm-src query-opts]))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
-                                        ^Clock clock, ^RefCounter ref-ctr fields]
+                                        current-time, default-tz, ^RefCounter ref-ctr, fields]
   (reify IResultCursor
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
         (throw (InterruptedException.)))
 
-      (binding [expr/*clock* clock]
+      (binding [expr/*clock* (InstantSource/fixed current-time)
+                expr/*default-tz* default-tz]
         (.tryAdvance cursor c)))
 
     (characteristics [_] (.characteristics cursor))
@@ -116,8 +114,7 @@
                      :param-fields param-fields}
                     (reify Function
                       (apply [_ emit-opts]
-                        (binding [expr/*clock* (Clock/fixed (.instant expr/*clock*) default-tz)]
-                          ;; only the tz in the clock is relevant at expr compile time
+                        (binding [expr/*default-tz* default-tz]
                           (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter)))))))
 
 (defn ->column-fields [ordered-outer-projection fields]
@@ -175,7 +172,7 @@
                                             (map-indexed (fn [idx field]
                                                            (types/field-with-name field (str "?_" idx)))))))
            param-fields-by-name (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity)) param-fields)
-           default-tz (or default-tz (.getZone expr/*clock*))]
+           default-tz (or default-tz expr/*default-tz*)]
 
        (reify PreparedQuery
          (paramFields [_] param-fields)
@@ -191,8 +188,7 @@
 
            ;; TODO throw if basis is in the future?
            (let [{:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
-                 current-time (or current-time (.instant expr/*clock*))
-                 clock (Clock/fixed current-time default-tz)]
+                 current-time (or current-time (expr/current-time))]
 
              (reify
                BoundQuery
@@ -220,15 +216,15 @@
                                               (RootAllocator.))
                                             wm (.openWatermark wm-src)]
                    (try
-                     (binding [expr/*clock* clock]
+                     (binding [expr/*clock* (InstantSource/fixed current-time)
+                               expr/*default-tz* default-tz]
                        (-> (->cursor {:allocator allocator, :watermark wm
-                                      :clock clock,
                                       :default-tz default-tz,
                                       :snapshot-time (or snapshot-time (some-> wm .getTxBasis .getSystemTime))
                                       :current-time current-time
                                       :args (or args vw/empty-args)
                                       :schema (scan/tables-with-cols wm-src)})
-                           (wrap-cursor wm allocator clock ref-ctr fields)))
+                           (wrap-cursor wm allocator current-time default-tz ref-ctr fields)))
 
                      (catch Throwable t
                        (.release ref-ctr) 

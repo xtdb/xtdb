@@ -53,13 +53,11 @@
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
   (close [])
   (scanFields [^xtdb.indexer.Watermark wm, scan-cols])
   (emitScan [scan-expr scan-fields param-fields]))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
     [table (case col-tag
@@ -72,11 +70,11 @@
   (letfn [(->time-μs [[tag arg]]
             (case tag
               :literal (-> arg
-                           (time/sql-temporal->micros (.getZone expr/*clock*)))
+                           (time/sql-temporal->micros expr/*default-tz*))
               :param (some-> (-> (.readerForName args (name arg))
                                  (.getObject 0))
-                             (time/sql-temporal->micros (.getZone expr/*clock*)))
-              :now (-> (.instant expr/*clock*)
+                             (time/sql-temporal->micros expr/*default-tz*))
+              :now (-> (expr/current-time)
                        (time/instant->micros))))
           (apply-constraint [constraint]
             (if-let [[tag & args] constraint]

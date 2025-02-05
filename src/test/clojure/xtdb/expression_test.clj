@@ -12,7 +12,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
-           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
+           (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
@@ -1867,104 +1867,105 @@
         la-tz (ZoneId/of "America/Los_Angeles")
         la-zdt (.withZoneSameInstant utc-zdt la-tz)
         la-zdt-micros (-> la-zdt (.truncatedTo ChronoUnit/MICROS))]
-    (letfn [(project-fn [form]
-              (run-projection (vr/rel-reader [] 1) form))]
-      (binding [expr/*clock* (Clock/fixed inst utc-tz)]
-        (t/testing "UTC"
-          (t/is (= {:res [utc-zdt-micros]
-                    :res-type [:timestamp-tz :micro "UTC"]}
-                   (project-fn '(current-timestamp)))
-                "current-timestamp")
+    (binding [expr/*clock* (InstantSource/fixed inst)]
+      (letfn [(project-fn [form]
+                (run-projection (vr/rel-reader [] 1) form))]
+        (binding [expr/*default-tz* utc-tz]
+          (t/testing "UTC"
+            (t/is (= {:res [utc-zdt-micros]
+                      :res-type [:timestamp-tz :micro "UTC"]}
+                     (project-fn '(current-timestamp)))
+                  "current-timestamp")
 
-          (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
-                    :res-type [:date :day]}
-                   (project-fn '(current-date)))
-                "current-date")
+            (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
+                      :res-type [:date :day]}
+                     (project-fn '(current-date)))
+                  "current-date")
 
-          (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time-local :micro]}
-                   (project-fn '(current-time)))
-                "current-time")
+            (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
+                      :res-type [:time-local :micro]}
+                     (project-fn '(current-time)))
+                  "current-time")
 
-          (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time-local :micro]}
-                   (project-fn '(local-time)))
-                "local-time")
+            (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
+                      :res-type [:time-local :micro]}
+                     (project-fn '(local-time)))
+                  "local-time")
 
-          (t/is (= {:res [(.toLocalDateTime utc-zdt-micros)]
-                    :res-type [:timestamp-local :micro]}
-                   (project-fn '(local-timestamp)))
-                "local-timestamp")))
+            (t/is (= {:res [(.toLocalDateTime utc-zdt-micros)]
+                      :res-type [:timestamp-local :micro]}
+                     (project-fn '(local-timestamp)))
+                  "local-timestamp")))
 
-      (binding [expr/*clock* (Clock/fixed inst la-tz)]
-        (t/testing "LA"
-          (t/is (= {:res [la-zdt-micros]
-                    :res-type [:timestamp-tz :micro "America/Los_Angeles"]}
-                   (run-projection (vr/rel-reader [] 1) '(current-timestamp)))
-                "current-timestamp")
+        (binding [expr/*default-tz* la-tz]
+          (t/testing "LA"
+            (t/is (= {:res [la-zdt-micros]
+                      :res-type [:timestamp-tz :micro "America/Los_Angeles"]}
+                     (run-projection (vr/rel-reader [] 1) '(current-timestamp)))
+                  "current-timestamp")
 
-          ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
-          ;; I've opted to return these as UTC to differentiate them from `local-time` and `local-timestamp` below.
-          (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
-                    :res-type [:date :day]}
-                   (project-fn '(current-date)))
-                "current-date")
+            ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
+            ;; I've opted to return these as UTC to differentiate them from `local-time` and `local-timestamp` below.
+            (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
+                      :res-type [:date :day]}
+                     (project-fn '(current-date)))
+                  "current-date")
 
-          (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time-local :micro]}
-                   (project-fn '(current-time)))
-                "current-time")
+            (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
+                      :res-type [:time-local :micro]}
+                     (project-fn '(current-time)))
+                  "current-time")
 
-          (t/is (= {:res [(.toLocalTime la-zdt-micros)]
-                    :res-type [:time-local :micro]}
-                   (project-fn '(local-time)))
-                "local-time")
+            (t/is (= {:res [(.toLocalTime la-zdt-micros)]
+                      :res-type [:time-local :micro]}
+                     (project-fn '(local-time)))
+                  "local-time")
 
-          (t/is (= {:res [(.toLocalDateTime la-zdt-micros)]
-                    :res-type [:timestamp-local :micro]}
-                   (project-fn '(local-timestamp)))
-                "local-timestamp")))
+            (t/is (= {:res [(.toLocalDateTime la-zdt-micros)]
+                      :res-type [:timestamp-local :micro]}
+                     (project-fn '(local-timestamp)))
+                  "local-timestamp")))
 
-      (binding [expr/*clock* (Clock/fixed inst, (ZoneId/of "America/Los_Angeles"))]
-        (t/testing "timestamp precision"
-          (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
-                    :res-type [:timestamp-tz :nano "America/Los_Angeles"]}
-                   (run-projection (vr/rel-reader [] 1) '(current-timestamp 7)))
-                "current-timestamp")
+        (binding [expr/*default-tz* la-tz]
+          (t/testing "timestamp precision"
+            (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
+                      :res-type [:timestamp-tz :nano "America/Los_Angeles"]}
+                     (run-projection (vr/rel-reader [] 1) '(current-timestamp 7)))
+                  "current-timestamp")
 
-          (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]
-                    :res-type [:timestamp-local :second]}
-                   (project-fn '(local-timestamp 0)))
-                "local-timestamp"))
+            (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]
+                      :res-type [:timestamp-local :second]}
+                     (project-fn '(local-timestamp 0)))
+                  "local-timestamp"))
 
-        (t/testing "time precision"
-          (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
-                    :res-type [:time-local :milli]}
-                   (project-fn '(current-time 3)))
-                "current-time")
+          (t/testing "time precision"
+            (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
+                      :res-type [:time-local :milli]}
+                     (project-fn '(current-time 3)))
+                  "current-time")
 
-          (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
-                    :res-type [:time-local :milli]}
-                   (project-fn '(local-time 2)))
-                "local-time"))))))
+            (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
+                      :res-type [:time-local :milli]}
+                     (project-fn '(local-time 2)))
+                  "local-time"))))))
 
-(t/deftest test-trim-array
-  (t/are [expected expr variables]
-      (= expected (project1 expr variables))
+  (t/deftest test-trim-array
+    (t/are [expected expr variables]
+        (= expected (project1 expr variables))
 
-    nil '(trim-array nil nil) {}
-    nil '(trim-array nil 42) {}
-    nil '(trim-array [42] nil) {}
+      nil '(trim-array nil nil) {}
+      nil '(trim-array nil 42) {}
+      nil '(trim-array [42] nil) {}
 
-    [] '(trim-array [] 0) {}
-    [42] '(trim-array [42] 0) {}
-    [] '(trim-array [42] 1) {}
-    [42] '(trim-array [42, 43] 1) {}
-    [] '(trim-array [42, 43] 2) {}
+      [] '(trim-array [] 0) {}
+      [42] '(trim-array [42] 0) {}
+      [] '(trim-array [42] 1) {}
+      [42] '(trim-array [42, 43] 1) {}
+      [] '(trim-array [42, 43] 2) {}
 
-    [] '(trim-array a 0) {:a []}
-    nil '(trim-array a 0) {:a nil}
-    [42] '(trim-array a 1) {:a [42, 43]}))
+      [] '(trim-array a 0) {:a []}
+      nil '(trim-array a 0) {:a nil}
+      [42] '(trim-array a 1) {:a [42, 43]})))
 
 (t/deftest test-trim-array-offset-over-trim-exception
   (t/is (thrown-with-msg? RuntimeException #"Data exception - array element error\." (project1 '(trim-array [1 2 3] 4) {}))))

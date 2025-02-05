@@ -176,23 +176,23 @@
   {:return-type target-type
    :->call-code (fn [[dt]]
                   (-> `(-> (LocalDate/ofEpochDay ~dt)
-                           (.atStartOfDay (.getZone expr/*clock*))
+                           (.atStartOfDay expr/*default-tz*)
                            (.toInstant))
                       (inst->ts tgt-tsunit)))})
 
 (defmethod expr/codegen-cast [:time-local :timestamp-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type
    :->call-code (fn [[tm]]
-                  (-> `(LocalDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                  (-> `(LocalDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
                                          (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano)))
                       (ldt->ts tgt-tsunit)))})
 
 (defmethod expr/codegen-cast [:time-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
   {:return-type target-type
    :->call-code (fn [[tm]]
-                  (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                  (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
                                              (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano))
-                                             (.getZone expr/*clock*))
+                                             expr/*default-tz*)
                            (.toInstant))
                       (inst->ts tgt-tsunit)))})
 
@@ -215,7 +215,7 @@
   {:return-type target-type,
    :->call-code (fn [[ts]]
                   (-> `(-> ~(ts->ldt ts src-tsunit)
-                           (.atZone (.getZone expr/*clock*))
+                           (.atZone expr/*default-tz*)
                            (.toInstant))
                       (inst->ts tgt-tsunit)))})
 
@@ -225,7 +225,7 @@
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
      :->call-code (fn [[tstz]]
                     `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                         (.withZoneSameInstant (.getZone expr/*clock*))
+                         (.withZoneSameInstant expr/*default-tz*)
                          (.toLocalDate)
                          (.toEpochDay)))}))
 
@@ -235,7 +235,7 @@
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
      :->call-code (fn [[tstz]]
                     (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant (.getZone expr/*clock*))
+                             (.withZoneSameInstant expr/*default-tz*)
                              (.toLocalTime)
                              (.toNanoOfDay))
                         (with-conversion :nano tgt-tsunit)))}))
@@ -246,7 +246,7 @@
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
      :->call-code (fn [[tstz]]
                     (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant (.getZone expr/*clock*))
+                             (.withZoneSameInstant expr/*default-tz*)
                              (.toLocalDateTime))
                         (ldt->ts tgt-tsunit)))}))
 
@@ -433,7 +433,7 @@
     {:op :call
      :f :cast
      :args [(expr/form->expr expr env)]
-     :target-type [:timestamp-tz unit (str (.getZone expr/*clock*))]
+     :target-type [:timestamp-tz unit (str expr/*default-tz*)]
      :cast-opts opts}))
 
 (defn mdn-interval->duration [^PeriodDuration x]
@@ -1513,10 +1513,10 @@
 
 (defn- current-timestamp [^long precision]
   (let [precision (bound-precision precision)
-        zone-id (.getZone expr/*clock*)]
+        zone-id expr/*default-tz*]
     {:return-type [:timestamp-tz (precision-timeunits precision) (str zone-id)]
      :->call-code (fn [_]
-                    (-> `(long (let [inst# (.instant expr/*clock*)]
+                    (-> `(long (let [inst# (expr/current-time)]
                                  (+ (* ~(seconds-multiplier precision) (.getEpochSecond inst#))
                                     (quot (.getNano inst#) ~(nanos-divisor precision)))))
                         (truncate-for-precision precision)))}))
@@ -1536,7 +1536,7 @@
   ;; we then turn DateDays into LocalDates, which confuses things further.
   {:return-type [:date :day]
    :->call-code (fn [_]
-                  `(long (-> (ZonedDateTime/ofInstant (.instant expr/*clock*) ZoneOffset/UTC)
+                  `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
                              (.toLocalDate)
                              (.toEpochDay))))})
 
@@ -1547,7 +1547,7 @@
   (let [precision (bound-precision precision)]
     {:return-type [:time-local (precision-timeunits precision)]
      :->call-code (fn [_]
-                    (-> `(long (-> (ZonedDateTime/ofInstant (.instant expr/*clock*) ZoneOffset/UTC)
+                    (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
                                    (.toLocalTime)
                                    (.toNanoOfDay)
                                    (quot ~(nanos-divisor precision))))
@@ -1564,7 +1564,7 @@
   (let [precision (bound-precision precision)]
     {:return-type [:timestamp-local (precision-timeunits precision)]
      :->call-code (fn [_]
-                    (-> `(long (let [ldt# (-> (ZonedDateTime/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                    (-> `(long (let [ldt# (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
                                               (.toLocalDateTime))]
                                  (+ (* (.toEpochSecond ldt# ZoneOffset/UTC) ~(seconds-multiplier precision))
                                     (quot (.getNano ldt#) ~(nanos-divisor precision)))))
@@ -1582,7 +1582,7 @@
         time-unit (precision-timeunits precision)]
     {:return-type [:time-local time-unit]
      :->call-code (fn [_]
-                    (-> `(long (-> (ZonedDateTime/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                    (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
                                    (.toLocalTime)
                                    (.toNanoOfDay)
                                    (quot ~(nanos-divisor precision))))
@@ -1598,7 +1598,7 @@
 (defmethod expr/codegen-call [:current_timezone] [_]
   {:return-type :utf8
    :->call-code (fn [_]
-                  (expr/emit-value String `(str (.getZone expr/*clock*))))})
+                  (expr/emit-value String `(str expr/*default-tz*)))})
 
 (defmethod expr/codegen-call [:abs :num] [{[numeric-type] :arg-types}]
   {:return-type numeric-type
@@ -1681,7 +1681,7 @@
                   `(temporal-contains-point? ~p1-code ~ts-code))})
 
 (defmethod expr/codegen-call [:contains? :tstz-range :timestamp-local] [{[arg1 [_ arg2-unit]] :arg-types, :as expr}]
-  (-> expr (recall-with-cast2 arg1 [:timestamp-tz arg2-unit (str (.getZone expr/*clock*))])))
+  (-> expr (recall-with-cast2 arg1 [:timestamp-tz arg2-unit (str expr/*default-tz*)])))
 
 (defmethod expr/codegen-call [:contains? :tstz-range :date] [{[arg1 _arg2] :arg-types, :as expr}]
   (-> expr (recall-with-cast2 arg1 [:timestamp-local :micro])))
@@ -1971,4 +1971,3 @@
                                             (.writeLong box# ~(zdt->ts zdt-sym out-unit)))))))}))
 
 
-(.plusDays #xt/zoned-date-time "2020-03-29T00:00Z[Europe/London]" 1)

@@ -10,11 +10,11 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
-           [java.net URI]
            (java.lang NumberFormatException)
+           [java.net URI]
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
+           (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.util Arrays Date List Map UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
@@ -346,7 +346,9 @@
 
     (f col-type (apply read-value-code col-type reader-sym args))))
 
-(def ^:dynamic ^java.time.Clock *clock* (Clock/systemUTC))
+(def ^:dynamic ^java.time.InstantSource *clock* (InstantSource/system))
+(defn current-time ^java.time.Instant [] (.instant *clock*))
+(def ^:dynamic ^java.time.ZoneId *default-tz* (ZoneId/systemDefault))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-value
@@ -1755,7 +1757,7 @@
 
 (defn- wrap-zone-id-cache-buster [f]
   (fn [expr opts]
-    (f expr (assoc opts :zone-id (.getZone *clock*)))))
+    (f expr (assoc opts :zone-id *default-tz*))))
 
 (defn arithmetic-ex->runtime-ex [^Throwable cause]
   (let [message (.getMessage cause)]
