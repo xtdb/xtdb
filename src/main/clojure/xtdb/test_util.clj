@@ -48,7 +48,9 @@
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector IVectorReader RelationReader)
+           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
+           (io.micrometer.core.instrument.composite CompositeMeterRegistry)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -78,6 +80,13 @@
   ([opts f]
    (binding [*node-opts* (merge *node-opts* opts)]
      (f))))
+
+(declare component)
+
+(defn with-simple-registry [f]
+  (let [^CompositeMeterRegistry registry (component *node* :xtdb.metrics/registry)]
+    (.add registry (SimpleMeterRegistry.))
+    (f)))
 
 (defn node->server [node]
   (-> node :system :xtdb.pgwire/server))
