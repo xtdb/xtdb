@@ -2543,3 +2543,26 @@ ORDER BY 1,2;"]))))))
                  ["public" "schemata" "table" "xtdb"]
                  ["public" "tables" "table" "xtdb"]]
                 (read)))))))
+
+(t/deftest select-snapshot-time
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [{:ts nil}] (jdbc/execute! conn ["SELECT SNAPSHOT_TIME ts"]))
+          "before any transactions")
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
+
+    (t/is (= [{:ts #inst "2020-01-01"}]
+             (jdbc/execute! conn ["SELECT SNAPSHOT_TIME ts"])))
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 5}]])
+
+    (t/is (= [{:snapshot_time #inst "2020-01-02"}]
+             (jdbc/execute! conn ["SHOW SNAPSHOT_TIME"])))
+
+    (let [sql "SELECT SNAPSHOT_TIME ts, * FROM docs ORDER BY _id"]
+      (t/is (= [{:ts #inst "2020-01-02", :_id 1, :x 3}
+                {:ts #inst "2020-01-02", :_id 2, :x 5}]
+               (jdbc/execute! conn [sql])))
+
+      (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
+               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z' " sql)]))))))

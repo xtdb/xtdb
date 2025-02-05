@@ -79,13 +79,14 @@
   (^clojure.lang.PersistentVector planQuery [query wm-src query-opts]))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
-                                        current-time, default-tz, ^RefCounter ref-ctr, fields]
+                                        current-time, snapshot-time, default-tz, ^RefCounter ref-ctr, fields]
   (reify IResultCursor
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
         (throw (InterruptedException.)))
 
       (binding [expr/*clock* (InstantSource/fixed current-time)
+                expr/*snapshot-time* snapshot-time
                 expr/*default-tz* default-tz]
         (.tryAdvance cursor c)))
 
@@ -219,14 +220,15 @@
                                             wm (.openWatermark wm-src)]
                    (try
                      (binding [expr/*clock* (InstantSource/fixed current-time)
-                               expr/*default-tz* default-tz]
+                               expr/*default-tz* default-tz
+                               expr/*snapshot-time* (or snapshot-time (some-> wm .getTxBasis .getSystemTime))]
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :default-tz default-tz,
-                                      :snapshot-time (or snapshot-time (some-> wm .getTxBasis .getSystemTime))
+                                      :snapshot-time expr/*snapshot-time*
                                       :current-time current-time
                                       :args (or args vw/empty-args)
                                       :schema (scan/tables-with-cols wm-src)})
-                           (wrap-cursor wm allocator current-time default-tz ref-ctr fields)))
+                           (wrap-cursor wm allocator current-time expr/*snapshot-time* default-tz ref-ctr fields)))
 
                      (catch Throwable t
                        (.release ref-ctr) 

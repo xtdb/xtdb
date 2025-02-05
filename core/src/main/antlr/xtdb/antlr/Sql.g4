@@ -35,6 +35,7 @@ directlyExecutableStatement
     | SHOW showVariable # ShowVariableStatement
     | SHOW identifier # ShowSessionVariableStatement
     | SHOW WATERMARK # ShowWatermarkStatement
+    | SHOW SNAPSHOT_TIME # ShowSnapshotTimeStatement
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
     ;
@@ -349,6 +350,7 @@ replacement : expr;
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
     | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision? ')')? # CurrentTimestampFunction
+    | 'SNAPSHOT_TIME' ('(' ')')? # SnapshotTimeFunction
     | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
     ;
 

@@ -1458,6 +1458,11 @@
   (visitCurrentDateFunction [_ _] '(current-date))
   (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
   (visitCurrentTimestampFunction [_ ctx] (fn-with-precision 'current-timestamp (.precision ctx)))
+
+  (visitSnapshotTimeFunction [_ _]
+    (-> '(snapshot_time)
+        (vary-meta assoc :identifier 'snapshot_time)))
+
   (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
   (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
 
@@ -2583,6 +2588,11 @@
 
       (-> (.queryExpression ctx)
           (.accept (->QueryPlanVisitor env scope)))))
+
+  (visitShowSnapshotTimeStatement [_ _]
+    (->QueryExpr '[:table [snapshot_time]
+                   [{:snapshot_time (snapshot_time)}]]
+                 '[snapshot_time]))
 
   (visitSettingDefaultSystemTime [_ ctx]
     [:sys-time-default

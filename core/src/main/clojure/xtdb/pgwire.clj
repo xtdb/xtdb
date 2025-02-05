@@ -576,6 +576,9 @@
                                                  [{:watermark watermark-tx-id}]
                                                  [])]})
 
+                                  (visitShowSnapshotTimeStatement [_ ctx]
+                                    {:statement-type :query, :query sql, :parsed-query ctx})
+
                                   ;; HACK: these values are fixed at prepare-time - if they were to change,
                                   ;; and the same prepared statement re-evaluated, the value would be stale.
                                   (visitShowSessionVariableStatement [_ ctx]

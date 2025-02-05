@@ -1407,3 +1407,28 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= '(and) (plan-expr "WHERE , ,")))
     (t/is (= '(and (= f/a 1)) (plan-expr "WHERE , a = 1")))
     (t/is (= '(and (= f/a 1) (= f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))
+
+(t/deftest select-snapshot-time
+  (t/is (= [{}] (xt/q tu/*node* "SELECT SNAPSHOT_TIME ts"))
+        "before any transactions")
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
+
+  (t/is (= [{:ts (time/->zdt #inst "2020-01-01")}]
+           (xt/q tu/*node* "SELECT SNAPSHOT_TIME ts")))
+
+  (t/is (= [{:snapshot-time (time/->zdt #inst "2020-01-01")}]
+           (xt/q tu/*node* "SHOW SNAPSHOT_TIME")))
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 5}]])
+
+  (let [sql "SELECT SNAPSHOT_TIME ts, * FROM docs ORDER BY _id"]
+    (t/is (= [{:ts (time/->zdt #inst "2020-01-02"), :xt/id 1, :x 3}
+              {:ts (time/->zdt #inst "2020-01-02"), :xt/id 2, :x 5}]
+             (xt/q tu/*node* sql)))
+
+    (t/is (= [{:ts (time/->zdt #inst "2020-01-01"), :xt/id 1, :x 3}]
+             (xt/q tu/*node* sql {:snapshot-time #inst "2020-01-01"})))
+
+    (t/is (= [{:snapshot-time (time/->zdt #inst "2020-01-01")}]
+             (xt/q tu/*node* "SHOW SNAPSHOT_TIME" {:snapshot-time #inst "2020-01-01"})))))
