@@ -5,7 +5,8 @@
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
-  (:import (java.time.zone ZoneRulesException)
+  (:import java.time.ZonedDateTime
+           (java.time.zone ZoneRulesException)
            [java.util HashMap]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -1407,3 +1408,43 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= '(and) (plan-expr "WHERE , ,")))
     (t/is (= '(and (= f/a 1)) (plan-expr "WHERE , a = 1")))
     (t/is (= '(and (= f/a 1) (= f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))
+
+(t/deftest select-snapshot-time
+  (t/is (= [{}] (xt/q tu/*node* "SELECT SNAPSHOT_TIME ts"))
+        "before any transactions")
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
+
+  (t/is (= [{:ts (time/->zdt #inst "2020-01-01")}]
+           (xt/q tu/*node* "SELECT SNAPSHOT_TIME ts")))
+
+  (t/is (= [{:snapshot-time (time/->zdt #inst "2020-01-01")}]
+           (xt/q tu/*node* "SHOW SNAPSHOT_TIME")))
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 5}]])
+
+  (let [sql "SELECT SNAPSHOT_TIME ts, * FROM docs ORDER BY _id"]
+    (t/is (= [{:ts (time/->zdt #inst "2020-01-02"), :xt/id 1, :x 3}
+              {:ts (time/->zdt #inst "2020-01-02"), :xt/id 2, :x 5}]
+             (xt/q tu/*node* sql)))
+
+    (t/is (= [{:ts (time/->zdt #inst "2020-01-01"), :xt/id 1, :x 3}]
+             (xt/q tu/*node* sql {:snapshot-time #inst "2020-01-01"})))
+
+    (t/is (= [{:snapshot-time (time/->zdt #inst "2020-01-01")}]
+             (xt/q tu/*node* "SHOW SNAPSHOT_TIME" {:snapshot-time #inst "2020-01-01"})))))
+
+(t/deftest show-clock-time
+  (t/testing "defaults to now"
+    (let [before (ZonedDateTime/now)
+          ct (-> (xt/q tu/*node* "SHOW CLOCK_TIME")
+                 first :clock-time)
+          after (ZonedDateTime/now)]
+      (t/is (.isBefore before ct))
+      (t/is (.isAfter after ct))))
+
+  (t/is (= [{:clock-time (time/->zdt #inst "2024-01-01")}]
+           (xt/q tu/*node* "SHOW CLOCK_TIME"
+                 {:current-time #inst "2024-01-01"
+                  :default-tz #xt/zone "UTC"}))
+        "explicitly specified"))

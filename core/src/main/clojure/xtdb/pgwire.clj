@@ -414,6 +414,19 @@
                          (subs di-str 1 (dec (count di-str)))))))
           (str/lower-case)))
 
+(defn date-time-visitor [^ZoneId default-tz]
+  (reify SqlVisitor
+    (visitDateLiteral [_ ctx]
+      (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
+          (.atStartOfDay)
+          (.atZone default-tz)))
+
+    (visitTimestampLiteral [_ ctx]
+      (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
+        (cond
+          (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts default-tz)
+          (instance? ZonedDateTime ts) ts)))))
+
 (defn- interpret-sql [sql {:keys [default-tz watermark-tx-id session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
@@ -460,25 +473,26 @@
                                   (visitIsolationLevel [_ _] {})
                                   (visitSessionIsolationLevel [_ _] {})
 
-                                  (visitReadWriteTransaction [_ _] {:access-mode :read-write})
-                                  (visitReadOnlyTransaction [_ _] {:access-mode :read-only})
+                                  (visitReadWriteTransaction [this ctx]
+                                    (into {:access-mode :read-write}
+                                          (mapcat (partial plan/accept-visitor this) (.readWriteTxOption ctx))))
+
+                                  (visitReadOnlyTransaction [this ctx]
+                                    (into {:access-mode :read-only}
+                                          (mapcat (partial plan/accept-visitor this) (.readOnlyTxOption ctx))))
 
                                   (visitReadWriteSession [_ _] {:access-mode :read-write})
+
                                   (visitReadOnlySession [_ _] {:access-mode :read-only})
 
-                                  (visitTransactionSystemTime [_ ctx]
-                                    {:tx-system-time (.accept (.dateTimeLiteral ctx)
-                                                              (reify SqlVisitor
-                                                                (visitDateLiteral [_ ctx]
-                                                                  (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
-                                                                      (.atStartOfDay)
-                                                                      (.atZone ^ZoneId default-tz)))
+                                  (visitSystemTimeTxOption [_ ctx]
+                                    {:system-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
 
-                                                                (visitTimestampLiteral [_ ctx]
-                                                                  (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
-                                                                    (cond
-                                                                      (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
-                                                                      (instance? ZonedDateTime ts) ts)))))})
+                                  (visitSnapshotTimeTxOption [_ ctx]
+                                    {:snapshot-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
+
+                                  (visitClockTimeTxOption [_ ctx]
+                                    {:current-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
 
                                   (visitCommitStatement [_ _] {:statement-type :commit})
                                   (visitRollbackStatement [_ _] {:statement-type :rollback})
@@ -547,8 +561,8 @@
                                   (visitSettingDefaultValidTime [_ _])
                                   (visitSettingDefaultSystemTime [_ _])
 
-                                  (visitSettingCurrentTime [_ ctx]
-                                    [:current-time (-> (.currentTime ctx)
+                                  (visitSettingClockTime [_ ctx]
+                                    [:current-time (-> (.clockTime ctx)
                                                        (plan/plan-expr {:default-tz default-tz})
                                                        (time/->instant))])
 
@@ -571,6 +585,12 @@
                                                (if watermark-tx-id
                                                  [{:watermark watermark-tx-id}]
                                                  [])]})
+
+                                  (visitShowSnapshotTimeStatement [_ ctx]
+                                    {:statement-type :query, :query sql, :parsed-query ctx})
+
+                                  (visitShowClockTimeStatement [_ ctx]
+                                    {:statement-type :query, :query sql, :parsed-query ctx})
 
                                   ;; HACK: these values are fixed at prepare-time - if they were to change,
                                   ;; and the same prepared statement re-evaluated, the value would be stale.
@@ -1396,7 +1416,7 @@
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf tx-system-time access-mode]} transaction
+        {:keys [failed dml-buf system-time access-mode]} transaction
         {:keys [^Clock clock, parameters]} session]
 
     (if failed
@@ -1405,7 +1425,7 @@
       (try
         (let [{:keys [tx-id error]} (when (= :read-write access-mode)
                                       (execute-tx conn dml-buf {:default-tz (.getZone clock)
-                                                                :system-time tx-system-time
+                                                                :system-time system-time
                                                                 :authn {:user (get parameters "user")}}))]
           (swap! conn-state (fn [conn-state]
                               (-> conn-state

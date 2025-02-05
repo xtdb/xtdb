@@ -35,6 +35,8 @@ directlyExecutableStatement
     | SHOW showVariable # ShowVariableStatement
     | SHOW identifier # ShowSessionVariableStatement
     | SHOW WATERMARK # ShowWatermarkStatement
+    | SHOW SNAPSHOT_TIME # ShowSnapshotTimeStatement
+    | SHOW CLOCK_TIME # ShowClockTimeStatement
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
     ;
@@ -55,8 +57,8 @@ settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable
 settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
-    | 'SNAPSHOT_TIME' ('TO' | '=') snapshotTime=literal # SettingSnapshotTime
-    | 'CURRENT_TIME' ('TO' | '=') currentTime=literal # SettingCurrentTime
+    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=literal # SettingSnapshotTime
+    | CLOCK_TIME ('TO' | '=') clockTime=literal # SettingClockTime
     ;
 
 //// §5 Lexical Elements
@@ -349,6 +351,7 @@ replacement : expr;
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
     | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision? ')')? # CurrentTimestampFunction
+    | 'SNAPSHOT_TIME' ('(' ')')? # SnapshotTimeFunction
     | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
     ;
 
@@ -870,10 +873,18 @@ sessionTxMode
 transactionCharacteristics : transactionMode (',' transactionMode)* ;
 
 transactionMode
-    : 'ISOLATION' 'LEVEL' levelOfIsolation  # IsolationLevel
-    | 'READ' 'ONLY' # ReadOnlyTransaction
-    | 'READ' 'WRITE' # ReadWriteTransaction
-    | 'AT' 'SYSTEM_TIME' dateTimeLiteral #TransactionSystemTime
+    : 'ISOLATION' 'LEVEL' levelOfIsolation # IsolationLevel
+    | 'READ' 'ONLY' ('WITH' '(' readOnlyTxOption? (',' readOnlyTxOption?)* ')')? # ReadOnlyTransaction
+    | 'READ' 'WRITE' ('WITH' '(' readWriteTxOption? (',' readWriteTxOption?)* ')')? # ReadWriteTransaction
+    ;
+
+readOnlyTxOption
+    : 'SNAPSHOT_TIME' ('=')? dateTimeLiteral # SnapshotTimeTxOption
+    | 'CLOCK_TIME' ('=')? dateTimeLiteral # ClockTimeTxOption
+    ;
+
+readWriteTxOption
+    : 'SYSTEM_TIME' ('=')? dateTimeLiteral # SystemTimeTxOption
     ;
 
 levelOfIsolation

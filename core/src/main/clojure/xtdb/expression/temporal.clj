@@ -1505,6 +1505,15 @@
 (def ^:private nanos-divisor (mapv long [1e9 1e6 1e6 1e6 1e3 1e3 1e3 1e0 1e0 1e0]))
 (def ^:private precision-modulus (mapv long [1e0 1e2 1e1 1e0 1e2 1e1 1e0 1e2 1e1 1e0]))
 
+(defmethod expr/codegen-call [:snapshot_time] [_]
+  (let [ts-type [:timestamp-tz :micro "UTC"]]
+    {:return-type [:union #{:null ts-type}]
+     :continue-call (fn [f _]
+                      (let [ts (gensym 'ts)]
+                        `(if-let [~ts expr/*snapshot-time*]
+                           ~(f ts-type `(time/instant->micros ~ts))
+                           ~(f :null nil))))}))
+
 (defn- truncate-for-precision [code precision]
   (let [^long modulus (precision-modulus precision)]
     (if (= modulus 1)
@@ -1512,9 +1521,8 @@
       `(* ~modulus (quot ~code ~modulus)))))
 
 (defn- current-timestamp [^long precision]
-  (let [precision (bound-precision precision)
-        zone-id expr/*default-tz*]
-    {:return-type [:timestamp-tz (precision-timeunits precision) (str zone-id)]
+  (let [precision (bound-precision precision)]
+    {:return-type [:timestamp-tz (precision-timeunits precision) (str expr/*default-tz*)]
      :->call-code (fn [_]
                     (-> `(long (let [inst# (expr/current-time)]
                                  (+ (* ~(seconds-multiplier precision) (.getEpochSecond inst#))
