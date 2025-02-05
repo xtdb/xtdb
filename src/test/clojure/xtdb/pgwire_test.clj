@@ -2565,7 +2565,22 @@ ORDER BY 1,2;"]))))))
                (jdbc/execute! conn [sql])))
 
       (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
-               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z' " sql)]))))))
+               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z' " sql)])))
+
+      (t/testing "in tx"
+        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z', CLOCK_TIME = TIMESTAMP '2020-01-04T00:00:00Z')"])
+        (try
+          (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
+                   (jdbc/execute! conn [sql])))
+
+          (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
+                   (jdbc/execute! conn [sql]))
+                "once more for luck")
+
+          (t/is (= {:clock_time #inst "2020-01-04"} (jdbc/execute-one! conn ["SHOW CLOCK_TIME"])))
+
+          (finally
+            (jdbc/execute! conn ["ROLLBACK"])))))))
 
 (t/deftest show-clock-time
   (with-open [conn (jdbc-conn)]
@@ -2576,4 +2591,13 @@ ORDER BY 1,2;"]))))))
                    (time/->instant))
             after (Instant/now)]
         (t/is (.isBefore before ct))
-        (t/is (.isAfter after ct))))))
+        (t/is (.isAfter after ct))))
+
+    (t/testing "setting on tx"
+      (jdbc/execute! conn ["BEGIN READ ONLY WITH (CLOCK_TIME = TIMESTAMP '2024-01-01T00:00:00Z')"])
+      (try
+          (t/is (= [{:clock_time #inst "2024-01-01"}]
+                   (jdbc/execute! conn ["SHOW CLOCK_TIME"])))
+
+          (finally
+            (jdbc/execute! conn ["ROLLBACK"]))))))

@@ -874,8 +874,13 @@ transactionCharacteristics : transactionMode (',' transactionMode)* ;
 
 transactionMode
     : 'ISOLATION' 'LEVEL' levelOfIsolation # IsolationLevel
-    | 'READ' 'ONLY' # ReadOnlyTransaction
+    | 'READ' 'ONLY' ('WITH' '(' readOnlyTxOption? (',' readOnlyTxOption?)* ')')? # ReadOnlyTransaction
     | 'READ' 'WRITE' ('WITH' '(' readWriteTxOption? (',' readWriteTxOption?)* ')')? # ReadWriteTransaction
+    ;
+
+readOnlyTxOption
+    : 'SNAPSHOT_TIME' ('=')? dateTimeLiteral # SnapshotTimeTxOption
+    | 'CLOCK_TIME' ('=')? dateTimeLiteral # ClockTimeTxOption
     ;
 
 readWriteTxOption

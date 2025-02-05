@@ -27,6 +27,7 @@
             xtdb.operator.unnest
             xtdb.operator.window
             [xtdb.sql :as sql]
+            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -191,7 +192,8 @@
 
            ;; TODO throw if basis is in the future?
            (let [{:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
-                 current-time (or current-time (expr/current-time))]
+                 current-time (or (some-> current-time time/->instant)
+                                  (expr/current-time))]
 
              (reify
                BoundQuery
@@ -221,7 +223,8 @@
                    (try
                      (binding [expr/*clock* (InstantSource/fixed current-time)
                                expr/*default-tz* default-tz
-                               expr/*snapshot-time* (or snapshot-time (some-> wm .getTxBasis .getSystemTime))]
+                               expr/*snapshot-time* (or (some-> snapshot-time time/->instant)
+                                                        (some-> wm .getTxBasis .getSystemTime))]
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :default-tz default-tz,
                                       :snapshot-time expr/*snapshot-time*

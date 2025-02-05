@@ -414,6 +414,19 @@
                          (subs di-str 1 (dec (count di-str)))))))
           (str/lower-case)))
 
+(defn date-time-visitor [^ZoneId default-tz]
+  (reify SqlVisitor
+    (visitDateLiteral [_ ctx]
+      (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
+          (.atStartOfDay)
+          (.atZone default-tz)))
+
+    (visitTimestampLiteral [_ ctx]
+      (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
+        (cond
+          (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts default-tz)
+          (instance? ZonedDateTime ts) ts)))))
+
 (defn- interpret-sql [sql {:keys [default-tz watermark-tx-id session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql-trimmed (trim-sql sql)]
@@ -464,25 +477,22 @@
                                     (into {:access-mode :read-write}
                                           (mapcat (partial plan/accept-visitor this) (.readWriteTxOption ctx))))
 
-                                  (visitReadOnlyTransaction [_ _] {:access-mode :read-only})
+                                  (visitReadOnlyTransaction [this ctx]
+                                    (into {:access-mode :read-only}
+                                          (mapcat (partial plan/accept-visitor this) (.readOnlyTxOption ctx))))
 
                                   (visitReadWriteSession [_ _] {:access-mode :read-write})
 
                                   (visitReadOnlySession [_ _] {:access-mode :read-only})
 
                                   (visitSystemTimeTxOption [_ ctx]
-                                    {:system-time (.accept (.dateTimeLiteral ctx)
-                                                           (reify SqlVisitor
-                                                             (visitDateLiteral [_ ctx]
-                                                               (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
-                                                                   (.atStartOfDay)
-                                                                   (.atZone ^ZoneId default-tz)))
+                                    {:system-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
 
-                                                             (visitTimestampLiteral [_ ctx]
-                                                               (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
-                                                                 (cond
-                                                                   (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts ^ZoneId default-tz)
-                                                                   (instance? ZonedDateTime ts) ts)))))})
+                                  (visitSnapshotTimeTxOption [_ ctx]
+                                    {:snapshot-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
+
+                                  (visitClockTimeTxOption [_ ctx]
+                                    {:current-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
 
                                   (visitCommitStatement [_ _] {:statement-type :commit})
                                   (visitRollbackStatement [_ _] {:statement-type :rollback})
