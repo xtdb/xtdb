@@ -8,6 +8,7 @@
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.expression :as expr]
+            [xtdb.metrics :as metrics]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.protocols :as xtp]
@@ -29,6 +30,7 @@
            [java.util List Map Set UUID]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
+           io.micrometer.core.instrument.Counter
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector PeriodDuration]
@@ -1029,7 +1031,7 @@
 
   If the connection is operating in the :extended protocol mode, any error causes the connection to skip
   messages until a msg-sync is received."
-  [{:keys [conn-state] :as conn} err]
+  [{:keys [conn-state ^Counter query-error-counter] :as conn} err]
 
   ;; error seen while in :extended mode, start skipping messages until sync received
   (when (= :extended (:protocol @conn-state))
@@ -1037,6 +1039,9 @@
 
   ;; mark a transaction (if open as failed), for now we will consider all errors to do this
   (swap! conn-state util/maybe-update :transaction assoc :failed true, :err err)
+
+  (when query-error-counter
+    (.increment ^Counter query-error-counter))
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
 
@@ -1839,7 +1844,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [server-state, port, allocator] :as server} ^Socket conn-socket]
+  [{:keys [server-state, port, allocator, query-error-counter] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1859,7 +1864,8 @@
                                                  (reset! !closing? true))
                                                (catch Throwable t
                                                  (log/warn t "error on conn startup")
-                                                 (throw t)))))]
+                                                 (throw t)))))
+        conn (assoc conn :query-error-counter query-error-counter)]
 
     (try
       ;; the connection loop only gets initialized if we are not closing
@@ -1938,12 +1944,13 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn]
+  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn metrics-registry]
                   :or {port 0
                        num-threads 42
                        drain-wait 5000}}]
    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
      (let [port (.getLocalPort accept-socket)
+           query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
            !tmp-nodes (when-not node
                         (ConcurrentHashMap.))
            server (map->Server {:allocator allocator
@@ -1974,6 +1981,7 @@
                                             (nil? node) (->tmp-node !tmp-nodes db-name)
                                             (= db-name "xtdb") node))})
 
+           server (assoc server :query-error-counter query-error-counter)
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)
@@ -2013,7 +2021,8 @@
 (defmethod ig/prep-key ::server [_ config]
   (into {:node (ig/ref :xtdb/node)
          :authn (ig/ref :xtdb/authn)
-         :allocator (ig/ref :xtdb/allocator)}
+         :allocator (ig/ref :xtdb/allocator)
+         :metrics-registry (ig/ref :xtdb.metrics/registry)}
         (<-config config)))
 
 (defmethod ig/init-key ::server [_ {:keys [node allocator authn] :as opts}]

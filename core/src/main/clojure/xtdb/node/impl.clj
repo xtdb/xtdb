@@ -16,6 +16,7 @@
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
+           io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
            (java.util.concurrent ExecutionException)
            java.util.HashMap
@@ -53,11 +54,11 @@
                              :latest-completed-tx latest-completed-tx
                              :snapshot-time snapshot-time}))))
 
-(defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator query-timer {:keys [args], :as query-opts}]
+(defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args], :as query-opts} {:keys [query-timer] :as metrics}]
   (util/with-close-on-catch [bound-query (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
                                            (.bind prepared-query (assoc query-opts :args args-rel)))]
     ;;TODO metrics only currently wrapping openQueryAsync results
-    (-> (q/open-cursor-as-stream bound-query query-opts)
+    (-> (q/open-cursor-as-stream bound-query query-opts metrics)
         (metrics/wrap-query query-timer))))
 
 (defn- ->TxOps [tx-ops]
@@ -75,7 +76,8 @@
                  ^CompositeMeterRegistry metrics-registry
                  default-tz
                  system, close-fn,
-                 query-timer]
+                 query-timer
+                 ^Counter query-error-counter]
   Xtdb
   (getServerPort [this]
     (or (:port (util/component this :xtdb.pgwire/server))
@@ -114,13 +116,24 @@
 
   (open-sql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
-      (-> (xtp/prepare-sql this query query-opts)
-          (then-execute-prepared-query allocator query-timer query-opts))))
+      ;; We catch exceptions here to count errors outside of query execution e.g. parsing errors
+      (try
+        (-> (xtp/prepare-sql this query query-opts)
+            (then-execute-prepared-query allocator query-opts {:query-timer query-timer :query-error-counter query-error-counter}))
+        (catch Exception e
+          (when query-error-counter
+            (.increment query-error-counter))
+          (throw e)))))
 
   (open-xtql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
-      (-> (xtp/prepare-xtql this query query-opts)
-          (then-execute-prepared-query allocator query-timer query-opts))))
+      (try
+        (-> (xtp/prepare-xtql this query query-opts)
+            (then-execute-prepared-query allocator query-opts {:query-timer query-timer :query-error-counter query-error-counter}))
+        (catch Exception e
+          (when query-error-counter
+            (.increment query-error-counter))
+          (throw e)))))
 
   xtp/PStatus
   (latest-completed-tx [_] (.getLatestCompletedTx live-idx))
@@ -189,7 +202,8 @@
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
   (let [node (map->Node (-> deps
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
-                                                                   {:description "indicates the timings for queries"}))))]
+                                                                   {:description "indicates the timings for queries"}))
+                            (assoc :query-error-counter (metrics/add-counter metrics-registry "query.error"))))]
 
     (doto metrics-registry
       (metrics/add-gauge "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
