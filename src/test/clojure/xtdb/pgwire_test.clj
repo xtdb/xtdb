@@ -25,7 +25,7 @@
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           (java.util Arrays Calendar List TimeZone UUID)
+           (java.util Arrays Calendar Date List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
@@ -969,7 +969,7 @@
 (t/deftest test-setting-basis-current-time-3505
   (with-open [conn (jdbc-conn)]
     (is (= [{:ts #inst "2020-01-01"}]
-           (q conn ["SETTING CURRENT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
+           (q conn ["SETTING CLOCK_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
                      SELECT CURRENT_TIMESTAMP AS ts"])))
 
     (q conn ["INSERT INTO foo (_id, version) VALUES ('foo', 0)"])
@@ -988,7 +988,7 @@
              :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
              :ts #inst "2024-01-01"}]
            (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z',
-                             CURRENT_TIME = TIMESTAMP '2024-01-01T00:00:00Z'
+                             CLOCK_TIME = TIMESTAMP '2024-01-01T00:00:00Z'
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
         "both snapshot and current time")
 
@@ -2566,3 +2566,14 @@ ORDER BY 1,2;"]))))))
 
       (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
                (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z' " sql)]))))))
+
+(t/deftest show-clock-time
+  (with-open [conn (jdbc-conn)]
+    (t/testing "defaults to now"
+      (let [before (Instant/now)
+            ct (-> (jdbc/execute-one! conn ["SHOW CLOCK_TIME"])
+                   :clock_time
+                   (time/->instant))
+            after (Instant/now)]
+        (t/is (.isBefore before ct))
+        (t/is (.isAfter after ct))))))

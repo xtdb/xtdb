@@ -551,8 +551,8 @@
                                   (visitSettingDefaultValidTime [_ _])
                                   (visitSettingDefaultSystemTime [_ _])
 
-                                  (visitSettingCurrentTime [_ ctx]
-                                    [:current-time (-> (.currentTime ctx)
+                                  (visitSettingClockTime [_ ctx]
+                                    [:current-time (-> (.clockTime ctx)
                                                        (plan/plan-expr {:default-tz default-tz})
                                                        (time/->instant))])
 
@@ -577,6 +577,9 @@
                                                  [])]})
 
                                   (visitShowSnapshotTimeStatement [_ ctx]
+                                    {:statement-type :query, :query sql, :parsed-query ctx})
+
+                                  (visitShowClockTimeStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})
 
                                   ;; HACK: these values are fixed at prepare-time - if they were to change,

@@ -2594,6 +2594,11 @@
                    [{:snapshot_time (snapshot_time)}]]
                  '[snapshot_time]))
 
+  (visitShowClockTimeStatement [_ _]
+    (->QueryExpr '[:table [clock_time]
+                   [{:clock_time (current_timestamp)}]]
+                 '[clock_time]))
+
   (visitSettingDefaultSystemTime [_ ctx]
     [:sys-time-default
      (.accept (.tableTimePeriodSpecification ctx)
@@ -2606,7 +2611,7 @@
 
   ;; dealt with earlier
   (visitSettingSnapshotTime [_ _ctx])
-  (visitSettingCurrentTime [_ _ctx])
+  (visitSettingClockTime [_ _ctx])
 
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 

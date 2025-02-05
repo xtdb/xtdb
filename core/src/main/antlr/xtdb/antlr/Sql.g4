@@ -36,6 +36,7 @@ directlyExecutableStatement
     | SHOW identifier # ShowSessionVariableStatement
     | SHOW WATERMARK # ShowWatermarkStatement
     | SHOW SNAPSHOT_TIME # ShowSnapshotTimeStatement
+    | SHOW CLOCK_TIME # ShowClockTimeStatement
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
     ;
@@ -56,8 +57,8 @@ settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable
 settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
-    | 'SNAPSHOT_TIME' ('TO' | '=') snapshotTime=literal # SettingSnapshotTime
-    | 'CURRENT_TIME' ('TO' | '=') currentTime=literal # SettingCurrentTime
+    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=literal # SettingSnapshotTime
+    | CLOCK_TIME ('TO' | '=') clockTime=literal # SettingClockTime
     ;
 
 //// §5 Lexical Elements
