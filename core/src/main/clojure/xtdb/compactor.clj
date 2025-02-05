@@ -134,21 +134,21 @@
                              (-> (trie/->Segment trie) (assoc :data-rel data-rel)))
                            table-metadatas
                            data-rels)
-            schema (->log-data-rel-schema (map :data-rel segments))]
+            schema (->log-data-rel-schema (map :data-rel segments))
 
-        (util/with-open [data-rel (Relation. allocator schema)
-                         recency-wtr (open-recency-wtr allocator)]
-          (merge-segments-into data-rel recency-wtr segments part)
+            data-file-size (util/with-open [data-rel (Relation. allocator schema)
+                                            recency-wtr (open-recency-wtr allocator)]
+                             (merge-segments-into data-rel recency-wtr segments part)
 
-          (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
-                                                           schema table-name out-trie-key
-                                                           true)]
+                             (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
+                                                                              schema table-name out-trie-key
+                                                                              true)]
 
-            (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))))
+                               (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))]
 
-    (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
+        (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
 
-    (cat/->added-trie table-name out-trie-key -1)
+        (cat/->added-trie table-name out-trie-key data-file-size)))
 
     (catch ClosedByInterruptException _ (throw (InterruptedException.)))
     (catch InterruptedException e (throw e))
