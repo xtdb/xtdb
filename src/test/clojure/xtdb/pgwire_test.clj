@@ -2482,29 +2482,9 @@ ORDER BY t.oid DESC LIMIT 1"
       (pg/execute conn "SELECT pg_sleep_for('0.01 minute')")
       (t/is (< 160 (- (System/currentTimeMillis) start))))))
 
-(t/deftest test-display-tables-query
-  (with-open [conn (jdbc-conn)]
-    (t/is (=
-           ["columns"
-            "pg_am"
-            "pg_attribute"
-            "pg_class"
-            "pg_database"
-            "pg_description"
-            "pg_matviews"
-            "pg_namespace"
-            "pg_proc"
-            "pg_range"
-            "pg_settings"
-            "pg_stat_user_tables"
-            "pg_tables"
-            "pg_type"
-            "pg_user"
-            "pg_views"
-            "schemata"
-            "tables"]
-           (map :Name
-                (q conn ["SELECT n.nspname as \"Schema\",
+(def display-tables-query
+  "
+SELECT n.nspname as \"Schema\",
   c.relname as \"Name\",
   CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'i' THEN 'index' WHEN 'S' THEN 'sequence' WHEN 't' THEN 'TOAST table' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' WHEN 'I' THEN 'partitioned index' END as \"Type\",
   pg_catalog.pg_get_userbyid(c.relowner) as \"Owner\"
@@ -2516,32 +2496,28 @@ WHERE c.relkind IN ('r','p','')
       AND n.nspname !~ '^pg_toast'
       AND n.nspname <> 'information_schema'
   AND pg_catalog.pg_table_is_visible(c.oid)
-ORDER BY 1,2;"]))))))
+ORDER BY 1,2;")
+
+(t/deftest test-display-tables-query
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
+    (jdbc/execute! conn ["INSERT INTO bar RECORDS {_id: 2}"])
+
+    (t/is (= [["public" "bar"]
+              ["public" "foo"]]
+           (map (juxt :Schema :Name)
+                (q conn [display-tables-query]))))))
 
 (t/deftest test-display-tables-psql
   (when (psql-available?)
     (psql-session
      (fn [send read]
+       (send "INSERT INTO foo RECORDS {_id: 1};\n")
+       (t/is (= [["INSERT 0 0"]] (read)))
+
        (send "\\d\n")
        (t/is (= [["Schema" "Name" "Type" "Owner"]
-                 ["public" "columns" "table" "xtdb"]
-                 ["public" "pg_am" "table" "xtdb"]
-                 ["public" "pg_attribute" "table" "xtdb"]
-                 ["public" "pg_class" "table" "xtdb"]
-                 ["public" "pg_database" "table" "xtdb"]
-                 ["public" "pg_description" "table" "xtdb"]
-                 ["public" "pg_matviews" "table" "xtdb"]
-                 ["public" "pg_namespace" "table" "xtdb"]
-                 ["public" "pg_proc" "table" "xtdb"]
-                 ["public" "pg_range" "table" "xtdb"]
-                 ["public" "pg_settings" "table" "xtdb"]
-                 ["public" "pg_stat_user_tables" "table" "xtdb"]
-                 ["public" "pg_tables" "table" "xtdb"]
-                 ["public" "pg_type" "table" "xtdb"]
-                 ["public" "pg_user" "table" "xtdb"]
-                 ["public" "pg_views" "table" "xtdb"]
-                 ["public" "schemata" "table" "xtdb"]
-                 ["public" "tables" "table" "xtdb"]]
+                 ["public" "foo" "table" "xtdb"]]
                 (read)))))))
 
 (t/deftest select-snapshot-time

@@ -226,7 +226,7 @@
               :relreplident "d",
               :reltoastrelid 0}
              {:relkind "r",
-              :relnamespace 1106696632,
+              :relnamespace 683075021,
               :oid 598393539,
               :relname "txs",
               :relam 2,

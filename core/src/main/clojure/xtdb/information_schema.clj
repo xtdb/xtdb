@@ -143,7 +143,7 @@
   (for [table (keys schema-info)]
     {:oid (name->oid table)
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (name table))
-     :relnamespace (name->oid "public")
+     :relnamespace (name->oid (namespace table))
      :relkind "r"
      :relam (int 2)
      :relchecks (int 0)
