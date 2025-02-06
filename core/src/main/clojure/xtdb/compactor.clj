@@ -1,7 +1,6 @@
 (ns xtdb.compactor
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [xtdb.bitemporal :as bitemp]
             [xtdb.metrics :as metrics]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
@@ -17,7 +16,7 @@
            xtdb.api.CompactorConfig
            (xtdb.api.log Log)
            (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
-           xtdb.bitemporal.IPolygonReader
+           (xtdb.bitemporal IPolygonReader PolygonCalculator)
            xtdb.BufferPool
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            (xtdb.metadata IMetadataManager)
@@ -51,7 +50,7 @@
 
 (defn merge-segments-into [^Relation data-rel, ^VectorWriter recency-wtr, segments, ^bytes path-filter]
   (let [reader->copier (->reader->copier data-rel)
-        calculate-polygon (bitemp/polygon-calculator)
+        polygon-calculator (PolygonCalculator.)
 
         is-valid-ptr (ArrowBufPointer.)]
 
@@ -86,7 +85,7 @@
 
       (loop [seen-erase? false]
         (when-let [{:keys [^EventRowPointer ev-ptr, ^RowCopier row-copier] :as q-obj} (.poll merge-q)]
-          (let [new-previous-polygon  (if-let [polygon (calculate-polygon ev-ptr)]
+          (let [new-previous-polygon  (if-let [polygon (.calculate polygon-calculator ev-ptr)]
                                         (do
                                           (.copyRow row-copier (.getIndex ev-ptr))
                                           (.writeLong recency-wtr (.getRecency ^IPolygonReader polygon))

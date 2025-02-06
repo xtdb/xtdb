@@ -1,7 +1,6 @@
 (ns xtdb.operator.scan
   (:require [clojure.spec.alpha :as s]
             [integrant.core :as ig]
-            [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression :as expr]
@@ -34,7 +33,7 @@
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            (xtdb BufferPool ICursor)
            (xtdb.arrow VectorIndirection VectorReader)
-           (xtdb.bitemporal IRowConsumer Polygon)
+           (xtdb.bitemporal IRowConsumer Polygon PolygonCalculator)
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.SelectionSpec
@@ -241,7 +240,7 @@
           (with-open [out-rel (vw/->rel-writer allocator)]
             (let [^SelectionSpec iid-pred (get col-preds "_iid")
                   merge-q (PriorityQueue. (Comparator/comparing #(.ev_ptr ^LeafPointer %) (EventRowPointer/comparator)))
-                  calculate-polygon (bitemp/polygon-calculator temporal-bounds)
+                  polygon-calculator (PolygonCalculator. temporal-bounds)
                   bitemp-consumer (->bitemporal-consumer out-rel col-names)
                   leaf-rdrs (for [leaf leaves
                                   :let [^RelationReader data-rdr (trie/load-page leaf buffer-pool vsr-cache)]]
@@ -258,7 +257,7 @@
               (loop []
                 (when-let [^LeafPointer q-obj (.poll merge-q)]
                   (let [^EventRowPointer ev-ptr (.ev_ptr q-obj)]
-                    (when-let [^Polygon polygon (calculate-polygon ev-ptr)]
+                    (when-let [^Polygon polygon (.calculate polygon-calculator ev-ptr)]
                       (when (= "put" (.getOp ev-ptr))
                         (let [sys-from (.getSystemFrom ev-ptr)
                               idx (.getIndex ev-ptr)]
