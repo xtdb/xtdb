@@ -446,6 +446,12 @@
                                              (key (first %)))
                                           projection-spec)))))
 
+(defn- period-extends-projection? [projection-spec]
+  (when (and (map? projection-spec)
+             (let [expr (first (vals projection-spec))]
+               (and (list? expr)
+                    (= 'period (first expr))))) projection-spec))
+
 (defn push-predicate-down-past-period-constructor [push-correlated? z]
   ;;NOTE this could reasonably be extended to other/all extends projections if we decided
   ;;that the cost of repeating the cost of the expression is worth it.
@@ -456,7 +462,7 @@
     ;;=>
     (when (or push-correlated? (no-correlated-columns? predicate))
       (let [period-projections (->> projection
-                                    (keep #(when (and (map? %) (= 'period (ffirst (vals %)))) %))
+                                    (keep period-extends-projection?)
                                     (into {}))
             cols-referenced-in-predicate (set (expr-symbols predicate))]
         (when (some #(contains? period-projections %) cols-referenced-in-predicate)

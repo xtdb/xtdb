@@ -77,7 +77,23 @@
            [:project
             [{~(plan/->col-sym '_valid_time) (+ 1 ~(plan/->col-sym '_valid_from))}]
             [:scan {:table public/docs}
-             [~(plan/->col-sym '_valid_from) ~(plan/->col-sym '_valid_to)]]]]))))))
+             [~(plan/->col-sym '_valid_from) ~(plan/->col-sym '_valid_to)]]]])))))
+
+  (t/testing "scalar extends expressions are handled"
+    (t/is
+     (=plan-file
+      "test-push-predicate-down-past-period-constructor-scalar-extends"
+      (lp/push-predicate-down-past-period-constructor
+       true
+       (xt/template
+        [:select
+         '(= ~(plan/->col-sym '_valid_time) 1)
+         [:project
+          [{~(plan/->col-sym '_foo) 4}
+           {~(plan/->col-sym '_valid_time)
+            (period ~(plan/->col-sym '_valid_from)
+                    ~(plan/->col-sym '_valid_to))}]
+          [:scan {:table public/docs} [~(plan/->col-sym '_bar)]]]]))))))
 
 (t/deftest test-remove-redundant-period-constructors
   (t/is
