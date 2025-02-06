@@ -93,6 +93,21 @@
            {~(plan/->col-sym '_valid_time)
             (period ~(plan/->col-sym '_valid_from)
                     ~(plan/->col-sym '_valid_to))}]
+          [:scan {:table public/docs} [~(plan/->col-sym '_bar)]]]])))))
+
+  (t/testing "only push predicate if all columns referenced (aside from the new period) present in inner rel"
+    (t/is
+     (nil?
+      (lp/push-predicate-down-past-period-constructor
+       true
+       (xt/template
+        [:select
+         '(= ~(plan/->col-sym '_valid_time) ~(plan/->col-sym '_foo))
+         [:project
+          [{~(plan/->col-sym '_foo) 4}
+           {~(plan/->col-sym '_valid_time)
+            (period ~(plan/->col-sym '_valid_from)
+                    ~(plan/->col-sym '_valid_to))}]
           [:scan {:table public/docs} [~(plan/->col-sym '_bar)]]]]))))))
 
 (t/deftest test-remove-redundant-period-constructors
