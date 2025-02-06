@@ -1,0 +1,5 @@
+[:project
+ [{_foo 4} {_valid_time (period _valid_from _valid_to)}]
+ [:select
+  '(= (period _valid_from _valid_to) 1)
+  [:scan {:table public/docs} [_bar]]]]
