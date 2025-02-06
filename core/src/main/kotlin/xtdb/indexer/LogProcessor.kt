@@ -128,7 +128,7 @@ class LogProcessor(
                     }
 
                     is Message.TriesAdded -> {
-                        msg.tries.forEach(trieCatalog::addTrie)
+                        trieCatalog.addTries(msg.tries)
                         null
                     }
                 }

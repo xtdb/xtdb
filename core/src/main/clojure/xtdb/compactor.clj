@@ -148,7 +148,7 @@
 
         (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
 
-        (cat/->added-trie table-name out-trie-key data-file-size)))
+        [(cat/->added-trie table-name out-trie-key data-file-size)]))
 
     (catch ClosedByInterruptException _ (throw (InterruptedException.)))
     (catch InterruptedException e (throw e))
