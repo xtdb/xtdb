@@ -1,7 +1,8 @@
 (ns xtdb.operator.join-test
-  (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.operator.join :as join]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.logical-plan :as lp]
+            [xtdb.operator.join :as join]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -932,9 +933,23 @@
                           {:foo 1 :bar "yay"}]]]])))
 
     (t/testing "Unused join conditions are added as conditions to the outermost join"
-      ;; bit of a hack as currently mega-join may not choose a join order where
-      ;; a condition like the one below is ever valid, but it should always be correct
-      ;; to used the unused conditions as conditions for the outermost join
+      ;;currently mega-join starts with the smallest (in terms of row count) relation
+      ;;and will only add connected relations to that sub-graph. In this case we would
+      ;;need to cross join the first 2 tables before joining the third.
+      ;;
+      ;;Instead we produce unconnected subgraphs (in this case 3) and then add the
+      ;;join conditions to the outermost join.
+      (t/is (= '[[0] [1] ([:pred-expr (= (+ name person) foo)]) [2]]
+               (:join-order
+                (lp/emit-expr
+                 (s/conform ::lp/logical-plan
+                            '[:mega-join
+                              [(= (+ name person) foo)]
+                              [[:table [{:name 1}]]
+                               [:table [{:person 1}]]
+                               [:table [{:foo 2 :bar "woo"}
+                                        {:foo 1 :bar "yay"}]]]])
+                 {}))))
       (t/is (= [{:person 1, :bar "woo", :name 1, :foo 2}]
                (tu/query-ra
                 '[:mega-join
@@ -958,7 +973,10 @@
 (deftest test-mega-join-join-order
   (t/is
    (=
-    [[2 3 0 1]]
+    '[[2 [[:equi-condition {foo bar}]]
+       3 [[:equi-condition {foo baz}]]
+       0 [[:equi-condition {bar biff}]]
+       1]]
     (:join-order
      (lp/emit-expr
       '{:op :mega-join,
@@ -984,7 +1002,7 @@
   (t/testing "disconnected-sub-graphs"
     (t/is
      (=
-      [[1 0] [2]]
+      '[[1 [[:equi-condition {foo baz}]] 0] [2]]
       (:join-order
        (lp/emit-expr
         '{:op :mega-join,

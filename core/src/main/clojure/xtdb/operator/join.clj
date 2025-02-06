@@ -733,18 +733,18 @@
                                 (match-relations-to-potential-join-clauses rels)
                                 (first))
             join-conditions (mapv
-                              adjust-to-equi-condition
-                              (:valid-join-conditions-for-rel join-candidate))]
+                             adjust-to-equi-condition
+                             (:valid-join-conditions-for-rel join-candidate))]
         (if join-candidate
           (recur
-            (emit-inner-join-expr
-              {:condition join-conditions
-               :left plan
-               :right join-candidate}
-              args)
-            (remove-joined-relation join-candidate rels)
-            (remove-used-join-conditions join-candidate conditions)
-            (conj join-order (:relation-id join-candidate)))
+           (emit-inner-join-expr
+            {:condition join-conditions
+             :left plan
+             :right join-candidate}
+            args)
+           (remove-joined-relation join-candidate rels)
+           (remove-used-join-conditions join-candidate conditions)
+           (conj join-order join-conditions (:relation-id join-candidate)))
           {:sub-graph-plan plan
            :sub-graph-unused-rels rels
            :sub-graph-unused-conditions conditions
@@ -761,6 +761,12 @@
         (expr->columns rhs)
         (expr->columns lhs)))
     (expr->columns condition)))
+
+(defn add-unused-join-conditions-to-join-order [join-order unused-join-conditions]
+  (conj
+   (vec (butlast join-order))
+   (map :condition unused-join-conditions)
+   (last join-order)))
 
 (defmethod lp/emit-expr :mega-join [{:keys [conditions relations]} args]
   (let [conditions-with-cols (->> conditions
@@ -793,22 +799,24 @@
             {:sub-graph-plans sub-graph-plans
              :unused-join-conditions conditions
              :join-order join-order}))]
-    ;; bit of a hack as currently mega-join may not choose a join order where
-    ;; a condition like the one below is ever valid, but it should always be correct
-    ;; to used the unused conditions as conditions for the outermost join
-    (assoc
-      (if (seq unused-join-conditions)
-        (emit-inner-join-expr
-          {:condition (mapv :condition unused-join-conditions)
-           :left
-           (reduce (fn [full-plan sub-graph-plan]
-                     (emit-cross-join
-                       {:left full-plan
-                        :right sub-graph-plan})) (butlast sub-graph-plans))
-           :right (last sub-graph-plans)}
-          args)
-        (reduce (fn [full-plan sub-graph-plan]
-                  (emit-cross-join
+    (if (seq unused-join-conditions)
+      ;; if there are unused join conditions that means there must be at least 2
+      ;; disconnected sub graphs as all other conditions (ignoring #4121) can and
+      ;; should be used already in the sub-graph joins.
+      (assoc
+       (emit-inner-join-expr
+        {:condition (mapv :condition unused-join-conditions)
+         :left
+         (reduce (fn [full-plan sub-graph-plan]
+                   (emit-cross-join
                     {:left full-plan
-                     :right sub-graph-plan})) sub-graph-plans))
-      :join-order join-order)))
+                     :right sub-graph-plan})) (butlast sub-graph-plans))
+         :right (last sub-graph-plans)}
+        args)
+       :join-order (add-unused-join-conditions-to-join-order join-order unused-join-conditions))
+      (assoc
+       (reduce (fn [full-plan sub-graph-plan]
+                 (emit-cross-join
+                  {:left full-plan
+                   :right sub-graph-plan})) sub-graph-plans)
+       :join-order join-order))))
