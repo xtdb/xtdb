@@ -110,6 +110,8 @@ class YamlSerdeTest {
 
     @Test
     fun testStorageDecoding() {
+        mockkObject(EnvironmentVariableProvider)
+
         val inMemoryConfig = "storage: !InMemory"
 
         assertEquals(
@@ -127,26 +129,32 @@ class YamlSerdeTest {
             nodeConfig(localConfig).storage
         )
 
+        every { EnvironmentVariableProvider.getEnvVariable("S3_BUCKET") } returns "xtdb-bucket"
+
         val s3Config = """
         storage: !Remote
             objectStore: !S3
-              bucket: xtdb-bucket
+              bucket: !Env S3_BUCKET
+              prefix: xtdb-object-store
             localDiskCache: test-path
         """.trimIndent()
 
         assertEquals(
             RemoteStorageFactory(
-                objectStore = s3(bucket = "xtdb-bucket"),
+                objectStore = s3(bucket = "xtdb-bucket").prefix(Paths.get("xtdb-object-store")),
                 localDiskCache = Paths.get("test-path")
             ),
             nodeConfig(s3Config).storage
         )
 
+        every { EnvironmentVariableProvider.getEnvVariable("AZURE_STORAGE_ACCOUNT") } returns "storage-account"
+
         val azureConfig = """
         storage: !Remote
             objectStore: !Azure
-              storageAccount: storage-account
+              storageAccount: !Env AZURE_STORAGE_ACCOUNT
               container: xtdb-container
+              prefix: xtdb-object-store
             localDiskCache: test-path
         """.trimIndent()
 
@@ -155,17 +163,20 @@ class YamlSerdeTest {
                 objectStore = azureBlobStorage(
                     storageAccount = "storage-account",
                     container = "xtdb-container"
-                ),
+                ).prefix(Paths.get("xtdb-object-store")),
                 localDiskCache = Paths.get("test-path")
             ),
             nodeConfig(azureConfig).storage
         )
 
+        every { EnvironmentVariableProvider.getEnvVariable("GCP_PROJECT_ID") } returns "xtdb-project"
+
         val googleCloudConfig = """
         storage: !Remote
           objectStore: !GoogleCloud
-            projectId: xtdb-project
+            projectId: !Env GCP_PROJECT_ID
             bucket: xtdb-bucket
+            prefix: xtdb-object-store
           localDiskCache: test-path
         """.trimIndent()
 
@@ -173,12 +184,14 @@ class YamlSerdeTest {
             RemoteStorageFactory(
                 objectStore = googleCloudStorage(
                     projectId = "xtdb-project",
-                    bucket ="xtdb-bucket"
-                ),
+                    bucket ="xtdb-bucket",
+                ).prefix(Paths.get("xtdb-object-store")),
                 localDiskCache = Paths.get("test-path")
             ),
             nodeConfig(googleCloudConfig).storage
         )
+
+        unmockkObject(EnvironmentVariableProvider)
     }
 
     @Test
