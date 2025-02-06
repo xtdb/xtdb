@@ -21,7 +21,7 @@
            xtdb.BufferPool
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            (xtdb.metadata IMetadataManager)
-           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask TrieCatalog)
+           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask TrieCatalog TrieWriter)
            (xtdb.util TemporalBounds)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -140,9 +140,9 @@
                                             recency-wtr (open-recency-wtr allocator)]
                              (merge-segments-into data-rel recency-wtr segments part)
 
-                             (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool
-                                                                              schema table-name out-trie-key
-                                                                              true)]
+                             (util/with-open [trie-wtr (TrieWriter. allocator buffer-pool
+                                                                    schema table-name out-trie-key
+                                                                    true)]
 
                                (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))]
 

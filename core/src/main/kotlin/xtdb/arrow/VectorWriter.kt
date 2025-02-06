@@ -38,6 +38,8 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun endStruct(): Unit = unsupported("endStruct")
 
     fun elementWriter(): VectorWriter = unsupported("elementWriter")
+    val elementWriter get() = elementWriter()
+
     fun elementWriter(fieldType: FieldType): VectorWriter = unsupported("elementWriter")
     fun endList(): Unit = unsupported("endList")
 

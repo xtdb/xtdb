@@ -21,7 +21,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow Relation Vector VectorReader VectorWriter)
            xtdb.BufferPool
-           (xtdb.metadata ITableMetadata PageIndexKey)
+           (xtdb.metadata ITableMetadata PageIndexKey PageMetadataWriter)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader)
@@ -52,11 +52,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface IPageMetadataWriter
-  (^void writeMetadata [^Iterable cols]))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
   (^void finishBlock [^long blockIdx, newBlockMetadata])
   (^java.util.NavigableMap blocksMetadata [])
@@ -66,7 +61,6 @@
   (allColumnFields [])
   (allTableNames []))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
@@ -242,7 +236,7 @@
                   (.writeInt struct-type-el-wtr sub-col-idx))
                 (.endList struct-type-wtr)))))))))
 
-(defn ->page-meta-wtr ^xtdb.metadata.IPageMetadataWriter [^VectorWriter cols-wtr]
+(defn ->page-meta-wtr ^xtdb.metadata.PageMetadataWriter [^VectorWriter cols-wtr]
   (let [col-wtr (.elementWriter cols-wtr)
         col-name-wtr (.keyWriter col-wtr "col-name")
         root-col-wtr (.keyWriter col-wtr "root-col?")
@@ -286,7 +280,7 @@
 
                 (.endStruct col-wtr)))]
 
-      (reify IPageMetadataWriter
+      (reify PageMetadataWriter
         (writeMetadata [_ cols]
           (doseq [^VectorReader col cols
                   :when (pos? (.getValueCount col))]
