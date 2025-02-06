@@ -163,10 +163,14 @@
 
 (defrecord TrieCatalog [^Map !table-tries, ^long l1-size-limit]
   xtdb.trie.TrieCatalog
-  (addTrie [this added-trie]
-    (.compute !table-tries (.getTableName added-trie)
-              (fn [_table-name tries]
-                (apply-trie-notification this tries added-trie))))
+  (addTries [this added-tries]
+    (doseq [[table-name added-tries] (->> added-tries
+                                          (group-by #(.getTableName ^AddedTrie %)))]
+      (.compute !table-tries table-name
+                (fn [_table-name tries]
+                  (reduce (partial apply-trie-notification this)
+                          (or tries {})
+                          added-tries)))))
 
   PTrieCatalog
   (table-names [_] (set (keys !table-tries)))
@@ -179,19 +183,12 @@
         opts))
 
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
-  (let [!table-tries (ConcurrentHashMap.)
-        trie-cat (->TrieCatalog !table-tries *l1-size-limit*)]
-
-    (doseq [table-name (.allTableNames metadata-mgr)]
-      (.put !table-tries table-name
-            (->> (.listAllObjects buffer-pool (trie/->table-meta-dir table-name))
-                 (transduce (map (fn [^ObjectStore$StoredObject obj]
-                                   (->added-trie table-name
-                                                 (str (.getFileName (.getKey obj)))
-                                                 (.getSize obj))))
-                            (partial apply-trie-notification trie-cat)))))
-
-    trie-cat))
+  (doto (TrieCatalog. (ConcurrentHashMap.) *l1-size-limit*)
+    (.addTries (for [table-name (.allTableNames metadata-mgr)
+                     ^ObjectStore$StoredObject obj (.listAllObjects buffer-pool (trie/->table-meta-dir table-name))]
+                 (->added-trie table-name
+                               (str (.getFileName (.getKey obj)))
+                               (.getSize obj))))))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
   (util/component node :xtdb/trie-catalog))

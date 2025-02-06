@@ -45,7 +45,7 @@ interface Compactor : AutoCloseable {
 
     interface Impl {
         fun availableJobs(): Collection<Job>
-        fun executeJob(job: Job): AddedTrie
+        fun executeJob(job: Job): List<AddedTrie>
     }
 
     fun signalBlock()
@@ -276,8 +276,8 @@ interface Compactor : AutoCloseable {
 
                                             // add the trie to the catalog eagerly so that it's present
                                             // next time we run `availableJobs` (it's idempotent)
-                                            trieCatalog.addTrie(res)
-                                            log.appendMessage(TriesAdded(listOf(res))).await()
+                                            trieCatalog.addTries(res)
+                                            log.appendMessage(TriesAdded(res)).await()
 
                                             LOGGER.debug("done: ${it.outputTrieKey}")
                                         }

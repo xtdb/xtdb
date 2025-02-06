@@ -324,9 +324,7 @@
 
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
                                 (cat/->added-trie table-name trie-key data-file-size))]
-              (doseq [added-trie added-tries]
-                (.addTrie trie-catalog added-trie))
-
+              (.addTries trie-catalog added-tries)
               @(.appendMessage log (Log$Message$TriesAdded. added-tries))))))
 
       (.nextBlock row-counter)
