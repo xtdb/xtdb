@@ -1,3 +1,4 @@
+@file:UseSerializers(StringWithEnvVarSerde::class, PathWithEnvVarSerde::class)
 package xtdb.gcp
 
 import clojure.lang.ExceptionInfo
@@ -11,6 +12,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
+import xtdb.api.PathWithEnvVarSerde
+import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
