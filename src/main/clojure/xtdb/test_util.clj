@@ -47,6 +47,7 @@
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ZonedDateTimeRange
+           xtdb.trie.TrieWriter
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader RelationReader)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)
@@ -371,7 +372,7 @@
         (throw (IllegalStateException. (str "No bounds found for page " page-idx "!")))))))
 
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
-  (util/with-close-on-catch [meta-rel (Relation. al trie/meta-rel-schema)]
+  (util/with-close-on-catch [meta-rel (Relation. al (TrieWriter/getMetaRelSchema))]
     (let [nodes-wtr (.get meta-rel "nodes")
           nil-wtr (.legWriter nodes-wtr "nil")
           iid-branch-wtr (.legWriter nodes-wtr "branch-iid")

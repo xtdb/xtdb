@@ -122,6 +122,11 @@ class DenseUnionVector(
         override fun elementWriter(fieldType: FieldType) = inner.elementWriter(fieldType)
         override fun endList() = writeValueThen().endList()
 
+        override fun mapKeyWriter() = inner.mapKeyWriter()
+        override fun mapKeyWriter(fieldType: FieldType) = inner.mapKeyWriter(fieldType)
+        override fun mapValueWriter() = inner.mapValueWriter()
+        override fun mapValueWriter(fieldType: FieldType) = inner.mapValueWriter(fieldType)
+
         override fun rowCopier0(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
             return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }

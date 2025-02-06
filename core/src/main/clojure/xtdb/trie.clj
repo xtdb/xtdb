@@ -1,14 +1,12 @@
 (ns xtdb.trie
   (:require [clojure.string :as str]
             [xtdb.buffer-pool]
-            [xtdb.metadata :as meta]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            (java.nio.file Path)
            (java.util ArrayList Arrays List)
-           (java.util.concurrent.atomic AtomicInteger)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
@@ -48,18 +46,6 @@
   (-> (->table-meta-dir table-name)
       (.resolve (format "%s.arrow" trie-key))))
 
-(def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
-  (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 4))) false
-                           (types/col-type->field "nil" :null)
-                           (types/col-type->field "branch-iid" [:list [:union #{:null :i32}]])
-                           (types/->field "branch-recency" (types/->arrow-type [:map {:sorted? true}]) false
-                                          (types/->field "recency-el" (types/->arrow-type :struct) false
-                                                         (types/col-type->field "recency" types/temporal-col-type)
-                                                         (types/col-type->field "idx" [:union #{:null :i32}])))
-
-                           (types/col-type->field "leaf" [:struct {'data-page-idx :i32
-                                                                   'columns meta/metadata-col-type}]))]))
-
 (defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [^Field put-doc-field]
   (Schema. [(types/col-type->field "_iid" [:fixed-size-binary 16])
             (types/col-type->field "_system_from" types/temporal-col-type)
@@ -77,93 +63,6 @@
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
      (vw/root->writer root))))
-
-(defn open-trie-writer ^TrieWriter [^BufferAllocator allocator, ^BufferPool buffer-pool,
-                                    ^Schema data-schema, table-name, trie-key
-                                    write-content-metadata?]
-  (util/with-close-on-catch [data-rel (Relation. allocator data-schema)
-                             data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-name trie-key) data-rel)
-                             meta-rel (Relation. allocator meta-rel-schema)]
-
-    (let [node-wtr (.get meta-rel "nodes")
-
-          iid-branch-wtr (.legWriter node-wtr "branch-iid")
-          iid-branch-el-wtr (.elementWriter iid-branch-wtr)
-
-          recency-branch-wtr (.legWriter node-wtr "branch-recency")
-          recency-el-wtr (.elementWriter recency-branch-wtr)
-          recency-wtr (.keyWriter recency-el-wtr "recency")
-          recency-idx-wtr (.keyWriter recency-el-wtr "idx")
-
-          leaf-wtr (.legWriter node-wtr "leaf")
-          page-idx-wtr (.keyWriter leaf-wtr "data-page-idx")
-          page-meta-wtr (meta/->page-meta-wtr (.keyWriter leaf-wtr "columns"))
-          !page-idx (AtomicInteger. 0)]
-
-      (reify TrieWriter
-        (getDataRel [_] data-rel)
-
-        (writeLeaf [_]
-          (let [put-rdr (-> data-rel
-                            (.get "op")
-                            (.legReader "put"))
-
-                meta-pos (.getValueCount node-wtr)]
-
-            (.writeMetadata page-meta-wtr (into [(.get data-rel "_system_from")
-                                                 (.get data-rel "_valid_from")
-                                                 (.get data-rel "_valid_to")
-                                                 (.get data-rel "_iid")]
-                                                (map #(.keyReader put-rdr %))
-                                                (when write-content-metadata?
-                                                  (.getKeys put-rdr))))
-
-            (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
-            (.endStruct leaf-wtr)
-            (.endRow meta-rel)
-
-            (.writePage data-file-wtr)
-            (.clear data-rel)
-
-            meta-pos))
-
-        (writeRecencyBranch [_ buckets]
-          (let [pos (.getValueCount node-wtr)]
-            (doseq [[^long recency, ^long idx] buckets]
-              (.writeLong recency-wtr recency)
-              (.writeInt recency-idx-wtr idx)
-              (.endStruct recency-el-wtr))
-
-            (.endList recency-branch-wtr)
-            (.endRow meta-rel)
-
-            pos))
-
-        (writeIidBranch [_ idxs]
-          (let [pos (.getValueCount node-wtr)]
-            (dotimes [n (alength idxs)]
-              (let [idx (aget idxs n)]
-                (if (= idx -1)
-                  (.writeNull iid-branch-el-wtr)
-                  (.writeInt iid-branch-el-wtr idx))))
-
-            (.endList iid-branch-wtr)
-            (.endRow meta-rel)
-
-            pos))
-
-        (end [_]
-          (let [data-file-size (.end data-file-wtr)]
-
-            (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-name trie-key) meta-rel)]
-              (.writePage meta-file-wtr)
-              (.end meta-file-wtr))
-
-            data-file-size))
-
-        AutoCloseable
-        (close [_]
-          (util/close [data-rel data-file-wtr meta-rel]))))))
 
 (defn write-live-trie-node [^TrieWriter trie-wtr, ^HashTrie$Node node, ^Relation data-rel]
   (let [copier (.rowCopier (.getDataRel trie-wtr) data-rel)]
@@ -192,8 +91,8 @@
 (defn write-live-trie! [^BufferAllocator allocator, ^BufferPool buffer-pool,
                         table-name, trie-key,
                         ^MemoryHashTrie trie, ^Relation data-rel]
-  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool (.getSchema data-rel) table-name trie-key
-                                              false)]
+  (util/with-open [trie-wtr (TrieWriter. allocator buffer-pool (.getSchema data-rel) table-name trie-key
+                                         false)]
     (let [trie (.compactLogs trie)]
       (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
 
