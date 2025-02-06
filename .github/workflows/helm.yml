@@ -3,7 +3,7 @@ name: Helm Charts
 on:
   workflow_call:
     inputs:
-      appVersion: 
+      appVersion:
         required: true
         type: string
 
@@ -26,15 +26,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Package & Push Azure Helm Chart
         run: |
           helm package azure/helm --app-version $APP_VERSION \
           ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
           helm push helm-xtdb-azure-*.tgz oci://ghcr.io/xtdb/
-      
+
       - name: Package & Push Google Cloud Helm Chart
         run: |
           helm package google-cloud/helm --app-version $APP_VERSION \
           ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
           helm push helm-xtdb-google-cloud-*.tgz oci://ghcr.io/xtdb/
+
+      - name: Package & Push AWS Helm Chart
+        run: |
+          helm package aws/helm --app-version $APP_VERSION \
+          ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
+          helm push helm-xtdb-aws-*.tgz oci://ghcr.io/xtdb/
