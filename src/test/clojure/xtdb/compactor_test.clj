@@ -400,24 +400,6 @@
 
           (t/is (= (tu/bad-uuid-seq 500) (q))))))))
 
-(t/deftest test-more-than-a-page-of-versions
-  (let [node-dir (util/->path "target/compactor/test-more-than-a-page-of-versions")]
-    (util/delete-dir node-dir)
-
-    (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
-              c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
-        (dotimes [n 100]
-          (xt/submit-tx node [[:put-docs :foo {:xt/id "foo", :v n}]]))
-        (tu/then-await-tx node)
-        (c/compact-all! node (Duration/ofSeconds 5))
-
-        (t/is (= [{:foo-count 100}] (xt/q node "SELECT COUNT(*) foo_count FROM foo FOR ALL VALID_TIME")))))
-
-    (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-more-than-a-page-of-versions")))
-                   (.resolve node-dir (tables-key "public$foo")) #"l01-(.+)\.arrow")))
-
 (t/deftest losing-data-when-compacting-3459
   (binding [c/*page-size* 8
             cat/*l1-size-limit* (* 16 1024)

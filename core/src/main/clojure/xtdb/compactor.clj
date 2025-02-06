@@ -143,7 +143,7 @@
                                                                     schema table-name out-trie-key
                                                                     true)]
 
-                               (Compactor/writeRelation trie-wtr data-rel recency-wtr page-size)))]
+                               (Compactor/writeRelation trie-wtr data-rel page-size)))]
 
         (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
 
