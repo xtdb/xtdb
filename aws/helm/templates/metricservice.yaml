@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: xtdb-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: xtdb-statefulset
+spec:
+  type: {{ .Values.metricService.type }}
+  ports:
+    - name: metrics
+      protocol: TCP
+      targetPort: {{ .Values.metricService.targetPort }}
+      port: {{ .Values.metricService.servicePort }}
+  clusterIP: None 
+  selector:
+    app: xtdb-statefulset
