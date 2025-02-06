@@ -301,7 +301,6 @@ dependencies {
     devImplementation("com.taoensso", "tufte", "2.6.3")
     devImplementation("clojure.java-time:clojure.java-time:1.4.2")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
-    testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("metosin", "jsonista", "0.3.3")
     testImplementation("clj-commons", "clj-yaml", "1.0.27")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
