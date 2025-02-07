@@ -1794,7 +1794,7 @@
 
     ;; here we catch explicitly because we need to send the error, then a ready message
     (catch InterruptedException e (throw e))
-    (catch Exception e (send-ex conn e)))
+    (catch Throwable e (send-ex conn e)))
 
   (cmd-send-ready conn))
 
