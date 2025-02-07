@@ -37,6 +37,7 @@ jobs:
             # type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
+            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
 
       - name: AWS meta
@@ -49,6 +50,7 @@ jobs:
             # type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
+            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
 
       - name: Azure meta
@@ -61,6 +63,7 @@ jobs:
             # type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
+            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
 
       - name: Google Cloud meta
@@ -73,6 +76,7 @@ jobs:
             # type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
+            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
 
       - name: Build Uberjar
