@@ -12,10 +12,190 @@ In order to run an AWS based XTDB cluster, the following infrastructure is requi
 
 * An **S3 bucket** for remote storage.
 * A **Kafka cluster** for the message log.
-** Within AWS, you can use the https://aws.amazon.com/msk/[Amazon Managed Streaming for Apache Kafka (MSK)^] service.
 ** For more information on setting up Kafka for usage with XTDB, see the link:config/log/kafka[Kafka configuration^] docs.
-* IAM policies which grant XTDB permission to the S3 bucket and Kafka cluster.
+* IAM policies which grant XTDB permission to the S3 bucket
 * XTDB nodes configured to communicate with the Kafka cluster and S3 bucket.
+
+[#terraform]
+== Terraform Templates
+
+To set up a basic version of the required infrastructure, we provide a set of Terraform templates specifically designed for AWS.
+
+These can be fetched from the XTDB repository using the following command:
+
+```bash
+terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
+```
+
+=== Resources
+
+By default, running the templates will deploy the following infrastructure:
+
+* Amazon S3 Storage Bucket for remote storage.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest[**terraform-aws-modules/s3-bucket**^] Terraform module.
+** Enables object ownership control and applies necessary permissions for XTDB.
+* IAM Policy for granting access to the S3 storage bucket.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-policy[**terraform-aws-modules/iam-policy**^] Terraform module.
+** Grants permissions for XTDB to read, write, and manage objects within the specified S3 bucket.
+* Virtual Private Cloud (VPC) for the XTDB EKS cluster.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest[**terraform-aws-modules/vpc**^] Terraform module.
+** Enables DNS resolution, assigns public subnets, and configures networking for the cluster.
+* Amazon Elastic Kubernetes Service (EKS) Cluster for running XTDB resources.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest[**terraform-aws-modules/eks**^] Terraform module.
+** Provisions a managed node group dedicated to XTDB workloads.
+
+=== Configuration
+
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
+
+The following variables are **required** to be set:
+
+* `s3_bucket_name`: The (globally unique) name of the S3 bucket used by XTDB. 
+
+For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
+
+=== Outputs
+
+The Terraform templates will return several outputs:
+
+[cols="2,3", options="header"]
+|===
+| Output              | Description
+
+|`aws_region`
+|The AWS region in which the resources were created.
+
+|`eks_cluster_name`
+|The name of the EKS cluster created for the XTDB deployment.
+
+|`s3_bucket_name`
+|The name of the S3 bucket created for the XTDB cluster.
+
+|`s3_access_policy_arn`
+|The ARN of the S3 bucket created for the XTDB cluster.
+
+|`oidc_provider`
+|OpenID Connect identity provider for the EKS cluster.
+
+|`oidc_provider_arn`
+|The ARN of the OpenID Connect identity provider for the EKS cluster.
+
+|===
+
+'''
+
+[#helm]
+== `xtdb-aws` Helm Charts
+
+For setting up a production-ready XTDB cluster on AWS, we provide a **Helm** chart built specifically for AWS environments.
+
+
+=== Pre-requisites
+
+To allow the XTDB nodes to access AWS resources, a Kubernetes Service Account (KSA) must be setup and linked with an IAM role that has any necessary permissions, using link:https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html[**IAM Roles for Service Accounts (IRSA)**^].
+
+==== Setting Up the Kubernetes Service Account:
+
+Create the Kubernetes Service Account in the target namespace:
+
+```bash
+kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
+```
+
+==== Setting up the IAM Service Account
+
+Fetch the ARN of a policy granting access to s3 (`s3_access_policy_arn`), the OpenID Connect identity provider of the EKS cluster (`oidc_provider`) and ARN for the OIDC provider (`oidc_provider_arn`).
+
+Create a file `eks_policy_document.json` for the trust policy, replacing values as appropriate:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "<oidc_provider_arn>"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "<oidc_provider>:aud": "sts.amazonaws.com",
+          "<oidc_provider>:sub": "system:serviceaccount:xtdb-deployment:xtdb-service-account"
+        }
+      }
+    }
+  ]
+}
+```
+
+Create the IAM role and attach the trust policy created above:
+
+```bash
+aws iam create-role --role-name xtdb-eks-role --assume-role-policy-document file://eks_policy_document.json --description "XTDB EKS Role"
+```
+
+Attach the S3 bucket role:
+
+```bash
+aws iam attach-role-policy --role-name xtdb-eks-role --policy-arn=<s3_access_policy_arn>
+```
+
+==== Annotating the Kubernetes Service Account
+
+Fetch the ARN of the IAM role:
+
+```bash
+xtdb_eks_role_arn=$(aws iam get-role --role-name xtdb-eks-role --query Role.Arn --output text)
+```
+
+Annotate the Kubernetes Service Account with the IAM role to establish the link between the two:
+
+```bash
+kubectl annotate serviceaccount xtdb-service-account --namespace xtdb-deployment eks.amazonaws.com/role-arn=$xtdb_eks_role_arn
+```
+
+=== Installation
+
+The Helm chart can be installed directly from the link:https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-aws[**Github Container Registry** releases]. 
+
+This will use the default configuration for the deployment, setting any required values as needed:  
+
+```bash
+helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \
+  --set xtdbConfig.s3Bucket=<s3_bucket> 
+```
+
+We provide a number of parameters for configuring numerous parts of the deployment, see the link:https://github.com/xtdb/xtdb/tree/main/aws/helm[`values.yaml` file] or call `helm show values`:
+
+```bash
+helm show values oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot 
+```
+
+=== Resources
+
+By default, the following resources are deployed by the Helm chart:
+
+* A `ConfigMap` containing the XTDB YAML configuration.
+* A `StatefulSet` containing a configurable number of XTDB nodes, using the link:#docker-image[**xtdb-aws** docker image]
+* A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
+
+=== Pulling the Chart Locally
+
+The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
+
+```bash
+helm pull oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --untar
+```
+
+'''
 
 [#docker-image]
 == `xtdb-aws` Docker Image
