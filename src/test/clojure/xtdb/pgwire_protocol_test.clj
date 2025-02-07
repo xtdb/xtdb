@@ -197,7 +197,7 @@
                   {:severity "ERROR",
                    :localized-severity "ERROR",
                    :sql-state "22P02",
-                   :message "Can not parse 'alan' as timestamp"}}]
+                   :message "invalid timestamp: Text 'alan' could not be parsed at index 0"}}]
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 

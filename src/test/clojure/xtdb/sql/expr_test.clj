@@ -468,7 +468,7 @@
 
   (t/is (thrown-with-msg?
          RuntimeException
-         #"String '2021-10-21T12' has invalid format for type timestamp with timezone"
+         #"'2021-10-21T12' could not be parsed, unparsed text found at index 10"
          (xt/q tu/*node* "SELECT CAST('2021-10-21T12' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz"))))
 
 (t/deftest test-cast-temporal-to-string
@@ -626,8 +626,9 @@
     "TIMESTAMP '3000-03-15T20:40:31Z'" #xt/zoned-date-time "3000-03-15T20:40:31Z"
 
     "TIMESTAMP '3000-04-15T20:40:31+01:00[Europe/London]'" #xt/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
-    ;; corrects the offset to the zone's offset
-    "TIMESTAMP '3000-04-15T20:40:31+05:00[Europe/London]'" #xt/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"
+    ;; corrects the time to the zone if errant offset provided
+    "TIMESTAMP '3000-04-15T20:40:31+05:00[Europe/London]'" #xt/zoned-date-time "3000-04-15T16:40:31+01:00[Europe/London]"
+
     ;; provides the correct offset for the zone
     "TIMESTAMP '3000-04-15T20:40:31[Europe/London]'" #xt/zoned-date-time "3000-04-15T20:40:31+01:00[Europe/London]"))
 

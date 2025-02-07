@@ -1,9 +1,11 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err])
-  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime)
+           [java.time.format DateTimeParseException]
            java.time.temporal.ChronoUnit
-           (java.util Date)))
+           (java.util Date)
+           xtdb.time.Time))
 
 (defn ->duration [d]
   (cond
@@ -114,10 +116,10 @@
     0))
 
 (defn parse-sql-timestamp-literal [ts-str]
-  (when-let [[_ y mons d h mins s sf ^String offset zone] (re-matches #"(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::\d{2})?)?(?:\[([\w\/]+)\])?" ts-str)]
-    (let [ldt (LocalDateTime/of (parse-long y) (parse-long mons) (parse-long d)
-                                (parse-long h) (parse-long mins) (parse-long s) (seconds-fraction->nanos sf))]
-      (cond
-        zone (ZonedDateTime/ofLocal ldt (ZoneId/of zone) (some-> offset ZoneOffset/of))
-        offset (ZonedDateTime/of ldt (ZoneOffset/of offset))
-        :else ldt))))
+  (try
+    (Time/asSqlTimestamp ts-str)
+    (catch DateTimeParseException e
+      (throw (err/illegal-arg :xtdb/invalid-date-time
+                              {::err/message (str "invalid timestamp: " (ex-message e))
+                               :timestamp ts-str}
+                              e)))))

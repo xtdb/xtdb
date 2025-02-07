@@ -20,7 +20,10 @@ e.g. `DATE '2007-06-29'`
 `TIMESTAMP [WITHOUT TIMEZONE]`:: date and time, without a time-zone offset.
 +
 * SQL standard: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01 00:00:00'`
+** extension: without time-part: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01'` - defaults to midnight
 * ISO8601: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01T00:00:00'`
+** without seconds: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01T18:00`
+
 `TIMESTAMP WITH TIMEZONE`:: date and time, with a time-zone offset.
 +
 * SQL standard: `TIMESTAMP WITH TIMEZONE '2020-01-01 18:00:00+00:00'`
@@ -28,6 +31,8 @@ e.g. `DATE '2007-06-29'`
 ** `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00Z`
 ** `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00+00:00'`
 ** `TIMESTAMP [WITH TIMEZONE] '2020-08-01T18:00:00+01:00[Europe/London]'`
+** without time-part: `TIMESTAMP [WITH TIMEZONE] '2020-01-01Z'` - defaults to midnight
+** without seconds: `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00Z`
 
 `TIME [WITHOUT TIMEZONE]`::
 time-of-day, without a time-zone offset.

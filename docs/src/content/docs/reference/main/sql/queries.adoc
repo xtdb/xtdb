@@ -211,6 +211,8 @@ const dateTimeLiteral = rr.Choice(0, dateLiteral, timeLiteral, timestampLiteral,
 return rr.Diagram(rr.Choice(0, "NULL", "<numeric literal>", stringLiteral, dateTimeLiteral))
 ----
 
+* See link:./data-types.html#_datetime_types[Date/time types] for more details on XTDB's timestamp literals.
+
 === <predicate>
 [railroad]
 ----
