@@ -1035,3 +1035,21 @@
               [::tu/pages [[{:id {:a 1, :b 2}, :foo 0}
                               {:id {:a 1, :b 3}, :foo 1}]]]
               [::tu/pages [[{:id {:a 1, :b 2}, :bar 5}]]]]))))
+
+(t/deftest test-non-joining-join-conditions
+  (t/testing "non joining join conditions are added at the earliest possible point"
+    (let [plan '[:mega-join
+                 [(= a b) (= b 1)]
+                 [[:table [{:a 1}]]
+                  [:table [{:b 1}]]]]]
+      (t/is (= '[[0 [[:equi-condition {a b}] [:pred-expr (= b 1)]] 1]]
+               (:join-order (lp/emit-expr (s/conform ::lp/logical-plan plan) {}))))
+      (t/is (= [{:a 1, :b 1}] (tu/query-ra plan))))))
+
+(t/deftest test-join-equi-literal
+  ;;FIXME expr->columns doesn't handle scalar literals in equi-join syntax
+  #_(t/is (= [{:bar 5, :id 4, :foo 0}]
+             (tu/query-ra
+              '[:mega-join [{id 4}]
+                [[::tu/pages [[{:id 4, :foo 0}]]]
+                 [::tu/pages [[{:bar 5}]]]]]))))

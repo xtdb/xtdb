@@ -650,7 +650,10 @@
   "Swaps the sides of equi conditions to match location of cols in plan
   or rewrite simple equals predicate condition as equi condition"
   [{:keys [condition cols-from-current-rel other-cols] :as join-condition}]
-  (if (= (first condition) :equi-condition)
+  (cond
+    (= nil cols-from-current-rel other-cols)
+    condition
+    (= (first condition) :equi-condition)
     (let [equi-join-cond (last condition)
           lhs (first (keys equi-join-cond))
           rhs (first (vals equi-join-cond))
@@ -658,6 +661,7 @@
       (if (= (:cols-from-current-rel join-condition) lhs-cols)
         condition
         [:equi-condition {rhs lhs}]))
+    :else
     (let [predicate (last condition)]
       (if (lp/equals-predicate? predicate)
         (let [[_ a b] predicate]
@@ -712,15 +716,9 @@
 (defn remove-joined-relation [join-candidate rels]
   (remove #(= (:relation-id %) (:relation-id join-candidate)) rels))
 
-(defn remove-used-join-conditions [join-candidate conditions]
-  (remove
-    #(contains?
-       (set
-         (map
-           :condition-id
-           (:valid-join-conditions-for-rel join-candidate)))
-       (:condition-id %))
-    conditions))
+(defn remove-used-join-conditions [conditions-to-remove conditions]
+  (let [condition-ids-to-remove (set (map :condition-id conditions-to-remove))]
+    (remove #(contains? condition-ids-to-remove (:condition-id %)) conditions)))
 
 (defn build-plan-for-next-sub-graph [conditions relations args]
   (loop [plan (first relations)
@@ -732,19 +730,29 @@
                                 (find-join-conditions-which-contain-cols-from-plan plan)
                                 (match-relations-to-potential-join-clauses rels)
                                 (first))
-            join-conditions (mapv
-                             adjust-to-equi-condition
-                             (:valid-join-conditions-for-rel join-candidate))]
+            joining-join-conditions (:valid-join-conditions-for-rel join-candidate)
+            post-join-cols (set/union (columns plan) (columns join-candidate))
+            extra-join-conditions
+            ;;these are conditions that don't reference cols from multiple rels
+            ;;ideally these should have been pushed into one of the child rels
+            ;;by lp rewrite rules, but mega-join should still be able to handle them
+            ;;we need to do this here, as if we only create a single sub-graph this
+            ;;may be the only join that takes place.
+            (filter #(set/superset? post-join-cols (:cols %))
+                    (remove-used-join-conditions joining-join-conditions conditions))
+            join-conditions (concat joining-join-conditions extra-join-conditions)
+            adjusted-join-conditions (mapv adjust-to-equi-condition join-conditions)]
+
         (if join-candidate
           (recur
            (emit-inner-join-expr
-            {:condition join-conditions
+            {:condition adjusted-join-conditions
              :left plan
              :right join-candidate}
             args)
            (remove-joined-relation join-candidate rels)
-           (remove-used-join-conditions join-candidate conditions)
-           (conj join-order join-conditions (:relation-id join-candidate)))
+           (remove-used-join-conditions join-conditions conditions)
+           (conj join-order adjusted-join-conditions (:relation-id join-candidate)))
           {:sub-graph-plan plan
            :sub-graph-unused-rels rels
            :sub-graph-unused-conditions conditions
@@ -801,7 +809,7 @@
              :join-order join-order}))]
     (if (seq unused-join-conditions)
       ;; if there are unused join conditions that means there must be at least 2
-      ;; disconnected sub graphs as all other conditions (ignoring #4121) can and
+      ;; disconnected sub graphs as all other conditions can and
       ;; should be used already in the sub-graph joins.
       (assoc
        (emit-inner-join-expr
