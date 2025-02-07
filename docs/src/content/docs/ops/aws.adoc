@@ -17,6 +17,79 @@ In order to run an AWS based XTDB cluster, the following infrastructure is requi
 * IAM policies which grant XTDB permission to the S3 bucket and Kafka cluster.
 * XTDB nodes configured to communicate with the Kafka cluster and S3 bucket.
 
+[#terraform]
+== Terraform Templates
+
+To set up a basic version of the required infrastructure, we provide a set of Terraform templates specifically designed for AWS.
+
+These can be fetched from the XTDB repository using the following command:
+
+```bash
+terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
+```
+
+=== Resources
+
+By default, running the templates will deploy the following infrastructure:
+
+* TODO
+
+=== Configuration
+
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
+
+For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
+
+'''
+
+[#helm]
+== `xtdb-aws` Helm Charts
+
+For setting up a production-ready XTDB cluster on AWS, we provide a **Helm** chart built specifically for AWS environments.
+
+=== Installation
+
+The Helm chart can be installed directly from the link:https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-aws[**Github Container Registry** releases]. 
+
+This will use the default configuration for the deployment, setting any required values as needed:  
+
+```bash
+helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set TODO
+```
+
+We provide a number of parameters for configuring numerous parts of the deployment, see the link:https://github.com/xtdb/xtdb/tree/main/aws/helm[`values.yaml` file] or call `helm show values`:
+
+```bash
+helm show values oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot 
+```
+
+=== Resources
+
+By default, the following resources are deployed by the Helm chart:
+
+* A `StatefulSet` containing a configurable number of XTDB nodes, using the link:#docker-image[**xtdb-aws** docker image]
+* A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB, default storage class of TODO)
+* A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
+* A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
+* A `ServiceAccount` used for authenticating the XTDB nodes with the S3 Bucket (TODO).
+
+=== Pulling the Chart Locally
+
+The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
+
+```bash
+helm pull oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --untar
+```
+
+'''
+
 [#docker-image]
 == `xtdb-aws` Docker Image
 
