@@ -2529,6 +2529,10 @@
   (every-pred forbidden-update-col?
               (complement '#{_id _valid_from _valid_to})))
 
+(def forbidden-patch-col?
+  (every-pred forbidden-update-col?
+              (complement '#{_id})))
+
 (defrecord ForbiddenColumnUpdate [col]
   PlanError
   (error-string [_] (format "Cannot UPDATE %s column" col)))
@@ -2536,6 +2540,10 @@
 (defrecord ForbiddenColumnInsert [col]
   PlanError
   (error-string [_] (format "Cannot INSERT %s column" col)))
+
+(defrecord ForbiddenColumnPatch [col]
+  PlanError
+  (error-string [_] (format "Cannot PATCH %s column" col)))
 
 (defn plan-patch [{:keys [table-info]} {:keys [table valid-from valid-to patch-rel]}]
   (let [known-cols (mapv symbol (get table-info table))]
@@ -2637,18 +2645,19 @@
                    (->QueryExpr (plan-patch env {:table table-name
                                                  :valid-from (some-> (.validFrom ctx) (.accept expr-visitor))
                                                  :valid-to (some-> (.validTo ctx) (.accept expr-visitor))
-                                                 ;; TODO valid-from/valid-to
                                                  :patch-rel (.accept (.patchSource ctx) this)})
-                                '[_iid _valid_from _valid_from doc]))))
+                                '[_iid _valid_from _valid_to doc]))))
 
   (visitPatchRecords [_ ctx]
     (let [{:keys [plan col-syms]} (-> (.recordsValueConstructor ctx)
                                       (.accept (->QueryPlanVisitor env scope))
                                       (remove-ns-qualifiers env))]
-      (->QueryExpr [:project ['{_iid (_iid _id)}
-                              {'doc (into {} (map (juxt keyword identity)) col-syms)}]
-                    plan]
-                   '[_iid doc])))
+      (if-let [forbidden-cols (seq (filter forbidden-patch-col? col-syms))]
+        (add-err! env (->ForbiddenColumnPatch forbidden-cols))
+        (->QueryExpr [:project ['{_iid (_iid _id)}
+                                {'doc (into {} (map (juxt keyword identity)) col-syms)}]
+                      plan]
+                     '[_iid doc]))))
 
   (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 

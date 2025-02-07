@@ -3,7 +3,8 @@
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.types :as types]))
+            [xtdb.types :as types]
+            [xtdb.compactor :as c]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
@@ -106,3 +107,41 @@
                 [{:xt/id 1, :a 1, :b 2} (time/->zdt #inst "2020-01-07") nil]
                 [{:xt/id 2, :a 6, :b 8} (time/->zdt #inst "2020-01-08") nil]]
                (q "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))))
+
+(t/deftest patch-with-forbidden-columns-fails-4120
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 1}"]])
+
+  (t/testing "patching with forbidden columns directly"
+    (xt/execute-tx tu/*node* ["PATCH INTO docs RECORDS {_id: 1,
+                                                        _valid_from: TIMESTAMP '2020-01-01 00:00:00+00:00',
+                                                        _valid_to: TIMESTAMP '2030-01-01 00:00:00+00:00'}"])
+
+    (t/is (= [{:xt/id 1,
+               :committed false,
+               :error
+               #xt/illegal-arg [:xtdb/sql-error "Errors planning SQL statement:
+  - Cannot PATCH (_valid_from _valid_to) column" {:errors [{:col (_valid_from _valid_to)}]}],
+               :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
+             (xt/q tu/*node* "SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 1"))))
+
+  (t/testing "patching with forbidden columns in parameters"
+    (xt/submit-tx tu/*node* [[:sql "PATCH INTO docs RECORDS ? "
+                              [{:_id 1 :_valid_from (time/->zdt #inst "2022") :_valid_to (time/->zdt #inst "2028")}]]])
+
+    (t/is (= [{:xt/id 2,
+               :committed false,
+               :error
+               #xt/illegal-arg [:xtdb/sql-error "Errors planning SQL statement:
+  - Cannot PATCH (_valid_from _valid_to) column" {:errors [{:col (_valid_from _valid_to)}]}],
+               :system-time #xt/zoned-date-time "2020-01-03T00:00Z[UTC]"}]
+             (xt/q tu/*node* "SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 1"))))
+
+  (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))
+
+  (t/testing "works after compaction"
+    (tu/finish-block! tu/*node*)
+    (c/compact-all! tu/*node*)
+
+    (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
+             (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))))
