@@ -66,7 +66,7 @@ class LogProcessor(
 
     private val allocator =
         allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
-            .also {
+            .also { allocator ->
                 Gauge.builder("watcher.allocator.allocated_memory", allocator) { it.allocatedMemory.toDouble() }
                     .baseUnit("bytes")
                     .register(meterRegistry)
