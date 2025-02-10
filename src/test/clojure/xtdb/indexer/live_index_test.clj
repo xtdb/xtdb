@@ -63,8 +63,8 @@
     (t/testing "finish block"
       (.finishBlock live-index)
 
-      (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/l00-b00.arrow"))
-            leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-b00.arrow"))]
+      (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/l00-rc-b00.arrow"))
+            leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-rc-b00.arrow"))]
         (util/with-open [trie-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap trie-ba)))
                          trie-rel (Relation. allocator (.getSchema trie-loader))
                          leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)) allocator)]
@@ -123,10 +123,10 @@
 
           (tu/finish-block! node)
 
-          (t/is (= [(os/->StoredObject "tables/public$foo/data/l00-b00.arrow" 2558)]
+          (t/is (= [(os/->StoredObject "tables/public$foo/data/l00-rc-b00.arrow" 2558)]
                    (.listAllObjects bp (util/->path "tables/public$foo/data"))))
 
-          (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-b00.arrow" 4382)]
+          (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-rc-b00.arrow" 4382)]
                    (.listAllObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
@@ -199,6 +199,6 @@
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 726)
-                    (os/->StoredObject (util/->path "blocks/b01.transit.json") 736)]
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 732)
+                    (os/->StoredObject (util/->path "blocks/b01.transit.json") 742)]
                    (.listAllObjects bp (util/->path "blocks")))))))))

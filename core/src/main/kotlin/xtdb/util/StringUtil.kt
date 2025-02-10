@@ -161,4 +161,6 @@ object StringUtil {
             val body = toUnsignedString(this, 16)
             return "${toUnsignedString(body.length - 1, 16)}$body"
         }
+
+    val String.fromLexHex: Long get() = substring(1).toLong(16)
 }

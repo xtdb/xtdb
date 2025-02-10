@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
+import xtdb.trie.BlockIndex
 import xtdb.trie.MemoryHashTrie
 import xtdb.vector.IRelationWriter
 import xtdb.vector.IVectorWriter

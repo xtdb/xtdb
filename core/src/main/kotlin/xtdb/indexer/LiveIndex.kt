@@ -5,8 +5,6 @@ import xtdb.api.TransactionKey
 import xtdb.api.log.Log.Message
 import xtdb.api.log.Log.Record
 
-typealias BlockIndex = Long
-
 interface LiveIndex : Watermark.Source, AutoCloseable {
 
     interface Watermark : AutoCloseable {

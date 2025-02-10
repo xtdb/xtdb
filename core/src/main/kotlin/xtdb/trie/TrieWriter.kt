@@ -14,11 +14,6 @@ import xtdb.util.requiringResolve
 import java.nio.file.Path
 import java.util.*
 
-typealias InstantMicros = Long
-typealias RowIndex = Int
-typealias TableName = String
-typealias TrieKey = String
-
 class TrieWriter(
     allocator: BufferAllocator,
     private val bufferPool: BufferPool,

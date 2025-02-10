@@ -161,10 +161,10 @@
   (getTableName [_] table-name)
   (getOutputTrieKey [_] out-trie-key))
 
-(defn- l0->l1-compaction-job [table-name trie-state {:keys [^long l1-size-limit]}]
-  (when-let [live-l0 (seq (->> (get trie-state [0 []])
+(defn- l0->l1-compaction-job [table-name {:keys [l0-tries l1-tries]} {:keys [^long l1-size-limit]}]
+  (when-let [live-l0 (seq (->> l0-tries
                                (take-while #(= :live (:state %)))))]
-    (let [latest-l1 (->> (get trie-state [1 []])
+    (let [latest-l1 (->> l1-tries
                          (take-while #(< (:data-file-size %) l1-size-limit))
                          first)]
       (loop [size (:data-file-size latest-l1 0)
@@ -175,10 +175,11 @@
 
           (let [{:keys [block-idx]} (last res)]
             (->Job table-name (mapv :trie-key res) nil
-                   (trie/->l0-l1-trie-key 1 block-idx))))))))
+                   ;; TODO recency
+                   (trie/->l1-trie-key nil block-idx))))))))
 
-(defn- l1p-compaction-jobs [table-name trie-state {:keys [^long l1-size-limit]}]
-  (for [[[level part] files] trie-state
+(defn- l1p-compaction-jobs [table-name {:keys [l1-tries ln-tries]} {:keys [^long l1-size-limit]}]
+  (for [[[level part] files] (conj ln-tries [[1 nil] l1-tries])
         :when (> level 0)
         :let [live-files (-> files
                              (->> (remove #(= :garbage (:state %))))
@@ -189,17 +190,19 @@
         p (range cat/branch-factor)
         :let [out-level (inc level)
               out-part (conj part p)
-              {lnp1-block-idx :block-idx} (first (get trie-state [out-level out-part]))
+              {lnp1-block-idx :block-idx} (first (get ln-tries [out-level out-part]))
 
               in-files (-> live-files
                            (cond->> lnp1-block-idx (drop-while #(<= (:block-idx %) lnp1-block-idx)))
-                           (->> (take cat/branch-factor)))]
+                           (->> (take cat/branch-factor)))
+              out-part (byte-array out-part)]
 
         :when (= cat/branch-factor (count in-files))
         :let [trie-keys (mapv :trie-key in-files)
               out-block-idx (:block-idx (last in-files))]]
     (->Job table-name trie-keys out-part
-           (trie/->l2+-trie-key out-level out-part out-block-idx))))
+           ;; TODO recency
+           (trie/->trie-key out-level nil out-part out-block-idx))))
 
 (defn compaction-jobs [table-name trie-state opts]
   (concat (when-let [job (l0->l1-compaction-job table-name trie-state opts)]
@@ -225,7 +228,7 @@
       (Compactor/open
        (reify Compactor$Impl
          (availableJobs [_]
-           (->> (cat/table-names trie-catalog)
+           (->> (.getTableNames trie-catalog)
                 (into [] (mapcat (fn [table-name]
                                    (compaction-jobs table-name (cat/trie-state trie-catalog table-name) trie-catalog))))))
 

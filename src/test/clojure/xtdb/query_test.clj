@@ -55,24 +55,24 @@
             (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-args)
                   param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} args)]
               (t/testing "L0 files don't have content metadata, so we have to match them"
-                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 0 0))
+                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 0 1))
+                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 1))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0))))))
 
               (t/testing "first L1 file has content metadata, doesn't match"
-                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 1 0))
+                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (false? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (false? (.test (.build param-sel table-metadata) 0))))))
 
               (t/testing "combined L1 file matches"
-                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 1 1))
+                (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 1))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0)))))))))
@@ -110,24 +110,24 @@
           (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-args)
                 param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} args)]
             (t/testing "L0 has no content metadata -> always match"
-              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 0 0))
+              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))
                 (fn [^ITableMetadata table-metadata]
                   (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                   (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 0 1))
+              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 1))
                 (fn [^ITableMetadata table-metadata]
                   (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                   (t/is (true? (.test (.build param-sel table-metadata) 0))))))
 
             (t/testing "first L1 file matches"
-              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 1 0))
+              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))
                 (fn [^ITableMetadata table-metadata]
                   (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                   (t/is (true? (.test (.build param-sel table-metadata) 0))))))
 
             (t/testing "combined L1 file also matches"
-              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-l1-trie-key 1 1))
+              (with-table-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 1))
                 (fn [^ITableMetadata table-metadata]
                   (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                   (t/is (true? (.test (.build param-sel table-metadata) 0)))))))))

@@ -6,4 +6,5 @@ typealias FileSize = Long
 
 interface TrieCatalog {
     fun addTries(addedTrie: Iterable<AddedTrie>)
+    val tableNames: Set<String>
 }

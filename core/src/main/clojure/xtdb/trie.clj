@@ -6,6 +6,8 @@
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            (java.nio.file Path)
+           java.time.LocalDate
+           java.time.format.DateTimeFormatterBuilder
            (java.util ArrayList Arrays List)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -16,18 +18,42 @@
            (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
            (xtdb.util TemporalBounds TemporalDimension)))
 
-(defn ->l0-l1-trie-key [^long level, ^long block-idx]
-  (assert (<= 0 level 1))
+(def ^:private ^java.time.format.DateTimeFormatter recency-fmt
+  (-> (DateTimeFormatterBuilder.)
+      (.appendPattern "yyyyMMdd")
+      (.toFormatter)))
 
-  (format "l%s-b%s" (util/->lex-hex-string level) (util/->lex-hex-string block-idx)))
+(defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
+  (str "l" (util/->lex-hex-string level)
+       "-r" (if recency
+              (.format recency-fmt recency)
+              "c")
+       (when part
+         (str "-p" (str/join part)))
+       "-b" (util/->lex-hex-string block-idx)))
 
-(defn ->l2+-trie-key [^long level, ^bytes part, ^long block-idx]
-  (assert (>= level 2))
+(defn ->l0-trie-key [^long block-idx]
+  (->trie-key 0 nil nil block-idx))
 
-  (format "l%s-p%s-b%s"
-          (util/->lex-hex-string level)
-          (str/join part)
-          (util/->lex-hex-string block-idx)))
+(defn ->l1-trie-key [^LocalDate recency, ^long block-idx]
+  (->trie-key 1 recency nil block-idx))
+
+(def ^:private trie-file-path-regex
+  ;; e.g. `l01-r20200101-b00-rs20.arrow` or `l04-rc-p0010-b12e.arrow`
+  #"(l(\p{XDigit}+)-r(\d{8}|c)(?:-p(\p{XDigit}+))?(?:-b(\p{XDigit}+)))(\.arrow)?$")
+
+(defn parse-trie-key [trie-key]
+  (when-let [[_ trie-key level-str recency-str part-str block-idx-str] (re-find trie-file-path-regex trie-key)]
+    (cond-> {:trie-key trie-key
+             :level (util/<-lex-hex-string level-str)
+             :block-idx (util/<-lex-hex-string block-idx-str)
+             :recency (when (not= recency-str "c")
+                        (.parse recency-fmt ^String recency-str LocalDate/from))}
+      part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str))))))
+
+(defn parse-trie-file-path [^Path file-path]
+  (-> (parse-trie-key (str (.getFileName file-path)))
+      (assoc :file-path file-path)))
 
 (def ^java.nio.file.Path tables-dir (util/->path "tables"))
 
@@ -97,21 +123,6 @@
       (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
 
       (.end trie-wtr))))
-
-(def ^:private trie-file-path-regex
-  ;; e.g. `l01-b00-rs20.arrow` or `l04-p0010-b12e.arrow`
-  #"(l(\p{XDigit}+)(?:-p(\p{XDigit}+))?(?:-b(\p{XDigit}+)))(\.arrow)?$")
-
-(defn parse-trie-key [trie-key]
-  (when-let [[_ trie-key level-str part-str block-idx-str] (re-find trie-file-path-regex trie-key)]
-    (cond-> {:trie-key trie-key
-             :level (util/<-lex-hex-string level-str)
-             :block-idx  (util/<-lex-hex-string block-idx-str)}
-      part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str))))))
-
-(defn parse-trie-file-path [^Path file-path]
-  (-> (parse-trie-key (str (.getFileName file-path)))
-      (assoc :file-path file-path)))
 
 (defrecord Segment [trie]
   ISegment
