@@ -14,7 +14,7 @@ directSqlStatement : directlyExecutableStatement ';'? EOF ;
 multiSqlStatement : directlyExecutableStatement ( ';' directlyExecutableStatement )* ';'? EOF ;
 
 directlyExecutableStatement
-    : settingQueryVariables? queryExpression #QueryExpr
+    : EXPLAIN? settingQueryVariables? queryExpression #QueryExpr
     | insertStatement #InsertStmt
     | updateStatementSearched #UpdateStmt
     | deleteStatementSearched #DeleteStmt

@@ -533,7 +533,8 @@
                                     {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
 
                                   (visitQueryExpr [this ctx]
-                                    (let [q {:statement-type :query, :query (subsql ctx), :parsed-query ctx}]
+                                    (let [q {:statement-type :query, :explain? (boolean (.EXPLAIN ctx))
+                                             :query (subsql ctx), :parsed-query ctx}]
                                       (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
                                            (transduce (keep (partial plan/accept-visitor this)) conj q))))
 
@@ -1558,11 +1559,12 @@
                                                                                                    (distinct)))))))})))
 
         (try
-          (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
+          (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
                 query-opts {:after-tx-id (or watermark-tx-id -1)
                             :tx-timeout (Duration/ofSeconds 1)
                             :param-types param-col-types
-                            :default-tz (.getZone clock)}
+                            :default-tz (.getZone clock)
+                            :explain? explain?}
 
                 ^PreparedQuery pq (if ra-plan
                                     (xtp/prepare-ra node ra-plan query-opts)

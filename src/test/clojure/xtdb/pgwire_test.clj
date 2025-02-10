@@ -2577,3 +2577,29 @@ ORDER BY 1,2;")
 
           (finally
             (jdbc/execute! conn ["ROLLBACK"]))))))
+
+(t/deftest test-explain
+  ;; this one might be a little brittle, let's revisit if it fails a lot.
+  (let [sql "EXPLAIN SELECT _id FROM foo"
+        expected-plan '[:project [{_id foo.1/_id}]
+                        [:rename foo.1
+                         [:scan {:table public/foo}
+                          [_id]]]]]
+    (with-open [conn (jdbc-conn)]
+      (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
+      (let [[row :as res] (jdbc/execute! conn [sql])]
+        (t/is (= 1 (count res)))
+        (t/is (= #{:plan} (set (keys row))))
+        (let [plan (read-string (:plan row))]
+          (t/is (= expected-plan plan)))))
+
+    (when (psql-available?)
+      (psql-session
+       (fn [send read]
+         (send "INSERT INTO foo RECORDS {_id: 1};\n")
+         (t/is (= [["INSERT 0 0"]] (read)))
+         (send (str sql ";\n"))
+         (let [[cols [plan] & more-rows] (read)]
+           (t/is (= ["plan"] cols))
+           (t/is (nil? more-rows))
+           (t/is (= expected-plan (read-string plan)))))))))
