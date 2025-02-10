@@ -300,8 +300,10 @@
 
 (defn- client-err
   ([client-msg] (client-err client-msg nil))
-  ([client-msg data]
-   (ex-info client-msg (assoc data ::client-error (err-protocol-violation client-msg)))))
+  ([client-msg {:keys [error-type] :as data}]
+   (ex-info client-msg (assoc data ::client-error
+                              (cond-> (err-protocol-violation client-msg)
+                                error-type (assoc :error-type error-type))))))
 
 ;;TODO parse errors should return a PSQL parse error
 ;;this code is generic, but there are specific ones a well
@@ -1052,7 +1054,7 @@
 
   If the connection is operating in the :extended protocol mode, any error causes the connection to skip
   messages until a msg-sync is received."
-  [{:keys [conn-state ^Counter query-error-counter] :as conn} err]
+  [{:keys [conn-state ^Counter query-error-counter ^Counter tx-error-counter] :as conn} {:keys [error-type] :as err}]
 
   ;; error seen while in :extended mode, start skipping messages until sync received
   (when (= :extended (:protocol @conn-state))
@@ -1061,8 +1063,9 @@
   ;; mark a transaction (if open as failed), for now we will consider all errors to do this
   (swap! conn-state util/maybe-update :transaction assoc :failed true, :err err)
 
-  (when query-error-counter
-    (.increment ^Counter query-error-counter))
+  (when (and (not= :dml error-type)
+             query-error-counter)
+    (.increment query-error-counter))
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
 
@@ -1245,7 +1248,7 @@
   (try
     (xt/execute-tx node dml-ops tx-opts)
     (catch xtdb.IllegalArgumentException e
-      (throw (client-err (ex-message e))))
+      (throw (client-err (ex-message e) {:error-type :dml})))
     (catch Throwable e
       (log/debug e "Error on execute-tx")
       (let [msg "unexpected error on tx submit (report as a bug)"]
@@ -1282,7 +1285,8 @@
     (do (log/error "Missing types for params in DML statement")
         (cmd-send-error
          conn
-         (err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")))
+         (-> (err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")
+             (assoc :error-type :dml))))
 
     (let [{:keys [session transaction]} @conn-state
           ^Clock clock (:clock session)
@@ -1321,7 +1325,8 @@
                                                  :authn {:user (-> session :parameters (get "user"))}})]
           (when-not (skip-until-sync? conn)
             (if error
-              (cmd-send-error conn (err-protocol-violation (ex-message error)))
+              (cmd-send-error conn (-> (err-protocol-violation (ex-message error))
+                                       (assoc :error-type :dml)))
               (cmd-write-msg conn msg-command-complete cmd-complete-msg))
             (swap! conn-state assoc :watermark-tx-id tx-id)))))))
 
@@ -1421,7 +1426,7 @@
         {:keys [^Clock clock, parameters]} session]
 
     (if failed
-      (throw (client-err "transaction failed"))
+      (throw (client-err "transaction failed" {:error-type :dml}))
 
       (try
         (let [{:keys [tx-id error]} (when (= :read-write access-mode)
@@ -1434,7 +1439,7 @@
                                   (cond-> tx-id (assoc :watermark-tx-id tx-id)))))
 
           (when error
-            (throw (client-err (ex-message error)))))
+            (throw (client-err (ex-message error) {:error-type :dml}))))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (swap! conn-state #(dissoc % :transaction))
@@ -1872,7 +1877,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [server-state, port, allocator, query-error-counter] :as server} ^Socket conn-socket]
+  [{:keys [server-state, port, allocator, query-error-counter, tx-error-counter] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1893,7 +1898,9 @@
                                                (catch Throwable t
                                                  (log/warn t "error on conn startup")
                                                  (throw t)))))
-        conn (assoc conn :query-error-counter query-error-counter)]
+        conn (assoc conn
+                    :query-error-counter query-error-counter
+                    :tx-error-counter tx-error-counter)]
 
     (try
       ;; the connection loop only gets initialized if we are not closing
@@ -1979,6 +1986,7 @@
    (util/with-close-on-catch [accept-socket (ServerSocket. port)]
      (let [port (.getLocalPort accept-socket)
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
+           tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            !tmp-nodes (when-not node
                         (ConcurrentHashMap.))
            server (map->Server {:allocator allocator
@@ -2010,7 +2018,9 @@
                                             (nil? node) (->tmp-node !tmp-nodes db-name)
                                             (= db-name "xtdb") node))})
 
-           server (assoc server :query-error-counter query-error-counter)
+           server (assoc server
+                         :query-error-counter query-error-counter
+                         :tx-error-counter tx-error-counter)
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)

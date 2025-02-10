@@ -81,7 +81,8 @@
                  default-tz
                  system, close-fn,
                  query-timer
-                 ^Counter query-error-counter]
+                 ^Counter query-error-counter
+                 ^Counter tx-error-counter]
   Xtdb
   (getServerPort [this]
     (get-in (util/component this :xtdb.pgwire/server) [:read-write :port] -1))
@@ -101,7 +102,11 @@
     (try
       @(xt-log/submit-tx& this (->TxOps tx-ops) opts)
       (catch ExecutionException e
-        (throw (ex-cause e)))))
+        (throw (ex-cause e)))
+      (catch IllegalArgumentException e
+        (when tx-error-counter
+          (.increment tx-error-counter))
+        (throw e))))
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
@@ -210,8 +215,9 @@
                             (dissoc :config)
                             (assoc :default-tz (:default-tz config))
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
-                                                                   {:description "indicates the timings for queries"}))
-                            (assoc :query-error-counter (metrics/add-counter metrics-registry "query.error"))))]
+                                                                   {:description "indicates the timings for queries"})
+                                   :query-error-counter (metrics/add-counter metrics-registry "query.error")
+                                   :tx-error-counter (metrics/add-counter metrics-registry "tx.error"))))]
 
     (doto metrics-registry
       (metrics/add-gauge "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
