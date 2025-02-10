@@ -25,7 +25,7 @@
             [xtdb.vector.writer :as vw]
             [xtdb.xtql.plan :as xtql])
   (:import (clojure.lang MapEntry)
-           (io.micrometer.core.instrument Timer)
+           (io.micrometer.core.instrument Counter Timer)
            (java.io ByteArrayInputStream Closeable)
            java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
@@ -710,7 +710,8 @@
                   ^IMetadataManager metadata-mgr
                   ^IQuerySource q-src
                   ^LiveIndex live-idx
-                  ^Timer tx-timer]
+                  ^Timer tx-timer
+                  ^Counter tx-error-counter]
   IIndexer
   (indexTx [_ tx-id msg-ts tx-root]
     (let [lc-tx (.getLatestCompletedTx live-idx)
@@ -734,6 +735,8 @@
                      (pr-str (.getLatestCompletedTx live-idx)))
 
           (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+            (when tx-error-counter
+              (.increment tx-error-counter))
             (add-tx-row! live-idx-tx tx-key err)
             (.commit live-idx-tx))
 
@@ -800,6 +803,8 @@
                         (.abort live-idx-tx))
 
                       (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+                        (when tx-error-counter
+                          (.increment tx-error-counter))
                         (add-tx-row! live-idx-tx tx-key e)
                         (.commit live-idx-tx))
 
@@ -830,7 +835,8 @@
     (->Indexer allocator metadata-mgr q-src live-index
 
                (metrics/add-timer metrics-registry "tx.op.timer"
-                                  {:description "indicates the timing and number of transactions"}))))
+                                  {:description "indicates the timing and number of transactions"})
+               (metrics/add-counter metrics-registry "tx.error"))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
