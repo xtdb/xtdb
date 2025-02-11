@@ -2674,3 +2674,36 @@ UNION ALL
              :tx-interval #xt/interval-mdn ["P0D" "PT1H"],
              :q-interval #xt/interval-mdn ["P0D" "PT1H"]}]
            (xt/q tu/*node* "FROM docs SELECT *, INTERVAL 'PT1H' AS q_interval"))))
+
+(t/deftest test-push-selection-down-past-unnest
+  (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, vs: [{t: 1, v: 1}, {t: 2, v: 2}]}"])
+
+  (let [q "FROM foo AS f,
+           UNNEST(vs) AS uvs(v)
+           WHERE f._id < 2
+           SELECT f._id, (v).t AS t, (v).v AS v"]
+    (t/is (= [{:xt/id 1, :t 1, :v 1} {:xt/id 1, :t 2, :v 2}]
+             (xt/q tu/*node* [q])))
+    (t/is (=plan-file
+           "test-push-selection-down-past-unnest-inner-col-ref"
+           (plan-sql q {:table-info {"public/foo" #{"_id" "vs"}}}))))
+
+  (let [q "FROM foo AS f,
+           UNNEST(vs) AS uvs(v)
+           WHERE (uvs.v).v < 2
+           SELECT f._id, (v).t AS t, (v).v AS v"]
+    (t/is (= [{:xt/id 1, :t 1, :v 1}]
+             (xt/q tu/*node* [q])))
+    (t/is (=plan-file
+           "test-push-selection-down-past-unnest-unnested-col-ref"
+           (plan-sql q {:table-info {"public/foo" #{"_id" "vs"}}}))))
+
+  (let [q "FROM foo AS f,
+           UNNEST(vs) WITH ORDINALITY AS uvs (v, ord)
+           WHERE uvs.ord < 2
+           SELECT f._id, (v).t AS t, (v).v AS v"]
+    (t/is (= [{:xt/id 1, :t 1, :v 1}]
+             (xt/q tu/*node* [q])))
+    (t/is (=plan-file
+           "test-push-selection-down-past-unnest-ord-col-ref"
+           (plan-sql q {:table-info {"public/foo" #{"_id" "vs"}}})))))
