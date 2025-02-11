@@ -23,6 +23,7 @@ import kotlin.io.path.extension
 interface Xtdb : AutoCloseable {
 
     val serverPort: Int
+    val serverReadOnlyPort: Int
 
     fun <T : XtdbModule> module(type: Class<T>): T?
 

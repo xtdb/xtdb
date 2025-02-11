@@ -83,8 +83,10 @@
                  ^Counter query-error-counter]
   Xtdb
   (getServerPort [this]
-    (or (:port (util/component this :xtdb.pgwire/server))
-        (throw (IllegalStateException. "No Postgres wire server running."))))
+    (get-in (util/component this :xtdb.pgwire/server) [:read-write :port] -1))
+
+  (getServerReadOnlyPort [this]
+    (get-in (util/component this :xtdb.pgwire/server) [:read-only :port] -1))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

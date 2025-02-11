@@ -41,3 +41,34 @@ XTDB provides a suite of tools & templates to facilitate monitoring and observab
 
 The pg-wire server and the http-server both support authentication which can be configured via authentication rules.
 See link:config/authentication[Authentication].
+
+=== Other configuration:
+
+XTDB nodes accept other optional configuration, as follows:
+
+[source,yaml]
+----
+server:
+  # Port on which to start a read-write Postgres wire-compatible server.
+  #
+  # Default is 0, to have the server choose an available port.
+  # (In the XTDB Docker images, this is defaulted to 5432.)
+  # Set to -1 to not start a read-write server.
+  port: 0
+
+  # Port on which to start a read-only Postgres wire-compatible server.
+  #
+  # The server on this port will reject any attempted DML/DDL,
+  # regardless of whether the user would otherwise have the permission to do so.
+  #
+  # Default is -1, to not start a read-only server.
+  # Set to 0 to have the server choose an available port.
+  readOnlyPort: -1
+
+compactor:
+  # Number of threads to use for compaction.
+
+  # Defaults to min(availableProcessors / 2, 1).
+  # Set to 0 to disable the compactor.
+  threads: 4
+----

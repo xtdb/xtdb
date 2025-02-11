@@ -88,9 +88,6 @@
     (.add registry (SimpleMeterRegistry.))
     (f)))
 
-(defn node->server [node]
-  (-> node :system :xtdb.pgwire/server))
-
 (defn with-node [f]
   (util/with-open [node (xtn/start-node *node-opts*)
                    conn (jdbc/get-connection node)]

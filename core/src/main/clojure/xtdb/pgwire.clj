@@ -48,7 +48,7 @@
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
 (defrecord Server [^BufferAllocator allocator
-                   port
+                   port read-only?
 
                    ^ServerSocket accept-socket
                    ^Thread accept-thread
@@ -101,7 +101,7 @@
 
         (util/close allocator)
 
-        (log/info "Server stopped.")))))
+        (log/infof "Server%sstopped." (if read-only? " (read-only) " " "))))))
 
 (defprotocol Frontend
   (send-client-msg!
@@ -1241,7 +1241,7 @@
 (def supported-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node]} dml-ops tx-opts]
+(defn- execute-tx [{:keys [node read-only?]} dml-ops tx-opts]
   (try
     (xt/execute-tx node dml-ops tx-opts)
     (catch xtdb.IllegalArgumentException e
@@ -1492,9 +1492,12 @@
 
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
-  [{:keys [conn-state]} {:keys [statement-type]}]
+  [{:keys [conn-state server]} {:keys [statement-type]}]
   (let [{:keys [access-mode]} (:transaction @conn-state)]
     (cond
+      (and (= :dml statement-type) (:read-only? server))
+      (err-protocol-violation "DML is not allowed on the READ ONLY server")
+
       (and (= :dml statement-type) (= :read-only access-mode))
       (err-protocol-violation "DML is not allowed in a READ ONLY transaction")
 
@@ -1969,7 +1972,7 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn metrics-registry]
+  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn metrics-registry read-only?]
                   :or {port 0
                        num-threads 42
                        drain-wait 5000}}]
@@ -1980,6 +1983,7 @@
                         (ConcurrentHashMap.))
            server (map->Server {:allocator allocator
                                 :port port
+                                :read-only? read-only?
                                 :accept-socket accept-socket
                                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                                 :!closing? (atom false)
@@ -2018,10 +2022,11 @@
        (.start accept-thread)
        server))))
 
-(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port num-threads ssl] :as server}]
+(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port read-only-port num-threads ssl] :as server}]
   (if server
     (cond-> (.getServer config)
       (some? port) (.port port)
+      (some? read-only-port) (.readOnlyPort read-only-port)
       (some? num-threads) (.numThreads num-threads)
       (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl)))
 
@@ -2039,6 +2044,7 @@
 
 (defn- <-config [^ServerConfig config]
   {:port (.getPort config)
+   :ro-port (.getReadOnlyPort config)
    :num-threads (.getNumThreads config)
    :ssl-ctx (when-let [ssl (.getSsl config)]
               (->ssl-ctx (.getKeyStore ssl) (.getKeyStorePassword ssl)))})
@@ -2050,12 +2056,21 @@
          :metrics-registry (ig/ref :xtdb.metrics/registry)}
         (<-config config)))
 
-(defmethod ig/init-key ::server [_ {:keys [node allocator authn] :as opts}]
-  (let [{:keys [port] :as srv} (serve node (assoc opts
-                                                  :authn authn
-                                                  :allocator (util/->child-allocator allocator "pgwire")))]
-    (log/info "Server started on port:" port)
-    srv))
+(defmethod ig/init-key ::server [_ {:keys [node allocator authn port ro-port] :as opts}]
+  (let [opts (dissoc opts :port :ro-port)]
+    (letfn [(start-server [port read-only?]
+              (when-not (neg? port)
+                (let [{:keys [port] :as srv} (serve node (-> opts
+                                                             (assoc :port port
+                                                                    :read-only? read-only?
+                                                                    :authn authn
+                                                                    :allocator (util/->child-allocator allocator "pgwire"))))]
+                  (log/infof "Server%sstarted on port: %d"
+                             (if read-only? " (read-only) " " ")
+                             port)
+                  srv)))]
+      {:read-write (start-server port false)
+       :read-only (start-server ro-port true)})))
 
 (defmethod ig/halt-key! ::server [_ srv]
   (util/close srv))

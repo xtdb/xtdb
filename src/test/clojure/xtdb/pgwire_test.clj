@@ -25,7 +25,7 @@
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
-           (java.util Arrays Calendar Date List TimeZone UUID)
+           (java.util Arrays Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
@@ -54,7 +54,7 @@
     (f)))
 
 (defn with-server-and-port [f]
-  (let [server (-> tu/*node* :system :xtdb.pgwire/server)]
+  (let [server (-> tu/*node* :system :xtdb.pgwire/server :read-write)]
     (binding [*server* server
               *port* (:port server)]
       (f))))
@@ -1610,7 +1610,7 @@
                  [{:_id 2, :a "two"}]]
                 [:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}" [3 "three"]]
                 [:sql "INSERT INTO foo RECORDS $1" [{:_id 4, :a "four"}]]]
-               (-> @(:server-state (util/component tu/*node* ::pgwire/server))
+               (-> @(:server-state *server*)
                    (get-in [:connections 2 :conn-state])
                    deref
                    (get-in [:transaction :dml-buf])))))
@@ -2209,7 +2209,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest pg-authentication
   (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
-    (binding [*port* (:port (tu/node->server node))]
+    (binding [*port* (.getServerPort node)]
       (t/is (thrown-with-msg? PSQLException #"ERROR: no authentication record found for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
             "users without record are blocked")
@@ -2222,13 +2222,13 @@ ORDER BY t.oid DESC LIMIT 1"
 
   (t/testing "users with a trusted record are allowed"
     (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
-      (binding [*port* (:port (tu/node->server node))]
+      (binding [*port* (.getServerPort node)]
         (with-open [_ (jdbc-conn "user" "fin")]))))
 
   (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
                                                                  {:user "fin", :method :password, :address "127.0.0.1"}]}]})]
 
-    (binding [*port* (:port (tu/node->server node))]
+    (binding [*port* (.getServerPort node)]
       (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: fin"
                               (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
             "users with a authentication record but not in the database")
@@ -2603,3 +2603,17 @@ ORDER BY 1,2;")
            (t/is (= ["plan"] cols))
            (t/is (nil? more-rows))
            (t/is (= expected-plan (read-string plan)))))))))
+
+(t/deftest test-ro-server-4043
+  (with-open [node (xtn/start-node {:server {:read-only-port 0, :port 0}})]
+    (binding [*port* (.getServerPort node)]
+      (with-open [conn (jdbc-conn)]
+        (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
+        (t/is (= [{:_id 1}] (jdbc/execute! conn ["SELECT * FROM foo"])))))
+
+    (binding [*port* (.getServerReadOnlyPort node)]
+      (with-open [ro-conn (jdbc-conn)]
+        (t/is (thrown-with-msg? PSQLException #"READ ONLY server"
+               (jdbc/execute! ro-conn ["INSERT INTO foo RECORDS {_id: 2}"])))
+
+        (t/is (= [{:_id 1}] (jdbc/execute! ro-conn ["SELECT * FROM foo"])))))))
