@@ -420,6 +420,28 @@
          independent-relation
          [:select predicate dependent-relation]]))))
 
+(defn- push-selection-down-past-unnest [push-correlated? z]
+  (r/zmatch z
+    [:select predicate
+     [:unnest _columns relation]]
+    ;;=>
+    (when (and (or push-correlated? (no-correlated-columns? predicate))
+               (columns-in-predicate-present-in-relation? relation predicate))
+
+      [:unnest _columns
+       [:select predicate
+        relation]])
+
+    [:select predicate
+     [:unnest _columns _ordinality_column relation]]
+    ;;=>
+    (when (and (or push-correlated? (no-correlated-columns? predicate))
+               (columns-in-predicate-present-in-relation? relation predicate))
+
+      [:unnest _columns _ordinality_column
+       [:select predicate
+        relation]])))
+
 (defn- push-selection-down-past-rename [push-correlated? z]
   (r/zmatch z
     [:select predicate
@@ -1270,6 +1292,7 @@
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def ^:private push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
+(def ^:private push-correlated-selection-down-past-unnest (partial push-selection-down-past-unnest true))
 (def ^:private push-correlated-predicate-down-past-period-constructor (partial push-predicate-down-past-period-constructor true))
 (def ^:private push-correlated-selection-down-past-group-by (partial push-selection-down-past-group-by true))
 (def ^:private push-correlated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down true))
@@ -1277,6 +1300,7 @@
 (def ^:private push-decorrelated-selection-down-past-join (partial push-selection-down-past-join false))
 (def ^:private push-decorrelated-selection-down-past-rename (partial push-selection-down-past-rename false))
 (def ^:private push-decorrelated-selection-down-past-project (partial push-selection-down-past-project false))
+(def ^:private push-decorrelated-selection-down-past-unnest (partial push-selection-down-past-unnest false))
 (def ^:private push-decorrelated-predicate-down-past-period-constructor (partial push-predicate-down-past-period-constructor false))
 (def ^:private push-decorrelated-selection-down-past-group-by (partial push-selection-down-past-group-by false))
 (def ^:private push-decorrelated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down false))
@@ -1293,6 +1317,7 @@
    #'push-correlated-selection-down-past-join
    #'push-correlated-selection-down-past-rename
    #'push-correlated-selection-down-past-project
+   #'push-correlated-selection-down-past-unnest
    #'push-correlated-predicate-down-past-period-constructor
    #'optimise-select-expressions
    #'push-correlated-selection-down-past-group-by
@@ -1310,6 +1335,7 @@
    #'push-decorrelated-selection-down-past-join
    #'push-decorrelated-selection-down-past-rename
    #'push-decorrelated-selection-down-past-project
+   #'push-decorrelated-selection-down-past-unnest
    #'push-decorrelated-predicate-down-past-period-constructor
    #'push-decorrelated-selection-down-past-group-by
    #'push-decorrelated-selections-with-fewer-variables-down
