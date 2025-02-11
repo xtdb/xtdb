@@ -40,7 +40,8 @@
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
   (tu/with-system (let [local-log (Log/localLog (.resolve (.toPath node-dir) "logs"))]
-                    {:xtdb.metrics/registry nil
+                    {:xtdb/node-id "concurrent-node-test"
+                     :xtdb.metrics/registry nil
                      :xtdb/allocator {}
                      :xtdb/log local-log
                      :xtdb.log/processor nil

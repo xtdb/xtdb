@@ -36,6 +36,9 @@
 (defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
   (util/close a))
 
+(defmethod ig/init-key :xtdb/node-id [_ node-id]
+  node-id)
+
 (defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz] :as node}]
@@ -233,11 +236,15 @@
 (defmethod ig/halt-key! :xtdb/modules [_ modules]
   (util/close modules))
 
+(defn random-node-id []
+  (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
+
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
         healthz (.getHealthz opts)
         indexer-cfg (.getIndexer opts)]
     (-> {:xtdb/node {}
+         :xtdb/node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
          :xtdb/allocator {}
          :xtdb/indexer {}
          :xtdb/trie-catalog {}

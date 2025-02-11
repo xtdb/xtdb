@@ -45,19 +45,18 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
-(defn random-node-id []
-  (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
-
 (defn direct-memory-pool ^java.lang.management.BufferPoolMXBean []
   (->> (java.lang.management.ManagementFactory/getPlatformMXBeans java.lang.management.BufferPoolMXBean)
        (some #(when (= (.getName ^java.lang.management.BufferPoolMXBean %) "direct") %))))
 
-(defmethod ig/init-key :xtdb.metrics/registry [_ _]
+(defmethod ig/prep-key ::registry [_ _]
+  {:node-id (ig/ref :xtdb/node-id)})
+
+(defmethod ig/init-key ::registry [_ {:keys [node-id]}]
   (let [reg (CompositeMeterRegistry.)]
 
     ;; Add common tag for the node
-    (let [node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
-          ^List tags [(Tag/of "node-id" node-id)]]
+    (let [^List tags [(Tag/of "node-id" node-id)]]
       (log/infof "tagging all metrics with node-id: %s" node-id)
       (-> (.config reg)
           (.commonTags tags)))
