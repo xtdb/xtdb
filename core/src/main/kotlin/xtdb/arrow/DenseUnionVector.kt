@@ -289,12 +289,14 @@ class DenseUnionVector(
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowDenseUnionVector)
-        typeBuffer.loadBuffer(vec.typeBuffer)
-        offsetBuffer.loadBuffer(vec.offsetBuffer)
+        val vc = vec.valueCount
+
+        typeBuffer.loadBuffer(vec.typeBuffer, vc.toLong())
+        offsetBuffer.loadBuffer(vec.offsetBuffer, vc.toLong() * Int.SIZE_BYTES)
 
         legVectors.forEach { it.loadFromArrow(vec.getChild(it.name)) }
 
-        valueCount = vec.valueCount
+        valueCount = vc
     }
 
     override fun clear() {

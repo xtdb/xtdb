@@ -5,6 +5,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
+import org.apache.arrow.vector.BitVectorHelper.getValidityBufferSize
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
@@ -162,10 +163,11 @@ class StructVector(
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is NonNullableStructVector)
-        validityBuffer.loadBuffer(vec.validityBuffer)
+        val valCount = vec.valueCount
+        validityBuffer.loadBuffer(vec.validityBuffer, getValidityBufferSize(valCount).toLong())
         childWriters.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
 
-        valueCount = vec.valueCount
+        valueCount = valCount
     }
 
     override fun clear() {

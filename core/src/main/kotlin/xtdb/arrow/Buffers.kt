@@ -131,9 +131,9 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))
 
-    internal fun loadBuffer(arrowBuf: ArrowBuf) {
+    internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()
-        buf = arrowBuf.also { it.referenceManager.retain() }
+        buf = arrowBuf.writerIndex(writerIndex).also { it.referenceManager.retain() }
     }
 
     fun clear() {
