@@ -23,6 +23,9 @@ import java.nio.channels.Channels
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption.READ
 import java.util.*
 import xtdb.vector.RelationReader as OldRelationReader
 
@@ -277,6 +280,9 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
             return ChannelLoader(al, readCh, readFooter(readCh))
         }
+
+        @JvmStatic
+        fun loader(al: BufferAllocator, path: Path): Loader = loader(al, Files.newByteChannel(path, READ))
 
         @JvmStatic
         fun readFooter(buf: ArrowBuf): ArrowFooter {

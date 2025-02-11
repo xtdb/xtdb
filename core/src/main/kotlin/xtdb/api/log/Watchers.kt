@@ -45,7 +45,9 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
                 }
 
                 is NotifyException -> {
-                    val ex = IngestionStoppedException(event.exception).also { exception = it }
+                    val ex = event.exception
+                        .let { if (it is IngestionStoppedException) it else IngestionStoppedException(event.offset, it) }
+                        .also { exception = it }
 
                     watchers.forEach { it.onDone.completeExceptionally(ex) }
                     watchers.clear()

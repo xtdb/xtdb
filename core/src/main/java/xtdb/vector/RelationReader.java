@@ -2,6 +2,8 @@ package xtdb.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
 import xtdb.api.query.IKeyFn;
+import xtdb.arrow.Relation;
+import xtdb.arrow.Vector;
 
 import java.util.*;
 import java.util.function.Function;
@@ -64,6 +66,18 @@ public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
 
     public RelationReader copy(BufferAllocator allocator) {
         return from(vr -> vr.copy(allocator), rowCount);
+    }
+
+    public Relation openAsRelation(BufferAllocator allocator) {
+        return new Relation(cols.values().stream()
+                .map(vr -> {
+                    var outVec = vr.getField().createVector(allocator);
+                    vr.copyTo(outVec);
+                    var res = Vector.fromArrow(outVec);
+                    outVec.close();
+                    return res;
+                })
+                .toList());
     }
 
     @Override
