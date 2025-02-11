@@ -10,7 +10,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector IntVector)
-           [org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field]
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field FieldType)
            (xtdb ICursor)
            (xtdb.arrow RowCopier)
            (xtdb.vector IVectorReader IVectorWriter RelationReader)
@@ -66,7 +66,9 @@
                                            idxs (IntStream/builder)
 
                                            ordinal-vec (when ordinality-column
-                                                         (IntVector. ordinality-column allocator))
+                                                         (IntVector. ordinality-column
+                                                                     (FieldType/notNullable #xt.arrow/type :i32)
+                                                                     allocator))
 
                                            _ (when ordinal-vec
                                                (.add out-cols (vr/vec->reader ordinal-vec)))

@@ -97,4 +97,14 @@
                            [:table ?x]]]
                         {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
                          :key-fn :snake-case-keyword}))
-        "with ordinality"))
+        "with ordinality")
+
+  (t/is (= [{:ordinal 1, :s 4}
+            {:ordinal 2, :s 6}
+            {:ordinal 3, :s 5}]
+           (tu/query-ra '[:project [ordinal s]
+                          [:group-by [ordinal {s (sum b*)}]
+                           [:unnest {b* b} {:ordinality-column ordinal}
+                            [:table ?x]]]]
+             {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
+        "group by ordinality"))
