@@ -926,3 +926,37 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:xt/id 1, :tz -7} {:xt/id 2, :tz 4} {:xt/id 3, :tz 2}]
            (xt/q tu/*node* "SELECT _id, EXTRACT(TIMEZONE_HOUR FROM ts) as tz from docs ORDER BY _id"))))
+
+(t/deftest test-skip-txes
+  (let [!skiptxid (atom nil)]
+    (util/with-tmp-dirs #{path}
+      (t/testing "node with no txes skipped:"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]})]
+          (t/testing "Send three transactions"
+            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+            (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
+              (reset! !skiptxid tx-id))
+            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]]))
+          
+          (t/testing "Can query three back out"
+            (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
+                     (set (xt/q node "SELECT * from xt_docs")))))))
+      
+      (t/testing "node with txs to skip"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]
+                                          :indexer {:skip-txs [@!skiptxid]}})]
+          (t/testing "Can query two back out - skipped one"
+            (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
+                     (set (xt/q node "SELECT * from xt_docs")))))
+          
+          ;; Call finish-block! to write files
+          (tu/finish-block! node)))
+      
+      (t/testing "node can remove 'txs to skip' after block finished"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]})]
+          (t/testing "Only two results are returned"
+            (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
+                     (set (xt/q node "SELECT * from xt_docs"))))))))))

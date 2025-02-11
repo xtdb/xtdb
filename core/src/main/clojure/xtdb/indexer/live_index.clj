@@ -17,7 +17,7 @@
   (:import [clojure.lang MapEntry]
            (java.lang AutoCloseable)
            (java.time Duration)
-           (java.util ArrayList HashMap Map)
+           (java.util ArrayList HashMap List Map)
            (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Function)
@@ -218,7 +218,8 @@
 
                     ^RowCounter row-counter, ^long rows-per-block
 
-                    ^long log-limit, ^long page-limit]
+                    ^long log-limit, ^long page-limit 
+                    ^List skip-txs]
   xtdb.indexer.LiveIndex
   (getLatestCompletedTx [_] latest-completed-tx)
   (getLatestCompletedBlockTx [_] latest-completed-block-tx)
@@ -352,8 +353,14 @@
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
-      (c/signal-block! compactor)
-      (log/debugf "finished block 'rf%s-nr%s'." (util/->lex-hex-string block-idx) (util/->lex-hex-string next-block-idx))))
+      (c/signal-block! compactor) 
+      
+      (log/debugf "finished block 'rf%s-nr%s'." (util/->lex-hex-string block-idx) (util/->lex-hex-string next-block-idx))
+      
+      (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
+        #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+        (defonce log-msg
+          (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable.")))))
 
   (forceFlush [this record msg]
     (let [expected-last-block-tx-id (.getExpectedBlockTxId msg)
@@ -399,7 +406,8 @@
 
                      (RowCounter. next-block-idx) (.getRowsPerBlock config)
 
-                     (.getLogLimit config) (.getPageLimit config))))))
+                     (.getLogLimit config) (.getPageLimit config)
+                     (.getSkipTxs config))))))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

@@ -177,7 +177,8 @@
                                                                nil (StampedLock.)
                                                                (RefCounter.)
                                                                (RowCounter. 0) 102400
-                                                               64 1024)]
+                                                               64 1024
+                                                               [])]
           (let [tx-key (serde/->TxKey 0 (.toInstant #inst "2000"))
                 live-index-tx (.startTx live-index tx-key)
                 live-table-tx (.liveTable live-index-tx table-name)
