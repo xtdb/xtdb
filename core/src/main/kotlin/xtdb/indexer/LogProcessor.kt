@@ -12,8 +12,12 @@ import xtdb.api.log.LogOffset
 import xtdb.api.log.Watchers
 import xtdb.arrow.asChannel
 import xtdb.trie.TrieCatalog
+import xtdb.util.error
+import xtdb.util.logger
+import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
+import kotlin.coroutines.cancellation.CancellationException
 
 class LogProcessor(
     allocator: BufferAllocator,
@@ -24,6 +28,10 @@ class LogProcessor(
     meterRegistry: MeterRegistry,
     flushTimeout: Duration
 ) : Log.Subscriber, AutoCloseable {
+
+    companion object {
+        private val LOG = LogProcessor::class.logger
+    }
 
     private val watchers = Watchers(liveIndex.latestCompletedTx?.txId ?: -1)
 
@@ -118,8 +126,18 @@ class LogProcessor(
                 }
 
                 watchers.notify(offset, res)
+            } catch (e: InterruptedException) {
+                watchers.notify(offset, e)
+                throw CancellationException(e)
+            } catch (e: ClosedByInterruptException) {
+                val ie = InterruptedException(e.toString())
+                watchers.notify(offset, ie)
+                throw CancellationException(ie)
             } catch (e: Throwable) {
                 watchers.notify(offset, e)
+                // TODO #4155
+                LOG.error(e, "Ingestion stopped: error processing log record at offset $offset")
+                throw CancellationException(e)
             }
         }
     }

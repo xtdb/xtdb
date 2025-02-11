@@ -19,10 +19,13 @@
             [xtdb.util :as util])
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
-           (java.time Duration InstantSource)
+           (java.time Duration Instant InstantSource)
+           org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
            xtdb.BufferPool
+           xtdb.arrow.Relation
+           xtdb.indexer.LiveIndex
            (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -561,8 +564,44 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                            [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 2, 200, 2000)"]
                            [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 3, x.foo, x.bar FROM (SELECT * FROM t1 WHERE bar = 2000) AS x)"]])
 
-  (t/is (=
-         [{:xt/id 2, :bar 2000, :foo 200}
-          {:xt/id 1, :foo 100}
-          {:xt/id 3, :bar 2000, :foo 200}]
-         (xt/q tu/*node* "SELECT * FROM t1"))))
+  (t/is (= [{:xt/id 2, :bar 2000, :foo 200}
+            {:xt/id 1, :foo 100}
+            {:xt/id 3, :bar 2000, :foo 200}]
+           (xt/q tu/*node* "SELECT * FROM t1"))))
+
+(t/deftest test-crash-log
+  (let [node-dir (util/->path "target/indexer-test/test-crash-log")]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir
+                                       :instant-src (tu/->mock-clock)})]
+      (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
+
+      (binding [idx/*crash-log-clock* (InstantSource/fixed Instant/EPOCH)]
+        (let [node-id "xtdb-foo-node"
+              idxer (tu/component node :xtdb/indexer)
+              ^BufferPool bp (tu/component node :xtdb/buffer-pool)
+              ^LiveIndex live-idx (tu/component node :xtdb.indexer/live-index)
+              ^BufferAllocator al (tu/component node :xtdb/allocator)]
+
+          (with-open [live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
+                      live-table-tx (.liveTable live-idx-tx "public/foo")]
+            (idx/crash-log! (-> idxer (assoc :node-id node-id)) "test crash log"
+                            {:foo "bar"} {:live-table-tx live-table-tx}))
+
+          (t/is (= {:foo "bar", :ex "test crash log"}
+                   (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/crash.edn" node-id))]
+                     (-> (.getByteArray bp path)
+                         String.
+                         read-string))))
+
+          (let [live-table-tx-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table.arrow" node-id))
+                footer (.getFooter bp live-table-tx-path)]
+            (with-open [rb (.getRecordBatch bp live-table-tx-path 0)
+                        rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
+              (t/is (= [{:xt/system-from (time/->zdt #inst "2020"),
+                         :xt/valid-from (time/->zdt #inst "2020"),
+                         :xt/valid-to (time/->zdt time/end-of-time)
+                         :op {:xt/id 2}}]
+                       (->> (.toMaps rel)
+                            (mapv #(dissoc % :xt/iid))))))))))))

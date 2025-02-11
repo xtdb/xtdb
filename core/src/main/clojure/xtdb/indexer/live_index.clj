@@ -33,8 +33,7 @@
            (xtdb.vector IRelationWriter IVectorWriter)))
 
 (defprotocol TestLiveTable
-  (^MemoryHashTrie live-trie [test-live-table])
-  (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
+  (^MemoryHashTrie live-trie [test-live-table]))
 
 (defn- live-rel->fields [^IRelationWriter live-rel]
   (let [live-rel-field (-> (.colWriter live-rel "op")
@@ -81,6 +80,7 @@
     (let [!transient-trie (atom live-trie)
           system-from-µs (time/instant->micros (.getSystemTime tx-key))]
       (reify LiveTable$Tx
+        (getLiveRelation [_] live-rel)
         (getDocWriter [_] put-wtr)
 
         (logPut [_ iid valid-from valid-to write-doc!]
@@ -156,9 +156,10 @@
 
   (openWatermark [this] (live-table-wm live-rel (.live-trie this)))
 
+  (getLiveRelation [_] live-rel)
+
   TestLiveTable
   (live-trie [_] live-trie)
-  (live-rel [_] live-rel)
 
   AutoCloseable
   (close [_]

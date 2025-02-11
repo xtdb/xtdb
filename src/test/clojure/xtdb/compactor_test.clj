@@ -189,8 +189,8 @@
                   [{:xt/id "foo", :v 2}
                    {:xt/id "bar", :v 2}])
 
-    (with-open [live-rel0 (.openAsRelation (li/live-rel lt0))
-                live-rel1 (.openAsRelation (li/live-rel lt1))]
+    (with-open [live-rel0 (.openAsRelation (.getLiveRelation lt0))
+                live-rel1 (.openAsRelation (.getLiveRelation lt1))]
 
       (let [segments [(-> (trie/->Segment (.compactLogs (li/live-trie lt0)))
                           (assoc :data-rel (->LiveDataRel live-rel0)))

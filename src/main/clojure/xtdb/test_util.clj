@@ -497,7 +497,7 @@
           (.end aw)))
       data-file-path)))
 
-(defn open-live-table [table-name]
+(defn open-live-table ^xtdb.indexer.LiveTable [table-name]
   (li/->live-table *allocator* nil (RowCounter. 0) table-name))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]

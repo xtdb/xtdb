@@ -3,6 +3,7 @@ package xtdb.indexer
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
 import xtdb.trie.MemoryHashTrie
+import xtdb.vector.IRelationWriter
 import xtdb.vector.IVectorWriter
 import xtdb.vector.RelationReader
 import java.nio.ByteBuffer
@@ -18,6 +19,7 @@ interface LiveTable : AutoCloseable {
     interface Tx : AutoCloseable{
         fun openWatermark(): Watermark
         val docWriter: IVectorWriter
+        val liveRelation: IRelationWriter
 
         fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable)
         fun logDelete(iid: ByteBuffer, validFrom: Long, validTo: Long)
@@ -26,6 +28,8 @@ interface LiveTable : AutoCloseable {
         fun commit(): LiveTable
         fun abort()
     }
+
+    val liveRelation: IRelationWriter
 
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean): Tx
     fun openWatermark(): Watermark

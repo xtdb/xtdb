@@ -50,7 +50,7 @@
         (.commit live-idx-tx)
 
         (let [live-table (.liveTable live-index "my-table")
-              live-rel (li/live-rel live-table)
+              live-rel (.getLiveRelation live-table)
               iid-vec (.getVector (.colWriter live-rel "_iid"))
 
               ^MemoryHashTrie trie (li/live-trie live-table)]
