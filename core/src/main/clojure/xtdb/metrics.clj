@@ -50,9 +50,9 @@
        (some #(when (= (.getName ^java.lang.management.BufferPoolMXBean %) "direct") %))))
 
 (defmethod ig/prep-key ::registry [_ _]
-  {:node-id (ig/ref :xtdb/node-id)})
+  {:config (ig/ref :xtdb/config)})
 
-(defmethod ig/init-key ::registry [_ {:keys [node-id]}]
+(defmethod ig/init-key ::registry [_ {{:keys [node-id]} :config}]
   (let [reg (CompositeMeterRegistry.)]
 
     ;; Add common tag for the node

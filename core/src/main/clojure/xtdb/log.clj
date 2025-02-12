@@ -322,16 +322,14 @@
                                                          (assoc :default-tz (:default-tz opts default-tz)
                                                                 :system-time (some-> system-time time/expect-instant)))))))
 
-(defmethod ig/prep-key :xtdb.log/processor [_ opts]
-  (when opts
-    (into {:allocator (ig/ref :xtdb/allocator)
-           :indexer (ig/ref :xtdb/indexer)
-           :live-idx (ig/ref :xtdb.indexer/live-index)
-           :log (ig/ref :xtdb/log)
-           :trie-catalog (ig/ref :xtdb/trie-catalog)
-           :metrics-registry (ig/ref :xtdb.metrics/registry)
-           :block-flush-duration #xt/duration "PT4H"}
-          opts)))
+(defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
+  {:allocator (ig/ref :xtdb/allocator)
+   :indexer (ig/ref :xtdb/indexer)
+   :live-idx (ig/ref :xtdb.indexer/live-index)
+   :log (ig/ref :xtdb/log)
+   :trie-catalog (ig/ref :xtdb/trie-catalog)
+   :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :block-flush-duration (.getFlushDuration (.getIndexer opts))})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx trie-catalog metrics-registry block-flush-duration] :as deps}]
   (when deps

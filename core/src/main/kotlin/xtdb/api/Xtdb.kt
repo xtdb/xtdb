@@ -18,6 +18,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.UUID.randomUUID
 import kotlin.io.path.extension
 
 interface Xtdb : AutoCloseable {
@@ -39,6 +40,7 @@ interface Xtdb : AutoCloseable {
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig(),
         var authn: Authenticator.Factory = UserTable(),
+        var nodeId: String = System.getenv("XTDB_NODE_ID")?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
@@ -63,6 +65,8 @@ interface Xtdb : AutoCloseable {
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
         fun authn(authn: Authenticator.Factory) = apply { this.authn = authn }
+
+        fun nodeId(nodeId: String) = apply { this.nodeId = nodeId }
 
         fun getModules(): List<XtdbModule.Factory> = modules
         fun module(module: XtdbModule.Factory) = apply { this.modules += module }

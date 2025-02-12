@@ -890,7 +890,7 @@
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :node-id (ig/ref :xtdb/node-id)
+          :config (ig/ref :xtdb/config)
           :buffer-pool (ig/ref :xtdb/buffer-pool)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :live-index (ig/ref :xtdb.indexer/live-index)
@@ -898,10 +898,10 @@
           :metrics-registry (ig/ref :xtdb.metrics/registry)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator node-id buffer-pool, metadata-mgr, q-src, live-index metrics-registry]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, metadata-mgr, q-src, live-index metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
-    (->Indexer allocator node-id buffer-pool metadata-mgr q-src live-index
+    (->Indexer allocator (:node-id config) buffer-pool metadata-mgr q-src live-index
 
                (metrics/add-timer metrics-registry "tx.op.timer"
                                   {:description "indicates the timing and number of transactions"}))))

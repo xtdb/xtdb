@@ -32,14 +32,15 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defmethod ig/prep-key :xtdb/config [_ ^Xtdb$Config opts]
+  {:node-id (.getNodeId opts)
+   :default-tz (.getDefaultTz opts)})
+
+(defmethod ig/init-key :xtdb/config [_ cfg] cfg)
+
 (defmethod ig/init-key :xtdb/allocator [_ _] (RootAllocator.))
 (defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
   (util/close a))
-
-(defmethod ig/init-key :xtdb/node-id [_ node-id]
-  node-id)
-
-(defmethod ig/init-key :xtdb/default-tz [_ default-tz] default-tz)
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz] :as node}]
   (-> (into {:default-tz default-tz,
@@ -164,24 +165,24 @@
         (.prepareRaQuery q-src plan query-opts))))
 
   (prepare-xtql [this query query-opts]
-   (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
-         ast (cond
-               (sequential? query) (xtql/parse-query query)
-               (instance? XtqlQuery query) query
-               :else (throw (err/illegal-arg :xtdb/unsupported-query-type
-                             {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
-     (xt-log/await-tx this after-tx-id tx-timeout)
-     (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
+    (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+          ast (cond
+                (sequential? query) (xtql/parse-query query)
+                (instance? XtqlQuery query) query
+                :else (throw (err/illegal-arg :xtdb/unsupported-query-type
+                                              {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
+      (xt-log/await-tx this after-tx-id tx-timeout)
+      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
-     (let [plan (.planQuery q-src ast query-opts)]
-       (.prepareRaQuery q-src plan query-opts))))
+      (let [plan (.planQuery q-src ast query-opts)]
+        (.prepareRaQuery q-src plan query-opts))))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-tx this after-tx-id tx-timeout)
-     (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
+      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
-     (.prepareRaQuery q-src plan query-opts)))
+      (.prepareRaQuery q-src plan query-opts)))
 
   Closeable
   (close [_]
@@ -197,15 +198,17 @@
           :live-idx (ig/ref :xtdb.indexer/live-index)
           :log (ig/ref :xtdb/log)
           :log-processor (ig/ref :xtdb.log/processor)
-          :default-tz (ig/ref :xtdb/default-tz)
+          :config (ig/ref :xtdb/config)
           :q-src (ig/ref :xtdb.query/query-source)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :metrics-registry (ig/ref :xtdb.metrics/registry)
           :authn (ig/ref :xtdb/authn)}
          opts))
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry] :as deps}]
+(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry config] :as deps}]
   (let [node (map->Node (-> deps
+                            (dissoc :config)
+                            (assoc :default-tz (:default-tz config))
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"}))
                             (assoc :query-error-counter (metrics/add-counter metrics-registry "query.error"))))]
@@ -238,31 +241,26 @@
 (defmethod ig/halt-key! :xtdb/modules [_ modules]
   (util/close modules))
 
-(defn random-node-id []
-  (format "xtdb-node-%1s" (subs (str (random-uuid)) 0 6)))
-
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
         healthz (.getHealthz opts)
         indexer-cfg (.getIndexer opts)]
     (-> {:xtdb/node {}
-         :xtdb/node-id (or (System/getenv "XTDB_NODE_ID") (random-node-id))
+         :xtdb/config opts
          :xtdb/allocator {}
          :xtdb/indexer {}
          :xtdb/trie-catalog {}
-         :xtdb.log/processor {:block-flush-duration (.getFlushDuration indexer-cfg)}
+         :xtdb.log/processor opts
          :xtdb.metadata/metadata-manager {}
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
          :xtdb/authn (.getAuthn opts)
-
          :xtdb/log (.getLog opts)
          :xtdb/buffer-pool (.getStorage opts)
          :xtdb.indexer/live-index indexer-cfg
-         :xtdb/modules (.getModules opts)
-         :xtdb/default-tz (.getDefaultTz opts)}
+         :xtdb/modules (.getModules opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
                 healthz (assoc :xtdb/healthz healthz))
         (doto ig/load-namespaces))))
