@@ -6,6 +6,7 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowStreamReader
+import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.LogOffset
@@ -26,7 +27,8 @@ class LogProcessor(
     private val log: Log,
     private val trieCatalog: TrieCatalog,
     meterRegistry: MeterRegistry,
-    flushTimeout: Duration
+    flushTimeout: Duration,
+    private val skipTxs: Set<LogOffset>
 ) : Log.Subscriber, AutoCloseable {
 
     companion object {
@@ -34,6 +36,7 @@ class LogProcessor(
     }
 
     private val watchers = Watchers(liveIndex.latestCompletedTx?.txId ?: -1)
+    private val LOGGER = LoggerFactory.getLogger(LogProcessor::class.java)
 
     val ingestionError get() = watchers.exception
 
@@ -103,12 +106,17 @@ class LogProcessor(
             try {
                 val res = when (val msg = record.message) {
                     is Message.Tx -> {
-                        msg.payload.asChannel.use { txOpsCh ->
-                            ArrowStreamReader(txOpsCh, allocator).use { reader ->
-                                reader.vectorSchemaRoot.use { root ->
-                                    reader.loadNextBatch()
-
-                                    indexer.indexTx(offset, record.logTimestamp, root)
+                        if (skipTxs.isNotEmpty() && skipTxs.contains(offset)) {
+                            LOGGER.warn("Skipping transaction offset $offset - within XTDB_SKIP_TXS")
+                            null
+                        } else {
+                            msg.payload.asChannel.use { txOpsCh ->
+                                ArrowStreamReader(txOpsCh, allocator).use { reader ->
+                                    reader.vectorSchemaRoot.use { root ->
+                                        reader.loadNextBatch()
+    
+                                        indexer.indexTx(offset, record.logTimestamp, root)
+                                    }
                                 }
                             }
                         }
@@ -124,7 +132,6 @@ class LogProcessor(
                         null
                     }
                 }
-
                 watchers.notify(offset, res)
             } catch (e: InterruptedException) {
                 watchers.notify(offset, e)
