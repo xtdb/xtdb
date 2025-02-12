@@ -4,10 +4,10 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.lang AutoCloseable)
+  (:import com.carrotsearch.hppc.ByteArrayList
+           (java.lang AutoCloseable)
            (java.nio.file Path)
            java.time.LocalDate
-           java.time.format.DateTimeFormatterBuilder
            (java.util ArrayList Arrays List)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -15,22 +15,11 @@
            org.apache.arrow.vector.types.UnionMode
            (xtdb.arrow Relation)
            xtdb.BufferPool
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode TrieWriter)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode Trie Trie$Key TrieWriter)
            (xtdb.util TemporalBounds TemporalDimension)))
 
-(def ^:private ^java.time.format.DateTimeFormatter recency-fmt
-  (-> (DateTimeFormatterBuilder.)
-      (.appendPattern "yyyyMMdd")
-      (.toFormatter)))
-
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
-  (str "l" (util/->lex-hex-string level)
-       "-r" (if recency
-              (.format recency-fmt recency)
-              "c")
-       (when part
-         (str "-p" (str/join part)))
-       "-b" (util/->lex-hex-string block-idx)))
+  (str (Trie$Key. level recency (some-> part ByteArrayList/from) block-idx)))
 
 (defn ->l0-trie-key [^long block-idx]
   (->trie-key 0 nil nil block-idx))
@@ -38,18 +27,16 @@
 (defn ->l1-trie-key [^LocalDate recency, ^long block-idx]
   (->trie-key 1 recency nil block-idx))
 
-(def ^:private trie-file-path-regex
-  ;; e.g. `l01-r20200101-b00-rs20.arrow` or `l04-rc-p0010-b12e.arrow`
-  #"(l(\p{XDigit}+)-r(\d{8}|c)(?:-p(\p{XDigit}+))?(?:-b(\p{XDigit}+)))(\.arrow)?$")
-
 (defn parse-trie-key [trie-key]
-  (when-let [[_ trie-key level-str recency-str part-str block-idx-str] (re-find trie-file-path-regex trie-key)]
-    (cond-> {:trie-key trie-key
-             :level (util/<-lex-hex-string level-str)
-             :block-idx (util/<-lex-hex-string block-idx-str)
-             :recency (when (not= recency-str "c")
-                        (.parse recency-fmt ^String recency-str LocalDate/from))}
-      part-str (assoc :part (byte-array (map #(Character/digit ^char % 4) part-str))))))
+  (try
+    (let [k (Trie/parseKey trie-key)]
+      {:trie-key trie-key
+       :level (.getLevel k)
+       :recency (.getRecency k)
+       :part (some-> (.getPart k) (.toArray))
+       :block-idx (.getBlockIndex k)})
+    (catch IllegalArgumentException _)
+    (catch IllegalStateException _)))
 
 (defn parse-trie-file-path [^Path file-path]
   (-> (parse-trie-key (str (.getFileName file-path)))

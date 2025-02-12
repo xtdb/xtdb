@@ -28,7 +28,7 @@
 
 (deftest parses-trie-paths
   (letfn [(parse [trie-key]
-            (-> (trie/parse-trie-file-path (util/->path (str trie-key ".arrow")))
+            (-> (trie/parse-trie-key trie-key)
                 (update :part #(some-> % vec))
                 (mapv [:level :recency :part :block-idx])))]
     (t/is (= "l00-rc-b04" (trie/->l0-trie-key 4)))
