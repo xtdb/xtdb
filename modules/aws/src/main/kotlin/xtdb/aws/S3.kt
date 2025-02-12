@@ -13,7 +13,9 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.async.AsyncRequestBody
 import software.amazon.awssdk.core.async.AsyncResponseTransformer
+import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
+import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.*
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
@@ -57,25 +59,11 @@ import kotlin.time.Duration.Companion.seconds
  * ```
  */
 class S3(
-    factory: Factory,
+    private val client: S3AsyncClient,
     private val bucket: String,
     private val prefix: Path,
+    private val configurator: S3Configurator,
 ) : ObjectStore, SupportsMultipart<CompletedPart> {
-
-    private val configurator = factory.s3Configurator
-
-    private val client =
-        S3AsyncClient.builder()
-            .apply {
-                factory.credentials?.let { (accessKey, secretKey) ->
-                    AwsBasicCredentials.create(accessKey, secretKey)
-                        .let { StaticCredentialsProvider.create(it) }
-                        .also { credentialsProvider(it) }
-                }
-                factory.endpoint?.let { endpointOverride(URI(it)) }
-
-                configurator.configureClient(this)
-            }.build()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -242,7 +230,7 @@ class S3(
 
     companion object {
         @JvmStatic
-        fun s3(bucket: String) = Factory(bucket)
+        fun s3(bucket: String) = Factory(bucket = bucket)
 
         @Suppress("unused")
         @JvmSynthetic
@@ -259,23 +247,51 @@ class S3(
     @Serializable
     @SerialName("!S3")
     data class Factory(
+        @Serializable(StringWithEnvVarSerde::class) var region: String? = null,
         @Serializable(StringWithEnvVarSerde::class) val bucket: String,
         @Serializable(PathWithEnvVarSerde::class) var prefix: Path? = null,
         var credentials: BasicCredentials? = null,
         @Serializable(StringWithEnvVarSerde::class) var endpoint: String? = null,
+        var pathStyleAccessEnabled: Boolean = false,
         @Transient var s3Configurator: S3Configurator = S3Configurator.Default,
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
+        fun region(region: String) = apply { this.region = region }
+        fun region(region: Region) = apply { this.region = region.id() }
 
         fun credentials(accessKey: String, secretKey: String) =
             apply { credentials = BasicCredentials(accessKey, secretKey) }
 
         fun endpoint(endpoint: String) = apply { this.endpoint = endpoint }
 
+        /**
+         * @see S3Configuration.Builder.pathStyleAccessEnabled(Boolean)
+         */
+        fun pathStyleAccessEnabled(enabled: Boolean) = apply { this.pathStyleAccessEnabled = enabled }
+
         fun s3Configurator(s3Configurator: S3Configurator) = apply { this.s3Configurator = s3Configurator }
 
-        override fun openObjectStore() = S3(this, bucket, prefix?.resolve(storageRoot) ?: storageRoot)
+        override fun openObjectStore(): S3 {
+            val client =
+                S3AsyncClient.builder()
+                    .apply {
+                        region?.let { this.region(Region.of(it)) }
+                        credentials?.let { (accessKey, secretKey) ->
+                            AwsBasicCredentials.create(accessKey, secretKey)
+                                .let { StaticCredentialsProvider.create(it) }
+                                .also { credentialsProvider(it) }
+                        }
+                        endpoint?.let { endpointOverride(URI(it)) }
+
+                        if (pathStyleAccessEnabled)
+                            serviceConfiguration { it.pathStyleAccessEnabled(true) }
+
+                        s3Configurator.configureClient(this)
+                    }.build()
+
+            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator)
+        }
     }
 
     /**
