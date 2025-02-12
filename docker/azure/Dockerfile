@@ -17,7 +17,7 @@ ENTRYPOINT ["java", \
 CMD ["-f", "azure_config.yaml"]
 
 HEALTHCHECK --start-period=15s --timeout=3s \
-    CMD curl -f http://localhost:3000/status || exit 1
+    CMD curl -f http://localhost:8080/healthz/alive || exit 1
 
 EXPOSE 5432
 EXPOSE 3000

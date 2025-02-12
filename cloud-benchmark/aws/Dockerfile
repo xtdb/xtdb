@@ -20,7 +20,7 @@ ENTRYPOINT ["java", \
     "clojure.main", "-m", "xtdb.run-auctionmark.main"]
 
 HEALTHCHECK --start-period=15s --timeout=3s \
-    CMD curl -f http://localhost:3000/status || exit 1
+    CMD curl -f http://localhost:8080/healthz/alive || exit 1
 
 RUN mkdir -p /var/lib/xtdb
 VOLUME /var/lib/xtdb
