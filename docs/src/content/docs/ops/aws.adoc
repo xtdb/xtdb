@@ -2,7 +2,7 @@
 title: AWS
 ---
 
-XTDB provides modular support for AWS environments, including a prebuilt Docker image, integrations for **S3 storage** and **CloudWatch metrics**, and configuration options for deploying onto AWS infrastructure.
+XTDB provides modular support for AWS environments, including a pre-built Docker image, integrations for **S3 storage** and **CloudWatch metrics**, and configuration options for deploying onto AWS infrastructure.
 
 NOTE: For more information on setting up an XTDB cluster on AWS, see the link:guides/starting-with-aws["Getting Started with AWS"^] guide.
 
@@ -41,13 +41,12 @@ The following environment variables are used to configure the `xtdb-aws` image:
 | `XTDB_S3_BUCKET`
 | Name of the S3 bucket used for remote storage.
 
-| `XTDB_LOGGING_LEVEL`
-| Sets the root logging level for the node - defaults to `INFO`. See link:troubleshooting/overview#loglevel["Increasing the Log Level"^] for more information.
-
 | `XTDB_NODE_ID`
 | Persistent node id for labelling Prometheus metrics.
 
 |===
+
+You can also link:/ops/troubleshooting#loglevel[set the XTDB log level] using environment variables.
 
 === Using a Custom Node Configuration
 
@@ -160,4 +159,3 @@ See the https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credenti
 
 The associated credentials must have permissions to write metrics to a pre-configured `CloudWatch` namespace.
 
-'''

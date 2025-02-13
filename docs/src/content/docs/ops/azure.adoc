@@ -135,12 +135,11 @@ The following environment variables configure the `xtdb-azure` image:
 | `XTDB_LOCAL_DISK_CACHE`
 | Path to the local disk cache for object storage.
 
-| `XTDB_LOGGING_LEVEL`
-| Sets the root logging level for the node - defaults to `INFO`. See link:troubleshooting/overview#loglevel["Increasing the Log Level"^] for more information.
-
 | `XTDB_NODE_ID`
 | Persistent node id for labelling Prometheus metrics.
 |===
+
+You can also link:/ops/troubleshooting#loglevel[set the XTDB log level] using environment variables.
 
 === Using the "private auth" Configuration File
 
@@ -229,7 +228,9 @@ To use Azure Blob Storage as the object store, the following infrastructure is r
 
 === Authentication
 
-XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`. This supports multiple authentication methods, including Managed Identity. For more details, refer to the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation^].
+XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`.
+This supports multiple authentication methods, including Managed Identity.
+For more details, refer to the link:https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[Azure Documentation^].
 
 === Configuration
 
@@ -274,7 +275,7 @@ storage: !Remote
 [#monitoring]
 == Application Insights Monitoring
 
-XTDB supports reporting metrics to https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview[**Azure Application Insights**^] for performance and health monitoring.
+XTDB supports reporting metrics to link:https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview[Azure Application Insights^] for performance and health monitoring.
 
 === Configuration
 
@@ -284,7 +285,6 @@ To enable Application Insights monitoring, include the following in your node co
 ----
 modules:
   - !AzureMonitor
+    # -- required
     connectionString: !Env XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING
 ----
-
-Providing a valid `connectionString` linked to a pre-existing Application Insights resource is required.

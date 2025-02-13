@@ -150,13 +150,7 @@ export default defineConfig({
                         { label: 'AWS', link: '/ops/aws' },
                         { label: 'Azure', link: '/ops/azure' },
                         { label: 'Google Cloud', link: '/ops/google-cloud' },
-                        {
-                            label: 'Troubleshooting',
-                            collapsed: true,
-                            items: [
-                                {label: "Overview", link: 'ops/troubleshooting/overview' }
-                            ],
-                        },
+                        { label: 'Troubleshooting', link: '/ops/troubleshooting' },
 
                     ]
                 },

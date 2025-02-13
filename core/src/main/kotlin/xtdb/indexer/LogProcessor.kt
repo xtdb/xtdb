@@ -142,8 +142,13 @@ class LogProcessor(
                 throw CancellationException(ie)
             } catch (e: Throwable) {
                 watchers.notify(offset, e)
-                // TODO #4155
-                LOG.error(e, "Ingestion stopped: error processing log record at offset $offset")
+                LOG.error(e, "Ingestion stopped: error processing log record at offset $offset.")
+                LOG.error("""
+                    XTDB transaction processing has encountered an unrecoverable error and has been stopped to prevent corruption of your data.
+                    This node has also been marked unhealthy, so if it is running within a container orchestration system (e.g. Kubernetes) it should be restarted shortly.
+                    
+                    Please see https://docs.xtdb.com/ops/troubleshooting#ingestion-stopped for more information and next steps.
+                """.trimIndent())
                 throw CancellationException(e)
             }
         }

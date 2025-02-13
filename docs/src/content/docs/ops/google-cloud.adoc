@@ -46,14 +46,11 @@ The following environment variables are used to configure the `xtdb-google-cloud
 | `XTDB_GCP_LOCAL_DISK_CACHE_PATH`
 | Path to the local disk cache.
 
-| `XTDB_LOGGING_LEVEL`
-| Sets the root logging level for the node - defaults to `INFO`. See link:troubleshooting/overview#loglevel["Increasing the Log Level"^] for more information.
-
 | `XTDB_NODE_ID`
 | Persistent node id for labelling Prometheus metrics.
-
-
 |===
+
+You can also link:/ops/troubleshooting#loglevel[set the XTDB log level] using environment variables.
 
 === Using a Custom Node Configuration
 
