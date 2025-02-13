@@ -124,6 +124,7 @@ export default defineConfig({
                             items: [
                                 'ops/guides/starting-with-aws',
                                 'ops/guides/starting-with-azure',
+                                'ops/guides/starting-with-gcp',
                                 'ops/guides/monitoring-with-grafana'
                             ],
                         },

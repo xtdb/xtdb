@@ -4,6 +4,8 @@ title: Google Cloud
 
 XTDB provides modular support for Google Cloud environments, including a prebuilt Docker image, integrations with **Google Cloud Storage**, and configuration options for deploying onto Google Cloud infrastructure.
 
+NOTE: For more details on getting started with Google Cloud, see the link:guides/starting-with-gcp["Setting up a cluster on Google Cloud"^] guide.
+
 == Required Infrastructure
 
 In order to run a Google Cloud based XTDB cluster, the following infrastructure is required:
@@ -15,6 +17,140 @@ In order to run a Google Cloud based XTDB cluster, the following infrastructure 
 * XTDB nodes configured to communicate with the Kafka cluster and Google Cloud Storage.
 
 NOTE: We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluster, which provides a managed Kubernetes environment in Google Cloud.
+
+[#terraform]
+== Terraform Templates
+
+To set up a basic version of the required infrastructure, we provide a set of Terraform templates specifically designed for Google Cloud.
+
+These can be fetched from the XTDB repository using the following command:
+
+```bash
+terraform init -from-module github.com/xtdb/xtdb.git//google-cloud/terraform
+```
+
+=== Required APIs
+
+To deploy the required infrastructure, we need to ensure the following APIs are enabled on the Google Cloud project:
+
+* Cloud Storage API
+* IAM API
+* Compute Engine API
+* Kubernetes Engine API
+
+=== Required Permissions
+
+In order for the terraform templates to setup the required infrastructure, the following permissions are required for the logged in user:
+
+* `Storage Admin` - Required for creating and managing Google Cloud Storage buckets.
+* `Service Account Admin` - Required for creating and managing service accounts.
+* `Kubernetes Engine Admin` - Required for creating and managing Google Kubernetes Engine clusters and their resources.
+
+=== Resources
+
+By default, running the templates will deploy the following infrastructure:
+
+* **IAM Service Account** for accessing required Google Cloud resources.
+* **Google Cloud Storage Bucket** for remote storage.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-google-modules/cloud-storage/google/latest[**GoogleCloud/storage-bucket**^] Terraform module.
+** Adds required permissions to the Service Account.
+* **Virtual Private Cloud Network** for the XTDB GKE cluster.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-google-modules/network/google/latest[**GoogleCloud/network**^] Terraform module.
+* **Google Kubernetes Engine Cluster** for running the XTDB resources.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-google-modules/kubernetes-engine/google/latest[**GoogleCloud/kubernetes-engine**^] Terraform module.
+
+=== Configuration
+
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
+
+The following variables are **required** to be set:
+
+* `project_id`: The Google Cloud project ID to deploy the resources to.
+
+For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
+
+'''
+
+[#helm]
+== `xtdb-google-cloud` Helm Charts
+
+For setting up a production-ready XTDB cluster on Google Cloud, we provide a **Helm** chart built specifically for Google Cloud environments.
+
+=== Pre-requisites
+
+To enable XTDB nodes to access a Google Cloud Storage bucket securely, a Kubernetes Service Account (KSA) must be set up and linked to a Google Cloud IAM service account using link:https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#using_from_your_code[**Workload Identity Federation**^].
+
+==== Setting Up the Kubernetes Service Account:
+
+Create the Kubernetes Service Account in the target namespace:
+
+```bash
+kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
+```
+
+==== Binding the IAM Service Account
+
+Fetch the IAM service account email (in the format `<IAM_SA_NAME>@<PROJECT_ID>.iam.gserviceaccount.com`) and bind the `roles/iam.workloadIdentityUser` role to the Kubernetes Service Account:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding <iam_service_account_email> \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:<project_id>.svc.id.goog[xtdb-deployment/xtdb-service-account]"
+```
+
+==== Annotating the Kubernetes Service Account
+
+Annotate the Kubernetes Service Account to establish the link between GKE and Google IAM:
+
+```bash
+kubectl annotate serviceaccount xtdb-service-account \
+  --namespace xtdb-deployment \
+  iam.gke.io/gcp-service-account=<iam_service_account_email>
+```
+
+=== Installation
+
+The Helm chart can be installed directly from the link:https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-google-cloud[**Github Container Registry** releases]. 
+
+This will use the default configuration for the deployment, setting any required values as needed:  
+
+```bash
+helm install xtdb-google-cloud oci://ghcr.io/xtdb/helm-xtdb-google-cloud \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount=xtdb-service-account \
+  --set xtdbConfig.gcpProjectId=<project_id> \
+  --set xtdbConfig.gcpBucket=<bucket_name> 
+```
+
+We provide a number of parameters for configuring numerous parts of the deployment, see the link:https://github.com/xtdb/xtdb/tree/main/google-cloud/helm[`values.yaml` file] or call `helm show values`:
+
+```bash
+helm show values oci://ghcr.io/xtdb/helm-xtdb-google-cloud \
+  --version 2.0.0-snapshot 
+```
+
+=== Resources
+
+By default, the following resources are deployed by the Helm chart:
+
+* A `StatefulSet` containing a configurable number of XTDB nodes, using the link:#docker-image[**xtdb-google-cloud** docker image]
+* A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB).
+* A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
+* A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
+
+=== Pulling the Chart Locally
+
+The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
+
+```bash
+helm pull oci://ghcr.io/xtdb/helm-xtdb-google-cloud \
+  --version 2.0.0-snapshot \
+  --untar
+```
+
+'''
 
 [#docker-image]
 == `xtdb-google-cloud` Docker Image
