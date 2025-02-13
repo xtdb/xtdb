@@ -960,3 +960,23 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (t/testing "Only two results are returned"
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs"))))))))))
+
+(t/deftest null-to-duv-promotion-halts-ingestion-4153
+  (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: 1.5}"])
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, a: 2, b: 1}"])
+  (tu/finish-block! tu/*node*)
+  ;; on disk, b :: Union(f64,i64)
+
+  (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 3, b: null}"])
+  ;; we don't read the disk here, so live index b :: null
+
+  (xt/submit-tx tu/*node* ["UPDATE docs SET a = 0.1 WHERE _id = 2"])
+  ;; this one promotes the null to DUV(f64,i64) but doesn't set the id=3 null correctly
+  ;; setting b here instead fixes the issue because it promotes correctly before needing to read the null value out
+
+  (xt/submit-tx tu/*node* ["UPDATE docs SET a = 0.1 WHERE _id = 3"])
+  ;; we try to copy b out of the live index -> boom.
+  ;; setting b here, again, fixes the issue because it doesn't need to read the null value out
+
+  (t/is (= [{:xt/id 1, :a 1, :b 1.5} {:xt/id 2, :b 1, :a 0.1} {:xt/id 3, :a 0.1}]
+           (xt/q tu/*node* ["SELECT * FROM docs ORDER BY _id"]))))
