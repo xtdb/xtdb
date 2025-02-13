@@ -27,7 +27,6 @@
 (defmacro with-log-levels [ns-level-pairs & body]
   `(with-log-levels* ~ns-level-pairs (fn [] ~@body)))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro with-log-level [ns level & body]
   `(with-log-levels {~ns ~level} ~@body))
 

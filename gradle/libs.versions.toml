@@ -13,6 +13,9 @@ testcontainers="1.20.3"
 micrometer="1.14.1"
 transit="1.0.329"
 
+slf4j="2.0.16"
+logback="1.5.16"
+
 [libraries]
 arrow-algorithm={ group="org.apache.arrow", name="arrow-algorithm", version.ref="arrow" }
 arrow-memory-netty={ group="org.apache.arrow", name="arrow-memory-netty", version.ref="arrow" }
@@ -78,6 +81,20 @@ micrometer-core={ group="io.micrometer", name="micrometer-core", version.ref="mi
 micrometer-registry-prometheus={ group="io.micrometer", name="micrometer-registry-prometheus", version.ref="micrometer" }
 micrometer-registry-cloudwatch2={ group="io.micrometer", name="micrometer-registry-cloudwatch2", version.ref="micrometer" }
 micrometer-registry-azuremonitor={ group="io.micrometer", name="micrometer-registry-azure-monitor", version.ref="micrometer" }
+
+
+# logging in XTDB:
+# XTDB has public dependencies on clojure.tools.logging, java.lang.System and SLF4J (API) - we could potentially remove the latter
+# we then have dependencies in our 'applications' (Docker images, test runs) on:
+#  - slf4j-jdk-platform-logging to bridge java.lang.System.Logger to SLF4J
+#  - logback-classic to provide an implementation for SLF4J
+#
+# Clojure -> SLF4J
+# java.lang.System.Logger -> SLF4J
+# SLF4J -> Logback
+slf4j-api={ group="org.slf4j", name="slf4j-api", version.ref="slf4j" } # use this when you refer to an SLF4J class
+slf4j-jpl={ group="org.slf4j", name="slf4j-jdk-platform-logging", version.ref="slf4j" } # use this in applications
+logback-classic={ group="ch.qos.logback", name="logback-classic", version.ref="logback" } # use this in applications
 
 [plugins]
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }

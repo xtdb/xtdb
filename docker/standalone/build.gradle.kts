@@ -9,7 +9,9 @@ plugins {
 dependencies {
     implementation(project(":xtdb-core"))
     implementation(project(":xtdb-http-server"))
-    implementation("ch.qos.logback", "logback-classic", "1.4.5")
+
+    runtimeOnly(libs.logback.classic)
+    runtimeOnly(libs.slf4j.jpl)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

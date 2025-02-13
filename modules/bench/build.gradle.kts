@@ -18,7 +18,9 @@ dependencies {
     api(project(":modules:xtdb-aws"))
 
     api("org.clojure", "data.csv", "1.0.1")
-    api("ch.qos.logback", "logback-classic", "1.4.5")
+
+    runtimeOnly(libs.logback.classic)
+    runtimeOnly(libs.slf4j.jpl)
 
     // bench
     api("com.github.oshi", "oshi-core", "6.3.0")

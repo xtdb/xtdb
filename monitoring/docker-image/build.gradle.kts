@@ -10,7 +10,6 @@ dependencies {
     implementation(project(":xtdb-core"))
     implementation(project(":modules:xtdb-kafka"))
     implementation(project(":xtdb-http-server"))
-    implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

@@ -14,7 +14,6 @@ dependencies {
     api(project(":xtdb-http-server"))
     implementation(project(":modules:bench"))
     
-    api("ch.qos.logback", "logback-classic", "1.4.5")
     api("clj-http", "clj-http","3.12.3")
     api("cheshire","cheshire","5.10.1")
 }

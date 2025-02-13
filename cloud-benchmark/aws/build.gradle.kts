@@ -9,7 +9,9 @@ plugins {
 dependencies {
     implementation(project(":cloud-benchmark"))
     implementation(project(":modules:xtdb-aws"))
-    implementation("ch.qos.logback", "logback-classic", "1.4.5")
+
+    implementation(libs.logback.classic)
+    implementation(libs.slf4j.jpl)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

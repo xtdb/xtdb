@@ -26,8 +26,10 @@ dependencies {
     api(project(":xtdb-api"))
     compileOnlyApi(files("src/main/resources"))
 
-    implementation(libs.clojure)
     api(libs.clojure.tools.logging)
+    api(libs.slf4j.api)
+
+    implementation(libs.clojure)
     api(libs.clojure.spec)
     api(libs.clojure.`data`.json)
     api(libs.clojure.`data`.csv)

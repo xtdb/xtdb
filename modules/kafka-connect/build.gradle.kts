@@ -22,9 +22,8 @@ dependencies {
     api(kotlin("stdlib-jdk8"))
     implementation("org.apache.kafka:connect-api:3.8.0")
 
-    api("org.clojure", "tools.logging", "1.2.4")
+    api(libs.clojure.tools.logging)
     api("cheshire", "cheshire", "5.13.0")
-    api("org.slf4j", "slf4j-api", "1.7.36")
     api("com.github.seancorfield", "next.jdbc", "1.3.939")
     api("org.postgresql", "postgresql", "42.7.3")
 
