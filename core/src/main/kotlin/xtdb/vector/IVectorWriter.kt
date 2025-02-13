@@ -5,6 +5,7 @@ import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
+import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -139,9 +140,10 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
                 .also { it.transfer() }
                 .to as FieldVector
 
-        field.type == ArrowType.Null.INSTANCE -> {
-            // workaround for #3376
+        // not union because unions don't have validity vectors - we need a specific null leg. #4153
+        field.type == ArrowType.Null.INSTANCE && fieldType.type !is ArrowType.Union -> {
             when (fieldType.type) {
+                // workaround for lists/sets for #3376
                 ArrowType.List.INSTANCE ->
                     ListVector(field.name, al, FieldType.nullable(ArrowType.List.INSTANCE), null)
                         .also { it.valueCount = vector.valueCount }
