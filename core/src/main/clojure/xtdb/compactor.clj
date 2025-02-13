@@ -234,7 +234,7 @@
                                    (compaction-jobs table-name (cat/trie-state trie-catalog table-name)
                                                     {:l1-file-size-rows l1-file-size-rows}))))))
 
-         (executeJob [_ {:keys [table-name out-trie-key] :as job}]
+         (executeJob [_ job]
            (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)))
 
        log trie-catalog *ignore-signal-block?* threads))))
