@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 class StructVectorWriterTest {
@@ -124,6 +125,20 @@ class StructVectorWriterTest {
 
             assertEquals(structField, structWriter.field)
             assertEquals(aField, nnWriter.field)
+        }
+    }
+
+    @Test
+    fun `promoting from non nullable struct to nullable struct throws FieldMismatch`() {
+        val fooField = Field("foo", FieldType.notNullable(MinorType.BIGINT.type), emptyList())
+        val nullableStructField = Field("src", FieldType.nullable(STRUCT_TYPE), listOf(fooField))
+        val nonNullableStructField = Field("src", FieldType.notNullable(STRUCT_TYPE), listOf(fooField))
+        nonNullableStructField.createVector(al).use { srcVec ->
+            val structWriter = writerFor(srcVec)
+
+            assertThrows<FieldMismatch>(
+                { structWriter.promoteChildren(nullableStructField) },
+            )
         }
     }
 }

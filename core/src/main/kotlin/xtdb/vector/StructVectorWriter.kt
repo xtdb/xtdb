@@ -153,7 +153,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     }
 
     override fun promoteChildren(field: Field) {
-        if (field.type != this.field.type || (field.isNullable && !field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
+        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
         for (child in field.children) {
             var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
             if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is ArrowType.Union)
