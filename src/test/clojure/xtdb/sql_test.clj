@@ -2737,6 +2737,6 @@ UNION ALL
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs"))))
 
 (t/deftest forbid-invalid-columns-update
-  (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1"])
+  (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1}"])
   (t/is (false? (execute-tx->committed? "UPDATE foo SET _valid_from = 2 WHERE _id = 1"))
         "invalid column in `UPDATE`"))
