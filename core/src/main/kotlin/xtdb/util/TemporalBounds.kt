@@ -27,8 +27,11 @@ data class TemporalDimension(
 
 data class TemporalBounds(
     val validTime: TemporalDimension = TemporalDimension(),
-    val systemTime: TemporalDimension = TemporalDimension()
+    val systemTime: TemporalDimension = TemporalDimension(),
+    val maxSystemFrom: Long = Long.MAX_VALUE,
 ){
+    constructor(validTime: TemporalDimension, systemTime: TemporalDimension) : this(validTime, systemTime, Long.MAX_VALUE)
+
     fun intersects(other: TemporalBounds) = this.validTime.intersects(other.validTime) && this.systemTime.intersects(other.systemTime)
     fun intersects(validFrom: Long, validTo: Long, systemFrom: Long, systemTo: Long) =
         (this.validTime.intersects(validFrom, validTo) && this.systemTime.intersects(systemFrom, systemTo))
