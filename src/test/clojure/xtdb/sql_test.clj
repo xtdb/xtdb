@@ -2707,3 +2707,36 @@ UNION ALL
     (t/is (=plan-file
            "test-push-selection-down-past-unnest-ord-col-ref"
            (plan-sql q {:table-info {"public/foo" #{"_id" "vs"}}})))))
+
+(defn execute-tx->committed? [sql]
+  (-> (xt/execute-tx tu/*node* [sql]) :committed?))
+
+(t/deftest forbid-invalid-columns-insert
+  (t/is (false? (execute-tx->committed? "INSERT INTO foo(_id, _foo) VALUES(1, 2)"))
+        "invalid column in `INSERT INTO`")
+
+  (t/is (false? (execute-tx->committed? "INSERT INTO foo RECORDS {_id: 1, _system_time: 2}"))
+        "invalid column in `INSERT INTO` with records")
+
+  (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1}"])
+
+  (t/is (false? (execute-tx->committed? "INSERT INTO foo (SELECT *, 1 AS _system_from FROM foo)"))
+        "invalid column in `INSERT INTO` from query")
+
+  (t/is (false? (execute-tx->committed? ["INSERT INTO docs (_id, _valid_to) VALUES (1, 'foo')"]))
+        "invalid column in `INSERT INTO`")
+
+  (t/is (false? (execute-tx->committed? "INSERT INTO docs (_id, _valid_from, _valid_to)
+                                         VALUES (1, TIMESTAMP '2021-01-01 00:00:00+00:00', TIMESTAMP '2020-01-01 00:00:00+00:00')"))
+        "valid-from after valid-to"))
+
+(t/deftest null-valid-time-insertion-behaves-as-if-non-specified
+  (xt/execute-tx tu/*node* ["INSERT INTO docs SELECT 1 _id, NULL _valid_from, NULL _valid_to"])
+
+  (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs"))))
+
+(t/deftest forbid-invalid-columns-update
+  (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1"])
+  (t/is (false? (execute-tx->committed? "UPDATE foo SET _valid_from = 2 WHERE _id = 1"))
+        "invalid column in `UPDATE`"))
