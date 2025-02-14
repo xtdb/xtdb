@@ -555,6 +555,10 @@
          plan]
         plan))))
 
+(defrecord TableProjectionMismatch [table-alias projections]
+  PlanError
+  (error-string [_] (format "Table projection mismatch for %s (%s)" table-alias (str/join "," projections))))
+
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
   (visitBaseTable [{{:keys [!id-count table-info ctes] :as env} :env} ctx]
@@ -637,19 +641,19 @@
           table-alias (identifier-sym (.tableAlias ctx))
           with-ordinality? (boolean (.withOrdinality ctx))]
 
-      (assert (or (nil? table-projection)
-                  (= (+ 1 (if with-ordinality? 1 0)) (count table-projection))))
-
-      (->UnnestTable env table-alias
-                     (symbol (str table-alias "." (swap! !id-count inc)))
-                     (or (->col-sym (first table-projection))
-                         (-> (->col-sym (str "_unnest." (swap! !id-count inc)))
-                             (vary-meta assoc :unnamed-unnest-col? true)))
-                     expr
-                     (when with-ordinality?
-                       (or (->col-sym (second table-projection))
-                           (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
-                               (vary-meta assoc :unnamed-unnest-col? true)))))))
+      (if-not (or (nil? table-projection)
+                  (= (+ 1 (if with-ordinality? 1 0)) (count table-projection)))
+        (add-err! env (->TableProjectionMismatch table-alias table-projection))
+        (->UnnestTable env table-alias
+                       (symbol (str table-alias "." (swap! !id-count inc)))
+                       (or (->col-sym (first table-projection))
+                           (-> (->col-sym (str "_unnest." (swap! !id-count inc)))
+                               (vary-meta assoc :unnamed-unnest-col? true)))
+                       expr
+                       (when with-ordinality?
+                         (or (->col-sym (second table-projection))
+                             (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
+                                 (vary-meta assoc :unnamed-unnest-col? true))))))))
 
   (visitGenerateSeriesTable [{{:keys [!id-count]} :env} ctx]
     (let [expr (-> (.generateSeries ctx)
@@ -659,20 +663,19 @@
           table-alias (identifier-sym (.tableAlias ctx))
           with-ordinality? (boolean (.withOrdinality ctx))]
 
-      (assert (or (nil? table-projection)
-                  (= (+ 1 (if with-ordinality? 1 0))
-                     (count table-projection))))
-
-      (->UnnestTable env table-alias
-                     (symbol (str table-alias "." (swap! !id-count inc)))
-                     (or (->col-sym (first table-projection))
-                         (-> (->col-sym (str "_genseries." (swap! !id-count inc)))
-                             (vary-meta assoc :unnamed-unnest-col? true)))
-                     expr
-                     (when with-ordinality?
-                       (or (->col-sym (second table-projection))
-                           (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
-                               (vary-meta assoc :unnamed-unnest-col? true)))))))
+      (if-not (or (nil? table-projection)
+                  (= (+ 1 (if with-ordinality? 1 0)) (count table-projection)))
+        (add-err! env (->TableProjectionMismatch table-alias table-projection))
+        (->UnnestTable env table-alias
+                       (symbol (str table-alias "." (swap! !id-count inc)))
+                       (or (->col-sym (first table-projection))
+                           (-> (->col-sym (str "_genseries." (swap! !id-count inc)))
+                               (vary-meta assoc :unnamed-unnest-col? true)))
+                       expr
+                       (when with-ordinality?
+                         (or (->col-sym (second table-projection))
+                             (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
+                                 (vary-meta assoc :unnamed-unnest-col? true))))))))
 
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
 

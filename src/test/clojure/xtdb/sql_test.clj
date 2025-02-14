@@ -2769,3 +2769,12 @@ UNION ALL
                              ON d1.value = d2.value + INTERVAL 'PT0M'
                              SELECT d1._id AS _id1, d2._id AS _id2"))
         "Testing joins with differnt temporal types"))
+
+(t/deftest mismatched-columns-in-table-projection-stops-ingestion-4069
+  (t/is (thrown-with-msg? IllegalArgumentException #"Table projection mismatch"
+                          (xt/q tu/*node* "FROM UNNEST([1,2,3]) x(_id, foo)")))
+  (t/is (false? (execute-tx->committed? "INSERT INTO docs (_id) SELECT _id FROM UNNEST([1,2,3]) x (_id, foo)")))
+
+  (t/is (thrown-with-msg? IllegalArgumentException #"Table projection mismatch"
+                          (xt/q tu/*node* "FROM generate_series (1, 4) xs (x, foo)")))
+  (t/is (false? (execute-tx->committed? "INSERT INTO docs (_id) FROM generate_series (1, 4) xs (x, foo)"))))
