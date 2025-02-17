@@ -199,6 +199,6 @@
           (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 747)
-                    (os/->StoredObject (util/->path "blocks/b01.transit.json") 757)]
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 726)
+                    (os/->StoredObject (util/->path "blocks/b01.transit.json") 736)]
                    (.listAllObjects bp (util/->path "blocks")))))))))

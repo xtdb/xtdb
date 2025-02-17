@@ -399,8 +399,10 @@
     (.clear blocks-metadata)))
 
 (defn latest-block-metadata [^IMetadataManager metadata-mgr]
-  (some-> (.lastEntry (.blocksMetadata metadata-mgr))
-          (.getValue)))
+  (let [entry (.lastEntry (.blocksMetadata metadata-mgr))]
+    (when entry
+      (-> (val entry)
+          (assoc :next-block-idx (inc ^long (key entry)))))))
 
 (defn- load-blocks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
   (let [bm (TreeMap.)]
