@@ -1877,7 +1877,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [server-state, port, allocator, query-error-counter, tx-error-counter] :as server} ^Socket conn-socket]
+  [{:keys [server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1905,6 +1905,8 @@
     (try
       ;; the connection loop only gets initialized if we are not closing
       (when (not @!closing?)
+        (when total-connections-counter
+          (.increment total-connections-counter))
         (swap! server-state assoc-in [:connections cid] conn)
 
         (log/trace "Starting connection loop" {:port port, :cid cid})
@@ -1987,6 +1989,7 @@
      (let [port (.getLocalPort accept-socket)
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
+           total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
            !tmp-nodes (when-not node
                         (ConcurrentHashMap.))
            server (map->Server {:allocator allocator
@@ -2020,7 +2023,8 @@
 
            server (assoc server
                          :query-error-counter query-error-counter
-                         :tx-error-counter tx-error-counter)
+                         :tx-error-counter tx-error-counter
+                         :total-connections-counter total-connections-counter)
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)
@@ -2029,6 +2033,10 @@
 
            server (assoc server :accept-thread accept-thread)]
 
+       (when metrics-registry
+         (metrics/add-gauge metrics-registry "pgwire.active_connections"
+                            (fn []
+                              (count (:connections @(:server-state server))))))
        (.start accept-thread)
        server))))
 
