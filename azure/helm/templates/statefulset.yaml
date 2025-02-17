@@ -18,7 +18,7 @@ spec:
         azure.workload.identity/use: "true" 
     spec:
       # Requires the service account to be created & federated identity set up
-      serviceAccountName: xtdb-service-account
+      serviceAccountName: {{ required (printf "xtdbConfig.serviceAccount is required - ensure you set it up on %s and federate with an Azure User Assigned Managed Identity" .Release.Namespace) .Values.xtdbConfig.serviceAccount }}
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       tolerations:
@@ -31,19 +31,22 @@ spec:
         - name: xtdb-yaml-config
           configMap:
             name: xtdb-yaml-config
+        - name: "local-disk-cache"
+          emptyDir:
+            sizeLimit: {{ .Values.xtdbConfig.localDiskCache.sizeLimit }}
       containers:
         - name: xtdb-container
           image: {{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ['-f', '/var/lib/xtdb-config/xtdbconfig.yaml']
           volumeMounts:
-            - name: xtdb-persistent-storage
-              mountPath: /var/lib/xtdb/buffers
             - name: "tmp"
               mountPath: "/tmp"
             - mountPath: /var/lib/xtdb-config/xtdbconfig.yaml
               name: xtdb-yaml-config
               subPath: xtdbconfig.yaml
+            - name: local-disk-cache
+              mountPath: "/var/lib/xtdb/buffers/"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
@@ -53,6 +56,16 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ required "xtdbConfig.kafkaBootstrapServers is required." .Values.xtdbConfig.kafkaBootstrapServers }}
+            - name: KAFKA_LOG_TOPIC
+              value: {{ required "xtdbConfig.kafkaLogTopic is required." .Values.xtdbConfig.kafkaLogTopic }}
+            - name: AZURE_STORAGE_ACCOUNT
+              value: {{ required "xtdbConfig.storageAccountName is required." .Values.xtdbConfig.storageAccountName }}
+            - name: AZURE_STORAGE_CONTAINER
+              value: {{ required "xtdbConfig.storageContainerName is required." .Values.xtdbConfig.storageContainerName }}
+            - name: AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+              value: {{ required "xtdbConfig.userManagedIdentityClientId is required." .Values.xtdbConfig.userManagedIdentityClientId }}
             {{- range $key, $value := .Values.xtdbConfig.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
@@ -63,5 +76,3 @@ spec:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
-  volumeClaimTemplates:
-    - {{- toYaml .Values.xtdbConfig.localDiskCache.volumeClaimTemplate | nindent 6 }}

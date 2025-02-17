@@ -5,7 +5,8 @@ image:
   # tag: 2.0.0-beta5
   pullPolicy: IfNotPresent
 
-nodeSelector: {}
+nodeSelector:
+  node_pool: "xtdbpool"
 
 tolerations: []
 
@@ -14,10 +15,12 @@ affinity: {}
 resources:
   limits:
     cpu: "1000m"
-    memory: "6Gi"
+    memory: "10G"
+    ephemeral-storage: 100Gi
   requests:
-    cpu: "1000m"
-    memory: "6Gi"
+    cpu: "750m"
+    memory: "10G"
+    ephemeral-storage: 100Gi
 
 securityContext:
   allowPrivilegeEscalation: false
@@ -30,63 +33,53 @@ securityContext:
 
 xtdbConfig:
   # REQUIRED
-  # The user managed identity client ID must always be set.
+  # Kubernetes Service Account configured with Workload Identity Federation wih access to Azure Storage
+  serviceAccount: ""
+  # Azure User Managed Identity Client ID
   userManagedIdentityClientId: ""
-
-  # We require these to be set when using default config file. 
+  # Azure Storage Account Name
   storageAccountName: ""
+  # Azure Storage Container Name
   storageContainerName: ""
+  # Kafka bootstrap servers
   kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
+  # XTDB log topic on Kafka 
   kafkaLogTopic: "xtdb-log"
 
   # OPTIONAL
   # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
   # See https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html
-  jdkOptions: "-Xmx2000m -Xms2000m -XX:MaxDirectMemorySize=2000m -XX:MaxMetaspaceSize=500m"
+  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=3000m -XX:MaxMetaspaceSize=500m"
 
-  # We mount and use a YAML file for configuring the XTDB nodes -
-  # We create a default file, setup wihin templates/xtdbyamlconfig.yaml using values set above.
-  #
-  # Setting `yamlConfigOverride/xtdbconfig.yaml` will override the contents of the config file 
-  # Ensure that you inline any values/set them using !Env tags
+  # We mount and use the below YAML for configuring the XTDB nodes and their modules.
+  # The !Env values are set by Environment Variables set on the XTDB statefulset pods.
   # See the XTDB configuration documentation for options: https://docs.xtdb.com/ops/config.html
-  yamlConfigOverride: 
-    # xtdbconfig.yaml: |-
-    #   server:
-    #     port: 5432
+  nodeConfig: |-
+    server:
+      port: 5432
 
-    #   log: !Kafka
-    #     bootstrapServers: "<kafkaBootstrapServers>"
-    #     topic: "<kafkaLogTopic>"
+    log: !Kafka
+      bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+      topic: !Env KAFKA_LOG_TOPIC
 
-    #   storage: !Remote
-    #     objectStore: !Azure
-    #       storageAccount: "<storageAccountName>"
-    #       container: "<storageContainerName>"
-    #       prefix: "xtdb-object-store"
-    #       userManagedIdentityClientId: "<userManagedIdentityClientId>"
-    #     localDiskCache: /var/lib/xtdb/buffers/disk-cache
+    storage: !Remote
+      objectStore: !Azure
+        storageAccount: !Env AZURE_STORAGE_ACCOUNT
+        container: !Env AZURE_STORAGE_CONTAINER
+        prefix: "xtdb-object-store"
+        userManagedIdentityClientId: !Env AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+      localDiskCache: /var/lib/xtdb/buffers/disk-cache
 
-    #   healthz:
-    #     port: 8080
+    healthz:
+      port: 8080
 
-    #   modules:
-    #   - !HttpServer
-    #     port: 3000
+    modules:
+    - !HttpServer
+      port: 3000 
       
-  # Persisent Volume Claim settings for XTDB local disk cache (one per node)
-  # By default, using Premium SSDs with managed-csi storage class -
-  # For more information, see https://learn.microsoft.com/en-us/azure/virtual-machines/disks-types#standard-hdds
+  # Volume size settings for XTDB Local Disk Cache (uses ephemeral storage)
   localDiskCache:
-    volumeClaimTemplate:
-      metadata:
-        name: xtdb-persistent-storage
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: 50Gi
-        storageClassName: "managed-csi"
+    sizeLimit: "50Gi"
 
   # Extra Env:
   env:

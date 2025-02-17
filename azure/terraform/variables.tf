@@ -40,33 +40,50 @@ variable "aks_cluster_name" {
   type        = string
 }
 
+variable "aks_system_pool_vm_size" {
+  description = "VM size for the XTDB AKS system node pool"
+  type        = string
+  default     = "Standard_D2pds_v6"
+}
+
+variable "aks_system_pool_node_count" {
+  description = "Number of nodes in the XTDB AKS system node pool"
+  type        = number
+  default     = 2
+}
+
+variable "aks_system_pool_availability_zones" {
+  description = "Availability zones for the XTDB AKS system node pool"
+  type        = list(string)
+  default     = ["1", "2"]
+}
+
 variable "aks_application_pool_vm_size" {
   description = "VM size for the XTDB AKS application node pool"
   type        = string
-  default     = "Standard_DS2_v2"
+  default     = "Standard_D4pds_v6"
 }
 
 variable "aks_application_pool_node_count" {
   description = "Number of nodes in the XTDB AKS application node pool"
   type        = number
-  default     = 1
+  default     = 3
 }
 
 variable "aks_application_pool_availability_zones" {
   description = "Availability zones for the XTDB AKS application node pool"
   type        = list(string)
-  default     = ["1"]
+  default     = ["1", "2", "3"]
 }
 
-variable "kubernetes_namespace" {
-  description = "Name of the Kubernetes namespace for XTDB"
+variable "aks_application_pool_os_disk_type" {
+  description = "OS disk type for the XTDB AKS application node pool"
   type        = string
-  default     = "xtdb-deployment"
+  default     = "Ephemeral"
 }
 
-variable "kubernetes_service_account_name" {
-  description = "Name of the Kubernetes service account for XTDB"
-  type        = string
-  default     = "xtdb-service-account"
+variable "aks_application_pool_os_disk_size_gb" {
+  description = "OS disk size in GB for the XTDB AKS application node pool"
+  type        = number
+  default     = 220
 }
-

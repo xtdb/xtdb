@@ -208,7 +208,6 @@ By verifying the status and reviewing the logs, you can ensure the Kafka instanc
 === Setting up the XTDB Workload Identity
 
 In order for the XTDB nodes to access the Google Cloud Storage bucket, we need to set up a Kubernetes Service Account that can access the Google Cloud IAM service account using link:https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#using_from_your_code[**Workload Identity Federation**^].
-We will use  to allow the AKS cluster to access the Azure Storage Account.
 
 To set up the Kubernetes Service Account, run the following command:
 

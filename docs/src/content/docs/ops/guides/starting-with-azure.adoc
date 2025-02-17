@@ -78,9 +78,6 @@ If using the default configuration, the following will be created:
 ** Adds required permissions to the User Assigned Managed Identity.
 * **AKS Cluster**  
 ** Configured with associated resources using the link:https://registry.terraform.io/modules/Azure/aks/azurerm/latest[**Azure/aks**^] Terraform module.
-* **Federated Identity Credential**  
-** Configures the AKS cluster to access the Azure Storage Account.
-** The credential is set up for the `kubernetes_service_account_name` within the `kubernetes_namespace`, both of which are defined in the `terraform.tfvars` file.
 
 NOTE: The above infrastructure is designed for creating a simple starting point for running XTDB on Azure & Kubernetes. 
 The VM sizes and resource tiers can & should be adjusted to suit your specific requirements and cost constraints, and the templates should be configured with any desired changes to security or networking configuration.
@@ -138,8 +135,6 @@ Now that `kubectl` is authenticated with the AKS cluster, you can set up the nam
 kubectl create namespace xtdb-deployment
 ```
 
-NOTE: Within the deployed terraform infrastructure, we create a link:https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster[Federated Identity Credential] for use by the XTDB statefulset, which by default will expect `xtdb-deployment` as the namespace and `xtdb-service-account` as the service account name. If you wish to change these, you will need to update the `terraform.tfvars` values accordingly.
-
 The AKS cluster is now ready for deployment,
 
 '''
@@ -150,9 +145,12 @@ To deploy a basic set of Kafka resources within AKS, you can make use of the `bi
 
 ```bash
 helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
   --namespace xtdb-deployment \
   --set listeners.client.protocol=PLAINTEXT \
-  --set listeners.controller.protocol=PLAINTEXT
+  --set listeners.controller.protocol=PLAINTEXT \
+  --set controller.resourcesPreset=medium \
+  --set controller.nodeSelector.node_pool=xtdbpool
 ```
 
 This command will create:
@@ -194,6 +192,44 @@ By verifying the status and reviewing the logs, you can ensure the Kafka instanc
 
 '''
 
+=== Setting up the XTDB Workload Identity
+
+In order for the XTDB nodes to access an Azure storage account securely, a Kubernetes Service Account (KSA) must be set up and linked to a User Assigned Managed Identity using link:https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation[**Workload Identity Federation**^].
+
+To set up the Kubernetes Service Account, run the following command:
+
+```bash
+kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
+```
+
+Fetch the name of the User Assigned Managed Identity (`user_assigned_managed_identity_name`) and the OIDC issuer URL of the AKS cluster (`oidc_issuer_url`) from the Terraform outputs.
+
+To create the federated identity run the `az` CLI command:
+
+```bash
+az identity federated-credential create \
+  --name "xtdb-federated-identity" \
+  --resource-group "xtdb-resource-group" \
+  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account" \
+  --audience "api://AzureADTokenExchange" \
+  --identity-name "<user_assigned_managed_identity_name>" \
+  --issuer "<oidc_issuer_url>" 
+```
+
+The subject name must include the namespace and Kubernetes ServiceAccount name. 
+
+Fetch the client ID of the User Assigned Managed Identity (`user_assigned_managed_identity_client_id`), and use it to annotate the Kubernetes Service Account to establish the link between the KSA and the User Assigned Managed Identity:
+
+```bash
+kubectl annotate serviceaccount xtdb-service-account \
+  --namespace xtdb-deployment \
+  azure.workload.identity/client-id="<user_assigned_managed_identity_client_id>"
+```
+
+With the XTDB service account set up, we can now deploy the XTDB cluster to the GKE cluster.
+
+'''
+
 === Deploying the XTDB cluster
 
 In order to deploy the XTDB cluster and it's constituent parts into the AKS cluster, we provide an `xtdb-azure` Helm chart/directory.
@@ -207,6 +243,7 @@ Run the following command, substituting the values as appropriate:
 helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure \
   --version 2.0.0-snapshot \
   --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \
   --set xtdbConfig.storageContainerName=<storage_account_container> \
   --set xtdbConfig.storageAccountName=<storage_account_name> \
   --set xtdbConfig.userManagedIdentityClientId=<user_managed_identity_client_id> 
@@ -218,7 +255,6 @@ The following are created by the templates:
 * A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB, default storage class of link:https://learn.microsoft.com/en-us/azure/aks/azure-disk-csi#dynamically-create-azure-disks-pvs-by-using-the-built-in-storage-classes[**managed-csi**^]).
 * A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
 * A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
-* A `ServiceAccount` used for authenticating the XTDB nodes with the Azure Storage Account (setup with Federated Identity Credential within the `terraform` deployment step).
 
 To check the status of the XTDB statefulset, run:
 ```bash
