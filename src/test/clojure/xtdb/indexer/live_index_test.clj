@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
             xtdb.node.impl
@@ -16,8 +17,8 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           (xtdb.arrow Relation VectorPosition)
            xtdb.BufferPool
+           (xtdb.arrow Relation VectorPosition)
            xtdb.indexer.LiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie MemoryHashTrie$Leaf)))
 
@@ -130,7 +131,10 @@
                    (.listAllObjects bp (util/->path "tables/public$foo/meta")))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
-                       (.resolve node-dir "objects"))))))
+                       (.resolve node-dir "objects"))
+
+        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
+                        (.resolve node-dir "objects"))))))
 
 (t/deftest test-new-table-discarded-on-abort-2721
   (let [^LiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)]
@@ -199,6 +203,6 @@
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 732)
-                    (os/->StoredObject (util/->path "blocks/b01.transit.json") 742)]
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 34)
+                    (os/->StoredObject (util/->path "blocks/b01.binpb") 35)]
                    (.listAllObjects bp (util/->path "blocks")))))))))

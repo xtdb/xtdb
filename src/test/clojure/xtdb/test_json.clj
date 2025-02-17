@@ -63,13 +63,13 @@
           actual)))
 
 #_{:clj-kondo/ignore [:unused-private-var]}
-(defn- copy-expected-file [^Path file, ^Path expected-dir, ^Path actual-dir]
+(defn copy-expected-file [^Path file, ^Path expected-dir, ^Path actual-dir]
   (Files/copy file (doto (.resolve expected-dir (.relativize actual-dir file))
                      (-> (.getParent) (util/mkdirs)))
               ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING})))
 
 #_{:clj-kondo/ignore [:unused-private-var]}
-(defn- delete-and-recreate-dir [^Path path]
+(defn delete-and-recreate-dir [^Path path]
   (when (.. path toFile isDirectory)
     (util/delete-dir path)
     (.mkdirs (.toFile path))))
