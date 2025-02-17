@@ -100,7 +100,7 @@
 
           (t/is (= {:latest-completed-tx last-tx-key}
                    (-> (meta/latest-block-metadata mm)
-                       (dissoc :tables :next-block-idx))))
+                       (dissoc :tables :block-idx))))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
                          (.resolve node-dir "objects")))))))
@@ -332,7 +332,7 @@
 
           (t/is (= {:latest-completed-tx last-tx-key}
                    (-> (meta/latest-block-metadata mm)
-                       (dissoc :tables :next-block-idx))))
+                       (dissoc :tables :block-idx))))
 
           (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))

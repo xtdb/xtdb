@@ -84,7 +84,9 @@
            :let [file-name (str (.getFileName path))
                  file-type (cond
                              (str/ends-with? file-name ".arrow") :arrow
-                             (str/ends-with? file-name ".transit.json") :transit)]
+                             (str/ends-with? file-name ".transit.json") :transit
+                             ;; TODO this should like not go in test-json
+                             (str/ends-with? file-name ".binpb") :protobuf)]
            :when (and file-type
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]

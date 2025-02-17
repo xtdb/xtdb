@@ -31,8 +31,11 @@
 
 (def ^java.nio.file.Path tables-dir (util/->path "tables"))
 
-(defn- table-name->table-path ^java.nio.file.Path [^String table-name]
+(defn table-name->table-path ^java.nio.file.Path [^String table-name]
   (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
+
+(defn table-dir->table-name ^String [^String table-dir]
+  (str/replace-first table-dir #"\$" "/" ))
 
 (defn ->table-data-file-path ^java.nio.file.Path [table-name trie-key]
   (-> (table-name->table-path table-name)

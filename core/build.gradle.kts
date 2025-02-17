@@ -76,6 +76,7 @@ dependencies {
     api(libs.kaml)
 
     api(libs.protobuf.kotlin)
+    api(libs.protobuf.java)
 
     api(libs.pgjdbc)
 

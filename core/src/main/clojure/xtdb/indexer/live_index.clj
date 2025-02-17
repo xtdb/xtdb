@@ -149,6 +149,7 @@
             (let [data-file-size (trie/write-live-trie! allocator buffer-pool table-name trie-key
                                                         live-trie data-rel)]
               (MapEntry/create table-name
+                               ;; TODO remove trie-key/data-file-size ?
                                {:fields (live-rel->fields live-rel)
                                 :trie-key trie-key
                                 :data-file-size data-file-size
@@ -384,7 +385,8 @@
    :config config})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
-  (let [{:keys [latest-completed-tx next-block-idx], :or {next-block-idx 0}} (meta/latest-block-metadata metadata-mgr)]
+  (let [{:keys [latest-completed-tx block-idx]} (meta/latest-block-metadata metadata-mgr)
+        next-block-idx (or (some-> block-idx inc) 0)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]

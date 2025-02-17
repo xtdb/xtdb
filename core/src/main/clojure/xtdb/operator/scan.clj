@@ -431,11 +431,8 @@
                                        :when (not (types/temporal-column? col-name))]
                                    select))
 
-              row-count (->> (for [{:keys [tables]} (vals (.blocksMetadata metadata-mgr))
-                                   :let [{:keys [row-count]} (get tables table-name)]
-                                   :when row-count]
-                               row-count)
-                             (reduce +))]
+              row-count (-> (.latestBlockMetadata metadata-mgr)
+                            (get-in [:tables table-name :row-count]))]
 
           {:fields fields
            :stats {:row-count row-count}
