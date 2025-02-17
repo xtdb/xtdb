@@ -184,3 +184,21 @@
         (.commit live-tx3))
 
       (t/is (some? (.liveTable live-index "bar"))))))
+
+(t/deftest live-index-row-counter-reinitialization
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/live-index-row-counter-reinitialization")]
+      (util/delete-dir node-dir)
+
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+        (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
+        (tu/finish-block! node))
+
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+          (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
+          (tu/finish-block! node)
+
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 747)
+                    (os/->StoredObject (util/->path "blocks/b01.transit.json") 757)]
+                   (.listAllObjects bp (util/->path "blocks")))))))))

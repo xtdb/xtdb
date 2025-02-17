@@ -320,6 +320,7 @@
                                    (util/rethrowing-cause))]
             (.finishBlock metadata-mgr block-idx
                           {:latest-completed-tx latest-completed-tx
+                           :next-block-idx (inc block-idx)
                            :tables table-metadata})
 
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
@@ -384,8 +385,7 @@
    :config config})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
-  ;; TODO: :next-chunk-idx until we have a breaking index change
-  (let [{next-block-idx :next-chunk-idx, :keys [latest-completed-tx], :or {next-block-idx 0}} (meta/latest-block-metadata metadata-mgr)]
+  (let [{:keys [next-block-idx latest-completed-tx], :or {next-block-idx 0}} (meta/latest-block-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
