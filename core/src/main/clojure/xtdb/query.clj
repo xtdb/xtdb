@@ -114,7 +114,7 @@
                                       (.scanFields scan-emitter wm scan-cols)))
                      :default-tz default-tz
                      :last-known-block (when metadata-mgr
-                                         (.lastEntry (.blocksMetadata metadata-mgr)))
+                                         (.latestBlockMetadata metadata-mgr))
                      :param-fields param-fields}
                     (reify Function
                       (apply [_ emit-opts]
@@ -234,7 +234,7 @@
                            (wrap-cursor wm allocator current-time expr/*snapshot-time* default-tz ref-ctr fields)))
 
                      (catch Throwable t
-                       (.release ref-ctr) 
+                       (.release ref-ctr)
                        (throw t)))))
 
                AutoCloseable

@@ -12,6 +12,7 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
+            [xtdb.check-pbuf :as cpb]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
@@ -100,10 +101,13 @@
 
           (t/is (= {:latest-completed-tx last-tx-key}
                    (-> (meta/latest-block-metadata mm)
-                       (dissoc :tables :next-block-idx))))
+                       (dissoc :tables :block-idx))))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
-                         (.resolve node-dir "objects")))))))
+                         (.resolve node-dir "objects"))
+
+          (cpb/check-pbuf  (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
+                           (.resolve node-dir "objects")))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
   (let [tx (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
@@ -171,7 +175,10 @@
         (tu/finish-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
-                       (.resolve node-dir "objects"))))))
+                       (.resolve node-dir "objects"))
+
+        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
+                        (.resolve node-dir "objects"))))))
 
 (t/deftest test-multi-block-metadata
   (binding [c/*ignore-signal-block?* true]
@@ -198,6 +205,9 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
                        (.resolve node-dir "objects"))
+
+        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
+                        (.resolve node-dir "objects"))
 
         (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
           (t/is (= (types/->field "_id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
@@ -270,7 +280,10 @@
         (tu/finish-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
-                       (.resolve node-dir "objects"))))))
+                       (.resolve node-dir "objects"))
+
+        (cpb/check-pbuf  (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
+                         (.resolve node-dir "objects"))))))
 
 (t/deftest can-stop-node-without-writing-blocks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-blocks")
@@ -332,10 +345,10 @@
 
           (t/is (= {:latest-completed-tx last-tx-key}
                    (-> (meta/latest-block-metadata mm)
-                       (dissoc :tables :next-block-idx))))
+                       (dissoc :tables :block-idx))))
 
           (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-            (t/is (= 4 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/data/l00.+?\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00.+?\.arrow" %) objs))))
@@ -386,7 +399,7 @@
                   (Thread/sleep 250)    ; wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                   (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-                    (t/is (= 5 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))
+                    (t/is (= 5 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
                     (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00.+\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/data/l00.+?\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00.+?\.arrow" %) objs))))
@@ -427,7 +440,7 @@
                       (Thread/sleep 250); wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
                       (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-                        (t/is (= 11 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.transit.json" %) objs))))
+                        (t/is (= 11 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
                         (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00-.+.arrow" %) objs))))
@@ -517,7 +530,10 @@
           (tu/finish-block! node)
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
-                         (.resolve node-dir "objects")))))))
+                         (.resolve node-dir "objects"))
+
+          (cpb/check-pbuf  (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
+                           (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
   (t/is (= {:tx-id 0,
