@@ -177,10 +177,6 @@
 
 ;;; Common specs
 
-(defmethod print-method Path [^Path p, ^Writer w]
-  (.write w "#xt/path ")
-  (print-method (.toString p) w))
-
 (defn ->path ^Path [path-ish]
   (cond
     (instance? Path path-ish) path-ish

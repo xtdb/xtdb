@@ -10,6 +10,7 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.net URI)
            [java.nio ByteBuffer]
+           (java.nio.file Path Paths)
            (java.time Duration Period)
            java.util.List
            [org.apache.arrow.vector PeriodDuration]
@@ -19,7 +20,7 @@
            (xtdb.api.tx TxOp$Sql TxOps)
            (xtdb.tx_ops AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PutDocs Update XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
-           (xtdb.xtql Pipeline From Where With Join LeftJoin Without Return UnionAll OrderBy Limit Offset Aggregate DocsRelation ParamRelation Unify)))
+           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
 
 (defrecord TxKey [tx-id system-time]
   TransactionKey
@@ -199,6 +200,19 @@
 (defn runex-reader [[k message data cause]]
   (xtdb.RuntimeException. k message data cause))
 
+(defmethod print-dup Path [^Path p, ^Writer w]
+  (.write w "#xt/path ")
+  (print-method (.toString p) w))
+
+(defmethod print-method Path [p, w]
+  (print-dup p w))
+
+(defn path-reader [path-ish]
+  (let [uri (URI. path-ish)]
+    (if (.getScheme uri)
+      (Paths/get uri)
+      (Paths/get path-ish (make-array String 0)))))
+
 (do
   (def transit-read-handlers
     (merge transit/default-read-handlers
@@ -228,7 +242,8 @@
             "i32" (transit/read-handler int)
             "i16" (transit/read-handler short)
             "i8" (transit/read-handler byte)
-            "xtdb/byte-array" (transit/read-handler #(ByteBuffer/wrap (Hex/decodeHex (subs % 2))))}))
+            "xtdb/byte-array" (transit/read-handler #(ByteBuffer/wrap (Hex/decodeHex (subs % 2))))
+            "xtdb/path" (transit/read-handler path-reader)}))
 
   (def transit-read-handler-map
     (transit/read-handler-map transit-read-handlers)))
@@ -268,6 +283,7 @@
 
           ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
           ByteBuffer (transit/write-handler "xtdb/byte-array" #(str "0x" (Hex/encodeHexString (bb->ba %))))
+          Path (transit/write-handler "xtdb/path" #(str %))
 
 
           Binding (transit/write-handler "xtdb.query/binding" render-binding)
