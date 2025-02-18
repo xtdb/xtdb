@@ -67,6 +67,8 @@ class RemoteBufferPool(
     private val recordBatchRequests: Counter = meterRegistry.counter("record-batch-requests")
     private val memCacheMisses: Counter = meterRegistry.counter("mem-cache-misses")
     private val diskCacheMisses: Counter = meterRegistry.counter("disk-cache-misses")
+    private val networkWrite: Counter = meterRegistry.counter("buffer-pool.network.write")
+    private val networkRead: Counter = meterRegistry.counter("buffer-pool.network.read")
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -177,7 +179,11 @@ class RemoteBufferPool(
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses.increment()
                 objectStore.getObject(k, tmpFile)
-            }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
+                      }.thenApply {
+                          entry ->
+                          networkRead.increment(entry.path.fileSize().toDouble())
+                          Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry)
+                      }
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0, arrowBlock.metadataLength, arrowBlock.bodyLength,
@@ -203,6 +209,7 @@ class RemoteBufferPool(
                             fileChannel.close()
 
                             val size = tmpPath.fileSize()
+                            networkWrite.increment(size.toDouble())
                             objectStore.uploadArrowFile(key, tmpPath)
 
                             diskCache.put(key, tmpPath)
