@@ -128,7 +128,9 @@
             (then-execute-prepared-query allocator query-opts {:query-timer query-timer :query-error-counter query-error-counter}))
         (catch Exception e
           (when query-error-counter
-            (.increment query-error-counter))
+            (prn 'query-error-counter query-error-counter)
+            (.increment query-error-counter)
+            (prn 'query-error-counter-count (.count query-error-counter)))
           (throw e)))))
 
   (open-xtql-query [this query query-opts]
