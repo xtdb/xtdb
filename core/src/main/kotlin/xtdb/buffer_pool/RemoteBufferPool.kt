@@ -63,6 +63,8 @@ class RemoteBufferPool(
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
     private val diskCacheMisses: Counter? = meterRegistry?.counter("disk-cache-misses")
+    private val networkWrite: Counter? = meterRegistry?.counter("buffer-pool.network.write")
+    private val networkRead: Counter? = meterRegistry?.counter("buffer-pool.network.read")
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -150,6 +152,10 @@ class RemoteBufferPool(
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 objectStore.getObject(k, tmpFile)
+                    .thenApply { entry ->
+                        networkRead?.increment(entry.fileSize().toDouble())
+                        entry
+                    }
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { it.toByteArray() }
 
@@ -179,6 +185,7 @@ class RemoteBufferPool(
             memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
+                networkRead?.increment(k.fileSize().toDouble())
                 objectStore.getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
@@ -216,6 +223,7 @@ class RemoteBufferPool(
 
                             val size = tmpPath.fileSize()
                             objectStore.uploadArrowFile(key, tmpPath)
+                            networkWrite?.increment(size.toDouble())
 
                             diskCache.put(key, tmpPath)
                             return size
@@ -232,6 +240,7 @@ class RemoteBufferPool(
     }
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
+        networkWrite?.increment(buffer.capacity().toDouble())
         objectStore.putObject(key, buffer).get()
     }
 

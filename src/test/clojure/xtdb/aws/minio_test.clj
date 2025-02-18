@@ -14,7 +14,10 @@
            [xtdb.api.storage ObjectStore Storage]
            [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
-           [xtdb.multipart IMultipartUpload SupportsMultipart]))
+           [xtdb.multipart IMultipartUpload SupportsMultipart]
+           io.micrometer.core.instrument.Counter
+           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
+           (io.micrometer.core.instrument.composite CompositeMeterRegistry)))
 
 ;; To run these, run the MinIO and Kafka containers in the docker-compose file
 ;; http://localhost:9001, minioadmin/minioadmin
