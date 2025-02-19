@@ -13,6 +13,7 @@
            [java.nio.charset StandardCharsets]
            [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
+           [java.time.temporal ChronoField]
            [java.util Arrays UUID]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
@@ -764,7 +765,15 @@
     (.parseCaseInsensitive)
     (.append DateTimeFormatter/ISO_LOCAL_DATE)
     (.appendLiteral " ")
-    (.append DateTimeFormatter/ISO_LOCAL_TIME)
+    (.appendValue ChronoField/HOUR_OF_DAY 2)
+    (.appendLiteral ":")
+    (.appendValue ChronoField/MINUTE_OF_HOUR 2)
+    (.optionalStart)
+    (.appendLiteral ":")
+    (.appendValue ChronoField/SECOND_OF_MINUTE 2)
+    (.optionalStart)
+    (.appendFraction ChronoField/MICRO_OF_SECOND, 0, 6, true)
+    (.parseStrict)
     (.toFormatter)))
 
 (def iso-offset-date-time-formatter-with-space
@@ -870,6 +879,11 @@
                  (+ 4 start str-len)
                  (conj arr string)))
         arr))))
+
+(defn get-unix-micros ^long [^IVectorReader rdr idx]
+  (let [[_ unit] (field->col-type (.getField rdr))]
+    (cond-> (.getLong rdr idx)
+      (= :nano unit) (quot 1000))))
 
 (def pg-types
   {:default {:typname "default" :col-type :default :oid 0}
@@ -1006,7 +1020,7 @@
                                   (throw (IllegalArgumentException. (format "Can not parse '%s' as timestamp" text))))))
 
                  :write-binary (fn [_env ^IVectorReader rdr idx]
-                                 (let [micros (- (.getLong rdr idx) unix-pg-epoch-diff-in-micros)
+                                 (let [micros (- (get-unix-micros rdr idx) unix-pg-epoch-diff-in-micros)
                                        bb (doto (ByteBuffer/allocate typlen)
                                             (.putLong micros))]
                                    (.array bb)))
@@ -1436,6 +1450,8 @@
    [:date :day] :date
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz
+   [:timestamp-local :nano] :timestamp
+   [:timestamp-tz :nano] :timestamptz
    :tstz-range :tstz-range
    [:interval :month-day-nano] :interval
    [:list :i32] :_int4
