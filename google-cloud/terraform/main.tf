@@ -1,3 +1,4 @@
+# IAM Service account to be used for GKE workload identity 
 resource "google_service_account" "xtdb_service_account" {
   project = var.project_id
 
@@ -5,6 +6,9 @@ resource "google_service_account" "xtdb_service_account" {
   display_name = "XTDB Service Account"
 }
 
+# Sets up cloud storage bucket used by XTDB
+# For more configuration options, see:
+# https://registry.terraform.io/modules/terraform-google-modules/cloud-storage/google/latest
 module "xtdb_storage" {
   source  = "terraform-google-modules/cloud-storage/google"
   version = "~> 9.0"
@@ -21,6 +25,9 @@ module "xtdb_storage" {
   admins          = [google_service_account.xtdb_service_account.member]
 }
 
+# Sets up VPC network and subnets used by GKE
+# For more configuration options, see:
+# https://registry.terraform.io/modules/terraform-google-modules/network/google/latest
 module "xtdb_vpc" {
   source  = "terraform-google-modules/network/google"
   version = "10.0.0"
@@ -37,6 +44,9 @@ module "xtdb_vpc" {
   ]
 }
 
+# Sets up a GKE cluster to be used by XTDB
+# For more configuration options, see:
+# https://registry.terraform.io/modules/terraform-google-modules/kubernetes-engine/google/latest
 module "kubernetes_engine" {
   source  = "terraform-google-modules/kubernetes-engine/google"
   version = "35.0.1"

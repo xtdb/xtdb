@@ -159,6 +159,7 @@ To deploy a basic set of Kafka resources within GKE, you can make use of the `bi
 
 ```bash
 helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
   --namespace xtdb-deployment \
   --set listeners.client.protocol=PLAINTEXT \
   --set listeners.controller.protocol=PLAINTEXT \
