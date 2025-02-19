@@ -24,7 +24,7 @@ jobs:
       checks: write
     services:
       kafka:
-        image: 'confluentinc/cp-kafka:7.5.1'
+        image: 'confluentinc/cp-kafka:7.8.0'
         ports:
           - '9092:9092'
         env:

@@ -14,7 +14,7 @@
 (def ^:private ^:dynamic *bootstrap-servers* nil)
 
 (defonce ^ConfluentKafkaContainer container
-  (ConfluentKafkaContainer. (DockerImageName/parse "confluentinc/cp-kafka:latest")))
+  (ConfluentKafkaContainer. (DockerImageName/parse "confluentinc/cp-kafka:7.8.0")))
 
 (comment
   ;; start these once when you're developing,

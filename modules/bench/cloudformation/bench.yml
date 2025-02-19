@@ -185,7 +185,7 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: core2
         - Name: 'kafka'
-          Image: confluentinc/cp-kafka:6.1.1
+          Image: confluentinc/cp-kafka:7.8.0
           DependsOn:
             - Condition: 'START'
               ContainerName: 'zookeeper'

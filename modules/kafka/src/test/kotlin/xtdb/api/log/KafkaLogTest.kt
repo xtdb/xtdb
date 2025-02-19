@@ -23,7 +23,7 @@ import kotlin.time.Duration.Companion.seconds
 @Tag("integration")
 class KafkaLogTest {
     companion object {
-        private val container = ConfluentKafkaContainer("confluentinc/cp-kafka:latest")
+        private val container = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
 
         @JvmStatic
         @BeforeAll

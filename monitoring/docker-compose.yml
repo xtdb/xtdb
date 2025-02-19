@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.8.0
     hostname: kafka
     environment:
       KAFKA_BROKER_ID: 1
