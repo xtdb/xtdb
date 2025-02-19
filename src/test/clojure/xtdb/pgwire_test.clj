@@ -1514,7 +1514,7 @@
        (fn [send read]
 
          (t/testing "timestamps are correctly output in text format"
-           ;;note nanosecond timestamp is returned as json
+           ;;note nanosecond timestamp is truncated to microsecond
            (send "SET TIME ZONE '+03:21';\n")
            (read)
            (send "SHOW timezone;\n")
@@ -1533,7 +1533,7 @@
                     "2022-08-16 14:29:03.123456+03:21"
                     "2022-08-16 14:29:03.1234+03:21"
                     "2022-08-16 14:29:03.123456"
-                    "\"2022-08-16T14:29:03.123456789\""]]
+                    "2022-08-16 14:29:03.123456"]]
                   (read)))
 
            (send "SET TIME ZONE 'GMT';\n")
@@ -1554,7 +1554,7 @@
                   "2022-08-16 11:08:03.123456+00:00"
                   "2022-08-16 11:08:03.1234+00:00"
                   "2022-08-16 11:08:03.123456"
-                  "\"2022-08-16T11:08:03.123456789\""]]
+                  "2022-08-16 11:08:03.123456"]]
                 (read))))))))
 
 (deftest test-prepare-select
@@ -2617,3 +2617,24 @@ ORDER BY 1,2;")
                (jdbc/execute! ro-conn ["INSERT INTO foo RECORDS {_id: 2}"])))
 
         (t/is (= [{:_id 1}] (jdbc/execute! ro-conn ["SELECT * FROM foo"])))))))
+
+(t/deftest test-return-nano-ts-as-micro-ts
+  ;;pgjdbc appears to use binary format for ts results but not tstz...
+  (doseq [binary? [false true]
+          {:keys [type val input]}
+          [{:type LocalDateTime :val #xt/date-time "2024-01-01T00:00:01.123456" :input "2024-01-01T00:00:00"}
+           {:type OffsetDateTime :val #xt/offset-date-time "2024-01-01T00:00:01.123456Z" :input "2024-01-01T00:00:00Z"}]
+          :let [q (format "SELECT TIMESTAMP '%s' + INTERVAL 'PT1.123456789S' v" input)]]
+
+      (t/testing (format "pgjdbc - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
+        (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                    stmt (.prepareStatement conn q)]
+          (with-open [rs (.executeQuery stmt)]
+            (.next rs)
+            (t/is (= val (.getObject rs 1 type))))))
+
+      (t/testing (format "pg2 - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
+        (with-open [conn (pg-conn {:binary-encode? binary? :binary-decode? binary?})]
+
+          (t/is (= [{:v val}]
+                   (pg/execute conn q)))))))
