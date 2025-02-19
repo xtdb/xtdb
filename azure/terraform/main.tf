@@ -81,16 +81,23 @@ module "aks" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
+  # Default/System node pool config
+  agents_size               = var.aks_system_pool_vm_size
+  agents_count              = var.aks_system_pool_node_count
+  agents_availability_zones = var.aks_system_pool_availability_zones
+
   # Node pools
   node_pools = {
     application = {
-      name       = "xtdbpool"
-      mode       = "User"
-      vm_size    = var.aks_application_pool_vm_size
-      node_count = var.aks_application_pool_node_count
-      zones      = var.aks_application_pool_availability_zones
-      labels = {
-        "nodepool" = "xtdbpool"
+      name              = "xtdbpool"
+      mode              = "User"
+      vm_size           = var.aks_application_pool_vm_size
+      node_count        = var.aks_application_pool_node_count
+      zones             = var.aks_application_pool_availability_zones
+      os_disk_type      = var.aks_application_pool_os_disk_type
+      os_disk_size_gb   = var.aks_application_pool_os_disk_size_gb
+      node_labels = {
+        "node_pool" = "xtdbpool"
       }
     }
   }
@@ -101,14 +108,3 @@ module "aks" {
   # Network
   rbac_aad = false
 }
-
-# Federated Identity Credential for AKS 
-resource "azurerm_federated_identity_credential" "xtdb_aks" {
-  name                = "xtdb-aks-worker"
-  resource_group_name = var.resource_group_name
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = module.aks.oidc_issuer_url
-  parent_id           = azurerm_user_assigned_identity.xtdb_infra.id
-  subject             = "system:serviceaccount:${var.kubernetes_namespace}:${var.kubernetes_service_account_name}"
-}
-

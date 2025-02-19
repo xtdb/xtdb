@@ -4,29 +4,5 @@ metadata:
   name: xtdb-yaml-config
   namespace: {{ .Release.Namespace }}
 data:
-  {{- if .Values.xtdbConfig.yamlConfigOverride }}
-  {{ .Values.xtdbConfig.yamlConfigOverride | toYaml | nindent 2 }}
-  {{- else }}
   xtdbconfig.yaml: |-
-    server:
-      port: 5432
-
-    log: !Kafka
-      bootstrapServers: {{ required "xtdbConfig.kafkaBootstrapServers is required." .Values.xtdbConfig.kafkaBootstrapServers }}
-      topic: {{ required "xtdbConfig.kafkaLogTopic is required." .Values.xtdbConfig.kafkaLogTopic }}
-
-    storage: !Remote
-      objectStore: !Azure
-        storageAccount: {{ required "xtdbConfig.storageAccountName is required." .Values.xtdbConfig.storageAccountName }}
-        container: {{ required "xtdbConfig.storageContainerName is required." .Values.xtdbConfig.storageContainerName }}
-        prefix: "xtdb-object-store"
-        userManagedIdentityClientId: {{ required "xtdbConfig.userManagedIdentityClientId is required." .Values.xtdbConfig.userManagedIdentityClientId }}
-      localDiskCache: /var/lib/xtdb/buffers/disk-cache
-
-    healthz:
-      port: 8080
-
-    modules:
-    - !HttpServer
-      port: 3000
-  {{- end }}
+    {{ .Values.xtdbConfig.nodeConfig | nindent 4 }}
