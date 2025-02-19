@@ -1944,8 +1944,7 @@
     (t/is (= [{:id 1}]
              (xt/q node
                    '(-> (from :docs2 [{:xt/id id} from-date])
-                        (where (< from-date #xt/date "2500-01-01")
-                               (< from-date #xt/date "2500-01-01"))
+                        (where (< from-date #xt/date "2500-01-01"))
                         (return id)))))))
 
 (t/deftest bug-non-namespaced-nested-keys-747
