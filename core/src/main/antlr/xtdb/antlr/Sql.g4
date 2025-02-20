@@ -592,7 +592,7 @@ joinSpecification
     ;
 
 joinType : 'INNER' | outerJoinType 'OUTER'? ;
-outerJoinType : 'LEFT' | 'RIGHT' | 'FULL' ;
+outerJoinType : 'LEFT' | 'RIGHT';
 
 /// §7.8 <where clause>
 
