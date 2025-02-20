@@ -2778,3 +2778,9 @@ UNION ALL
   (t/is (thrown-with-msg? IllegalArgumentException #"Table projection mismatch"
                           (xt/q tu/*node* "FROM generate_series (1, 4) xs (x, foo)")))
   (t/is (false? (execute-tx->committed? "INSERT INTO docs (_id) FROM generate_series (1, 4) xs (x, foo)"))))
+
+(t/deftest test-full-outer-join
+  (t/is
+   (thrown-with-msg? IllegalArgumentException #"mismatched input 'FULL'"
+                     (plan-sql "SELECT * FROM d1 FULL OUTER JOIN d2 ON true"
+                               {:table-info {"d1" #{"_id" "bar"} "d2" #{"_id" "foo"}}}))))
