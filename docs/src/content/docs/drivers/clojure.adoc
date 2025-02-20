@@ -11,7 +11,9 @@ SQL queries can be executed using the XTDB JDBC driver:
 
 [source,clojure]
 ----
-{:deps {;; https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
+{:deps {org.clojure/clojure {:mvn/version "1.12.0"} ; minimum reqmt
+
+        ;; https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
         com.xtdb/xtdb-jdbc {:mvn/version "XTDB_VERSION"}
 
         ;; https://mvnrepository.com/artifact/com/github/seancorfield/next.jdbc
@@ -58,7 +60,7 @@ You can run XTDB nodes either in-process, or connect to a remote XTDB server via
 
 [source,clojure]
 ----
-{:deps {org.clojure/clojure {:mvn/version "1.12.0"}
+{:deps {org.clojure/clojure {:mvn/version "1.12.0"} ; minimum reqmt
 
         ;; xtdb-api for the main public API, for both remote-client and in-process nodes
         com.xtdb/xtdb-api {:mvn/version "XTDB_VERSION"}
