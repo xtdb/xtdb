@@ -33,6 +33,7 @@ services:
     hostname: xtdb-node-1
     ports:
       - '5432:5432'
+      - '8080:8080'
       - '3000:3000'
     environment:
       XTDB_NODE_ID: xtdb-node-1 # persistent node id for labelling grafana metrics
@@ -49,6 +50,7 @@ services:
     hostname: xtdb-node-2
     ports:
       - '5433:5432'
+      - '8081:8080'
       - '3001:3000'
     environment:
       XTDB_NODE_ID: xtdb-node-2 # persistent node id for labelling grafana metrics

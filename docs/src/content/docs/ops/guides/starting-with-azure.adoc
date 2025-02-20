@@ -289,7 +289,9 @@ You can use this IP to access the XTDB cluster via the Postgres Wire Server (on 
 To check the status of the XTDB cluster using the HTTP server, run:
 
 ```bash
-curl -X POST http://$ExternalIP:3000/status
+curl -X POST http://$ExternalIP:8080/healthz/alive
+
+# alternatively `/healthz/started`, `/healthz/ready`
 ```
 
 If the above command succeeds, you now have a load-balanced XTDB cluster accessible over the internet.

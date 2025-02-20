@@ -23,10 +23,18 @@ You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server 
 # `nightly`: built every night from `main` branch
 # `edge`: latest nightly plus urgent fixes
 
-docker run -it --pull=always -p 6543:3000 -p 5432:5432 ghcr.io/xtdb/xtdb
+docker run -it --pull=always \
+  -p 5432:5432 \
+  -p 8080:8080 \
+  -p 3000:3000 \
+  ghcr.io/xtdb/xtdb
+
+# 5432: Postgres wire-compatible server (primary API)
+# 8080: Monitoring/healthz HTTP endpoints
+# 3000: HTTP query/tx API
 ----
 
-This command starts a Postgres wire-compatible endpoint on port 5432 and an HTTP server available at http://localhost:6543
+This command starts a Postgres wire-compatible endpoint on port 5432 and an HTTP server available at http://localhost:3000
 
 By default your data will only be stored transiently using a local directory within the Docker container, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
 
@@ -34,24 +42,24 @@ After seeing a 'Node started' log message (e.g. `09:00:00 | INFO  xtdb.cli | Nod
 
 [source,bash]
 ----
-curl http://localhost:6543/status
-----
+curl http://localhost:8080/healthz/alive
 
-If everything is running you will see this response `{"latestCompletedTx":null,"latestSubmittedTx":null}`
+# Alive.
+----
 
 == Connect with `psql`
 
 [source,bash]
 ----
 # if you have Postgres installed, psql is already available
-psql -h localhost -p 5432
+psql -h localhost -U xtdb xtdb
 ----
 
 == Run your first query
 
 [source, text]
 ----
-psql (16.2, server 14)
+psql (16.2, server 16)
 Type "help" for help.
 
 user=> SELECT 'foo' AS bar;
@@ -63,4 +71,4 @@ user=> SELECT 'foo' AS bar;
 
 ----
 
-Next up, if you haven't already run through the Quickstart already, you probably want to start there with inserting data, running your first queries, and learning about XTDB's novel capabilities: link:/quickstart/insert-and-query[Let's INSERT some data]!
+Next up, if you haven't already run through the Quickstart already, you probably want to start there with inserting data, running your first queries, and learning about XTDB's novel capabilities: link:/quickstart/sql-overview[let's INSERT some data]!
