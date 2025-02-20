@@ -146,6 +146,8 @@ interface VectorReader : AutoCloseable {
             override fun valueReader(pos: VectorPosition) = vector.valueReader(pos)
 
             override fun close() = vector.close()
+
+            override fun toString(): String = "(NewToOldAdaptor{vector=$vector})"
         }
 
         private class OldToNewAdapter(private val old: IVectorReader) : VectorReader {
@@ -182,6 +184,8 @@ interface VectorReader : AutoCloseable {
             override fun rowCopier(dest: VectorWriter) = error("rowCopier")
 
             override fun close() = old.close()
+
+            override fun toString(): String = "(OldToNewAdaptor{oldReader=$old})"
         }
 
         @JvmStatic
