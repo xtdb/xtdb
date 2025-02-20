@@ -23,7 +23,7 @@ directlyExecutableStatement
     | prepareStatement #PrepareStmt
     | executeStatement #ExecuteStmt
     | ASSERT searchCondition #AssertStatement
-    | (START TRANSACTION | BEGIN) transactionCharacteristics? # StartTransactionStatement
+    | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
     | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
     | COMMIT # CommitStatement
     | ROLLBACK # RollbackStatement

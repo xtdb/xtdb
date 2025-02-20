@@ -1931,6 +1931,18 @@ ORDER BY t.oid DESC LIMIT 1"
 
              (q conn ["SELECT * FROM foo"])))))
 
+(t/deftest test-pg2-begin-4182
+  (with-open [conn (pg-conn {})]
+    (pg/begin conn)
+    (pg/execute conn "INSERT INTO foo RECORDS {_id: 1}")
+    (pg/commit conn)
+
+    (pg/with-transaction [tx conn]
+      (pg/execute conn "INSERT INTO foo RECORDS {_id: 2}"))
+
+    (t/is (= (pg/execute conn "SELECT * FROM foo ORDER BY _id")
+             [{:_id 1} {:_id 2}]))))
+
 (deftest test-pg2-transit-param
   (with-open [conn (pg-conn {})]
     (pg/execute conn
