@@ -980,3 +980,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:xt/id 1, :a 1, :b 1.5} {:xt/id 2, :b 1, :a 0.1} {:xt/id 3, :a 0.1}]
            (xt/q tu/*node* ["SELECT * FROM docs ORDER BY _id"]))))
+
+(deftest check-explicitly-for-l0-content-metadat-4185
+  (with-open [node (xtn/start-node {:compactor {:threads 0}})]
+    (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :a #inst "2000-01-01"}]] )
+    (tu/finish-block! node)
+
+    (t/is (= [{:xt/id 1}]
+             (xt/q node ["SELECT _id FROM docs WHERE a < ?" #xt/date "2500-01-01"])))))

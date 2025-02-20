@@ -183,11 +183,12 @@
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
-                           `(if ~col-sym
+                           `(if (and ~col-sym ~content-metadata-present-sym)
                               (let [~expr/idx-sym ~idx-code]
                                 (when (>= ~expr/idx-sym 0)
                                   ~(continue (fn [_ code] code))))
-                              (not ~content-metadata-present-sym))))}))))
+                              ;; no content-metadata, we can't filter the pages
+                              true)))}))))
 
 (defmethod ewalk/walk-expr :test-metadata [inner outer expr]
   (outer (-> expr (update :value-expr inner))))
