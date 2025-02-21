@@ -7,20 +7,24 @@
             xtdb.expression.temporal
             [xtdb.object-store :as os]
             [xtdb.serde :as serde]
+            [xtdb.trie :as  trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (com.github.benmanes.caffeine.cache Cache Caffeine)
+  (:import (clojure.lang MapEntry)
+           (com.github.benmanes.caffeine.cache Cache Caffeine)
+           (com.google.protobuf ByteString)
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util HashMap HashSet Map NavigableMap TreeMap)
+           (java.util HashMap HashSet Map ArrayList)
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow Relation Vector VectorReader VectorWriter)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
            xtdb.BufferPool
+           (xtdb.arrow Relation Vector VectorReader VectorWriter)
+           (xtdb.block.proto TableBlock)
            (xtdb.metadata ITableMetadata PageIndexKey PageMetadataWriter)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
@@ -54,7 +58,7 @@
 
 (definterface IMetadataManager
   (^void finishBlock [^long blockIdx, newBlockMetadata])
-  (^java.util.NavigableMap blocksMetadata [])
+  (^java.util.Map latestBlockMetadata [])
   (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
@@ -76,22 +80,72 @@
 (defn- ->block-metadata-obj-key [block-idx]
   (.resolve block-metadata-path (format "b%s.transit.json" (util/->lex-hex-string block-idx))))
 
-(defn- write-block-metadata ^java.nio.ByteBuffer [block-meta]
+(def ^Path block-table-metadata-path (util/->path "blocks"))
+
+(defn- write-block-metadata ^java.nio.ByteBuffer [latest-completed-tx table-block-paths]
   (with-open [os (ByteArrayOutputStream.)]
     (let [w (transit/writer os :json {:handlers metadata-write-handler-map})]
-      (transit/write w block-meta))
+      (transit/write w {:latest-completed-tx latest-completed-tx
+                        :table-block-paths table-block-paths}))
     (ByteBuffer/wrap (.toByteArray os))))
 
-(defn- merge-fields [fields {:keys [tables]}]
-  (reduce (fn [fields [table {new-fields :fields}]]
-            (update fields table
-                    (fn [fields new-fields]
-                      (->> (merge-with types/merge-fields fields new-fields)
-                           (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
-                           (into {})))
-                    new-fields))
-          fields
-          tables))
+(defn- bytes->clj [^bytes bytes]
+  (with-open [is (ByteArrayInputStream. bytes)]
+    (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
+      (transit/read rdr))))
+
+(def ^:private table-block-path-regex
+  #"tables\/([\w$]+)\/blocks\/(?:b(\p{XDigit}+))(\.binpb)$")
+
+(defn parse-table-block-key [^Path table-block-path]
+  (when-let [[_ table-name block-idx-str] (re-find table-block-path-regex (str table-block-path))]
+    {:table-name (trie/table-dir->table-name table-name)
+     :block-idx  (util/<-lex-hex-string block-idx-str)}))
+
+(comment
+  (parse-table-block-key "tables/xt$txs/blocks/b00.binpb"))
+
+(defn- ->table-block-metadata-obj-key [^Path table-path block-idx]
+  (.resolve (.resolve table-path block-table-metadata-path)
+            (format "b%s.binpb" (util/->lex-hex-string block-idx))))
+
+(defn- write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count]
+  (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
+                         (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
+                         (.setRowCount row-count))
+                       (.build)
+                       (.toByteArray))))
+
+(defn- <-table-block [^TableBlock table-block]
+  (let [^Schema schema
+        (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]
+    {:row-count (.getRowCount table-block)
+     :fields (->> (for [^Field field (.getFields schema)]
+                    (MapEntry/create (.getName field) field))
+                  (into {}))}))
+
+(defn- merge-fields [old-fields new-fields]
+  (->> (merge-with types/merge-fields old-fields new-fields)
+       (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
+       (into {})))
+
+(defn- merge-tables [old-table {:keys [row-count fields] :as delta-table}]
+  (cond-> old-table
+    delta-table (-> (update :row-count (fnil + 0) row-count)
+                    (update :fields merge-fields fields))))
+
+(defn- new-block [block-idx
+                  {:keys [tables] :as _old-block-medata}
+                  {new-delta-tables :tables :keys [latest-completed-tx] :as _new-block-metadata}]
+  (let [table-names (set (concat (keys tables) (keys new-delta-tables)))]
+    {:block-idx block-idx
+     :latest-completed-tx latest-completed-tx
+     :tables (->> table-names
+                  (map (fn [table-name]
+                         (MapEntry/create table-name
+                                          (merge-tables (get tables table-name)
+                                                        (get new-delta-tables table-name)))))
+                  (into {}))}))
 
 (def metadata-col-type
   '[:list
@@ -374,65 +428,86 @@
 
 (deftype MetadataManager [^BufferPool buffer-pool
                           ^Cache table-metadata-idx-cache
-                          ^NavigableMap blocks-metadata
-                          ^:volatile-mutable ^Map fields]
+                          ^:volatile-mutable ^Map last-block-metadata
+                          ^:volatile-mutable ^Map table->fields]
   IMetadataManager
+  ;; the new-block-metadata is only the delta for the new block
   (finishBlock [this block-idx new-block-metadata]
-    (.putObject buffer-pool (->block-metadata-obj-key block-idx) (write-block-metadata new-block-metadata))
-    (set! (.fields this) (merge-fields fields new-block-metadata))
-    (.put blocks-metadata block-idx new-block-metadata))
+    (when (or (nil? (:block-idx last-block-metadata)) (< ^long (:block-idx last-block-metadata) block-idx))
+      (let [{:keys [latest-completed-tx] :as new-block-metadata}
+            (new-block block-idx last-block-metadata new-block-metadata)
+
+            new-table->fields (-> new-block-metadata :tables (update-vals :fields))
+            table-block-paths (ArrayList.)]
+
+        (doseq [[table-name col-name->-field] new-table->fields]
+          (let [row-count (get-in new-block-metadata [:tables table-name :row-count])
+                fields (for [[col-name field] col-name->-field]
+                         (types/field-with-name field col-name))
+                table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)]
+            (.add table-block-paths table-block-path)
+            (.putObject buffer-pool table-block-path
+                        (write-table-block-data (Schema. fields) row-count))))
+        (.putObject buffer-pool (->block-metadata-obj-key block-idx)
+                    (write-block-metadata latest-completed-tx table-block-paths))
+        (set! (.table->fields this) new-table->fields)
+        (set! (.last-block-metadata this) new-block-metadata))))
 
   (openTableMetadata [_ file-path]
     (->table-metadata buffer-pool file-path table-metadata-idx-cache))
 
-  (blocksMetadata [_] blocks-metadata)
+  (latestBlockMetadata [_] last-block-metadata)
   (columnField [_ table-name col-name]
-    (some-> (get fields table-name)
+    (some-> (get table->fields table-name)
             (get col-name (types/->field col-name #xt.arrow/type :null true))))
 
-  (columnFields [_ table-name] (get fields table-name))
-  (allColumnFields [_] fields)
-  (allTableNames [_] (set (keys fields)))
+  (columnFields [_ table-name] (get table->fields table-name))
+  (allColumnFields [_] table->fields)
+  (allTableNames [_] (set (keys table->fields)))
 
   AutoCloseable
-  (close [_]
-    (.clear blocks-metadata)))
+  (close [_]))
 
 (defn latest-block-metadata [^IMetadataManager metadata-mgr]
-  (let [entry (.lastEntry (.blocksMetadata metadata-mgr))]
-    (when entry
-      (-> (val entry)
-          (assoc :next-block-idx (inc ^long (key entry)))))))
+  (.latestBlockMetadata metadata-mgr))
 
-(defn- load-blocks-metadata ^java.util.NavigableMap [{:keys [^BufferPool buffer-pool]}]
-  (let [bm (TreeMap.)]
-    (doseq [bm-obj (.listAllObjects buffer-pool block-metadata-path)
-            :let [{bm-obj-key :key} (os/<-StoredObject bm-obj)]]
-      (with-open [is (ByteArrayInputStream. (.getByteArray buffer-pool bm-obj-key))]
-        (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
-          (.put bm (obj-key->block-idx bm-obj-key) (transit/read rdr)))))
-    bm))
+(defn- load-latest-block-metadata ^java.util.Map [{:keys [^BufferPool buffer-pool]}]
+  ;; TODO is it ok here to only get the last one?
+  (when-let [bm-obj (last (.listAllObjects buffer-pool block-metadata-path))]
+    (let [{bm-obj-key :key} (os/<-StoredObject bm-obj)
+          {:keys [latest-completed-tx table-block-paths]} (bytes->clj (.getByteArray buffer-pool bm-obj-key))]
+      {:block-idx (obj-key->block-idx bm-obj-key)
+       :latest-completed-tx latest-completed-tx
+       :tables (->> (for [table-block-path table-block-paths
+                          :let [{:keys [table-name]} (parse-table-block-key table-block-path)
+                                table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
+                      (MapEntry/create table-name (<-table-block table-block)))
+                    (into {}))})))
 
 (comment
   (require '[clojure.java.io :as io])
 
-  (with-open [is (io/input-stream "src/test/resources/xtdb/indexer-test/can-build-live-index/v02/chunk-metadata/00.transit.json")]
+  (with-open [is (io/input-stream "src/test/resources/xtdb/indexer-test/can-build-live-index/v06/blocks/b00.transit.json")]
     (let [rdr (transit/reader is :json {:handlers metadata-read-handler-map})]
-      (transit/read rdr))))
+      (transit/read rdr)))
+
+  )
 
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
+
 (defmethod ig/init-key ::metadata-manager [_ {:keys [cache-size ^BufferPool buffer-pool], :or {cache-size 128} :as deps}]
-  (let [blocks-metadata (load-blocks-metadata deps)
+  (let [last-block-metadata (load-latest-block-metadata deps)
         table-metadata-cache (-> (Caffeine/newBuilder)
                                  (.maximumSize cache-size)
                                  (.build))]
     (MetadataManager. buffer-pool
                       table-metadata-cache
-                      blocks-metadata
-                      (->> (vals blocks-metadata) (reduce merge-fields {})))))
+                      ;; TODO is nil here an issue?
+                      last-block-metadata
+                      (or (-> last-block-metadata :tables (update-vals :fields)) {}))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))

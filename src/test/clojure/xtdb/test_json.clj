@@ -84,13 +84,15 @@
            :let [file-name (str (.getFileName path))
                  file-type (cond
                              (str/ends-with? file-name ".arrow") :arrow
-                             (str/ends-with? file-name ".transit.json") :transit)]
+                             (str/ends-with? file-name ".transit.json") :transit
+                             ;; TODO this should like not go in test-json
+                             (str/ends-with? file-name ".binpb") :protobuf)]
            :when (and file-type
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]
      (doto (case file-type
              :arrow (write-arrow-json-file path)
-             :transit path)
+             (:transit :protobuf) path)
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(copy-expected-file expected-dir actual-dir))) ;; <<no-commit>>
 
@@ -102,7 +104,10 @@
        (check-arrow-json-file expected actual)
 
        (.endsWith file-name ".transit.json")
-       (check-transit-json-file expected actual)))))
+       (check-transit-json-file expected actual)
+
+       (.endsWith file-name ".binpb")
+       (= (seq (Files/readAllBytes expected)) (seq (Files/readAllBytes actual)))))))
 
 (defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]

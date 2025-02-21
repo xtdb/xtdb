@@ -58,6 +58,7 @@ mockk={ group="io.mockk", name="mockk", version="1.13.9" }
 kaml={ group="com.charleskorn.kaml", name="kaml", version="0.56.0" }
 
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 
 jsonista={ group="metosin", name="jsonista", version="0.3.3" }
 muuntaja={ group="metosin", name="muuntaja", version.ref="muuntaja" }

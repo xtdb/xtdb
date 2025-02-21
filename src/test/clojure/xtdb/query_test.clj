@@ -48,7 +48,7 @@
                          (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
                                            {:node node, :args {:name "Ivan"}})))))]
 
-        (t/is (= #{0 1} (set (keys (.blocksMetadata metadata-mgr)))))
+        (t/is (= 1 (:block-idx (.latestBlockMetadata metadata-mgr))))
 
         (util/with-open [args (tu/open-args {:name "Ivan"})]
           (t/testing "only needs to scan block 1, page 1"
@@ -103,7 +103,7 @@
     (tu/finish-block! node)
     (c/compact-all! node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-      (t/is (= #{0 1} (set (keys (.blocksMetadata metadata-mgr)))))
+      (t/is (= 1 (:block-idx (.latestBlockMetadata metadata-mgr))))
 
       (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]
