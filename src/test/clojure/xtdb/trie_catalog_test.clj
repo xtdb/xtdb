@@ -103,15 +103,15 @@
         (tu/finish-block! node)
 
         (t/is (= #{"public/foo" "xt/txs"} (cat/table-names cat)))
-        (t/is (= [{:trie-key "l00-b01", :state :live}
-                  {:trie-key "l00-b00", :state :live}]
+        (t/is (= [{:trie-key "l00-b00", :state :live}
+                  {:trie-key "l00-b01", :state :live}]
                  (->> (cat/current-tries (cat/trie-state cat "public/foo"))
                       (mapv #(select-keys % [:trie-key :state])))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (cat/trie-catalog node)]
         (t/is (= #{"public/foo" "xt/txs"} (cat/table-names cat)))
-        (t/is (= [{:trie-key "l00-b01", :state :live}
-                  {:trie-key "l00-b00", :state :live}]
+        (t/is (= [{:trie-key "l00-b00", :state :live}
+                  {:trie-key "l00-b01", :state :live}]
                  (->> (cat/current-tries (cat/trie-state cat "public/foo"))
                       (mapv #(select-keys % [:trie-key :state])))))))))

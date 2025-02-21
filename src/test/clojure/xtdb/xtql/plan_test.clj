@@ -6,6 +6,7 @@
 (ns xtdb.xtql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.james-bond :as bond]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -2084,6 +2085,25 @@
                                            #xt/zoned-date-time "2020-01-06T00:00Z")}}
            (set (xt/q node '(from :ints {:bind [{:n n :xt/id 0 :xt/valid-time valid-time}]
                                          :for-valid-time (in #inst "2020-01-01" #inst "2020-01-06")})))))))
+
+
+(t/deftest sort-current-tries-by-block-index-2531
+  (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}
+                                                          :indexer {:rows-per-block 1}
+                                                          :log [:in-memory {:instant-src (tu/->mock-clock)}]}))]
+
+    ;; creating l00-00
+    (xt/submit-tx node [[:put-docs :ints {:xt/id 0 :v 0}]])
+    ;; creating l01-00
+    (c/compact-all! node)
+    ;; creating l00-01, bounds v0 in valid-time, but not relevant for the query
+    (xt/submit-tx node [[:put-docs :ints {:xt/id 0 :v 1}]])
+
+    (t/is (= [{:v 0,
+               :valid-time (tu/->tstz-range #xt/zoned-date-time "2020-01-01T00:00Z",
+                                            #xt/zoned-date-time "2020-01-02T00:00Z")}]
+             (xt/q node '(from :ints {:bind [{:v v :xt/id 0 :xt/valid-time valid-time}]
+                                      :for-valid-time (in #inst "2020-01-01" #inst "2020-01-02")}))))))
 
 (deftest test-no-zero-width-intervals
   (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id 1 :v 1}]

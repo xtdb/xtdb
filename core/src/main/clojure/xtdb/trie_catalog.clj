@@ -159,7 +159,8 @@
 (defn current-tries [tries]
   (->> tries
        (into [] (comp (mapcat val)
-                      (filter #(= (:state %) :live))))))
+                      (filter #(= (:state %) :live))))
+       (sort-by :block-idx)))
 
 (defrecord TrieCatalog [^Map !table-tries, ^long l1-size-limit]
   xtdb.trie.TrieCatalog
