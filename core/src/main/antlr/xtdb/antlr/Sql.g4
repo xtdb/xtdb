@@ -154,7 +154,7 @@ dataType
     | 'TIMESTAMP' ('(' precision ')')? withOrWithoutTimeZone? # TimestampType
     | 'TIMESTAMPTZ' #TimestampTzType
     | 'INTERVAL' intervalQualifier? # IntervalType
-    | ('VARCHAR' | 'TEXT') # CharacterStringType
+    | ('VARCHAR' | 'TEXT' | 'NAME') # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'REGCLASS' #RegClassType
@@ -294,7 +294,7 @@ exprPrimary
     | 'GREATEST' '(' expr (',' expr)* ')' # GreatestFunction
 
     // string value functions
-    | 'SUBSTRING' '('
+    | SUBSTRING_SYM '('
         expr
         ('FROM'? startPosition ( 'FOR'? stringLength )? ( 'USING' charLengthUnits )?
          | ',' startPosition (',' stringLength)? )
@@ -324,8 +324,17 @@ exprPrimary
     | (schemaName '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
     | (schemaName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
     | (schemaName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
+    | (schemaName '.')? 'PG_STAT_GET_NUMSCANS' '(' expr ')' # PgStatGetNumscansFunction
+    | (schemaName '.')? 'PG_TABLESPACE_LOCATION' '(' expr ')' # PgTablespaceLocationFunction
     | PG_SLEEP '(' sleepSeconds=expr ')' # PgSleepFunction
     | PG_SLEEP_FOR '(' sleepPeriod=expr ')' # PgSleepForFunction
+
+    | (schemaName '.')? 'FORMAT_TYPE' ('(' expr ',' expr ')')? # PgFormatTypeFunction
+    | (schemaName '.')? 'PG_GET_PARTKEYDEF' ('(' expr ')')? # PgGetPartkeydefFunction
+    | (schemaName '.')? 'PG_TOTAL_RELATION_SIZE' ('(' expr ')')? # PgTotalRelationSizeFunction
+    | (schemaName '.')? 'PG_RELATION_SIZE' ('(' expr ')')? # PgRelationSizeFunction
+    | (schemaName '.')? 'PG_GET_CONSTRAINTDEF' ('(' expr ')')? # PgGetConstraintdefFunction
+    | (schemaName '.')? 'PG_GET_RULEDEF' ('(' expr ')')? # PgGetRuledefFunction
 
     | currentInstantFunction # CurrentInstantFunction0
     | 'CURRENT_SETTING' '(' expr ')' #CurrentSettingFunction
