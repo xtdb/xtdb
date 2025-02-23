@@ -71,4 +71,7 @@ user=> SELECT 'foo' AS bar;
 
 ----
 
-Next up, if you haven't already run through the Quickstart already, you probably want to start there with inserting data, running your first queries, and learning about XTDB's novel capabilities: link:/quickstart/sql-overview[let's INSERT some data]!
+Next up:
+
+* if you haven't already run through the Quickstart already, you probably want to start there with inserting data, running your first queries, and learning about XTDB's novel capabilities: link:/quickstart/sql-overview[let's INSERT some data]!
+* to connect to XTDB from your language/tool of choice, have a look at XTDB's link:/drivers[driver support].
