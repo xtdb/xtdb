@@ -698,8 +698,8 @@ queryTerm
     ;
 
 queryTail
-    : whereClause (groupByClause? havingClause? selectClause)?
-    | groupByClause? havingClause? selectClause
+    : whereClause # WhereTail
+    | groupByClause? havingClause? selectClause # SelectTail
     ;
 
 orderByClause : 'ORDER' 'BY' sortSpecificationList ;

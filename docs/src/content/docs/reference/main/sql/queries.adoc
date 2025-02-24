@@ -56,11 +56,11 @@ return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
 const selectClause = "<select clause>"
 const fromClause = "<from clause>"
 const predicates = rr.OneOrMore(rr.Optional('<predicate>', 'skip'), ',')
-const whereClause = rr.Optional(rr.Sequence("WHERE", predicates), "skip")
+const whereClause = rr.Sequence("WHERE", predicates)
 const groupByClause = rr.Optional(rr.Sequence("GROUP", "BY", rr.OneOrMore("<value>", ",")), "skip")
 const havingClause = rr.Optional(rr.Sequence("HAVING", predicates), "skip")
-const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), whereClause, groupByClause, havingClause)
-const fromFirst = rr.Sequence(fromClause, rr.OneOrMore(rr.Sequence(whereClause, rr.Optional(rr.Sequence(groupByClause, havingClause, selectClause), 'skip'))))
+const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), rr.Optional(whereClause, "skip"), groupByClause, havingClause)
+const fromFirst = rr.Sequence(fromClause, rr.OneOrMore(rr.Choice(0, rr.Skip(), whereClause, rr.Sequence(groupByClause, havingClause, selectClause))))
 
 const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
 const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")

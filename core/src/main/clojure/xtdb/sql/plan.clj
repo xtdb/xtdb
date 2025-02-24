@@ -2330,15 +2330,20 @@
                               select-clause (wrap-query-tail this (.groupByClause ctx) (.havingClause ctx) select-clause order-by-ctx))))
 
                 (letfn [(wrap-tail [order-by-ctx, rel, ^Sql$QueryTailContext tail]
-                          (let [where-clause (some-> tail .whereClause)
-                                select-clause (some-> tail .selectClause)]
-                            (-> rel
-                                (cond-> where-clause (wrap-where this where-clause)
-                                        select-clause (wrap-query-tail this (.groupByClause tail) (.havingClause tail) select-clause order-by-ctx)))))]
+                          (.accept tail
+                                   (reify SqlVisitor
+                                     (visitWhereTail [_ tail]
+                                       (wrap-where rel this (.whereClause tail)))
+
+                                     (visitSelectTail [_ tail]
+                                       (wrap-query-tail rel this (.groupByClause tail) (.havingClause tail) (.selectClause tail) order-by-ctx)))))]
+
                   (let [tails (.queryTail ctx)]
                     (as-> qs-scope rel
                       (reduce (partial wrap-tail nil) rel (butlast tails))
-                      (wrap-tail order-by-ctx rel (last tails))))))
+                      (if-let [tail (last tails)]
+                        (wrap-tail order-by-ctx rel tail)
+                        rel)))))
 
           projections (->> (find-cols rel nil)
                            (into [] (map-indexed ->projected-col-expr)))
