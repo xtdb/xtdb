@@ -2784,3 +2784,15 @@ UNION ALL
    (thrown-with-msg? IllegalArgumentException #"mismatched input 'FULL'"
                      (plan-sql "SELECT * FROM d1 FULL OUTER JOIN d2 ON true"
                                {:table-info {"d1" #{"_id" "bar"} "d2" #{"_id" "foo"}}}))))
+
+(t/deftest order-by-ignored-4193
+  (xt/submit-tx tu/*node* ["INSERT INTO docs (_id, col1, w) VALUES (1, 'foo', 'x')"
+                           "INSERT INTO docs RECORDS {_id: 2, col1: 'bar', col2: 1, w:'y'}"
+                           "INSERT INTO docs RECORDS {_id: 3, col1: 'baz', col2: 1, w:'z'}"])
+
+  (t/is (= [{:t "bar"} {:t "baz"} {:t "foo"}]
+           (xt/q tu/*node*
+                 "FROM docs d1
+                  SELECT d1.col1 t
+                  WHERE t IS NOT NULL
+                  ORDER BY t asc"))))

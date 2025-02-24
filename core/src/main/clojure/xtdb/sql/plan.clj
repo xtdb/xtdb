@@ -2106,7 +2106,7 @@
                                      nil
                                      table-refs)))
 
-(defn- wrap-where [scope, {:keys [env]}, ^Sql$WhereClauseContext where-clause]
+(defn- wrap-where [scope, {:keys [env]}, ^Sql$WhereClauseContext where-clause, order-by-ctx]
   (let [!subqs (HashMap.)
         predicate (-> (.searchCondition where-clause)
                       (.accept (map->ExprPlanVisitor {:env env, :scope scope, :!subqs !subqs})))]
@@ -2116,10 +2116,16 @@
       (-find-cols [_ chain excl-cols] (-find-cols scope chain excl-cols))
 
       PlanRelation
-      (plan-rel [_]
-        (-> (plan-rel scope)
-            (apply-sqs !subqs)
-            (wrap-predicates predicate))))))
+      (plan-rel [this]
+        (letfn [(wrap-ob [plan order-by-ctx]
+                  (let [col-syms (available-cols this)]
+                    (-> plan
+                        (wrap-isolated-ob col-syms (plan-order-by order-by-ctx env nil col-syms)))))]
+
+          (-> (plan-rel scope)
+              (apply-sqs !subqs)
+              (wrap-predicates predicate)
+              (cond-> order-by-ctx (wrap-ob order-by-ctx))))))))
 
 (defn- wrap-query-tail [scope {:keys [env]}
                         ^Sql$GroupByClauseContext group-by-clause
@@ -2326,14 +2332,14 @@
           rel (if-let [select-clause (.selectClause ctx)]
                 (let [where-clause (.whereClause ctx)]
                   (-> qs-scope
-                      (cond-> where-clause (wrap-where this where-clause)
+                      (cond-> where-clause (wrap-where this where-clause nil)
                               select-clause (wrap-query-tail this (.groupByClause ctx) (.havingClause ctx) select-clause order-by-ctx))))
 
                 (letfn [(wrap-tail [order-by-ctx, rel, ^Sql$QueryTailContext tail]
                           (.accept tail
                                    (reify SqlVisitor
                                      (visitWhereTail [_ tail]
-                                       (wrap-where rel this (.whereClause tail)))
+                                       (wrap-where rel this (.whereClause tail) order-by-ctx))
 
                                      (visitSelectTail [_ tail]
                                        (wrap-query-tail rel this (.groupByClause tail) (.havingClause tail) (.selectClause tail) order-by-ctx)))))]
