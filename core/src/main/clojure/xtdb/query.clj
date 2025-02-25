@@ -244,8 +244,7 @@
 
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts
-         {:prepare-cache-size 1000 
-          :plan-cache-size 1000
+         {:plan-cache-size 1000
           :allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref ::scan/scan-emitter)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
