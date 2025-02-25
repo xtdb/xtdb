@@ -431,17 +431,17 @@
 
 (defn- interpret-sql [sql {:keys [default-tz watermark-tx-id session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
-  (let [sql-trimmed (trim-sql sql)]
-    (or (when (str/blank? sql-trimmed)
+  (let [sql (trim-sql sql)]
+    (or (when (str/blank? sql)
           [{:statement-type :empty-query}])
 
-        (when-some [canned-response (get-canned-response sql-trimmed)]
+        (when-some [canned-response (get-canned-response sql)]
           [{:statement-type :canned-response, :canned-response canned-response}])
 
         (try
           (letfn [(subsql [^ParserRuleContext ctx]
                     (subs sql (.getStartIndex (.getStart ctx)) (inc (.getStopIndex (.getStop ctx)))))]
-            (->> (antlr/parse-multi-statement sql-trimmed)
+            (->> (antlr/parse-multi-statement sql)
                  (mapv (partial plan/accept-visitor
                                 (reify SqlVisitor
                                   (visitSetSessionVariableStatement [_ ctx]
