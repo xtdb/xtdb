@@ -1708,14 +1708,17 @@
 
         (t/is (= [{"v" "2030-01-04 12:44:55+00"}] (rs->maps rs)))))))
 
-(deftest test-java-time-instant
+(deftest test-java-time-instant-ts
+  ;;NOTE https://github.com/igrishaev/pg2/issues/46
   (with-open [conn (pg-conn {})]
-
     (t/is (= [{:v #xt/date-time "2030-01-04T12:44:55"}]
              (pg/execute conn "SELECT $1 v" {:params [#xt/instant "2030-01-04T12:44:55Z"]
                                              :oids [OID/TIMESTAMP]}))
-          "when reading param, zone is ignored and instant is treated as a timestamp")
+          "when reading param, zone is ignored and instant is treated as a timestamp")))
 
+(deftest test-java-time-instant-tstz
+  ;;NOTE https://github.com/igrishaev/pg2/issues/46
+  (with-open [conn (pg-conn {})]
     (t/is (= [{:v #xt/offset-date-time "2030-01-04T12:44:55Z"}]
              (pg/execute conn "SELECT $1 v" {:params [#xt/instant "2030-01-04T12:44:55Z"]
                                              :oids [OID/TIMESTAMPTZ]}))
