@@ -2653,3 +2653,7 @@ ORDER BY 1,2;")
 
           (t/is (= [{:v val}]
                    (pg/execute conn q)))))))
+
+(t/deftest test-sql-with-leading-whitespace
+  (with-open [conn (pg-conn {})]
+    (pg/execute conn "     INSERT INTO test RECORDS {_id: 0, value: 'hi'}")))
