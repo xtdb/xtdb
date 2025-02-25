@@ -48,7 +48,7 @@
                         {:node tu/*node*}))))
 
 (t/deftest test-block-boundary
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (->> (for [i (range 110)]
            [:put-docs :xt_docs {:xt/id i}])
          (partition-all 10)
@@ -59,7 +59,7 @@
                                {:node node}))))))
 
 (t/deftest test-block-boundary-different-struct-types
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (xt/submit-tx node (for [i (range 20)]
                          [:put-docs :xt_docs {:xt/id i :foo {:bar 42}}]))
 
@@ -81,7 +81,8 @@
                            {:node node}))))))
 
 (t/deftest test-row-copying-different-struct-types-between-block-boundaries-3338
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}
+                                                               :compactor {:threads 0}}))]
     (xt/submit-tx node (for [i (range 20)]
                          [:put-docs :xt_docs {:xt/id i :foo {:bar 42}}]))
 
@@ -108,10 +109,13 @@
 
 (t/deftest test-metadata
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
-    (->> (for [i (range 100)]
-           [:put-docs :xt_docs {:xt/id i}])
-         (partition-all 20)
-         (mapv #(xt/submit-tx node %)))
+    (doseq [batch (->> (for [i (range 100)]
+                         [:put-docs :xt_docs {:xt/id i}])
+                       (partition-all 20))]
+      (xt/execute-tx node batch))
+
+    (tu/finish-block! node)
+    (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= (set (concat (for [i (range 20)] {:xt/id i}) (for [i (range 80 100)] {:xt/id i})))
              (set (tu/query-ra '[:scan {:table public/xt_docs} [{_id (or (< _id 20)
@@ -122,6 +126,9 @@
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
     (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
     (xt/submit-tx node (for [i (range 20)] [:delete-docs :xt_docs i]))
+
+    (tu/finish-block! node)
+    (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= []
              (tu/query-ra '[:scan {:table public/xt_docs} [{_id (< _id 20)}]]
@@ -691,7 +698,7 @@
 
         (tu/finish-block! node)
         ;; compaction happens in 2026
-        (c/compact-all! node)
+        (c/compact-all! node #xt/duration "PT1S")
 
         (let [query-opts {:node node
                           :current-time (:system-time tx-key)}]
