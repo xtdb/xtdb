@@ -497,7 +497,7 @@
         (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id #uuid "20000000-0000-0000-0000-000000000000"}]}]]))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
-                     (.resolve node-dir (tables-key "public$foo")) #"log-l01-(.+)\.arrow"))))
+                     (.resolve node-dir (tables-key "public$foo")) #"l01-(.+)\.arrow"))))
 
 (t/deftest recency-bucketing-bug
   (let [node-dir (util/->path "target/compactor/recency-bucketing-bug")]
