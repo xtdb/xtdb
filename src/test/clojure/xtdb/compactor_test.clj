@@ -27,21 +27,21 @@
   ([out in part] {:trie-keys in, :out-trie-key out, :part part}))
 
 (defn calc-jobs [& tries]
-  (let [opts {:l1-size-limit cat/*l1-size-limit*}]
+  (let [opts {:file-size-target cat/*file-size-target*}]
     (-> tries
         (->> (transduce (map (fn [[trie-key size]]
                                (-> (trie/parse-trie-key trie-key)
                                    (assoc :data-file-size (or size -1)))))
                         (completing (partial cat/apply-trie-notification opts))
                         {}))
-        (as-> trie-state (c/compaction-jobs "foo" trie-state opts))
+        (as-> table-cat (c/compaction-jobs "foo" table-cat opts))
         (->> (into #{} (map (fn [job]
                               (-> job
                                   (update :part vec)
                                   (dissoc :table-name)))))))))
 
 (t/deftest test-l0->l1-compaction-jobs
-  (binding [cat/*l1-size-limit* 16]
+  (binding [cat/*file-size-target* 16]
     (t/is (= #{} (calc-jobs)))
 
     (t/is (= #{(job "l01-rc-b01" ["l00-rc-b00" "l00-rc-b01"])}
@@ -72,7 +72,7 @@
           "all merged, nothing to do")))
 
 (t/deftest test-l1c->l2c-compaction-jobs
-  (binding [cat/*l1-size-limit* 16]
+  (binding [cat/*file-size-target* 16]
     (t/is (= (let [l1-trie-keys ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"]]
                #{(job "l02-rc-p0-b07" l1-trie-keys [0])
                  (job "l02-rc-p1-b07" l1-trie-keys [1])
@@ -89,7 +89,7 @@
           "still needs L2 [1]")))
 
 (t/deftest test-l2+-compaction-jobs
-  (binding [cat/*l1-size-limit* 16]
+  (binding [cat/*file-size-target* 16]
     (t/testing "L2+"
       (t/is (= #{ ;; L2 [0] is full, compact L3 [0 0] and [0 1]
                  (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
@@ -105,7 +105,7 @@
                  (job "l02-rc-p2-b0f" ["l01-rc-b0c" "l01-rc-b0d" "l01-rc-b0e" "l01-rc-b0f"] [2])
                  (job "l02-rc-p3-b0b" ["l01-rc-b08" "l01-rc-b09" "l01-rc-b0a" "l01-rc-b0b"] [3])}
 
-               (binding [cat/*l1-size-limit* 2]
+               (binding [cat/*file-size-target* 2]
                  (calc-jobs ["l03-rc-p02-b0f"]
                             ["l03-rc-p03-b0f"]
                             ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
@@ -235,7 +235,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
@@ -276,7 +276,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
@@ -317,7 +317,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
@@ -349,7 +349,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
@@ -384,7 +384,7 @@
 
 (t/deftest losing-data-when-compacting-3459
   (binding [c/*page-size* 8
-            cat/*l1-size-limit* (* 16 1024)
+            cat/*file-size-target* (* 16 1024)
             c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/compactor/lose-data-on-compaction")]
       (util/delete-dir node-dir)

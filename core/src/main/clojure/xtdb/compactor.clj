@@ -162,16 +162,16 @@
   (getTableName [_] table-name)
   (getOutputTrieKey [_] out-trie-key))
 
-(defn- l0->l1-compaction-job [table-name {:keys [l0-tries l1-tries]} {:keys [^long l1-size-limit]}]
-  (when-let [live-l0 (seq (->> l0-tries
+(defn- l0->l1-compaction-job [table-name {l0 [0 nil []], l1c [1 nil []]} {:keys [^long file-size-target]}]
+  (when-let [live-l0 (seq (->> l0
                                (take-while #(= :live (:state %)))))]
-    (let [latest-l1 (->> l1-tries
-                         (take-while #(< (:data-file-size %) l1-size-limit))
+    (let [latest-l1 (->> l1c
+                         (take-while #(< (:data-file-size %) file-size-target))
                          first)]
       (loop [size (:data-file-size latest-l1 0)
              [{^long l0-size :data-file-size, :as l0-file} & more-l0s] (reverse live-l0)
              res (cond-> [] latest-l1 (conj latest-l1))]
-        (if (and l0-file (< size l1-size-limit))
+        (if (and l0-file (< size file-size-target))
           (recur (+ size l0-size) more-l0s (conj res l0-file))
 
           (let [{:keys [block-idx]} (last res)]
@@ -179,19 +179,20 @@
                    ;; TODO recency
                    (trie/->l1-trie-key nil block-idx))))))))
 
-(defn- l1p-compaction-jobs [table-name {:keys [l1-tries ln-tries]} {:keys [^long l1-size-limit]}]
-  (for [[[level part] files] (conj ln-tries [[1 nil] l1-tries])
+(defn- l1c-and-above-compaction-jobs [table-name table-tries {:keys [^long file-size-target]}]
+  (for [[[level recency part] files] table-tries
         :when (> level 0)
-        :let [live-files (-> files
+        :let [_ (assert (nil? recency) "shouldn't have recency yet")
+              live-files (-> files
                              (->> (remove #(= :garbage (:state %))))
-                             (cond->> (= level 1) (filter #(>= (:data-file-size %) l1-size-limit))))]
+                             (cond->> (= level 1) (filter #(>= (:data-file-size %) file-size-target))))]
         :when (>= (count live-files) cat/branch-factor)
         :let [live-files (reverse live-files)]
 
         p (range cat/branch-factor)
         :let [out-level (inc level)
               out-part (conj part p)
-              {lnp1-block-idx :block-idx} (first (get ln-tries [out-level out-part]))
+              {lnp1-block-idx :block-idx} (first (get table-tries [out-level recency out-part]))
 
               in-files (-> live-files
                            (cond->> lnp1-block-idx (drop-while #(<= (:block-idx %) lnp1-block-idx)))
@@ -205,10 +206,10 @@
            ;; TODO recency
            (trie/->trie-key out-level nil out-part out-block-idx))))
 
-(defn compaction-jobs [table-name trie-state opts]
-  (concat (when-let [job (l0->l1-compaction-job table-name trie-state opts)]
+(defn compaction-jobs [table-name {table-tries :tries} opts]
+  (concat (when-let [job (l0->l1-compaction-job table-name table-tries opts)]
             [job])
-          (l1p-compaction-jobs table-name trie-state opts)))
+          (l1c-and-above-compaction-jobs table-name table-tries opts)))
 
 (defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
   {:allocator (ig/ref :xtdb/allocator)
