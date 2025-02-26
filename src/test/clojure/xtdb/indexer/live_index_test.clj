@@ -191,12 +191,12 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
         (tu/finish-block! node))
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
-          (xt/submit-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
+          (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 
           (t/is (= [(os/->StoredObject (util/->path "blocks/b00.transit.json") 726)
