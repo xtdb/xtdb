@@ -475,26 +475,27 @@
                                      #uuid "40000000-0000-0000-0000-000000000000"
                                      #uuid "80000000-0000-0000-0000-000000000000"]]
 
-        (xt/submit-tx node [[:put-docs :foo {:xt/id id-before} {:xt/id id} {:xt/id id-after}]])
+        (xt/execute-tx node [[:put-docs :foo {:xt/id id-before} {:xt/id id} {:xt/id id-after}]])
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
-        (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id id}]}]])
+        (xt/execute-tx node [[:erase {:from :foo :bind [{:xt/id id}]}]])
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (t/is (= [{:xt/id id-before} {:xt/id id-after}]
                  (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME")))
 
-        (xt/submit-tx node [[:put-docs :foo {:xt/id id}]])
+        (xt/execute-tx node [[:put-docs :foo {:xt/id id}]])
+
+        (t/testing "an id where there is no previous data shouldn't show up in the compacted files"
+          (xt/execute-tx node [[:erase {:from :foo :bind [{:xt/id #uuid "20000000-0000-0000-0000-000000000000"}]}]]))
+
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after}]
                  (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"))))
-
-      (t/testing "an id where there is no previous data shouldn't show up in the compacted files"
-        (xt/submit-tx node [[:erase {:from :foo :bind [{:xt/id #uuid "20000000-0000-0000-0000-000000000000"}]}]]))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
                      (.resolve node-dir (tables-key "public$foo")) #"l01-(.+)\.arrow"))))
