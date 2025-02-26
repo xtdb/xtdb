@@ -15,7 +15,7 @@
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb.api.storage ObjectStore$Factory Storage)
+           (xtdb.api.storage ObjectStore ObjectStore$Factory Storage)
            (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
            (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
@@ -135,6 +135,17 @@
         (Thread/sleep 100)
         (t/is (= 3 (:file-count (file-info local-disk-cache))))))))
 
+(defn no-op-object-store-factory []
+  (reify ObjectStore$Factory
+    (openObjectStore [_]
+      (reify ObjectStore
+        (getObject [_ k] (throw (UnsupportedOperationException. "foo")))
+        (getObject [_ _ k] (throw (UnsupportedOperationException. "foo")))
+        (putObject [_ k v] (throw (UnsupportedOperationException. "foo")))
+        (listAllObjects [_] (throw (UnsupportedOperationException. "foo")))
+        (listAllObjects [_ _] (throw (UnsupportedOperationException. "foo")))
+        (deleteObject [_ k] (throw (UnsupportedOperationException. "foo")))))))
+
 (t/deftest local-disk-cache-with-previous-values
   (let [obj-store-factory (simulated-obj-store-factory)
         path-a (util/->path "a")
@@ -142,20 +153,20 @@
     (util/with-tmp-dirs #{local-disk-cache}
       ;; Writing files to buffer pool & local-disk-cache
       (with-open [bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
-                         (.maxDiskCacheBytes 10)
-                         (.maxCacheBytes 12)
+                         (.maxDiskCacheBytes 64)
+                         (.maxCacheBytes 64)
                          (.open tu/*allocator* (SimpleMeterRegistry.)))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
-      (with-open [bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
-                         (.maxDiskCacheBytes 10)
-                         (.maxCacheBytes 12)
+      ;; passing a no-op object store to ensure objects are not loaded from object store and instead only the cache is under test.
+      (with-open [bp (-> (Storage/remoteStorage (no-op-object-store-factory) local-disk-cache)
+                         (.maxDiskCacheBytes 64)
+                         (.maxCacheBytes 64)
                          (.open tu/*allocator* (SimpleMeterRegistry.)))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
-
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))
 
 (t/deftest local-buffer-pool
