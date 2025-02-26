@@ -27,107 +27,109 @@
   ([out in] (job out in []))
   ([out in part] {:trie-keys in, :out-trie-key out, :part part}))
 
-(t/deftest test-compaction-jobs
+(defn calc-jobs [& tries]
+  (let [opts {:l1-size-limit cat/*l1-size-limit*}]
+    (-> tries
+        (->> (transduce (map (fn [[trie-key size]]
+                               (-> (trie/parse-trie-key trie-key)
+                                   (assoc :data-file-size (or size -1)))))
+                        (completing (partial cat/apply-trie-notification opts))
+                        {}))
+        (as-> trie-state (c/compaction-jobs "foo" trie-state opts))
+        (->> (into #{} (map (fn [job]
+                              (-> job
+                                  (update :part vec)
+                                  (dissoc :table-name)))))))))
+
+(t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*l1-size-limit* 16]
-    (letfn [(f [& tries]
-              (let [opts {:l1-size-limit cat/*l1-size-limit*}]
-                (-> tries
-                    (->> (transduce (map (fn [[trie-key size]]
-                                           (-> (trie/parse-trie-key trie-key)
-                                               (assoc :data-file-size (or size -1)))))
-                                    (completing (partial cat/apply-trie-notification opts))
-                                    {}))
-                    (as-> trie-state (c/compaction-jobs "foo" trie-state opts))
-                    (->> (into #{} (map (fn [job]
-                                          (-> job
-                                              (update :part vec)
-                                              (dissoc :table-name)))))))))]
+    (t/is (= #{} (calc-jobs)))
 
-      (t/testing "l0 -> l1"
-        (t/is (= #{} (f)))
+    (t/is (= #{(job "l01-rc-b01" ["l00-rc-b00" "l00-rc-b01"])}
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]))
+          "no L1s yet, merge L0s up to limit and stop")
 
-        (t/is (= #{(job "l01-rc-b01" ["l00-rc-b00" "l00-rc-b01"])}
-                 (f ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]))
-              "no L1s yet, merge L0s up to limit and stop")
+    (t/is (= #{(job "l01-rc-b01" ["l01-rc-b00" "l00-rc-b01"])}
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]
+                        ["l01-rc-b00" 10]))
+          "have a partial L1, merge into that until it's full")
 
-        (t/is (= #{(job "l01-rc-b01" ["l01-rc-b00" "l00-rc-b01"])}
-                 (f ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]
-                    ["l01-rc-b00" 10]))
-              "have a partial L1, merge into that until it's full")
+    (t/is (empty? (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10]
+                             ["l01-rc-b01" 20]))
+          "all merged, nothing to do")
 
-        (t/is (empty? (f ["l00-rc-b00" 10] ["l00-rc-b01" 10]
-                         ["l01-rc-b01" 20]))
-              "all merged, nothing to do")
+    (t/is (= #{(job "l01-rc-b03" ["l00-rc-b02" "l00-rc-b03"])}
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
+                        ["l01-rc-b01" 20]))
+          "have a full L1, start a new L1 til that's full")
 
-        (t/is (= #{(job "l01-rc-b03" ["l00-rc-b02" "l00-rc-b03"])}
-                 (f ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
-                    ["l01-rc-b01" 20]))
-              "have a full L1, start a new L1 til that's full")
+    (t/is (= #{(job "l01-rc-b03" ["l01-rc-b02" "l00-rc-b03"])}
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
+                        ["l01-rc-b01" 20] ["l01-rc-b02" 10]))
+          "have a full and a partial L1, merge into that til it's full")
 
-        (t/is (= #{(job "l01-rc-b03" ["l01-rc-b02" "l00-rc-b03"])}
-                 (f ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
-                    ["l01-rc-b01" 20] ["l01-rc-b02" 10]))
-              "have a full and a partial L1, merge into that til it's full")
+    (t/is (empty? (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
+                             ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b04" 10]))
+          "all merged, nothing to do")))
 
-        (t/is (empty? (f ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
-                         ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b04" 10]))
-              "all merged, nothing to do"))
+(t/deftest test-l1c->l2c-compaction-jobs
+  (binding [cat/*l1-size-limit* 16]
+    (t/is (= (let [l1-trie-keys ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"]]
+               #{(job "l02-rc-p0-b07" l1-trie-keys [0])
+                 (job "l02-rc-p1-b07" l1-trie-keys [1])
+                 (job "l02-rc-p2-b07" l1-trie-keys [2])
+                 (job "l02-rc-p3-b07" l1-trie-keys [3])})
+             (calc-jobs ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20] ["l01-rc-b04" 10] ["l01-rc-b05" 20] ["l01-rc-b06" 10] ["l01-rc-b07" 20]))
 
-      (t/testing "l1 -> l2"
-        (t/is (= (let [l1-trie-keys ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"]]
-                   #{(job "l02-rc-p0-b07" l1-trie-keys [0])
-                     (job "l02-rc-p1-b07" l1-trie-keys [1])
-                     (job "l02-rc-p2-b07" l1-trie-keys [2])
-                     (job "l02-rc-p3-b07" l1-trie-keys [3])})
-                 (f ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20] ["l01-rc-b04" 10] ["l01-rc-b05" 20] ["l01-rc-b06" 10] ["l01-rc-b07" 20]))
+          "empty L2 and superseded L1 files get ignored")
 
-              "empty L2 and superseded L1 files get ignored")
+    (t/is (= #{(job "l02-rc-p1-b07" ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"] [1])}
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10] ["l00-rc-b05" 10] ["l00-rc-b06" 10] ["l00-rc-b07" 10]
+                        ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b05" 20] ["l01-rc-b07" 20]
+                        ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"]))
+          "still needs L2 [1]")))
 
-        (t/is (= #{(job "l02-rc-p1-b07" ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"] [1])}
-                 (f ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"]
-                    ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b05" 20] ["l01-rc-b07" 20]
-                    ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10] ["l00-rc-b05" 10] ["l00-rc-b06" 10] ["l00-rc-b07" 10]))
-              "still needs L2 [1]"))
+(t/deftest test-l2+-compaction-jobs
+  (binding [cat/*l1-size-limit* 16]
+    (t/testing "L2+"
+      (t/is (= #{ ;; L2 [0] is full, compact L3 [0 0] and [0 1]
+                 (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
+                 (job "l03-rc-p01-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 1])
 
-      (t/testing "L2+"
-        (t/is (= #{ ;; L2 [0] is full, compact L3 [0 0] and [0 1]
-                   (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
-                   (job "l03-rc-p01-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 1])
+                 ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
+                 (job "l02-rc-p0-b113" ["l01-rc-b110" "l01-rc-b111" "l01-rc-b112" "l01-rc-b113"] [0])
 
-                   ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
-                   (job "l02-rc-p0-b113" ["l01-rc-b110" "l01-rc-b111" "l01-rc-b112" "l01-rc-b113"] [0])
+                 ;; L2 [1] has nothing, choose the first four
+                 (job "l02-rc-p1-b03" ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"] [1])
 
-                   ;; L2 [1] has nothing, choose the first four
-                   (job "l02-rc-p1-b03" ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"] [1])
+                 ;; fill in the gaps in [2] and [3]
+                 (job "l02-rc-p2-b0f" ["l01-rc-b0c" "l01-rc-b0d" "l01-rc-b0e" "l01-rc-b0f"] [2])
+                 (job "l02-rc-p3-b0b" ["l01-rc-b08" "l01-rc-b09" "l01-rc-b0a" "l01-rc-b0b"] [3])}
 
-                   ;; fill in the gaps in [2] and [3]
-                   (job "l02-rc-p2-b0f" ["l01-rc-b0c" "l01-rc-b0d" "l01-rc-b0e" "l01-rc-b0f"] [2])
-                   (job "l02-rc-p3-b0b" ["l01-rc-b08" "l01-rc-b09" "l01-rc-b0a" "l01-rc-b0b"] [3])}
+               (binding [cat/*l1-size-limit* 2]
+                 (calc-jobs ["l03-rc-p02-b0f"]
+                            ["l03-rc-p03-b0f"]
+                            ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
+                            ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"] ; missing [1]
+                            ["l02-rc-p0-b0b"] ["l02-rc-p2-b0b"]                ; missing [1] + [3]
+                            ["l02-rc-p0-b0f"]                               ; missing [1], [2], and [3]
+                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2] ["l01-rc-b03" 2]
+                            ["l01-rc-b04" 2] ["l01-rc-b05" 2] ["l01-rc-b06" 2] ["l01-rc-b07" 2]
+                            ["l01-rc-b08" 2] ["l01-rc-b09" 2] ["l01-rc-b0a" 2] ["l01-rc-b0b" 2]
+                            ["l01-rc-b0c" 2] ["l01-rc-b0d" 2] ["l01-rc-b0e" 2] ["l01-rc-b0f" 2]
+                            ["l01-rc-b110" 2] ["l01-rc-b111" 2] ["l01-rc-b112" 2] ["l01-rc-b113" 2]
+                            ;; superseded ones
+                            ["l01-rc-b00" 1] ["l01-rc-b02" 1] ["l01-rc-b09" 1] ["l01-rc-b0d" 1])))
+            "up to L3")
 
-                 (binding [cat/*l1-size-limit* 2]
-                   (f ["l03-rc-p02-b0f"]
-                      ["l03-rc-p03-b0f"]
-                      ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
-                      ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"] ; missing [1]
-                      ["l02-rc-p0-b0b"] ["l02-rc-p2-b0b"]                ; missing [1] + [3]
-                      ["l02-rc-p0-b0f"]                               ; missing [1], [2], and [3]
-                      ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2] ["l01-rc-b03" 2]
-                      ["l01-rc-b04" 2] ["l01-rc-b05" 2] ["l01-rc-b06" 2] ["l01-rc-b07" 2]
-                      ["l01-rc-b08" 2] ["l01-rc-b09" 2] ["l01-rc-b0a" 2] ["l01-rc-b0b" 2]
-                      ["l01-rc-b0c" 2] ["l01-rc-b0d" 2] ["l01-rc-b0e" 2] ["l01-rc-b0f" 2]
-                      ["l01-rc-b110" 2] ["l01-rc-b111" 2] ["l01-rc-b112" 2] ["l01-rc-b113" 2]
-                      ;; superseded ones
-                      ["l01-rc-b00" 1] ["l01-rc-b02" 1] ["l01-rc-b09" 1] ["l01-rc-b0d" 1])))
-              "up to L3")
+      (let [l2-keys ["l03-rc-p03-b0f" "l03-rc-p03-b11f" "l03-rc-p03-b12f" "l03-rc-p03-b13f"]]
+        (t/is (= #{(job "l04-rc-p030-b13f" l2-keys [0 3 0])
+                   (job "l04-rc-p031-b13f" l2-keys [0 3 1])
+                   (job "l04-rc-p032-b13f" l2-keys [0 3 2])
+                   (job "l04-rc-p033-b13f" l2-keys [0 3 3])}
 
-        (t/is (= (let [l2-keys ["l03-rc-p03-b0f" "l03-rc-p03-b11f" "l03-rc-p03-b12f" "l03-rc-p03-b13f"]]
-                   #{(job "l04-rc-p030-b13f" l2-keys [0 3 0])
-                     (job "l04-rc-p031-b13f" l2-keys [0 3 1])
-                     (job "l04-rc-p032-b13f" l2-keys [0 3 2])
-                     (job "l04-rc-p033-b13f" l2-keys [0 3 3])})
-
-                 (f ["l03-rc-p02-b0f"]
-                    ["l03-rc-p03-b0f"] ["l03-rc-p03-b11f"] ["l03-rc-p03-b12f"] ["l03-rc-p03-b13f"]))
+                 (calc-jobs ["l03-rc-p02-b0f"]
+                            ["l03-rc-p03-b0f"] ["l03-rc-p03-b11f"] ["l03-rc-p03-b12f"] ["l03-rc-p03-b13f"]))
               "L3 -> L4")))))
 
 (deftype LiveDataRel [^RelationReader live-rel]
