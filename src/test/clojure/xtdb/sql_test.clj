@@ -2796,3 +2796,9 @@ UNION ALL
                   SELECT d1.col1 t
                   WHERE t IS NOT NULL
                   ORDER BY t asc"))))
+
+(t/deftest test-duplicate-column-projection
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"Duplicate column projection: a"
+         (plan-sql "SELECT 1 AS a, 2 AS a" {}))))
