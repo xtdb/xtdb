@@ -236,6 +236,7 @@
                   (.writeInt struct-type-el-wtr sub-col-idx))
                 (.endList struct-type-wtr)))))))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->page-meta-wtr ^xtdb.metadata.PageMetadataWriter [^VectorWriter cols-wtr]
   (let [col-wtr (.elementWriter cols-wtr)
         col-name-wtr (.keyWriter col-wtr "col-name")
