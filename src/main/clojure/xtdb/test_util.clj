@@ -280,12 +280,10 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [allocator node args preserve-pages? with-col-types? key-fn] :as query-opts
-           :or {key-fn (serde/read-key-fn :kebab-case-keyword)
-                allocator *allocator*}}]
+  ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
+           :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [{:keys [live-idx]} node
          query-opts (-> query-opts
-                        (assoc :allocator allocator)
                         (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
                                          (doto (-> :after-tx-id (then-await-tx node))))))
 
@@ -297,7 +295,7 @@
                                                             (openWatermark [_]
                                                               (Watermark. nil nil {})))}))]
      (util/with-open [^RelationReader args-rel (if args
-                                                 (vw/open-args allocator args)
+                                                 (vw/open-args *allocator* args)
                                                  vw/empty-args)
                       bq (.bind pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
                                        (assoc :args args-rel, :close-args? false)))
