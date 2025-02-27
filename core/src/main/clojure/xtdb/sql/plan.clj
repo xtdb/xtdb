@@ -2157,10 +2157,15 @@
         ob-plan (some-> order-by-clause
                         (plan-order-by env scope
                                        (mapv :col-sym projected-cols)))]
+
+        (when-let [dup-cols (not-empty (dups (mapv :col-sym projected-cols)))]
+          (doseq [col dup-cols]
+            (add-err! env (->DuplicateColumnProjection col))))
+
     (reify
       Scope
       (available-cols [_]
-        (->insertion-ordered-set (mapv :col-sym (:projected-cols select-plan))))
+        (->insertion-ordered-set (mapv :col-sym projected-cols)))
 
       (-find-cols [this [col-name table-name] excl-cols]
         (when (nil? table-name)
