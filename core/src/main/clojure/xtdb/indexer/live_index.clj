@@ -4,12 +4,12 @@
             [integrant.core :as ig]
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
-            [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
+            [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
-            [xtdb.trie-catalog :as cat]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -28,7 +28,6 @@
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
-           xtdb.metadata.IMetadataManager
            (xtdb.trie MemoryHashTrie TrieCatalog TrieWriter)
            (xtdb.util RefCounter RowCounter)
            (xtdb.vector IRelationWriter IVectorWriter)))
@@ -198,17 +197,18 @@
       AutoCloseable
       (close [_] (util/close wms)))))
 
-(defn ->schema [^LiveIndex$Watermark live-index-wm ^IMetadataManager metadata-mgr]
+(defn ->schema [^LiveIndex$Watermark live-index-wm table-catalog]
   (merge-with set/union
-              (update-vals (.allColumnFields metadata-mgr)
+              (update-vals (table-cat/all-column-fields table-catalog)
                            (comp set keys))
               (update-vals (some-> live-index-wm
                                    (.getAllColumnFields))
                            (comp set keys))))
 
 
-(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr
-                    ^Log log, ^TrieCatalog trie-catalog, compactor
+(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log, compactor
+                    ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
+
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^:volatile-mutable ^TransactionKey latest-completed-block-tx
                     ^Map tables,
@@ -252,7 +252,7 @@
 
               (let [^Watermark old-wm (.shared-wm this-idx)
                     ^Watermark shared-wm (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
-                                           (Watermark. tx-key live-index-wm (->schema live-index-wm metadata-mgr)))]
+                                           (Watermark. tx-key live-index-wm (->schema live-index-wm table-cat)))]
                 (set! (.shared-wm this-idx) shared-wm)
                 (some-> old-wm .close))
 
@@ -319,13 +319,13 @@
                                                           (catch Exception _
                                                             (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                    (util/rethrowing-cause))]
-            (.finishBlock metadata-mgr block-idx
-                          {:latest-completed-tx latest-completed-tx
-                           :tables table-metadata})
+
+            (let [table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata)]
+              (.finishBlock block-cat block-idx latest-completed-tx table-block-paths))
 
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
-                                (cat/->added-trie table-name trie-key data-file-size))]
-              (.addTries trie-catalog added-tries)
+                                (trie-cat/->added-trie table-name trie-key data-file-size))]
+              (.addTries trie-cat added-tries)
               @(.appendMessage log (Log$Message$TriesAdded. added-tries))))))
 
       (.nextBlock row-counter)
@@ -344,7 +344,7 @@
                   (Watermark.
                    latest-completed-tx
                    live-index-wm
-                   (->schema live-index-wm metadata-mgr))))
+                   (->schema live-index-wm table-cat))))
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
@@ -378,24 +378,25 @@
   {:allocator (ig/ref :xtdb/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :block-cat (ig/ref :xtdb/block-catalog)
-   :metadata-mgr (ig/ref ::meta/metadata-manager)
+   :table-cat (ig/ref :xtdb/table-catalog)
    :compactor (ig/ref :xtdb/compactor)
    :log (ig/ref :xtdb/log)
-   :trie-catalog (ig/ref :xtdb/trie-catalog)
+   :trie-cat (ig/ref :xtdb/trie-catalog)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^BlockCatalog block-cat, buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat compactor ^IndexerConfig config metrics-registry]}]
   (let [block-idx (.getCurrentBlockIndex block-cat)
         latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
-        (->LiveIndex allocator buffer-pool metadata-mgr log trie-catalog compactor
+        (->LiveIndex allocator buffer-pool log compactor
+                     block-cat table-cat trie-cat
                      latest-completed-tx latest-completed-tx
                      tables
 
-                     (Watermark. nil (open-live-idx-wm tables) (->schema nil metadata-mgr))
+                     (Watermark. nil (open-live-idx-wm tables) (->schema nil table-cat))
                      (StampedLock.)
                      (RefCounter.)
 

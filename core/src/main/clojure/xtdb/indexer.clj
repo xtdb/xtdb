@@ -808,6 +808,7 @@
                     ^IMetadataManager metadata-mgr
                     ^IQuerySource q-src
                     ^LiveIndex live-idx
+                    table-catalog
                     ^Timer tx-timer
                     ^Counter tx-error-counter]
   IIndexer
@@ -850,7 +851,7 @@
                            (openWatermark [_]
                              (util/with-close-on-catch [live-index-wm (.openWatermark live-idx-tx)]
                                (Watermark. nil live-index-wm
-                                           (li/->schema live-index-wm metadata-mgr)))))
+                                           (li/->schema live-index-wm table-catalog)))))
 
                   tx-opts {:snapshot-time system-time
                            :current-time system-time
@@ -920,13 +921,15 @@
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :live-index (ig/ref :xtdb.indexer/live-index)
           :q-src (ig/ref ::q/query-source)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)}
+          :metrics-registry (ig/ref :xtdb.metrics/registry)
+          :table-catalog (ig/ref :xtdb/table-catalog)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, metadata-mgr, q-src, live-index metrics-registry]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, metadata-mgr, q-src,
+                                                live-index metrics-registry table-catalog]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
-    (->Indexer allocator (:node-id config) buffer-pool metadata-mgr q-src live-index
+    (->Indexer allocator (:node-id config) buffer-pool metadata-mgr q-src live-index table-catalog
 
                (metrics/add-timer metrics-registry "tx.op.timer"
                                   {:description "indicates the timing and number of transactions"})

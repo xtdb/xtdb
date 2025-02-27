@@ -1,6 +1,7 @@
 (ns xtdb.information-schema
   (:require [xtdb.authn :as authn]
             xtdb.metadata
+            [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -11,7 +12,6 @@
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            (xtdb.indexer Watermark)
-           (xtdb.metadata IMetadataManager)
            xtdb.operator.SelectionSpec
            (xtdb.trie MemoryHashTrie)
            (xtdb.vector IVectorReader RelationReader)))
@@ -323,13 +323,14 @@
     (util/close vsr)
     (some-> out-rel .close)))
 
-(defn ->cursor [allocator derived-table-schema table col-names col-preds schema params ^IMetadataManager metadata-mgr ^Watermark wm]
+(defn ->cursor [allocator derived-table-schema table col-names col-preds schema params
+                table-catalog ^Watermark wm]
   (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (vec (vals derived-table-schema)))
                                                            allocator)]
     ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
     ;;should be types/merge-fields as per scan-fields
     (let [schema-info (-> (merge-with merge
-                                      (.allColumnFields metadata-mgr)
+                                      (table-cat/all-column-fields table-catalog)
                                       (some-> (.getLiveIndex wm)
                                               (.getAllColumnFields)))
                           (update-keys symbol)

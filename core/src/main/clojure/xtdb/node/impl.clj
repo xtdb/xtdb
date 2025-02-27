@@ -256,6 +256,7 @@
          :xtdb/allocator {}
          :xtdb/indexer {}
          :xtdb/block-catalog {}
+         :xtdb/table-catalog {}
          :xtdb/trie-catalog {}
          :xtdb.log/processor opts
          :xtdb.metadata/metadata-manager {}

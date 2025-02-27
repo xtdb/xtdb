@@ -5,14 +5,16 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.block-catalog :as block-cat]
+            [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
+            [xtdb.table-catalog :as cat]
             [xtdb.test-json :as tj]
-            [xtdb.check-pbuf :as cpb]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.ts-devices :as ts]
@@ -24,8 +26,8 @@
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
-           xtdb.BufferPool
            xtdb.arrow.Relation
+           xtdb.BufferPool
            xtdb.indexer.LiveIndex
            (xtdb.metadata IMetadataManager)))
 
@@ -88,8 +90,8 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [mm (tu/component node ::meta/metadata-manager)]
-          (t/is (nil? (meta/latest-block-metadata mm)))
+        (let [block-cat (block-cat/<-node node)]
+          (t/is (nil? (.getCurrentBlockIndex block-cat)))
 
           (t/is (= magic-last-tx-id
                    (last (for [tx-ops txs]
@@ -99,9 +101,7 @@
 
           (tu/finish-block! node)
 
-          (t/is (= {:latest-completed-tx last-tx-key}
-                   (-> (meta/latest-block-metadata mm)
-                       (dissoc :tables :block-idx))))
+          (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
                          (.resolve node-dir "objects"))
@@ -209,12 +209,12 @@
         (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
                         (.resolve node-dir "objects"))
 
-        (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
+        (let [tc (cat/<-node node)]
           (t/is (= (types/->field "_id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
                                   (types/col-type->field :utf8)
                                   (types/col-type->field :keyword)
                                   (types/col-type->field :i64))
-                   (.columnField mm "public/xt_docs" "_id")))
+                   (cat/column-field tc "public/xt_docs" "_id")))
 
           (t/is (= (types/->field "list" #xt.arrow/type :list true
                                   (types/->field "$data$" #xt.arrow/type :union false
@@ -222,7 +222,7 @@
                                                  (types/col-type->field :utf8)
                                                  (types/col-type->field [:timestamp-tz :micro "UTC"])
                                                  (types/col-type->field :bool)))
-                   (.columnField mm "public/xt_docs" "list")))
+                   (cat/column-field tc "public/xt_docs" "list")))
 
           (t/is (= (types/->field "struct" #xt.arrow/type :struct true
                                   (types/->field "a" #xt.arrow/type :union false
@@ -233,7 +233,7 @@
                                                  (types/->field "struct" #xt.arrow/type :struct true
                                                                 (types/->field "c" #xt.arrow/type :utf8 true)
                                                                 (types/->field "d" #xt.arrow/type :utf8 true))))
-                   (.columnField mm "public/xt_docs" "struct"))))))))
+                   (cat/column-field tc "public/xt_docs" "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
@@ -321,7 +321,7 @@
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
-            ^IMetadataManager mm (tu/component node ::meta/metadata-manager)
+            block-cat (block-cat/<-node node)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -333,19 +333,17 @@
         (t/is (nil? (tu/latest-completed-tx node)))
 
         (let [last-tx-id (reduce
-                           (fn [_acc tx-ops]
-                             (xt/submit-tx node tx-ops))
-                           nil
-                           (partition-all 100 tx-ops))
+                          (fn [_acc tx-ops]
+                            (xt/submit-tx node tx-ops))
+                          nil
+                          (partition-all 100 tx-ops))
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
           (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-block! node)
 
-          (t/is (= {:latest-completed-tx last-tx-key}
-                   (-> (meta/latest-block-metadata mm)
-                       (dissoc :tables :block-idx))))
+          (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
 
           (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
             (t/is (= 4 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
@@ -376,15 +374,16 @@
           (t/is (= 5500 (count second-half-tx-ops)))
 
           (let [first-half-tx-id (reduce
-                                   (fn [_ tx-ops]
-                                     (xt/submit-tx node1 tx-ops))
-                                   nil
-                                   (partition-all 100 first-half-tx-ops))]
+                                  (fn [_ tx-ops]
+                                    (xt/submit-tx node1 tx-ops))
+                                  nil
+                                  (partition-all 100 first-half-tx-ops))]
             (.close node1)
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
               (let [^BufferPool bp (util/component node2 :xtdb/buffer-pool)
-                    ^IMetadataManager mm (util/component node2 ::meta/metadata-manager)
+                    block-cat (block-cat/<-node node2)
+                    tc (cat/<-node node2)
                     lc-tx (-> first-half-tx-id
                               (tu/then-await-tx node2 (Duration/ofSeconds 10)))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
@@ -392,7 +391,7 @@
                          (tu/latest-completed-tx node2)))
 
 
-                (let [{:keys [latest-completed-tx]} (meta/latest-block-metadata mm)]
+                (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
 
                   (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
 
@@ -407,13 +406,13 @@
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))
 
                 (t/is (= :utf8
-                         (types/field->col-type (.columnField mm "public/device_readings" "_id"))))
+                         (types/field->col-type (cat/column-field tc "public/device_readings" "_id"))))
 
                 (let [second-half-tx-id (reduce
-                                          (fn [_ tx-ops]
-                                            (xt/submit-tx node2 tx-ops))
-                                          nil
-                                          (partition-all 100 second-half-tx-ops))]
+                                         (fn [_ tx-ops]
+                                           (xt/submit-tx node2 tx-ops))
+                                         nil
+                                         (partition-all 100 second-half-tx-ops))]
 
                   (t/is (<= first-half-tx-id
                             (:tx-id (tu/latest-completed-tx node2))
@@ -430,7 +429,7 @@
                                 second-half-tx-id))
 
                       (t/is (= :utf8
-                               (types/field->col-type (.columnField mm "public/device_info" "_id"))))
+                               (types/field->col-type (cat/column-field tc "public/device_info" "_id"))))
 
                       (let [lc-tx (-> second-half-tx-id (tu/then-await-tx node3 (Duration/ofSeconds 15)))]
                         (t/is (= second-half-tx-id (:tx-id lc-tx)))
@@ -448,7 +447,7 @@
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
 
                       (t/is (= :utf8
-                               (types/field->col-type (.columnField mm "public/device_info" "_id")))))))))))))))
+                               (types/field->col-type (cat/column-field tc "public/device_info" "_id")))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -456,7 +455,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-      (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
+      (let [tc1 (cat/<-node node1)]
 
         (-> (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 0, :v "foo"}]])
             (tu/then-await-tx node1 (Duration/ofSeconds 1)))
@@ -464,7 +463,7 @@
         (tu/finish-block! node1)
 
         (t/is (= :utf8
-                 (types/field->col-type (.columnField mm1 "public/xt_docs" "v"))))
+                 (types/field->col-type (cat/column-field tc1 "public/xt_docs" "v"))))
 
         (let [tx2 (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                                        [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -474,14 +473,14 @@
           (tu/finish-block! node1)
 
           (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                   (types/field->col-type (.columnField mm1 "public/xt_docs" "v"))))
+                   (types/field->col-type (cat/column-field tc1 "public/xt_docs" "v"))))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-            (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
+            (let [tc2 (cat/<-node node2)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                       (types/field->col-type (.columnField mm2 "public/xt_docs" "v")))))))))))
+                       (types/field->col-type (cat/column-field tc2 "public/xt_docs" "v")))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
@@ -514,8 +513,8 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir
                                          :instant-src (tu/->mock-clock)})]
-        (let [mm (tu/component node ::meta/metadata-manager)]
-          (t/is (nil? (meta/latest-block-metadata mm)))
+        (let [block-cat (block-cat/<-node node)]
+          (t/is (nil? (.getCurrentBlockIndex block-cat)))
 
           (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"

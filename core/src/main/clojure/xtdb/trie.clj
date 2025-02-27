@@ -4,7 +4,10 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import com.carrotsearch.hppc.ByteArrayList
+  (:import (clojure.lang MapEntry)
+           com.carrotsearch.hppc.ByteArrayList
+           (com.google.protobuf ByteString)
+           (java.nio ByteBuffer)
            (java.nio.file Path)
            java.time.LocalDate
            (java.util ArrayList)
@@ -12,6 +15,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
+           (xtdb.block.proto TableBlock)
            xtdb.BufferPool
            (xtdb.trie DataRel ISegment MemoryHashTrie MergePlanNode Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)))
@@ -44,9 +48,6 @@
 
 (defn table-name->table-path ^java.nio.file.Path [^String table-name]
   (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
-
-(defn table-dir->table-name ^String [^String table-dir]
-  (str/replace-first table-dir #"\$" "/" ))
 
 (defn ->table-data-file-path ^java.nio.file.Path [table-name trie-key]
   (-> (table-name->table-path table-name)
