@@ -10,6 +10,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.object-store
+            [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie :refer [MergePlanPage]]
             [xtdb.trie-catalog :as cat]
@@ -373,10 +374,11 @@
          {:allocator (ig/ref :xtdb/allocator)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :buffer-pool (ig/ref :xtdb/buffer-pool)
+          :table-catalog (ig/ref :xtdb/table-catalog)
           :trie-catalog (ig/ref :xtdb/trie-catalog)}))
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^BufferPool buffer-pool,
-                                                 ^TrieCatalog trie-catalog]}]
+                                                 ^TrieCatalog trie-catalog, table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (close [_] (->> table->template-rel+trie vals (map first) util/close))
@@ -388,7 +390,7 @@
                     (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
                             (or (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
                                 (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
-                                (types/merge-fields (.columnField metadata-mgr table col-name)
+                                (types/merge-fields (table-cat/column-field table-catalog table col-name)
                                                     (some-> (.getLiveIndex wm)
                                                             (.liveTable table)
                                                             (.columnField col-name)))))
@@ -430,15 +432,14 @@
                                        :when (not (types/temporal-column? col-name))]
                                    select))
 
-              row-count (-> (.latestBlockMetadata metadata-mgr)
-                            (get-in [:tables table-name :row-count]))]
+              row-count (table-cat/row-count table-catalog table-name)]
 
           {:fields fields
            :stats {:row-count row-count}
            :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args metadata-mgr watermark))
+                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args table-catalog watermark))
 
                          (let [template-table? (info-schema/template-tables table)
                                iid-bb (selects->iid-byte-buffer selects args)

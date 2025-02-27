@@ -1,10 +1,11 @@
 (ns xtdb.indexer.live-table-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
+            [xtdb.block-catalog :as block-cat]
             [xtdb.indexer.live-index :as li]
-            [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
+            [xtdb.table-catalog :as table-cat]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -166,13 +167,14 @@
         table-name "foo"]
     (util/with-open [allocator (RootAllocator.)]
       (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
-            mm (tu/component tu/*node* ::meta/metadata-manager)
+            block-cat (block-cat/<-node tu/*node*)
             log (tu/component tu/*node* :xtdb/log)
+            table-catalog (table-cat/<-node tu/*node*)
             trie-catalog (tu/component tu/*node* :xtdb/trie-catalog)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp mm
-                                                               log trie-catalog
-                                                               (Compactor/getNoop)
+        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log (Compactor/getNoop)
+                                                               block-cat table-catalog trie-catalog
+
                                                                nil nil (HashMap.)
                                                                nil (StampedLock.)
                                                                (RefCounter.)

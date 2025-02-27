@@ -1,14 +1,15 @@
 (ns xtdb.query-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.block-catalog :as block-cat]
+            [xtdb.compactor :as c]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.compactor :as c])
+            [xtdb.vector.writer :as vw])
   (:import (java.time LocalTime)
            (xtdb.metadata IMetadataManager ITableMetadata)))
 
@@ -38,7 +39,7 @@
     (tu/finish-block! node)
     (c/compact-all! node)
 
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+    (let [block-cat (block-cat/<-node node)]
       (letfn [(test-query-ivan [expected]
                 (t/is (= expected
                          (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name "Ivan")}]]
@@ -48,7 +49,7 @@
                          (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
                                            {:node node, :args {:name "Ivan"}})))))]
 
-        (t/is (= 1 (:block-idx (.latestBlockMetadata metadata-mgr))))
+        (t/is (= 1 (.getCurrentBlockIndex block-cat)))
 
         (util/with-open [args (tu/open-args {:name "Ivan"})]
           (t/testing "only needs to scan block 1, page 1"
@@ -102,8 +103,8 @@
 
     (tu/finish-block! node)
     (c/compact-all! node)
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-      (t/is (= 1 (:block-idx (.latestBlockMetadata metadata-mgr))))
+    (let [block-cat (block-cat/<-node node)]
+      (t/is (= 1 (.getCurrentBlockIndex block-cat)))
 
       (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]

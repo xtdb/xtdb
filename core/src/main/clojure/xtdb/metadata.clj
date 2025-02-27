@@ -7,21 +7,16 @@
             [xtdb.trie :as  trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (clojure.lang MapEntry)
-           (com.github.benmanes.caffeine.cache Cache Caffeine)
-           (com.google.protobuf ByteString)
+  (:import (com.github.benmanes.caffeine.cache Cache Caffeine)
            java.lang.AutoCloseable
-           java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util ArrayList HashMap HashSet Map)
+           (java.util HashMap HashSet Map)
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow Relation Vector VectorReader VectorWriter)
-           (xtdb.block.proto TableBlock)
            xtdb.BufferPool
-           xtdb.catalog.BlockCatalog
            (xtdb.metadata ITableMetadata PageIndexKey PageMetadataWriter)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
@@ -31,60 +26,10 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IMetadataManager
-  (^void finishBlock [^long blockIdx, newBlockMetadata])
-  (^java.util.Map latestBlockMetadata [])
-  (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath])
-  (columnFields [^String tableName])
-  (columnField [^String tableName, ^String colName])
-  (allColumnFields [])
-  (allTableNames []))
+  (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath]))
 
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
-
-(def ^Path block-table-metadata-path (util/->path "blocks"))
-
-(defn- ->table-block-metadata-obj-key [^Path table-path block-idx]
-  (.resolve (.resolve table-path block-table-metadata-path)
-            (format "b%s.binpb" (util/->lex-hex-string block-idx))))
-
-(defn- write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count]
-  (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
-                         (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
-                         (.setRowCount row-count))
-                       (.build)
-                       (.toByteArray))))
-
-(defn- <-table-block [^TableBlock table-block]
-  (let [^Schema schema
-        (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]
-    {:row-count (.getRowCount table-block)
-     :fields (->> (for [^Field field (.getFields schema)]
-                    (MapEntry/create (.getName field) field))
-                  (into {}))}))
-
-(defn- merge-fields [old-fields new-fields]
-  (->> (merge-with types/merge-fields old-fields new-fields)
-       (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
-       (into {})))
-
-(defn- merge-tables [old-table {:keys [row-count fields] :as delta-table}]
-  (cond-> old-table
-    delta-table (-> (update :row-count (fnil + 0) row-count)
-                    (update :fields merge-fields fields))))
-
-(defn- new-block [block-idx
-                  {:keys [tables] :as _old-block-medata}
-                  {new-delta-tables :tables :keys [latest-completed-tx] :as _new-block-metadata}]
-  (let [table-names (set (concat (keys tables) (keys new-delta-tables)))]
-    {:block-idx block-idx
-     :latest-completed-tx latest-completed-tx
-     :tables (->> table-names
-                  (map (fn [table-name]
-                         (MapEntry/create table-name
-                                          (merge-tables (get tables table-name)
-                                                        (get new-delta-tables table-name)))))
-                  (into {}))}))
 
 (def metadata-col-type
   '[:list
@@ -369,77 +314,25 @@
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^BufferPool buffer-pool
-                          ^BlockCatalog block-cat
-                          ^Cache table-metadata-idx-cache
-                          ^:volatile-mutable ^Map last-block-metadata
-                          ^:volatile-mutable ^Map table->fields]
+                          ^Cache table-metadata-idx-cache]
   IMetadataManager
-  ;; the new-block-metadata is only the delta for the new block
-  (finishBlock [this block-idx new-block-metadata]
-    (let [current-block-idx (.getCurrentBlockIndex block-cat)]
-      (when (or (nil? current-block-idx) (< ^long current-block-idx block-idx))
-        (let [{:keys [latest-completed-tx] :as new-block-metadata}
-              (new-block block-idx last-block-metadata new-block-metadata)
-
-              new-table->fields (-> new-block-metadata :tables (update-vals :fields))
-              table-names (ArrayList.)]
-
-          (doseq [[table-name col-name->-field] new-table->fields]
-            (let [row-count (get-in new-block-metadata [:tables table-name :row-count])
-                  fields (for [[col-name field] col-name->-field]
-                           (types/field-with-name field col-name))
-                  table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)]
-              (.add table-names table-name)
-              (.putObject buffer-pool table-block-path
-                          (write-table-block-data (Schema. fields) row-count))))
-          (.finishBlock block-cat block-idx latest-completed-tx table-names)
-          (set! (.table->fields this) new-table->fields)
-          (set! (.last-block-metadata this) new-block-metadata)))))
-
   (openTableMetadata [_ file-path]
     (->table-metadata allocator buffer-pool file-path table-metadata-idx-cache))
-
-  (latestBlockMetadata [_] last-block-metadata)
-
-  (columnField [_ table-name col-name]
-    (some-> (get table->fields table-name)
-            (get col-name (types/->field col-name #xt.arrow/type :null true))))
-
-  (columnFields [_ table-name] (get table->fields table-name))
-  (allColumnFields [_] table->fields)
-  (allTableNames [_] (set (keys table->fields)))
 
   AutoCloseable
   (close [_]
     (util/close allocator)))
 
-(defn latest-block-metadata [^IMetadataManager metadata-mgr]
-  (.latestBlockMetadata metadata-mgr))
-
-(defn- load-latest-block-tables ^java.util.Map [{:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
-  (when-let [block-idx (.getCurrentBlockIndex block-cat)]
-    {:block-idx block-idx
-     :latest-completed-tx (.getLatestCompletedTx block-cat)
-     :tables (->> (for [table-name (.getAllTableNames block-cat)
-                        :let [table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)
-                              table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
-                    (MapEntry/create table-name (<-table-block table-block)))
-                  (into {}))}))
-
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)
-          :block-cat (ig/ref :xtdb/block-catalog)}
+          :buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, block-cat, cache-size], :or {cache-size 128} :as deps}]
-  (let [last-block-tables (load-latest-block-tables deps)]
-    (MetadataManager. (util/->child-allocator allocator "metadata-mgr") buffer-pool block-cat
-                      (-> (Caffeine/newBuilder)
-                          (.maximumSize cache-size)
-                          (.build))
-                      last-block-tables
-                      (or (-> last-block-tables :tables (update-vals :fields)) {}))))
+(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, cache-size], :or {cache-size 128} :as deps}]
+  (MetadataManager. (util/->child-allocator allocator "metadata-mgr") buffer-pool
+                    (-> (Caffeine/newBuilder)
+                        (.maximumSize cache-size)
+                        (.build))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))

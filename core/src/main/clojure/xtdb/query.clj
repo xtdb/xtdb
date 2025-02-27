@@ -48,8 +48,8 @@
            (xtdb ICursor IResultCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
+           xtdb.catalog.BlockCatalog
            (xtdb.indexer Watermark$Source)
-           xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
            xtdb.vector.IVectorReader))
@@ -106,15 +106,14 @@
 
     (columnFields [_] fields)))
 
-(defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^Watermark$Source wm-src]}
+(defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^BlockCatalog block-cat, ^Watermark$Source wm-src]}
                  conformed-query scan-cols default-tz param-fields]
   (.computeIfAbsent cache
                     {:scan-fields (when (and (seq scan-cols) scan-emitter)
                                     (with-open [wm (.openWatermark wm-src)]
                                       (.scanFields scan-emitter wm scan-cols)))
                      :default-tz default-tz
-                     :last-known-block (when metadata-mgr
-                                         (.latestBlockMetadata metadata-mgr))
+                     :last-known-block (some-> block-cat .getCurrentBlockIndex)
                      :param-fields param-fields}
                     (reify Function
                       (apply [_ emit-opts]
