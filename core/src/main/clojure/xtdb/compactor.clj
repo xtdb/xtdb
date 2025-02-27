@@ -230,7 +230,9 @@
                                    (compaction-jobs table-name (cat/trie-state trie-catalog table-name) trie-catalog))))))
 
          (executeJob [_ job]
-           (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job)))
+           (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job))
+
+         (close [_] (util/close allocator)))
 
        log trie-catalog *ignore-signal-block?* threads))))
 

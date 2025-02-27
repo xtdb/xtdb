@@ -34,7 +34,7 @@ interface Compactor : AutoCloseable {
         val outputTrieKey: String
     }
 
-    interface Impl {
+    interface Impl : AutoCloseable {
         fun availableJobs(): Collection<Job>
         fun executeJob(job: Job): List<AddedTrie>
     }
@@ -218,6 +218,7 @@ interface Compactor : AutoCloseable {
 
                 override fun close() {
                     runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+                    impl.close()
                 }
             }
 
