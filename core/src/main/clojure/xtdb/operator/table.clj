@@ -11,7 +11,7 @@
   (:import clojure.lang.MapEntry
            (java.util HashMap HashSet Set)
            (org.apache.arrow.vector VectorSchemaRoot ZeroVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Null ArrowType$Union Field Schema)
            (xtdb ICursor)
            xtdb.arrow.VectorPosition
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
@@ -151,8 +151,11 @@
 
      :->out-rel (fn [{:keys [allocator ^RelationReader args]}]
                   (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
-                    (let [list-rdr (cond-> list-rdr
-                                     (instance? ArrowType$Union (.getType (.getField list-rdr))) (.legReader "list"))]
+                    (let [list-rdr-type (.getType (.getField list-rdr))
+                          list-rdr (cond
+                                     (instance? ArrowType$Null list-rdr-type) nil
+                                     (instance? ArrowType$Union list-rdr-type) (.legReader list-rdr "list")
+                                     :else list-rdr)]
 
                       (util/with-close-on-catch [el-rdr (.copy (or (some-> list-rdr .listElementReader (.withName (str out-col)))
                                                                    (vr/vec->reader (ZeroVector. (str out-col))))

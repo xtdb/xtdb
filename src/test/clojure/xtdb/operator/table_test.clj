@@ -167,7 +167,12 @@
 
            (tu/query-ra '[:table {unnest-param ?coll}]
                         {:args {:coll [12.4, nil, 100, 83.0]}
-                         :with-col-types? true}))))
+                         :with-col-types? true})))
+
+  (t/is (= {:res [], :col-types '{b :null}}
+           (tu/query-ra '[:table {b nil}]
+                        {:with-col-types? true}))
+        "nil value - #4075"))
 
 (t/deftest test-table-with-map-params
   (t/is (= [{:a 4.2} {:b "1", :c 2, :a 0} {:b 2, :a 1}]
