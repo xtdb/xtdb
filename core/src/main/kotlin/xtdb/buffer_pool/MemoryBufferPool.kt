@@ -60,7 +60,7 @@ class MemoryBufferPool(
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
         synchronized(memoryStore) {
-            memoryStore[key] = buffer.openArrowBufView(allocator)
+            memoryStore.put(key, buffer.openArrowBufView(allocator))?.close()
         }
     }
 
