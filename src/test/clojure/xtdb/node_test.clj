@@ -988,3 +988,24 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:xt/id 1}]
              (xt/q node ["SELECT _id FROM docs WHERE a < ?" #xt/date "2500-01-01"])))))
+
+(t/deftest able-to-override-valid-time-in-put-docs
+  (xt/execute-tx tu/*node* [[:put-docs :docs
+                             {:xt/id 1, :xt/valid-from #inst "2000-01-01"}
+                             {:xt/id 1, :a 1}
+                             {:xt/id 2, :xt/valid-from #inst "2000-01-01", :xt/valid-to #inst "2000-01-02"}]])
+
+  (t/is (= [{:xt/id 1, :xt/valid-from (time/->zdt #inst "2000-01-01"), :xt/valid-to (time/->zdt #inst "2020-01-01")}
+            {:xt/id 1, :a 1, :xt/valid-from (time/->zdt #inst "2020-01-01")}
+            {:xt/id 2, :xt/valid-from (time/->zdt #inst "2000-01-01"), :xt/valid-to (time/->zdt #inst "2000-01-02")}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
+
+  (xt/execute-tx tu/*node* [[:put-docs {:into :docs2, :valid-from #inst "2025-01-01"}
+                             {:xt/id 1, :xt/valid-from #inst "2000-01-01"}
+                             {:xt/id 1, :a 1, :xt/valid-from nil}
+                             {:xt/id 2, :xt/valid-from #inst "2000-01-01", :xt/valid-to #inst "2000-01-02"}]])
+
+  (t/is (= [{:xt/id 1, :xt/valid-from (time/->zdt #inst "2000-01-01"), :xt/valid-to (time/->zdt #inst "2025-01-01")}
+            {:xt/id 1, :a 1, :xt/valid-from (time/->zdt #inst "2025-01-01")}
+            {:xt/id 2, :xt/valid-from (time/->zdt #inst "2000-01-01"), :xt/valid-to (time/->zdt #inst "2000-01-02")}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs2 FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))

@@ -95,6 +95,13 @@
 
          (throw (ex-info msg# data# e#))))))
 
+(defn- assert-timestamp-col-type [^IVectorReader rdr]
+  (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getType (.getField rdr))))
+    (throw (err/illegal-arg :xtdb/invalid-timestamp-col-type
+                            {:col-name (.getName rdr)
+                             :field (pr-str (.getType (.getField rdr)))
+                             :col-type (types/field->col-type (.getField rdr))}))))
+
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx,
                                                    ^IVectorReader tx-ops-rdr, ^Instant system-time
                                                    {:keys [indexer tx-key]}]
@@ -119,7 +126,7 @@
                                           ks (.structKeys doc-rdr)]
                                       (when-let [forbidden-cols (not-empty (->> ks
                                                                                 (into #{} (filter (every-pred #(str/starts-with? % "_")
-                                                                                                              (complement #{"_id" "_fn"}))))))]
+                                                                                                              (complement #{"_id" "_fn" "_valid_from" "_valid_to"}))))))]
                                         (throw (err/illegal-arg :xtdb/forbidden-columns
                                                                 {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
                                                                  :table-name table-name
@@ -133,6 +140,11 @@
 
                                                           :live-table-tx live-table-tx
 
+                                                          :row-valid-from-rdr (doto (.structKeyReader doc-rdr "_valid_from")
+                                                                                (assert-timestamp-col-type))
+                                                          :row-valid-to-rdr (doto (.structKeyReader doc-rdr "_valid_to")
+                                                                              (assert-timestamp-col-type))
+
                                                           :docs-rdr table-docs-rdr
 
                                                           :doc-copier (-> (.getDocWriter live-table-tx)
@@ -142,7 +154,8 @@
       (indexOp [_ tx-op-idx]
         (let [table-name (.getLeg docs-rdr tx-op-idx)
 
-              {:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^LiveTable$Tx live-table-tx, ^RowCopier doc-copier]}
+              {:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^LiveTable$Tx live-table-tx, ^RowCopier doc-copier
+                      ^IVectorReader row-valid-from-rdr, ^IVectorReader row-valid-to-rdr]}
               (get tables table-name)
 
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
@@ -160,7 +173,14 @@
                 ^long iid-start-idx (or (some-> iids-rdr (.getListStartIndex tx-op-idx))
                                         Long/MIN_VALUE)]
             (dotimes [row-idx (.getListCount docs-rdr tx-op-idx)]
-              (let [doc-idx (+ doc-start-idx row-idx)]
+              (let [doc-idx (+ doc-start-idx row-idx)
+                    valid-from (if (and row-valid-from-rdr (not (.isNull row-valid-from-rdr doc-idx)))
+                                 (.getLong row-valid-from-rdr doc-idx)
+                                 valid-from)
+                    valid-to (if (and row-valid-to-rdr (not (.isNull row-valid-to-rdr doc-idx)))
+                               (.getLong row-valid-to-rdr doc-idx)
+                               valid-to)]
+
                 (with-crash-log indexer "error putting document"
                     {:table-name table-name :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
                     {:live-table-tx live-table-tx}
