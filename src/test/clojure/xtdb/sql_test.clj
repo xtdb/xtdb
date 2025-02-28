@@ -2780,10 +2780,25 @@ UNION ALL
   (t/is (false? (execute-tx->committed? "INSERT INTO docs (_id) FROM generate_series (1, 4) xs (x, foo)"))))
 
 (t/deftest test-full-outer-join
+  (t/testing "uncorelated FOJ"
+    (let [q "SELECT foo, bar FROM d1 FULL OUTER JOIN d2 ON foo = bar"]
+      (t/is
+       (=plan-file "test-full-outer-join-uncorrelated"
+                   (plan-sql q
+                             {:table-info {"public/d1" #{"_id" "bar"} "public/d2" #{"_id" "foo"}}})))
+
+      (xt/execute-tx tu/*node* ["INSERT INTO d1 (_id, foo) VALUES (1, 1), (2, 2), (3, 4)"
+                                "INSERT INTO d2 (_id, bar) VALUES (1, 1), (2, 2), (3, 3)"])
+
+      (t/is (= [{:foo 2, :bar 2} {:foo 1, :bar 1} {:bar 3} {:foo 4}]
+               (xt/q tu/*node* q)))))
+
   (t/is
-   (thrown-with-msg? IllegalArgumentException #"mismatched input 'FULL'"
-                     (plan-sql "SELECT * FROM d1 FULL OUTER JOIN d2 ON true"
-                               {:table-info {"d1" #{"_id" "bar"} "d2" #{"_id" "foo"}}}))))
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Subqueries are not allowed in this context"
+    (plan-sql "SELECT foo, bar FROM d1 FULL OUTER JOIN d2 ON foo = (SELECT bar)"
+              {:table-info {"public/d1" #{"_id" "bar"} "public/d2" #{"_id" "foo"}}}))))
 
 (t/deftest order-by-ignored-4193
   (xt/submit-tx tu/*node* ["INSERT INTO docs (_id, col1, w) VALUES (1, 'foo', 'x')"

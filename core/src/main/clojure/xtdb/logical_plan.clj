@@ -190,6 +190,9 @@
     [:left-outer-join _ lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
+    [:full-outer-join _ lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
+
     [:semi-join _ lhs _]
     (relation-columns lhs)
 
@@ -595,7 +598,7 @@
     ;;=>
     (when (and
             (contains?
-              #{:join :semi-join :anti-join :left-outer-join :single-join :mark-join}
+              #{:join :semi-join :anti-join :left-outer-join :single-join :mark-join} ;TODO full-outer-join
               join-op)
             (or push-correlated? (no-correlated-columns? predicate)))
       (cond
@@ -819,7 +822,7 @@
     (when (not-empty (expr-correlated-symbols predicate))
       [:select predicate [:join join-map lhs rhs]])
 
-    [:left-outer-join join-map lhs [:select predicate rhs]]
+    [:left-outer-join join-map lhs [:select predicate rhs]] ;;TODO full-outer-join but also is this correct for LOJ
     ;;=>
     (when (not-empty (expr-correlated-symbols predicate))
       [:select predicate [:left-outer-join join-map lhs rhs]])
@@ -1111,7 +1114,7 @@
 
 (defn- rewrite-equals-predicates-in-join-as-equi-join-map [z]
   (r/zcase z
-    (:join :semi-join :anti-join :left-outer-join :single-join :mark-join)
+    (:join :semi-join :anti-join :left-outer-join :single-join :mark-join :full-outer-join)
     (r/zmatch
       z
       [:mark-join projection lhs rhs]

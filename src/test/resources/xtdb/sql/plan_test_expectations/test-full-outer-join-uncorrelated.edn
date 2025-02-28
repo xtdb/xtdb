@@ -1,0 +1,6 @@
+[:project
+ [{foo d2.2/foo} {bar d1.1/bar}]
+ [:full-outer-join
+  [{d1.1/bar d2.2/foo}]
+  [:rename d1.1 [:scan {:table public/d1} [bar]]]
+  [:rename d2.2 [:scan {:table public/d2} [foo]]]]]
