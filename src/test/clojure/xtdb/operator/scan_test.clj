@@ -49,10 +49,11 @@
 
 (t/deftest test-block-boundary
   (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
-    (->> (for [i (range 110)]
-           [:put-docs :xt_docs {:xt/id i}])
-         (partition-all 10)
-         (mapv #(xt/submit-tx node %)))
+    (doseq [batch (->> (range 110)
+                       (partition-all 10))]
+      (xt/execute-tx node
+                     (for [i batch]
+                       [:put-docs :xt_docs {:xt/id i}])))
 
     (t/is (= (set (for [i (range 110)] {:xt/id i}))
              (set (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
@@ -124,8 +125,8 @@
           "testing only getting some trie matches"))
 
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 20}}))]
-    (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
-    (xt/submit-tx node (for [i (range 20)] [:delete-docs :xt_docs i]))
+    (xt/execute-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
+    (xt/execute-tx node (for [i (range 20)] [:delete-docs :xt_docs i]))
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
@@ -589,18 +590,17 @@
 
 (deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
-    (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
-        (tu/then-await-tx node))
+    (xt/execute-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
              (set (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
                                {:node node}))))))
 
 (deftest test-pushdown-blooms
-  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
+  (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
                            [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]])
   (tu/finish-block! tu/*node*)
-  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
+  (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
   (tu/finish-block! tu/*node*)
 
   (let [!page-idxs-cnt (atom 0)
