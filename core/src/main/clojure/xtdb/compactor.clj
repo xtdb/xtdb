@@ -137,7 +137,7 @@
 
             data-file-size (util/with-open [data-rel (Relation. allocator schema)
                                             recency-wtr (open-recency-wtr allocator)]
-                             (merge-segments-into data-rel recency-wtr segments part)
+                             (merge-segments-into data-rel recency-wtr segments (byte-array part))
 
                              (util/with-open [trie-wtr (TrieWriter. allocator buffer-pool
                                                                     schema table-name out-trie-key
@@ -156,7 +156,7 @@
       (log/error t "Error running compaction job.")
       (throw t))))
 
-(defrecord Job [table-name trie-keys ^bytes part out-trie-key]
+(defrecord Job [table-name trie-keys part out-trie-key]
   Compactor$Job
   (getTableName [_] table-name)
   (getOutputTrieKey [_] out-trie-key))
@@ -198,7 +198,7 @@
         :when (= cat/branch-factor (count in-files))
         :let [trie-keys (mapv :trie-key in-files)
               out-block-idx (:block-idx (last in-files))]]
-    (->Job table-name trie-keys (byte-array out-part)
+    (->Job table-name trie-keys out-part
            (trie/->l2+-trie-key out-level out-part out-block-idx))))
 
 (defn compaction-jobs [table-name trie-state opts]

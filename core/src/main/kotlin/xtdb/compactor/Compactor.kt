@@ -12,13 +12,11 @@ import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.log.proto.AddedTrie
-import xtdb.trie.FileSize
-import xtdb.trie.HashTrie
+import xtdb.trie.*
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
-import xtdb.trie.TrieCatalog
-import xtdb.trie.TrieWriter
-import xtdb.util.debug
+import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.requiringResolve
 import xtdb.util.trace
 import java.time.Duration
 import java.util.*
@@ -26,6 +24,8 @@ import kotlin.time.Duration.Companion.seconds
 
 private typealias InstantMicros = Long
 private typealias Selection = IntArray
+
+private typealias JobKey = Pair<TableName, TrieKey>
 
 interface Compactor : AutoCloseable {
 
@@ -147,49 +147,44 @@ interface Compactor : AutoCloseable {
                 private val idle = Channel<Unit>()
 
                 @Volatile
-                private var availableJobKeys = emptySet<String>()
+                private var availableJobs = emptyMap<JobKey, Job>()
 
-                private val queuedJobs = mutableSetOf<String>()
+                private val queuedJobs = mutableSetOf<JobKey>()
 
                 init {
                     scope.launch {
-                        val doneCh = Channel<Job>()
+                        val doneCh = Channel<JobKey>()
 
                         while (true) {
-                            val availableJobs = impl.availableJobs()
-                            availableJobKeys = availableJobs.map { it.outputTrieKey }.toSet()
+                            availableJobs = impl.availableJobs().associateBy { JobKey(it.tableName, it.outputTrieKey) }
 
                             if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
                                 LOGGER.trace("sending idle")
                                 idle.trySend(Unit)
                             }
 
-                            availableJobs.forEach {
-                                if (queuedJobs.add(it.outputTrieKey)) {
+                            availableJobs.keys.forEach { jobKey ->
+                                if (queuedJobs.add(jobKey)) {
                                     jobsScope.launch {
                                         // check it's still required
-                                        if (it.outputTrieKey in availableJobKeys) {
-                                            LOGGER.debug("executing job: ${it.outputTrieKey}")
-
-                                            val res = runInterruptible { impl.executeJob(it) }
+                                        val job = availableJobs[jobKey]
+                                        if (job != null) {
+                                            val res = runInterruptible { impl.executeJob(job) }
 
                                             // add the trie to the catalog eagerly so that it's present
                                             // next time we run `availableJobs` (it's idempotent)
                                             trieCatalog.addTries(res)
                                             log.appendMessage(TriesAdded(res)).await()
-
-                                            LOGGER.debug("done: ${it.outputTrieKey}")
                                         }
 
-                                        doneCh.send(it)
+                                        doneCh.send(jobKey)
                                     }
                                 }
                             }
 
                             select {
                                 doneCh.onReceive {
-                                    queuedJobs.remove(it.outputTrieKey)
-                                    LOGGER.debug("Completed job ${it.outputTrieKey}")
+                                    queuedJobs.remove(it)
                                 }
 
                                 wakeup.onReceive {
