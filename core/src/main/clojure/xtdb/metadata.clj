@@ -17,7 +17,7 @@
            (java.util HashMap HashSet Map NavigableMap TreeMap)
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
-           (org.apache.arrow.memory ArrowBuf)
+           (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow Relation Vector VectorReader VectorWriter)
            xtdb.BufferPool
@@ -350,30 +350,31 @@
 
 (def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
 
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^BufferPool buffer-pool ^Path file-path, ^Cache table-metadata-idx-cache]
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^BufferAllocator allocator, ^BufferPool buffer-pool,
+                                                      ^Path file-path, ^Cache table-metadata-idx-cache]
   (let [footer (.getFooter buffer-pool file-path)]
     (util/with-open [rb (.getRecordBatch buffer-pool file-path 0)]
-      (let [alloc (.getAllocator (.getReferenceManager ^ArrowBuf (first (.getBuffers rb))))]
-        (util/with-close-on-catch [rel (Relation/fromRecordBatch alloc (.getSchema footer) rb)]
-          (let [nodes-vec (.get rel "nodes")
-                rdr (.getOldRelReader rel)
-                ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
-                                                   (.legReader "leaf"))
-                {:keys [col-names page-idx-cache]} (.get table-metadata-idx-cache file-path
-                                                         (fn [_]
-                                                           (->table-metadata-idxs metadata-reader)))
+      (util/with-close-on-catch [rel (Relation/fromRecordBatch allocator (.getSchema footer) rb)]
+        (let [nodes-vec (.get rel "nodes")
+              rdr (.getOldRelReader rel)
+              ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
+                                                 (.legReader "leaf"))
+              {:keys [col-names page-idx-cache]} (.get table-metadata-idx-cache file-path
+                                                       (fn [_]
+                                                         (->table-metadata-idxs metadata-reader)))
 
 
-                temporal-col-types-rdr (some-> (.structKeyReader metadata-reader "columns")
-                                               (.listElementReader)
-                                               (.structKeyReader "types")
-                                               (.structKeyReader temporal-col-type-leg-name))
+              temporal-col-types-rdr (some-> (.structKeyReader metadata-reader "columns")
+                                             (.listElementReader)
+                                             (.structKeyReader "types")
+                                             (.structKeyReader temporal-col-type-leg-name))
 
-                min-rdr (some-> temporal-col-types-rdr (.structKeyReader "min"))
-                max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
-            (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache min-rdr max-rdr)))))))
+              min-rdr (some-> temporal-col-types-rdr (.structKeyReader "min"))
+              max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
+          (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache min-rdr max-rdr))))))
 
-(deftype MetadataManager [^BufferPool buffer-pool
+(deftype MetadataManager [^BufferAllocator allocator
+                          ^BufferPool buffer-pool
                           ^Cache table-metadata-idx-cache
                           ^NavigableMap blocks-metadata
                           ^:volatile-mutable ^Map fields]
@@ -384,7 +385,7 @@
     (.put blocks-metadata block-idx new-block-metadata))
 
   (openTableMetadata [_ file-path]
-    (->table-metadata buffer-pool file-path table-metadata-idx-cache))
+    (->table-metadata allocator buffer-pool file-path table-metadata-idx-cache))
 
   (blocksMetadata [_] blocks-metadata)
   (columnField [_ table-name col-name]
@@ -397,7 +398,8 @@
 
   AutoCloseable
   (close [_]
-    (.clear blocks-metadata)))
+    (.clear blocks-metadata)
+    (util/close allocator)))
 
 (defn latest-block-metadata [^IMetadataManager metadata-mgr]
   (let [entry (.lastEntry (.blocksMetadata metadata-mgr))]
@@ -422,15 +424,17 @@
       (transit/read rdr))))
 
 (defmethod ig/prep-key ::metadata-manager [_ opts]
-  (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}
+  (merge {:allocator (ig/ref :xtdb/allocator)
+          :buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [cache-size ^BufferPool buffer-pool], :or {cache-size 128} :as deps}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, cache-size], :or {cache-size 128} :as deps}]
   (let [blocks-metadata (load-blocks-metadata deps)
         table-metadata-cache (-> (Caffeine/newBuilder)
                                  (.maximumSize cache-size)
                                  (.build))]
-    (MetadataManager. buffer-pool
+    (MetadataManager. (util/->child-allocator allocator "metadata-mgr")
+                      buffer-pool
                       table-metadata-cache
                       blocks-metadata
                       (->> (vals blocks-metadata) (reduce merge-fields {})))))
