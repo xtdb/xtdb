@@ -26,9 +26,12 @@ variable "kubernetes_service_account_name" {
 }
 
 variable "storage_bucket_name" {
-  description = "The name of the Google Cloud Storage bucket used for XTDB data storage."
+  description = "The globally unique name of the Google Cloud Storage bucket for XTDB deployment."
   type        = string
-  default     = "xtdb-storage-bucket"
+  validation {
+    condition     = length(var.storage_bucket_name) >= 0
+    error_message = "The Google cloud storage bucket name must be set and globally unique."
+  }
 }
 
 variable "storage_bucket_location" {

@@ -5,7 +5,7 @@
 service_account_name = "xtdb-service-account"
 
 # Google Cloud Storage Settings
-storage_bucket_name          = "xtdb-storage-bucket"
+# storage_bucket_name          = "unique-bucket-name"
 storage_bucket_location      = "us-central1"
 storage_bucket_storage_class = "STANDARD"
 

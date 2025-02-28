@@ -126,6 +126,7 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-azure \
 
 By default, the following resources are deployed by the Helm chart:
 
+* A `ConfigMap` containing the XTDB YAML configuration.
 * A `StatefulSet` containing a configurable number of XTDB nodes, using the link:#docker-image[**xtdb-azure** docker image]
 * A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
 
