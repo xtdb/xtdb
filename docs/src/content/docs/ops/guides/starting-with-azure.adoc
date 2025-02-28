@@ -251,10 +251,9 @@ helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure \
 
 The following are created by the templates:
 
+* A `ConfigMap` containing the XTDB YAML configuration.
 * A `StatefulSet` containing the XTDB nodes.
-* A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB, default storage class of link:https://learn.microsoft.com/en-us/azure/aks/azure-disk-csi#dynamically-create-azure-disks-pvs-by-using-the-built-in-storage-classes[**managed-csi**^]).
 * A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
-* A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
 
 To check the status of the XTDB statefulset, run:
 ```bash
@@ -284,12 +283,16 @@ kubectl get svc xtdb-service --namespace xtdb-deployment
 ```
 
 This will return the external IP of the LoadBalancer service. 
-You can use this IP to access the XTDB cluster via the Postgres Wire Server (on port `5432`), or over the HTTP Server (on port `3000`). 
+You can use this IP and access the XTDB cluster via:
+
+* Postgres Wire Server (on port `5432`)
+* Healthz Server (on port `8080`)
+* HTTP Server (on port `3000`). 
 
 To check the status of the XTDB cluster using the HTTP server, run:
 
 ```bash
-curl -X POST http://$ExternalIP:8080/healthz/alive
+curl http://$ExternalIP:8080/healthz/alive
 
 # alternatively `/healthz/started`, `/healthz/ready`
 ```

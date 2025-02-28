@@ -127,9 +127,7 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-azure \
 By default, the following resources are deployed by the Helm chart:
 
 * A `StatefulSet` containing a configurable number of XTDB nodes, using the link:#docker-image[**xtdb-azure** docker image]
-* A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB, default storage class of link:https://learn.microsoft.com/en-us/azure/aks/azure-disk-csi#dynamically-create-azure-disks-pvs-by-using-the-built-in-storage-classes[**managed-csi**^]).
 * A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
-* A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
 
 === Pulling the Chart Locally
 
