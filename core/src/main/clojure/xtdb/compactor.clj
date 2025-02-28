@@ -125,7 +125,7 @@
     (log/debugf "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
 
     (util/with-open [table-metadatas (LinkedList.)
-                     data-rels (trie/open-data-rels buffer-pool table-name trie-keys)]
+                     data-rels (trie/open-data-rels allocator buffer-pool table-name trie-keys)]
       (doseq [trie-key trie-keys]
         (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-name trie-key))))
 
