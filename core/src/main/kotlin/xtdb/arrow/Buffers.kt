@@ -133,7 +133,7 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()
-        buf = arrowBuf.writerIndex(writerIndex).also { it.referenceManager.retain() }
+        buf = arrowBuf.writerIndex(writerIndex).let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
     }
 
     fun clear() {
