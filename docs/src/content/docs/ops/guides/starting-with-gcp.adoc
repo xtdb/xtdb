@@ -89,9 +89,9 @@ By default, our terraform templates will create the GKE Cluster with:
 * A three node application node pool spread across three zones. 
 * All nodes using the `n2-highmem-2` machine type (`node_machine_type` in `terraform.tfvars`).
 
-
 `n2-highmem-2` is intended to work on most projects/accounts.
 Dependent on your project limits, you may wish to adjust this machine type:
+
 * We would recommend a machine type better suited for database loads, such as the `c3-*-lssd` instances.
 * For more information on the available machine types and their optimal workloads, see the link:https://cloud.google.com/compute/docs/general-purpose-machines[**Google Cloud Documentation**^].
 
@@ -101,6 +101,7 @@ Dependent on your project limits, you may wish to adjust this machine type:
 Before creating the Terraform resources, review and update the `terraform.tfvars` file to ensure the parameters are correctly set for your environment:
 
 * You are **required** to set the `project_id` parameter to the Google Cloud project ID you wish to deploy into. 
+* You are also **required** to set a unique and valid `storage_bucket_name` for your environment.
 * You may also wish to change resource tiers, the location of the resource group, or the VM sizes used by the Google Cloud cluster.
 
 To get a full list of the resources that will be deployed by the templates, run:
@@ -258,10 +259,9 @@ helm install xtdb-google-cloud oci://ghcr.io/xtdb/helm-xtdb-google-cloud \
 
 The following are created by the templates:
 
+* A `ConfigMap` containing the XTDB YAML configuration.
 * A `StatefulSet` containing the XTDB nodes.
-* A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB).
 * A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
-* A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
 
 To check the status of the XTDB statefulset, run:
 ```bash
@@ -291,12 +291,16 @@ kubectl get svc xtdb-service --namespace xtdb-deployment
 ```
 
 This will return the external IP of the LoadBalancer service. 
-You can use this IP to access the XTDB cluster via the Postgres Wire Server (on port `5432`), or over the HTTP Server (on port `3000`). 
+You can use this IP and access the XTDB cluster via:
+
+* Postgres Wire Server (on port `5432`)
+* Healthz Server (on port `8080`)
+* HTTP Server (on port `3000`). 
 
 To check the status of the XTDB cluster using the HTTP server, run:
 
 ```bash
-curl -X POST http://$ExternalIP:8080/healthz/alive
+curl http://$ExternalIP:8080/healthz/alive
 
 # alternatively `/healthz/started`, `/healthz/ready`
 ```

@@ -67,6 +67,7 @@ These variables can be modified to tailor the infrastructure to your specific ne
 The following variables are **required** to be set:
 
 * `project_id`: The Google Cloud project ID to deploy the resources to.
+* `storage_bucket_name`: A globally unique name for your Google Cloud Storage bucket.
 
 For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
 
@@ -135,10 +136,9 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-google-cloud \
 
 By default, the following resources are deployed by the Helm chart:
 
+* A `ConfigMap` containing the XTDB YAML configuration.
 * A `StatefulSet` containing a configurable number of XTDB nodes, using the link:#docker-image[**xtdb-google-cloud** docker image]
-* A `PersistentVolumeClaim` for each member of the `StatefulSet` (default size of 50 GiB).
 * A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
-* A `ClusterIP` service for exposing the **Prometheus** metrics from the nodes.
 
 === Pulling the Chart Locally
 

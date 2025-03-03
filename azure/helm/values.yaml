@@ -114,10 +114,8 @@ xtdbService:
     targetPort: 3000
     # Port exposed by the service
     servicePort: 3000
-
-metricService: 
-  type: ClusterIP
-  # Port of the metrics server on the nodes
-  targetPort: 8080
-  # Port exposed by the service
-  servicePort: 80
+  healthzServer:
+    # Port of the healthz server on the nodes
+    targetPort: 8080
+    # Port exposed by the service
+    servicePort: 8080
