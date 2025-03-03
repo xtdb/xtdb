@@ -1,6 +1,5 @@
 (ns xtdb.metadata
-  (:require [cognitect.transit :as transit]
-            [integrant.core :as ig]
+  (:require [integrant.core :as ig]
             [xtdb.bloom :as bloom]
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
@@ -17,42 +16,19 @@
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.file Path)
-           (java.util HashMap HashSet Map ArrayList)
+           (java.util ArrayList HashMap HashSet Map)
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           xtdb.BufferPool
+           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
            (xtdb.arrow Relation Vector VectorReader VectorWriter)
-           (xtdb.block.proto Block TxKey TableBlock)
+           (xtdb.block.proto Block TableBlock TxKey)
+           xtdb.BufferPool
            (xtdb.metadata ITableMetadata PageIndexKey PageMetadataWriter)
            (xtdb.trie ArrowHashTrie HashTrie)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader)
            (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
-
-(def metadata-read-handler-map
-  (transit/read-handler-map
-   (into {"xtdb/arrow-type" (transit/read-handler types/->arrow-type)
-          "xtdb/field-type" (transit/read-handler (fn [[arrow-type nullable?]]
-                                                    (if nullable?
-                                                      (FieldType/nullable arrow-type)
-                                                      (FieldType/notNullable arrow-type))))
-          "xtdb/field" (transit/read-handler (fn [[name field-type children]]
-                                               (Field. name field-type children)))}
-         serde/transit-read-handlers)))
-
-(def metadata-write-handler-map
-  (transit/write-handler-map
-   (into {ArrowType (transit/write-handler "xtdb/arrow-type" #(types/<-arrow-type %))
-          ;; beware that this currently ignores dictionary encoding and metadata of FieldType's
-          FieldType (transit/write-handler "xtdb/field-type"
-                                           (fn [^FieldType field-type]
-                                             [(.getType field-type) (.isNullable field-type)]))
-          Field (transit/write-handler "xtdb/field"
-                                       (fn [^Field field]
-                                         [(.getName field) (.getFieldType field) (.getChildren field)]))}
-         serde/transit-write-handlers)))
 
 (defn clj-tx-key->proto-tx-key ^TxKey [{:keys [tx-id system-time]}]
   (-> (doto (TxKey/newBuilder)

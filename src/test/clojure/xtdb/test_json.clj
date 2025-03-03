@@ -4,7 +4,6 @@
             [clojure.walk :as walk]
             [cognitect.transit :as transit]
             [jsonista.core :as json]
-            [xtdb.metadata :as meta]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -53,7 +52,7 @@
         actual))
 
 (defn- read-transit-obj [stream]
-  (transit/read (transit/reader stream :json {:handlers meta/metadata-read-handler-map})))
+  (transit/read (transit/reader stream :json)))
 
 (defn check-transit-json-file [^Path expected, ^Path actual]
   (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))
