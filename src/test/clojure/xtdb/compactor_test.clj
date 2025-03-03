@@ -44,28 +44,28 @@
   (binding [cat/*file-size-target* 16]
     (t/is (= #{} (calc-jobs)))
 
-    (t/is (= #{(job "l01-rc-b01" ["l00-rc-b00" "l00-rc-b01"])}
+    (t/is (= #{(job "l01-rc-b00" ["l00-rc-b00"])}
              (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]))
-          "no L1s yet, merge L0s up to limit and stop")
+          "no L1s yet, take one L0")
 
     (t/is (= #{(job "l01-rc-b01" ["l01-rc-b00" "l00-rc-b01"])}
-             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 5] ["l00-rc-b02" 5]
                         ["l01-rc-b00" 10]))
-          "have a partial L1, merge into that until it's full")
+          "have a partial L1, merge a single L0 into that")
 
     (t/is (empty? (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10]
                              ["l01-rc-b01" 20]))
           "all merged, nothing to do")
 
-    (t/is (= #{(job "l01-rc-b03" ["l00-rc-b02" "l00-rc-b03"])}
+    (t/is (= #{(job "l01-rc-b02" ["l00-rc-b02"])}
              (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
                         ["l01-rc-b01" 20]))
-          "have a full L1, start a new L1 til that's full")
+          "have a full L1, start a new L1")
 
     (t/is (= #{(job "l01-rc-b03" ["l01-rc-b02" "l00-rc-b03"])}
              (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
                         ["l01-rc-b01" 20] ["l01-rc-b02" 10]))
-          "have a full and a partial L1, merge into that til it's full")
+          "have a full and a partial L1, merge a single file into the partial")
 
     (t/is (empty? (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
                              ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b04" 10]))
@@ -237,7 +237,7 @@
     (binding [c/*page-size* 32
               cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 50})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
                     (xt/submit-tx node [(into [:put-docs :foo]

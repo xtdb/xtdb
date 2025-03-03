@@ -165,19 +165,16 @@
 (defn- l0->l1-compaction-job [table-name {l0 [0 nil []], l1c [1 nil []]} {:keys [^long file-size-target]}]
   (when-let [live-l0 (seq (->> l0
                                (take-while #(= :live (:state %)))))]
-    (let [latest-l1 (->> l1c
-                         (take-while #(< (:data-file-size %) file-size-target))
-                         first)]
-      (loop [size (:data-file-size latest-l1 0)
-             [{^long l0-size :data-file-size, :as l0-file} & more-l0s] (reverse live-l0)
-             res (cond-> [] latest-l1 (conj latest-l1))]
-        (if (and l0-file (< size file-size-target))
-          (recur (+ size l0-size) more-l0s (conj res l0-file))
 
-          (let [{:keys [block-idx]} (last res)]
-            (->Job table-name (mapv :trie-key res) nil
-                   ;; TODO recency
-                   (trie/->l1-trie-key nil block-idx))))))))
+    (let [{l0-trie-key :trie-key, :keys [block-idx]} (last live-l0)
+          {l1-trie-key :trie-key} (->> l1c
+                                       (take-while #(< (:data-file-size %) file-size-target))
+                                       first)]
+      (->Job table-name (-> []
+                            (cond-> l1-trie-key (conj l1-trie-key))
+                            (conj l0-trie-key))
+             nil ; recency
+             (trie/->l1-trie-key nil block-idx)))))
 
 (defn- l1c-and-above-compaction-jobs [table-name table-tries {:keys [^long file-size-target]}]
   (for [[[level recency part] files] table-tries
