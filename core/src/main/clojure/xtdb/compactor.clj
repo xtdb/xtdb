@@ -20,7 +20,7 @@
            xtdb.BufferPool
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            (xtdb.metadata IMetadataManager)
-           (xtdb.trie EventRowPointer EventRowPointer$XtArrow HashTrieKt IDataRel MergePlanTask TrieCatalog TrieWriter)
+           (xtdb.trie DataRel EventRowPointer EventRowPointer$XtArrow HashTrieKt MergePlanTask TrieCatalog TrieWriter)
            (xtdb.util TemporalBounds)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -106,10 +106,10 @@
     nil))
 
 (defn ->log-data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [data-rels]
-  (trie/data-rel-schema (-> (for [^IDataRel data-rel data-rels]
-                                   (-> (.getSchema data-rel)
-                                       (.findField "op")
-                                       (.getChildren) ^Field first))
+  (trie/data-rel-schema (-> (for [^DataRel data-rel data-rels]
+                              (-> (.getSchema data-rel)
+                                  (.findField "op")
+                                  (.getChildren) ^Field first))
                             (->> (apply types/merge-fields))
                             (types/field-with-name "put"))))
 
@@ -125,7 +125,7 @@
     (log/debugf "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
 
     (util/with-open [table-metadatas (LinkedList.)
-                     data-rels (trie/open-data-rels allocator buffer-pool table-name trie-keys)]
+                     data-rels (DataRel/openRels allocator buffer-pool table-name trie-keys)]
       (doseq [trie-key trie-keys]
         (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-name trie-key))))
 

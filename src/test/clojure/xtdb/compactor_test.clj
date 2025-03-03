@@ -12,14 +12,13 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import java.lang.AutoCloseable
-           [java.nio ByteBuffer]
+  (:import [java.nio ByteBuffer]
            [java.time Duration]
            [xtdb BufferPool]
            xtdb.api.storage.Storage
            (xtdb.arrow Relation RelationReader)
            [xtdb.metadata IMetadataManager]
-           [xtdb.trie HashTrie IDataRel MemoryHashTrie$Leaf]))
+           [xtdb.trie DataRel HashTrie]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -132,16 +131,6 @@
                             ["l03-rc-p03-b0f"] ["l03-rc-p03-b11f"] ["l03-rc-p03-b12f"] ["l03-rc-p03-b13f"]))
               "L3 -> L4")))))
 
-(deftype LiveDataRel [^RelationReader live-rel]
-  IDataRel
-  (getSchema [_] (.getSchema live-rel))
-
-  (loadPage [_ leaf]
-    (.select live-rel (.getData ^MemoryHashTrie$Leaf leaf)))
-
-  AutoCloseable
-  (close [_]))
-
 (t/deftest test-merges-segments
   (util/with-open [lt0 (tu/open-live-table "foo")
                    lt1 (tu/open-live-table "foo")]
@@ -164,9 +153,9 @@
                 live-rel1 (.openAsRelation (.getLiveRelation lt1))]
 
       (let [segments [(-> (trie/->Segment (.compactLogs (li/live-trie lt0)))
-                          (assoc :data-rel (->LiveDataRel live-rel0)))
+                          (assoc :data-rel (DataRel/live live-rel0)))
                       (-> (trie/->Segment (.compactLogs (li/live-trie lt1)))
-                          (assoc :data-rel (->LiveDataRel live-rel1)))]]
+                          (assoc :data-rel (DataRel/live live-rel1)))]]
 
         (t/testing "merge segments"
           (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
@@ -348,7 +337,7 @@
                                   (mapv (comp :key os/<-StoredObject)))]
               (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-name trie-key))
-                                 ^IDataRel data-rel (first (trie/open-data-rels tu/*allocator* bp table-name [trie-key]))]
+                                 ^DataRel data-rel (first (DataRel/openRels tu/*allocator* bp table-name [trie-key]))]
 
                   ;; checking that every page relation has a positive row count
                   (t/is (empty? (->> (mapv #(.loadPage data-rel %) (.getLeaves trie))

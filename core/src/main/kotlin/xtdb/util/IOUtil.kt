@@ -9,3 +9,7 @@ internal fun Path.newSeekableByteChannel() = SeekableReadChannel(Files.newByteCh
 
 val String.asPath: Path
     get() = Path.of(this)
+
+fun Iterable<AutoCloseable>.closeAll() {
+    forEach { it.close() }
+}
