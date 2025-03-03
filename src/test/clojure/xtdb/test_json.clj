@@ -2,7 +2,6 @@
   (:require [clojure.string :as str]
             [clojure.test :as t]
             [clojure.walk :as walk]
-            [cognitect.transit :as transit]
             [jsonista.core :as json]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -51,16 +50,6 @@
            (sort-arrow-json (json/read-value (Files/readString actual))))
         actual))
 
-(defn- read-transit-obj [stream]
-  (transit/read (transit/reader stream :json)))
-
-(defn check-transit-json-file [^Path expected, ^Path actual]
-  (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))
-              actual-stream (Files/newInputStream actual (into-array OpenOption #{StandardOpenOption/READ}))]
-    (t/is (= (read-transit-obj expected-stream)
-             (read-transit-obj actual-stream))
-          actual)))
-
 #_{:clj-kondo/ignore [:unused-private-var]}
 (defn copy-expected-file [^Path file, ^Path expected-dir, ^Path actual-dir]
   (Files/copy file (doto (.resolve expected-dir (.relativize actual-dir file))
@@ -80,28 +69,19 @@
    ;; uncomment if you want to remove files
    #_(delete-and-recreate-dir expected-dir) ;; <<no-commit>>
    (doseq [^Path path (iterator-seq (.iterator (Files/walk actual-dir (make-array FileVisitOption 0))))
-           :let [file-name (str (.getFileName path))
-                 file-type (cond
-                             (str/ends-with? file-name ".arrow") :arrow
-                             (str/ends-with? file-name ".transit.json") :transit)]
-           :when (and file-type
+           :let [file-name (str (.getFileName path))]
+           :when (and (str/ends-with? file-name ".arrow")
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]
-     (doto (case file-type
-             :arrow (write-arrow-json-file path)
-             :transit path)
+     (doto (write-arrow-json-file path)
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(copy-expected-file expected-dir actual-dir))) ;; <<no-commit>>
 
    (doseq [^Path expected (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
            :let [actual (.resolve actual-dir (.relativize expected-dir expected))
-                 file-name (str (.getFileName expected))]]
-     (cond
-       (.endsWith file-name ".arrow.json")
-       (check-arrow-json-file expected actual)
-
-       (.endsWith file-name ".transit.json")
-       (check-transit-json-file expected actual)))))
+                 file-name (str (.getFileName expected))]
+           :when (.endsWith file-name ".arrow.json")]
+     (check-arrow-json-file expected actual))))
 
 (defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]
