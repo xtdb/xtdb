@@ -176,11 +176,37 @@
              nil ; recency
              (trie/->l1-trie-key nil block-idx)))))
 
-(defn- l1c-and-above-compaction-jobs [table-name table-tries {:keys [^long file-size-target]}]
+(defn- l2h-input-files
+  "if the tries can be compacted to L2H, return the input tries; otherwise nil"
+  [live-tries {:keys [^long file-size-target]}]
+
+  (->> live-tries
+
+       (reductions (fn [[acc-tries acc-size] {:keys [^long data-file-size] :as trie}]
+                     [(conj acc-tries trie) (+ acc-size data-file-size)])
+                   [[] 0])
+
+       (some (fn [[tries total-size]]
+               (when (or (= cat/branch-factor (count tries))
+                         (>= total-size file-size-target))
+                 tries)))))
+
+(defn- l2h-compaction-jobs [table-name table-tries opts]
+  (for [[[level recency _part] tries] table-tries
+        :when (and recency (= level 1))
+        :let [input-tries (-> tries
+                              (->> (take-while #(= :live (:state %))))
+                              reverse
+                              (l2h-input-files opts))]
+        :when input-tries]
+    (->Job table-name (mapv :trie-key input-tries) []
+           (trie/->trie-key 2 recency nil (:block-idx (last input-tries))))))
+
+(defn- tiering-compaction-jobs [table-name table-tries {:keys [^long file-size-target]}]
   (for [[[level recency part] files] table-tries
-        :when (> level 0)
-        :let [_ (assert (nil? recency) "shouldn't have recency yet")
-              live-files (-> files
+        :when (or (and (nil? recency) (= level 1))
+                  (> level 1))
+        :let [live-files (-> files
                              (->> (remove #(= :garbage (:state %))))
                              (cond->> (= level 1) (filter #(>= (:data-file-size %) file-size-target))))]
         :when (>= (count live-files) cat/branch-factor)
@@ -200,13 +226,13 @@
         :let [trie-keys (mapv :trie-key in-files)
               out-block-idx (:block-idx (last in-files))]]
     (->Job table-name trie-keys out-part
-           ;; TODO recency
-           (trie/->trie-key out-level nil out-part out-block-idx))))
+           (trie/->trie-key out-level recency out-part out-block-idx))))
 
 (defn compaction-jobs [table-name {table-tries :tries} opts]
   (concat (when-let [job (l0->l1-compaction-job table-name table-tries opts)]
             [job])
-          (l1c-and-above-compaction-jobs table-name table-tries opts)))
+          (l2h-compaction-jobs table-name table-tries opts)
+          (tiering-compaction-jobs table-name table-tries opts)))
 
 (defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
   {:allocator (ig/ref :xtdb/allocator)
