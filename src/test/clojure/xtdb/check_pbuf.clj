@@ -21,14 +21,11 @@
    ;; uncomment if you want to remove files
    #_(tj/delete-and-recreate-dir expected-dir) ;; <<no-commit>>
    (doseq [^Path path (iterator-seq (.iterator (Files/walk actual-dir (make-array FileVisitOption 0))))
-           :let [file-name (str (.getFileName path))
-                 file-type (cond
-                             (str/ends-with? file-name ".binpb") :protobuf)]
-           :when (and file-type
+           :let [file-name (str (.getFileName path))]
+           :when (and (str/ends-with? file-name ".binpb")
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]
-     (doto (case file-type
-             (:protobuf) path)
+     (doto path
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(tj/copy-expected-file expected-dir actual-dir))) ;; <<no-commit>>
 
