@@ -60,13 +60,6 @@
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
-(defn- obj-key->block-idx [^Path obj-key]
-  (some->> (.getFileName obj-key)
-           (str)
-           (re-matches #"b(\p{XDigit}+).binpb")
-           (second)
-           (util/<-lex-hex-string)))
-
 (def ^Path block-metadata-path (util/->path "blocks"))
 
 (defn- ->block-metadata-obj-key [block-idx]
@@ -74,8 +67,9 @@
 
 (def ^Path block-table-metadata-path (util/->path "blocks"))
 
-(defn- write-block-metadata ^java.nio.ByteBuffer [latest-completed-tx table-names]
+(defn- write-block-metadata ^java.nio.ByteBuffer [^long block-idx, latest-completed-tx, table-names]
   (-> (doto (Block/newBuilder)
+        (.setBlockIndex block-idx)
         (.setLatestCompletedTx (clj-tx-key->proto-tx-key latest-completed-tx))
         (.addAllTableNames table-names))
       (.build)
@@ -84,19 +78,9 @@
 
 (defn- read-block-metadata [^bytes block-bytes]
   (let [block (Block/parseFrom block-bytes)]
-    {:latest-completed-tx (proto-tx-key->clj-tx-key (.getLatestCompletedTx block))
+    {:block-idx (.getBlockIndex block)
+     :latest-completed-tx (proto-tx-key->clj-tx-key (.getLatestCompletedTx block))
      :table-names (into [] (.getTableNamesList block))}))
-
-(def ^:private table-block-path-regex
-  #"tables\/([\w$]+)\/blocks\/(?:b(\p{XDigit}+))(\.binpb)$")
-
-(defn parse-table-block-key [^Path table-block-path]
-  (when-let [[_ table-name block-idx-str] (re-find table-block-path-regex (str table-block-path))]
-    {:table-name (trie/table-dir->table-name table-name)
-     :block-idx  (util/<-lex-hex-string block-idx-str)}))
-
-(comment
-  (parse-table-block-key "tables/xt$txs/blocks/b00.binpb"))
 
 (defn- ->table-block-metadata-obj-key [^Path table-path block-idx]
   (.resolve (.resolve table-path block-table-metadata-path)
@@ -445,7 +429,7 @@
             (.putObject buffer-pool table-block-path
                         (write-table-block-data (Schema. fields) row-count))))
         (.putObject buffer-pool (->block-metadata-obj-key block-idx)
-                    (write-block-metadata latest-completed-tx table-names))
+                    (write-block-metadata block-idx latest-completed-tx table-names))
         (set! (.table->fields this) new-table->fields)
         (set! (.last-block-metadata this) new-block-metadata))))
 
@@ -471,8 +455,7 @@
 (defn- load-latest-block-metadata ^java.util.Map [{:keys [^BufferPool buffer-pool]}]
   (when-let [bm-obj (last (.listAllObjects buffer-pool block-metadata-path))]
     (let [{bm-obj-key :key} (os/<-StoredObject bm-obj)
-          {:keys [latest-completed-tx table-names]} (read-block-metadata (.getByteArray buffer-pool bm-obj-key))
-          block-idx (obj-key->block-idx bm-obj-key)]
+          {:keys [block-idx latest-completed-tx table-names]} (read-block-metadata (.getByteArray buffer-pool bm-obj-key))]
       {:block-idx block-idx
        :latest-completed-tx latest-completed-tx
        :tables (->> (for [table-name table-names
