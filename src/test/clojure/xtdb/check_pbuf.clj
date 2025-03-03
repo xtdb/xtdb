@@ -1,5 +1,6 @@
 (ns xtdb.check-pbuf
-  (:require [clojure.string :as str]
+  (:require [clojure.test :as t]
+            [clojure.string :as str]
             [xtdb.test-json :as tj])
   (:import [java.nio.file FileVisitOption Files Path]
            (xtdb.block.proto Block TableBlock)))
@@ -36,4 +37,4 @@
                  file-name (str (.getFileName expected))]]
      (cond
        (.endsWith file-name ".binpb")
-       (= (parse-fn (Files/readAllBytes expected)) (parse-fn (Files/readAllBytes actual)))))))
+       (t/is (= (parse-fn (Files/readAllBytes expected)) (parse-fn (Files/readAllBytes actual))))))))
