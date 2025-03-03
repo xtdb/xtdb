@@ -26,6 +26,7 @@
            (xtdb.api IndexerConfig TransactionKey)
            (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.BufferPool
+           xtdb.catalog.BlockCatalog
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
            xtdb.metadata.IMetadataManager
            (xtdb.trie MemoryHashTrie TrieCatalog TrieWriter)
@@ -376,6 +377,7 @@
 (defmethod ig/prep-key :xtdb.indexer/live-index [_ config]
   {:allocator (ig/ref :xtdb/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
+   :block-cat (ig/ref :xtdb/block-catalog)
    :metadata-mgr (ig/ref ::meta/metadata-manager)
    :compactor (ig/ref :xtdb/compactor)
    :log (ig/ref :xtdb/log)
@@ -383,8 +385,9 @@
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
-  (let [{:keys [latest-completed-tx block-idx]} (meta/latest-block-metadata metadata-mgr)]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^BlockCatalog block-cat, buffer-pool metadata-mgr log trie-catalog compactor ^IndexerConfig config metrics-registry]}]
+  (let [block-idx (.getCurrentBlockIndex block-cat)
+        latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]

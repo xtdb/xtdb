@@ -3,14 +3,13 @@
 package xtdb.time
 
 import java.lang.Math.multiplyExact
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
-import java.time.ZonedDateTime
+import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
 import java.time.format.DateTimeFormatter.ISO_LOCAL_TIME
 import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoUnit
+import java.time.temporal.ChronoUnit.MICROS
 import java.time.temporal.TemporalAccessor
 import java.time.temporal.TemporalQueries
 
@@ -23,6 +22,8 @@ internal val Long.secondsToMicros get() = multiplyExact(this, MICRO_HZ)
 val Long.secondsToNanos get() = multiplyExact(this, NANO_HZ)
 val Long.millisToNanos get() = multiplyExact(this, (NANO_HZ / MILLI_HZ))
 val Long.microsToNanos get() = multiplyExact(this, (NANO_HZ / MICRO_HZ))
+
+val Long.microsAsInstant get() = Instant.EPOCH.plus(this, MICROS)
 
 internal val Long.millisToSecondsPart get() = this / MILLI_HZ
 internal val Long.microsToSecondsPart get() = this / MICRO_HZ

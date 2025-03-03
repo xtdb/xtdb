@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.metrics :as metrics]
+            xtdb.metadata
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]

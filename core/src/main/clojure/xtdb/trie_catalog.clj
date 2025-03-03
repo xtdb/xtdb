@@ -1,14 +1,13 @@
 (ns xtdb.trie-catalog
   (:require [integrant.core :as ig]
-            [xtdb.metadata :as meta]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            (xtdb BufferPool)
            xtdb.api.storage.ObjectStore$StoredObject
-           xtdb.log.proto.AddedTrie
-           xtdb.metadata.IMetadataManager))
+           xtdb.catalog.BlockCatalog
+           xtdb.log.proto.AddedTrie))
 
 (defprotocol PTrieCatalog
   (trie-state [trie-cat table-name]))
@@ -181,12 +180,12 @@
 
 (defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
   (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
-         :metadata-mgr (ig/ref ::meta/metadata-manager)}
+         :block-cat (ig/ref :xtdb/block-catalog)}
         opts))
 
-(defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
+(defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
   (doto (TrieCatalog. (ConcurrentHashMap.) *l1-size-limit*)
-    (.addTries (for [table-name (.allTableNames metadata-mgr)
+    (.addTries (for [table-name (.getAllTableNames block-cat)
                      ^ObjectStore$StoredObject obj (.listAllObjects buffer-pool (trie/->table-meta-dir table-name))
                      :let [file-name (str (.getFileName (.getKey obj)))
                            [_ trie-key] (re-matches #"(.+)\.arrow" file-name)]

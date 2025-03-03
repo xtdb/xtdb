@@ -23,11 +23,7 @@
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofMinutes 15))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
-            (tu/finish-block! node)
-
-            (t/is (= {:latest-completed-tx last-tx-key}
-                     (-> (meta/latest-block-metadata (tu/component ::meta/metadata-manager))
-                         (select-keys [:latest-completed-tx])))))
+            (tu/finish-block! node))
 
           (f))))))
 
