@@ -63,6 +63,18 @@ class TrieWriter(
                 )
             )
         )
+
+        @JvmStatic
+        fun writeLiveTrie(
+            al: BufferAllocator, bufferPool: BufferPool,
+            tableName: TableName, trieKey: TrieKey,
+            trie: MemoryHashTrie, dataRel: Relation
+        ) =
+            TrieWriter(al, bufferPool, dataRel.schema, tableName, trieKey, false)
+                .use { writer ->
+                    writer.writeLiveTrieNode(trie.compactLogs().rootNode, dataRel)
+                    writer.end()
+                }
     }
 
     val dataRel: Relation = Relation(allocator, dataSchema)
@@ -156,6 +168,26 @@ class TrieWriter(
         metaRel.endRow()
 
         return rowIdx
+    }
+
+    private fun writeLiveTrieNode(node: MemoryHashTrie.Node, dataRel: Relation) {
+        val copier = this.dataRel.rowCopier(dataRel)
+
+        fun MemoryHashTrie.Node.writeNode0(): Int =
+            when (this) {
+                is MemoryHashTrie.Branch -> {
+                    val children = iidChildren
+
+                    writeIidBranch(IntArray(children.size) { idx -> children[idx]?.writeNode0() ?: -1 })
+                }
+
+                is MemoryHashTrie.Leaf -> {
+                    data.forEach { idx -> copier.copyRow(idx) }
+                    writeLeaf()
+                }
+            }
+
+        node.writeNode0()
     }
 
     private val metaFilePath = metaFilePath(tableName, trieKey)

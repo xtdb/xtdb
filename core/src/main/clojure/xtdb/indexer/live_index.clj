@@ -28,7 +28,7 @@
            xtdb.BufferPool
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
            xtdb.metadata.IMetadataManager
-           (xtdb.trie MemoryHashTrie TrieCatalog)
+           (xtdb.trie MemoryHashTrie TrieCatalog TrieWriter)
            (xtdb.util RefCounter RowCounter)
            (xtdb.vector IRelationWriter IVectorWriter)))
 
@@ -146,8 +146,8 @@
       (when (pos? row-count)
         (let [trie-key (trie/->l0-trie-key block-idx)]
           (with-open [data-rel (.openAsRelation live-rel)]
-            (let [data-file-size (trie/write-live-trie! allocator buffer-pool table-name trie-key
-                                                        live-trie data-rel)]
+            (let [data-file-size (TrieWriter/writeLiveTrie allocator buffer-pool table-name trie-key
+                                                           live-trie data-rel)]
               (MapEntry/create table-name
                                {:fields (live-rel->fields live-rel)
                                 :trie-key trie-key

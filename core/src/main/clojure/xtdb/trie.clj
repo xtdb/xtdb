@@ -8,14 +8,14 @@
            (java.lang AutoCloseable)
            (java.nio.file Path)
            java.time.LocalDate
-           (java.util ArrayList Arrays List)
-           (org.apache.arrow.memory ArrowBuf BufferAllocator)
+           (java.util ArrayList List)
+           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.arrow Relation)
            xtdb.BufferPool
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie$Node ISegment MemoryHashTrie MemoryHashTrie$Leaf MergePlanNode Trie Trie$Key TrieWriter)
+           (xtdb.trie ArrowHashTrie$Leaf ISegment MemoryHashTrie MergePlanNode Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
@@ -79,40 +79,6 @@
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
      (vw/root->writer root))))
-
-(defn write-live-trie-node [^TrieWriter trie-wtr, ^HashTrie$Node node, ^Relation data-rel]
-  (let [copier (.rowCopier (.getDataRel trie-wtr) data-rel)]
-    (letfn [(write-node! [^HashTrie$Node node]
-              (if-let [children (.getIidChildren node)]
-                (let [child-count (alength children)
-                      !idxs (int-array child-count)]
-                  (dotimes [n child-count]
-                    (aset !idxs n
-                          (unchecked-int
-                           (if-let [child (aget children n)]
-                             (write-node! child)
-                             -1))))
-
-                  (.writeIidBranch trie-wtr !idxs))
-
-                (let [^MemoryHashTrie$Leaf leaf node]
-                  (-> (Arrays/stream (.getData leaf))
-                      (.forEach (fn [idx]
-                                  (.copyRow copier idx))))
-
-                  (.writeLeaf trie-wtr))))]
-
-      (write-node! node))))
-
-(defn write-live-trie! [^BufferAllocator allocator, ^BufferPool buffer-pool,
-                        table-name, trie-key,
-                        ^MemoryHashTrie trie, ^Relation data-rel]
-  (util/with-open [trie-wtr (TrieWriter. allocator buffer-pool (.getSchema data-rel) table-name trie-key
-                                         false)]
-    (let [trie (.compactLogs trie)]
-      (write-live-trie-node trie-wtr (.getRootNode trie) data-rel)
-
-      (.end trie-wtr))))
 
 (defrecord Segment [trie]
   ISegment
