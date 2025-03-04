@@ -10,7 +10,8 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
-  (:import (java.lang AutoCloseable)
+  (:import (clojure.lang MapEntry)
+           (java.lang AutoCloseable)
            (java.time Duration)
            (java.util HashMap List Map)
            (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
@@ -165,14 +166,20 @@
                                                           (catch Exception _
                                                             (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                    (util/rethrowing-cause))]
-
-            (let [table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata)]
-              (.finishBlock block-cat block-idx latest-completed-tx table-block-paths))
-
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
                                 (trie/->trie-details table-name trie-key data-file-size))]
               (.addTries trie-cat added-tries)
-              @(.appendMessage log (Log$Message$TriesAdded. added-tries))))))
+              @(.appendMessage log (Log$Message$TriesAdded. added-tries)))
+
+            (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
+                  table->current-tries (->> all-tables
+                                            (map (fn [table-name]
+                                                   (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
+                                                                                    trie-cat/all-tries))))
+                                            (into {}))
+                  table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata
+                                                             table->current-tries)]
+              (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))
 
       (.nextBlock row-counter)
 

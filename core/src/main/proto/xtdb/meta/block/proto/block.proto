@@ -2,11 +2,14 @@ edition = "2023";
 
 package xtdb.block.proto;
 
+import "xtdb/log/proto/log.proto";
+
 option java_multiple_files = true;
 
 message TableBlock {
   bytes arrow_schema = 1;
   int64 row_count = 2;
+  repeated xtdb.log.proto.TrieDetails current_tries = 3;
 }
 
 message TxKey {
