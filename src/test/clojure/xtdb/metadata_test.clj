@@ -41,6 +41,7 @@
       (tu/then-await-tx tu/*node*))
 
   (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
 
   (t/is (= [{:num 1} {:num 1.0}]
            (tu/query-ra '[:scan {:table public/xt_docs}
@@ -71,6 +72,7 @@
       (tu/then-await-tx tu/*node*))
 
   (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
@@ -100,6 +102,7 @@
       (tu/then-await-tx tu/*node*))
 
   (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
 
   (t/is (= [{:time #xt/time "04:05:06"}]
            (tu/query-ra '[:scan {:table public/xt_docs}
@@ -161,6 +164,7 @@
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1}]])
 
   (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
