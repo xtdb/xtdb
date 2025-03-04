@@ -20,7 +20,7 @@
            (xtdb.bitemporal IPolygonReader PolygonCalculator)
            xtdb.BufferPool
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
-           (xtdb.metadata IMetadataManager)
+           (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.trie DataRel EventRowPointer EventRowPointer$XtArrow HashTrieKt MergePlanTask TrieCatalog TrieWriter)
            (xtdb.util TemporalBounds)))
 
@@ -120,19 +120,19 @@
                             (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])
                             nil)))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^BufferPool buffer-pool, ^IMetadataManager metadata-mgr
+(defn exec-compaction-job! [^BufferAllocator allocator, ^BufferPool buffer-pool, ^PageMetadata$Factory metadata-mgr
                             {:keys [page-size]} {:keys [table-name part trie-keys out-trie-key]}]
   (try
     (log/debugf "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
 
-    (util/with-open [table-metadatas (LinkedList.)
+    (util/with-open [page-metadatas (LinkedList.)
                      data-rels (DataRel/openRels allocator buffer-pool table-name trie-keys)]
       (doseq [trie-key trie-keys]
-        (.add table-metadatas (.openTableMetadata metadata-mgr (trie/->table-meta-file-path table-name trie-key))))
+        (.add page-metadatas (.openPageMetadata metadata-mgr (trie/->table-meta-file-path table-name trie-key))))
 
-      (let [segments (mapv (fn [{:keys [trie] :as _table-metadata} data-rel]
-                             (-> (trie/->Segment trie) (assoc :data-rel data-rel)))
-                           table-metadatas
+      (let [segments (mapv (fn [^PageMetadata page-meta data-rel]
+                             (-> (trie/->Segment (.getTrie page-meta)) (assoc :data-rel data-rel)))
+                           page-metadatas
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))
 

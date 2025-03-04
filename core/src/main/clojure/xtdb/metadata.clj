@@ -4,32 +4,18 @@
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
-            [xtdb.trie :as  trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (com.github.benmanes.caffeine.cache Cache Caffeine)
-           java.lang.AutoCloseable
-           (java.nio.file Path)
-           (java.util HashMap HashSet Map)
+  (:import (java.util HashMap)
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
-           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow Relation Vector VectorReader VectorWriter)
+           (xtdb.arrow Vector VectorReader VectorWriter)
            xtdb.BufferPool
-           (xtdb.metadata ITableMetadata PageIndexKey PageMetadataWriter)
-           (xtdb.trie ArrowHashTrie HashTrie)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader)
+           (xtdb.metadata PageMetadata PageMetadataWriter)
            (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(definterface IMetadataManager
-  (^xtdb.metadata.ITableMetadata openTableMetadata [^java.nio.file.Path metaFilePath]))
-
-(definterface IMetadataPredicate
-  (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
 (def metadata-col-type
   '[:list
@@ -227,113 +213,16 @@
             (write-col-meta! true col))
           (.endList cols-wtr))))))
 
-(defn ->table-metadata-idxs [^IVectorReader metadata-rdr]
-  (let [page-idx-cache (HashMap.)
-        meta-row-count (.valueCount metadata-rdr)
-        data-page-idx-rdr (.structKeyReader metadata-rdr "data-page-idx")
-        cols-rdr (.structKeyReader metadata-rdr "columns")
-        col-rdr (.listElementReader cols-rdr)
-        column-name-rdr (.structKeyReader col-rdr "col-name")
-        root-col-rdr (.structKeyReader col-rdr "root-col?")
-        col-names (HashSet.)]
-
-    (dotimes [meta-idx meta-row-count]
-      (when-not (or (.isNull metadata-rdr meta-idx)
-                    (.isNull cols-rdr meta-idx))
-        (let [cols-start-idx (.getListStartIndex cols-rdr meta-idx)
-              data-page-idx (if-let [data-page-idx (.getObject data-page-idx-rdr meta-idx)]
-                              data-page-idx
-                              -1)]
-          (dotimes [cols-data-idx (.getListCount cols-rdr meta-idx)]
-            (let [cols-data-idx (+ cols-start-idx cols-data-idx)
-                  col-name (str (.getObject column-name-rdr cols-data-idx))]
-              (.add col-names col-name)
-              (when (.getBoolean root-col-rdr cols-data-idx)
-                (.put page-idx-cache (PageIndexKey. col-name data-page-idx) cols-data-idx)))))))
-
-    {:col-names (into #{} col-names)
-     :page-idx-cache page-idx-cache}))
-
-
-(defrecord TableMetadata [^HashTrie trie
-                          ^Relation meta-rel
-                          ^IVectorReader metadata-leaf-rdr
-                          col-names
-                          ^Map page-idx-cache
-                          ^IVectorReader min-rdr
-                          ^IVectorReader max-rdr]
-  ITableMetadata
-  (metadataReader [_] metadata-leaf-rdr)
-  (columnNames [_] col-names)
-  (rowIndex [_ col-name page-idx] (.getOrDefault page-idx-cache (PageIndexKey. col-name page-idx) -1))
-
-  (iidBloomBitmap [_ page-idx]
-    (let [bloom-rdr (-> (.structKeyReader metadata-leaf-rdr "columns")
-                        (.listElementReader)
-                        (.structKeyReader "bloom"))]
-
-      (when-let [bloom-vec-idx (.get page-idx-cache (PageIndexKey. "_iid" page-idx))]
-        (when (.getObject bloom-rdr bloom-vec-idx)
-          (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))
-
-  (temporalBounds[_ page-idx]
-    (let [^long system-from-idx (.get page-idx-cache (PageIndexKey. "_system_from" page-idx))
-          ^long valid-from-idx (.get page-idx-cache (PageIndexKey. "_valid_from" page-idx))
-          ^long valid-to-idx (.get page-idx-cache (PageIndexKey. "_valid_to" page-idx))]
-      (TemporalBounds. (TemporalDimension. (.getLong min-rdr valid-from-idx) (.getLong max-rdr valid-to-idx))
-                       (TemporalDimension. (.getLong min-rdr system-from-idx) Long/MAX_VALUE)
-                       (.getLong max-rdr system-from-idx))))
-
-  AutoCloseable
-  (close [_]
-    (util/close meta-rel)))
-
-(def ^:private temporal-col-type-leg-name (name (types/arrow-type->leg (types/->arrow-type [:timestamp-tz :micro "UTC"]))))
-
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^BufferAllocator allocator, ^BufferPool buffer-pool,
-                                                      ^Path file-path, ^Cache table-metadata-idx-cache]
-  (let [footer (.getFooter buffer-pool file-path)]
-    (util/with-open [rb (.getRecordBatch buffer-pool file-path 0)]
-      (util/with-close-on-catch [rel (Relation/fromRecordBatch allocator (.getSchema footer) rb)]
-        (let [nodes-vec (.get rel "nodes")
-              rdr (.getOldRelReader rel)
-              ^IVectorReader metadata-reader (-> (.readerForName rdr "nodes")
-                                                 (.legReader "leaf"))
-              {:keys [col-names page-idx-cache]} (.get table-metadata-idx-cache file-path
-                                                       (fn [_]
-                                                         (->table-metadata-idxs metadata-reader)))
-
-
-              temporal-col-types-rdr (some-> (.structKeyReader metadata-reader "columns")
-                                             (.listElementReader)
-                                             (.structKeyReader "types")
-                                             (.structKeyReader temporal-col-type-leg-name))
-
-              min-rdr (some-> temporal-col-types-rdr (.structKeyReader "min"))
-              max-rdr (some-> temporal-col-types-rdr (.structKeyReader "max"))]
-          (->TableMetadata (ArrowHashTrie. nodes-vec) rel metadata-reader col-names page-idx-cache min-rdr max-rdr))))))
-
-(deftype MetadataManager [^BufferAllocator allocator
-                          ^BufferPool buffer-pool
-                          ^Cache table-metadata-idx-cache]
-  IMetadataManager
-  (openTableMetadata [_ file-path]
-    (->table-metadata allocator buffer-pool file-path table-metadata-idx-cache))
-
-  AutoCloseable
-  (close [_]
-    (util/close allocator)))
-
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
           :buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, cache-size], :or {cache-size 128} :as deps}]
-  (MetadataManager. (util/->child-allocator allocator "metadata-mgr") buffer-pool
-                    (-> (Caffeine/newBuilder)
-                        (.maximumSize cache-size)
-                        (.build))))
+(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, cache-size], :or {cache-size 128}}]
+  (PageMetadata/factory allocator buffer-pool cache-size))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
+
+(defn <-node ^xtdb.metadata.PageMetadata$Factory [node]
+  (util/component node ::metadata-manager))

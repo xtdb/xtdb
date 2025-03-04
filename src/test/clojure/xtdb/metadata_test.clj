@@ -14,7 +14,6 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            xtdb.api.storage.Storage
-           (xtdb.metadata IMetadataManager)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -41,7 +40,7 @@
       (tu/then-await-tx tu/*node*))
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:num 1} {:num 1.0}]
            (tu/query-ra '[:scan {:table public/xt_docs}
@@ -72,7 +71,7 @@
       (tu/then-await-tx tu/*node*))
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
@@ -102,7 +101,7 @@
       (tu/then-await-tx tu/*node*))
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:time #xt/time "04:05:06"}]
            (tu/query-ra '[:scan {:table public/xt_docs}
@@ -116,7 +115,7 @@
           (tu/then-await-tx node))
 
       (tu/finish-block! node)
-      (c/compact-all! node)
+      (c/compact-all! node #xt/duration "PT1S")
 
       (let [first-buckets (map (comp first tu/byte-buffer->path util/->iid) (range 20))
             bucket->page-idx (->> (into (sorted-set) first-buckets)
@@ -134,27 +133,27 @@
                                 (filter (fn [[_ {:keys [min max]}]] (<= min 10 max)))
                                 (map (comp bucket->page-idx first)))
 
-            ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+            metadata-mgr (meta/<-node node)
             literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
 
         (t/testing "L0"
           (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
-            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-              (let [page-idx-pred (.build literal-selector table-metadata)]
+            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+              (let [page-idx-pred (.build literal-selector page-metadata)]
 
                 (t/is (= #{"_iid" "_valid_to" "_valid_from" "_system_from"}
-                         (.columnNames table-metadata)))
+                         (.getColumnNames page-metadata)))
 
                 (doseq [page-idx relevant-pages]
                   (t/is (true? (.test page-idx-pred page-idx))))))))
 
         (t/testing "L1"
           (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
-            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-              (let [page-idx-pred (.build literal-selector table-metadata)]
+            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+              (let [page-idx-pred (.build literal-selector page-metadata)]
 
                 (t/is (= #{"_iid" "_valid_to" "_valid_from" "_id" "_system_from"}
-                         (.columnNames table-metadata)))
+                         (.getColumnNames page-metadata)))
 
                 (doseq [page-idx relevant-pages]
                   (t/is (true? (.test page-idx-pred page-idx))
@@ -164,40 +163,40 @@
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1}]])
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
-  (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
+  (let [metadata-mgr (meta/<-node tu/*node*)
         meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
-    (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+    (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt/instant "2020-01-01T00:00:00.000000Z")
             temporal-dimension (TemporalDimension. sys-time-micros Long/MAX_VALUE)
             metadata-bounds (TemporalBounds. temporal-dimension temporal-dimension sys-time-micros)]
-        (t/is (= metadata-bounds (.temporalBounds table-metadata 0)))))))
+        (t/is (= metadata-bounds (.temporalBounds page-metadata 0)))))))
 
 (t/deftest test-boolean-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]])
   (tu/finish-block! tu/*node*)
 
-  (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
+  (let [metadata-mgr (meta/<-node tu/*node*)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
 
     (t/testing "L0"
       (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
-        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-          (let [page-idx-pred (.build true-selector table-metadata)]
+        (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+          (let [page-idx-pred (.build true-selector page-metadata)]
             (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
-                     (.columnNames table-metadata)))
+                     (.getColumnNames page-metadata)))
 
             (t/is (true? (.test page-idx-pred 0)))))))
 
-    (c/compact-all! tu/*node*)
+    (c/compact-all! tu/*node* #xt/duration "PT1S")
 
     (t/testing "L1"
       (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
-        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
-          (let [page-idx-pred (.build true-selector table-metadata)]
+        (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+          (let [page-idx-pred (.build true-selector page-metadata)]
             (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "boolean_or_int"}
-                     (.columnNames table-metadata)))
+                     (.getColumnNames page-metadata)))
 
             (t/is (true? (.test page-idx-pred 0)))))))))
 
@@ -209,28 +208,28 @@
       (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
 
       (tu/finish-block! node)
-      (c/compact-all! node)
+      (c/compact-all! node #xt/duration "PT1S")
 
-      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+      (let [metadata-mgr (meta/<-node node)]
         (t/testing "L0"
           (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
-            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
                              (.resolve node-dir (str "objects/" Storage/version "/tables/")))
 
               (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
-                       (.columnNames table-metadata))))))
+                       (.getColumnNames page-metadata))))))
 
         (t/testing "L1"
           (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
-            (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
                              (.resolve node-dir (str "objects/" Storage/version "/tables/")))
 
               (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
-                       (.columnNames table-metadata))))))))))
+                       (.getColumnNames page-metadata))))))))))
 
 (t/deftest test-duration-metadata-4198
   (let [node-dir (util/->path "target/test-duration-metadata")]
@@ -245,12 +244,12 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
-      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+      (let [metadata-mgr (meta/<-node node)
             meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
-        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+        (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
                          (.resolve node-dir (str "objects/" Storage/version "/tables/"))
                          #"l01.*")
 
           (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "duration"}
-                   (.columnNames table-metadata))))))))
+                   (.getColumnNames page-metadata))))))))

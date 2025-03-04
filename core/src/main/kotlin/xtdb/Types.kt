@@ -48,7 +48,7 @@ private fun IntervalUnit.toLegPart() = when (this) {
 
 private val TZ_STR_CACHE = Caffeine.newBuilder().build<String, String> { it.lowercase().replace(Regex("[/:]"), "_") }
 
-fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
+fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
     override fun visit(type: ArrowType.Null) = "null"
     override fun visit(type: ArrowType.Struct) = "struct"
     override fun visit(type: ArrowType.List) = "list"
@@ -95,7 +95,7 @@ fun ArrowType.toLeg() = accept(object : ArrowTypeVisitor<String> {
     }
 })
 
-private val TS_TZ_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, "UTC")
+internal val TEMPORAL_COL_TYPE = ArrowType.Timestamp(MICROSECOND, "UTC")
 private val TS_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, null)
 private val DATE_DAY_TYPE = ArrowType.Date(DAY)
 private val DURATION_MICRO_TYPE = ArrowType.Duration(MICROSECOND)
@@ -116,8 +116,8 @@ fun valueToArrowType(obj: Any?) = when (obj) {
 
     is ZonedDateTime -> ArrowType.Timestamp(MICROSECOND, obj.zone.toString())
     is OffsetDateTime -> ArrowType.Timestamp(MICROSECOND, obj.offset.toString())
-    is Instant -> TS_TZ_MICRO_TYPE
-    is Date -> TS_TZ_MICRO_TYPE
+    is Instant -> TEMPORAL_COL_TYPE
+    is Date -> TEMPORAL_COL_TYPE
     is LocalDateTime -> TS_MICRO_TYPE
     is LocalDate -> DATE_DAY_TYPE
     is LocalTime -> TIME_NANO_TYPE

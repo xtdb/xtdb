@@ -14,9 +14,7 @@ import xtdb.arrow.VectorReader
 import xtdb.log.proto.AddedTrie
 import xtdb.trie.*
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
-import xtdb.util.info
 import xtdb.util.logger
-import xtdb.util.requiringResolve
 import xtdb.util.trace
 import java.time.Duration
 import java.util.*

@@ -11,6 +11,7 @@ typealias InstantMicros = Long
 typealias RowIndex = Int
 typealias BlockIndex = Long
 typealias TableName = String
+typealias ColumnName = String
 typealias TrieKey = String
 
 object Trie {

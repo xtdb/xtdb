@@ -42,7 +42,6 @@
            (xtdb.arrow RowCopier)
            xtdb.BufferPool
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
-           xtdb.metadata.IMetadataManager
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.types.ClojureForm
            (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)))
@@ -805,7 +804,6 @@
 (defrecord Indexer [^BufferAllocator allocator
                     node-id
                     ^BufferPool buffer-pool
-                    ^IMetadataManager metadata-mgr
                     ^IQuerySource q-src
                     ^LiveIndex live-idx
                     table-catalog
@@ -918,18 +916,17 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :config (ig/ref :xtdb/config)
           :buffer-pool (ig/ref :xtdb/buffer-pool)
-          :metadata-mgr (ig/ref ::meta/metadata-manager)
           :live-index (ig/ref :xtdb.indexer/live-index)
           :q-src (ig/ref ::q/query-source)
           :metrics-registry (ig/ref :xtdb.metrics/registry)
           :table-catalog (ig/ref :xtdb/table-catalog)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, metadata-mgr, q-src,
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, q-src,
                                                 live-index metrics-registry table-catalog]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
-    (->Indexer allocator (:node-id config) buffer-pool metadata-mgr q-src live-index table-catalog
+    (->Indexer allocator (:node-id config) buffer-pool q-src live-index table-catalog
 
                (metrics/add-timer metrics-registry "tx.op.timer"
                                   {:description "indicates the timing and number of transactions"})

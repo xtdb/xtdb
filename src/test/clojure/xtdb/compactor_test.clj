@@ -4,6 +4,7 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
+            [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
@@ -17,7 +18,6 @@
            [xtdb BufferPool]
            xtdb.api.storage.Storage
            (xtdb.arrow Relation RelationReader)
-           [xtdb.metadata IMetadataManager]
            [xtdb.trie DataRel HashTrie]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -399,7 +399,7 @@
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
-              ^IMetadataManager meta-mgr (tu/component node :xtdb.metadata/metadata-manager)]
+              meta-mgr (meta/<-node node)]
           (letfn [(submit! [xs]
                     (last (for [batch (partition-all 8 xs)]
                             (xt/submit-tx node [(into [:put-docs :foo]
@@ -413,12 +413,14 @@
             (let [table-name "foo"
                   meta-files (->> (.listAllObjects bp (trie/->table-meta-dir table-name))
                                   (mapv (comp :key os/<-StoredObject)))]
+
+              ;; TODO this doseq seems to return nothing, so nothing gets tested?
               (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
-                (util/with-open [{:keys [^HashTrie trie] :as _table-metadata} (.openTableMetadata meta-mgr (trie/->table-meta-file-path table-name trie-key))
+                (util/with-open [page-meta (.openPageMetadata meta-mgr (trie/->table-meta-file-path table-name trie-key))
                                  ^DataRel data-rel (first (DataRel/openRels tu/*allocator* bp table-name [trie-key]))]
 
                   ;; checking that every page relation has a positive row count
-                  (t/is (empty? (->> (mapv #(.loadPage data-rel %) (.getLeaves trie))
+                  (t/is (empty? (->> (mapv #(.loadPage data-rel %) (.getLeaves (.getTrie page-meta)))
                                      (map #(.getRowCount ^RelationReader %))
                                      (filter zero?)))))))))))))
 

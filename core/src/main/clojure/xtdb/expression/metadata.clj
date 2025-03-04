@@ -9,7 +9,7 @@
             [xtdb.vector.writer :as vw])
   (:import java.util.function.IntPredicate
            (xtdb.arrow RelationReader VectorReader)
-           (xtdb.metadata IMetadataPredicate ITableMetadata)))
+           (xtdb.metadata MetadataPredicate PageMetadata)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -201,15 +201,15 @@
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
-           :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag ITableMetadata))
+           :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag PageMetadata))
                         ~(-> expr/args-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
-                     (let [~metadata-rdr-sym (VectorReader/from (.metadataReader ~table-metadata-sym))
+                     (let [~metadata-rdr-sym (VectorReader/from (.getMetadataLeafReader ~table-metadata-sym))
                            ~cols-rdr-sym (.keyReader ~metadata-rdr-sym "columns")
                            ~col-rdr-sym (.elementReader ~cols-rdr-sym)
                            ~types-rdr-sym (.keyReader ~col-rdr-sym "types")
                            ~bloom-rdr-sym (.keyReader ~col-rdr-sym "bloom")
-                           ~content-metadata-present-sym (contains? (.columnNames ~table-metadata-sym) "_id")
+                           ~content-metadata-present-sym (contains? (.getColumnNames ~table-metadata-sym) "_id")
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
@@ -220,7 +220,7 @@
 
       (util/lru-memoize)))
 
-(defn ->metadata-selector ^xtdb.metadata.IMetadataPredicate [form col-types params]
+(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [form col-types params]
   (let [params (RelationReader/from params)
         param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
@@ -229,6 +229,6 @@
                                              :col-types col-types
                                              :extract-vecs-from-rel? false})
         bloom-hashes (->bloom-hashes expr params)]
-    (reify IMetadataPredicate
+    (reify MetadataPredicate
       (build [_ table-metadata]
         (f table-metadata params bloom-hashes)))))

@@ -9,7 +9,6 @@
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.indexer :as idx]
-            [xtdb.metadata :as meta]
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
@@ -26,10 +25,9 @@
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
+           (xtdb BufferPool)
            xtdb.arrow.Relation
-           xtdb.BufferPool
-           xtdb.indexer.LiveIndex
-           (xtdb.metadata IMetadataManager)))
+           xtdb.indexer.LiveIndex))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
@@ -421,8 +419,7 @@
                   (.close node2)
 
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
-                    (let [^BufferPool bp (tu/component node3 :xtdb/buffer-pool)
-                          ^IMetadataManager mm (tu/component node3 ::meta/metadata-manager)]
+                    (let [^BufferPool bp (tu/component node3 :xtdb/buffer-pool)]
                       (t/is (<= first-half-tx-id
                                 (:tx-id (-> first-half-tx-id
                                             (tu/then-await-tx node3 (Duration/ofSeconds 10))))
