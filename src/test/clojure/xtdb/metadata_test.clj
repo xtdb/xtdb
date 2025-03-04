@@ -231,3 +231,26 @@
 
               (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
                        (.columnNames table-metadata))))))))))
+
+(t/deftest test-duration-metadata-4198
+  (let [node-dir (util/->path "target/test-duration-metadata")]
+    (util/delete-dir node-dir)
+    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+
+      (xt/submit-tx node [[:put-docs :xt_docs
+                           {:xt/id "foo", :duration #xt/duration "PT1H"}
+                           {:xt/id "bar", :duration #xt/duration "P3D"}
+                           {:xt/id "baz", :duration #xt/duration "PT0S"}]])
+
+      (tu/finish-block! node)
+      (c/compact-all! node #xt/duration "PT1S")
+
+      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+            meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
+        (util/with-open [table-metadata (.openTableMetadata metadata-mgr meta-file-path)]
+          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
+                         (.resolve node-dir (str "objects/" Storage/version "/tables/"))
+                         #"l01.*")
+
+          (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "duration"}
+                   (.columnNames table-metadata))))))))
