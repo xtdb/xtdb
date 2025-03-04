@@ -2,6 +2,7 @@ package xtdb.util
 
 import java.lang.System.Logger
 import java.lang.System.Logger.Level.*
+import java.util.function.Supplier
 import kotlin.reflect.KClass
 
 val KClass<*>.logger: Logger get() = System.getLogger(qualifiedName)
@@ -20,3 +21,4 @@ fun Logger.warn(throwable: Throwable, message: String) = log(WARNING, message, t
 
 fun Logger.error(message: String) = log(ERROR, message)
 fun Logger.error(throwable: Throwable, message: String) = log(ERROR, message, throwable)
+fun Logger.error(throwable: Throwable, message: Supplier<String>) = log(ERROR, message, throwable)

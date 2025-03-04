@@ -18,7 +18,6 @@ import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.api.storage.Storage.openStorageChildAllocator
-import xtdb.api.storage.Storage.registerMetrics
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.openArrowBufView
 import xtdb.arrow.ArrowUtil.readArrowFooter
@@ -29,10 +28,8 @@ import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
 import xtdb.multipart.SupportsMultipart
 import xtdb.trie.FileSize
-import xtdb.util.closeOnCatch
-import xtdb.util.maxDirectMemory
+import xtdb.util.*
 import xtdb.util.newSeekableByteChannel
-import xtdb.util.toMmapPath
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel

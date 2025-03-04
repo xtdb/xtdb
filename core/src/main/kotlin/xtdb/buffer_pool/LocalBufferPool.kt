@@ -14,7 +14,6 @@ import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.api.storage.Storage.openStorageChildAllocator
-import xtdb.api.storage.Storage.registerMetrics
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
@@ -24,6 +23,7 @@ import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import xtdb.util.maxDirectMemory
 import xtdb.util.newSeekableByteChannel
+import xtdb.util.registerMetrics
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException

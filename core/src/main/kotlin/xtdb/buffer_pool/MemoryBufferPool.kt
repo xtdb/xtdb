@@ -10,7 +10,6 @@ import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.openStorageChildAllocator
-import xtdb.api.storage.Storage.registerMetrics
 import xtdb.arrow.ArrowUtil.openArrowBufView
 import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
@@ -18,6 +17,7 @@ import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
+import xtdb.util.registerMetrics
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels.newChannel

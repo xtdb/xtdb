@@ -13,3 +13,10 @@ val String.asPath: Path
 fun Iterable<AutoCloseable>.closeAll() {
     forEach { it.close() }
 }
+
+inline fun <C : AutoCloseable, L : Iterable<C>, R> L.useAll(block: (L) -> R): R =
+    try {
+        block(this)
+    } finally {
+        closeAll()
+    }
