@@ -1,0 +1,1070 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "_system_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_to",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "op",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "put",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "delete",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "erase",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 4,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["c01de328fb266bc76af51881801da40c","c06e7c69b19b8e6513b0347a1f854267","c071573cb669f27552064703e4f2623a","c0cb655d3671888a66310e5edfad417a"]
+    },{
+      "name" : "_system_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1593993600000000,1581379200000000,1586044800000000,1593907200000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1593993600000000,1581379200000000,1586044800000000,1593907200000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 4,
+      "TYPE_ID" : [0,0,0,0],
+      "OFFSET" : [0,1,2,3],
+      "children" : [{
+        "name" : "put",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : ["1118","250","566","1112"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 4,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["c10bfcf4ad5856f6ea6e23182be81395","c11f6a546ad5e5490cf61a79e267c7b5","c12a4adc39554a01cfb2f4b92a6fbcd8","c15f2b10a61e54d7013d207a73422c2a"]
+    },{
+      "name" : "_system_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1593475200000000,1585785600000000,1586736000000000,1579132800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1593475200000000,1585785600000000,1586736000000000,1579132800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 4,
+      "TYPE_ID" : [0,0,0,0],
+      "OFFSET" : [0,1,2,3],
+      "children" : [{
+        "name" : "put",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : ["1082","551","614","93"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["c2531412c0d9ec323d47372765797238","c2b97fd8d6677def5922bd30931511df"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1584921600000000,1591660800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1584921600000000,1591660800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["495","960"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["c328a24753f5bba97775f87dffc02668","c3d65d6722dd965d1524e195c93b07ca"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1593734400000000,1585180800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1593734400000000,1585180800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["1096","506"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["c407f42a4aaf9721a6f582bc79a1e848","c4222f6ef3cb1d6d80410c45dbe90c04"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1597708800000000,1590364800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1597708800000000,1590364800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["1376","868"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["c44f5f818283d5d1eaf9ab7e9d464941","c454f4d569be65b381a481c4103f2c07"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1598313600000000,1595030400000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1598313600000000,1595030400000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["1415","1189"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["c488e43ddb5bc74004780c18a85963bd","c49bf28414e3f1da8e39619079a81aee","c4ae3f94fc9634bb588133ff779d0e27"]
+    },{
+      "name" : "_system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1587081600000000,1584576000000000,1597449600000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1587081600000000,1584576000000000,1597449600000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
+      "children" : [{
+        "name" : "put",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["640","470","1355"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["c4cc9a0763831b05820c6177cfba9654","c4e67e6664c6299908f7165adc2ff486","c4f949cd305536893d65d29dceacd4a6"]
+    },{
+      "name" : "_system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1583971200000000,1591574400000000,1578614400000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1583971200000000,1591574400000000,1578614400000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
+      "children" : [{
+        "name" : "put",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["428","953","56"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 6,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["c53917d1861182f4530fabba2f0ff58a","c587497dad64e1777db3d56925d77a45","c5a52f52af8623b88fc104b1813f1d2d","c5c5ea28b27d81898c571a88382405e6","c5d70d88672185c14210002a57ed20c4","c5e91590450eec7ffb5a03a2240aea31"]
+    },{
+      "name" : "_system_from",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1596412800000000,1586649600000000,1586304000000000,1583712000000000,1580256000000000,1597017600000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1596412800000000,1586649600000000,1586304000000000,1583712000000000,1580256000000000,1597017600000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 6,
+      "TYPE_ID" : [0,0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4,5],
+      "children" : [{
+        "name" : "put",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 6,
+          "VALIDITY" : [1,1,1,1,1,1],
+          "DATA" : ["1284","611","589","410","172","1326"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 6,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["c6010fbf34f9668a22d990c95d1e2fa3","c640ffaf23b6ed414321946cdc7e342a","c67481d53afd3b683b9059a3ac6be7e3","c6815df8420ffbcb80127d288d70899e","c6efa157ec2645594b9fee164a47753b","c6f6c7b5ef5ab0cc41ce73ad58937c97"]
+    },{
+      "name" : "_system_from",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1593129600000000,1578182400000000,1584489600000000,1592438400000000,1591142400000000,1590278400000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1593129600000000,1578182400000000,1584489600000000,1592438400000000,1591142400000000,1590278400000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 6,
+      "TYPE_ID" : [0,0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4,5],
+      "children" : [{
+        "name" : "put",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 6,
+          "VALIDITY" : [1,1,1,1,1,1],
+          "DATA" : ["1056","26","467","1011","921","865"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 4,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["c719c33a111b9b3c39e09c0ee6ebf07c","c779d8aec84d2c121b1e1da36bf877ae","c7824c61918490b922c019c2efa5bd0f","c78823b69ac506f37ec494f9952b623b"]
+    },{
+      "name" : "_system_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1590192000000000,1578614400000000,1598227200000000,1592438400000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1590192000000000,1578614400000000,1598227200000000,1592438400000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 4,
+      "TYPE_ID" : [0,0,0,0],
+      "OFFSET" : [0,1,2,3],
+      "children" : [{
+        "name" : "put",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : ["855","55","1409","1009"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["c82bac33a1947011082bd04dadd08b8b","c8c4ab8b87707035ab439094842df548","c8f74955cd99a75656cb4ff8cd8544d4"]
+    },{
+      "name" : "_system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1587945600000000,1586390400000000,1591228800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1587945600000000,1586390400000000,1591228800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
+      "children" : [{
+        "name" : "put",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["701","595","927"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["c98952fa5f8c57414da743a155562cf7","c9fd3eccf817a69d14d5e12461210824"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1581724800000000,1578787200000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1581724800000000,1578787200000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["273","66"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 4,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["ca1f23447023f906d74eff8cac133cd5","ca80aff827af9b969dac4fbcc5b59ebe","cabdc6bbb70a8b4285a17a60708d2f2f","cac86d0649183cf4f4d496f71a579557"]
+    },{
+      "name" : "_system_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1593648000000000,1596931200000000,1579046400000000,1593907200000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [1593648000000000,1596931200000000,1579046400000000,1593907200000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 4,
+      "TYPE_ID" : [0,0,0,0],
+      "OFFSET" : [0,1,2,3],
+      "children" : [{
+        "name" : "put",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : ["1093","1322","86","1108"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["cb00a196c7c66edb80ca38f9f1c0893a","cb1fadb9cd56fc400cedf8bf1fdeb2e0"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1586044800000000,1587168000000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1586044800000000,1587168000000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["569","644"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["cb4a8665e4039d234f6731996f58cff8","cb779086bd0f8cbd6febdf7f8a1e99cc"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1579651200000000,1580083200000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1579651200000000,1580083200000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["131","161"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["cb8ba6674d75559bd92148f6a2951fc4","cb96947163d263dd6202d400873a0b0e","cba8015057d39c67e85af79c44272dc4"]
+    },{
+      "name" : "_system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1578960000000000,1583798400000000,1588982400000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1578960000000000,1583798400000000,1588982400000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
+      "children" : [{
+        "name" : "put",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["80","416","771"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["cbca0311f02bf4a1f12ecfa8239522d0","cbcd956fdfaf97345ccfa3135e4b3494","cbed176d27e44fd9803662691dd5aa37"]
+    },{
+      "name" : "_system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1595462400000000,1596153600000000,1597536000000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1595462400000000,1596153600000000,1597536000000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
+      "children" : [{
+        "name" : "put",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["1217","1268","1364"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 5,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 5,
+      "VALIDITY" : [1,1,1,1,1],
+      "DATA" : ["cc1aa391666ba816fab1afebc0666c97","cc384704239b17bf39c473f9282bd0af","cc455aadcaefd61b6feb78e13676303c","ccc84347f4bf33a244c6edb5c518399b","ccf6803c91ea729115fc4279385ae922"]
+    },{
+      "name" : "_system_from",
+      "count" : 5,
+      "VALIDITY" : [1,1,1,1,1],
+      "DATA" : [1591833600000000,1585267200000000,1583452800000000,1593820800000000,1580860800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 5,
+      "VALIDITY" : [1,1,1,1,1],
+      "DATA" : [1591833600000000,1585267200000000,1583452800000000,1593820800000000,1580860800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 5,
+      "VALIDITY" : [1,1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 5,
+      "TYPE_ID" : [0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4],
+      "children" : [{
+        "name" : "put",
+        "count" : 5,
+        "VALIDITY" : [1,1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 5,
+          "VALIDITY" : [1,1,1,1,1],
+          "DATA" : ["972","512","390","1105","214"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 7,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : ["cd1f1290f870cfa3a819d64de6a83216","cd4dceb84c2fc686632cf39e85de49ae","cd5d3bd1702ecf00f06defbdf4898f1a","cd76effee842013ba2382d4f29138bd7","cd9d92ee12534ce7e1369643813dcdea","cda30a803175d8d8d0940cc29f0738b6","cdd1e0aa920e91aa09d1d1c5f43bb3db"]
+    },{
+      "name" : "_system_from",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : [1582156800000000,1586390400000000,1590192000000000,1584748800000000,1593734400000000,1591401600000000,1596585600000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : [1582156800000000,1586390400000000,1590192000000000,1584748800000000,1593734400000000,1591401600000000,1596585600000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 7,
+      "TYPE_ID" : [0,0,0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4,5,6],
+      "children" : [{
+        "name" : "put",
+        "count" : 7,
+        "VALIDITY" : [1,1,1,1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 7,
+          "VALIDITY" : [1,1,1,1,1,1,1],
+          "DATA" : ["303","592","856","482","1098","939","1299"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["ce4aee1536e25ca13b34a2b730be0b8e","cec74ddfc15430df08407492b9cea7b0","cee947cafcb41d1f8b0f13bde8e59874"]
+    },{
+      "name" : "_system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1578182400000000,1594771200000000,1593561600000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1578182400000000,1594771200000000,1593561600000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
+      "children" : [{
+        "name" : "put",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["27","1169","1084"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  },{
+    "count" : 6,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["cf1450e0d21f35a5c87201d150b69c03","cf4645a5175a66ebdee259d016bf56db","cf571a2db2d81c5936df4e7af8b97b35","cf958d8816d82489cd60fc8612676916","cfabf11db427431e113ccce2d848403e","cfb48f27f3fde91af9cb6a2161cb3ff2"]
+    },{
+      "name" : "_system_from",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1595030400000000,1585958400000000,1582675200000000,1581897600000000,1590364800000000,1597795200000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1595030400000000,1585958400000000,1582675200000000,1581897600000000,1590364800000000,1597795200000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 6,
+      "TYPE_ID" : [0,0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4,5],
+      "children" : [{
+        "name" : "put",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 6,
+          "VALIDITY" : [1,1,1,1,1,1],
+          "DATA" : ["1188","565","340","282","866","1383"]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  }]
+}

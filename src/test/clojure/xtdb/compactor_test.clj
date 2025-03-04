@@ -27,109 +27,187 @@
   ([out in part] {:trie-keys in, :out-trie-key out, :part part}))
 
 (defn calc-jobs [& tries]
-  (let [opts {:l1-size-limit cat/*l1-size-limit*}]
+  (let [opts {:file-size-target cat/*file-size-target*}]
     (-> tries
         (->> (transduce (map (fn [[trie-key size]]
                                (-> (trie/parse-trie-key trie-key)
                                    (assoc :data-file-size (or size -1)))))
                         (completing (partial cat/apply-trie-notification opts))
                         {}))
-        (as-> trie-state (c/compaction-jobs "foo" trie-state opts))
+        (as-> table-cat (c/compaction-jobs "foo" table-cat opts))
         (->> (into #{} (map (fn [job]
                               (-> job
                                   (update :part vec)
                                   (dissoc :table-name)))))))))
 
 (t/deftest test-l0->l1-compaction-jobs
-  (binding [cat/*l1-size-limit* 16]
+  (binding [cat/*file-size-target* 16]
     (t/is (= #{} (calc-jobs)))
 
-    (t/is (= #{(job "l01-rc-b01" ["l00-rc-b00" "l00-rc-b01"])}
+    (t/is (= #{(job "l01-rc-b00" ["l00-rc-b00"])}
              (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]))
-          "no L1s yet, merge L0s up to limit and stop")
+          "no L1s yet, take one L0")
 
     (t/is (= #{(job "l01-rc-b01" ["l01-rc-b00" "l00-rc-b01"])}
-             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10]
+             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 5] ["l00-rc-b02" 5]
                         ["l01-rc-b00" 10]))
-          "have a partial L1, merge into that until it's full")
+          "have a partial L1, merge a single L0 into that")
 
     (t/is (empty? (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10]
                              ["l01-rc-b01" 20]))
           "all merged, nothing to do")
 
-    (t/is (= #{(job "l01-rc-b03" ["l00-rc-b02" "l00-rc-b03"])}
+    (t/is (= #{(job "l01-rc-b02" ["l00-rc-b02"])}
              (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
                         ["l01-rc-b01" 20]))
-          "have a full L1, start a new L1 til that's full")
+          "have a full L1, start a new L1")
 
     (t/is (= #{(job "l01-rc-b03" ["l01-rc-b02" "l00-rc-b03"])}
              (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
                         ["l01-rc-b01" 20] ["l01-rc-b02" 10]))
-          "have a full and a partial L1, merge into that til it's full")
+          "have a full and a partial L1, merge a single file into the partial")
 
     (t/is (empty? (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
                              ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b04" 10]))
           "all merged, nothing to do")))
 
-(t/deftest test-l1c->l2c-compaction-jobs
-  (binding [cat/*l1-size-limit* 16]
-    (t/is (= (let [l1-trie-keys ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"]]
-               #{(job "l02-rc-p0-b07" l1-trie-keys [0])
-                 (job "l02-rc-p1-b07" l1-trie-keys [1])
-                 (job "l02-rc-p2-b07" l1-trie-keys [2])
-                 (job "l02-rc-p3-b07" l1-trie-keys [3])})
-             (calc-jobs ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20] ["l01-rc-b04" 10] ["l01-rc-b05" 20] ["l01-rc-b06" 10] ["l01-rc-b07" 20]))
+(t/deftest test-levelling-compaction-jobs
+  (binding [cat/*file-size-target* 16]
+    (t/testing "L1C"
+      (t/is (= (let [l1-trie-keys ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"]]
+                 #{(job "l02-rc-p0-b07" l1-trie-keys [0])
+                   (job "l02-rc-p1-b07" l1-trie-keys [1])
+                   (job "l02-rc-p2-b07" l1-trie-keys [2])
+                   (job "l02-rc-p3-b07" l1-trie-keys [3])})
+               (calc-jobs ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20] ["l01-rc-b04" 10] ["l01-rc-b05" 20] ["l01-rc-b06" 10] ["l01-rc-b07" 20]))
 
-          "empty L2 and superseded L1 files get ignored")
+            "empty L2 and superseded L1 files get ignored")
 
-    (t/is (= #{(job "l02-rc-p1-b07" ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"] [1])}
-             (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10] ["l00-rc-b05" 10] ["l00-rc-b06" 10] ["l00-rc-b07" 10]
-                        ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b05" 20] ["l01-rc-b07" 20]
-                        ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"]))
-          "still needs L2 [1]")))
+      (t/is (= #{(job "l02-rc-p1-b07" ["l01-rc-b01" "l01-rc-b03" "l01-rc-b05" "l01-rc-b07"] [1])}
+               (calc-jobs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10] ["l00-rc-b05" 10] ["l00-rc-b06" 10] ["l00-rc-b07" 10]
+                          ["l01-rc-b01" 20] ["l01-rc-b03" 20] ["l01-rc-b05" 20] ["l01-rc-b07" 20]
+                          ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"]))
+            "still needs L2 [1]"))
+
+    (t/testing "L2H"
+      (let [full-keys ["l02-r20200101-b04" "l02-r20200101-b06" "l02-r20200101-b0f" "l02-r20200101-b114"]]
+        (t/is (= #{}
+                 (calc-jobs ["l02-r20200101-b03" 10] ["l02-r20200101-b04" 20]
+                            ["l02-r20200101-b06" 20]
+                            ["l02-r20200101-b0a" 10] ["l02-r20200101-b0f" 20]
+
+                            ;; different recency
+                            ["l02-r20200102-b110" 20]))
+              "only 3 full keys")
+
+        (t/is (= #{(job "l03-r20200101-p0-b114" full-keys [0])
+                   (job "l03-r20200101-p1-b114" full-keys [1])
+                   (job "l03-r20200101-p2-b114" full-keys [2])
+                   (job "l03-r20200101-p3-b114" full-keys [3])}
+                 (calc-jobs ["l02-r20200101-b03" 10] ["l02-r20200101-b04" 20]
+                            ["l02-r20200101-b06" 20]
+                            ["l02-r20200101-b0a" 10] ["l02-r20200101-b0f" 20]
+                            ["l02-r20200101-b114" 20])))
+
+        (t/is (= #{(job "l03-r20200101-p1-b114" full-keys [1])
+                   (job "l03-r20200101-p3-b114" full-keys [3])}
+                 (calc-jobs ["l02-r20200101-b03" 10] ["l02-r20200101-b04" 20]
+                            ["l02-r20200101-b06" 20]
+                            ["l02-r20200101-b0a" 10] ["l02-r20200101-b0f" 20]
+                            ["l02-r20200101-b114" 20]
+                            ["l03-r20200101-p0-b114"] ["l03-r20200101-p2-b114"]))
+              "two L3Hs already present")))))
+
+(t/deftest test-l1h-jobs
+  (binding [cat/*file-size-target* 16]
+    (t/is (= #{}
+             (calc-jobs ["l01-r20200101-b00" 3] ["l01-r20200101-b01" 3] ["l01-r20200101-b02" 3]
+                        ["l01-r20200102-b00" 3] ["l01-r20200102-b01" 3]
+                        ;; to mark the historical ones 'live'
+                        ["l01-rc-b00" 0] ["l01-rc-b01" 0] ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
+
+          "fewer than 4 L1H files in all partitions, no L2H")
+
+    (t/is (= #{(job "l02-r20200102-b03" ["l01-r20200102-b00" "l01-r20200102-b01" "l01-r20200102-b02" "l01-r20200102-b03"] [])}
+             (calc-jobs ["l01-r20200101-b00" 3] ["l01-r20200101-b01" 3] ["l01-r20200101-b02" 3]
+                        ["l01-r20200102-b00" 3] ["l01-r20200102-b01" 3] ["l01-r20200102-b02" 3] ["l01-r20200102-b03" 3]
+                        ;; to mark the historical ones 'live'
+                        ["l01-rc-b00" 0] ["l01-rc-b01" 0] ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
+          "4 L1H files in one of the partitions, create L2H")
+
+    (t/is (= #{(job "l02-r20200101-b03" ["l01-r20200101-b00" "l01-r20200101-b01" "l01-r20200101-b02" "l01-r20200101-b03"] [])
+               (job "l02-r20200102-b03" ["l01-r20200102-b00" "l01-r20200102-b01" "l01-r20200102-b02" "l01-r20200102-b03"] [])}
+             (calc-jobs ["l01-r20200101-b00" 3] ["l01-r20200101-b01" 3] ["l01-r20200101-b02" 3] ["l01-r20200101-b03" 3]
+                        ["l01-r20200102-b00" 3] ["l01-r20200102-b01" 3] ["l01-r20200102-b02" 3] ["l01-r20200102-b03" 3]
+                        ["l01-r20200103-b00" 3] ["l01-r20200102-b03" 3]
+                        ;; to mark the historical ones 'live'
+                        ["l01-rc-b00" 0] ["l01-rc-b01" 0] ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
+          "4 L1H files in multiple partitions, create L2Hs")
+
+    (t/is (= #{(job "l02-r20200101-b02" ["l01-r20200101-b00" "l01-r20200101-b01" "l01-r20200101-b02"] [])}
+             (calc-jobs ["l01-r20200101-b00" 6] ["l01-r20200101-b01" 6] ["l01-r20200101-b02" 6] ["l01-r20200101-b03" 5]
+                        ["l01-r20200102-b00" 3] ["l01-r20200102-b01" 3]
+                        ;; to mark the historical ones 'live'
+                        ["l01-rc-b00" 0] ["l01-rc-b01" 0] ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
+
+          "fewer than 4 L1H files take us over the limit, so we compact early")))
 
 (t/deftest test-l2+-compaction-jobs
-  (binding [cat/*l1-size-limit* 16]
-    (t/testing "L2+"
-      (t/is (= #{ ;; L2 [0] is full, compact L3 [0 0] and [0 1]
-                 (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
-                 (job "l03-rc-p01-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 1])
+  (binding [cat/*file-size-target* 16]
+    (t/is (= #{ ;; L2 [0] is full, compact L3 [0 0] and [0 1]
+               (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
+               (job "l03-rc-p01-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 1])
 
-                 ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
-                 (job "l02-rc-p0-b113" ["l01-rc-b110" "l01-rc-b111" "l01-rc-b112" "l01-rc-b113"] [0])
+               ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
+               (job "l02-rc-p0-b113" ["l01-rc-b110" "l01-rc-b111" "l01-rc-b112" "l01-rc-b113"] [0])
 
-                 ;; L2 [1] has nothing, choose the first four
-                 (job "l02-rc-p1-b03" ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"] [1])
+               ;; L2 [1] has nothing, choose the first four
+               (job "l02-rc-p1-b03" ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"] [1])
 
-                 ;; fill in the gaps in [2] and [3]
-                 (job "l02-rc-p2-b0f" ["l01-rc-b0c" "l01-rc-b0d" "l01-rc-b0e" "l01-rc-b0f"] [2])
-                 (job "l02-rc-p3-b0b" ["l01-rc-b08" "l01-rc-b09" "l01-rc-b0a" "l01-rc-b0b"] [3])}
+               ;; fill in the gaps in [2] and [3]
+               (job "l02-rc-p2-b0f" ["l01-rc-b0c" "l01-rc-b0d" "l01-rc-b0e" "l01-rc-b0f"] [2])
+               (job "l02-rc-p3-b0b" ["l01-rc-b08" "l01-rc-b09" "l01-rc-b0a" "l01-rc-b0b"] [3])}
 
-               (binding [cat/*l1-size-limit* 2]
+             (binding [cat/*file-size-target* 2]
+               (calc-jobs ["l03-rc-p02-b0f"]
+                          ["l03-rc-p03-b0f"]
+                          ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
+                          ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"] ; missing [1]
+                          ["l02-rc-p0-b0b"] ["l02-rc-p2-b0b"]                ; missing [1] + [3]
+                          ["l02-rc-p0-b0f"]                               ; missing [1], [2], and [3]
+                          ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2] ["l01-rc-b03" 2]
+                          ["l01-rc-b04" 2] ["l01-rc-b05" 2] ["l01-rc-b06" 2] ["l01-rc-b07" 2]
+                          ["l01-rc-b08" 2] ["l01-rc-b09" 2] ["l01-rc-b0a" 2] ["l01-rc-b0b" 2]
+                          ["l01-rc-b0c" 2] ["l01-rc-b0d" 2] ["l01-rc-b0e" 2] ["l01-rc-b0f" 2]
+                          ["l01-rc-b110" 2] ["l01-rc-b111" 2] ["l01-rc-b112" 2] ["l01-rc-b113" 2]
+                          ;; superseded ones
+                          ["l01-rc-b00" 1] ["l01-rc-b02" 1] ["l01-rc-b09" 1] ["l01-rc-b0d" 1])))
+          "up to L3")
+
+    (t/testing "L3 -> L4"
+      (let [l3-keys ["l03-rc-p03-b0f" "l03-rc-p03-b11f" "l03-rc-p03-b12f" "l03-rc-p03-b13f"]]
+        (t/is (= #{(job "l04-rc-p030-b13f" l3-keys [0 3 0])
+                   (job "l04-rc-p031-b13f" l3-keys [0 3 1])
+                   (job "l04-rc-p032-b13f" l3-keys [0 3 2])
+                   (job "l04-rc-p033-b13f" l3-keys [0 3 3])}
+
                  (calc-jobs ["l03-rc-p02-b0f"]
-                            ["l03-rc-p03-b0f"]
-                            ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
-                            ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"] ; missing [1]
-                            ["l02-rc-p0-b0b"] ["l02-rc-p2-b0b"]                ; missing [1] + [3]
-                            ["l02-rc-p0-b0f"]                               ; missing [1], [2], and [3]
-                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2] ["l01-rc-b03" 2]
-                            ["l01-rc-b04" 2] ["l01-rc-b05" 2] ["l01-rc-b06" 2] ["l01-rc-b07" 2]
-                            ["l01-rc-b08" 2] ["l01-rc-b09" 2] ["l01-rc-b0a" 2] ["l01-rc-b0b" 2]
-                            ["l01-rc-b0c" 2] ["l01-rc-b0d" 2] ["l01-rc-b0e" 2] ["l01-rc-b0f" 2]
-                            ["l01-rc-b110" 2] ["l01-rc-b111" 2] ["l01-rc-b112" 2] ["l01-rc-b113" 2]
-                            ;; superseded ones
-                            ["l01-rc-b00" 1] ["l01-rc-b02" 1] ["l01-rc-b09" 1] ["l01-rc-b0d" 1])))
-            "up to L3")
+                            ["l03-rc-p03-b0f"] ["l03-rc-p03-b11f"] ["l03-rc-p03-b12f"] ["l03-rc-p03-b13f"])))))
 
-      (let [l2-keys ["l03-rc-p03-b0f" "l03-rc-p03-b11f" "l03-rc-p03-b12f" "l03-rc-p03-b13f"]]
-        (t/is (= #{(job "l04-rc-p030-b13f" l2-keys [0 3 0])
-                   (job "l04-rc-p031-b13f" l2-keys [0 3 1])
-                   (job "l04-rc-p032-b13f" l2-keys [0 3 2])
-                   (job "l04-rc-p033-b13f" l2-keys [0 3 3])}
+    (t/testing "L3H -> L4H"
+      (let [in-keys ["l03-r20200101-p0-b03" "l03-r20200101-p0-b07" "l03-r20200101-p0-b0b" "l03-r20200101-p0-b0f"]]
+        (t/is (= #{(job "l04-r20200101-p00-b0f" in-keys [0 0])
+                   (job "l04-r20200101-p01-b0f" in-keys [0 1])
+                   (job "l04-r20200101-p02-b0f" in-keys [0 2])
+                   (job "l04-r20200101-p03-b0f" in-keys [0 3])}
+                 (calc-jobs ["l03-r20200101-p0-b03"] ["l03-r20200101-p0-b07"] ["l03-r20200101-p0-b0b"] ["l03-r20200101-p0-b0f"]
 
-                 (calc-jobs ["l03-rc-p02-b0f"]
-                            ["l03-rc-p03-b0f"] ["l03-rc-p03-b11f"] ["l03-rc-p03-b12f"] ["l03-rc-p03-b13f"]))
-              "L3 -> L4")))))
+                            ;; only 3 tries
+                            ["l03-r20200101-p1-b03"] ["l03-r20200101-p1-b07"] ["l03-r20200101-p1-b0b"]
+
+                            ;; N.B. different recency in the first one
+                            ["l03-r20200102-p2-b03"] ["l03-r20200101-p2-b07"] ["l03-r20200101-p2-b0b"] ["l03-r20200101-p2-b0f"]
+                            )))))))
 
 (t/deftest test-merges-segments
   (util/with-open [lt0 (tu/open-live-table "foo")
@@ -235,9 +313,9 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 50})]
         (letfn [(submit! [xs]
                   (doseq [batch (partition-all 8 xs)]
                     (xt/submit-tx node [(into [:put-docs :foo]
@@ -276,7 +354,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
@@ -317,7 +395,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
@@ -349,7 +427,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 8
-              cat/*l1-size-limit* (* 16 1024)
+              cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
         (letfn [(submit! [xs]
@@ -384,7 +462,7 @@
 
 (t/deftest losing-data-when-compacting-3459
   (binding [c/*page-size* 8
-            cat/*l1-size-limit* (* 16 1024)
+            cat/*file-size-target* (* 16 1024)
             c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/compactor/lose-data-on-compaction")]
       (util/delete-dir node-dir)
