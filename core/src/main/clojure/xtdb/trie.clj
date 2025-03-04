@@ -4,18 +4,14 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (clojure.lang MapEntry)
-           com.carrotsearch.hppc.ByteArrayList
-           (com.google.protobuf ByteString)
-           (java.nio ByteBuffer)
+  (:import com.carrotsearch.hppc.ByteArrayList
            (java.nio.file Path)
            java.time.LocalDate
            (java.util ArrayList)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.block.proto TableBlock)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            xtdb.BufferPool
            (xtdb.trie DataRel ISegment MemoryHashTrie MergePlanNode Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)))
