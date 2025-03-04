@@ -14,7 +14,7 @@
            xtdb.catalog.BlockCatalog))
 
 (defprotocol PTableCatalog
-  (finish-block! [table-cat block-idx delta-tables->metadata])
+  (finish-block! [table-cat block-idx delta-tables->metadata table->current-tries])
   (column-fields [table-cat table-name])
   (row-count [table-cat table-name])
   (column-field [table-cat talbe-name col-name])
@@ -22,14 +22,20 @@
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
+(defn ->table-block-dir ^java.nio.file.Path [table-name]
+  (-> (trie/table-name->table-path table-name)
+      (.resolve block-table-metadata-path)))
+
 (defn ->table-block-metadata-obj-key [^Path table-path block-idx]
   (.resolve (.resolve table-path block-table-metadata-path)
             (format "b%s.binpb" (util/->lex-hex-string block-idx))))
 
-(defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count]
+(defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count
+                                                   current-tries]
   (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
                          (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
-                         (.setRowCount row-count))
+                         (.setRowCount row-count)
+                         (.addAllCurrentTries current-tries))
                        (.build)
                        (.toByteArray))))
 
@@ -39,7 +45,8 @@
     {:row-count (.getRowCount table-block)
      :fields (->> (for [^Field field (.getFields schema)]
                     (MapEntry/create (.getName field) field))
-                  (into {}))}))
+                  (into {}))
+     :current-tries (into [] (.getCurrentTriesList table-block))}))
 
 (defn- merge-fields [old-fields new-fields]
   (->> (merge-with types/merge-fields old-fields new-fields)
@@ -60,7 +67,7 @@
                                                (get new-deltas-metadata table-name)))))
          (into {}))))
 
-(defn- load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^BlockCatalog block-cat]
+(defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^BlockCatalog block-cat]
   (when-let [block-idx (.getCurrentBlockIndex block-cat)]
     (let [table-names (.getAllTableNames block-cat)]
       [block-idx
@@ -74,17 +81,20 @@
                        ^:volatile-mutable ^long block-idx
                        ^:volatile-mutable table->metadata]
   PTableCatalog
-  (finish-block! [this block-idx delta-table->metadata]
+  (finish-block! [this block-idx delta-table->metadata table->current-tries]
     (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
       (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
             table-names (ArrayList.)]
         (doseq [[table-name {:keys [row-count fields]}] new-table->metadata]
-          (let [fields (for [[col-name field] fields]
+          (let [current-tries (get table->current-tries table-name)
+                fields (for [[col-name field] fields]
                          (types/field-with-name field col-name))
                 table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)]
             (.add table-names table-name)
             (.putObject buffer-pool table-block-path
-                        (write-table-block-data (Schema. fields) row-count))))
+                        (write-table-block-data (Schema. fields) row-count
+                                                (map (fn [{:keys [trie-key data-file-size]}]
+                                                       (trie/->trie-details table-name trie-key data-file-size)) current-tries)))))
         (set! (.block-idx this) block-idx)
         (set! (.table->metadata this) new-table->metadata)
         (vec table-names))))
@@ -101,8 +111,9 @@
    :block-cat (ig/ref :xtdb/block-catalog)})
 
 (defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
-  (let [[block-idx table->metadata] (load-tables-to-metadata buffer-pool block-cat)]
-    (TableCatalog. buffer-pool (or block-idx -1) table->metadata)))
+  (let [[block-idx table->table-block] (load-tables-to-metadata buffer-pool block-cat)]
+    (TableCatalog. buffer-pool (or block-idx -1)
+                   (update-vals table->table-block #(dissoc % :current-tries)))))
 
 (defn <-node [node]
   (util/component node :xtdb/table-catalog))
