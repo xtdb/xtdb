@@ -66,13 +66,6 @@
          (cons v (map-while f xs))
          (cons x xs))))))
 
-(defn ->trie-details ^TrieDetails [table-name, trie-key, ^long data-file-size]
-  (.. (TrieDetails/newBuilder)
-      (setTableName table-name)
-      (setTrieKey trie-key)
-      (setDataFileSize data-file-size)
-      (build)))
-
 (defn- stale-block-idx? [tries ^long block-idx]
   (when-let [{^long other-block-idx :block-idx} (first tries)]
     (>= other-block-idx block-idx)))
@@ -237,7 +230,7 @@
                      :let [file-name (str (.getFileName (.getKey obj)))
                            [_ trie-key] (re-matches #"(.+)\.arrow" file-name)]
                      :when trie-key]
-                 (->trie-details table-name trie-key (.getSize obj))))))
+                 (trie/->trie-details table-name trie-key (.getSize obj))))))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
   (util/component node :xtdb/trie-catalog))
