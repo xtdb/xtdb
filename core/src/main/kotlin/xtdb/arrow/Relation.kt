@@ -11,12 +11,14 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.ArrowWriter
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation.UnloadMode.FILE
 import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
+import xtdb.trie.FileSize
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -120,7 +122,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
                 }
             }
 
-    inner class RelationUnloader(private val ch: WriteChannel, private val mode: UnloadMode) : AutoCloseable {
+    inner class RelationUnloader(private val ch: WriteChannel, private val mode: UnloadMode) : ArrowWriter {
 
         private val schema = Schema(this@Relation.vectors.values.map { it.field })
         private val arrowBlocks = mutableListOf<ArrowBlock>()
@@ -134,7 +136,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             }
         }
 
-        fun writePage() {
+        override fun writePage() {
             try {
                 openArrowRecordBatch().use { recordBatch ->
                     MessageSerializer.serialize(ch, recordBatch)
@@ -145,8 +147,9 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             }
         }
 
-        fun end() {
+        override fun end(): FileSize {
             mode.end(ch, schema, arrowBlocks)
+            return ch.currentPosition
         }
 
         override fun close() {
