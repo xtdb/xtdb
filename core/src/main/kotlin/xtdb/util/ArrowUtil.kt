@@ -10,10 +10,10 @@ import org.apache.arrow.vector.complex.UnionVector
 internal fun BufferAllocator.openChildAllocator(name: String) =
     newChildAllocator(name, 0, Long.MAX_VALUE)
 
-internal fun BufferAllocator.registerMetrics(meterRegistry: MeterRegistry) = apply {
-    Gauge.builder("$name.allocator.allocated_memory", this) { al -> al.allocatedMemory.toDouble() }
+internal fun MeterRegistry.register(al: BufferAllocator) {
+    Gauge.builder("${al.name}.allocator.allocated_memory", al) { it.allocatedMemory.toDouble() }
         .baseUnit("bytes")
-        .register(meterRegistry)
+        .register(this@register)
 }
 
 fun ValueVector.openSlice(offset: Int = 0, len: Int = valueCount): ValueVector =

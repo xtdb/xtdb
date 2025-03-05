@@ -17,7 +17,6 @@ import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
-import xtdb.api.storage.Storage.openStorageChildAllocator
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.openArrowBufView
 import xtdb.arrow.ArrowUtil.readArrowFooter
@@ -44,16 +43,16 @@ class RemoteBufferPool(
     factory: RemoteStorageFactory,
     allocator: BufferAllocator,
     val objectStore: ObjectStore,
-    meterRegistry: MeterRegistry,
+    meterRegistry: MeterRegistry? = null,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
-    private val allocator = allocator.openStorageChildAllocator().also { it.registerMetrics(meterRegistry) }
+    private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
 
     private val arrowFooterCache = arrowFooterCache()
 
     private val memoryCache =
         MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
-            .also { it.registerMetrics("memory-cache", meterRegistry) }
+            .apply { meterRegistry?.registerMemoryCache("memory-cache") }
 
     val diskCache = DiskCache(
         factory.localDiskCache.also { it.createDirectories() },
@@ -61,9 +60,9 @@ class RemoteBufferPool(
             ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0).toLong())
     )
 
-    private val recordBatchRequests: Counter = meterRegistry.counter("record-batch-requests")
-    private val memCacheMisses: Counter = meterRegistry.counter("mem-cache-misses")
-    private val diskCacheMisses: Counter = meterRegistry.counter("disk-cache-misses")
+    private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
+    private val memCacheMisses: Counter? = meterRegistry?.counter("mem-cache-misses")
+    private val diskCacheMisses: Counter? = meterRegistry?.counter("disk-cache-misses")
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -146,9 +145,9 @@ class RemoteBufferPool(
 
     override fun getByteArray(key: Path): ByteArray =
         memoryCache.get(PathSlice(key)) { pathSlice ->
-            memCacheMisses.increment()
+            memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
-                diskCacheMisses.increment()
+                diskCacheMisses?.increment()
                 objectStore.getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { it.toByteArray() }
@@ -156,23 +155,29 @@ class RemoteBufferPool(
     override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
         diskCache
             .get(key) { k, tmpFile ->
-                diskCacheMisses.increment()
+                diskCacheMisses?.increment()
                 objectStore.getObject(k, tmpFile)
             }.get()
             .use { entry -> Relation.readFooter(entry.path.newSeekableByteChannel()) }
     }
 
     override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
-        recordBatchRequests.increment()
+        recordBatchRequests?.increment()
 
         val footer = getFooter(key)
         val arrowBlock = footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
-        return memoryCache.get(PathSlice(key, arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)) { pathSlice ->
-            memCacheMisses.increment()
+        return memoryCache.get(
+            PathSlice(
+                key,
+                arrowBlock.offset,
+                arrowBlock.metadataLength + arrowBlock.bodyLength
+            )
+        ) { pathSlice ->
+            memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
-                diskCacheMisses.increment()
+                diskCacheMisses?.increment()
                 objectStore.getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
