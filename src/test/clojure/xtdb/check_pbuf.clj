@@ -1,7 +1,8 @@
 (ns xtdb.check-pbuf
-  (:require [clojure.test :as t]
-            [clojure.string :as str]
-            [xtdb.test-json :as tj])
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
+            [xtdb.block-catalog :as block-cat]
+            [xtdb.table-catalog :as table-cat])
   (:import [java.nio.file FileVisitOption Files Path]
            (xtdb.block.proto Block TableBlock)))
 
@@ -13,8 +14,8 @@
         (throw (RuntimeException. "No matching parse-fn!")))))
 
 (defn check-pbuf
-  ([expected-dir actual-dir] (check-pbuf expected-dir actual-dir (multi-parse-fn [#(Block/parseFrom ^bytes %)
-                                                                                  #(TableBlock/parseFrom ^bytes %)])))
+  ([expected-dir actual-dir] (check-pbuf expected-dir actual-dir (multi-parse-fn [#(block-cat/<-Block (Block/parseFrom ^bytes %))
+                                                                                  #(table-cat/<-table-block (TableBlock/parseFrom ^bytes %))])))
   ([expected-dir actual-dir parse-fn] (check-pbuf expected-dir actual-dir parse-fn nil))
 
   ([^Path expected-dir, ^Path actual-dir, parse-fn, file-pattern]
