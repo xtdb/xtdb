@@ -7,7 +7,6 @@ import xtdb.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
-import xtdb.trie.TrieWriter.Companion.writeLiveTrie
 import xtdb.types.Fields
 import xtdb.util.RowCounter
 import xtdb.util.closeAllOnCatch
@@ -20,12 +19,13 @@ import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
 class LiveTable
 @JvmOverloads constructor(
-    private val al: BufferAllocator,
-    private val bp: BufferPool,
+    al: BufferAllocator, bp: BufferPool,
     private val tableName: TableName,
     private val rowCounter: RowCounter,
     liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) }
 ) : AutoCloseable {
+
+    private val trieWriter = TrieWriter(al, bp, false)
 
     @FunctionalInterface
     fun interface LiveTrieFactory {
@@ -164,7 +164,7 @@ class LiveTable
         val trieKey = Trie.l0Key(blockIdx).toString()
 
         return liveRelation.openAsRelation().useAll { dataRel ->
-            val dataFileSize = writeLiveTrie(al, bp, tableName, trieKey, liveTrie, dataRel)
+            val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
             FinishedBlock(liveRelation.fields, trieKey, dataFileSize, rowCount)
         }
     }

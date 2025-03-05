@@ -1,19 +1,12 @@
 (ns xtdb.trie
-  (:require [clojure.string :as str]
-            [xtdb.buffer-pool]
-            [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+  (:require [xtdb.buffer-pool]
+            [xtdb.util :as util])
   (:import com.carrotsearch.hppc.ByteArrayList
            (java.nio.file Path)
            java.time.LocalDate
            (java.util ArrayList)
-           (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.UnionMode
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            xtdb.BufferPool
-           (xtdb.trie DataRel ISegment MemoryHashTrie MergePlanNode Trie Trie$Key)
+           (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
@@ -40,32 +33,11 @@
   (-> (parse-trie-key (str (.getFileName file-path)))
       (assoc :file-path file-path)))
 
-(def ^java.nio.file.Path tables-dir (util/->path "tables"))
-
 (defn table-name->table-path ^java.nio.file.Path [^String table-name]
-  (.resolve tables-dir (-> table-name (str/replace #"[\.\/]" "\\$"))))
-
-(defn ->table-data-file-path ^java.nio.file.Path [table-name trie-key]
-  (-> (table-name->table-path table-name)
-      (.resolve (format "data/%s.arrow" trie-key))))
+  (Trie/getTablePath table-name))
 
 (defn ->table-meta-dir ^java.nio.file.Path [table-name]
-  (-> (table-name->table-path table-name)
-      (.resolve "meta")))
-
-(defn ->table-meta-file-path [table-name trie-key]
-  (-> (->table-meta-dir table-name)
-      (.resolve (format "%s.arrow" trie-key))))
-
-(defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [^Field put-doc-field]
-  (Schema. [(types/col-type->field "_iid" [:fixed-size-binary 16])
-            (types/col-type->field "_system_from" types/temporal-col-type)
-            (types/col-type->field "_valid_from" types/temporal-col-type)
-            (types/col-type->field "_valid_to" types/temporal-col-type)
-            (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
-                           put-doc-field
-                           (types/col-type->field "delete" :null)
-                           (types/col-type->field "erase" :null))]))
+  (Trie/metaFileDir table-name))
 
 (defrecord Segment [trie]
   ISegment
@@ -141,7 +113,3 @@
                    (recur more-pages)))))
            (vec leaves)))))))
 
-(defn load-data-page [^MergePlanNode merge-plan-node]
-  (let [{:keys [^DataRel data-rel]} (.getSegment merge-plan-node)
-        trie-leaf (.getNode merge-plan-node)]
-    (.loadPage data-rel trie-leaf)))

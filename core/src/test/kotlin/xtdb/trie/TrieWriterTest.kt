@@ -1,4 +1,4 @@
-package xtdb
+package xtdb.trie
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
@@ -6,10 +6,10 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.compactor.Compactor.Companion.iidPartitions
-import xtdb.compactor.Compactor.Companion.partitionSlices
 import xtdb.arrow.FixedSizeBinaryVector
 import xtdb.arrow.VectorReader
+import xtdb.trie.TrieWriter.Companion.iidPartitions
+import xtdb.trie.TrieWriter.Companion.partitionSlices
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -28,7 +28,7 @@ internal fun <V> usingIidReader(allocator: BufferAllocator, iids: List<UUID>, f:
         f(vec)
     }
 
-internal class CompactorTest {
+internal class TrieWriterTest {
 
     private lateinit var allocator: BufferAllocator
 

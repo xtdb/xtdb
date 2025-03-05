@@ -169,7 +169,7 @@
             table-catalog (table-cat/<-node tu/*node*)
             trie-catalog (tu/component tu/*node* :xtdb/trie-catalog)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log (Compactor/getNoop)
+        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log Compactor/NOOP
                                                                block-cat table-catalog trie-catalog
 
                                                                nil nil (HashMap.)

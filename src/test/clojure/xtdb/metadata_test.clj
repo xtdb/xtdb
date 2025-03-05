@@ -14,6 +14,7 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            xtdb.api.storage.Storage
+           xtdb.trie.Trie
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -137,7 +138,7 @@
             literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
 
         (t/testing "L0"
-          (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
+          (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (let [page-idx-pred (.build literal-selector page-metadata)]
 
@@ -148,7 +149,7 @@
                   (t/is (true? (.test page-idx-pred page-idx))))))))
 
         (t/testing "L1"
-          (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
+          (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (let [page-idx-pred (.build literal-selector page-metadata)]
 
@@ -166,7 +167,7 @@
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (let [metadata-mgr (meta/<-node tu/*node*)
-        meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
+        meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
     (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt/instant "2020-01-01T00:00:00.000000Z")
             temporal-dimension (TemporalDimension. sys-time-micros Long/MAX_VALUE)
@@ -181,7 +182,7 @@
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
 
     (t/testing "L0"
-      (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
+      (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
             (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
@@ -192,7 +193,7 @@
     (c/compact-all! tu/*node* #xt/duration "PT1S")
 
     (t/testing "L1"
-      (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
+      (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
             (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "boolean_or_int"}
@@ -212,7 +213,7 @@
 
       (let [metadata-mgr (meta/<-node node)]
         (t/testing "L0"
-          (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))]
+          (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
@@ -222,7 +223,7 @@
                        (.getColumnNames page-metadata))))))
 
         (t/testing "L1"
-          (let [meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
+          (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
@@ -245,7 +246,7 @@
       (c/compact-all! node #xt/duration "PT1S")
 
       (let [metadata-mgr (meta/<-node node)
-            meta-file-path (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))]
+            meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
                          (.resolve node-dir (str "objects/" Storage/version "/tables/"))

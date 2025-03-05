@@ -38,7 +38,7 @@
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            xtdb.operator.SelectionSpec
-           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask TrieCatalog)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask TrieCatalog Trie)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)))
 
@@ -388,12 +388,12 @@
                         col-name (str col-name)]
                     ;; TODO move to fields here
                     (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                            (or (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
-                                (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
-                                (types/merge-fields (table-cat/column-field table-catalog table col-name)
-                                                    (some-> (.getLiveIndex wm)
-                                                            (.liveTable table)
-                                                            (.columnField col-name)))))
+                            (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
+                            (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
+                            (types/merge-fields (table-cat/column-field table-catalog table col-name)
+                                                (some-> (.getLiveIndex wm)
+                                                        (.liveTable table)
+                                                        (.columnField col-name))))
                         (types/field-with-name col-name))))]
           (->> scan-cols
                (into {} (map (juxt identity ->field))))))
@@ -455,11 +455,11 @@
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
-                                                                                (let [meta-path (trie/->table-meta-file-path table-name trie-key)
+                                                                                (let [meta-path (Trie/metaFilePath table-name trie-key)
                                                                                       page-metadata (.openPageMetadata metadata-mgr meta-path)]
                                                                                   (.add page-metadatas page-metadata)
                                                                                   (into (trie/->Segment (.getTrie page-metadata))
-                                                                                        {:data-file-path (trie/->table-data-file-path table-name trie-key)
+                                                                                        {:data-file-path (Trie/dataFilePath table-name trie-key)
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                   (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata col-name)]
                                                                                                                     (.and page-idx-pred bloom-page-idx-pred)

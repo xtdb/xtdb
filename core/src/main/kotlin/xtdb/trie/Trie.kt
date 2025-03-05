@@ -81,8 +81,11 @@ object Trie {
         tablePath.resolve("data").resolve("$trieKey.arrow")
 
     @JvmStatic
+    fun TableName.metaFileDir(): Path = tablePath.resolve("meta")
+
+    @JvmStatic
     fun TableName.metaFilePath(trieKey: TrieKey): Path =
-        tablePath.resolve("meta").resolve("$trieKey.arrow")
+        metaFileDir().resolve("$trieKey.arrow")
 
     private val metadataField = Fields.List(
         Fields.Struct(
@@ -119,7 +122,7 @@ object Trie {
             "_valid_from" to Fields.TEMPORAL,
             "_valid_to" to Fields.TEMPORAL,
             "op" to Fields.Union(
-                putDocField.asPair,
+                "put" to NamelessField(putDocField.fieldType, putDocField.children),
                 "delete" to Fields.NULL,
                 "erase" to Fields.NULL
             )

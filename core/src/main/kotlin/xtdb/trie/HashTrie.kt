@@ -77,6 +77,11 @@ interface HashTrie<N : Node<N>, L: N> {
 interface ISegment<L : Node<*>> {
     val trie: HashTrie<*, L>
     val dataRel: DataRel<L>?
+
+    class Segment<L : Node<*>>(
+        override val trie: HashTrie<*, L>,
+        override val dataRel: DataRel<L>
+    ): ISegment<L>
 }
 
 data class MergePlanNode<L : Node<*>>(val segment: ISegment<L>, val node: Node<*>)
@@ -85,12 +90,12 @@ class MergePlanTask(val mpNodes: List<MergePlanNode<*>>, val path: ByteArray)
 
 // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
 @Suppress("UNUSED_EXPRESSION")
-fun toMergePlan(segments: List<ISegment<*>>, pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
+fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
     val minRecency = min(temporalBounds.validTime.lower, temporalBounds.systemTime.lower)
 
-    val initialMpNodes = segments.mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
+    val initialMpNodes = mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
     if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
 
     while (!stack.isEmpty) {

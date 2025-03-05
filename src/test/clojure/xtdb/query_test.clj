@@ -11,7 +11,8 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (java.time LocalTime)
-           (xtdb.metadata PageMetadata)))
+           (xtdb.metadata PageMetadata)
+           (xtdb.trie Trie)))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
@@ -56,24 +57,24 @@
             (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-args)
                   param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} args)]
               (t/testing "L0 files don't have content metadata, so we have to match them"
-                (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))
+                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
                   (fn [^PageMetadata page-metadata]
                     (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (true? (.test (.build param-sel page-metadata) 0)))))
 
-                (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 1))
+                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 1))
                   (fn [^PageMetadata page-metadata]
                     (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (true? (.test (.build param-sel page-metadata) 0))))))
 
               (t/testing "first L1 file has content metadata, doesn't match"
-                (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))
+                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))
                   (fn [^PageMetadata page-metadata]
                     (t/is (false? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (false? (.test (.build param-sel page-metadata) 0))))))
 
               (t/testing "combined L1 file matches"
-                (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 1))
+                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 1))
                   (fn [^PageMetadata page-metadata]
                     (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))
@@ -111,24 +112,24 @@
           (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-args)
                 param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} args)]
             (t/testing "L0 has no content metadata -> always match"
-              (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 0))
+              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0)))))
 
-              (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l0-trie-key 1))
+              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 1))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0))))))
 
             (t/testing "first L1 file matches"
-              (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 0))
+              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0))))))
 
             (t/testing "combined L1 file also matches"
-              (with-page-metadata node (trie/->table-meta-file-path "public$xt_docs" (trie/->l1-trie-key nil 1))
+              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 1))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))

@@ -1,72 +1,20 @@
 (ns xtdb.compactor
-  (:require [clojure.tools.logging :as log]
-            [integrant.core :as ig]
+  (:require [integrant.core :as ig]
             xtdb.metadata
-            [xtdb.metrics :as metrics]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
-            [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import [java.nio.channels ClosedByInterruptException]
-           [java.util LinkedList]
-           [org.apache.arrow.memory BufferAllocator]
-           (org.apache.arrow.vector.types.pojo Field)
-           (xtdb BufferPool)
-           xtdb.api.CompactorConfig
-           (xtdb.api.log Log)
-           (xtdb.arrow Relation)
-           xtdb.BufferPool
-           (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
-           (xtdb.metadata PageMetadata PageMetadata$Factory)
-           (xtdb.trie DataRel TrieCatalog TrieWriter)))
+  (:import xtdb.api.CompactorConfig
+           (xtdb.compactor Compactor Compactor$Impl Compactor$Job Compactor$JobCalculator)
+           xtdb.trie.TrieCatalog))
 
 (def ^:dynamic *ignore-signal-block?* false)
-
-(defn ->log-data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [data-rels]
-  (trie/data-rel-schema (-> (for [^DataRel data-rel data-rels]
-                              (-> (.getSchema data-rel)
-                                  (.findField "op")
-                                  (.getChildren) ^Field first))
-                            (->> (apply types/merge-fields))
-                            (types/field-with-name "put"))))
-
-(defn exec-compaction-job! [^BufferAllocator allocator, ^BufferPool buffer-pool, ^PageMetadata$Factory metadata-mgr
-                            {:keys [page-size]} {:keys [table-name part trie-keys out-trie-key]}]
-  (try
-    (log/debugf "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
-
-    (util/with-open [page-metadatas (LinkedList.)
-                     data-rels (DataRel/openRels allocator buffer-pool table-name trie-keys)]
-      (doseq [trie-key trie-keys]
-        (.add page-metadatas (.openPageMetadata metadata-mgr (trie/->table-meta-file-path table-name trie-key))))
-
-      (let [segments (mapv (fn [^PageMetadata page-meta data-rel]
-                             (-> (trie/->Segment (.getTrie page-meta)) (assoc :data-rel data-rel)))
-                           page-metadatas
-                           data-rels)
-            schema (->log-data-rel-schema (map :data-rel segments))
-
-            data-file-size (util/with-open [data-rel (Compactor/mergeSegments allocator schema segments (byte-array part))
-                                            trie-wtr (TrieWriter. allocator buffer-pool
-                                                                  schema table-name out-trie-key
-                                                                  true)]
-
-                             (Compactor/writeRelation trie-wtr data-rel page-size))]
-
-        (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
-
-        [(cat/->added-trie table-name out-trie-key data-file-size)]))
-
-    (catch ClosedByInterruptException _ (throw (InterruptedException.)))
-    (catch InterruptedException e (throw e))
-
-    (catch Throwable t
-      (log/error t "Error running compaction job.")
-      (throw t))))
 
 (defrecord Job [table-name trie-keys part out-trie-key]
   Compactor$Job
   (getTableName [_] table-name)
+  (getTrieKeys [_] (set trie-keys))
+  (getPart [_] part)
   (getOutputTrieKey [_] out-trie-key))
 
 (defn- l0->l1-compaction-job [table-name {l0 [0 nil []], l1c [1 nil []]} {:keys [^long file-size-target]}]
@@ -152,29 +100,23 @@
 
 (def ^:dynamic *page-size* 1024)
 
-(defn- open-compactor [{:keys [allocator, ^BufferPool buffer-pool, ^Log log, ^TrieCatalog trie-catalog, metadata-mgr,
-                               ^long threads metrics-registry]}]
-  (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
-    (metrics/add-allocator-gauge metrics-registry "compactor.allocator.allocated_memory" allocator)
-    (let [page-size *page-size*]
-      (Compactor/open
-       (reify Compactor$Impl
-         (availableJobs [_]
-           (->> (.getTableNames trie-catalog)
-                (into [] (mapcat (fn [table-name]
-                                   (compaction-jobs table-name (cat/trie-state trie-catalog table-name) trie-catalog))))))
+(defn- open-compactor [{:keys [allocator buffer-pool metadata-mgr
+                               log, ^TrieCatalog trie-catalog, metrics-registry
+                               threads]}]
+  (Compactor$Impl. allocator buffer-pool metadata-mgr
+                   log trie-catalog metrics-registry
+                   (reify Compactor$JobCalculator
+                     (availableJobs [_]
+                       (->> (.getTableNames trie-catalog)
+                            (into [] (mapcat (fn [table-name]
+                                               (compaction-jobs table-name (cat/trie-state trie-catalog table-name) trie-catalog)))))))
 
-         (executeJob [_ job]
-           (exec-compaction-job! allocator buffer-pool metadata-mgr {:page-size page-size} job))
-
-         (close [_] (util/close allocator)))
-
-       log trie-catalog *ignore-signal-block?* threads))))
+                   *ignore-signal-block?* threads *page-size*))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
   (if (pos? threads)
     (open-compactor opts)
-    (Compactor/getNoop)))
+    Compactor/NOOP))
 
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))

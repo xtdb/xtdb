@@ -20,7 +20,7 @@ interface DataRel<L> : AutoCloseable {
         fun openRels(
             al: BufferAllocator, bp: BufferPool,
             tableName: TableName, trieKeys: Iterable<TrieKey>
-        ): List<DataRel<*>> =
+        ): List<DataRel<ArrowHashTrie.Leaf>> =
             mutableListOf<Arrow>().also { res ->
                 try {
                     trieKeys.forEach { trieKey ->

@@ -17,15 +17,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def metadata-col-type
-  '[:list
-    [:struct
-     {col-name :utf8
-      root-col? :bool
-      count :i64
-      types [:struct {}]
-      bloom [:union #{:null :varbinary}]}]])
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ContentMetadataWriter
   (^void writeContentMetadata []))
