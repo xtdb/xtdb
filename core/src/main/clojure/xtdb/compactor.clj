@@ -22,9 +22,6 @@
 
 (def ^:dynamic *ignore-signal-block?* false)
 
-(defn merge-segments-into [^Relation data-rel, segments, ^bytes path-filter]
-  (Compactor/mergeSegmentsInto data-rel segments path-filter))
-
 (defn ->log-data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [data-rels]
   (trie/data-rel-schema (-> (for [^DataRel data-rel data-rels]
                               (-> (.getSchema data-rel)
@@ -49,14 +46,12 @@
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))
 
-            data-file-size (util/with-open [data-rel (Relation. allocator schema)]
-                             (merge-segments-into data-rel segments (byte-array part))
+            data-file-size (util/with-open [data-rel (Compactor/mergeSegments allocator schema segments (byte-array part))
+                                            trie-wtr (TrieWriter. allocator buffer-pool
+                                                                  schema table-name out-trie-key
+                                                                  true)]
 
-                             (util/with-open [trie-wtr (TrieWriter. allocator buffer-pool
-                                                                    schema table-name out-trie-key
-                                                                    true)]
-
-                               (Compactor/writeRelation trie-wtr data-rel page-size)))]
+                             (Compactor/writeRelation trie-wtr data-rel page-size))]
 
         (log/debugf "compacted '%s' -> '%s'." table-name out-trie-key)
 

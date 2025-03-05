@@ -3,7 +3,6 @@
             [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.indexer.live-index :as li]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
@@ -18,7 +17,8 @@
            [xtdb BufferPool]
            xtdb.api.storage.Storage
            (xtdb.arrow Relation RelationReader)
-           [xtdb.trie DataRel HashTrie]))
+           (xtdb.compactor Compactor)
+           [xtdb.trie DataRel]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -236,10 +236,7 @@
                           (assoc :data-rel (DataRel/live live-rel1)))]]
 
         (t/testing "merge segments"
-          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))]
-
-            (c/merge-segments-into data-rel segments nil)
-
+          (util/with-open [data-rel (Compactor/mergeSegments tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)) segments nil)]
             (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                        :xt/system-from (time/->zdt #inst "2023")
                        :xt/valid-from (time/->zdt #inst "2023")
@@ -275,8 +272,7 @@
                           (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))
 
         (t/testing "merge segments with path predicate"
-          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))]
-            (c/merge-segments-into data-rel segments (byte-array [2]))
+          (util/with-open [data-rel (Compactor/mergeSegments tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)) segments (byte-array [2]))]
 
             (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                        :xt/system-from (time/->zdt #inst "2023")
