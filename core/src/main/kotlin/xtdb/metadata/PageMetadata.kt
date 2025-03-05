@@ -14,7 +14,7 @@ import xtdb.trie.ArrowHashTrie
 import xtdb.trie.ColumnName
 import xtdb.util.TemporalBounds
 import xtdb.util.TemporalDimension
-import xtdb.util.closeOnCatch
+import xtdb.util.closeAllOnCatch
 import xtdb.util.openChildAllocator
 import xtdb.vector.IVectorReader
 import java.nio.file.Path
@@ -146,7 +146,7 @@ class PageMetadata private constructor(
         fun openPageMetadata(metaFilePath: Path): PageMetadata =
             bp.getRecordBatch(metaFilePath, 0).use { rb ->
                 val footer = bp.getFooter(metaFilePath)
-                Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->
+                Relation.fromRecordBatch(al, footer.schema, rb).closeAllOnCatch { rel ->
                     val rdr = rel.oldRelReader
                     val metadataReader = rdr.readerForName("nodes").legReader("leaf")
 

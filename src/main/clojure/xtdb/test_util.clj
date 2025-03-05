@@ -19,12 +19,13 @@
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang ExceptionInfo)
+           (io.micrometer.core.instrument.composite CompositeMeterRegistry)
+           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (java.io FileOutputStream)
            java.net.ServerSocket
            (java.nio.channels Channels)
@@ -40,18 +41,16 @@
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.types.pojo Field Schema)
-           (xtdb ICursor)
+           (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.trie Trie)
            xtdb.types.ZonedDateTimeRange
-           xtdb.trie.TrieWriter
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader RelationReader)
-           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
-           (io.micrometer.core.instrument.composite CompositeMeterRegistry)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -371,7 +370,7 @@
         (throw (IllegalStateException. (str "No bounds found for page " page-idx "!")))))))
 
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
-  (util/with-close-on-catch [meta-rel (Relation. al (TrieWriter/getMetaRelSchema))]
+  (util/with-close-on-catch [meta-rel (Relation. al (Trie/getMetaRelSchema))]
     (let [nodes-wtr (.get meta-rel "nodes")
           nil-wtr (.legWriter nodes-wtr "nil")
           iid-branch-wtr (.legWriter nodes-wtr "branch-iid")
@@ -458,7 +457,7 @@
                                (map (comp types/col-type->field vw/value->col-type normalize-doc second))
                                (apply types/merge-fields))
                           (types/field-with-name "put"))]
-      (util/with-open [data-vsr (VectorSchemaRoot/create (trie/data-rel-schema data-schema) al)
+      (util/with-open [data-vsr (VectorSchemaRoot/create (Trie/dataRelSchema data-schema) al)
                        data-wtr (vw/root->writer data-vsr)
                        os (FileOutputStream. (.toFile data-file-path))
                        write-ch (Channels/newChannel os)
@@ -495,7 +494,7 @@
       data-file-path)))
 
 (defn open-live-table ^xtdb.indexer.LiveTable [table-name]
-  (li/->live-table *allocator* nil (RowCounter. 0) table-name))
+  (LiveTable. *allocator* BufferPool/UNUSED table-name (RowCounter. 0)))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)

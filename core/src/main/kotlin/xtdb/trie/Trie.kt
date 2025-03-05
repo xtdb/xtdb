@@ -1,8 +1,22 @@
 package xtdb.trie
 
 import com.carrotsearch.hppc.ByteArrayList
+import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.types.Fields
+import xtdb.types.NamelessField
+import xtdb.types.NamelessField.Companion.nullable
+import xtdb.types.Schema
+import xtdb.types.asPair
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
+import xtdb.util.asPath
+import xtdb.util.closeOnCatch
+import xtdb.vector.IRelationWriter
+import xtdb.vector.RootWriter
+import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatterBuilder
 
@@ -21,13 +35,15 @@ object Trie {
         override fun toString() = buildString {
             append("l"); append(level.asLexHex)
             append("-r"); append(recency?.let { RECENCY_FMT.format(it) } ?: "c")
-            part?.let { append("-p"); it.forEach { b -> append(b.value)} }
+            part?.let { append("-p"); it.forEach { b -> append(b.value) } }
             append("-b"); append(blockIndex.asLexHex)
         }
     }
 
     private val String.asPart
         get() = ByteArrayList.from(*ByteArray(length) { this[it].digitToInt(4).toByte() })
+
+    fun l0Key(blockIndex: BlockIndex) = Key(0, null, null, blockIndex)
 
     @JvmStatic
     fun parseKey(trieKey: TrieKey): Key {
@@ -53,4 +69,68 @@ object Trie {
             requireNotNull(blockIndex) { "Invalid trie key: $trieKey" }
         )
     }
+
+    @JvmStatic
+    val tablesDir = "tables".asPath
+
+    @JvmStatic
+    val TableName.tablePath: Path get() = tablesDir.resolve(replace(Regex("[./]"), "\\$"))
+
+    @JvmStatic
+    fun TableName.dataFilePath(trieKey: TrieKey): Path =
+        tablePath.resolve("data").resolve("$trieKey.arrow")
+
+    @JvmStatic
+    fun TableName.metaFilePath(trieKey: TrieKey): Path =
+        tablePath.resolve("meta").resolve("$trieKey.arrow")
+
+    private val metadataField = Fields.List(
+        Fields.Struct(
+            "col-name" to Fields.UTF8,
+            "root-col?" to Fields.BOOL,
+            "count" to Fields.I64,
+            "types" to Fields.Struct(),
+            "bloom" to Fields.VAR_BINARY.nullable
+        ),
+        elName = "struct"
+    )
+
+    @JvmStatic
+    val metaRelSchema = Schema(
+        "nodes" to Fields.Union(
+            "nil" to Fields.NULL,
+            "branch-iid" to Fields.List(nullable(Fields.I32)),
+            "branch-recency" to Fields.Map(
+                "recency" to Fields.TEMPORAL,
+                "idx" to nullable(Fields.I32),
+            ),
+            "leaf" to Fields.Struct(
+                "data-page-idx" to Fields.I32,
+                "columns" to metadataField
+            )
+        )
+    )
+
+    @JvmStatic
+    fun dataRelSchema(putDocField: Field): Schema =
+        Schema(
+            "_iid" to Fields.IID,
+            "_system_from" to Fields.TEMPORAL,
+            "_valid_from" to Fields.TEMPORAL,
+            "_valid_to" to Fields.TEMPORAL,
+            "op" to Fields.Union(
+                putDocField.asPair,
+                "delete" to Fields.NULL,
+                "erase" to Fields.NULL
+            )
+        )
+
+    private fun dataRelSchema(putDocField: NamelessField) = dataRelSchema(putDocField.toArrowField("put"))
+
+    @JvmStatic
+    fun openLogDataWriter(
+        allocator: BufferAllocator,
+        dataSchema: Schema = dataRelSchema(Fields.Struct())
+    ): IRelationWriter =
+        VectorSchemaRoot.create(dataSchema, allocator).closeOnCatch { root -> RootWriter(root) }
 }

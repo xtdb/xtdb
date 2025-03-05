@@ -46,4 +46,20 @@ interface BufferPool : AutoCloseable {
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
+
+    companion object {
+        @JvmField
+        val UNUSED = object : BufferPool {
+            private fun throwUnused(): Nothing = error("using supposedly unused buffer pool")
+
+            override fun getByteArray(key: Path) = throwUnused()
+            override fun getFooter(key: Path) = throwUnused()
+            override fun getRecordBatch(key: Path, idx: Int) = throwUnused()
+            override fun putObject(key: Path, buffer: ByteBuffer) = throwUnused()
+            override fun listAllObjects() = throwUnused()
+            override fun listAllObjects(dir: Path) = throwUnused()
+            override fun openArrowWriter(key: Path, rel: Relation) = throwUnused()
+            override fun close() = throwUnused()
+        }
+    }
 }

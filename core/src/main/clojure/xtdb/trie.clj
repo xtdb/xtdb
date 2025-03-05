@@ -67,14 +67,6 @@
                            (types/col-type->field "delete" :null)
                            (types/col-type->field "erase" :null))]))
 
-(defn open-log-data-wtr
-  (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-   (open-log-data-wtr allocator (data-rel-schema (types/col-type->field "put" [:struct {}]))))
-
-  (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
-   (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
-     (vw/root->writer root))))
-
 (defrecord Segment [trie]
   ISegment
   (getTrie [_] trie)

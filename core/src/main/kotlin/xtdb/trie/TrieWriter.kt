@@ -6,12 +6,10 @@ import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.metadata.PageMetadataWriter
-import xtdb.types.Fields
-import xtdb.types.NamelessField.Companion.nullable
-import xtdb.types.Schema
-import xtdb.util.asPath
+import xtdb.trie.Trie.dataFilePath
+import xtdb.trie.Trie.metaFilePath
+import xtdb.trie.Trie.metaRelSchema
 import xtdb.util.requiringResolve
-import java.nio.file.Path
 import java.util.*
 
 class TrieWriter(
@@ -23,47 +21,6 @@ class TrieWriter(
     private val writeContentMetadata: Boolean
 ) : AutoCloseable {
     companion object {
-        @JvmStatic
-        val tablesDir = "tables".asPath
-
-        @JvmStatic
-        val TableName.tablePath: Path get() = tablesDir.resolve(replace(Regex("[./]"), "\\$"))
-
-        @JvmStatic
-        fun dataFilePath(tableName: TableName, trieKey: TrieKey): Path =
-            tableName.tablePath.resolve("data").resolve("$trieKey.arrow")
-
-        @JvmStatic
-        fun metaFilePath(tableName: TableName, trieKey: TrieKey): Path =
-            tableName.tablePath.resolve("meta").resolve("$trieKey.arrow")
-
-        private val metadataField = Fields.List(
-            Fields.Struct(
-                "col-name" to Fields.UTF8,
-                "root-col?" to Fields.BOOL,
-                "count" to Fields.I64,
-                "types" to Fields.Struct(),
-                "bloom" to Fields.VAR_BINARY.nullable
-            ),
-            elName = "struct"
-        )
-
-        @JvmStatic
-        val metaRelSchema = Schema(
-            "nodes" to Fields.Union(
-                "nil" to Fields.NULL,
-                "branch-iid" to Fields.List(nullable(Fields.I32)),
-                "branch-recency" to Fields.Map(
-                    "recency" to Fields.TEMPORAL,
-                    "idx" to nullable(Fields.I32),
-                ),
-                "leaf" to Fields.Struct(
-                    "data-page-idx" to Fields.I32,
-                    "columns" to metadataField
-                )
-            )
-        )
-
         @JvmStatic
         fun writeLiveTrie(
             al: BufferAllocator, bufferPool: BufferPool,
@@ -80,7 +37,7 @@ class TrieWriter(
     val dataRel: Relation = Relation(allocator, dataSchema)
 
     private val dataFileWriter: ArrowWriter =
-        runCatching { bufferPool.openArrowWriter(dataFilePath(tableName, trieKey), dataRel) }
+        runCatching { bufferPool.openArrowWriter(tableName.dataFilePath(trieKey), dataRel) }
             .onFailure { dataRel.close() }
             .getOrThrow()
 
@@ -190,7 +147,7 @@ class TrieWriter(
         node.writeNode0()
     }
 
-    private val metaFilePath = metaFilePath(tableName, trieKey)
+    private val metaFilePath = tableName.metaFilePath(trieKey)
 
     /**
      * @return the size of the data file

@@ -45,6 +45,8 @@ data class NamelessField(val fieldType: FieldType, val children: List<ArrowField
     }
 }
 
+val ArrowField.asPair get() = name to NamelessField(fieldType, children)
+
 @Suppress("FunctionName")
 object Fields {
 
@@ -56,6 +58,7 @@ object Fields {
     val VAR_BINARY = MinorType.VARBINARY.asField
 
     val TEMPORAL = ArrowType.Timestamp(MICROSECOND, "UTC").asField
+    val IID = ArrowType.FixedSizeBinary(16).asField
 
     fun Union(vararg legs: Pair<FieldName, NamelessField>) =
         ArrowType.Union(UnionMode.Dense, null).asField(*legs)

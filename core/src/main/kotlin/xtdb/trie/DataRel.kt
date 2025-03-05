@@ -5,7 +5,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.trie.TrieWriter.Companion.dataFilePath
+import xtdb.trie.Trie.dataFilePath
 import xtdb.util.closeAll
 import java.nio.file.Path
 
@@ -24,7 +24,7 @@ interface DataRel<L> : AutoCloseable {
             mutableListOf<Arrow>().also { res ->
                 try {
                     trieKeys.forEach { trieKey ->
-                        val dataFile = dataFilePath(tableName, trieKey)
+                        val dataFile = tableName.dataFilePath(trieKey)
                         res.add(Arrow(al, bp, dataFile, bp.getFooter(dataFile).schema))
                     }
                 } catch (e: Throwable) {

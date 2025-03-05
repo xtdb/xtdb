@@ -13,7 +13,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
-           (xtdb.trie MemoryHashTrie)
+           (xtdb.trie MemoryHashTrie Trie)
            (xtdb.vector IVectorReader RelationReader)))
 
 (defn name->oid [s]
@@ -283,9 +283,8 @@
   [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn/encrypt-pw "xtdb")}])
 
 (defn pg-user-template-page+trie [allocator]
-  (util/with-close-on-catch [root (VectorSchemaRoot/create (trie/data-rel-schema pg-user-field) allocator)]
-    (let [out-rel-writer (vw/root->writer root)
-          iid-wrt (.colWriter out-rel-writer "_iid")
+  (util/with-close-on-catch [out-rel-writer (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]
+    (let [iid-wrt (.colWriter out-rel-writer "_iid")
           sys-wrt (.colWriter out-rel-writer "_system_from")
           vf-wrt (.colWriter out-rel-writer "_valid_from")
           vt-wrt (.colWriter out-rel-writer "_valid_to")
@@ -300,7 +299,7 @@
         (.endRow out-rel-writer))
       (let [out-rel (vw/rel-wtr->rdr out-rel-writer)
             iid-rdr (vw/vec-wtr->rdr iid-wrt)
-            dummy-trie (reduce #(.add ^MemoryHashTrie %1 %2) (trie/->live-trie 32 1024 iid-rdr) (range (count initial-user-data)))]
+            dummy-trie (reduce #(.plus ^MemoryHashTrie %1 %2) (trie/->live-trie 32 1024 iid-rdr) (range (count initial-user-data)))]
         [out-rel dummy-trie]))))
 
 (defn table->template-rel+tries [allocator]

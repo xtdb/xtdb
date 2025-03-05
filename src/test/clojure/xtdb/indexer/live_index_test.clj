@@ -4,7 +4,6 @@
             [xtdb.api :as xt]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
-            [xtdb.indexer.live-index :as li]
             xtdb.node.impl
             [xtdb.object-store :as os]
             [xtdb.serde :as serde]
@@ -17,10 +16,10 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           xtdb.BufferPool
            (xtdb.arrow Relation VectorPosition)
+           xtdb.BufferPool
            xtdb.indexer.LiveIndex
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie MemoryHashTrie$Leaf)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie$Leaf)))
 
 (t/use-fixtures :each tu/with-allocator
   (tu/with-opts {:compactor {:threads 0}})
@@ -54,7 +53,7 @@
               live-rel (.getLiveRelation live-table)
               iid-vec (.getVector (.colWriter live-rel "_iid"))
 
-              ^MemoryHashTrie trie (li/live-trie live-table)]
+              trie (.getLiveTrie live-table)]
 
           (t/is (= iid-bytes
                    (->> (.getLeaves (.compactLogs trie))

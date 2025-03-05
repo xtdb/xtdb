@@ -19,7 +19,6 @@
            xtdb.api.storage.Storage
            xtdb.arrow.Relation
            xtdb.buffer_pool.LocalBufferPool
-           (xtdb.metadata PageMetadata)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector RelationWriter)))

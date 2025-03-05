@@ -82,3 +82,4 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
 }
 
 fun from(v: ValueVector) = v.accept(VecToReader, null)
+val ValueVector.asReader get() = from(this)

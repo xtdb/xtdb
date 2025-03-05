@@ -18,7 +18,7 @@
            xtdb.arrow.VectorPosition
            xtdb.BufferPool
            xtdb.compactor.Compactor
-           (xtdb.indexer LiveIndex LiveTable$Watermark)
+           (xtdb.indexer LiveIndex LiveTable LiveTable$Watermark)
            (xtdb.trie MemoryHashTrie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
@@ -43,7 +43,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (li/->live-table allocator bp (RowCounter. 0) "foo" {:->live-trie (partial trie/->live-trie 2 4)})]
+                         live-table (LiveTable. allocator bp "foo" (RowCounter. 0) (partial trie/->live-trie 2 4))]
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
@@ -58,7 +58,7 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (li/live-trie live-table)))
+            (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
                   leaf ^MemoryHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
@@ -81,7 +81,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (li/->live-table allocator bp (RowCounter. 0) "foo")]
+                         live-table (LiveTable. allocator bp "foo" (RowCounter. 0))]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
 
@@ -95,15 +95,12 @@
 
             (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs ^MemoryHashTrie (li/live-trie live-table)))
+            (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
                   leaf ^MemoryHashTrie$Leaf (first leaves)]
 
               (t/is (= 1 (count leaves)))
 
-              (t/is
-               (uuid-equal-to-path?
-                uuid
-                (.getPath leaf)))
+              (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
 
               (t/is (= (reverse (range n))
                        (vec (.getData leaf)))))
@@ -116,8 +113,8 @@
                 (.resolve path "objects")))))))))
 
 (defn live-table-wm->data [^LiveTable$Watermark live-table-wm]
-  (let [live-rel-data (vr/rel->rows (.liveRelation live-table-wm))
-        live-trie (.compactLogs (.liveTrie live-table-wm))
+  (let [live-rel-data (vr/rel->rows (.getLiveRelation live-table-wm))
+        live-trie (.compactLogs (.getLiveTrie live-table-wm))
         live-trie-leaf-data (->> live-trie
                                  (.getLeaves)
                                  (mapcat #(.getData ^MemoryHashTrie$Leaf %))
@@ -134,7 +131,7 @@
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
                 ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (li/->live-table allocator bp rc "foo")]
+                live-table (LiveTable. allocator bp "foo" rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.getDocWriter live-table-tx)]
 

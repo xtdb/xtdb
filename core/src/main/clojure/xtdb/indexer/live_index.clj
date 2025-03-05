@@ -6,182 +6,24 @@
             [xtdb.compactor :as c]
             [xtdb.metrics :as metrics]
             [xtdb.serde :as serde]
-            [xtdb.time :as time]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
-            [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
-  (:import [clojure.lang MapEntry]
-           (java.lang AutoCloseable)
+            [xtdb.util :as util])
+  (:import (java.lang AutoCloseable)
            (java.time Duration)
-           (java.util ArrayList HashMap List Map)
+           (java.util HashMap List Map)
            (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Field)
            (xtdb.api IndexerConfig TransactionKey)
            (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
-           (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable$Tx LiveTable$Watermark Watermark)
-           (xtdb.trie MemoryHashTrie TrieCatalog TrieWriter)
-           (xtdb.util RefCounter RowCounter)
-           (xtdb.vector IRelationWriter IVectorWriter)))
-
-(defprotocol TestLiveTable
-  (^MemoryHashTrie live-trie [test-live-table]))
-
-(defn- live-rel->fields [^IRelationWriter live-rel]
-  (let [live-rel-field (-> (.colWriter live-rel "op")
-                           (.legWriter "put")
-                           .getField)]
-    (assert (= #xt.arrow/type :struct (.getType live-rel-field)))
-    (into {} (map (comp (juxt #(.getName ^Field %) identity))) (.getChildren live-rel-field))))
-
-(defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel]
-  (let [out-cols (ArrayList.)]
-    (try
-      (doseq [^IVectorWriter w (vals rel)]
-        (.syncValueCount w)
-        (.add out-cols (vr/vec->reader (util/slice-vec (.getVector w)))))
-
-      (vr/rel-reader out-cols)
-
-      (catch Throwable t
-        (util/close out-cols)
-        (throw t)))))
-
-(defn live-table-wm [^IRelationWriter live-rel, trie]
-  (let [fields (live-rel->fields live-rel)
-        wm-live-rel (open-wm-live-rel live-rel)
-        wm-live-trie (-> ^MemoryHashTrie trie
-                         (.withIidReader (.readerForName wm-live-rel "_iid")))]
-    (reify LiveTable$Watermark
-      (columnField [_ col-name]
-        (get fields col-name (types/->field col-name #xt.arrow/type :null true)))
-
-      (columnFields [_] fields)
-      (liveRelation [_] wm-live-rel)
-      (liveTrie [_] wm-live-trie)
-
-      AutoCloseable
-      (close [_] (util/close wm-live-rel)))))
-
-(deftype LiveTable [^BufferAllocator allocator, ^BufferPool buffer-pool, ^RowCounter row-counter, ^String table-name
-                    ^IRelationWriter live-rel, ^:unsynchronized-mutable ^MemoryHashTrie live-trie
-                    ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr, ^IVectorWriter valid-from-wtr, ^IVectorWriter valid-to-wtr
-                    ^IVectorWriter put-wtr, ^IVectorWriter delete-wtr, ^IVectorWriter erase-wtr]
-  xtdb.indexer.LiveTable
-  (startTx [this-table tx-key new-live-table?]
-    (let [!transient-trie (atom live-trie)
-          system-from-µs (time/instant->micros (.getSystemTime tx-key))]
-      (reify LiveTable$Tx
-        (getLiveRelation [_] live-rel)
-        (getDocWriter [_] put-wtr)
-
-        (logPut [_ iid valid-from valid-to write-doc!]
-          (.startRow live-rel)
-
-          (.writeBytes iid-wtr iid)
-
-          (.writeLong system-from-wtr system-from-µs)
-          (.writeLong valid-from-wtr valid-from)
-          (.writeLong valid-to-wtr valid-to)
-
-          (write-doc!)
-
-          (.endRow live-rel)
-
-          (swap! !transient-trie #(.add ^MemoryHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
-          (.addRows row-counter 1))
-
-        (logDelete [_ iid valid-from valid-to]
-          (.writeBytes iid-wtr iid)
-
-          (.writeLong system-from-wtr system-from-µs)
-          (.writeLong valid-from-wtr valid-from)
-          (.writeLong valid-to-wtr valid-to)
-
-          (.writeNull delete-wtr)
-
-          (.endRow live-rel)
-
-          (swap! !transient-trie #(.add ^MemoryHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
-          (.addRows row-counter 1))
-
-        (logErase [_ iid]
-          (.writeBytes iid-wtr iid)
-
-          (.writeLong system-from-wtr system-from-µs)
-          (.writeLong valid-from-wtr Long/MIN_VALUE)
-          (.writeLong valid-to-wtr Long/MAX_VALUE)
-
-          (.writeNull erase-wtr)
-
-          (.endRow live-rel)
-
-          (swap! !transient-trie #(.add ^MemoryHashTrie % (dec (.getPosition (.writerPosition live-rel)))))
-          (.addRows row-counter 1))
-
-        (openWatermark [_] (live-table-wm live-rel @!transient-trie))
-
-        (commit [_]
-          (set! (.-live-trie this-table) @!transient-trie)
-          this-table)
-
-        (abort [_]
-          (when new-live-table?
-            (util/close this-table)))
-
-        AutoCloseable
-        (close [_]))))
-
-  (finishBlock [_ block-idx]
-    (.syncRowCount live-rel)
-    (let [row-count (.getPosition (.writerPosition live-rel))]
-      (when (pos? row-count)
-        (let [trie-key (trie/->l0-trie-key block-idx)]
-          (with-open [data-rel (.openAsRelation live-rel)]
-            (let [data-file-size (TrieWriter/writeLiveTrie allocator buffer-pool table-name trie-key
-                                                           live-trie data-rel)]
-              (MapEntry/create table-name
-                               {:fields (live-rel->fields live-rel)
-                                :trie-key trie-key
-                                :data-file-size data-file-size
-                                :row-count row-count})))))))
-
-  (openWatermark [this] (live-table-wm live-rel (.live-trie this)))
-
-  (getLiveRelation [_] live-rel)
-
-  TestLiveTable
-  (live-trie [_] live-trie)
-
-  AutoCloseable
-  (close [_]
-    (util/close live-rel)))
-
-(defn ->live-table
-  (^xtdb.indexer.LiveTable [allocator buffer-pool row-counter table-name]
-   (->live-table allocator buffer-pool row-counter table-name {}))
-
-  (^xtdb.indexer.LiveTable [allocator buffer-pool row-counter table-name
-                            {:keys [->live-trie]
-                             :or {->live-trie (fn [iid-rdr]
-                                                (MemoryHashTrie/emptyTrie iid-rdr))}}]
-   (util/with-close-on-catch [rel (trie/open-log-data-wtr allocator)]
-     (let [iid-wtr (.colWriter rel "_iid")
-           op-wtr (.colWriter rel "op")]
-       (->LiveTable allocator buffer-pool row-counter table-name rel
-                    (->live-trie (vw/vec-wtr->rdr iid-wtr))
-                    iid-wtr (.colWriter rel "_system_from")
-                    (.colWriter rel "_valid_from") (.colWriter rel "_valid_to")
-                    (.legWriter op-wtr "put") (.legWriter op-wtr "delete") (.legWriter op-wtr "erase"))))))
-
+           (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable LiveTable$Tx LiveTable$Watermark Watermark)
+           (xtdb.trie TrieCatalog)
+           (xtdb.util RefCounter RowCounter)))
 
 (defn open-live-idx-wm [^Map tables]
   (util/with-close-on-catch [wms (HashMap.)]
@@ -190,7 +32,7 @@
       (.put wms table-name (.openWatermark live-table)))
 
     (reify LiveIndex$Watermark
-      (getAllColumnFields [_] (update-vals wms #(.columnFields ^LiveTable$Watermark %)))
+      (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
 
       (liveTable [_ table-name] (.get wms table-name))
 
@@ -237,8 +79,8 @@
                                 (let [live-table (.liveTable this-idx table-name)
                                       new-live-table? (nil? live-table)
                                       ^LiveTable live-table (or live-table
-                                                                (->live-table allocator buffer-pool row-counter table-name
-                                                                              {:->live-trie (partial trie/->live-trie log-limit page-limit)}))]
+                                                                (LiveTable. allocator buffer-pool table-name row-counter
+                                                                            (partial trie/->live-trie log-limit page-limit)))]
 
                                   (.startTx live-table tx-key new-live-table?))))))
 
@@ -280,7 +122,7 @@
               (.computeIfAbsent wms table-name (fn [_] (.openWatermark live-table))))
 
             (reify LiveIndex$Watermark
-              (getAllColumnFields [_] (update-vals wms #(.columnFields ^LiveTable$Watermark %)))
+              (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
               (liveTable [_ table-name] (.get wms table-name))
 
               AutoCloseable
@@ -302,10 +144,14 @@
       (log/debugf "finishing block '%s'..." (util/->lex-hex-string block-idx))
 
       (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
-        (let [tasks (vec (for [^LiveTable table (.values tables)]
+        (let [tasks (vec (for [[table-name ^LiveTable table] tables]
                            (.fork scope (fn []
                                           (try
-                                            (.finishBlock table block-idx)
+                                            (when-let [finished-block (.finishBlock table block-idx)]
+                                              [table-name {:fields (.getFields finished-block)
+                                                           :trie-key (.getTrieKey finished-block)
+                                                           :row-count (.getRowCount finished-block)
+                                                           :data-file-size (.getDataFileSize finished-block)}])
                                             (catch InterruptedException e
                                               (throw e))
                                             (catch Exception e

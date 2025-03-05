@@ -29,7 +29,7 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
         fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
     }
 
-    fun add(idx: Int) = copy(rootNode = rootNode.add(this, idx))
+    operator fun plus(idx: Int) = copy(rootNode = rootNode.add(this, idx))
 
     @Suppress("unused")
     fun withIidReader(iidReader: IVectorReader) = copy(iidReader = iidReader)

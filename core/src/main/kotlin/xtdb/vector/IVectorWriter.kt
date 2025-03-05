@@ -178,3 +178,8 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
         }
     }
 }
+
+internal val IVectorWriter.asReader: IVectorReader get() {
+    syncValueCount()
+    return ValueVectorReader.from(vector)
+}

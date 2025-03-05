@@ -470,8 +470,8 @@
                                                                               (-> (cat/trie-state trie-catalog table-name)
                                                                                   (cat/current-tries)))
 
-                                                                  live-table-wm (conj (-> (trie/->Segment (.liveTrie live-table-wm))
-                                                                                          (assoc :memory-rel (.liveRelation live-table-wm))))
+                                                                  live-table-wm (conj (-> (trie/->Segment (.getLiveTrie live-table-wm))
+                                                                                          (assoc :memory-rel (.getLiveRelation live-table-wm))))
                                                                   template-table? (conj (let [[memory-rel trie] (table->template-rel+trie (symbol table-name))]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]
