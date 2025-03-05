@@ -9,14 +9,20 @@ import kotlinx.coroutines.time.withTimeout
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
+import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RowCopier
 import xtdb.arrow.VectorReader
+import xtdb.bitemporal.PolygonCalculator
 import xtdb.log.proto.AddedTrie
 import xtdb.trie.*
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.util.logger
 import xtdb.util.trace
 import java.time.Duration
+import java.util.*
+import java.util.function.Predicate
+import kotlin.math.min
 import kotlin.time.Duration.Companion.seconds
 
 private typealias InstantMicros = Long
@@ -71,6 +77,89 @@ interface Compactor : AutoCloseable {
 
             // slice the selection array for each partition
             return partitionSlices(partIdxs)
+        }
+
+        private fun ByteArray.toPathPredicate() =
+            Predicate<ByteArray> { pagePath ->
+                val len = min(size, pagePath.size)
+                Arrays.equals(this, 0, len, pagePath, 0, len)
+            }
+
+        @Suppress("UNCHECKED_CAST")
+        private fun <L : HashTrie.Node<*>> MergePlanNode<L>.loadDataPage(): RelationReader? =
+            segment.dataRel?.loadPage(node as L)
+
+        fun copierFactory(dataWriter: Relation): (RelationReader) -> RowCopier {
+            val iidWtr = dataWriter["_iid"]!!
+            val sfWtr = dataWriter["_system_from"]!!
+            val vfWtr = dataWriter["_valid_from"]!!
+            val vtWtr = dataWriter["_valid_to"]!!
+            val opWtr = dataWriter["op"]!!
+
+            return { dataReader ->
+                val iidCopier = dataReader["_iid"]!!.rowCopier(iidWtr)
+                val sfCopier = dataReader["_system_from"]!!.rowCopier(sfWtr)
+                val vfCopier = dataReader["_valid_from"]!!.rowCopier(vfWtr)
+                val vtCopier = dataReader["_valid_to"]!!.rowCopier(vtWtr)
+                val opCopier = dataReader["op"]!!.rowCopier(opWtr)
+
+                RowCopier {
+                    val pos = iidCopier.copyRow(it)
+
+                    sfCopier.copyRow(it)
+                    vfCopier.copyRow(it)
+                    vtCopier.copyRow(it)
+                    opCopier.copyRow(it)
+                    dataWriter.endRow()
+
+                    pos
+                }
+            }
+        }
+
+        @JvmStatic
+        fun mergeSegmentsInto(dataRel: Relation, segments: List<ISegment<*>>, pathFilter: ByteArray?) {
+            val copierFactory = copierFactory(dataRel)
+            val polygonCalculator = PolygonCalculator()
+            val isValidPtr = ArrowBufPointer()
+
+            data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RowCopier)
+
+            for (task in toMergePlan(segments, pathFilter?.toPathPredicate())) {
+                if (Thread.interrupted()) throw InterruptedException()
+
+                val mpNodes = task.mpNodes
+                var path = task.path
+                val dataReaders = mpNodes.map { it.loadDataPage() }
+                val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
+                path = if (pathFilter == null || path.size > pathFilter.size) path else pathFilter
+
+                for (dataReader in dataReaders) {
+                    if (dataReader == null) continue
+                    val evPtr = EventRowPointer.XtArrow(dataReader, path)
+                    val rowCopier = copierFactory(dataReader)
+                    if (evPtr.isValid(isValidPtr, path)) {
+                        mergeQueue.add(QueueElem(evPtr, rowCopier))
+                    }
+                }
+
+                var seenErase = false
+                while(true) {
+                    val elem = mergeQueue.poll() ?: break
+                    val (evPtr, rowCopier) = elem
+                    if (polygonCalculator.calculate(evPtr) != null) {
+                        rowCopier.copyRow(evPtr.index)
+                    } else {
+                        if (!seenErase) rowCopier.copyRow(evPtr.index)
+                        seenErase = true
+                    }
+
+                    evPtr.nextIndex()
+                    if (evPtr.isValid(isValidPtr, path)) {
+                        mergeQueue.add(elem)
+                    }
+                }
+            }
         }
 
         @Suppress("unused")

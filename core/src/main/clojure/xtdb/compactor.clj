@@ -1,109 +1,29 @@
 (ns xtdb.compactor
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [xtdb.metrics :as metrics]
             xtdb.metadata
+            [xtdb.metrics :as metrics]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import [java.nio.channels ClosedByInterruptException]
-           [java.util Arrays Comparator LinkedList PriorityQueue]
-           (java.util.function Predicate)
+           [java.util LinkedList]
            [org.apache.arrow.memory BufferAllocator]
-           [org.apache.arrow.memory.util ArrowBufPointer]
-           (org.apache.arrow.vector.types.pojo Field FieldType)
+           (org.apache.arrow.vector.types.pojo Field)
            (xtdb BufferPool)
            xtdb.api.CompactorConfig
            (xtdb.api.log Log)
-           (xtdb.arrow Relation RelationReader RowCopier Vector VectorWriter)
-           (xtdb.bitemporal IPolygonReader PolygonCalculator)
+           (xtdb.arrow Relation)
            xtdb.BufferPool
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
-           (xtdb.trie DataRel EventRowPointer EventRowPointer$XtArrow HashTrieKt MergePlanTask TrieCatalog TrieWriter)
-           (xtdb.util TemporalBounds)))
+           (xtdb.trie DataRel TrieCatalog TrieWriter)))
 
 (def ^:dynamic *ignore-signal-block?* false)
 
-(defn- ->reader->copier [^Relation data-wtr]
-  (let [iid-wtr (.get data-wtr "_iid")
-        sf-wtr (.get data-wtr "_system_from")
-        vf-wtr (.get data-wtr "_valid_from")
-        vt-wtr (.get data-wtr "_valid_to")
-        op-wtr (.get data-wtr "op")]
-    (fn reader->copier [^RelationReader data-rdr]
-      (let [iid-copier (-> (.get data-rdr "_iid") (.rowCopier iid-wtr))
-            sf-copier (-> (.get data-rdr "_system_from") (.rowCopier sf-wtr))
-            vf-copier (-> (.get data-rdr "_valid_from") (.rowCopier vf-wtr))
-            vt-copier (-> (.get data-rdr "_valid_to") (.rowCopier vt-wtr))
-            op-copier (-> (.get data-rdr "op") (.rowCopier op-wtr))]
-        (reify RowCopier
-          (copyRow [_ ev-idx]
-            (let [pos (.copyRow iid-copier ev-idx)]
-              (.copyRow sf-copier ev-idx)
-              (.copyRow vf-copier ev-idx)
-              (.copyRow vt-copier ev-idx)
-              (.copyRow op-copier ev-idx)
-              (.endRow data-wtr)
-
-              pos)))))))
-
 (defn merge-segments-into [^Relation data-rel, segments, ^bytes path-filter]
-  (let [reader->copier (->reader->copier data-rel)
-        polygon-calculator (PolygonCalculator.)
-
-        is-valid-ptr (ArrowBufPointer.)]
-
-    (doseq [^MergePlanTask merge-plan-task (HashTrieKt/toMergePlan segments
-                                                                   (when path-filter
-                                                                     (let [path-len (alength path-filter)]
-                                                                       (reify Predicate
-                                                                         (test [_ page-path]
-                                                                           (let [^bytes page-path page-path
-                                                                                 len (min path-len (alength page-path))]
-                                                                             (Arrays/equals path-filter 0 len
-                                                                                            page-path 0 len))))))
-                                                                   (TemporalBounds.))
-            :let [_ (when (Thread/interrupted)
-                      (throw (InterruptedException.)))
-
-                  mp-nodes (.getMpNodes merge-plan-task)
-                  ^bytes path (.getPath merge-plan-task)
-                  data-rdrs (mapv trie/load-data-page mp-nodes)
-                  merge-q (PriorityQueue. (Comparator/comparing :ev-ptr (EventRowPointer/comparator)))
-                  path (if (or (nil? path-filter)
-                               (> (alength path) (alength path-filter)))
-                         path
-                         path-filter)]]
-
-      (doseq [^RelationReader data-rdr data-rdrs
-              :when data-rdr
-              :let [ev-ptr (EventRowPointer$XtArrow. data-rdr path)
-                    row-copier (reader->copier data-rdr)]]
-        (when (.isValid ev-ptr is-valid-ptr path)
-          (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
-
-      (loop [seen-erase? false]
-        (when-let [{:keys [^EventRowPointer ev-ptr, ^RowCopier row-copier] :as q-obj} (.poll merge-q)]
-          (let [now-seen-erase? (if (.calculate polygon-calculator ev-ptr)
-                                  (do
-                                    (.copyRow row-copier (.getIndex ev-ptr))
-                                    false)
-
-                                  (do
-                                    ;; assumption: if calculate returns nil it's because it was an erase
-                                    ;; calculate can also return nil in other cases but I don't think those can happen in the compactor.
-                                    (when-not seen-erase?
-                                      ;; the first time we encounter an erase
-                                      (.copyRow row-copier (.getIndex ev-ptr)))
-                                    true))]
-            (.nextIndex ev-ptr)
-            (when (.isValid ev-ptr is-valid-ptr path)
-              (.add merge-q q-obj))
-            (recur now-seen-erase?)))))
-
-    nil))
+  (Compactor/mergeSegmentsInto data-rel segments path-filter))
 
 (defn ->log-data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [data-rels]
   (trie/data-rel-schema (-> (for [^DataRel data-rel data-rels]

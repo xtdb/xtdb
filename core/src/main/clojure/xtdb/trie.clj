@@ -77,7 +77,8 @@
 
 (defrecord Segment [trie]
   ISegment
-  (getTrie [_] trie))
+  (getTrie [_] trie)
+  (getDataRel [this] (:data-rel this)))
 
 (defprotocol MergePlanPage
   (load-page [mpg ^BufferPool buffer-pool vsr-cache])

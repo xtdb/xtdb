@@ -21,7 +21,7 @@ fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
-interface HashTrie<N : Node<N>> {
+interface HashTrie<N : Node<N>, L: N> {
     val rootNode: N?
 
     val leaves get() = rootNode?.leaves ?: emptyList()
@@ -43,8 +43,6 @@ interface HashTrie<N : Node<N>> {
 
         val leaves: List<Node<N>> get() = leafStream().toList()
     }
-
-    abstract class BaseNode : Node<BaseNode>
 
     @Suppress("MemberVisibilityCanBePrivate")
     companion object {
@@ -76,17 +74,18 @@ interface HashTrie<N : Node<N>> {
     }
 }
 
-interface ISegment {
-    val trie: HashTrie<*>
+interface ISegment<L : Node<*>> {
+    val trie: HashTrie<*, L>
+    val dataRel: DataRel<L>?
 }
 
-data class MergePlanNode(val segment: ISegment, val node: Node<*>)
+data class MergePlanNode<L : Node<*>>(val segment: ISegment<L>, val node: Node<*>)
 
-class MergePlanTask(val mpNodes: List<MergePlanNode>, val path: ByteArray)
+class MergePlanTask(val mpNodes: List<MergePlanNode<*>>, val path: ByteArray)
 
-// IMPORTANT - Tries (i.e segments) and nodes need to be returned in system time order
+// IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
 @Suppress("UNUSED_EXPRESSION")
-fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
+fun toMergePlan(segments: List<ISegment<*>>, pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
     val minRecency = min(temporalBounds.validTime.lower, temporalBounds.systemTime.lower)
@@ -100,13 +99,13 @@ fun toMergePlan(segments: List<ISegment>, pathPred: Predicate<ByteArray>?, tempo
 
         when {
             mpNodes.any { it.node is RecencyBranch } -> {
-                val newMpNodes = mutableListOf<MergePlanNode>()
+                val newMpNodes = mutableListOf<MergePlanNode<*>>()
                 for (mpNode in mergePlanTask.mpNodes) {
                     val recencies = mpNode.node.recencies
                     if (recencies != null) {
-                        val tempMpNodes = mutableListOf<MergePlanNode>()
+                        val tempMpNodes = mutableListOf<MergePlanNode<*>>()
                         for(i in recencies.indices.reversed()) {
-                            // the recency of a bucket is non inclusive, i.e. no event in the bucket has the recency of the bucket
+                            // the recency of a bucket is exclusive, i.e. no event in the bucket has the recency of the bucket
                             if (recencies[i] <= minRecency) break
                             tempMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
                         }
