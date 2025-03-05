@@ -25,7 +25,6 @@ import java.util.function.Predicate
 import kotlin.math.min
 import kotlin.time.Duration.Companion.seconds
 
-private typealias InstantMicros = Long
 private typealias Selection = IntArray
 
 private typealias JobKey = Pair<TableName, TrieKey>

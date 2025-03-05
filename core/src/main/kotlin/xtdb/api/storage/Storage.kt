@@ -40,8 +40,6 @@ object Storage {
         fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
     }
 
-    internal fun BufferAllocator.openStorageChildAllocator() = openChildAllocator("buffer-pool")
-
     internal fun arrowFooterCache(maxEntries: Long = 1024): Cache<Path, ArrowFooter> =
         Caffeine.newBuilder().maximumSize(maxEntries).build()
 

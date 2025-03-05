@@ -59,7 +59,7 @@ class MemoryCache @JvmOverloads constructor(
 
     data class Stats(val metaStats: SectionStats, val dataStats: SectionStats)
 
-    internal val stats0: Stats
+    private val stats0: Stats
         get() {
             val grouped = pinningCache.cache.asMap().entries.groupBy { it.key.path.isMetaFile }
             return Stats(SectionStats(grouped[true].orEmpty()), SectionStats(grouped[false].orEmpty()))
@@ -71,15 +71,15 @@ class MemoryCache @JvmOverloads constructor(
 
     val stats: Stats get() = statsCache[Unit]
 
-    fun registerMetrics(meterName: String, registry: MeterRegistry) {
-        pinningCache.registerMetrics(meterName, registry)
+    fun MeterRegistry.registerMemoryCache(meterName: String) {
+        pinningCache.registerMetrics(meterName, this)
 
         fun registerGauge(name: String, baseUnit: String? = null, f: SectionStats.() -> Double) {
-            Gauge.builder("$meterName.metaFiles.$name", this) { it.stats.metaStats.f() }
-                .baseUnit(baseUnit).tag("type", "meta").register(registry)
+            Gauge.builder("$meterName.metaFiles.$name", this@MemoryCache) { it.stats.metaStats.f() }
+                .baseUnit(baseUnit).tag("type", "meta").register(this)
 
-            Gauge.builder("$meterName.dataFiles.$name", this) { it.stats.dataStats.f() }
-                .baseUnit(baseUnit).tag("type", "data").register(registry)
+            Gauge.builder("$meterName.dataFiles.$name", this@MemoryCache) { it.stats.dataStats.f() }
+                .baseUnit(baseUnit).tag("type", "data").register(this)
         }
 
         registerGauge("sliceCount") { sliceCount.toDouble() }
