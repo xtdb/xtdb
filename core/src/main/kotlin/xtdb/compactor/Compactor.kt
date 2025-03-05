@@ -6,7 +6,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.Relation
@@ -17,8 +19,7 @@ import xtdb.bitemporal.PolygonCalculator
 import xtdb.log.proto.AddedTrie
 import xtdb.trie.*
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
-import xtdb.util.logger
-import xtdb.util.trace
+import xtdb.util.*
 import java.time.Duration
 import java.util.*
 import java.util.function.Predicate
@@ -116,17 +117,14 @@ interface Compactor : AutoCloseable {
             }
         }
 
-        @JvmStatic
-        fun mergeSegmentsInto(dataRel: Relation, segments: List<ISegment<*>>, pathFilter: ByteArray?) {
+        private class PageMerge(dataRel: Relation, val pathFilter: ByteArray?) {
             val copierFactory = copierFactory(dataRel)
             val polygonCalculator = PolygonCalculator()
             val isValidPtr = ArrowBufPointer()
 
             data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RowCopier)
 
-            for (task in toMergePlan(segments, pathFilter?.toPathPredicate())) {
-                if (Thread.interrupted()) throw InterruptedException()
-
+            fun mergePages(task: MergePlanTask) {
                 val mpNodes = task.mpNodes
                 var path = task.path
                 val dataReaders = mpNodes.map { it.loadDataPage() }
@@ -143,7 +141,8 @@ interface Compactor : AutoCloseable {
                 }
 
                 var seenErase = false
-                while(true) {
+
+                while (true) {
                     val elem = mergeQueue.poll() ?: break
                     val (evPtr, rowCopier) = elem
                     if (polygonCalculator.calculate(evPtr) != null) {
@@ -160,6 +159,43 @@ interface Compactor : AutoCloseable {
                 }
             }
         }
+
+        @JvmStatic
+        fun mergeSegments(
+            al: BufferAllocator,
+            schema: Schema,
+            segments: List<ISegment<*>>,
+            pathFilter: ByteArray?
+        ): Relation =
+            useTempFile("merged-segments", ".arrow") { tempFile ->
+                Relation(al, schema).use { dataRel ->
+                    dataRel.startUnload(tempFile.openWritableChannel()).use { unloader ->
+                        val pageMerge = PageMerge(dataRel, pathFilter)
+
+                        for (task in toMergePlan(segments, pathFilter?.toPathPredicate())) {
+                            if (Thread.interrupted()) throw InterruptedException()
+
+                            pageMerge.mergePages(task)
+
+                            unloader.writePage()
+                            dataRel.clear()
+                        }
+
+                        unloader.end()
+                    }
+                }
+
+                Relation(al, schema).closeOnCatch { outRel ->
+                    Relation.loader(al, tempFile).use { inLoader ->
+                        Relation(al, inLoader.schema).use { inRel ->
+                            while (inLoader.loadNextPage(inRel))
+                                outRel.append(inRel)
+                        }
+                    }
+
+                    outRel
+                }
+            }
 
         @Suppress("unused")
         @JvmOverloads

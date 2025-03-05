@@ -67,6 +67,11 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         }
     }
 
+    fun append(rel: RelationReader) {
+        val copier = rowCopier(rel)
+        repeat(rel.rowCount) { copier.copyRow(it) }
+    }
+
     fun loadFromArrow(root: VectorSchemaRoot) {
         vectors.forEach { (name, vec) -> vec.loadFromArrow(root.getVector(name)) }
         rowCount = root.rowCount
