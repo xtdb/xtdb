@@ -49,7 +49,7 @@
 
               pos)))))))
 
-(defn merge-segments-into [^Relation data-rel, ^VectorWriter recency-wtr, segments, ^bytes path-filter]
+(defn merge-segments-into [^Relation data-rel, segments, ^bytes path-filter]
   (let [reader->copier (->reader->copier data-rel)
         polygon-calculator (PolygonCalculator.)
 
@@ -86,23 +86,22 @@
 
       (loop [seen-erase? false]
         (when-let [{:keys [^EventRowPointer ev-ptr, ^RowCopier row-copier] :as q-obj} (.poll merge-q)]
-          (let [new-previous-polygon  (if-let [polygon (.calculate polygon-calculator ev-ptr)]
-                                        (do
-                                          (.copyRow row-copier (.getIndex ev-ptr))
-                                          (.writeLong recency-wtr (.getRecency ^IPolygonReader polygon))
-                                          false)
+          (let [now-seen-erase? (if (.calculate polygon-calculator ev-ptr)
+                                  (do
+                                    (.copyRow row-copier (.getIndex ev-ptr))
+                                    false)
 
-                                        (do
-                                          ;; the first time we encounter an erase
-                                          (when-not seen-erase?
-                                            (.copyRow row-copier (.getIndex ev-ptr))
-                                            ;; TODO this can likely become system-time, but we wanted to play it safe for now
-                                            (.writeLong recency-wtr Long/MAX_VALUE))
-                                          true))]
+                                  (do
+                                    ;; assumption: if calculate returns nil it's because it was an erase
+                                    ;; calculate can also return nil in other cases but I don't think those can happen in the compactor.
+                                    (when-not seen-erase?
+                                      ;; the first time we encounter an erase
+                                      (.copyRow row-copier (.getIndex ev-ptr)))
+                                    true))]
             (.nextIndex ev-ptr)
             (when (.isValid ev-ptr is-valid-ptr path)
               (.add merge-q q-obj))
-            (recur new-previous-polygon)))))
+            (recur now-seen-erase?)))))
 
     nil))
 
@@ -113,12 +112,6 @@
                                   (.getChildren) ^Field first))
                             (->> (apply types/merge-fields))
                             (types/field-with-name "put"))))
-
-(defn open-recency-wtr ^xtdb.arrow.Vector [allocator]
-  (Vector/fromField allocator
-                    (Field. "_recency"
-                            (FieldType/notNullable #xt.arrow/type [:timestamp-tz :micro "UTC"])
-                            nil)))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^BufferPool buffer-pool, ^PageMetadata$Factory metadata-mgr
                             {:keys [page-size]} {:keys [table-name part trie-keys out-trie-key]}]
@@ -136,9 +129,8 @@
                            data-rels)
             schema (->log-data-rel-schema (map :data-rel segments))
 
-            data-file-size (util/with-open [data-rel (Relation. allocator schema)
-                                            recency-wtr (open-recency-wtr allocator)]
-                             (merge-segments-into data-rel recency-wtr segments (byte-array part))
+            data-file-size (util/with-open [data-rel (Relation. allocator schema)]
+                             (merge-segments-into data-rel segments (byte-array part))
 
                              (util/with-open [trie-wtr (TrieWriter. allocator buffer-pool
                                                                     schema table-name out-trie-key

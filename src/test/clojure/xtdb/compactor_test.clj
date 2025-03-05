@@ -236,10 +236,9 @@
                           (assoc :data-rel (DataRel/live live-rel1)))]]
 
         (t/testing "merge segments"
-          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
-                           recency-wtr (c/open-recency-wtr tu/*allocator*)]
+          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))]
 
-            (c/merge-segments-into data-rel recency-wtr segments nil)
+            (c/merge-segments-into data-rel segments nil)
 
             (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                        :xt/system-from (time/->zdt #inst "2023")
@@ -273,16 +272,11 @@
                        :op {:v 0, :xt/id "foo"}}]
 
                      (->> (.toMaps data-rel)
-                          (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))
-
-            (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")
-                      (time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2022")]
-                     (-> recency-wtr .getAsList)))))
+                          (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))
 
         (t/testing "merge segments with path predicate"
-          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))
-                           recency-wtr (c/open-recency-wtr tu/*allocator*)]
-            (c/merge-segments-into data-rel recency-wtr segments (byte-array [2]))
+          (util/with-open [data-rel (Relation. tu/*allocator* (c/->log-data-rel-schema (map :data-rel segments)))]
+            (c/merge-segments-into data-rel segments (byte-array [2]))
 
             (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                        :xt/system-from (time/->zdt #inst "2023")
@@ -301,10 +295,7 @@
                        :op {:v 0, :xt/id "bar"}}]
 
                      (->> (.toMaps data-rel)
-                          (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))
-
-            (t/is (= [(time/->zdt time/end-of-time) (time/->zdt #inst "2023") (time/->zdt #inst "2021")]
-                     (.getAsList recency-wtr)))))))))
+                          (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))))
 
 (defn tables-key ^String [table] (str "objects/" Storage/version "/tables/" table))
 

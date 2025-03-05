@@ -17,7 +17,6 @@ import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.util.logger
 import xtdb.util.trace
 import java.time.Duration
-import java.util.*
 import kotlin.time.Duration.Companion.seconds
 
 private typealias InstantMicros = Long
@@ -93,13 +92,6 @@ interface Compactor : AutoCloseable {
                 iidReader.getPointer(first(), startPtr) == iidReader.getPointer(last(), endPtr)
 
             fun writeSubtree(depth: Int, sel: Selection): Int {
-
-                fun writeRecencyBranch(parts: SortedMap<InstantMicros, Selection>): Int =
-                    trieWriter.writeRecencyBranch(
-                        parts.mapValuesTo(sortedMapOf()) { innerSel ->
-                            writeSubtree(depth + 1, innerSel.value)
-                        }
-                    )
 
                 return when {
                     Thread.interrupted() -> throw InterruptedException()
