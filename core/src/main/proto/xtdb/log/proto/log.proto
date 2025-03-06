@@ -16,10 +16,10 @@ message FlushBlock {
 }
 
 message TriesAdded {
-    repeated AddedTrie tries = 1;
+    repeated TrieDetails tries = 1;
 }
 
-message AddedTrie {
+message TrieDetails {
     string table_name = 1;
     string trie_key = 2;
     int64 data_file_size = 3;

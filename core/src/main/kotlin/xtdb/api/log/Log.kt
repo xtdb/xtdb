@@ -81,7 +81,7 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class TriesAdded(val tries: List<AddedTrie>) : ProtobufMessage() {
+        data class TriesAdded(val tries: List<TrieDetails>) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
                 triesAdded = triesAdded { tries.addAll(this@TriesAdded.tries) }
             }

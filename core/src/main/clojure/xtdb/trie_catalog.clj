@@ -7,7 +7,7 @@
            (xtdb BufferPool)
            xtdb.api.storage.ObjectStore$StoredObject
            xtdb.catalog.BlockCatalog
-           xtdb.log.proto.AddedTrie))
+           xtdb.log.proto.TrieDetails))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -66,8 +66,8 @@
          (cons v (map-while f xs))
          (cons x xs))))))
 
-(defn ->added-trie ^xtdb.log.proto.AddedTrie [table-name, trie-key, ^long data-file-size]
-  (.. (AddedTrie/newBuilder)
+(defn ->trie-details ^TrieDetails [table-name, trie-key, ^long data-file-size]
+  (.. (TrieDetails/newBuilder)
       (setTableName table-name)
       (setTrieKey trie-key)
       (setDataFileSize data-file-size)
@@ -208,10 +208,10 @@
   xtdb.trie.TrieCatalog
   (addTries [this added-tries]
     (doseq [[table-name added-tries] (->> added-tries
-                                          (group-by #(.getTableName ^AddedTrie %)))]
+                                          (group-by #(.getTableName ^TrieDetails %)))]
       (.compute !table-cats table-name
                 (fn [_table-name tries]
-                  (reduce (fn [table-cat ^AddedTrie added-trie]
+                  (reduce (fn [table-cat ^TrieDetails added-trie]
                             (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
                               (apply-trie-notification this table-cat
                                                        (-> parsed-key
@@ -237,7 +237,7 @@
                      :let [file-name (str (.getFileName (.getKey obj)))
                            [_ trie-key] (re-matches #"(.+)\.arrow" file-name)]
                      :when trie-key]
-                 (->added-trie table-name trie-key (.getSize obj))))))
+                 (->trie-details table-name trie-key (.getSize obj))))))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
   (util/component node :xtdb/trie-catalog))

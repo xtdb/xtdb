@@ -170,7 +170,7 @@
               (.finishBlock block-cat block-idx latest-completed-tx table-block-paths))
 
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
-                                (trie-cat/->added-trie table-name trie-key data-file-size))]
+                                (trie-cat/->trie-details table-name trie-key data-file-size))]
               (.addTries trie-cat added-tries)
               @(.appendMessage log (Log$Message$TriesAdded. added-tries))))))
 

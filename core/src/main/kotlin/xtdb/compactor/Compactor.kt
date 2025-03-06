@@ -12,7 +12,7 @@ import xtdb.BufferPool
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.Relation
-import xtdb.log.proto.AddedTrie
+import xtdb.log.proto.TrieDetails
 import xtdb.metadata.PageMetadata
 import xtdb.trie.*
 import xtdb.trie.ISegment.Segment
@@ -60,13 +60,13 @@ interface Compactor : AutoCloseable {
         private fun Relation.writeTrie(tableName: TableName, outputTrieKey: TrieKey): FileSize =
             trieWriter.writeRelation(tableName, outputTrieKey, this, pageSize)
 
-        private fun Job.addedTrie(dataFileSize: FileSize) =
-            AddedTrie.newBuilder()
+        private fun Job.trieDetails(dataFileSize: FileSize) =
+            TrieDetails.newBuilder()
                 .setTableName(tableName).setTrieKey(outputTrieKey)
                 .setDataFileSize(dataFileSize)
                 .build()
 
-        private fun Job.execute(): List<AddedTrie> =
+        private fun Job.execute(): List<TrieDetails> =
             try {
                 LOGGER.debug("compacting '$tableName' '$trieKeys' -> $outputTrieKey")
 
@@ -90,7 +90,7 @@ interface Compactor : AutoCloseable {
 
                 LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
 
-                listOf(addedTrie(dataFileSize))
+                listOf(trieDetails(dataFileSize))
             } catch (e: ClosedByInterruptException) {
                 throw InterruptedException(e.message)
             } catch (e: InterruptedException) {

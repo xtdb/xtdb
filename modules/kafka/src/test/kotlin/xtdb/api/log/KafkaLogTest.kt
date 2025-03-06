@@ -14,7 +14,7 @@ import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log.Message
 import xtdb.api.log.Log.Record
 import xtdb.api.log.Log.Subscriber
-import xtdb.log.proto.AddedTrie
+import xtdb.log.proto.TrieDetails
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.Collections.synchronizedList
@@ -47,13 +47,13 @@ class KafkaLogTest {
             every { latestCompletedOffset } returns -1
         }
 
-        fun addedTrie(key: String, size: Long) =
-            AddedTrie.newBuilder()
+        fun trieDetails(key: String, size: Long) =
+            TrieDetails.newBuilder()
                 .setTableName("my-table").setTrieKey(key)
                 .setDataFileSize(size)
                 .build()
 
-        val addedTries = listOf(addedTrie("foo", 12), addedTrie("bar", 18))
+        val addedTrieDetails = listOf(trieDetails("foo", 12), trieDetails("bar", 18))
 
         KafkaLog.kafka(container.bootstrapServers, "test-topic")
             .pollDuration(Duration.ofMillis(100))
@@ -64,7 +64,7 @@ class KafkaLogTest {
 
                     log.appendMessage(Message.FlushBlock(12)).await()
 
-                    log.appendMessage(Message.TriesAdded(addedTries)).await()
+                    log.appendMessage(Message.TriesAdded(addedTrieDetails)).await()
 
                     while (msgs.flatten().size < 3) delay(100)
                 }
@@ -86,7 +86,7 @@ class KafkaLogTest {
 
         allMsgs[2].message.let {
             check(it is Message.TriesAdded)
-            assertEquals(addedTries, it.tries)
+            assertEquals(addedTrieDetails, it.tries)
         }
     }
 }
