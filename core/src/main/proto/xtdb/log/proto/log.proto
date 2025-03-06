@@ -19,8 +19,20 @@ message TriesAdded {
     repeated TrieDetails tries = 1;
 }
 
+message TrieMetadata {
+    int64 min_valid_from = 1 [default = 9223372036854775807];
+    int64 max_valid_from = 2 [default = -9223372036854775808];
+    int64 min_valid_to = 3 [default = 9223372036854775807];
+    int64 max_valid_to = 4 [default = -9223372036854775808];
+    int64 min_system_from = 5 [default = 9223372036854775807];
+    int64 max_system_from = 6  [default = -9223372036854775808];
+    int64 row_count = 7 [default = 0];
+    bytes iid_bloom = 8;
+}
+
 message TrieDetails {
     string table_name = 1;
     string trie_key = 2;
     int64 data_file_size = 3;
+    TrieMetadata trie_metadata = 4;
 }

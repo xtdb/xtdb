@@ -1,11 +1,14 @@
 (ns xtdb.compactor-test
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
+            [xtdb.table-catalog :as table-cat]
+            [xtdb.table-catalog-test :as table-test]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -15,6 +18,7 @@
            (xtdb BufferPool)
            xtdb.api.storage.Storage
            (xtdb.arrow RelationReader)
+           [xtdb.block.proto TableBlock]
            (xtdb.trie DataRel Trie)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -444,3 +448,54 @@
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
                      (.resolve node-dir (tables-key "public$foo")) #"l01-rc-(.+)\.arrow"))))
 
+(t/deftest compactor-trie-metadata
+  (let [node-dir (util/->path "target/compactor/compactor-metadata-test")]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 1})]
+      (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+        (xt/execute-tx node [[:put-docs {:into :foo
+                                         :valid-from #xt/instant "2010-01-01T00:00:00Z"
+                                         :valid-to #xt/instant "2011-01-01T00:00:00Z"}
+                              {:xt/id 1}]])
+        (tu/finish-block! node)
+
+        (xt/execute-tx node [[:put-docs {:into :foo
+                                         :valid-from #xt/instant "2015-01-01T00:00:00Z"
+                                         :valid-to #xt/instant "2016-01-01T00:00:00Z"}
+                              {:xt/id 2}]])
+        (tu/finish-block! node)
+
+        (c/compact-all! node)
+        ;; to artifically create a new table block
+        (tu/finish-block! node)
+
+
+        (t/is (= (os/->StoredObject "tables/public$foo/blocks/b02.binpb" 696)
+                 (last (.listAllObjects bp (table-cat/->table-block-dir "public/foo")))))
+
+        (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
+                                 TableBlock/parseFrom
+                                 table-cat/<-table-block
+                                 :current-tries
+                                 (mapv table-test/trie-details->edn))]
+          (t/is (= ["l00-rc-b00" "l01-rc-b00" "l00-rc-b01" "l01-rc-b01"]
+                   (map :trie-key current-tries)))
+
+          (t/is (= [{:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
+                     :max-valid-from #xt/instant "2010-01-01T00:00:00Z",
+                     :min-valid-to #xt/instant "2011-01-01T00:00:00Z",
+                     :max-valid-to #xt/instant "2011-01-01T00:00:00Z",
+                     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+                     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+                     :row-count 1}
+                    {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
+                     :max-valid-from #xt/instant "2015-01-01T00:00:00Z",
+                     :min-valid-to #xt/instant "2011-01-01T00:00:00Z",
+                     :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
+                     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+                     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+                     :row-count 2}]
+                   (->> current-tries
+                        (filter #(str/starts-with? (:trie-key %) "l01"))
+                        (map (comp #(dissoc % :iid-bloom) :trie-metadata))))))))))

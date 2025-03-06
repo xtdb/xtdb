@@ -152,7 +152,8 @@
                                               [table-name {:fields (.getFields finished-block)
                                                            :trie-key (.getTrieKey finished-block)
                                                            :row-count (.getRowCount finished-block)
-                                                           :data-file-size (.getDataFileSize finished-block)}])
+                                                           :data-file-size (.getDataFileSize finished-block)
+                                                           :trie-metadata (.getTrieMetadata finished-block)}])
                                             (catch InterruptedException e
                                               (throw e))
                                             (catch Exception e
@@ -166,8 +167,8 @@
                                                           (catch Exception _
                                                             (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                    (util/rethrowing-cause))]
-            (let [added-tries (for [[table-name {:keys [trie-key data-file-size]}] table-metadata]
-                                (trie/->trie-details table-name trie-key data-file-size))]
+            (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
+                                (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
               (.addTries trie-cat added-tries)
               @(.appendMessage log (Log$Message$TriesAdded. added-tries)))
 
