@@ -93,8 +93,9 @@
             (.add table-names table-name)
             (.putObject buffer-pool table-block-path
                         (write-table-block-data (Schema. fields) row-count
-                                                (map (fn [{:keys [trie-key data-file-size]}]
-                                                       (trie/->trie-details table-name trie-key data-file-size)) current-tries)))))
+                                                (map (fn [{:keys [trie-key data-file-size trie-metadata]}]
+                                                       (trie/->trie-details table-name trie-key data-file-size trie-metadata))
+                                                     current-tries)))))
         (set! (.block-idx this) block-idx)
         (set! (.table->metadata this) new-table->metadata)
         (vec table-names))))

@@ -8,14 +8,22 @@
            xtdb.BufferPool
            (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)
-           xtdb.log.proto.TrieDetails))
+           (xtdb.log.proto TrieDetails TrieMetadata)))
 
-(defn ->trie-details ^TrieDetails [table-name, trie-key, ^long data-file-size]
-  (.. (TrieDetails/newBuilder)
-      (setTableName table-name)
-      (setTrieKey trie-key)
-      (setDataFileSize data-file-size)
-      (build)))
+(defn ->trie-details ^TrieDetails
+  ([table-name, trie-key, ^long data-file-size]
+   (.. (TrieDetails/newBuilder)
+       (setTableName table-name)
+       (setTrieKey trie-key)
+       (setDataFileSize data-file-size)
+       (build)))
+  ([table-name, trie-key, ^long data-file-size, ^TrieMetadata trie-metadata]
+   (.. (TrieDetails/newBuilder)
+       (setTableName table-name)
+       (setTrieKey trie-key)
+       (setDataFileSize data-file-size)
+       (setTrieMetadata trie-metadata)
+       (build))))
 
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
   (str (Trie$Key. level recency (some-> part ByteArrayList/from) block-idx)))
