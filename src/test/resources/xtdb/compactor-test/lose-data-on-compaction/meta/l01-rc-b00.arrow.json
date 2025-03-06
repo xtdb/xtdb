@@ -192,25 +192,25 @@
     }]
   },
   "batches" : [{
-    "count" : 3,
+    "count" : 7,
     "columns" : [{
       "name" : "nodes",
-      "count" : 3,
-      "TYPE_ID" : [3,3,1],
-      "OFFSET" : [0,1,0],
+      "count" : 7,
+      "TYPE_ID" : [3,1,1,3,1,1,1],
+      "OFFSET" : [0,0,1,1,2,3,4],
       "children" : [{
         "name" : "nil",
         "count" : 0
       },{
         "name" : "branch-iid",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "OFFSET" : [0,4],
+        "count" : 5,
+        "VALIDITY" : [1,1,1,1,1],
+        "OFFSET" : [0,4,8,12,16,20],
         "children" : [{
           "name" : "$data$",
-          "count" : 4,
-          "VALIDITY" : [0,1,1,0],
-          "DATA" : [0,0,1,0]
+          "count" : 20,
+          "VALIDITY" : [0,0,0,1,1,0,0,0,0,1,0,0,0,0,1,0,0,1,1,0],
+          "DATA" : [0,0,0,0,1,0,0,0,0,3,0,0,0,0,4,0,0,2,5,0]
         }]
       },{
         "name" : "branch-recency",

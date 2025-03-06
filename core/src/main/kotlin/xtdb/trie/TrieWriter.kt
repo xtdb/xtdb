@@ -7,6 +7,7 @@ import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
+import xtdb.compactor.PageTree
 import xtdb.metadata.PageMetadataWriter
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.Trie.dataFilePath
@@ -174,39 +175,80 @@ class TrieWriter(
         }
     }
 
-    fun writeRelation(tableName: TableName, trieKey: TrieKey, rel: Relation, pageSize: Int): FileSize =
-        OpenWriter(tableName, trieKey, rel.schema).use { writer ->
-            val dataRel = writer.dataRel
-            val rowCopier = dataRel.rowCopier(rel)
-            val iidReader = rel["_iid"]!!
-            val startPtr = ArrowBufPointer()
-            val endPtr = ArrowBufPointer()
+    private fun OpenWriter.writeRelation(rel: Relation, depth: Int, pageSize: Int): RowIndex {
+        val rowCopier = dataRel.rowCopier(rel)
+        val iidReader = rel["_iid"]!!
+        val startPtr = ArrowBufPointer()
+        val endPtr = ArrowBufPointer()
 
-            fun Selection.soloIid(): Boolean =
-                iidReader.getPointer(first(), startPtr) == iidReader.getPointer(last(), endPtr)
+        fun Selection.soloIid(): Boolean =
+            iidReader.getPointer(first(), startPtr) == iidReader.getPointer(last(), endPtr)
 
-            fun writeSubtree(depth: Int, sel: Selection): Int =
-                when {
-                    Thread.interrupted() -> throw InterruptedException()
+        fun writeSubtree(depth: Int, sel: Selection): RowIndex =
+            when {
+                Thread.interrupted() -> throw InterruptedException()
 
-                    sel.isEmpty() -> writer.writeNull()
+                sel.isEmpty() -> writeNull()
 
-                    sel.size <= pageSize || depth >= 64 || sel.soloIid() -> {
-                        for (idx in sel) rowCopier.copyRow(idx)
+                sel.size <= pageSize || depth >= 64 || sel.soloIid() -> {
+                    for (idx in sel) rowCopier.copyRow(idx)
 
-                        val pos = writer.writeLeaf()
-                        dataRel.clear()
-                        pos
-                    }
-
-                    else -> writer.writeIidBranch(
-                        sel.iidPartitions(iidReader, depth)
-                            .map { if (it != null) writeSubtree(depth + 1, it) else -1 }
-                            .toIntArray())
+                    writeLeaf()
                 }
 
-            writeSubtree(0, IntArray(rel.rowCount) { idx -> idx })
+                else -> writeIidBranch(
+                    sel.iidPartitions(iidReader, depth)
+                        .map { if (it != null) writeSubtree(depth + 1, it) else -1 }
+                        .toIntArray())
+            }
 
-            writer.end()
+        return writeSubtree(depth, IntArray(rel.rowCount) { idx -> idx })
+    }
+
+    fun writePageTree(
+        tableName: TableName, trieKey: TrieKey,
+        loader: Relation.Loader, pageTree: PageTree?,
+        pageSize: Int
+    ): FileSize =
+        OpenWriter(tableName, trieKey, loader.schema).use { writer ->
+            Relation(allocator, loader.schema).use { inRel ->
+                fun PageTree?.writeSubtree(depth: Int): RowIndex {
+                    if (Thread.interrupted()) throw InterruptedException()
+
+                    return when (this) {
+                        null -> writer.writeNull()
+
+                        is PageTree.Leaf -> {
+                            if (rowCount > pageSize) {
+                                // split large leaves
+                                loader.loadPage(pageIdx, inRel)
+                                writer.writeRelation(inRel, depth, pageSize)
+                            } else {
+                                loader.loadPage(pageIdx, writer.dataRel)
+                                writer.writeLeaf()
+                            }
+                        }
+
+                        is PageTree.Node -> {
+                            if (rowCount > pageSize) {
+                                val idxs = IntArray(children.size) { children[it]?.writeSubtree(depth + 1) ?: -1 }
+                                writer.writeIidBranch(idxs)
+                            } else {
+                                // combine small leaves
+                                inRel.clear()
+                                for (leaf in leaves) {
+                                    loader.loadPage(leaf.pageIdx, inRel)
+                                    writer.dataRel.append(inRel)
+                                }
+                                writer.writeLeaf()
+                            }
+                        }
+                    }
+                }
+
+                pageTree.writeSubtree(0)
+
+                writer.end()
+            }
         }
 }

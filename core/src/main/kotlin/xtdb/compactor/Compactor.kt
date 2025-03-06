@@ -12,6 +12,7 @@ import xtdb.BufferPool
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.Relation
+import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.log.proto.TrieDetails
 import xtdb.metadata.PageMetadata
 import xtdb.trie.*
@@ -51,14 +52,12 @@ interface Compactor : AutoCloseable {
             .also { meterRegistry?.register(it) }
 
         private val trieWriter = TrieWriter(al, bp, true)
+        private val segMerge = SegmentMerge(al)
 
         companion object {
             private val LOGGER = Compactor::class.logger
 
         }
-
-        private fun Relation.writeTrie(tableName: TableName, outputTrieKey: TrieKey): FileSize =
-            trieWriter.writeRelation(tableName, outputTrieKey, this, pageSize)
 
         private fun Job.trieDetails(dataFileSize: FileSize) =
             TrieDetails.newBuilder()
@@ -70,27 +69,30 @@ interface Compactor : AutoCloseable {
             try {
                 LOGGER.debug("compacting '$tableName' '$trieKeys' -> $outputTrieKey")
 
-                val dataFileSize =
-                    DataRel.openRels(al, bp, tableName, trieKeys).useAll { dataRels ->
-                        mutableListOf<PageMetadata>().useAll { pageMetadatas ->
-                            for (trieKey in trieKeys) {
-                                pageMetadatas.add(mm.openPageMetadata(tableName.metaFilePath(trieKey)))
-                            }
+                DataRel.openRels(al, bp, tableName, trieKeys).useAll { dataRels ->
+                    mutableListOf<PageMetadata>().useAll { pageMetadatas ->
+                        for (trieKey in trieKeys) {
+                            pageMetadatas.add(mm.openPageMetadata(tableName.metaFilePath(trieKey)))
+                        }
 
-                            val segments = (pageMetadatas zip dataRels)
-                                .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
+                        val segments = (pageMetadatas zip dataRels)
+                            .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
 
-                            with(SegmentMerge(al)) {
-                                segments
-                                    .mergeToRelation(part)
-                                    .use { it.writeTrie(tableName, outputTrieKey) }
+                        useTempFile("merged-segments", ".arrow") { tempFile ->
+                            val pageTree =
+                                with(segMerge) { segments.mergeTo(tempFile.openWritableChannel(), part).asTree }
+
+                            Relation.loader(al, tempFile).use { loader ->
+                                val dataFileSize =
+                                    trieWriter.writePageTree(tableName, outputTrieKey, loader, pageTree, pageSize)
+
+                                LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
+
+                                listOf(trieDetails(dataFileSize))
                             }
                         }
                     }
-
-                LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
-
-                listOf(trieDetails(dataFileSize))
+                }
             } catch (e: ClosedByInterruptException) {
                 throw InterruptedException(e.message)
             } catch (e: InterruptedException) {

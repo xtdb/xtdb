@@ -8,7 +8,7 @@ import java.nio.file.StandardOpenOption.*
 import kotlin.io.path.createTempFile
 import kotlin.io.path.deleteIfExists
 
-internal fun Path.newSeekableByteChannel() = SeekableReadChannel(Files.newByteChannel(this, READ))
+internal fun Path.openArrowReadChannel() = SeekableReadChannel(Files.newByteChannel(this, READ))
 
 internal fun Path.openWritableChannel(): WritableByteChannel = Files.newByteChannel(this, WRITE, CREATE)
 
