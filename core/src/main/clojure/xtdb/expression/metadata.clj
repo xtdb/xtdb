@@ -9,7 +9,8 @@
             [xtdb.vector.writer :as vw])
   (:import java.util.function.IntPredicate
            (xtdb.arrow RelationReader VectorReader)
-           (xtdb.metadata MetadataPredicate PageMetadata)))
+           (xtdb.metadata MetadataPredicate PageMetadata)
+           (xtdb.bloom BloomUtils)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -160,7 +161,7 @@
                          `(boolean
                            (let [~expr/idx-sym ~idx-code]
                              (if (>= ~expr/idx-sym 0)
-                               (bloom/bloom-contains? ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)
+                               (BloomUtils/bloomContains ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)
                                (not ~content-metadata-present-sym))))))}
 
       (let [col-sym (gensym 'meta_col)

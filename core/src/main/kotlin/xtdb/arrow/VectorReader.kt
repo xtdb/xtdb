@@ -149,6 +149,8 @@ interface VectorReader : AutoCloseable {
 
             override fun toString(): String = "(NewToOldAdaptor{vector=$vector})"
         }
+        
+        fun toOld(new: VectorReader): IVectorReader = NewToOldAdapter(new)
 
         private class OldToNewAdapter(private val old: IVectorReader) : VectorReader {
             override val name: String get() = old.name

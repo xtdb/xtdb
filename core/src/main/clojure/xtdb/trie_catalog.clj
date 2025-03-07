@@ -2,12 +2,15 @@
   (:require [integrant.core :as ig]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
+            [xtdb.time :as time]
             [xtdb.table-catalog :as table-cat])
-  (:import [java.util Map]
+  (:import org.roaringbitmap.buffer.ImmutableRoaringBitmap
+           [java.nio ByteBuffer]
+           [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           xtdb.log.proto.TrieDetails))
+           (xtdb.log.proto TrieDetails TrieMetadata)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -201,6 +204,17 @@
   (->> (into [] (mapcat val) tries)
        (sort-by :block-idx)))
 
+(defn <-trie-metadata [^TrieMetadata trie-metadata]
+  (when (.hasMinValidFrom trie-metadata)
+    {:min-valid-from (time/micros->instant  (.getMinValidFrom trie-metadata))
+     :max-valid-from (time/micros->instant (.getMaxValidFrom trie-metadata))
+     :min-valid-to (time/micros->instant (.getMinValidTo trie-metadata))
+     :max-valid-to (time/micros->instant (.getMaxValidTo trie-metadata))
+     :min-system-from (time/micros->instant (.getMinSystemFrom trie-metadata))
+     :max-system-from (time/micros->instant (.getMaxSystemFrom trie-metadata))
+     :row-count (.getRowCount trie-metadata)
+     :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))}))
+
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [this added-tries]
@@ -212,7 +226,8 @@
                             (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
                               (apply-trie-notification this table-cat
                                                        (-> parsed-key
-                                                           (assoc :data-file-size (.getDataFileSize added-trie))))
+                                                           (assoc :data-file-size (.getDataFileSize added-trie)
+                                                                  :trie-metadata (.getTrieMetadata added-trie))))
                               table-cat))
                           (or tries {})
                           added-tries)))))

@@ -1,19 +1,25 @@
 package xtdb.trie
 
+import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Schema
+import org.checkerframework.checker.units.qual.min
+import org.roaringbitmap.RoaringBitmap
 import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
+import xtdb.bloom.BloomUtils
 import xtdb.compactor.PageTree
+import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadataWriter
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.Trie.metaRelSchema
 import xtdb.util.requiringResolve
+import xtdb.util.toByteArray
 
 private typealias Selection = IntArray
 
@@ -24,7 +30,7 @@ class TrieWriter(
 ) {
 
     private inner class OpenWriter(
-        private val tableName: TableName, private val trieKey: TrieKey, dataSchema: Schema
+        private val tableName: TableName, private val trieKey: TrieKey, dataSchema: Schema, private val writeTrieMetadata: Boolean = true
     ) : AutoCloseable {
         val dataRel: Relation = Relation(allocator, dataSchema)
 
@@ -54,6 +60,17 @@ class TrieWriter(
 
         private var pageIdx = 0
 
+        private val trieMetadataBuilder = TrieMetadata.newBuilder()
+            .setMinValidFrom(Long.MAX_VALUE)
+            .setMaxValidFrom(Long.MIN_VALUE)
+            .setMinValidTo(Long.MAX_VALUE)
+            .setMaxValidTo(Long.MIN_VALUE)
+            .setMinSystemFrom(Long.MAX_VALUE)
+            .setMaxSystemFrom(Long.MIN_VALUE)
+            .setRowCount(0)
+
+        private val iidBloom = RoaringBitmap()
+
         fun writeNull(): RowIndex {
             val pos = nodeWtr.valueCount
             nullBranchWtr.writeNull()
@@ -64,12 +81,28 @@ class TrieWriter(
             val putReader = dataRel["op"]!!.legReader("put")
             val metaPos = nodeWtr.valueCount
 
-            val temporalCols = listOf(
-                dataRel["_system_from"],
-                dataRel["_valid_from"],
-                dataRel["_valid_to"],
-                dataRel["_iid"]
-            )
+            val systemFrom = dataRel["_system_from"]!!
+            val validFrom = dataRel["_valid_from"]!!
+            val validTo = dataRel["_valid_to"]!!
+            val iidVec = dataRel["_iid"]!!
+
+            val temporalCols = listOf(systemFrom, validFrom, validTo, iidVec)
+
+            if(writeTrieMetadata) {
+                val (minValidFrom, maxValidFrom) = validFrom.fold(trieMetadataBuilder.minValidFrom to trieMetadataBuilder.maxValidFrom) { (min, max) , v : Long -> minOf(min, v) to maxOf(max, v) }
+                trieMetadataBuilder.minValidFrom = minValidFrom
+                trieMetadataBuilder.maxValidFrom = maxValidFrom
+                val (minValidTo, maxValidTo) = validTo.fold(trieMetadataBuilder.minValidTo to trieMetadataBuilder.maxValidTo) { (min, max) , v : Long -> minOf(min, v) to maxOf(max, v) }
+                trieMetadataBuilder.minValidTo = minValidTo
+                trieMetadataBuilder.maxValidTo = maxValidTo
+                val (minSystemFrom, maxSystemFrom) = systemFrom.fold(trieMetadataBuilder.minSystemFrom to trieMetadataBuilder.maxSystemFrom ) { (min, max) , v : Long -> minOf(min, v) to maxOf(max, v) }
+                trieMetadataBuilder.minSystemFrom = minSystemFrom
+                trieMetadataBuilder.maxSystemFrom = maxSystemFrom
+                trieMetadataBuilder.rowCount = iidVec.valueCount.toLong()
+                for(i in 0 until iidVec.valueCount) {
+                    iidBloom.add(*BloomUtils.bloomHashes(iidVec , i))
+                }
+            }
 
             val contentCols = writeContentMetadata.takeIf { it }
                 ?.let { putReader?.keys?.mapNotNull { putReader.keyReader(it) } }
@@ -104,7 +137,7 @@ class TrieWriter(
         /**
          * @return the size of the data file
          */
-        fun end(): FileSize {
+        fun end(): Pair<FileSize, TrieMetadata> {
             val dataFileSize = dataFileWriter.end()
 
             bufferPool.openArrowWriter(metaFilePath, metaRel).use { metaFileWriter ->
@@ -112,7 +145,11 @@ class TrieWriter(
                 metaFileWriter.end()
             }
 
-            return dataFileSize
+            if(writeTrieMetadata) {
+                trieMetadataBuilder.iidBloom  = ByteString.copyFrom(BloomUtils.roaringBloomToByteBuffer(iidBloom).toByteArray())
+            }
+
+            return Pair(dataFileSize, trieMetadataBuilder.build())
         }
 
         override fun close() {
@@ -123,7 +160,7 @@ class TrieWriter(
     }
 
     fun writeLiveTrie(tableName: TableName, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: Relation): FileSize =
-        OpenWriter(tableName, trieKey, dataRel.schema).use { writer ->
+        OpenWriter(tableName, trieKey, dataRel.schema, false).use { writer ->
             val copier = writer.dataRel.rowCopier(dataRel)
 
             fun MemoryHashTrie.Node.writeNode(): Int =
@@ -139,7 +176,7 @@ class TrieWriter(
 
             trie.compactLogs().rootNode.writeNode()
 
-            writer.end()
+            writer.end().first
         }
 
     companion object {
@@ -209,7 +246,7 @@ class TrieWriter(
         tableName: TableName, trieKey: TrieKey,
         loader: Relation.Loader, pageTree: PageTree?,
         pageSize: Int
-    ): FileSize =
+    ): Pair<FileSize, TrieMetadata> =
         OpenWriter(tableName, trieKey, loader.schema).use { writer ->
             Relation(allocator, loader.schema).use { inRel ->
                 fun PageTree?.writeSubtree(depth: Int): RowIndex {

@@ -40,7 +40,8 @@
            xtdb.operator.SelectionSpec
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask TrieCatalog Trie)
            (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)))
+           (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
+           (xtdb.bloom BloomUtils)))
 
 (s/def ::table symbol?)
 
@@ -333,8 +334,7 @@
            (let [bloom-vec-idx (.rowIndex page-metadata col-name page-idx)]
              (and (>= bloom-vec-idx 0)
                   (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
-                  (MutableRoaringBitmap/intersects pushdown-bloom
-                                                   (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
+                  (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx))))))))))
 
 (defn ->path-pred [^ArrowBuf iid-arrow-buf]
   (when iid-arrow-buf

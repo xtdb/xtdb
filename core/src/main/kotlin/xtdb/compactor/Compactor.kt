@@ -14,6 +14,7 @@ import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.arrow.Relation
 import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.log.proto.TrieDetails
+import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.trie.*
 import xtdb.trie.ISegment.Segment
@@ -52,6 +53,8 @@ interface Compactor : AutoCloseable {
             .also { meterRegistry?.register(it) }
 
         private val trieWriter = TrieWriter(al, bp, true)
+
+
         private val segMerge = SegmentMerge(al)
 
         companion object {
@@ -59,10 +62,11 @@ interface Compactor : AutoCloseable {
 
         }
 
-        private fun Job.trieDetails(dataFileSize: FileSize) =
+        private fun Job.trieDetails(dataFileSize: FileSize, trieMetadata: TrieMetadata) =
             TrieDetails.newBuilder()
                 .setTableName(tableName).setTrieKey(outputTrieKey)
                 .setDataFileSize(dataFileSize)
+                .setTrieMetadata(trieMetadata)
                 .build()
 
         private fun Job.execute(): List<TrieDetails> =
@@ -83,12 +87,12 @@ interface Compactor : AutoCloseable {
                                 with(segMerge) { segments.mergeTo(tempFile.openWritableChannel(), part).asTree }
 
                             Relation.loader(al, tempFile).use { loader ->
-                                val dataFileSize =
+                                val (dataFileSize, trieMetadata )=
                                     trieWriter.writePageTree(tableName, outputTrieKey, loader, pageTree, pageSize)
 
                                 LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
 
-                                listOf(trieDetails(dataFileSize))
+                                listOf(trieDetails(dataFileSize, trieMetadata))
                             }
                         }
                     }
@@ -191,5 +195,4 @@ interface Compactor : AutoCloseable {
             override fun close() {}
         }
     }
-
 }

@@ -33,6 +33,7 @@ fun FieldType.copy(
     dictionary: DictionaryEncoding? = this.dictionary
 ) = FieldType(nullable, type, dictionary)
 
+@Suppress("UNCHECKED_CAST")
 sealed class Vector : VectorReader, VectorWriter {
 
     abstract override var name: String
@@ -74,6 +75,12 @@ sealed class Vector : VectorReader, VectorWriter {
     override val asList get() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)
+
+    fun <T, S> fold(init: T, op: (T, S) -> T): T {
+        var acc: T =  init
+        for (i in 0 until valueCount) acc = op(acc, getObject(i) as S)
+        return acc
+    }
 
     companion object {
         @JvmStatic
