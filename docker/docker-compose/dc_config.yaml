@@ -1,0 +1,24 @@
+server:
+  port: 5432
+
+log: !Kafka
+  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  topic: !Env XTDB_LOG_TOPIC
+
+storage: !Remote
+  objectStore: !S3
+    bucket: !Env XTDB_S3_BUCKET
+    prefix: "xtdb-object-store"
+    endpoint: !Env XTDB_S3_ENDPOINT
+    credentials:
+      accessKey: !Env ACCESS_KEY
+      secretKey: !Env SECRET_KEY
+    pathStyleAccessEnabled: true
+  localDiskCache: /var/lib/xtdb/buffers
+
+healthz:
+  port: 8080
+
+modules:
+- !HttpServer
+  port: 3000

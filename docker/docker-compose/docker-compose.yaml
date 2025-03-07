@@ -1,0 +1,84 @@
+version: '3'
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "8090:8090"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":8090"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  # a service simply to create the bucket
+  minio-setup:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing myminio/xtdb-bucket &&
+      echo 'MinIO bucket created successfully!'"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    expose:
+      - 9092
+      - 9999
+      - 29092
+      - 29093
+    ports:
+      - 29092:29092
+      - 29093:29093
+    environment:
+      CLUSTER_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+
+  xtdb:
+    image: ghcr.io/xtdb/xtdb-aws:edge
+    depends_on:
+      - kafka
+      - minio
+      - minio-setup
+    expose:
+      - 8080
+      - 5432
+      - 3000
+    ports:
+      - 8081:8080
+      - 5433:5432
+      - 3003:3000
+    environment:
+      AWS_REGION: "aws-iso-global"
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_S3_USE_VIRTUAL_HOSTING: "false"
+      XTDB_NODE_ID: "xt-node-1"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      XTDB_LOG_TOPIC: "xt_log"
+      XTDB_S3_BUCKET: "xtdb-bucket"
+      XTDB_S3_ENDPOINT: "http://minio:9000"
+      ACCESS_KEY: "minioadmin"
+      SECRET_KEY: "minioadmin"
+    command: ["-f", "/config/dc_config.yaml"]
+    volumes:
+      - ./dc_config.yaml:/config/dc_config.yaml
+
+volumes:
+  minio_data:
