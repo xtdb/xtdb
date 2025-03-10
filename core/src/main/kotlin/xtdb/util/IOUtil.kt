@@ -28,6 +28,10 @@ fun Iterable<AutoCloseable>.closeAll() {
     forEach { it.close() }
 }
 
+fun <K, V : AutoCloseable> Map<K, V>.closeAll() {
+    values.closeAll()
+}
+
 inline fun <T : AutoCloseable, R> T.closeOnCatch(block: (T) -> R): R =
     try {
         block(this)
