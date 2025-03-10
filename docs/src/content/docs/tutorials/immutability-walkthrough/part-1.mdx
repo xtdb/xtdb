@@ -2,9 +2,7 @@
 title: 1) Avoiding a lossy database
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 
 Imagine a system that stores product data.
@@ -50,34 +48,34 @@ For example, let's set up a scenario by inserting some product records:
 
 Let's pretend the day we are inserting these records is 2024-01-01.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-01"
        txs="INSERT INTO product (_id, name)
             VALUES
             (1, 'Pendleton Electric Bicycle'),
             (2, 'Bicycle Pump')" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Let's query these products:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product" />
-</Fiddle>
+</Xtplay>
 
 A month later, someone deletes the product.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-02-01"
        txs="DELETE FROM product WHERE product.name = 'Pendleton Electric Bicycle'" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Let's check that the bicycle is no longer in our database:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product" />
-</Fiddle>
+</Xtplay>
 
 The product is gone! Oh no!
 
@@ -85,11 +83,11 @@ However, don't worry. Since the database is immutable, we can make
 a historical query different time. We can do this by adding a
 qualifier to the query:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT *
             FROM product
             FOR VALID_TIME AS OF DATE '2024-01-01'" />
-</Fiddle>
+</Xtplay>
 
 ## Conclusion
 

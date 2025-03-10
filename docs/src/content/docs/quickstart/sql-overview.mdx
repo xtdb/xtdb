@@ -2,9 +2,7 @@
 title: SQL Quickstart
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components';
 import { Aside } from '@astrojs/starlight/components';
 import { Card, CardGrid } from '@astrojs/starlight/components';
 import TabbedExample from '@components/tabbed-example.astro';
@@ -23,11 +21,11 @@ import TabCssFix from '@components/tabcssfix.astro';
 <li>columns are ordered alphanumerically (this restriction will be lifted [soon](https://github.com/xtdb/xt-fiddle/issues/42))</li>
 <li>you can click on the 'Open in xt-play' link beneath a given instance to see the full context and to experiment more freely</li>
 <li>all XT Play instances execute statelessly - a new ephemeral cloud database instance is summoned into being every time you press 'Run' (using AWS Lambda)</li></ul></details></Aside>
-    <Fiddle magicContext="my-context">
+    <Xtplay magicContext="my-context">
       <Txs systemTime="2024-01-01"
 	   txs="INSERT INTO people (_id, name) VALUES (6, 'fred')" />
       <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-    </Fiddle>
+    </Xtplay>
   </div>
   <Card slot="2">
 If you don't already have XTDB running, follow the brief install steps described in [Installation via Docker](/intro/installation-via-docker).
@@ -52,9 +50,9 @@ Querying this data back again is a simple matter of:
 
 <TabbedExample>
   <div slot="1">
-    <Fiddle magicContext="my-context">
+    <Xtplay magicContext="my-context">
       <Query q="SELECT * FROM people" />
-    </Fiddle>
+    </Xtplay>
   </div>
   <Card slot="2">
 ```sql
@@ -72,13 +70,13 @@ user=> SELECT * FROM people;
 If we now INSERT another row with a slightly different shape, we can see that XTDB automatically handles the implicitly extended schema and allows us to return both rows:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-02"
          txs={`
 INSERT INTO people (_id, name, likes)
   VALUES (9, 'bob', ['fishing', 3.14, {nested:'data'}])`}/>
     <Query q="SELECT * FROM people" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, likes)
@@ -100,7 +98,7 @@ user=> SELECT * FROM people;
 XTDB is designed to work with JSON-like nested data as a first-class concept (i.e. not restricted to JSON or JSONB types). This means you can easily handle complex document-like nested data. Here the `RECORDS` syntax, combined with the 'upsert' behavior of the `INSERT`, avoids the chore of having to be explicit about all the individual columns involved:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-03"
          txs={`
 INSERT INTO people
@@ -113,7 +111,7 @@ INSERT INTO people
                              registered: DATE '2024-01-01'}]}}
 `}/>
     <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> INSERT INTO people RECORDS
@@ -132,12 +130,12 @@ INSERT 0 0
 You can then query this nested data intuitively:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SELECT (people.info).contact[2].tel
 FROM people
   WHERE people.name = 'fred'`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT (people.info).contact[2].tel
@@ -154,10 +152,10 @@ FROM people
 You can also observe the inferred schema using the SQL standard's `INFORMATION_SCHEMA` facilities:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SELECT * FROM information_schema.columns`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT * FROM information_schema.columns;
@@ -190,10 +188,10 @@ A key distinction between interacting with Postgres and interacting with XTDB (e
 The complete transaction history is permanently stored within the system-maintained `xt.txs` table:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20 -- "recent transactions"`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20;
@@ -220,11 +218,11 @@ A query like `SELECT * FROM people` will only show the 'current' version of ever
 Let's try deleting `fred` from the database...
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-04"
          txs="DELETE FROM people WHERE name = 'fred'" />
     <Query q="SELECT * FROM people" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> DELETE FROM people WHERE name = 'fred';
@@ -243,11 +241,11 @@ Despite having _seemingly_ deleted the latest version of the `fred` record, the 
 The simplest way to observe the prior version of the `fred` record is to re-run the exact same query against an earlier 'basis'.
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SETTING DEFAULT SYSTEM_TIME TO AS OF DATE '2020-01-01'
 SELECT * FROM PEOPLE`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SETTING DEFAULT SYSTEM_TIME TO AS OF DATE '2020-01-01'
@@ -272,11 +270,11 @@ Whenever you do not specify a basis like this, the latest available basis is use
 Now try setting the basis to a point in time shortly after our initial transaction:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SETTING DEFAULT SYSTEM_TIME TO AS OF DATE '2024-01-01' -- (try 02 and 03 also)
 SELECT * FROM PEOPLE`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
     <Aside type="caution">The timestamp shown here is for illustration only, you should refer to the output of your recent transactions query for a suitable timestamp.
 When querying against a real XTDB node (like you are), XTDB sets the `SYSTEM_TIME` of `INSERT`/`UPDATE`s to the current time.
@@ -315,11 +313,11 @@ You can avoid ever needing to reach for backups or ETL integrations with data wa
 The built-in system-time columns `_system_from` and `_system_to` are hidden from view by default but, when specified, can be accessed on every table using regular SQL:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SELECT name, _system_from
   FROM people`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT name, _system_from
@@ -338,11 +336,11 @@ user=> SELECT name, _system_from
 The full system-time history for a set of records in a table can be retrieved by specifying `FOR SYSTEM_TIME ALL` after the table reference:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SELECT name, likes, _system_from, _system_to
   FROM people FOR SYSTEM_TIME ALL`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT name, likes, _system_from, _system_to
@@ -364,11 +362,11 @@ Here are some useful capabilities these temporal eatures enable...
 ### A delta of changes to a table since a given system-time
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SELECT name, _system_from, _system_to
   FROM people FOR SYSTEM_TIME BETWEEN DATE '2020-01-01' AND NOW`} />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT name, _system_from, _system_to
@@ -390,7 +388,7 @@ Because XTDB retains history, the regular SQL DELETE statement is essentially pe
 Here's how we can bring `fred` back to being visible and active in our database:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-05"
          txs={`
 INSERT INTO people (_id, name, info)
@@ -400,7 +398,7 @@ SELECT _id, name, info
   ORDER BY _system_to DESC
   LIMIT 1`}/>
     <Query q="SELECT * FROM people" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, info)
@@ -425,12 +423,12 @@ user=> SELECT * FROM people;
 Sometimes you do really want to forget the past though, and for circumstances where data does need to be erased ("hard deleted"), an `ERASE` operation is provided:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-06"
          txs={`
 ERASE FROM people WHERE _id = 6`}/>
     <Query q="SELECT * FROM people" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> ERASE FROM people WHERE _id = 6;
@@ -476,13 +474,13 @@ Let's have a glimpse of what can you do with SQL to make use of valid-time...
 We can specify the `_valid_from` column during an INSERT statement to record when the organization (i.e. thinking beyond this particular database!) first became aware of the person `carol`:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-07"
          txs={`
 INSERT INTO people (_id, name, favorite_color, _valid_from)
   VALUES (2, 'carol', 'blue', DATE '2023-01-01')`}/>
     <Query q="SELECT name, _valid_from FROM people" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, favorite_color, _valid_from)
@@ -503,9 +501,9 @@ user=> SELECT name, _valid_from FROM people;
 With backdated information now correctly loaded into XTDB, we can easily verify that we knew `carol` existed in the company records at a time before our current database was even created:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q="SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01'" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01';
@@ -522,14 +520,14 @@ user=> SELECT * FROM people FOR VALID_TIME AS OF DATE '2023-10-01';
 The 'bitemporal' combination of valid-time and system-time columns allows us to readily produce an auditable history about what we claimed to have known in the past:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Txs systemTime="2024-01-08"
          txs={`
 INSERT INTO people (_id, name, favorite_color, _valid_from)
   VALUES (2, 'carol', 'red', DATE '2023-09-01')`}/>
     <Query q="SELECT name, favorite_color, _valid_from, _valid_to, _system_from, _system_to
   FROM people FOR VALID_TIME ALL FOR SYSTEM_TIME ALL" />
-  </Fiddle>
+  </Xtplay>
   <Card slot="2">
 ```sql
 user=> INSERT INTO people (_id, name, favorite_color, _valid_from)
@@ -553,12 +551,12 @@ FROM people FOR VALID_TIME ALL FOR SYSTEM_TIME ALL;
 Perhaps most importantly for many applications, we can easily produce and later re-produce _correct_ reports against business-relevant timestamps without having to assemble wildly complex queries or maintain unnecessary ETL infrastructure:
 
 <TabbedExample>
-  <Fiddle magicContext="my-context" slot="1">
+  <Xtplay magicContext="my-context" slot="1">
     <Query q={`
 SETTING DEFAULT VALID_TIME AS OF DATE '2023-10-01',
         DEFAULT SYSTEM_TIME AS OF DATE '2024-01-08'
 SELECT name, favorite_color , _valid_from, _system_from FROM people`}/>
-    </Fiddle>
+    </Xtplay>
   <Card slot="2">
 ```sql
 user=> SETTING DEFAULT VALID_TIME AS OF DATE '2023-10-01',

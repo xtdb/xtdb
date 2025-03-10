@@ -2,10 +2,7 @@
 title: 4) Changing an immutable database
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
-
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 In [part 3](/tutorials/immutability-walkthrough/part-3), we learned how to insert historical data into XTDB.
 
@@ -13,7 +10,7 @@ In this part, we will understand how to update past data, but we will also learn
 
 First, let's insert three versions of the same product into different points in the past with three different prices:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs txs="INSERT INTO product (_id, name, price, _valid_from)
             VALUES
             (1, 'Pendleton Electric Bicycle', 300, TIMESTAMP '2022-01-01 00:00:00')" />
@@ -24,27 +21,27 @@ First, let's insert three versions of the same product into different points in 
             VALUES
             (1, 'Pendleton Electric Bicycle', 500, TIMESTAMP '2024-01-01 00:00:00')" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time" />
-</Fiddle>
+</Xtplay>
 
 Let's prove to ourselves that querying at various points in the past, gives us the correct data:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2022-01-02'" />
-</Fiddle>
+</Xtplay>
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2023-01-02'" />
-</Fiddle>
+</Xtplay>
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-02'" />
-</Fiddle>
+</Xtplay>
 
 Now let's say we know that the price for **2023** was INCORRECT. This could have been due to a multitude of reasons, a developer bug, a faulty database update, or an incorrect manual data entry.
 
 Let's correct the price for **2023**:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs txs={
 `INSERT INTO product (_id, name, price, _valid_from, _valid_to)
 VALUES
@@ -52,13 +49,13 @@ VALUES
  TIMESTAMP '2023-01-01 00:00:00',
  TIMESTAMP '2024-01-01 00:00:00')`} />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Now when we query in **2023**, we get the updated price back:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2023-01-02'" />
-</Fiddle>
+</Xtplay>
 
 ## Immutability
 
@@ -74,14 +71,14 @@ No updates to this line are possible, we can only add to the end of the timeline
 
 For example, querying against SYSTEM_TIME, we should see the original, unmutated data:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT product.*,
             _system_from,
             _system_to,
             _valid_from,
             _valid_to
             FROM product FOR ALL SYSTEM_TIME FOR ALL VALID_TIME" />
-</Fiddle>
+</Xtplay>
 
 ## Conclusion
 

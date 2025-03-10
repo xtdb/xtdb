@@ -2,9 +2,7 @@
 title: Late trade adjustments
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 A typical trade flow will include the following steps:
 
@@ -15,7 +13,7 @@ Whenever a trade arrives in our risk system we can set the valid-time (the busin
 
 For example, a set of trades entering our risk system may look something like this:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-15T16:59:00"
        txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
@@ -25,13 +23,13 @@ For example, a set of trades entering our risk system may look something like th
   <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 However sometimes a trade is booked right at the end of the day, after the standard End-of-Day reporting window has closed, and therefore isn't available and processed by the system until sometime later.
 
 Let's say this trade was entered after the market close:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-15T19:10:00"
        txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
@@ -39,11 +37,11 @@ Let's say this trade was entered after the market close:
   <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 The following day sees more trades entered into the system:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-16T16:59:00"
        txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
@@ -52,16 +50,16 @@ The following day sees more trades entered into the system:
   <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 We can re-run our final risk reports for yesterday, which includes the late-arriving trade, but not the new trades for today:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT *
             FROM trades FOR ALL VALID_TIME
             WHERE VALID_TIME CONTAINS TIMESTAMP '2024-01-15 17:00:00'
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 Now our reports can be made consistent and reproducible whilst accounting for late-arriving data, great!
 

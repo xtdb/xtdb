@@ -2,31 +2,29 @@
 title: Auditing past trade adjustments
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 In [Late trade adjustments](late-trade) we saw the ability to make changes to the previous day's records.
 
 Let's say instead of backfilling a trade to the previous day, someone adds a trade a *month* ago.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs txs="INSERT INTO trades (_id, symbol, volume, _valid_from)
             VALUES
             (5, 'GHI', 1000000, DATE '2023-12-01')" />
   <Query q="SELECT t.*, _valid_from AS trade_date
             FROM trades AS t
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 Now when the auditors come in, they check for changes since they last were here:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT *
             FROM trades
             WHERE _valid_from > DATE '2024-01-01'
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 They can't find the trade we inserted into last month!
 
@@ -34,20 +32,20 @@ If we want to allow editing the timeline, how can we detect this?
 
 In XTDB we use system-time (a.k.a. wall-clock time), an **immutable** timeline that gets appended to with every change. This means our fraudulent/malicious/accidental edit from earlier gets caught easily:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT *
             FROM trades AS t
             WHERE _system_from > DATE '2024-01-01'
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 In fact we can even scan the system for suspicious or unusual changes. For example, any retroactive changes to valid-time that go back further than 24 hours:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT t.*, _system_from, _valid_from
             FROM trades AS t
             WHERE (_system_from - _valid_from) > DURATION 'PT24H'
             ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 Conclusion: As an immutable database, XTDB keeps you safe from your own changes by making sure to record when they happened. Even when reaching into the past!

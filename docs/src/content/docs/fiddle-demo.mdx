@@ -1,60 +1,58 @@
 ---
-title: Fiddle Demo
+title: Xtplay Demo
 pagefind: false
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 Allows you to embed a miniature instance of [xt-fiddle](https://fiddle.xtdb.com) in the docs, with a couple added features as a bonus!
 
 ## Basic Usage
 
-You can add a `Fiddle` to the page with pre-set transactions & query like so:
+You can add an `Xtplay` to the page with pre-set transactions & query like so:
 
-<Fiddle>
+<Xtplay>
   <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs" />
-</Fiddle>
+</Xtplay>
 
 If you want to preserve whitespace you can do this:
 
-<Fiddle>
+<Xtplay>
   <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q={
 `SELECT _id, foo
   FROM docs
 -- You can also put comments :)`}
 />
-</Fiddle>
+</Xtplay>
 
 ## Hide editors
 
 Sometimes you just want to show of the query, you can hide the transactions like so:
 
-<Fiddle>
+<Xtplay>
   <Txs hidden={true}
        txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs" />
-</Fiddle>
+</Xtplay>
 
 
 You can do the same with the query of course:
 
-<Fiddle>
+<Xtplay>
   <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query hidden={true} q="SELECT * FROM docs"/>
-</Fiddle>
+</Xtplay>
 
 ## AutoLoad
 
-You can tell Fiddle to load it's results on page load by using the `autoLoad` property:
+You can tell Xtplay to load it's results on page load by using the `autoLoad` property:
 
-<Fiddle autoLoad>
+<Xtplay autoLoad>
   <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs"/>
-</Fiddle>
+</Xtplay>
 
 This is particularly useful for [Templated Queries](#templated-queries) as we'll see below.
 
@@ -62,27 +60,27 @@ This is particularly useful for [Templated Queries](#templated-queries) as we'll
 
 If you have an error in the transactions/query it looks like this:
 
-<Fiddle autoLoad>
+<Xtplay autoLoad>
   <Txs txs="INSERT INTO docs (_id, foo) VALUES (1, 'one');" />
   <Query q="SELECT * FOM docs" />
-</Fiddle>
+</Xtplay>
 
 ## System Time
 
 You can set system time on a transaction like so:
 
-<Fiddle>
+<Xtplay>
   <Txs systemTime="2020-01-01"
        txs="INSERT INTO docs (_id, name) VALUES (1, 'one');" />
   <Query q="SELECT * FROM xt.txs" />
-</Fiddle>
+</Xtplay>
 
 ## Multiple Transactions
 
 It can be useful to include multiple "batches" of transactions.
 Particularly for showing of valid time & system time:
 
-<Fiddle>
+<Xtplay>
   <Txs systemTime="2020-01-01"
        txs="INSERT INTO docs (_id, name) VALUES (1, 'one');" />
   <Txs systemTime="2020-01-02"
@@ -91,18 +89,18 @@ Particularly for showing of valid time & system time:
 `SELECT _id, name, _system_from
   FROM docs FOR ALL VALID_TIME
   ORDER BY _id, _system_from`} />
-</Fiddle>
+</Xtplay>
 
 ## Lone Transaction
 
 If you have a transaction on it's own then it won't be rendered with an editor:
 
-<Fiddle>
+<Xtplay>
   <Txs txs="INSERT INTO docs
             (_id, name)
             VALUES
             (1, 'one');" />
-</Fiddle>
+</Xtplay>
 
 (It will still contribute to magicContext if you set one).
 
@@ -117,15 +115,15 @@ Note that it will only look for transactions from fiddles with the *same context
 
 For example:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2020-01-01"
        txs="INSERT INTO docs (_id, name) VALUES (1, 'one');" />
   <Query q="SELECT * FROM docs" />
-</Fiddle>
+</Xtplay>
 
 Note that it we only have docs from this fiddle.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2020-01-02"
        txs="
     INSERT INTO docs (_id, name) VALUES (1, 'two');
@@ -134,13 +132,13 @@ Note that it we only have docs from this fiddle.
 `SELECT _id, name, _system_from
   FROM docs FOR ALL VALID_TIME
   ORDER BY _id, _system_from`} />
-</Fiddle>
+</Xtplay>
 
 Note that now we have the transactions from the previous fiddle :)
 
 This fiddle uses a different context id, so it will not use the context of previous fiddles:
 
-<Fiddle magicContext="different-context">
+<Xtplay magicContext="different-context">
   <Txs systemTime="2020-01-02"
        txs="
     INSERT INTO docs (_id, name) VALUES (1, 'two');
@@ -149,7 +147,7 @@ This fiddle uses a different context id, so it will not use the context of previ
 `SELECT _id, name, _system_from
   FROM docs FOR ALL VALID_TIME
   ORDER BY _id, _system_from`} />
-</Fiddle>
+</Xtplay>
 
 
 ## Templated Queries
@@ -159,7 +157,7 @@ Having a full editor and asking a user to change it can be a lot. Instead you ca
 import QueryTemplate from "@components/fiddle/template.astro"
 import Range from "@components/fiddle/range.astro"
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <Txs txs="INSERT INTO orders
             (_id, name, count, _valid_from)
             VALUES
@@ -172,7 +170,7 @@ import Range from "@components/fiddle/range.astro"
                     FROM orders
                     LIMIT {{limit}}" />
   <Range name="limit" min={0} max={5} step={1} value={3} />
-</Fiddle>
+</Xtplay>
 
 Query templates use [mustache](https://mustache.github.io/) templates.
 
@@ -184,7 +182,7 @@ It usually makes sense to set the `autoLoad` property when you have a query temp
 
 Inputs set variables in the template using their `name` property.
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     {{#enabled}}
@@ -195,7 +193,7 @@ Inputs set variables in the template using their `name` property.
     <Checkbox name="enabled" checked />
     <Range name="limit" min={0} max={5} step={1} value={3} />
   </div>
-</Fiddle>
+</Xtplay>
 
 See [Available Inputs](#available-inputs) for a showcase.
 
@@ -206,7 +204,7 @@ By default, if no outputs are added a [table output](#table-output) is automatic
 
 You can override this by adding your own:
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
@@ -221,11 +219,11 @@ You can override this by adding your own:
       y: { field: 'count', type: 'quantitative' }
     }
   }} />
-</Fiddle>
+</Xtplay>
 
 You can also have multiple if you want:
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
@@ -243,7 +241,7 @@ You can also have multiple if you want:
     }} />
     <OutputTable />
   </div>
-</Fiddle>
+</Xtplay>
 
 See [Available Outputs](#available-outputs) for a showcase.
 
@@ -251,19 +249,19 @@ See [Available Outputs](#available-outputs) for a showcase.
 
 Please note that the fiddle expects **exactly one** query:
 
-<Fiddle>
+<Xtplay>
   <Txs txs="INSERT INTO docs (_id, name) VALUES (1, 'one')" />
   <Query q="SELECT * FROM docs" />
   <Txs txs="INSERT INTO docs (_id, name) VALUES (2, 'two')" />
   <Query q="this won't be run" />
-</Fiddle>
+</Xtplay>
 
 The query is always run last:
 
-<Fiddle>
+<Xtplay>
   <Query q="SELECT * FROM docs" />
   <Txs txs="INSERT INTO docs (_id, name) VALUES (1, 'one')" />
-</Fiddle>
+</Xtplay>
 
 ## Styling Tips
 
@@ -273,7 +271,7 @@ This is handy for:
 
 import Text from '@components/fiddle/text.astro';
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE {{#true}}true{{/true}}{{^true}}false{{/true}} {{#enableSearch}}AND name LIKE '%{{search}}%'{{/enableSearch}}
@@ -297,7 +295,7 @@ import Text from '@components/fiddle/text.astro';
     <Checkbox name="enableSearch" checked />
     <Text name="search" />
   </div>
-</Fiddle>
+</Xtplay>
 
 ## Available Inputs
 
@@ -307,7 +305,7 @@ A wrapper around the [checkbox input](https://developer.mozilla.org/en-US/docs/W
 
 import Checkbox from "@components/fiddle/checkbox.astro"
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     -- Watch as the below changes:
@@ -316,20 +314,20 @@ import Checkbox from "@components/fiddle/checkbox.astro"
                     {{/useWhere}}
                     ORDER BY _id" />
   <Checkbox name="useWhere" checked />
-</Fiddle>
+</Xtplay>
 
 ### Range
 
 You can provide a `min`, `max`, `step` and `value` to specify a range.
 Can be a float or integer.
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
                     ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} />
-</Fiddle>
+</Xtplay>
 
 ### DateRange
 
@@ -339,33 +337,33 @@ A customised range input specifically for outputting dates with two varieties:
 
 You can provide a `start`, `stop` and `step` amount to have a full range of dates:
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT _id, count, name, _valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}}
                     ORDER BY _id" />
   <DateRange name="validTime" start="2024-01-01" stop="2024-01-05" step="1 day" value="2024-01-04" />
-</Fiddle>
+</Xtplay>
 
 Or you can provide an array of dates:
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT _id, count, name, _valid_from
                     FROM orders FOR VALID_TIME AS OF {{validTime}}
                     ORDER BY _id" />
   <DateRange name="validTime" dates={["2024-01-01","2024-01-02","2024-01-05"]} value="2024-01-05" />
-</Fiddle>
+</Xtplay>
 
 ### Text
 
 A textbox element that allows the user to type in whatever they like:
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE name LIKE '%{{name}}%'
                     ORDER BY _id" />
   <Text name="name" value="Toy" />
-</Fiddle>
+</Xtplay>
 
 
 ## Available Outputs
@@ -374,16 +372,16 @@ A textbox element that allows the user to type in whatever they like:
 
 import OutputTable from '@components/fiddle/output-table.astro';
 
-The same table used in the Fiddle. Added by default if no output is provided.
+The same table used in the Xtplay. Added by default if no output is provided.
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
                     ORDER BY _id" />
   <Range name="count" min={0} max={6} step={2} />
   <OutputTable />
-</Fiddle>
+</Xtplay>
 
 ### Vega
 
@@ -393,7 +391,7 @@ Displays a vega chart. You can specify a chart spec using the `spec` arg.
 
 Data is provided through a dataset named `table`.
 
-<Fiddle autoLoad magicContext="orders">
+<Xtplay autoLoad magicContext="orders">
   <QueryTemplate q="SELECT *
                     FROM orders
                     WHERE count > {{count}}
@@ -408,13 +406,13 @@ Data is provided through a dataset named `table`.
       y: { field: 'count', type: 'quantitative' }
     }
   }} />
-</Fiddle>
+</Xtplay>
 
 {/*
 
 TODO: Put this somewhere?
 
-<Fiddle autoLoad>
+<Xtplay autoLoad>
   <Txs hidden txs={`
 INSERT INTO customer (_id, address, preference, _valid_from, _valid_to)
 VALUES
@@ -524,6 +522,6 @@ ORDER BY CAST (customer._id AS INTEGER), customer._valid_from`} />
       }
     ]
   }} />
-</Fiddle>
+</Xtplay>
 
 */}

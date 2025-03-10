@@ -2,9 +2,7 @@
 title: 2) Understanding change
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 In [part 1](/tutorials/immutability-walkthrough/part-1), we covered deleted data, and the fact that in an immutable database, data is never truly gone.
 
@@ -15,72 +13,72 @@ Let's use a single record for this example.
 
 Let's pretend the first version is inserted on `2024-01-01`.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-01"
        txs="INSERT INTO product (_id, name, price)
             VALUES
             (1, 'Pendleton Electric Bicycle', 340)" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 (Notice how we don't have to create a database table explicitly, or tell our database about the columns - the database will learn the schema from the data we give it)
 
 Let's query this product:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product" />
-</Fiddle>
+</Xtplay>
 
 A month later on `2024-02-01`, we decide to update the price of the product.
 
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-02-01"
        txs="UPDATE product
             SET price = 360
             WHERE name = 'Pendleton Electric Bicycle'" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Let's check the new price:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product" />
-</Fiddle>
+</Xtplay>
 
 A month later on `2024-03-01`, with part costs still increasing, we increase the price again.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-03-01"
        txs="UPDATE product
             SET price = 400
             WHERE name = 'Pendleton Electric Bicycle'" />
   <Query q="SELECT * FROM product" />
-</Fiddle>
+</Xtplay>
 
 Let's say we need to do an audit query, and we need to know
 the price of every product as of `2024-01-15`.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-15'" />
-</Fiddle>
+</Xtplay>
 
 Here you can see we have the correct historical price for `2024-01-15`, which is 340
 
 Now let's say our CFO wants to know how the prices have increased over Q1?
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT p.*, _valid_from, _valid_to
 FROM product
   FOR VALID_TIME FROM DATE '2024-01-01' TO DATE '2024-03-31'
   AS p
 ORDER BY _valid_from`} />
-</Fiddle>
+</Xtplay>
 
 When did the bicycle price first exceed $350 ?
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT p.*, _valid_from, _valid_to
 FROM product
@@ -89,7 +87,7 @@ FROM product
 WHERE price > 350
 ORDER BY _valid_from
 LIMIT 1`} />
-</Fiddle>
+</Xtplay>
 
 Yes, it was the price change of `2024-02-01` where the bicycle's
 price exceeded $350.

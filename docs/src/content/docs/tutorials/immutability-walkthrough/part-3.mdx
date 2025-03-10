@@ -2,9 +2,7 @@
 title: 3) Updating the past
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 In [part 2](/tutorials/immutability-walkthrough/part-2), we queried the historical timeline, to understand what changes were made.
 
@@ -14,27 +12,27 @@ How does this work with an immutable database!? Let's find out together.
 
 Let's pretend the day today is `2024-01-01`, and we insert a product:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-01"
        txs="INSERT INTO product (_id, name, price)
             VALUES
             (1, 'Pendleton Electric Bicycle', 340)" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Let's query the day after this insert:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-02'" />
-</Fiddle>
+</Xtplay>
 
 Now, let's query against the past, in **2023**
 
 We should NOT see any data, because the product was inserted into the database on `2024-01-01`:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2023-01-01'" />
-</Fiddle>
+</Xtplay>
 
 ## Inserting historical data
 
@@ -44,31 +42,31 @@ This could be an import of historical product prices from another system into ou
 
 We achieve this in XT by setting the `_valid_from` and `_valid_to` column
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-01-01"
        txs="INSERT INTO product (_id, name, price, _valid_from, _valid_to)
             VALUES
             (1, 'Pendleton Electric Bicycle', 300, DATE '2022-01-01', DATE '2024-01-01')" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Now if we query in **2024**, we still get the **2024** value
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-02'" />
-</Fiddle>
+</Xtplay>
 
 But if we query in **2023**, we should see the older **2022** value:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2023-01-01'" />
-</Fiddle>
+</Xtplay>
 
 If we query in **2020**, we should see nothing:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2020-01-01'" />
-</Fiddle>
+</Xtplay>
 
 ## Conclusion
 

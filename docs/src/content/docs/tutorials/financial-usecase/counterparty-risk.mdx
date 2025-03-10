@@ -2,20 +2,18 @@
 title: Analysing counterparty risk
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 Let's imagine that we operate a simple portfolio risk system which only tracks very limited information about the products we've bought from various sources:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2001-01-01"
        txs="INSERT INTO assets (_id, product, amount)
             VALUES
             (1, 'my-product-1', 340),
             (2, 'my-product-2', 10)" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 The system has only ever been required to hold a basic set of data for risk reporting because the trade execution platform kept its own rules for when to buy and sell stocks, and the extra integration work always seemed unnecessary.
 
@@ -25,7 +23,7 @@ Imagine we just found out that a (fictional) major bank has collapsed: XY Bank.
 
 Oh gosh, does our portfolio include any products managed by XY Bank?
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs hidden={true}
        txs="INSERT INTO assets (_id, product, amount)
             VALUES
@@ -34,13 +32,13 @@ Oh gosh, does our portfolio include any products managed by XY Bank?
             (3, 'my-product-3', 1920),
             (4, 'my-product-4', 206)" />
   <Query q="SELECT * FROM assets ORDER BY _id" />
-</Fiddle>
+</Xtplay>
 
 Right, we probably should have done that integration work to keep track of what we bought from who owned what...
 
 Not to worry, with a bit of manual effort and research we can add a table of which products are owned by various entities:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs txs="INSERT INTO products (_id, name, owner)
             VALUES
             (1, 'my-product-1', 'XY Bank'),
@@ -48,18 +46,18 @@ Not to worry, with a bit of manual effort and research we can add a table of whi
             (3, 'my-product-3', 'XY Bank'),
             (4, 'my-product-4', 'Royal Red')" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Now, what do we have to sell?
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT a.*
   FROM assets AS a
   INNER JOIN products AS p ON a.product = p.name
   WHERE p.owner = 'XY Bank'
   ORDER BY a._id`} />
-</Fiddle>
+</Xtplay>
 
 Ok, that's a lot. But we can manage.
 
@@ -68,7 +66,7 @@ We didn't keep track of when that happened!
 
 Let's add that in:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs txs="INSERT INTO products (_id, name, owner, _valid_from, _valid_to)
             VALUES
             -- Product 1's history
@@ -85,31 +83,31 @@ Let's add that in:
             -- Product 4's history
             (4, 'my-product-4', 'Royal Red', DATE '2020-01-01', null)" />
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
-</Fiddle>
+</Xtplay>
 
 Just to double-check that's not changed our current view of the exposure:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT a.*
   FROM assets AS a
   INNER JOIN products AS p ON a.product = p.name
   WHERE p.owner = 'XY Bank'
   ORDER BY a._id`} />
-</Fiddle>
+</Xtplay>
 
 Nope!
 
 Let's start with figuring out when was each product last not owned by XY Bank:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT name, max(_valid_from)
   FROM products FOR ALL VALID_TIME
   WHERE owner <> 'XY Bank'
   GROUP BY name
 `} />
-</Fiddle>
+</Xtplay>
 
 Ok, now we know when we should have ideally sold and we can combine that with our prices to calculate how much we lost because of XY Bank's collapse.
 
@@ -119,12 +117,12 @@ With our new and improved approach to historical record-keeping we'll also now b
 
 Should a prospective new investor a year from now ask why did we not sell these XY Bank products earlier - and having long since forgotten the details of the situation - we can quickly produce the answer:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT _id, name, owner, _system_from
   FROM products FOR ALL SYSTEM_TIME
 `} />
-</Fiddle>
+</Xtplay>
 
 Ah, see there.
 The audit information shows that we only started recording product owner changes recently.

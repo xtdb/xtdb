@@ -2,9 +2,7 @@
 title: Understanding P&L and Risk
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { DateRange, Query, QueryTemplate, OutputTraffic, Txs, Xtplay } from 'xtplay-components'
 
 Let's imagine you're a commodities trader.
 
@@ -14,7 +12,7 @@ Whenever something in those reports doesn't look quite like what you were expect
 
 For example, let's assume that over the course of the day your colleagues have made the following trades:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_trades
@@ -31,11 +29,11 @@ SELECT t.*, _valid_from
 FROM commodity_trades as t
 ORDER BY _id
 `} />
-</Fiddle>
+</Xtplay>
 
 At the end of the day, the market closes with the following prices:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_spot_prices
@@ -51,12 +49,12 @@ VALUES
 SELECT _id, spot_price, _valid_from
 FROM commodity_spot_prices
 `} />
-</Fiddle>
+</Xtplay>
 
 Now we want to price our risk and P&L for the end of this week.
 Let's extract the information we need to calculate our P&L:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT
     ct._id as trade_id,
@@ -74,12 +72,12 @@ INNER JOIN
 ON
     ct.symbol = csp._id
 `} />
-</Fiddle>
+</Xtplay>
 
 For the purposes of this simple example, we'll just use SQL to calculate the P&L.
 However, in the 'real world', we'd usually have much more complex objects (yield curves, etc.) and would use a quant pricing library.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
@@ -91,13 +89,13 @@ ON
     ct.symbol = csp._id
 `} />
   <OutputTraffic />
-</Fiddle>
+</Xtplay>
 
 So far so good.
 
 On the Monday morning, after a pleasant weekend's break, you come back into the trading floor.
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_trades (_id, symbol, quantity, price, _valid_from, trader_name)
@@ -110,11 +108,11 @@ SELECT t.*, _valid_from
 FROM commodity_trades as t
 ORDER BY _id
 `} />
-</Fiddle>
+</Xtplay>
 
 At the end of this Monday trading day, the market closes with the following prices:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_spot_prices (_id, spot_price, _valid_from)
@@ -129,11 +127,11 @@ VALUES
 SELECT _id, spot_price, _valid_from
 FROM commodity_spot_prices
 `} />
-</Fiddle>
+</Xtplay>
 
 We now recalculate our new P&L:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
@@ -145,17 +143,13 @@ ON
     ct.symbol = csp._id
 `} />
   <OutputTraffic />
-</Fiddle>
+</Xtplay>
 
 Oh no!
 
 What if we could ignore the today's trades, and just see what our closing position on Friday would have looked like in the market at the end of today.
 
-import DateRange from '@components/fiddle/date-range.astro';
-import QueryTemplate from '@components/fiddle/template.astro';
-import OutputTraffic from '@components/fiddle/output-traffic.astro';
-
-<Fiddle autoLoad magicContext="my-context">
+<Xtplay autoLoad magicContext="my-context">
   <QueryTemplate q={`
 SELECT
     SUM((csp.spot_price - ct.price) * ct.quantity) as pnl
@@ -190,6 +184,6 @@ ON
     </div>
   </div>
   <OutputTraffic />
-</Fiddle>
+</Xtplay>
 
 We have now established that today's trades must be causing the dramatic P&L change.

@@ -2,15 +2,13 @@
 title: Backtesting
 ---
 
-import Fiddle from '@components/fiddle.astro';
-import Txs from '@components/fiddle/txs.astro';
-import Query from '@components/fiddle/query.astro';
+import { Query, Txs, Xtplay } from 'xtplay-components'
 
 Backtesting is a general term that refers to testing a predictive model on historical data. It is critical for regression-testing changes to models before they are promoted into production.
 
 Let's assume we have some trade data in our risk system that also serves as an authoritative platform for regression testing:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_trades
@@ -27,11 +25,11 @@ SELECT t.*, _valid_from
 FROM commodity_trades as t
 ORDER BY _id
 `} />
-</Fiddle>
+</Xtplay>
 
 The system also contains the following history of prices:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Txs systemTime="2024-04-01"
        txs={`
 INSERT INTO commodity_spot_prices
@@ -52,11 +50,11 @@ VALUES
 SELECT _id, spot_price, _valid_from
 FROM commodity_spot_prices
 `} />
-</Fiddle>
+</Xtplay>
 
 The backtesting processes are able to simulate querying as-of successive moments in time by efficiently querying the entire database without the need for explicit snapshots, using SQL:
 
-<Fiddle magicContext="my-context">
+<Xtplay magicContext="my-context">
   <Query q={`
 SELECT
     ct._id as trade_id,
@@ -78,6 +76,6 @@ INNER JOIN
 ON
     ct.symbol = csp._id
 `} />
-</Fiddle>
+</Xtplay>
 
 This as-of view across all database tables in the system can encompass all reference data and complete portfolio states, which thereby maximises the number of useful signals available to the model.
