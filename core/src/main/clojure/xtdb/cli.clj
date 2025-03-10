@@ -92,22 +92,26 @@
   (util/install-uncaught-exception-handler!)
   (logging/set-from-env! (System/getenv))
 
-  (let [{::keys [errors help playground-port node-opts]} (parse-args args)]
-    (cond
-      errors (binding [*out* *err*]
-               (doseq [error errors]
-                 (println error))
-               (System/exit 1))
+  (try
+    (let [{::keys [errors help playground-port node-opts]} (parse-args args)]
+      (cond
+        errors (binding [*out* *err*]
+                 (doseq [error errors]
+                   (println error))
+                 (System/exit 1))
 
-      help (println help)
+        help (println help)
 
-      :else (util/with-open [_node (if playground-port
-                                     (pgw/open-playground {:port playground-port})
-                                     (xtn/start-node node-opts))]
-              (log/info "Node started")
-              ;; NOTE: This isn't registered until the node manages to start up
-              ;; cleanly, so ctrl-c keeps working as expected in case the node
-              ;; fails to start.
-              @(shutdown-hook-promise)))
+        :else (util/with-open [_node (if playground-port
+                                       (pgw/open-playground {:port playground-port})
+                                       (xtn/start-node node-opts))]
+                (log/info "Node started")
+                ;; NOTE: This isn't registered until the node manages to start up
+                ;; cleanly, so ctrl-c keeps working as expected in case the node
+                ;; fails to start.
+                @(shutdown-hook-promise)))
 
-    (shutdown-agents)))
+      (shutdown-agents))
+    (catch Throwable t
+      (log/error "Error starting node" t)
+      (throw t))))
