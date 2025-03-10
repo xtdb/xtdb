@@ -4,18 +4,20 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import xtdb.api.CompactorConfig
+  (:import com.carrotsearch.hppc.ByteArrayList
+           xtdb.api.CompactorConfig
            (xtdb.compactor Compactor Compactor$Impl Compactor$Job Compactor$JobCalculator)
-           xtdb.trie.TrieCatalog))
+           (xtdb.trie Trie$Key TrieCatalog)))
 
 (def ^:dynamic *ignore-signal-block?* false)
 
-(defrecord Job [table-name trie-keys part out-trie-key]
+(defrecord Job [table-name trie-keys part out-trie-key partitioned-by-recency?]
   Compactor$Job
   (getTableName [_] table-name)
   (getTrieKeys [_] (set trie-keys))
   (getPart [_] part)
-  (getOutputTrieKey [_] out-trie-key))
+  (getOutputTrieKey [_] out-trie-key)
+  (getPartitionedByRecency [_] partitioned-by-recency?))
 
 (defn- l0->l1-compaction-job [table-name {l0 [0 nil []], l1c [1 nil []]} {:keys [^long file-size-target]}]
   (when-let [live-l0 (seq (->> l0
@@ -28,8 +30,10 @@
       (->Job table-name (-> []
                             (cond-> l1-trie-key (conj l1-trie-key))
                             (conj l0-trie-key))
-             nil ; recency
-             (trie/->l1-trie-key nil block-idx)))))
+             nil ; part
+             (Trie$Key. 1 nil nil block-idx)
+             true ; partitioned-by-recency?
+             ))))
 
 (defn- l2h-input-files
   "if the tries can be compacted to L2H, return the input tries; otherwise nil"
@@ -60,8 +64,10 @@
                                                reverse)
                                            opts)]
         :when input-tries]
-    (->Job table-name (mapv :trie-key input-tries) []
-           (trie/->trie-key 2 recency nil (:block-idx (last input-tries))))))
+    (->Job table-name (mapv :trie-key input-tries) (byte-array 0)
+           (Trie$Key. 2 recency nil (:block-idx (last input-tries)))
+           false ; partitioned-by-recency?
+           )))
 
 (defn- tiering-compaction-jobs [table-name table-tries {:keys [^long file-size-target]}]
   (for [[[level recency part] files] table-tries
@@ -87,7 +93,9 @@
         :let [trie-keys (mapv :trie-key in-files)
               out-block-idx (:block-idx (last in-files))]]
     (->Job table-name trie-keys out-part
-           (trie/->trie-key out-level recency out-part out-block-idx))))
+           (Trie$Key. out-level recency (ByteArrayList/from out-part) out-block-idx)
+           false ; partitioned-by-recency?
+           )))
 
 (defn compaction-jobs [table-name {table-tries :tries} opts]
   (concat (when-let [job (l0->l1-compaction-job table-name table-tries opts)]

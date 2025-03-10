@@ -103,7 +103,7 @@
  [{:nation "ARGENTINA", :o_year 1998, :sum_profit 17779.069700000007}
   {:nation "ARGENTINA", :o_year 1997, :sum_profit 13943.953800000003}
   {:nation "ARGENTINA", :o_year 1996, :sum_profit 7641.422700000003}
-  {:nation "ARGENTINA", :o_year 1995, :sum_profit 20892.752500000002}
+  {:nation "ARGENTINA", :o_year 1995, :sum_profit 20892.7525}
   {:nation "ARGENTINA", :o_year 1994, :sum_profit 15088.352599999998}
   {:nation "ARGENTINA", :o_year 1993, :sum_profit 17586.344600000004}
   {:nation "ARGENTINA", :o_year 1992, :sum_profit 28732.461499999994}
@@ -114,7 +114,7 @@
   {:nation "ETHIOPIA", :o_year 1993, :sum_profit 23782.61}
   {:nation "IRAN", :o_year 1997, :sum_profit 23590.007999999998}
   {:nation "IRAN", :o_year 1996, :sum_profit 7428.232500000005}
-  {:nation "IRAN", :o_year 1995, :sum_profit 21000.996499999994}
+  {:nation "IRAN", :o_year 1995, :sum_profit 21000.996499999997}
   {:nation "IRAN", :o_year 1994, :sum_profit 29408.13}
   {:nation "IRAN", :o_year 1993, :sum_profit 49876.41499999999}
   {:nation "IRAN", :o_year 1992, :sum_profit 52064.24}
@@ -127,32 +127,32 @@
   {:nation "IRAQ", :o_year 1992, :sum_profit 29098.2557}
   {:nation "KENYA", :o_year 1998, :sum_profit 33148.3345}
   {:nation "KENYA", :o_year 1997, :sum_profit 54355.016500000005}
-  {:nation "KENYA", :o_year 1996, :sum_profit 43794.4118}
-  {:nation "KENYA", :o_year 1995, :sum_profit 69156.86249999999}
-  {:nation "KENYA", :o_year 1994, :sum_profit 88510.84769999998}
-  {:nation "KENYA", :o_year 1993, :sum_profit 95483.2956}
-  {:nation "KENYA", :o_year 1992, :sum_profit 93473.44700000001}
-  {:nation "MOROCCO", :o_year 1998, :sum_profit 80034.8312}
-  {:nation "MOROCCO", :o_year 1997, :sum_profit 48218.429000000004}
-  {:nation "MOROCCO", :o_year 1996, :sum_profit 111533.7568}
-  {:nation "MOROCCO", :o_year 1995, :sum_profit 190286.556}
-  {:nation "MOROCCO", :o_year 1994, :sum_profit 120458.78839999999}
-  {:nation "MOROCCO", :o_year 1993, :sum_profit 121013.21870000001}
-  {:nation "MOROCCO", :o_year 1992, :sum_profit 170329.14880000002}
-  {:nation "PERU", :o_year 1998, :sum_profit 58330.754799999995}
-  {:nation "PERU", :o_year 1997, :sum_profit 54422.6497}
-  {:nation "PERU", :o_year 1996, :sum_profit 22129.370899999994}
-  {:nation "PERU", :o_year 1995, :sum_profit 94384.7288}
-  {:nation "PERU", :o_year 1994, :sum_profit 55023.063200000004}
-  {:nation "PERU", :o_year 1993, :sum_profit 87328.3271}
-  {:nation "PERU", :o_year 1992, :sum_profit 59177.11840000001}
-  {:nation "UNITED KINGDOM", :o_year 1998, :sum_profit 62507.25600000001}
-  {:nation "UNITED KINGDOM", :o_year 1997, :sum_profit 52221.212199999994}
-  {:nation "UNITED KINGDOM", :o_year 1996, :sum_profit 114503.24999999999}
-  {:nation "UNITED KINGDOM", :o_year 1995, :sum_profit 147460.92960000003}
-  {:nation "UNITED KINGDOM", :o_year 1994, :sum_profit 70682.74199999998}
-  {:nation "UNITED KINGDOM", :o_year 1993, :sum_profit 192054.806}
-  {:nation "UNITED KINGDOM", :o_year 1992, :sum_profit 29955.24040000001}
+  {:nation "KENYA", :o_year 1996, :sum_profit 48581.83179999999}
+  {:nation "KENYA", :o_year 1995, :sum_profit 76990.8225}
+  {:nation "KENYA", :o_year 1994, :sum_profit 96344.8077}
+  {:nation "KENYA", :o_year 1993, :sum_profit 102229.2056}
+  {:nation "KENYA", :o_year 1992, :sum_profit 117628.157}
+  {:nation "MOROCCO", :o_year 1998, :sum_profit 33230.57119999999}
+  {:nation "MOROCCO", :o_year 1997, :sum_profit 23551.318999999996}
+  {:nation "MOROCCO", :o_year 1996, :sum_profit 36267.44679999999}
+  {:nation "MOROCCO", :o_year 1995, :sum_profit 61891.08599999999}
+  {:nation "MOROCCO", :o_year 1994, :sum_profit 40765.0484}
+  {:nation "MOROCCO", :o_year 1993, :sum_profit 53336.78869999999}
+  {:nation "MOROCCO", :o_year 1992, :sum_profit 59010.90879999999}
+  {:nation "PERU", :o_year 1998, :sum_profit 44157.15479999999}
+  {:nation "PERU", :o_year 1997, :sum_profit 53030.599700000006}
+  {:nation "PERU", :o_year 1996, :sum_profit 19218.720899999997}
+  {:nation "PERU", :o_year 1995, :sum_profit 77680.12879999998}
+  {:nation "PERU", :o_year 1994, :sum_profit 55023.0632}
+  {:nation "PERU", :o_year 1993, :sum_profit 78976.0271}
+  {:nation "PERU", :o_year 1992, :sum_profit 54368.2184}
+  {:nation "UNITED KINGDOM", :o_year 1998, :sum_profit 40248.77600000001}
+  {:nation "UNITED KINGDOM", :o_year 1997, :sum_profit 14478.572199999993}
+  {:nation "UNITED KINGDOM", :o_year 1996, :sum_profit 42889.01}
+  {:nation "UNITED KINGDOM", :o_year 1995, :sum_profit 33265.249599999996}
+  {:nation "UNITED KINGDOM", :o_year 1994, :sum_profit 14068.781999999992}
+  {:nation "UNITED KINGDOM", :o_year 1993, :sum_profit 36729.326000000015}
+  {:nation "UNITED KINGDOM", :o_year 1992, :sum_profit 14954.960400000005}
   {:nation "UNITED STATES", :o_year 1998, :sum_profit 32847.96}
   {:nation "UNITED STATES", :o_year 1997, :sum_profit 30849.5}
   {:nation "UNITED STATES", :o_year 1996, :sum_profit 56125.46000000001}

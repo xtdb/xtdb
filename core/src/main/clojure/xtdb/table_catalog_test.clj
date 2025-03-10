@@ -54,10 +54,10 @@
               [trie1-bloom _trie2-bloom] (map :iid-bloom trie-metas)]
           (t/is (= [{:table-name "public/foo",
                      :trie-key "l00-rc-b00",
-                     :data-file-size 1966}
+                     :data-file-size 2182}
                     {:table-name "public/foo",
                      :trie-key "l00-rc-b01",
-                     :data-file-size 1966}]
+                     :data-file-size 2182}]
                    (map #(dissoc % :trie-metadata) current-tries)))
 
           (t/is (= [{:min-valid-from #xt/instant "2020-01-01T00:00:00Z",

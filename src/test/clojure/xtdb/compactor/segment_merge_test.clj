@@ -1,23 +1,12 @@
 (ns xtdb.compactor.segment-merge-test
-  (:require [clojure.java.io :as io]
-            [clojure.test :as t]
-            [xtdb.api :as xt]
+  (:require [clojure.test :as t]
             [xtdb.compactor :as c]
-            [xtdb.metadata :as meta]
-            [xtdb.node :as xtn]
-            [xtdb.object-store :as os]
-            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
-            [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           [java.time Duration]
-           [xtdb BufferPool]
-           xtdb.api.storage.Storage
-           (xtdb.arrow Relation RelationReader)
-           (xtdb.compactor Compactor SegmentMerge)
+           (xtdb.compactor SegmentMerge SegmentMerge$Result SegmentMerge$RecencyPartitioning$Partition SegmentMerge$RecencyPartitioning$Preserve)
            [xtdb.trie DataRel]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -50,59 +39,120 @@
                             (assoc :data-rel (DataRel/live live-rel1)))]]
 
           (t/testing "merge segments"
-            (util/with-open [data-rel (.mergeToRelation seg-merge segments nil)]
-              (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                         :xt/system-from (time/->zdt #inst "2023")
-                         :xt/valid-from (time/->zdt #inst "2023")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 2, :xt/id "bar"}}
-                        {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                         :xt/system-from (time/->zdt #inst "2021")
-                         :xt/valid-from (time/->zdt #inst "2021")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 1, :xt/id "bar"}}
-                        {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                         :xt/system-from (time/->zdt #inst "2020")
-                         :xt/valid-from (time/->zdt #inst "2020")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 0, :xt/id "bar"}}
-                        {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
-                         :xt/system-from (time/->zdt #inst "2023")
-                         :xt/valid-from (time/->zdt #inst "2023")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 2, :xt/id "foo"}}
-                        {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
-                         :xt/system-from (time/->zdt #inst "2022")
-                         :xt/valid-from (time/->zdt #inst "2022")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 1, :xt/id "foo"}}
-                        {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
-                         :xt/system-from (time/->zdt #inst "2020")
-                         :xt/valid-from (time/->zdt #inst "2020")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 0, :xt/id "foo"}}]
+            (util/with-open [results (.mergeSegments seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
+              (t/is (= [[{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                          :xt/system-from (time/->zdt #inst "2023")
+                          :xt/valid-from (time/->zdt #inst "2023")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt time/end-of-time)
+                          :op {:v 2, :xt/id "bar"}}
+                         {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                          :xt/system-from (time/->zdt #inst "2021")
+                          :xt/valid-from (time/->zdt #inst "2021")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt #inst "2023")
+                          :op {:v 1, :xt/id "bar"}}
+                         {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                          :xt/system-from (time/->zdt #inst "2020")
+                          :xt/valid-from (time/->zdt #inst "2020")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt #inst "2021")
+                          :op {:v 0, :xt/id "bar"}}
+                         {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                          :xt/system-from (time/->zdt #inst "2023")
+                          :xt/valid-from (time/->zdt #inst "2023")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt time/end-of-time)
+                          :op {:v 2, :xt/id "foo"}}
+                         {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                          :xt/system-from (time/->zdt #inst "2022")
+                          :xt/valid-from (time/->zdt #inst "2022")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt #inst "2023")
+                          :op {:v 1, :xt/id "foo"}}
+                         {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                          :xt/system-from (time/->zdt #inst "2020")
+                          :xt/valid-from (time/->zdt #inst "2020")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt #inst "2022")
+                          :op {:v 0, :xt/id "foo"}}]]
 
-                       (->> (.toMaps data-rel)
-                            (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))
+                       (for [^SegmentMerge$Result res results]
+                         (with-open [rel (.openAllAsRelation seg-merge res)]
+                           (->> (.toMaps rel)
+                                (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))
 
           (t/testing "merge segments with path predicate"
-            (util/with-open [data-rel (.mergeToRelation seg-merge segments (byte-array [2]))]
+            (util/with-open [results (.mergeSegments seg-merge segments (byte-array [2]) (SegmentMerge$RecencyPartitioning$Preserve. nil))]
+              (t/is (= [[{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                          :xt/system-from (time/->zdt #inst "2023")
+                          :xt/valid-from (time/->zdt #inst "2023")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt time/end-of-time)
+                          :op {:v 2, :xt/id "bar"}}
+                         {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                          :xt/system-from (time/->zdt #inst "2021")
+                          :xt/valid-from (time/->zdt #inst "2021")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt #inst "2023")
+                          :op {:v 1, :xt/id "bar"}}
+                         {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                          :xt/system-from (time/->zdt #inst "2020")
+                          :xt/valid-from (time/->zdt #inst "2020")
+                          :xt/valid-to (time/->zdt time/end-of-time)
+                          :xt/recency (time/->zdt #inst "2021")
+                          :op {:v 0, :xt/id "bar"}}]]
 
-              (t/is (= [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                         :xt/system-from (time/->zdt #inst "2023")
-                         :xt/valid-from (time/->zdt #inst "2023")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 2, :xt/id "bar"}}
-                        {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                         :xt/system-from (time/->zdt #inst "2021")
-                         :xt/valid-from (time/->zdt #inst "2021")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 1, :xt/id "bar"}}
-                        {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                         :xt/system-from (time/->zdt #inst "2020")
-                         :xt/valid-from (time/->zdt #inst "2020")
-                         :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:v 0, :xt/id "bar"}}]
+                       (for [^SegmentMerge$Result res results]
+                         (with-open [rel (.openAllAsRelation seg-merge res)]
+                           (->> (.toMaps rel)
+                                (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))
 
-                       (->> (.toMaps data-rel)
-                            (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap)))))))))))))
+          (t/testing "merge segments partitioning by recency"
+            (util/with-open [results (.mergeSegments seg-merge segments nil SegmentMerge$RecencyPartitioning$Partition/INSTANCE)]
+              (t/is (= {"r20210104.arrow" [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                                            :xt/system-from (time/->zdt #inst "2020")
+                                            :xt/valid-from (time/->zdt #inst "2020")
+                                            :xt/valid-to (time/->zdt time/end-of-time)
+                                            :xt/recency (time/->zdt #inst "2021")
+                                            :op {:v 0, :xt/id "bar"}}]
+
+                        "r20220103.arrow" [{:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                                            :xt/system-from (time/->zdt #inst "2020")
+                                            :xt/valid-from (time/->zdt #inst "2020")
+                                            :xt/valid-to (time/->zdt time/end-of-time)
+                                            :xt/recency (time/->zdt #inst "2022")
+                                            :op {:v 0, :xt/id "foo"}}]
+
+                        "r20230102.arrow" [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                                            :xt/system-from (time/->zdt #inst "2021")
+                                            :xt/valid-from (time/->zdt #inst "2021")
+                                            :xt/valid-to (time/->zdt time/end-of-time)
+                                            :xt/recency (time/->zdt #inst "2023")
+                                            :op {:v 1, :xt/id "bar"}}
+                                           {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                                            :xt/system-from #xt/zoned-date-time "2022-01-01T00:00Z[UTC]",
+                                            :xt/valid-from #xt/zoned-date-time "2022-01-01T00:00Z[UTC]",
+                                            :xt/valid-to (time/->zdt time/end-of-time)
+                                            :xt/recency #xt/zoned-date-time "2023-01-01T00:00Z[UTC]"
+                                            :op {:xt/id "foo", :v 1}}]
+
+                        "rc.arrow" [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
+                                     :xt/system-from (time/->zdt #inst "2023")
+                                     :xt/valid-from (time/->zdt #inst "2023")
+                                     :xt/valid-to (time/->zdt time/end-of-time)
+                                     :xt/recency (time/->zdt time/end-of-time)
+                                     :op {:v 2, :xt/id "bar"}}
+                                    {:xt/iid #uuid "d9c7fae2-a04e-0471-6493-6265ba33cf80",
+                                     :xt/system-from (time/->zdt #inst "2023")
+                                     :xt/valid-from (time/->zdt #inst "2023")
+                                     :xt/valid-to (time/->zdt time/end-of-time)
+                                     :xt/recency (time/->zdt time/end-of-time)
+                                     :op {:v 2, :xt/id "foo"}}]}
+
+                       (->> (for [^SegmentMerge$Result res results]
+                              [(str (.getFileName (.getPath$xtdb_core res)))
+                               (with-open [rel (.openAllAsRelation seg-merge res)]
+                                 (->> (.toMaps rel)
+                                      (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap)))))])
+                            (into {})))))))))))
