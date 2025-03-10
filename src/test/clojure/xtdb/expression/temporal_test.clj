@@ -1683,6 +1683,23 @@
                         {:i #xt/interval-mdn ["P0D" "PT15M"]
                          :src #inst "2020-01-01T00:20:10Z"}))))
 
+(deftest test-date-bin-with-origin
+  (t/is (= #xt/zoned-date-time "2024-03-06T12:00Z"
+           (et/project1
+            '(date-bin stride src origin)
+            {:stride #xt/interval-mdn ["P0D" "PT3H"]
+             :src #xt/zoned-date-time "2024-03-06T14:23:45Z"
+             :origin #xt/zoned-date-time "2000-01-01T00:00:00Z"}))))
+
+(deftest test-pd-scale-type-hinting-4252
+  ;;pd accessors in ts +/- interval causes reflection if pd-scale return
+  ;;type not hinted
+  (t/is (= #xt/zoned-date-time "2020-01-03T06:00Z"
+           (et/project1
+            '(+ #xt/zoned-date-time "2020-01-01T00:00:00Z"
+                (* #xt/interval-mdn ["P1D" "PT3H"] 2))
+            {}))))
+
 (deftest test-range-bins
   (let [base (time/->zdt #inst "2020-01-01")]
     (letfn [(f [start end]

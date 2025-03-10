@@ -996,10 +996,12 @@
   {:return-type interval-type
    :->call-code (fn [[i]] `(pd-neg ~i))})
 
-(defn pd-scale ^PeriodDuration [^PeriodDuration pd ^long factor]
-  (let [p (.getPeriod pd)
-        d (.getDuration pd)]
-    (PeriodDuration. (.multipliedBy p factor) (.multipliedBy d factor))))
+;;HACK https://clojure.atlassian.net/browse/CLJ-2817
+(def ^PeriodDuration pd-scale
+  (fn ^PeriodDuration [^PeriodDuration pd ^long factor]
+    (let [p (.getPeriod pd)
+          d (.getDuration pd)]
+      (PeriodDuration. (.multipliedBy p factor) (.multipliedBy d factor)))))
 
 (defmethod expr/codegen-call [:* :interval :int] [{[l-type _] :arg-types}]
   {:return-type l-type
