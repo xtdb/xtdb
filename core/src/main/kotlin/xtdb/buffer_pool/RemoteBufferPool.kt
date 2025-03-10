@@ -80,9 +80,9 @@ class RemoteBufferPool(
             val upload = startMultipart(key).await()
 
             try {
-                val waitingParts = nioBuffers.map {
+                val waitingParts = nioBuffers.mapIndexed { idx, it ->
                     async(multipartUploadDispatcher) {
-                        upload.uploadPart(it).await()
+                        upload.uploadPart(idx, it).await()
                     }
                 }
 

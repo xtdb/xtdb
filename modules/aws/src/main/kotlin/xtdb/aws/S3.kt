@@ -82,8 +82,6 @@ class S3(
         val uploadId = initResp.uploadId()
 
         object : IMultipartUpload<CompletedPart> {
-            val partNum = AtomicInteger(1)
-
             fun S3AsyncClient.uploadPart(body: AsyncRequestBody, configure: Consumer<UploadPartRequest.Builder>) =
                 uploadPart(configure, body)
 
@@ -91,24 +89,23 @@ class S3(
              * part-numbers have to be in ascending order, so we increment the counter synchronously.
              * caller therefore needs to call this method in order.
              */
-            override fun uploadPart(buf: ByteBuffer) =
-                partNum.getAndIncrement().let { partNum ->
-                    scope.future {
-                        val contentLength = buf.remaining().toLong()
+            override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<CompletedPart> =
+                scope.future {
+                    val contentLength = buf.remaining().toLong()
+                    val partNum = idx + 1
 
-                        val partResp = client.uploadPart(AsyncRequestBody.fromByteBuffer(buf)) {
-                            it.bucket(bucket)
-                            it.key(s3Key)
-                            it.uploadId(uploadId)
-                            it.partNumber(partNum)
-                            it.contentLength(contentLength)
-                        }.await()
+                    val partResp = client.uploadPart(AsyncRequestBody.fromByteBuffer(buf)) {
+                        it.bucket(bucket)
+                        it.key(s3Key)
+                        it.uploadId(uploadId)
+                        it.partNumber(partNum)
+                        it.contentLength(contentLength)
+                    }.await()
 
-                        CompletedPart.builder().apply {
-                            partNumber(partNum)
-                            eTag(partResp.eTag())
-                        }.build()
-                    }
+                    CompletedPart.builder().apply {
+                        partNumber(partNum)
+                        eTag(partResp.eTag())
+                    }.build()
                 }
 
             override fun complete(parts: List<CompletedPart>) = scope.future {

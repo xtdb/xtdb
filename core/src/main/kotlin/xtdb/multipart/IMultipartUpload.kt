@@ -8,7 +8,7 @@ interface IMultipartUpload<Part> {
     /**
      * Asynchronously uploads a part to the multipart request and adds it to the internal list of completed parts.
      */
-    fun uploadPart(buf: ByteBuffer): CompletableFuture<Part>
+    fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<Part>
 
     /**
      * Asynchronously completes the multipart request.

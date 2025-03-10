@@ -148,8 +148,8 @@
           file-part-2 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
 
           parts [;; Uploading parts to multipart upload
-                 @(.uploadPart multipart-upload file-part-1)
-                 @(.uploadPart multipart-upload file-part-2)]]
+                 @(.uploadPart multipart-upload 0 file-part-1)
+                 @(.uploadPart multipart-upload 1 file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
         @(.complete multipart-upload parts)
@@ -199,10 +199,10 @@
     (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-larger-multi-put"))
           part-size 500
           parts (doall
-                 (for [_ (range 20)]
+                 (for [i (range 20)]
                    (let [buf ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
                      {:buf buf
-                      :!part (.uploadPart multipart-upload buf)})))]
+                      :!part (.uploadPart multipart-upload i buf)})))]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
         @(.complete multipart-upload (mapv (comp deref :!part) parts))
@@ -225,7 +225,7 @@
               parts (doall
                      (for [_ (range 2)]
                        (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-                         (.uploadPart initial-multipart-upload file-part))))]
+                         (.uploadPart initial-multipart-upload 0 file-part))))]
 
           @(.complete initial-multipart-upload (mapv deref parts))
 
@@ -237,9 +237,9 @@
       (t/testing "Attempt to multipart upload to an existing object shouldn't throw, should abort and remove uncomitted blobs"
         (let [second-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))
               parts (doall
-                     (for [_ (range 3)]
+                     (for [i (range 3)]
                        (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-                         (.uploadPart second-multipart-upload file-part))))]
+                         (.uploadPart second-multipart-upload i file-part))))]
 
           @(.complete second-multipart-upload (mapv deref parts))
 

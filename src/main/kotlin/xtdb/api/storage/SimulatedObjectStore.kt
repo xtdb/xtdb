@@ -58,7 +58,7 @@ class SimulatedObjectStore(
 
     override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> {
         val upload = object : IMultipartUpload<ByteBuffer> {
-            override fun uploadPart(buf: ByteBuffer): CompletableFuture<ByteBuffer> {
+            override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<ByteBuffer> {
                 calls.add(StoreOperation.UPLOAD)
                 return completedFuture(copyByteBuffer(buf))
             }
