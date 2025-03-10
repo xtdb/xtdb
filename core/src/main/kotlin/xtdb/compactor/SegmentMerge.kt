@@ -66,9 +66,8 @@ class SegmentMerge(private val al: BufferAllocator) {
 
         private data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RowCopier)
 
-        @Suppress("UNCHECKED_CAST")
-        private fun <L : HashTrie.Node<*>> MergePlanNode<L>.loadDataPage(): RelationReader? =
-            segment.dataRel?.loadPage(node as L)
+        private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
+            segment.dataRel?.loadPage(node)
 
         private val copierFactory = CopierFactory(dataRel)
 
@@ -111,7 +110,7 @@ class SegmentMerge(private val al: BufferAllocator) {
         }
     }
 
-    internal fun List<ISegment<*>>.mergeTo(ch: WritableByteChannel, pathFilter: ByteArray?): List<PageTree.Leaf> {
+    internal fun List<ISegment<*, *>>.mergeTo(ch: WritableByteChannel, pathFilter: ByteArray?): List<PageTree.Leaf> {
         val schema = logDataRelSchema(this.map { it.dataRel!!.schema })
         val mergePlan = this.toMergePlan(pathFilter?.toPathPredicate())
 
@@ -135,7 +134,7 @@ class SegmentMerge(private val al: BufferAllocator) {
         }
     }
 
-    fun List<ISegment<*>>.mergeToRelation(part: ByteArray?) =
+    fun List<ISegment<*, *>>.mergeToRelation(part: ByteArray?) =
         useTempFile("merged-segments", ".arrow") { tempFile ->
             mergeTo(tempFile.openWritableChannel(), part)
 

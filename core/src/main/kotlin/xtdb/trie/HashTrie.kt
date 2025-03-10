@@ -21,7 +21,7 @@ fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
-interface HashTrie<N : Node<N>, L: N> {
+interface HashTrie<N : Node<N>, L : N> {
     val rootNode: N?
 
     val leaves get() = rootNode?.leaves ?: emptyList()
@@ -37,7 +37,9 @@ interface HashTrie<N : Node<N>, L: N> {
         fun leafStream(): Stream<out Node<N>> =
             when {
                 iidChildren != null -> Arrays.stream(iidChildren).flatMap { child -> child?.leafStream() }
-                recencies != null -> recencies!!.indices.toList().stream().flatMap { idx -> recencyNode(idx).leafStream() }
+                recencies != null -> recencies!!.indices.toList().stream()
+                    .flatMap { idx -> recencyNode(idx).leafStream() }
+
                 else -> Stream.of(this)
             }
 
@@ -74,28 +76,37 @@ interface HashTrie<N : Node<N>, L: N> {
     }
 }
 
-interface ISegment<L : Node<*>> {
-    val trie: HashTrie<*, L>
+interface ISegment<N : Node<N>, L : N> {
+    val trie: HashTrie<N, L>
     val dataRel: DataRel<L>?
 
-    class Segment<L : Node<*>>(
-        override val trie: HashTrie<*, L>,
+    class Segment<N : Node<N>, L : N>(
+        override val trie: HashTrie<N, L>,
         override val dataRel: DataRel<L>
-    ): ISegment<L>
+    ) : ISegment<N, L>
 }
 
-data class MergePlanNode<L : Node<*>>(val segment: ISegment<L>, val node: Node<*>)
+data class MergePlanNode<N : Node<N>, L : N>(val segment: ISegment<N, L>, val node: L) {
+    companion object {
+        @Suppress("UNCHECKED_CAST")
+        fun <N : Node<N>, L : N> create(segment: ISegment<N, L>, node: Node<*>): MergePlanNode<N, L> =
+            MergePlanNode(segment, node as L)
+    }
+}
 
-class MergePlanTask(val mpNodes: List<MergePlanNode<*>>, val path: ByteArray)
+class MergePlanTask(val mpNodes: List<MergePlanNode<*, *>>, val path: ByteArray)
 
 // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
 @Suppress("UNUSED_EXPRESSION")
-fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?, temporalBounds: TemporalBounds = TemporalBounds()): List<MergePlanTask> {
+fun List<ISegment<*, *>>.toMergePlan(
+    pathPred: Predicate<ByteArray>?,
+    temporalBounds: TemporalBounds = TemporalBounds()
+): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
     val minRecency = min(temporalBounds.validTime.lower, temporalBounds.systemTime.lower)
 
-    val initialMpNodes = mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode(seg, it) } }
+    val initialMpNodes = mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode.create(seg, it) } }
     if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
 
     while (!stack.isEmpty) {
@@ -104,15 +115,15 @@ fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?, temporalBound
 
         when {
             mpNodes.any { it.node is RecencyBranch } -> {
-                val newMpNodes = mutableListOf<MergePlanNode<*>>()
+                val newMpNodes = mutableListOf<MergePlanNode<*, *>>()
                 for (mpNode in mergePlanTask.mpNodes) {
                     val recencies = mpNode.node.recencies
                     if (recencies != null) {
-                        val tempMpNodes = mutableListOf<MergePlanNode<*>>()
-                        for(i in recencies.indices.reversed()) {
+                        val tempMpNodes = mutableListOf<MergePlanNode<*, *>>()
+                        for (i in recencies.indices.reversed()) {
                             // the recency of a bucket is exclusive, i.e. no event in the bucket has the recency of the bucket
                             if (recencies[i] <= minRecency) break
-                            tempMpNodes += MergePlanNode(mpNode.segment, mpNode.node.recencyNode(i))
+                            tempMpNodes += MergePlanNode.create(mpNode.segment, mpNode.node.recencyNode(i))
                         }
                         newMpNodes += tempMpNodes.reversed()
                     } else {
@@ -130,7 +141,7 @@ fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?, temporalBound
                 for (bucketIdx in HashTrie.LEVEL_WIDTH - 1 downTo 0) {
                     val newMpNodes = nodeChildren.mapIndexedNotNull { idx, children ->
                         if (children != null) {
-                            children[bucketIdx]?.let { MergePlanNode(mpNodes[idx].segment, it) }
+                            children[bucketIdx]?.let { MergePlanNode.create(mpNodes[idx].segment, it) }
                         } else {
                             mpNodes[idx]
                         }
