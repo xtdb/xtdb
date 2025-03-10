@@ -78,17 +78,20 @@ interface Compactor : AutoCloseable {
                         val segments = (pageMetadatas zip dataRels)
                             .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
 
-                        useTempFile("merged-segments", ".arrow") { tempFile ->
-                            val pageTree =
-                                with(segMerge) { segments.mergeTo(tempFile.openWritableChannel(), part).asTree }
+                        segMerge.mergeSegments(segments, part).use { mergeRes ->
+                            mergeRes.openForRead().use { mergeReadCh ->
+                                Relation.loader(al, mergeReadCh).use { loader ->
+                                    val dataFileSize =
+                                        trieWriter.writePageTree(
+                                            tableName, outputTrieKey,
+                                            loader, mergeRes.leaves.asTree,
+                                            pageSize
+                                        )
 
-                            Relation.loader(al, tempFile).use { loader ->
-                                val dataFileSize =
-                                    trieWriter.writePageTree(tableName, outputTrieKey, loader, pageTree, pageSize)
+                                    LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
 
-                                LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
-
-                                listOf(trieDetails(dataFileSize))
+                                    listOf(trieDetails(dataFileSize))
+                                }
                             }
                         }
                     }
@@ -191,5 +194,4 @@ interface Compactor : AutoCloseable {
             override fun close() {}
         }
     }
-
 }

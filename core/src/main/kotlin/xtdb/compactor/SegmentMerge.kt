@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalPathApi::class)
+
 package xtdb.compactor
 
 import com.carrotsearch.hppc.ByteArrayList
@@ -13,14 +15,18 @@ import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
 import xtdb.types.withName
 import xtdb.util.closeOnCatch
+import xtdb.util.openReadableChannel
 import xtdb.util.openWritableChannel
-import xtdb.util.useTempFile
-import java.nio.channels.WritableByteChannel
+import java.nio.file.Path
 import java.util.*
 import java.util.function.Predicate
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.createTempFile
+import kotlin.io.path.deleteRecursively
 import kotlin.math.min
 
 class SegmentMerge(private val al: BufferAllocator) {
+
     companion object {
         private fun logDataRelSchema(dataSchemas: Collection<Schema>) =
             mergeFields(dataSchemas.map { it.findField("op").children.first() })
@@ -71,7 +77,7 @@ class SegmentMerge(private val al: BufferAllocator) {
 
         private val copierFactory = CopierFactory(dataRel)
 
-        fun mergePages(task: MergePlanTask) {
+        fun execMergeTask(task: MergePlanTask) {
             val polygonCalculator = PolygonCalculator()
             val isValidPtr = ArrowBufPointer()
 
@@ -85,9 +91,9 @@ class SegmentMerge(private val al: BufferAllocator) {
                 if (dataReader == null) continue
                 val evPtr = EventRowPointer.XtArrow(dataReader, path)
                 val rowCopier = copierFactory.rowCopier(dataReader)
-                if (evPtr.isValid(isValidPtr, path)) {
+
+                if (evPtr.isValid(isValidPtr, path))
                     mergeQueue.add(QueueElem(evPtr, rowCopier))
-                }
             }
 
             var seenErase = false
@@ -110,18 +116,28 @@ class SegmentMerge(private val al: BufferAllocator) {
         }
     }
 
-    internal fun List<ISegment<*, *>>.mergeTo(ch: WritableByteChannel, pathFilter: ByteArray?): List<PageTree.Leaf> {
-        val schema = logDataRelSchema(this.map { it.dataRel!!.schema })
-        val mergePlan = this.toMergePlan(pathFilter?.toPathPredicate())
+    class MergeResult(private val path: Path, val leaves: List<PageTree.Leaf>) : AutoCloseable {
+        fun openForRead() = path.openReadableChannel()
 
-        return Relation(al, schema).use { dataRel ->
-            dataRel.startUnload(ch).use { unloader ->
-                with(PageMerge(dataRel, pathFilter)) {
-                    var idx = 0
-                    mergePlan.mapNotNull { task ->
+        override fun close() = path.deleteRecursively()
+    }
+
+    internal fun mergeSegments(segments: List<ISegment<*, *>>, pathFilter: ByteArray?): MergeResult {
+        val schema = logDataRelSchema(segments.map { it.dataRel!!.schema })
+        val mergePlan = segments.toMergePlan(pathFilter?.toPathPredicate())
+        val outPath = createTempFile("merged-segments", ".arrow")
+
+        val leaves = Relation(al, schema).use { dataRel ->
+            val pageMerge = PageMerge(dataRel, pathFilter)
+
+            dataRel.startUnload(outPath.openWritableChannel()).use { unloader ->
+                var idx = 0
+
+                mergePlan
+                    .mapNotNull { task ->
                         if (Thread.interrupted()) throw InterruptedException()
 
-                        mergePages(task)
+                        pageMerge.execMergeTask(task)
 
                         if (dataRel.rowCount == 0) return@mapNotNull null
 
@@ -129,16 +145,16 @@ class SegmentMerge(private val al: BufferAllocator) {
                         PageTree.Leaf(idx++, ByteArrayList.from(*task.path), dataRel.rowCount)
                             .also { dataRel.clear() }
                     }
-                }.also { unloader.end() }
+                    .also { unloader.end() }
             }
         }
+
+        return MergeResult(outPath, leaves)
     }
 
-    fun List<ISegment<*, *>>.mergeToRelation(part: ByteArray?) =
-        useTempFile("merged-segments", ".arrow") { tempFile ->
-            mergeTo(tempFile.openWritableChannel(), part)
-
-            Relation.loader(al, tempFile).use { inLoader ->
+    fun mergeToRelation(segments: List<ISegment<*, *>>, part: ByteArray?) =
+        mergeSegments(segments, part).use { res ->
+            Relation.loader(al, res.openForRead()).use { inLoader ->
                 val schema = inLoader.schema
                 Relation(al, schema).closeOnCatch { outRel ->
                     Relation(al, schema).use { inRel ->
