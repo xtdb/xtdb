@@ -2,12 +2,14 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.buffer-pool-test :as bp-test]
+            [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
+           [java.time Duration]
            [xtdb.api.storage ObjectStore]
            [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
@@ -101,8 +103,8 @@
           file-part-1 (os-test/generate-random-byte-buffer part-size)
           file-part-2 (os-test/generate-random-byte-buffer part-size)
           parts [;; Uploading parts to multipart upload
-                 (.uploadPart multipart-upload file-part-1)
-                 (.uploadPart multipart-upload file-part-2)]]
+                 (.uploadPart multipart-upload 0 file-part-1)
+                 (.uploadPart multipart-upload 1 file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
         @(.complete multipart-upload (mapv deref parts))
@@ -137,23 +139,16 @@
         (t/is (seq (.listAllObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
-#_
 (t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
-                      (util/with-open [node (xtn/start-node
-                                             {:storage [:remote
-                                                        {:object-store [:s3 {:bucket bucket
-                                                                             :prefix (util/->path (str (random-uuid)))}]
-                                                         :local-disk-cache local-disk-cache}]})]
-                                                        ;; Submit tpch docs
-                                                        (-> (tpch/submit-docs! node 0.05)
-                                                            (tu/then-await-tx node (Duration/ofHours 1)))
+    (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
+      ;; Submit tpch docs
+      (tpch/submit-docs! node 0.1)
+      (tu/then-await-tx (:latest-submitted-tx-id (xt/status node)) node (Duration/ofHours 1))
 
-                                                        ;; Ensure finish-block! works
-                                                        (t/is (nil? (tu/finish-block! node)))
+      ;; Ensure finish-block! works
+      (t/is (nil? (tu/finish-block! node)))
 
-                                                        (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))])
-                                                          (t/is (instance? RemoteBufferPool buffer-pool))
-                                                          (t/is (instance? ObjectStore object-store))
-                                                          ;; Ensure some files are written
-                                                          (t/is (seq (.listAllObjects object-store))))))
+      ;; Ensure some files written to buffer-pool 
+      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        (t/is (seq (.listAllObjects buffer-pool)))))))

@@ -114,8 +114,8 @@
           file-part-2 (os-test/generate-random-byte-buffer part-size)
 
           parts [;; Uploading parts to multipart upload
-                 (.uploadPart multipart-upload file-part-1)
-                 (.uploadPart multipart-upload file-part-2)]]
+                 (.uploadPart 0 multipart-upload file-part-1)
+                 (.uploadPart 1 multipart-upload file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
         @(.complete multipart-upload (mapv deref parts))

@@ -63,8 +63,8 @@ class BlobStorageTest : ObjectStoreTest() {
         val part2 = randomByteBuffer(500)
 
         val parts = awaitAll(
-            async { multipart.uploadPart(part1).await() },
-            async { multipart.uploadPart(part2).await() }
+            async { multipart.uploadPart(0, part1).await() },
+            async { multipart.uploadPart(1, part2).await() }
         )
 
         multipart.complete(parts).await()
@@ -95,10 +95,10 @@ class BlobStorageTest : ObjectStoreTest() {
             buffer.flip()
         }
 
-        val uploadedParts = parts.map {
+        val uploadedParts = parts.mapIndexed { idx, it ->
             async(dispatcher) {
                 Thread.sleep(Random.nextLong(100L..200L))
-                upload.uploadPart(it).await()
+                upload.uploadPart(idx, it).await()
             }
         }
 

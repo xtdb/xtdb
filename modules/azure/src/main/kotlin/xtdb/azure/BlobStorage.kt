@@ -151,7 +151,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
             private val b64 = Base64.getEncoder()
             private val newBlockId get() = randomUUID().asBytes.let { b64.encodeToString(it) }
 
-            override fun uploadPart(buf: ByteBuffer) = scope.future {
+            override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<String> = scope.future {
                 try {
                     unwrappingReactorException {
                         val blockId = newBlockId
