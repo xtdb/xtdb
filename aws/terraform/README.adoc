@@ -1,0 +1,10 @@
+# XTDB AWS Terraform Sample
+
+Contained within this directory are sample terraform files for deploying XTDB to AWS. The samples are designed to be as simple as possible, and are intended to be used as a starting point for your own deployments.
+
+## Pulling the files locally
+
+We can fetch the contents of this folder using the terraform CLI:
+```
+terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
+```  

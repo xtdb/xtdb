@@ -1,0 +1,120 @@
+nodeCount: 3
+
+image:
+  repository: ghcr.io/xtdb/xtdb-aws
+  # tag: 2.0.0-beta6
+  pullPolicy: IfNotPresent
+
+nodeSelector:
+  node_pool: "xtdbpool"
+
+tolerations: []
+
+affinity: {}
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "10G"
+    ephemeral-storage: 100Gi
+  requests:
+    cpu: "750m"
+    memory: "10G"
+    ephemeral-storage: 100Gi
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+xtdbConfig:
+  # REQUIRED
+  # Kubernetes Service Account configured with Workload Identity Federation wih access to Azure Storage
+  serviceAccount: ""
+  # AWS S3 Bucket Name
+  s3Bucket: ""
+
+  # Kafka bootstrap servers
+  kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
+  # XTDB log topic on Kafka 
+  kafkaLogTopic: "xtdb-log"
+
+  # OPTIONAL
+  # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
+  # See https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html
+  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=3000m -XX:MaxMetaspaceSize=500m"
+
+  # We mount and use the below YAML for configuring the XTDB nodes and their modules.
+  # The !Env values are set by Environment Variables set on the XTDB statefulset pods.
+  # See the XTDB configuration documentation for options: https://docs.xtdb.com/ops/config.html
+  nodeConfig: |-
+    server:
+      port: 5432
+
+    log: !Kafka
+      bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+      topic: !Env KAFKA_LOG_TOPIC
+
+    storage: !Remote
+      objectStore: !S3
+        bucket: !Env AWS_S3_BUCKET
+        prefix: xtdb-object-store
+      localDiskCache: /var/lib/xtdb/buffers/disk-cache
+
+    healthz:
+      port: 8080
+
+    modules:
+    - !HttpServer
+      port: 3000 
+
+  # Volume size settings for XTDB Local Disk Cache (uses ephemeral storage)
+  localDiskCache:
+    sizeLimit: "50Gi"
+
+  # Extra Env:
+  env:
+    # (ENV_VAR_NAME: Value)
+    XTDB_LOGGING_LEVEL: "info" # See https://docs.xtdb.com/ops/troubleshooting/overview.html
+
+startupProbe:
+  httpGet:
+    path: /healthz/started
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  failureThreshold: 10 
+
+livenessProbe:
+  httpGet:
+    path: /healthz/alive
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+
+xtdbService:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  server:
+    # Port of the Postgres Wire Server on the nodes
+    targetPort: 5432
+    # Port exposed by the service
+    servicePort: 5432
+  httpServer:
+    # Port of the http server on the nodes
+    targetPort: 3000
+    # Port exposed by the service
+    servicePort: 3000
+  healthzServer:
+    # Port of the healthz server on the nodes
+    targetPort: 8080
+    # Port exposed by the service
+    servicePort: 8080
