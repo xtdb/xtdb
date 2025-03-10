@@ -38,6 +38,9 @@ class SegmentMerge(private val al: BufferAllocator) {
                 val len = min(size, pagePath.size)
                 Arrays.equals(this, 0, len, pagePath, 0, len)
             }
+
+        private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
+            segment.dataRel?.loadPage(node)
     }
 
     private class CopierFactory(private val dataRel: Relation) {
@@ -68,53 +71,7 @@ class SegmentMerge(private val al: BufferAllocator) {
         }
     }
 
-    private class PageMerge(dataRel: Relation, private val pathFilter: ByteArray?) {
-
-        private data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RowCopier)
-
-        private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
-            segment.dataRel?.loadPage(node)
-
-        private val copierFactory = CopierFactory(dataRel)
-
-        fun execMergeTask(task: MergePlanTask) {
-            val polygonCalculator = PolygonCalculator()
-            val isValidPtr = ArrowBufPointer()
-
-            val mpNodes = task.mpNodes
-            var path = task.path
-            val dataReaders = mpNodes.map { it.loadDataPage() }
-            val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
-            path = if (pathFilter == null || path.size > pathFilter.size) path else pathFilter
-
-            for (dataReader in dataReaders) {
-                if (dataReader == null) continue
-                val evPtr = EventRowPointer.XtArrow(dataReader, path)
-                val rowCopier = copierFactory.rowCopier(dataReader)
-
-                if (evPtr.isValid(isValidPtr, path))
-                    mergeQueue.add(QueueElem(evPtr, rowCopier))
-            }
-
-            var seenErase = false
-
-            while (true) {
-                val elem = mergeQueue.poll() ?: break
-                val (evPtr, rowCopier) = elem
-                if (polygonCalculator.calculate(evPtr) != null) {
-                    rowCopier.copyRow(evPtr.index)
-                } else {
-                    if (!seenErase) rowCopier.copyRow(evPtr.index)
-                    seenErase = true
-                }
-
-                evPtr.nextIndex()
-                if (evPtr.isValid(isValidPtr, path)) {
-                    mergeQueue.add(elem)
-                }
-            }
-        }
-    }
+    private data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RowCopier)
 
     class MergeResult(private val path: Path, val leaves: List<PageTree.Leaf>) : AutoCloseable {
         fun openForRead() = path.openReadableChannel()
@@ -122,34 +79,88 @@ class SegmentMerge(private val al: BufferAllocator) {
         override fun close() = path.deleteRecursively()
     }
 
-    internal fun mergeSegments(segments: List<ISegment<*, *>>, pathFilter: ByteArray?): MergeResult {
-        val schema = logDataRelSchema(segments.map { it.dataRel!!.schema })
-        val mergePlan = segments.toMergePlan(pathFilter?.toPathPredicate())
-        val outPath = createTempFile("merged-segments", ".arrow")
+    private inner class OutRel(schema: Schema) : AutoCloseable {
+        private val outPath = createTempFile("merged-segments", ".arrow")
 
-        val leaves = Relation(al, schema).use { dataRel ->
-            val pageMerge = PageMerge(dataRel, pathFilter)
+        private val outRel = Relation(al, schema)
 
-            dataRel.startUnload(outPath.openWritableChannel()).use { unloader ->
-                var idx = 0
+        private val unloader = runCatching { outRel.startUnload(outPath.openWritableChannel()) }
+            .onFailure { outRel.close() }
+            .getOrThrow()
 
-                mergePlan
-                    .mapNotNull { task ->
-                        if (Thread.interrupted()) throw InterruptedException()
+        private val copierFactory = CopierFactory(outRel)
 
-                        pageMerge.execMergeTask(task)
+        private var pageIdx = 0
+        private val leaves = mutableListOf<PageTree.Leaf>()
 
-                        if (dataRel.rowCount == 0) return@mapNotNull null
+        fun rowCopier(reader: RelationReader) = copierFactory.rowCopier(reader)
 
-                        unloader.writePage()
-                        PageTree.Leaf(idx++, ByteArrayList.from(*task.path), dataRel.rowCount)
-                            .also { dataRel.clear() }
-                    }
-                    .also { unloader.end() }
-            }
+        fun endPage(path: ByteArray) {
+            if (outRel.rowCount == 0) return
+
+            unloader.writePage()
+
+            leaves += PageTree.Leaf(pageIdx++, ByteArrayList.from(*path), outRel.rowCount)
+            outRel.clear()
         }
 
-        return MergeResult(outPath, leaves)
+        fun end(): MergeResult {
+            unloader.end()
+            return MergeResult(outPath, leaves)
+        }
+
+        override fun close() {
+            unloader.close()
+            outRel.close()
+        }
+    }
+
+    internal fun mergeSegments(segments: List<ISegment<*, *>>, pathFilter: ByteArray?): MergeResult {
+        val schema = logDataRelSchema(segments.map { it.dataRel!!.schema })
+
+        val isValidPtr = ArrowBufPointer()
+
+        return OutRel(schema).use { outWtr ->
+            for (task in segments.toMergePlan(pathFilter?.toPathPredicate())) {
+                if (Thread.interrupted()) throw InterruptedException()
+
+                val mpNodes = task.mpNodes
+                val path = task.path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
+                val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
+
+                for (dataReader in mpNodes.mapNotNull { it.loadDataPage() }) {
+                    val evPtr = EventRowPointer.XtArrow(dataReader, path)
+                    val rowCopier = outWtr.rowCopier(dataReader)
+
+                    if (evPtr.isValid(isValidPtr, path))
+                        mergeQueue.add(QueueElem(evPtr, rowCopier))
+                }
+
+                var seenErase = false
+
+                val polygonCalculator = PolygonCalculator()
+
+                while (true) {
+                    val elem = mergeQueue.poll() ?: break
+                    val (evPtr, rowCopier) = elem
+                    if (polygonCalculator.calculate(evPtr) != null) {
+                        rowCopier.copyRow(evPtr.index)
+                    } else {
+                        if (!seenErase) rowCopier.copyRow(evPtr.index)
+                        seenErase = true
+                    }
+
+                    evPtr.nextIndex()
+                    if (evPtr.isValid(isValidPtr, path)) {
+                        mergeQueue.add(elem)
+                    }
+                }
+
+                outWtr.endPage(task.path)
+            }
+
+            outWtr.end()
+        }
     }
 
     fun mergeToRelation(segments: List<ISegment<*, *>>, part: ByteArray?) =
