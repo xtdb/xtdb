@@ -20,7 +20,6 @@ import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
 import xtdb.trie.FileSize
 import xtdb.util.*
-import xtdb.util.openArrowReadChannel
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
@@ -72,14 +71,14 @@ class LocalBufferPool(
         arrowFooterCache.get(key) {
             val path = diskStore.resolve(key).orThrowIfMissing(key)
 
-            Relation.readFooter(path.openArrowReadChannel())
+            Relation.readFooter(path.openReadableChannel())
         }
 
     override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
         val path = diskStore.resolve(key).orThrowIfMissing(key)
 
-        val footer = arrowFooterCache.get(key) { Relation.readFooter(path.openArrowReadChannel()) }
+        val footer = arrowFooterCache.get(key) { Relation.readFooter(path.openReadableChannel()) }
 
         val arrowBlock = footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")

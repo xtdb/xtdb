@@ -28,7 +28,6 @@ import xtdb.cache.PathSlice
 import xtdb.multipart.SupportsMultipart
 import xtdb.trie.FileSize
 import xtdb.util.*
-import xtdb.util.openArrowReadChannel
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -158,7 +157,7 @@ class RemoteBufferPool(
                 diskCacheMisses?.increment()
                 objectStore.getObject(k, tmpFile)
             }.get()
-            .use { entry -> Relation.readFooter(entry.path.openArrowReadChannel()) }
+            .use { entry -> Relation.readFooter(entry.path.openReadableChannel()) }
     }
 
     override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
