@@ -43,7 +43,7 @@ clojure-tools-cli={ group="org.clojure", name="tools.cli", version="1.0.206" }
 clj-yaml={ group="clj-commons", name="clj-yaml", version="1.0.27" }
 transit-clj={ group="com.cognitect", name="transit-clj", version.ref="transit" }
 transit-java={ group="com.cognitect", name="transit-java", version.ref="transit" }
-next-jdbc={ group="com.github.seancorfield", name="next.jdbc", version="1.3.955" }
+next-jdbc={ group="com.github.seancorfield", name="next.jdbc", version="1.3.1002" }
 honeysql={ group="com.github.seancorfield", name="honeysql", version="2.6.1203" }
 integrant={ group="integrant", name="integrant", version="0.13.1" }
 sci={ group="org.babashka", name="sci", version="0.6.37" }
