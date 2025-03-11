@@ -1,6 +1,5 @@
 (ns xtdb.metadata
   (:require [integrant.core :as ig]
-            [xtdb.bloom :as bloom]
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
@@ -10,8 +9,9 @@
            (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow Vector VectorReader VectorWriter)
            xtdb.BufferPool
+           (xtdb.arrow Vector VectorReader VectorWriter)
+           (xtdb.bloom BloomUtils)
            (xtdb.metadata PageMetadata PageMetadataWriter)
            (xtdb.vector.extensions KeywordType SetType TransitType TsTzRangeType UriType UuidType)))
 
@@ -189,7 +189,7 @@
                                                      (test [_ idx]
                                                        (not (.isNull content-col idx)))))
                                           (.count)))
-                (bloom/write-bloom bloom-wtr content-col)
+                (BloomUtils/writeBloom bloom-wtr content-col)
 
                 (doseq [^ContentMetadataWriter content-writer content-writers]
                   (.writeContentMetadata content-writer))

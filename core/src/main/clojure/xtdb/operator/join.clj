@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.string]
             [clojure.walk :as walk]
-            [xtdb.bloom :as bloom]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.map :as emap]
@@ -24,6 +23,7 @@
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb ICursor)
            xtdb.arrow.VectorReader
+           (xtdb.bloom BloomUtils)
            (xtdb.expression.map IRelationMap)
            (xtdb.operator ProjectionSpec)
            (xtdb.vector RelationReader)))
@@ -178,7 +178,7 @@
                                      build-col (.readerForName build-rel (str build-col-name))
                                      ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                  (dotimes [build-idx (.rowCount build-rel)]
-                                   (.add pushdown-bloom ^ints (bloom/bloom-hashes (VectorReader/from build-col) build-idx)))))))))))
+                                   (.add pushdown-bloom ^ints (BloomUtils/bloomHashes (VectorReader/from build-col) build-idx)))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.vector.RelationReader probe-phase
