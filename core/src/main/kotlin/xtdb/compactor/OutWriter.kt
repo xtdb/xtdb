@@ -1,0 +1,149 @@
+package xtdb.compactor
+
+import com.carrotsearch.hppc.ByteArrayList
+import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.Relation
+import xtdb.arrow.RelationReader
+import xtdb.compactor.SegmentMerge.Results
+import xtdb.time.microsAsInstant
+import xtdb.trie.Trie
+import xtdb.util.closeAll
+import xtdb.util.openWritableChannel
+import java.nio.file.Path
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.temporal.TemporalAdjusters.next
+import kotlin.io.path.createTempDirectory
+import kotlin.io.path.createTempFile
+
+private typealias RecencyMicros = Long
+
+internal fun RecencyMicros.toPartition(): LocalDate =
+    microsAsInstant.minusNanos(1)
+        .atZone(ZoneOffset.UTC)
+        .with(next(DayOfWeek.MONDAY))
+        .toLocalDate()
+
+internal interface OutWriter : AutoCloseable {
+    fun rowCopier(reader: RelationReader): RecencyRowCopier
+    fun endPage(path: ByteArrayList)
+
+    /**
+     * assumption: so long as end() is called before the OutWriter is closed, the Results can be read afterwards
+     */
+    fun end(): Results
+
+    fun interface RecencyRowCopier {
+        fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int
+    }
+
+    class OutWriters(private val al: BufferAllocator) {
+        private class CopierFactory(private val dataRel: Relation) {
+            private val iidWtr = dataRel["_iid"]!!
+            private val sfWtr = dataRel["_system_from"]!!
+            private val vfWtr = dataRel["_valid_from"]!!
+            private val vtWtr = dataRel["_valid_to"]!!
+            private val recencyWtr = dataRel["_recency"]!!
+            private val opWtr = dataRel["op"]!!
+
+            fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
+                private val iidCopier = dataReader["_iid"]!!.rowCopier(iidWtr)
+                private val sfCopier = dataReader["_system_from"]!!.rowCopier(sfWtr)
+                private val vfCopier = dataReader["_valid_from"]!!.rowCopier(vfWtr)
+                private val vtCopier = dataReader["_valid_to"]!!.rowCopier(vtWtr)
+                private val opCopier = dataReader["op"]!!.rowCopier(opWtr)
+
+                override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int {
+                    val pos = iidCopier.copyRow(sourceIndex)
+
+                    sfCopier.copyRow(sourceIndex)
+                    vfCopier.copyRow(sourceIndex)
+                    vtCopier.copyRow(sourceIndex)
+                    recencyWtr.writeLong(recency)
+                    opCopier.copyRow(sourceIndex)
+                    dataRel.endRow()
+
+                    return pos
+                }
+            }
+        }
+
+        internal inner class OutRel(
+            schema: Schema,
+            private val outPath: Path = createTempFile("merged-segments", ".arrow"),
+            val recency: LocalDate?
+        ) : OutWriter {
+            private val outRel = Relation(al, schema)
+
+            private val unloader = runCatching { outRel.startUnload(outPath.openWritableChannel()) }
+                .onFailure { outRel.close() }
+                .getOrThrow()
+
+            private val copierFactory = CopierFactory(outRel)
+
+            private var pageIdx = 0
+            private val leaves0 = mutableListOf<PageTree.Leaf>()
+
+            val leaves: List<PageTree.Leaf> get() = leaves0
+
+            override fun rowCopier(reader: RelationReader) = copierFactory.rowCopier(reader)
+
+            override fun endPage(path: ByteArrayList) {
+                if (outRel.rowCount == 0) return
+
+                unloader.writePage()
+
+                leaves0 += PageTree.Leaf(pageIdx++, path, outRel.rowCount)
+                outRel.clear()
+            }
+
+            override fun end(): Results {
+                unloader.end()
+                return Results(listOf(SegmentMerge.Result(outPath, recency, leaves)))
+            }
+
+            override fun close() {
+                unloader.close()
+                outRel.close()
+            }
+        }
+
+        internal inner class PartitionedOutWriter(private val schema: Schema) : OutWriter {
+            private val outDir = createTempDirectory("merged-segments")
+            private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
+
+            private val historicalRels = mutableMapOf<LocalDate, OutRel>()
+
+            private fun historicalRel(recencyPartition: LocalDate) = historicalRels.computeIfAbsent(recencyPartition) {
+                OutRel(schema, outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
+            }
+
+            override fun rowCopier(reader: RelationReader) = object : RecencyRowCopier {
+                private val currentCopier = currentRel.rowCopier(reader)
+                private val historicalCopiers = mutableMapOf<LocalDate, RecencyRowCopier>()
+
+                private fun copier(recency: RecencyMicros) =
+                    if (recency == Long.MAX_VALUE) currentCopier
+                    else historicalCopiers.computeIfAbsent(recency.toPartition()) { historicalRel(it).rowCopier(reader) }
+
+                override fun copyRow(recency: RecencyMicros, sourceIndex: Int) =
+                    copier(recency).copyRow(recency, sourceIndex)
+            }
+
+            override fun endPage(path: ByteArrayList) {
+                historicalRels.values.forEach { it.endPage(path) }
+                currentRel.endPage(path)
+            }
+
+            override fun end(): Results =
+                Results(historicalRels.values.flatMap { it.end() } + currentRel.end(), outDir)
+
+            override fun close() {
+                historicalRels.closeAll()
+                currentRel.close()
+            }
+        }
+    }
+}

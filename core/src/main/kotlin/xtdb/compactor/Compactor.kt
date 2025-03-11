@@ -32,7 +32,8 @@ interface Compactor : AutoCloseable {
         val tableName: String
         val trieKeys: Set<TrieKey>
         val part: ByteArray
-        val outputTrieKey: TrieKey
+        val outputTrieKey: Trie.Key
+        val partitionedByRecency: Boolean
     }
 
     interface JobCalculator {
@@ -60,9 +61,9 @@ interface Compactor : AutoCloseable {
 
         }
 
-        private fun Job.trieDetails(dataFileSize: FileSize, trieMetadata: TrieMetadata) =
+        private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata) =
             TrieDetails.newBuilder()
-                .setTableName(tableName).setTrieKey(outputTrieKey)
+                .setTableName(tableName).setTrieKey(trieKey)
                 .setDataFileSize(dataFileSize)
                 .setTrieMetadata(trieMetadata)
                 .build()
@@ -80,22 +81,31 @@ interface Compactor : AutoCloseable {
                         val segments = (pageMetadatas zip dataRels)
                             .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
 
-                        segMerge.mergeSegments(segments, part).use { mergeRes ->
-                            mergeRes.openForRead().use { mergeReadCh ->
-                                Relation.loader(al, mergeReadCh).use { loader ->
-                                    val (dataFileSize, trieMetadata) =
-                                        trieWriter.writePageTree(
-                                            tableName, outputTrieKey,
-                                            loader, mergeRes.leaves.asTree,
-                                            pageSize
-                                        )
+                        val recencyPartitioning =
+                            if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
+                            else SegmentMerge.RecencyPartitioning.Preserve(outputTrieKey.recency)
 
-                                    LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
+                        segMerge.mergeSegments(segments, part, recencyPartitioning)
+                            .useAll { mergeRes ->
+                                mergeRes.map {
+                                    it.openForRead().use { mergeReadCh ->
+                                        Relation.loader(al, mergeReadCh).use { loader ->
+                                            val trieKey = outputTrieKey.copy(recency = it.recency).toString()
 
-                                    listOf(trieDetails(dataFileSize, trieMetadata))
+                                            val (dataFileSize, trieMetadata) =
+                                                trieWriter.writePageTree(
+                                                    tableName, trieKey,
+                                                    loader, it.leaves.asTree,
+                                                    pageSize
+                                                )
+
+                                            LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
+
+                                            trieDetails(trieKey, dataFileSize, trieMetadata)
+                                        }
+                                    }
                                 }
                             }
-                        }
                     }
                 }
             } catch (e: ClosedByInterruptException) {
@@ -128,7 +138,8 @@ interface Compactor : AutoCloseable {
                 val doneCh = Channel<JobKey>()
 
                 while (true) {
-                    availableJobs = jobCalculator.availableJobs().associateBy { JobKey(it.tableName, it.outputTrieKey) }
+                    availableJobs =
+                        jobCalculator.availableJobs().associateBy { JobKey(it.tableName, it.outputTrieKey.toString()) }
 
                     if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
                         LOGGER.trace("sending idle")

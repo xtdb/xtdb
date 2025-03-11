@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalPathApi::class)
-
 package xtdb.compactor
 
 import com.carrotsearch.hppc.ByteArrayList
@@ -8,162 +6,142 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.RowCopier
 import xtdb.bitemporal.PolygonCalculator
+import xtdb.compactor.OutWriter.OutWriters
+import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.trie.*
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
 import xtdb.types.withName
 import xtdb.util.closeOnCatch
 import xtdb.util.openReadableChannel
-import xtdb.util.openWritableChannel
 import java.nio.file.Path
+import java.time.LocalDate
 import java.util.*
 import java.util.function.Predicate
-import kotlin.io.path.ExperimentalPathApi
-import kotlin.io.path.createTempFile
-import kotlin.io.path.deleteRecursively
+import kotlin.io.path.deleteExisting
 import kotlin.math.min
+import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
-class SegmentMerge(private val al: BufferAllocator) {
+private fun logDataRelSchema(dataSchemas: Collection<Schema>) =
+    mergeFields(dataSchemas.map { it.findField("op").children.first() })
+        .withName("put")
+        .let { dataRelSchema(it) }
 
-    companion object {
-        private fun logDataRelSchema(dataSchemas: Collection<Schema>) =
-            mergeFields(dataSchemas.map { it.findField("op").children.first() })
-                .withName("put")
-                .let { dataRelSchema(it) }
-
-        private fun ByteArray.toPathPredicate() =
-            Predicate<ByteArray> { pagePath ->
-                val len = min(size, pagePath.size)
-                Arrays.equals(this, 0, len, pagePath, 0, len)
-            }
+private fun ByteArray.toPathPredicate() =
+    Predicate<ByteArray> { pagePath ->
+        val len = min(size, pagePath.size)
+        Arrays.equals(this, 0, len, pagePath, 0, len)
     }
 
-    private class CopierFactory(private val dataRel: Relation) {
-        private val iidWtr = dataRel["_iid"]!!
-        private val sfWtr = dataRel["_system_from"]!!
-        private val vfWtr = dataRel["_valid_from"]!!
-        private val vtWtr = dataRel["_valid_to"]!!
-        private val opWtr = dataRel["op"]!!
+private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
+    segment.dataRel?.loadPage(node)
 
-        fun rowCopier(dataReader: RelationReader): RowCopier {
-            val iidCopier = dataReader["_iid"]!!.rowCopier(iidWtr)
-            val sfCopier = dataReader["_system_from"]!!.rowCopier(sfWtr)
-            val vfCopier = dataReader["_valid_from"]!!.rowCopier(vfWtr)
-            val vtCopier = dataReader["_valid_to"]!!.rowCopier(vtWtr)
-            val opCopier = dataReader["op"]!!.rowCopier(opWtr)
+internal class SegmentMerge(private val al: BufferAllocator) {
 
-            return RowCopier {
-                val pos = iidCopier.copyRow(it)
+    class Result(internal val path: Path, val recency: LocalDate?, val leaves: List<PageTree.Leaf>) : AutoCloseable {
+        fun openForRead() = path.openReadableChannel()
 
-                sfCopier.copyRow(it)
-                vfCopier.copyRow(it)
-                vtCopier.copyRow(it)
-                opCopier.copyRow(it)
-                dataRel.endRow()
+        override fun close() = path.deleteExisting()
+    }
 
-                pos
-            }
+    /**
+     * Closing these results deletes the temporary files.
+     */
+    class Results(private val results: List<Result>, private val dir: Path? = null) : Iterable<Result>, AutoCloseable {
+        override fun iterator() = results.iterator()
+
+        override fun close() {
+            results.forEach { it.close() }
+            dir?.deleteExisting()
         }
     }
 
-    private class PageMerge(dataRel: Relation, private val pathFilter: ByteArray?) {
+    // for clojure test
+    fun Result.openAllAsRelation() =
+        Relation.loader(al, openForRead()).use { inLoader ->
+            val schema = inLoader.schema
+            Relation(al, schema).closeOnCatch { outRel ->
+                Relation(al, schema).use { inRel ->
+                    while (inLoader.loadNextPage(inRel))
+                        outRel.append(inRel)
+                }
 
-        private data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RowCopier)
-
-        private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
-            segment.dataRel?.loadPage(node)
-
-        private val copierFactory = CopierFactory(dataRel)
-
-        fun execMergeTask(task: MergePlanTask) {
-            val polygonCalculator = PolygonCalculator()
-            val isValidPtr = ArrowBufPointer()
-
-            val mpNodes = task.mpNodes
-            var path = task.path
-            val dataReaders = mpNodes.map { it.loadDataPage() }
-            val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
-            path = if (pathFilter == null || path.size > pathFilter.size) path else pathFilter
-
-            for (dataReader in dataReaders) {
-                if (dataReader == null) continue
-                val evPtr = EventRowPointer.XtArrow(dataReader, path)
-                val rowCopier = copierFactory.rowCopier(dataReader)
-
-                if (evPtr.isValid(isValidPtr, path))
-                    mergeQueue.add(QueueElem(evPtr, rowCopier))
+                outRel
             }
+        }
 
-            var seenErase = false
+    private data class QueueElem(val evPtr: EventRowPointer, val rowCopier: RecencyRowCopier)
 
-            while (true) {
-                val elem = mergeQueue.poll() ?: break
-                val (evPtr, rowCopier) = elem
-                if (polygonCalculator.calculate(evPtr) != null) {
-                    rowCopier.copyRow(evPtr.index)
-                } else {
-                    if (!seenErase) rowCopier.copyRow(evPtr.index)
+    private val outWriters = OutWriters(al)
+
+    private fun MergePlanTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
+        val isValidPtr = ArrowBufPointer()
+
+        val mpNodes = mpNodes
+        val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
+        val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
+
+        for (dataReader in mpNodes.mapNotNull { it.loadDataPage() }) {
+            val evPtr = EventRowPointer.XtArrow(dataReader, path)
+            val rowCopier = outWriter.rowCopier(dataReader)
+
+            if (evPtr.isValid(isValidPtr, path))
+                mergeQueue.add(QueueElem(evPtr, rowCopier))
+        }
+
+        var seenErase = false
+
+        val polygonCalculator = PolygonCalculator()
+
+        while (true) {
+            val elem = mergeQueue.poll() ?: break
+            val (evPtr, rowCopier) = elem
+
+            when (val polygon = polygonCalculator.calculate(evPtr)) {
+                null -> {
+                    if (!seenErase) rowCopier.copyRow(MAX_LONG, evPtr.index)
                     seenErase = true
                 }
 
-                evPtr.nextIndex()
-                if (evPtr.isValid(isValidPtr, path)) {
-                    mergeQueue.add(elem)
-                }
+                else -> rowCopier.copyRow(polygon.recency, evPtr.index)
             }
+
+            evPtr.nextIndex()
+
+            if (evPtr.isValid(isValidPtr, path))
+                mergeQueue.add(elem)
         }
+
+        outWriter.endPage(ByteArrayList.from(*this.path))
     }
 
-    class MergeResult(private val path: Path, val leaves: List<PageTree.Leaf>) : AutoCloseable {
-        fun openForRead() = path.openReadableChannel()
+    sealed interface RecencyPartitioning {
+        data object Partition : RecencyPartitioning
 
-        override fun close() = path.deleteRecursively()
+        class Preserve(val recency: LocalDate?) : RecencyPartitioning
     }
 
-    internal fun mergeSegments(segments: List<ISegment<*, *>>, pathFilter: ByteArray?): MergeResult {
+    fun mergeSegments(
+        segments: List<ISegment<*, *>>,
+        pathFilter: ByteArray?,
+        recencyPartitioning: RecencyPartitioning,
+    ): Results {
         val schema = logDataRelSchema(segments.map { it.dataRel!!.schema })
-        val mergePlan = segments.toMergePlan(pathFilter?.toPathPredicate())
-        val outPath = createTempFile("merged-segments", ".arrow")
 
-        val leaves = Relation(al, schema).use { dataRel ->
-            val pageMerge = PageMerge(dataRel, pathFilter)
-
-            dataRel.startUnload(outPath.openWritableChannel()).use { unloader ->
-                var idx = 0
-
-                mergePlan
-                    .mapNotNull { task ->
-                        if (Thread.interrupted()) throw InterruptedException()
-
-                        pageMerge.execMergeTask(task)
-
-                        if (dataRel.rowCount == 0) return@mapNotNull null
-
-                        unloader.writePage()
-                        PageTree.Leaf(idx++, ByteArrayList.from(*task.path), dataRel.rowCount)
-                            .also { dataRel.clear() }
-                    }
-                    .also { unloader.end() }
-            }
+        val outWriter = when(recencyPartitioning) {
+            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema)
+            is RecencyPartitioning.Preserve -> outWriters.OutRel(schema, recency = recencyPartitioning.recency)
         }
 
-        return MergeResult(outPath, leaves)
+        return outWriter.use {
+            for (task in segments.toMergePlan(pathFilter?.toPathPredicate())) {
+                if (Thread.interrupted()) throw InterruptedException()
+
+                task.merge(it, pathFilter)
+            }
+
+            it.end()
+        }
     }
-
-    fun mergeToRelation(segments: List<ISegment<*, *>>, part: ByteArray?) =
-        mergeSegments(segments, part).use { res ->
-            Relation.loader(al, res.openForRead()).use { inLoader ->
-                val schema = inLoader.schema
-                Relation(al, schema).closeOnCatch { outRel ->
-                    Relation(al, schema).use { inRel ->
-                        while (inLoader.loadNextPage(inRel))
-                            outRel.append(inRel)
-                    }
-
-                    outRel
-                }
-            }
-        }
 }

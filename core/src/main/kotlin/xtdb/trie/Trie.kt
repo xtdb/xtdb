@@ -9,7 +9,6 @@ import xtdb.types.Fields
 import xtdb.types.NamelessField
 import xtdb.types.NamelessField.Companion.nullable
 import xtdb.types.Schema
-import xtdb.types.asPair
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
@@ -29,7 +28,7 @@ typealias ColumnName = String
 typealias TrieKey = String
 
 object Trie {
-    private val RECENCY_FMT = DateTimeFormatterBuilder().appendPattern("yyyyMMdd").toFormatter()
+    internal val RECENCY_FMT = DateTimeFormatterBuilder().appendPattern("yyyyMMdd").toFormatter()
 
     data class Key(val level: Level, val recency: LocalDate?, val part: ByteArrayList?, val blockIndex: BlockIndex) {
         override fun toString() = buildString {
@@ -121,6 +120,7 @@ object Trie {
             "_system_from" to Fields.TEMPORAL,
             "_valid_from" to Fields.TEMPORAL,
             "_valid_to" to Fields.TEMPORAL,
+            "_recency" to Fields.TEMPORAL.nullable,
             "op" to Fields.Union(
                 "put" to NamelessField(putDocField.fieldType, putDocField.children),
                 "delete" to Fields.NULL,
