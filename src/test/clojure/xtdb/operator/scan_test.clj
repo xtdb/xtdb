@@ -604,10 +604,12 @@
 
 (deftest test-pushdown-blooms
   (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
-                           [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]])
+                            [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]])
   (tu/finish-block! tu/*node*)
   (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
   (tu/finish-block! tu/*node*)
+
+  (c/compact-all! tu/*node*)
 
   (let [!page-idxs-cnt (atom 0)
         old-filter-trie-match scan/filter-pushdown-bloom-page-idx-pred]
