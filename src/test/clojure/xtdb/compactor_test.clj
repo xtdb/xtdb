@@ -151,7 +151,21 @@
                         ;; to mark the historical ones 'live'
                         ["l01-rc-b00" 0] ["l01-rc-b01" 0] ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
 
-          "fewer than 4 L1H files take us over the limit, so we compact early")))
+          "fewer than 4 L1H files take us over the limit, so we compact early")
+
+    (t/is (= #{(job "l02-r20200102-b03" ["l02-r20200102-b00" "l01-r20200102-b01" "l01-r20200102-b02" "l01-r20200102-b03"] [])}
+             (calc-jobs ["l02-r20200101-b00" 3] ["l01-r20200101-b01" 3] ["l01-r20200101-b02" 3]
+                        ["l02-r20200102-b00" 3] ["l01-r20200102-b01" 3] ["l01-r20200102-b02" 3] ["l01-r20200102-b03" 3]
+                        ;; to mark the historical ones 'live'
+                        ["l01-rc-b00" 0] ["l01-rc-b01" 0] ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
+          "include existing L2H")
+
+    (t/is (= #{(job "l02-r20200101-b02" ["l02-r20200101-b01" "l01-r20200101-b02"] [])}
+             (calc-jobs ["l02-r20200101-b01" 12] ["l01-r20200101-b02" 6] ["l01-r20200101-b03" 5]
+                        ;; to mark the historical ones 'live'
+                        ["l01-rc-b02" 0] ["l01-rc-b03" 0]))
+
+          "L2H + L1H take us over the limit, compact early")))
 
 (t/deftest test-l2+-compaction-jobs
   (binding [cat/*file-size-target* 16]

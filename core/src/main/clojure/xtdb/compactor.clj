@@ -33,13 +33,16 @@
 
 (defn- l2h-input-files
   "if the tries can be compacted to L2H, return the input tries; otherwise nil"
-  [live-tries {:keys [^long file-size-target]}]
+  [l2h-tries l1h-tries {:keys [^long file-size-target]}]
 
-  (->> live-tries
+  (->> l1h-tries
 
        (reductions (fn [[acc-tries acc-size] {:keys [^long data-file-size] :as trie}]
                      [(conj acc-tries trie) (+ acc-size data-file-size)])
-                   [[] 0])
+                   (or (when-let [{:keys [data-file-size] :as l2h-trie} (first l2h-tries)]
+                         (when (< data-file-size file-size-target)
+                           [[l2h-trie] data-file-size]))
+                       [[] 0]))
 
        (some (fn [[tries total-size]]
                (when (or (= cat/branch-factor (count tries))
@@ -47,12 +50,15 @@
                  tries)))))
 
 (defn- l2h-compaction-jobs [table-name table-tries opts]
-  (for [[[level recency _part] tries] table-tries
+  (for [[[level recency _part] l1h-tries] table-tries
         :when (and recency (= level 1))
-        :let [input-tries (-> tries
-                              (->> (take-while #(= :live (:state %))))
-                              reverse
-                              (l2h-input-files opts))]
+        :let [input-tries (l2h-input-files (-> (get table-tries [2 recency []])
+                                               (->> (take-while #(= :live (:state %))))
+                                               reverse)
+                                           (-> l1h-tries
+                                               (->> (take-while #(= :live (:state %))))
+                                               reverse)
+                                           opts)]
         :when input-tries]
     (->Job table-name (mapv :trie-key input-tries) []
            (trie/->trie-key 2 recency nil (:block-idx (last input-tries))))))
