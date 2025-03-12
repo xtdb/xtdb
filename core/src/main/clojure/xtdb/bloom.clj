@@ -15,13 +15,16 @@
 ;; 10000     16           0.0495
 ;; 10000     17           0.0085
 ;; 100000    20           0.0154
+;; 1000000   24           0.0043
 
 (comment
   (defn bloom-false-positive-probability?
     (^double [^long n]
      (bloom-false-positive-probability? n BloomUtils/BLOOM_K BloomUtils/BLOOM_BITS))
     (^double [^long n ^long k ^long m]
-     (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k))))
+     (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k)))
+
+  (bloom-false-positive-probability? 1000000 3 (bit-shift-left 1 24)))
 
 (def literal-hasher
   (-> (fn [value-expr target-col-type]

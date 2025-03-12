@@ -10,7 +10,7 @@ import xtdb.arrow.VectorWriter
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-const val BLOOM_BITS = 1 shl 20
+const val BLOOM_BITS = 1 shl 24
 const val BLOOM_BIT_MASK = BLOOM_BITS - 1
 const val BLOOM_K = 3
 

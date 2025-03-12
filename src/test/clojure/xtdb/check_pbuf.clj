@@ -2,7 +2,8 @@
   (:require [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.block-catalog :as block-cat]
-            [xtdb.table-catalog :as table-cat])
+            [xtdb.table-catalog :as table-cat]
+            [xtdb.test-json :as tj])
   (:import [java.nio.file FileVisitOption Files Path]
            (xtdb.block.proto Block TableBlock)))
 
