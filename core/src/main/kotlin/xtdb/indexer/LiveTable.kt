@@ -31,6 +31,7 @@ class LiveTable
     private val trieWriter = TrieWriter(al, bp, false)
     private val trieMetadataBuilder = TrieMetadata.newBuilder()
     private var iidBloom = RoaringBitmap()
+    private val hyperLogLogs = mutableMapOf<String, HLL> ()
 
     @FunctionalInterface
     fun interface LiveTrieFactory {
@@ -125,6 +126,9 @@ class LiveTable
         }
 
         fun commit() = this@LiveTable.also {
+            val putRdr = putWtr.asReader
+            val columns = putRdr.structKeys()
+            val legRdrs = columns.map { it to VectorReader.from(putRdr.structKeyReader(it)!!) }
             val pos = liveRelation.writerPosition().position
             for (i in startPos until pos) {
                 trieMetadataBuilder.minValidFrom = minOf(trieMetadataBuilder.minValidFrom, validFromRdr.getLong(i))
@@ -134,7 +138,12 @@ class LiveTable
                 trieMetadataBuilder.minSystemFrom = minOf(trieMetadataBuilder.minSystemFrom, systemFromRdr.getLong(i))
                 trieMetadataBuilder.maxSystemFrom = maxOf(trieMetadataBuilder.maxSystemFrom, systemFromRdr.getLong(i))
                 trieMetadataBuilder.rowCount += (pos - startPos)
+
                 it.iidBloom.add(*bloomHashes(VectorReader.from(iidRdr) , i))
+
+                for ((col, rdr) in legRdrs) {
+                    hyperLogLogs.compute(col) { _, hll -> (hll ?: HyperLogLog.createHLL()).also { HyperLogLog.add(it, rdr, i) } }
+                }
             }
             it.liveTrie = transientTrie
         }
@@ -188,6 +197,8 @@ class LiveTable
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
         trieMetadataBuilder.iidBloom  = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
+        trieMetadataBuilder.addAllHllColumnName(hyperLogLogs.keys)
+        trieMetadataBuilder.addAllHyperLogLog (hyperLogLogs.values.map { ByteString.copyFrom(it.nioBuffer(0, it.capacity())) })
 
         return liveRelation.openAsRelation().useAll { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)

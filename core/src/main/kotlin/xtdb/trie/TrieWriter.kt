@@ -19,6 +19,8 @@ import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.Trie.metaRelSchema
+import xtdb.util.HLL
+import xtdb.util.HyperLogLog
 import xtdb.util.requiringResolve
 import xtdb.util.toByteArray
 
@@ -63,6 +65,7 @@ class TrieWriter(
 
         private val trieMetadataBuilder = TrieMetadata.newBuilder()
         private val iidBloom = RoaringBitmap()
+        private val hyperLogLogs = mutableMapOf<String, HLL>()
 
         fun writeNull(): RowIndex {
             val pos = nodeWtr.valueCount
@@ -92,6 +95,10 @@ class TrieWriter(
 
             val temporalCols = listOf(systemFrom, validFrom, validTo, iidVec)
 
+            val contentCols = writeContentMetadata.takeIf { it }
+                ?.let { putReader?.keys?.mapNotNull { putReader.keyReader(it) } }
+                .orEmpty()
+
             if(writeTrieMetadata) {
                 val (minValidFrom, maxValidFrom) = getMinMax(validFrom ,trieMetadataBuilder.minValidFrom, trieMetadataBuilder.maxValidFrom)
                 trieMetadataBuilder.minValidFrom = minValidFrom
@@ -108,13 +115,19 @@ class TrieWriter(
                 trieMetadataBuilder.rowCount = iidVec.valueCount.toLong()
 
                 for(i in 0 until iidVec.valueCount) {
+
                     iidBloom.add(*bloomHashes(iidVec , i))
+
+                    for (col in contentCols) {
+                        hyperLogLogs.compute(col.name)
+                        { _, hll ->
+                            (hll ?: HyperLogLog.createHLL()).also {
+                                HyperLogLog.add( it, col, i)
+                            }
+                        }
+                    }
                 }
             }
-
-            val contentCols = writeContentMetadata.takeIf { it }
-                ?.let { putReader?.keys?.mapNotNull { putReader.keyReader(it) } }
-                .orEmpty()
 
             pageMetaWriter.writeMetadata(temporalCols + contentCols)
 
@@ -155,6 +168,8 @@ class TrieWriter(
 
             if(writeTrieMetadata) {
                 trieMetadataBuilder.iidBloom  = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
+                trieMetadataBuilder.addAllHllColumnName(hyperLogLogs.keys)
+                trieMetadataBuilder.addAllHyperLogLog (hyperLogLogs.values.map { ByteString.copyFrom(it.nioBuffer(0, it.capacity())) })
             }
 
             return Pair(dataFileSize, trieMetadataBuilder.build())

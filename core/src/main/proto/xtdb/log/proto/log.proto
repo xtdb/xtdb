@@ -28,6 +28,8 @@ message TrieMetadata {
     int64 max_system_from = 6  [default = -9223372036854775808];
     int64 row_count = 7 [default = 0];
     bytes iid_bloom = 8;
+    repeated string hll_column_name = 9;
+    repeated bytes hyper_log_log = 10;
 }
 
 message TrieDetails {

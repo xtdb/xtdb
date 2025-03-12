@@ -4,13 +4,15 @@
             [xtdb.util :as util]
             [xtdb.time :as time]
             [xtdb.table-catalog :as table-cat])
-  (:import org.roaringbitmap.buffer.ImmutableRoaringBitmap
+  (:import (com.google.protobuf ByteString)
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            [java.nio ByteBuffer]
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           (xtdb.log.proto TrieDetails TrieMetadata)))
+           (xtdb.log.proto TrieDetails TrieMetadata)
+           (xtdb.util HyperLogLog)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -213,7 +215,9 @@
      :min-system-from (time/micros->instant (.getMinSystemFrom trie-metadata))
      :max-system-from (time/micros->instant (.getMaxSystemFrom trie-metadata))
      :row-count (.getRowCount trie-metadata)
-     :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))}))
+     :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))
+     :hyper-log-logs (zipmap (.getHllColumnNameList trie-metadata)
+                             (map #(HyperLogLog/toHLL (.toByteArray ^ByteString %)) (.getHyperLogLogList trie-metadata)))}))
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog

@@ -203,5 +203,5 @@
           (tu/finish-block! node)
 
           (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 36)
-                    (os/->StoredObject (util/->path "blocks/b01.binpb") 37)]
+                    (os/->StoredObject (util/->path "blocks/b01.binpb") 38)]
                    (.listAllObjects bp (util/->path "blocks")))))))))
