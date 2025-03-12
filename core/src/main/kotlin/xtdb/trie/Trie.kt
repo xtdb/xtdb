@@ -120,7 +120,6 @@ object Trie {
             "_system_from" to Fields.TEMPORAL,
             "_valid_from" to Fields.TEMPORAL,
             "_valid_to" to Fields.TEMPORAL,
-            "_recency" to Fields.TEMPORAL.nullable,
             "op" to Fields.Union(
                 "put" to NamelessField(putDocField.fieldType, putDocField.children),
                 "delete" to Fields.NULL,

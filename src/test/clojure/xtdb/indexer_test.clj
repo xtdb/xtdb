@@ -610,7 +610,6 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
               (t/is (= [{:xt/system-from (time/->zdt #inst "2020"),
                          :xt/valid-from (time/->zdt #inst "2020"),
                          :xt/valid-to (time/->zdt time/end-of-time)
-                         :xt/recency nil
                          :op {:xt/id 2}}]
                        (->> (.toMaps rel)
                             (mapv #(dissoc % :xt/iid))))))))))))

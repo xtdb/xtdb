@@ -36,15 +36,6 @@
       },
       "children" : [ ]
     },{
-      "name" : "_recency",
-      "nullable" : true,
-      "type" : {
-        "name" : "timestamp",
-        "unit" : "MICROSECOND",
-        "timezone" : "UTC"
-      },
-      "children" : [ ]
-    },{
       "name" : "op",
       "nullable" : false,
       "type" : {
@@ -112,11 +103,6 @@
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "DATA" : [1588291200000000,9223372036854775807,9223372036854775807,9223372036854775807]
-    },{
-      "name" : "_recency",
-      "count" : 4,
-      "VALIDITY" : [0,0,0,0],
-      "DATA" : [0,0,0,0]
     },{
       "name" : "op",
       "count" : 4,

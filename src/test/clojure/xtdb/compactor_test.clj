@@ -366,21 +366,22 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32
-              cat/*file-size-target* (* 1024 32)
+              cat/*file-size-target* (* 1024 16)
               c/*ignore-signal-block?* true]
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 210})]
-        (doseq [day (range 20)
-                batch (->> (range 200)
-                           (partition-all 120))]
-          (xt/execute-tx node [(into [:put-docs {:into :readings,
-                                                 :valid-from (.plusDays (time/->zdt #inst "2020-01-01") day)
-                                                 :valid-to (.plusDays (time/->zdt #inst "2020-01-02") day)}]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 120})]
+        (doseq [tick (range 25)
+                batch (->> (range 100)
+                           (partition-all 64))
+                :let [tick-at (-> (time/->zdt #inst "2020-01-01") (.plusHours (* tick 12)))]]
+          (xt/execute-tx node [(into [:put-docs {:into :readings, :valid-from tick-at, :valid-to (.plusHours tick-at 12)}]
                                      (for [x batch]
-                                       {:xt/id x, :reading day}))
+                                       {:xt/id x, :reading tick}))
 
-                               (into [:put-docs {:into :prices, :valid-from (.plusMinutes (time/->zdt #inst "2020-01-01") day)}]
+                               (into [:put-docs {:into :prices, :valid-from tick-at}]
                                      (for [x batch]
-                                       {:xt/id x, :price day}))]))
+                                       {:xt/id x, :price tick}))]
+
+                         {:system-time tick-at}))
 
         (c/compact-all! node #xt/duration "PT1S")
 

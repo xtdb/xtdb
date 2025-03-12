@@ -45,7 +45,6 @@ internal interface OutWriter : AutoCloseable {
             private val sfWtr = dataRel["_system_from"]!!
             private val vfWtr = dataRel["_valid_from"]!!
             private val vtWtr = dataRel["_valid_to"]!!
-            private val recencyWtr = dataRel["_recency"]!!
             private val opWtr = dataRel["op"]!!
 
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
@@ -61,7 +60,6 @@ internal interface OutWriter : AutoCloseable {
                     sfCopier.copyRow(sourceIndex)
                     vfCopier.copyRow(sourceIndex)
                     vtCopier.copyRow(sourceIndex)
-                    recencyWtr.writeLong(recency)
                     opCopier.copyRow(sourceIndex)
                     dataRel.endRow()
 
