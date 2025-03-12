@@ -125,7 +125,6 @@ class LiveTable
         }
 
         fun commit() = this@LiveTable.also {
-            val deltaBloom = RoaringBitmap()
             val pos = liveRelation.writerPosition().position
             for (i in startPos until pos) {
                 trieMetadataBuilder.minValidFrom = minOf(trieMetadataBuilder.minValidFrom, validFromRdr.getLong(i))
@@ -135,10 +134,9 @@ class LiveTable
                 trieMetadataBuilder.minSystemFrom = minOf(trieMetadataBuilder.minSystemFrom, systemFromRdr.getLong(i))
                 trieMetadataBuilder.maxSystemFrom = maxOf(trieMetadataBuilder.maxSystemFrom, systemFromRdr.getLong(i))
                 trieMetadataBuilder.rowCount += (pos - startPos)
-                deltaBloom.add(*bloomHashes(VectorReader.from(iidRdr) , i))
+                it.iidBloom.add(*bloomHashes(VectorReader.from(iidRdr) , i))
             }
             it.liveTrie = transientTrie
-            it.iidBloom = RoaringBitmap.or(it.iidBloom, deltaBloom)
         }
 
         fun abort() {
