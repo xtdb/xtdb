@@ -13,6 +13,10 @@ private val TRANSIT_MSGPACK_READER: IFn = requiringResolve("xtdb.serde/transit-m
 class TransitVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<VarBinaryVector>(name, allocator, fieldType, VarBinaryVector(name, allocator)) {
 
+    init {
+        require(fieldType.type == TransitType)
+    }
+
     private fun transitReader(v: ByteArray): Reader = TRANSIT_MSGPACK_READER.invoke(ByteArrayInputStream(v)) as Reader
 
     override fun getObject0(index: Int): Any = transitReader(underlyingVector[index]).read()

@@ -24,6 +24,10 @@ class TsTzRangeVector(name: String, allocator: BufferAllocator, fieldType: Field
         )
     ) {
 
+    init {
+        require(fieldType.type is TsTzRangeType)
+    }
+
     companion object {
         private val elField =
             Field("\$data\$", FieldType.notNullable(Timestamp(MICROSECOND, "UTC")), null)

@@ -18,10 +18,14 @@ fun toListFieldType (fieldType: FieldType): FieldType {
 class SetVector : XtExtensionVector<ListVector> {
 
     constructor( name: String, allocator: BufferAllocator, fieldType: FieldType, callBack: CallBack? = null) :
-            super(name, allocator, fieldType, ListVector(name, allocator, toListFieldType(fieldType), callBack))
+            super(name, allocator, fieldType, ListVector(name, allocator, toListFieldType(fieldType), callBack)) {
+        require(fieldType.type is SetType)
+    }
 
     constructor(field: Field, allocator: BufferAllocator, callBack: CallBack? = null) :
-            super(field, allocator, ListVector(field.name, allocator, toListFieldType(field.fieldType), callBack))
+            super(field, allocator, ListVector(field.name, allocator, toListFieldType(field.fieldType), callBack)) {
+        require(field.fieldType.type is SetType)
+    }
 
     // the overriding of the XtExtensionVector.getTransferPair are only needed because createVector
     // on ListField throws when no child is provided, see #3377

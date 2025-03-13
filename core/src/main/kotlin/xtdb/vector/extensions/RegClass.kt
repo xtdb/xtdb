@@ -17,6 +17,10 @@ import xtdb.vector.ValueVectorReader
 class RegClassVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<IntVector>(name, allocator, fieldType, IntVector(name, allocator)) {
 
+    init {
+        require(fieldType.type == RegClassType)
+    }
+
     override fun getObject0(index: Int): RegClass = RegClass(underlyingVector.get(index))
 }
 
