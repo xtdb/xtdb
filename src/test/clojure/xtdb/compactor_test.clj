@@ -20,7 +20,8 @@
            xtdb.api.storage.Storage
            (xtdb.arrow RelationReader)
            [xtdb.block.proto TableBlock]
-           (xtdb.trie DataRel Trie)))
+           (xtdb.trie DataRel Trie)
+           (xtdb.util HyperLogLog)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -568,7 +569,7 @@
         (tu/finish-block! node)
 
 
-        (t/is (= (os/->StoredObject "tables/public$foo/blocks/b02.binpb" 763)
+        (t/is (= (os/->StoredObject "tables/public$foo/blocks/b02.binpb" 17185)
                  (last (.listAllObjects bp (table-cat/->table-block-dir "public/foo")))))
 
         (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
@@ -599,4 +600,13 @@
                         (filter #(str/starts-with? (:trie-key %) "l01"))
                         (into {} (map (juxt :trie-key
                                             (fn [{:keys [trie-metadata]}]
-                                              (dissoc trie-metadata :iid-bloom)))))))))))))
+                                              (dissoc trie-metadata :iid-bloom :hyper-log-logs))))))))
+
+          (let [{hlls1 "l01-r20110103-b00"
+                 hlls2 "l01-r20160104-b01"}
+                (->> current-tries
+                     (filter #(str/starts-with? (:trie-key %) "l01"))
+                     (into {} (map (juxt :trie-key (comp :hyper-log-logs :trie-metadata)))))]
+
+            (t/is (<= 0.99 (HyperLogLog/estimate (get hlls1 "_id")) 1.01))
+            (t/is (<= 0.99 (HyperLogLog/estimate (get hlls2 "_id")) 1.01))))))))
