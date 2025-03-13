@@ -2806,3 +2806,7 @@ UNION ALL
          IllegalArgumentException
          #"Duplicate column projection: a"
          (plan-sql "SELECT 1 AS a, 2 AS a" {}))))
+
+(t/deftest test-hashcode-for-tstzrange-4263
+  (t/is (= [{:p #xt/tstz-range [#xt/zoned-date-time "2024-01-01T00:00Z" #xt/zoned-date-time "2024-01-02T00:00Z"]}]
+           (xt/q tu/*node* "SELECT DISTINCT PERIOD(TIMESTAMP '2024-01-01Z', TIMESTAMP '2024-01-02Z') AS p;"))))
