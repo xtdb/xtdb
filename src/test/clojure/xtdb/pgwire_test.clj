@@ -2619,6 +2619,11 @@ ORDER BY 1,2;")
            (t/is (nil? more-rows))
            (t/is (= expected-plan (read-string plan)))))))))
 
+(t/deftest test-explain-query-with-params
+  (with-open [conn (pg-conn {})]
+    (let [[{:keys [plan]}] (pg/execute conn "EXPLAIN SELECT $1" {:params [""]})]
+      (t/is (some? plan)))))
+
 (t/deftest test-ro-server-4043
   (with-open [node (xtn/start-node {:server {:read-only-port 0, :port 0}})]
     (binding [*port* (.getServerPort node)]
