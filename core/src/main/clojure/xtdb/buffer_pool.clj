@@ -61,7 +61,7 @@
    :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
 (defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, metrics-registry]}]
-  (.open factory allocator metrics-registry))
+  (.open factory Storage/storageRoot allocator metrics-registry))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))

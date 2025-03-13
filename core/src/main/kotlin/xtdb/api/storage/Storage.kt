@@ -19,7 +19,6 @@ import xtdb.buffer_pool.MemoryBufferPool
 import xtdb.buffer_pool.RemoteBufferPool
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
-import xtdb.util.openChildAllocator
 import java.nio.file.Path
 
 object Storage {
@@ -37,7 +36,7 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
-        fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
+        fun open(storageRoot: Path, allocator: BufferAllocator, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
     }
 
     internal fun arrowFooterCache(maxEntries: Long = 1024): Cache<Path, ArrowFooter> =
@@ -51,7 +50,7 @@ object Storage {
     @SerialName("!InMemory")
     data object InMemoryStorageFactory : Factory {
 
-        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
+        override fun open(storageRoot: Path, allocator: BufferAllocator, meterRegistry: MeterRegistry) =
             MemoryBufferPool(allocator, meterRegistry)
     }
 
@@ -85,8 +84,8 @@ object Storage {
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
-            LocalBufferPool(allocator, this, meterRegistry)
+        override fun open(storageRoot: Path, allocator: BufferAllocator, meterRegistry: MeterRegistry) =
+            LocalBufferPool(this, storageRoot, allocator, meterRegistry)
     }
 
     @JvmStatic
@@ -142,8 +141,8 @@ object Storage {
 
         fun maxDiskCacheBytes(maxDiskCacheBytes: Long) = apply { this.maxDiskCacheBytes = maxDiskCacheBytes }
 
-        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
-            objectStore.openObjectStore().closeOnCatch { objectStore ->
+        override fun open(storageRoot: Path, allocator: BufferAllocator, meterRegistry: MeterRegistry) =
+            objectStore.openObjectStore(storageRoot).closeOnCatch { objectStore ->
                 RemoteBufferPool(this, allocator, objectStore, meterRegistry)
             }
     }

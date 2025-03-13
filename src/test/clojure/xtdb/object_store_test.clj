@@ -71,7 +71,7 @@
 
 (defmethod bp/->object-store-factory ::memory-object-store [_ _]
   (reify ObjectStore$Factory
-    (openObjectStore [_]
+    (openObjectStore [_ _storage-root]
       (->InMemoryObjectStore (ConcurrentSkipListMap.)))))
 
 (defn test-put-delete [^ObjectStore obj-store]
