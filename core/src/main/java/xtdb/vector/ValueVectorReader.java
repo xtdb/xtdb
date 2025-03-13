@@ -461,6 +461,8 @@ public class ValueVectorReader implements IVectorReader {
         var underlyingVec = varCharVector(v.getUnderlyingVector());
 
         return new ValueVectorReader(v) {
+            private int HASH_CODE = 0x7a7a7a7a;
+
             @Override
             public ByteBuffer getBytes(int idx) {
                 return underlyingVec.getBytes(idx);
@@ -469,6 +471,11 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             protected Object getObject0(int idx, IKeyFn<?> keyFn) {
                 return Keyword.intern((String) underlyingVec.getObject(idx));
+            }
+
+            @Override
+            public int hashCode0(int idx, Hasher hasher) {
+                return underlyingVec.hashCode(idx, hasher) + HASH_CODE;
             }
         };
     }
