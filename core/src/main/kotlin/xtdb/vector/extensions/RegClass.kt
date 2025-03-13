@@ -13,6 +13,7 @@ import xtdb.arrow.ValueReader
 import xtdb.types.RegClass
 import xtdb.vector.ExtensionVectorWriter
 import xtdb.vector.ValueVectorReader
+import java.nio.ByteBuffer
 
 class RegClassVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<IntVector>(name, allocator, fieldType, IntVector(name, allocator)) {
@@ -37,6 +38,8 @@ object RegClassType: XtExtensionType("xt/regclass", Types.MinorType.INT.getType(
 
 internal class RegClassReader(vec: RegClassVector): ValueVectorReader(vec) {
     private val underlyingVec = from(vec.underlyingVector)
+
+    override fun getBytes(idx: Int): ByteBuffer = underlyingVec.getBytes(idx)
 
     override fun getInt(idx: Int) = underlyingVec.getInt(idx)
 

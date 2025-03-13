@@ -26,11 +26,9 @@ import org.apache.arrow.vector.types.pojo.Field;
 import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
-import xtdb.time.Time;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
-import xtdb.util.HashUtilKt;
 import xtdb.util.Hasher;
 import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
@@ -492,7 +490,15 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     public static IVectorReader transitVector(TransitVector v) {
-        return new ValueVectorReader(v);
+        return new ValueVectorReader(v) {
+            private final VarBinaryVector underlyingVector = v.getUnderlyingVector();
+
+            @Override
+            public ByteBuffer getBytes(int idx) {
+                return getBytes(underlyingVector, idx);
+            }
+
+        };
     }
 
     public static IVectorReader varBinaryVector(VarBinaryVector v) {
@@ -694,6 +700,11 @@ public class ValueVectorReader implements IVectorReader {
         var inner = fixedSizeListVector(v.getUnderlyingVector());
 
         return new ValueVectorReader(v) {
+            @Override
+            public int hashCode0(int idx, Hasher hasher) {
+                return inner.hashCode(idx, hasher);
+            }
+
             @Override
             public IVectorReader listElementReader() {
                 return inner.listElementReader();
