@@ -13,8 +13,8 @@ interface ObjectStore : AutoCloseable {
         fun throwMissingKey(k: Path): Nothing = error("Object '$k' doesn't exist")
     }
 
-    interface Factory {
-        fun openObjectStore(storageRoot: Path = Storage.storageRoot): ObjectStore
+    fun interface Factory {
+        fun openObjectStore(): ObjectStore
     }
 
     data class StoredObject(val key: Path, val size: Long)

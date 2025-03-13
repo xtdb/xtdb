@@ -22,7 +22,9 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.api.storage.Storage.storageRoot
 import xtdb.asBytes
+import xtdb.azure.BlobStorage.Factory
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
 import xtdb.util.asPath
@@ -309,7 +311,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
 
         fun connectionString(connectionString: String) = apply { this.connectionString = connectionString }
 
-        override fun openObjectStore(storageRoot: Path) = BlobStorage(this, prefix?.resolve(storageRoot) ?: storageRoot)
+        override fun openObjectStore() = BlobStorage(this, prefix?.resolve(storageRoot) ?: storageRoot)
     }
 
     /**

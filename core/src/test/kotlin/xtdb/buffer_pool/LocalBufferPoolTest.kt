@@ -6,7 +6,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import xtdb.BufferPool
 import xtdb.api.storage.Storage.localStorage
-import xtdb.api.storage.Storage.storageRoot
 import java.nio.file.Files.createTempDirectory
 
 class LocalBufferPoolTest : BufferPoolTest() {
@@ -18,11 +17,7 @@ class LocalBufferPoolTest : BufferPoolTest() {
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
-        localBufferPool = LocalBufferPool(
-            localStorage(createTempDirectory("local-buffer-pool-test")),
-            storageRoot,
-            allocator
-        )
+        localBufferPool = LocalBufferPool(allocator, localStorage(createTempDirectory("local-buffer-pool-test")))
     }
 
     @AfterEach

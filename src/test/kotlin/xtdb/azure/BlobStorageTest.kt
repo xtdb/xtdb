@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test
 import org.testcontainers.containers.GenericContainer
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.ObjectStoreTest
-import xtdb.api.storage.Storage
 import xtdb.azure.BlobStorage.Companion.azureBlobStorage
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -53,7 +52,7 @@ class BlobStorageTest : ObjectStoreTest() {
             storageAccountKey("Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==")
 
             prefix(prefix)
-        }.openObjectStore(Storage.storageRoot)
+        }.openObjectStore()
 
     @Test
     fun `multipart put test`() = runTest(timeout = 10.seconds) {

@@ -23,6 +23,7 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.api.storage.Storage.storageRoot
 import xtdb.aws.s3.S3Configurator
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
@@ -31,6 +32,7 @@ import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Consumer
 import kotlin.time.Duration.Companion.seconds
 
@@ -267,7 +269,7 @@ class S3(
 
         fun s3Configurator(s3Configurator: S3Configurator) = apply { this.s3Configurator = s3Configurator }
 
-        override fun openObjectStore(storageRoot: Path): S3 {
+        override fun openObjectStore(): S3 {
             val client =
                 S3AsyncClient.builder()
                     .apply {

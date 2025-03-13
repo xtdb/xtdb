@@ -13,7 +13,7 @@
   (:import (java.nio ByteBuffer)
            (java.nio.file Files)
            (java.time Duration)
-           (xtdb.api.storage ObjectStore Storage)
+           (xtdb.api.storage ObjectStore)
            (xtdb.azure BlobStorage)
            (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
@@ -49,7 +49,7 @@
 (defn object-store ^xtdb.azure.BlobStorage [prefix]
   (-> (BlobStorage/azureBlobStorage storage-account container)
       (.prefix (util/->path (str prefix)))
-      (.openObjectStore Storage/storageRoot)))
+      (.openObjectStore)))
 
 (t/deftest ^:azure put-delete-test
   (with-open [os (object-store (random-uuid))]

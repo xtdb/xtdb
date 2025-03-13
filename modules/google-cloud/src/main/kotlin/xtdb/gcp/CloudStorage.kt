@@ -19,6 +19,8 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.api.storage.Storage.storageRoot
+import xtdb.gcp.CloudStorage.Factory
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -144,7 +146,7 @@ class CloudStorage(
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
-        override fun openObjectStore(storageRoot: Path) =
+        override fun openObjectStore() =
             CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot) }
 
     /**
