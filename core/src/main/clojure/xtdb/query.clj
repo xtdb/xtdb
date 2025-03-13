@@ -293,7 +293,8 @@
 
                                :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
                     (if (:explain? query-opts)
-                      [:table [{:plan (with-out-str (pp/pprint plan))}]]
+                      (with-meta [:table [{:plan (with-out-str (pp/pprint plan))}]]
+                                 (-> (meta plan) (select-keys [:param-count :warnings])))
                       plan))))))
 
       AutoCloseable
