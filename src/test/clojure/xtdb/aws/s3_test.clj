@@ -10,7 +10,7 @@
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
            [java.time Duration]
-           [xtdb.api.storage ObjectStore]
+           [xtdb.api.storage ObjectStore Storage]
            [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
@@ -25,7 +25,7 @@
 (defn object-store ^xtdb.aws.S3 [prefix]
   (-> (S3/s3 bucket)
       (.prefix (util/->path (str prefix)))
-      (.openObjectStore)))
+      (.openObjectStore Storage/storageRoot)))
 
 (t/deftest ^:s3 put-delete-test
   (with-open [os (object-store (random-uuid))]

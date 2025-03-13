@@ -85,7 +85,7 @@
 
 (defn simulated-obj-store-factory []
   (reify ObjectStore$Factory
-    (openObjectStore [_]
+    (openObjectStore [_ _storage-root]
       (SimulatedObjectStore.))))
 
 (defn remote-test-buffer-pool ^xtdb.BufferPool []
@@ -137,14 +137,14 @@
 
 (defn no-op-object-store-factory []
   (reify ObjectStore$Factory
-    (openObjectStore [_]
+    (openObjectStore [_ _storage-root]
       (reify ObjectStore
-        (getObject [_ k] (throw (UnsupportedOperationException. "foo")))
-        (getObject [_ _ k] (throw (UnsupportedOperationException. "foo")))
-        (putObject [_ k v] (throw (UnsupportedOperationException. "foo")))
+        (getObject [_ _k] (throw (UnsupportedOperationException. "foo")))
+        (getObject [_ _ _k] (throw (UnsupportedOperationException. "foo")))
+        (putObject [_ _k _v] (throw (UnsupportedOperationException. "foo")))
         (listAllObjects [_] (throw (UnsupportedOperationException. "foo")))
         (listAllObjects [_ _] (throw (UnsupportedOperationException. "foo")))
-        (deleteObject [_ k] (throw (UnsupportedOperationException. "foo")))))))
+        (deleteObject [_ _k] (throw (UnsupportedOperationException. "foo")))))))
 
 (t/deftest local-disk-cache-with-previous-values
   (let [obj-store-factory (simulated-obj-store-factory)
@@ -171,7 +171,7 @@
 
 (t/deftest local-buffer-pool
   (tu/with-tmp-dirs #{tmp-dir}
-    (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
+    (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/storageRoot tu/*allocator* (SimpleMeterRegistry.))]
       (t/testing "empty buffer pool"
         (t/is (= [] (.listAllObjects bp)))
         (t/is (= [] (.listAllObjects bp (.toPath (io/file "foo")))))))))
@@ -179,7 +179,7 @@
 (t/deftest dont-list-temporary-objects-3544
   (tu/with-tmp-dirs #{tmp-dir}
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
-      (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))
+      (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/storageRoot tu/*allocator* (SimpleMeterRegistry.))
                   rel (Relation. tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
         (t/is (= [] (.listAllObjects bp)))))))
@@ -230,5 +230,5 @@
 
 (t/deftest test-local-list-objs
   (tu/with-tmp-dirs #{tmp-dir}
-    (with-open [bp (LocalBufferPool. tu/*allocator* (Storage/localStorage tmp-dir) (SimpleMeterRegistry.))]
+    (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/storageRoot tu/*allocator* (SimpleMeterRegistry.))]
       (test-list-objects bp))))

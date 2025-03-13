@@ -589,7 +589,7 @@
   (let [bp-path (util/tmp-dir "tmp-buffer-pool")
         storage-root (.resolve bp-path Storage/storageRoot)]
     (util/copy-dir dir storage-root)
-    (LocalBufferPool. allocator (Storage/localStorage bp-path) (SimpleMeterRegistry.))))
+    (LocalBufferPool. (Storage/localStorage bp-path) Storage/storageRoot allocator (SimpleMeterRegistry.))))
 
 (deftest test-trie-cursor-with-multiple-recency-nodes-from-same-file-3298
   (let [eid #uuid "00000000-0000-0000-0000-000000000000"]

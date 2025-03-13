@@ -11,7 +11,7 @@
            [java.nio.file Path]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse]
-           [xtdb.api.storage ObjectStore]
+           [xtdb.api.storage ObjectStore Storage]
            [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
            [xtdb.multipart IMultipartUpload SupportsMultipart]))
@@ -33,7 +33,7 @@
         (.prefix (util/->path (str prefix)))
         (.credentials access-key secret-key)
         (.endpoint "http://127.0.0.1:9000")
-        (.openObjectStore))))
+        (.openObjectStore Storage/storageRoot))))
 
 (t/deftest ^:minio put-delete-test
   (with-open [os (object-store (random-uuid))]
@@ -114,8 +114,8 @@
           file-part-2 (os-test/generate-random-byte-buffer part-size)
 
           parts [;; Uploading parts to multipart upload
-                 (.uploadPart 0 multipart-upload file-part-1)
-                 (.uploadPart 1 multipart-upload file-part-2)]]
+                 (.uploadPart multipart-upload 0 file-part-1)
+                 (.uploadPart multipart-upload 1 file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
         @(.complete multipart-upload (mapv deref parts))

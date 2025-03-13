@@ -19,7 +19,6 @@ import xtdb.buffer_pool.MemoryBufferPool
 import xtdb.buffer_pool.RemoteBufferPool
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
-import xtdb.util.openChildAllocator
 import java.nio.file.Path
 
 object Storage {
@@ -37,6 +36,9 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
+        fun setStorageRoot(path: Path): Factory =
+            throw UnsupportedOperationException("Storage root cannot be set on ${this.javaClass}")
+
         fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
     }
 
@@ -50,7 +52,6 @@ object Storage {
     @Serializable
     @SerialName("!InMemory")
     data object InMemoryStorageFactory : Factory {
-
         override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
             MemoryBufferPool(allocator, meterRegistry)
     }
@@ -78,6 +79,7 @@ object Storage {
     @SerialName("!Local")
     data class LocalStorageFactory(
         val path: Path,
+        var storageRoot: Path = Storage.storageRoot,
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long? = null,
     ) : Factory {
@@ -86,7 +88,7 @@ object Storage {
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
         override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
-            LocalBufferPool(allocator, this, meterRegistry)
+            LocalBufferPool(this, storageRoot, allocator, meterRegistry)
     }
 
     @JvmStatic
@@ -128,6 +130,7 @@ object Storage {
     @SerialName("!Remote")
     data class RemoteStorageFactory(
         val objectStore: ObjectStore.Factory,
+        var storageRoot: Path = Storage.storageRoot,
         val localDiskCache: Path,
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long? = null,
@@ -143,20 +146,20 @@ object Storage {
         fun maxDiskCacheBytes(maxDiskCacheBytes: Long) = apply { this.maxDiskCacheBytes = maxDiskCacheBytes }
 
         override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
-            objectStore.openObjectStore().closeOnCatch { objectStore ->
+            objectStore.openObjectStore(storageRoot).closeOnCatch { objectStore ->
                 RemoteBufferPool(this, allocator, objectStore, meterRegistry)
             }
     }
 
     @JvmStatic
     fun remoteStorage(objectStore: ObjectStore.Factory, localDiskCachePath: Path) =
-        RemoteStorageFactory(objectStore, localDiskCachePath)
+        RemoteStorageFactory(objectStore, localDiskCache = localDiskCachePath)
 
     @JvmSynthetic
     fun Xtdb.Config.remoteStorage(
         objectStore: ObjectStore.Factory,
         localDiskCachePath: Path,
         configure: RemoteStorageFactory.() -> Unit,
-    ) = storage(RemoteStorageFactory(objectStore, localDiskCachePath).also(configure))
+    ) = storage(RemoteStorageFactory(objectStore, localDiskCache = localDiskCachePath).also(configure))
 }
 

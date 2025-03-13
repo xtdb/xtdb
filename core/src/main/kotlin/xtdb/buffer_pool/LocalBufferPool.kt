@@ -31,8 +31,9 @@ import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 
 class LocalBufferPool(
-    allocator: BufferAllocator,
     factory: LocalStorageFactory,
+    storageRoot: Path,
+    allocator: BufferAllocator,
     meterRegistry: MeterRegistry? = null
 ) : BufferPool, IEvictBufferTest, Closeable {
 
@@ -42,7 +43,7 @@ class LocalBufferPool(
         MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
             .apply { meterRegistry?.registerMemoryCache("memory-cache") }
 
-    private val diskStore = factory.path.resolve(Storage.storageRoot).also { it.createDirectories() }
+    private val diskStore = factory.path.resolve(storageRoot).also { it.createDirectories() }
 
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
