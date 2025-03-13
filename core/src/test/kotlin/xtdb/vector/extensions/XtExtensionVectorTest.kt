@@ -53,7 +53,6 @@ class XtExtensionVectorTest {
             assertEquals(2, newVector.valueCount)
             assertEquals(listOf(uuid1, uuid2), from(newVector).toList())
 
-            uuidVector.close()
             newVector.close()
         }
     }
