@@ -826,7 +826,7 @@
 (defmethod expr/codegen-call [:* :int :duration] [{[_x-type y-type] :arg-types}]
   {:return-type y-type
    :->call-code (fn [emitted-args]
-                  `(Math/multiplyExact ~@emitted-args))})
+                  `(~^[long long] Math/multiplyExact ~@emitted-args))})
 
 (defmethod expr/codegen-call [:* :num :duration] [{[_x-type y-type] :arg-types}]
   {:return-type y-type

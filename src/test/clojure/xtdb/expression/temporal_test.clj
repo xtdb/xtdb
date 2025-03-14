@@ -828,7 +828,13 @@
 
       (t/is (nil? (test-arithmetic '- nil  #xt/date-time "2022-08-01T02:31:26.684")))
       (t/is (nil? (test-arithmetic '- #xt/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" nil)))
-      (t/is (nil? (test-arithmetic '- nil nil))))))
+      (t/is (nil? (test-arithmetic '- nil nil))))
+
+    (t/testing "(* num duration)"
+      (t/is (= #xt/duration "PT6M" (test-arithmetic '* 2 #xt/duration "PT3M")))
+      (t/is (= #xt/duration "PT6M" (test-arithmetic '* (int 2) #xt/duration "PT3M")))
+      (t/is (= #xt/duration "PT6M" (test-arithmetic '* #xt/duration "PT3M" 2)))
+      (t/is (= #xt/duration "PT6M" (test-arithmetic '* #xt/duration "PT3M" (int 2)))))))
 
 (tct/defspec test-lt
   (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
