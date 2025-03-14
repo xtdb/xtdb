@@ -1078,3 +1078,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
       ;; SUCCEEDED - returned {:xt/id :foo} once
       (t/is (= [{:xt/id :foo}]
                (xt/q node "SELECT * FROM docs"))))))
+
+(t/deftest ingestion-stopped-on-null-col-ref-4259
+  (t/is (false? (:committed? (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"])))))
