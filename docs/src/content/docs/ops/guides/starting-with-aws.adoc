@@ -2,140 +2,330 @@
 title: Setting up a cluster on AWS
 ---
 
-This guide will walk you through the process of configuring an XTDB cluster on AWS, featuring a customizable number of nodes operating on https://aws.amazon.com/ecs/[**ECS**], all accessible via a load balancer.
+This guide will walk you through the process of configuring and running an XTDB Cluster on AWS. This setup includes:
 
-We'll utilize a set of provided CloudFormation templates available in the https://github.com/xtdb/xtdb/tree/main/cloudformation[**XTDB repository**]. These will set up a cluster of XTDB nodes that use https://aws.amazon.com/s3/[**S3**] as the XTDB object store, and https://aws.amazon.com/msk/[**MSK**] hosted **Kafka** as the XTDB log.
+* Using **AWS S3** as the remote storage implementation.
+* Utilizing **Apache Kafka** as the shared message log implementation.
+* Exposing the cluster to the internet via a Postgres wire-compatible server and HTTP.
+ 
+The required AWS infrastructure is provisioned using **Terraform**, and the XTDB cluster and it's resources are deployed on link:https://aws.amazon.com/eks/[**Amazon Elastic Kubernetes Service**^] using **Helm**.
 
-While we provide numerous parameters to configure these templates, you're encouraged to edit them for more advanced use-cases or to reuse existing infrastructure where appropriate.
+Although we provide numerous parameters to configure the templates, you are encouraged to edit them, use them as a foundation for more advanced use cases, and reuse existing infrastructure when suitable. 
+These templates serve as a simple starting point for running XTDB on AWS and Kubernetes, and should be adapted to meet your specific needs, especially in production environments.
 
-The guide assumes that you are using the default templates to set everything up.
+This guide assumes that you are using the default templates.
 
-*The provided templates:*
+== Requirements 
 
-* `xtdb-vpc`: Sets up a sample VPC to be used by the other infrastructure
-* `xtdb-s3`: Sets up all S3 infrastructure & permissions that are required to be used for an XTDB Object Store
-* `xtdb-msk`: Sets up an MSK Kafka cluster for use as the XTDB log
-** Depends on `xtdb-vpc`
-* `xtdb-alb`: Sets up application load balancer and all relevant infrastructure for that to route traffic to the ECS service
-** Depends on `xtdb-vpc`
-* `xtdb-ecs`: Sets up XTDB on ECS, running on EC2 instances.
-** Depends on `xtdb-vpc`, `xtdb-s3`, `xtdb-msk` and `xtdb-alb`
+Before starting, ensure you have the following installed:
 
-== Setting up the stacks
+* The **AWS CLI** - See the link:https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html[**Installation Instructions**^].
+* **Terraform** - See the link:https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli[**Installation Instructions**^].
+* **kubectl** - The Kubernetes CLI, used to interact with the AKS cluster. See the link:https://kubernetes.io/docs/tasks/tools/install-kubectl/[**Installation Instructions**^].
+* **Helm** - The Kubernetes package manager, used to deploy numerous components to AKS. See the link:https://helm.sh/docs/intro/install/[**Installation Instructions**^].
 
-Access the **AWS CloudFormation** dashboard (or use the CLI) and follow the instructions to set up each stack in sequence.
+On AWS itself, you will need:
 
-=== Setting up the VPC
+* An AWS account and associated credentials that allow you to create resources.
 
-The `xtdb-vpc` template creates a sample VPC with networking components to be used by other infrastructure. This can be uploaded as is - no additional parameters are needed.
+=== Authenticating the AWS CLI
 
-It will **output** the following:
+Before running the Terraform templates, you need to authenticate the AWS CLI with your AWS account.
 
-* `VpcId`: ID of the created VPC.
-* `PublicSubnets`: IDs of the VPC's public subnets
-* `PrivateSubnets`: IDs of the VPC's private subnets
-* `SecurityGroupId`: ID of the VPC's security group
-
-NOTE: If you wish to group all of the resources created from all the templates under a single tag, you can apply them at the stack level when uploading the templates. This is optional, but may be useful for finding resources later.  
-
-=== Setting up the S3 resources
-
-The `xtdb-s3` template sets up infrastructure & permissions necessary to use S3 as an XTDB Object Store.
-
-It doesn't depend on `xtdb-vpc`, so you can upload both simultaneously. It requires the following **input parameter**:
-
-* `S3BucketName` - Desired name of the bucket which will contain the XTDB Object Store
-
-It will **output** the following:
-
-* `BucketName`: Created S3 bucket name (identical to `S3BucketName`)
-* `S3AccessPolicyArn`: ARN of the managed policy granting all of the relevant S3 permissions
-
-=== Setting up the MSK cluster
-
-The `xtdb-msk` template establishes an MSK Kafka cluster to be used as the XTDB log, including necessary permissions. It requires `xtdb-vpc` to be created first.
-
-It takes the following **input parameters**:
-
-* `VpcId`: ID of the VPC to host the MSK cluster on (from `xtdb-vpc`)
-* `SecurityGroupId`: ID of the security group to be used by the ECS nodes (from `xtdb-vpc`)
-* `PrivateSubnets`: List of private subnets to host the MSK brokers on, at least two (from `xtdb-vpc`)
-* `MSKClusterName`: Desired name for the MSK Kafka cluster - defaults to `xtdb-cluster-kafka`
-* `MSKVolumeSize`: The size in GiB of the EBS volume for the data drive on each broker node of the Kafka cluster - defaults to `100`
-
-It will **output** the following:
-
-* `MSKClusterArn`: ARN of the created MSK cluster 
-* `MSKClusterName`:  Name of the created MSK cluster
-* `MSKAccessPolicyArn`: ARN of the managed policy granting MSK permissions
-
-The `xtdb-msk` stack will take longer to set up - usually around thirty minutes. This is because **MSK** will need to provision and set up Kafka. In the interim, you can set up `xtdb-alb` (see <<albsetup, below>>). 
-
-Following the creation of the `xtdb-msk` stack, it's crucial to perform an additional step to enable configuration of the XTDB nodes: **retrieving the bootstrap servers from MSK**.
-
-[#bootstrap-servers]
-=== Fetching the bootstrap servers 
-
-After the `xtdb-msk` stack has been successfully created, you will need to get the list of **Kafka bootstrap servers** that the node will connect to. As these cannot be directly returned from CloudFormation itself, you will need to fetch them manually from the cluster on AWS.
-
-The steps to do so (in the AWS console) are as follows:
-
-* Go to the **MSK** dashboard in the console.
-* This should lead you to a list of **Clusters** - select whichever one has the same name as `MSKClusterName` (this defaults to `xtdb-cluster-kafka` if left unaltered)
-* You should see an overview of the created MSK cluster - at the top, there will be a **Cluster summary** - with a link to "View client information". Click on this.
-* This should lead to a list of Bootstrap Servers - there should be a copy button on the "PLAINTEXT" ones.
-** These should be in a comma separated list - there should be two of them in total.
-** The Bootstrap Server URLs should be in something similar to the following shape: `b-2.<MSKClusterName>.<ID>.c5.kafka.<Region>.amazonaws.com:9092`. 
-** Ensure they end with port `9092`, as these are the `PLAINTEXT` URLs. 
-
-[#albsetup]
-=== Setting up the load balancer
-
-The `xtdb-alb` template configures an Application Load Balancer to route traffic across the ECS service. It will require will require `xtdb-vpc` to have been created prior.
-
-It takes the following **input parameters**:
-
-- `VpcId`: ID of the VPC to host the load balancer on (from `xtdb-vpc`)
-- `SecurityGroupId`: Group ID of the security group to be used by the ECS nodes (from `xtdb-vpc`)
-- `PublicSubnets`: List of public subnets to host the load balancer on (from `xtdb-vpc`)
-
-It will **output** the following:
-
-- `TargetGroupArn`: ARN of the created target group 
-- `LoadBalancerArn`: ARN of the created Application Load Balancer
-- `LoadBalancerUrl`: The load-balanced XTDB node URL - 'http://${ECSALB.DNSName}'
-
-=== Setting up the nodes on ECS
-
-The `xtdb-ecs` template will set up our XTDB cluster on running as an ECS service, and will require all of the prior stacks to be created. 
-
-It splits it's inputs into two distinct sections - parameters/resources from other stacks, and desired ECS Configuration.
-
-* Expected **input parameters** from other resources/stacks: 
-** `SecurityGroupId`: ID of the security group to be used by the ECS nodes (from `xtdb-vpc`)
-** `PublicSubnets`: List of public subnets to host the load balancer on (from `xtdb-vpc`)
-** `TargetGroupArn`: ARN of the target group created for the nodes (from `xtdb-alb`)
-** `LoadBalancerArn`: ARN of the Application Load Balancer created for the nodes (from `xtdb-alb`)
-** `S3BucketName`: Name of the S3 bucket to use as the XTDB object store (from `xtdb-s3`)
-** `S3AccessPolicyArn`: ARN of the managed policy offering access to all the S3 permissions necessary for the object store (from `xtdb-s3`)
-** `MSKBootstrapServers`: Comma separated list containing all Kafka bootstrap server URLs from MSK (needs to be grabbed manually from the MSK cluster info, see "<<Fetching the bootstrap servers>>")
-** `MSKAccessPolicyArn`: ARN of the managed policy offering access to all the MSK permissions (from `xtdb-msk`)
-* Expected **input parameters** for the configuration of ECS: 
-** `ClusterName`: Name of the desired ECS cluster -  defaults to `xtdb-cluster`
-** `EC2InstanceType`: EC2 instance type used for ECS Service - defaults to `i3.large` (storage optimized)
-** `DesiredCapacity`: Number of EC2 instances to launch in your ECS cluster / XTDB node tasks to run - defaults to `1`
-** `ImageId:` Used to grab an 'ECS optimized' image from SSM Parameter Store (We recommend that this is left as default)  
-
-After creation - there will now be a cluster of XTDB nodes running on ECS with the desired user configuration. These will be accessible via the `LoadBalancerUrl` from `xtdb-alb`.
-
-== Accessing the node
-
-With the stacks set up in AWS, you should now be able to make calls to the nodes over HTTP using the `LoadBalancerUrl` from the Application Load Balancer. You can call to `GET` the status of one of the nodes:
+See link:https://docs.aws.amazon.com/signin/latest/userguide/command-line-sign-in.html[**AWS CLI Sign-In Instructions**^] for more information on how to authenticate the AWS CLI - for this guide, we will use `aws sso` and profiles.
 
 ```bash
-curl $LoadBalancerUrl/status
+# Setup SSO profile
+aws configure sso
+# Authenticate with AWS SSO
+aws sso login --profile <profile_name>
 ```
 
-NOTE: As our nodes are behind an application load balancer, be aware that messages sent over HTTP will be spread across the nodes, so you may see some differing values coming back from the status as each node in the cluster processes new transactions.
+This allows you to perform necessary operations on AWS via Terraform using the User Principal on the AWS CLI.
 
-Should the above be successful, you should be ready to go with an XTDB cluster!
+[#terraform]
+== Getting started with Terraform
+
+The following assumes that you are authenticated on the AWS CLI, have Terraform installed on your machine, and are located a directory that you wish to use as the root of the Terraform configuration.
+
+First, make the following `terraform init` call:
+```
+terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
+```  
+
+This will download the Terraform files from the XTDB repository, and initialize the working directory.
+
+NOTE: For the sake of this guide, we store Terraform state locally. 
+However, to persist the state onto AWS, you will need to configure a remote backend using AWS S3. 
+This allows you to share the state file across teams, maintain versioning, and ensure consistency during deployments. 
+For more info, see the link:https://developer.hashicorp.com/terraform/language/backend/s3[**Terraform S3 backend**^] documentation.
+
+== What is being deployed on AWS?
+
+The sample Terraform directory sets up a few key components of the infrastructure required by XTDB.
+If using the default configuration, the following resources will be created:
+
+* Amazon S3 Storage Bucket for remote storage.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest[**terraform-aws-modules/s3-bucket**^] Terraform module.
+** Enables object ownership control and applies necessary permissions for XTDB.
+* IAM Policy for granting access to the S3 storage bucket.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-policy[**terraform-aws-modules/iam-policy**^] Terraform module.
+** Grants permissions for XTDB to read, write, and manage objects within the specified S3 bucket.
+* Virtual Private Cloud (VPC) for the XTDB EKS cluster.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest[**terraform-aws-modules/vpc**^] Terraform module.
+** Enables DNS resolution, assigns public subnets, and configures networking for the cluster.
+* Amazon Elastic Kubernetes Service (EKS) Cluster for running XTDB resources.
+** Configured with associated resources using the link:https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest[**terraform-aws-modules/eks**^] Terraform module.
+** Provisions a managed node group dedicated to XTDB workloads.
+
+This infrastructure provides a solid foundation for deploying XTDB on AWS with Kubernetes.
+Resource sizes, IAM permissions, and networking configurations can be customized to fit your specific requirements and cost constraints.
+
+NOTE: Later within this guide we shall create an IAM role using the command line that can be assumed by a Kubernetes Service Account on the EKS cluster to access the S3 bucket. Assuming that you setup similar resources on Kubernetes, you may want to manage these using Terraform as well.
+
+== Deploying the AWS Infrastructure
+
+Before creating the Terraform resources, review and update the `terraform.tfvars` file to ensure the parameters are correctly set for your environment:
+
+* You are **required** to set a unique and valid `s3_bucket_name` for your environment.
+* You may also wish to change resource tiers, the location for the resources to be deployed on, or the VM sizes used by the EKS cluster.
+
+NOTE: In this guide, we use AWS Named Profiles to authenticate with AWS, and need to pass the profile to use our Terraform commands. Though we do this via the CLI, you can also add it directly to the terraform `provider` config or authenticate using other methods - see the link:https://registry.terraform.io/providers/hashicorp/aws/latest/docs#authentication-and-configuration[**AWS Provider Documentation**^] for more information. 
+
+To get a full list of the resources that will be deployed by the templates, run:
+```bash
+AWS_PROFILE=<profile_name> terraform plan 
+```
+
+Finally, to create the resources, run:
+```bash
+AWS_PROFILE=<profile_name> terraform apply
+```
+
+This will create the necessary infrastructure on the AWS account.
+
+[#terraform-outputs]
+=== Fetching the Terraform Outputs
+
+The Terraform templates will generate several outputs required for setting up the XTDB nodes on the EKS cluster.
+
+To retrieve these outputs, execute the following command:
+```bash
+terraform output
+```
+
+This will return the following outputs:
+
+* `aws_region` - The AWS region in which the resources were created.
+* `eks_cluster_name` - The name of the EKS cluster created for the XTDB deployment.
+* `s3_bucket_name` - The name of the S3 bucket created for the XTDB cluster.
+* `s3_access_policy_arn` - The ARN of the S3 bucket created for the XTDB cluster.
+* `oidc_provider` - OpenID Connect identity provider for the EKS cluster.
+* `oidc_provider_arn` - The ARN of the OpenID Connect identity provider for the EKS cluster.
+
+== Deploying on Kubernetes
+
+With the infrastructure created on AWS, we can now deploy the XTDB nodes and a simple Kafka instance on the EKS cluster.
+
+Prior to deploying the Kubernetes resources, ensure that the `kubectl` CLI is installed and configured to interact with the EKS cluster. Run the following command:
+
+```bash
+aws eks --profile <profile_name> --region <region> update-kubeconfig --name <eks_cluster_name>
+```
+
+Now that `kubectl` is authenticated with the EKS cluster, you can set up the namespace for the XTDB deployment:
+
+```bash
+kubectl create namespace xtdb-deployment
+```
+
+The EKS cluster is now ready for deployment,
+
+'''
+
+=== Deploying an example Kafka 
+
+To deploy a basic set of Kafka resources within GKE, you can make use of the `bitnami/kafka` Helm chart. Run the following command:
+
+```bash
+helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
+  --namespace xtdb-deployment \
+  --set listeners.client.protocol=PLAINTEXT \
+  --set listeners.controller.protocol=PLAINTEXT \
+  --set controller.resourcesPreset=medium \
+  --set global.defaultStorageClass=gp2 \
+  --set controller.nodeSelector.node_pool=xtdbpool
+```
+
+This command will create:
+
+* A simple, **unauthenticated** Kafka deployment on the GKE cluster, which XTDB will use as its message log, along with its dependent infrastructure and persistent storage.
+** Using gp2 backed storage for the Persistent Volume Claims.
+* A Kubernetes service to expose the Kafka instance to the XTDB cluster.
+
+==== Considerations of the Kafka Deployment
+
+The Kafka instance set up above is for **demonstration purposes** and is **not recommended for production use**. 
+This example lacks authentication for the Kafka cluster and allows XTDB to manage Kafka topic creation and configuration itself.
+
+For production environments, consider the following:
+
+* Use a more robust Kafka deployment.
+* Pre-create the required Kafka topics.
+* Configure XTDB appropriately to interact with the production Kafka setup.
+
+Additional resources:
+
+* For further configuration options for the Helm chart, refer to the link:https://artifacthub.io/packages/helm/bitnami/kafka[**Bitnami Kafka Chart Documentation**^].
+* For detailed configuration guidance when using Kafka with XTDB, see the link:https://docs.xtdb.com/ops/config/log/kafka.html#_setup[**XTDB Kafka Setup Documentation**^].
+
+=== Verifying the Kafka Deployment
+
+After deployment, verify that the Kafka instance is running properly by checking its status and logs.
+
+To check the status of the Kafka deployment, run the following command:
+```bash
+kubectl get pods --namespace xtdb-deployment
+```
+
+To view the logs of the Kafka deployment, use the command:
+```bash
+kubectl logs -f statefulset/kafka-controller --namespace xtdb-deployment
+```
+
+By verifying the status and reviewing the logs, you can ensure the Kafka instance is correctly deployed and ready for use by XTDB.
+
+'''
+
+=== Creating an IAM Role for the XTDB nodes 
+
+To allow the XTDB nodes to access the S3 bucket created earlier, a Kubernetes Service Account (KSA) must be setup and linked with an IAM role that has the necessary permissions, using link:https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html[**IAM Roles for Service Accounts (IRSA)**^].
+
+To set up the Kubernetes Service Account, run the following command:
+
+```bash
+kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
+```
+
+Fetch the S3 bucket policy ARN (`s3_access_policy_arn`) and the OpenID Connect identity provider of the EKS cluster (`oidc_provider`) along with the ARN for the provider (`oidc_provider_arn`) from the Terraform outputs.
+
+Create a file `eks_policy_document.json` for the trust policy, replacing values as appropriate:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "<oidc_provider_arn>"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "<oidc_provider>:aud": "sts.amazonaws.com",
+          "<oidc_provider>:sub": "system:serviceaccount:xtdb-deployment:xtdb-service-account"
+        }
+      }
+    }
+  ]
+}
+```
+
+Create the IAM role and attach the trust policy:
+
+```bash
+aws iam --profile <profile_name> create-role --role-name xtdb-eks-role --assume-role-policy-document file://eks_policy_document.json --description "XTDB EKS Role"
+```
+
+Now attach the S3 bucket role:
+
+```bash
+aws iam --profile <profile_name> attach-role-policy --role-name xtdb-eks-role --policy-arn=<s3_access_policy_arn>
+```
+
+Fetch the ARN of the IAM role:
+
+```bash
+xtdb_eks_role_arn=$(aws iam --profile <profile_name> get-role --role-name xtdb-eks-role --query Role.Arn --output text)
+```
+
+Finally, annotate the Kubernetes Service Account with the IAM role:
+
+```bash
+kubectl annotate serviceaccount xtdb-service-account --namespace xtdb-deployment eks.amazonaws.com/role-arn=$xtdb_eks_role_arn
+```
+
+With the XTDB service account set up, we can now deploy the XTDB cluster to the EKS cluster.
+
+'''
+
+=== Deploying the XTDB cluster
+
+In order to deploy the XTDB cluster and it's constituent parts into the AKS cluster, we provide an `xtdb-aws` Helm chart/directory.
+
+This can be found on the link:https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-aws[**XTDB Github Container Registry**^], and can be used directly with `helm` commands.
+
+With the values from the link:#terraform-outputs[Terraform outputs], you can now deploy the XTDB cluster. 
+Run the following command, substituting the values as appropriate: 
+
+```bash
+helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \
+  --set xtdbConfig.s3Bucket=<s3_bucket> 
+```
+
+The following are created by the templates:
+
+* A `ConfigMap` containing the XTDB YAML configuration.
+* A `StatefulSet` containing the XTDB nodes.
+* A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
+
+To check the status of the XTDB statefulset, run:
+```bash
+kubectl get statefulset --namespace xtdb-deployment
+```
+
+To view the logs of each individual StatefulSet member, run:
+```bash
+kubectl logs -f xtdb-statefulset-n --namespace xtdb-deployment
+```
+
+==== Customizing the XTDB Deployment
+
+The above deployment uses the `xtdb-aws` chart defaults, individually setting the terraform outputs as `xtdbConfig` settings using the command line. 
+
+For more information on the available configuration options and fetching the charts locally for customization, see the link:/ops/aws#helm[`xtdb-aws` Helm documentation]
+
+'''
+
+=== Accessing the XTDB Cluster
+
+NOTE: As it will take some time for the XTDB nodes to be marked as ready (as they need to pass their initial startup checks), and AWS will need to provision a Load Balancer for the service, it may take a few minutes for the XTDB cluster to be accessible.
+
+Once the XTDB cluster is up and running, you can access it via the LoadBalancer service that was created.
+
+To get the external IP of the LoadBalancer service, run:
+```bash
+kubectl get svc xtdb-service --namespace xtdb-deployment
+```
+
+This will return the external IP of the LoadBalancer service. 
+You can use this IP and access the XTDB cluster via:
+
+* Postgres Wire Server (on port `5432`)
+* Healthz Server (on port `8080`)
+* HTTP Server (on port `3000`). 
+
+To check the status of the XTDB cluster using the HTTP server, run:
+
+```bash
+curl http://$ExternalIP:8080/healthz/alive
+
+# alternatively `/healthz/started`, `/healthz/ready`
+```
+
+If the above command succeeds, you now have a load-balanced XTDB cluster accessible over the internet.

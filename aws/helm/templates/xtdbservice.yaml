@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: xtdb-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: xtdb-statefulset
+  annotations:
+    {{- with .Values.xtdbService.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.xtdbService.type }}
+  
+  ports:
+  - port: {{ .Values.xtdbService.server.servicePort }}
+    targetPort: {{ .Values.xtdbService.server.targetPort }}
+    name: server
+  - port: {{ .Values.xtdbService.httpServer.servicePort }}
+    targetPort: {{ .Values.xtdbService.httpServer.targetPort }}
+    name: http
+  - port: {{ .Values.xtdbService.healthzServer.servicePort }}
+    targetPort: {{ .Values.xtdbService.healthzServer.targetPort }}
+    name: healthz
+  selector:
+    app: xtdb-statefulset
