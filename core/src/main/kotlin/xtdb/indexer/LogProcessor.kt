@@ -108,7 +108,8 @@ class LogProcessor(
                     is Message.Tx -> {
                         if (skipTxs.isNotEmpty() && skipTxs.contains(offset)) {
                             LOGGER.warn("Skipping transaction offset $offset - within XTDB_SKIP_TXS")
-                            null
+                            // use abort flow in indexTx
+                            indexer.indexTx(offset, record.logTimestamp, null)
                         } else {
                             msg.payload.asChannel.use { txOpsCh ->
                                 ArrowStreamReader(txOpsCh, allocator).use { reader ->
