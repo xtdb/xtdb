@@ -961,6 +961,48 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs"))))))))))
 
+
+(t/deftest test-skip-txes-latest-submitted-tx-id
+  (let [!skiptxid (atom nil)]
+    (util/with-tmp-dirs #{path}
+      (t/testing "node with no txes skipped:"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]})]
+          (t/testing "Send two transactions"
+            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+            (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
+              (reset! !skiptxid tx-id)))
+
+          (t/is (= @!skiptxid (:latest-submitted-tx-id (xt/status node))))
+          (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node)))))))
+
+      (t/testing "node with txs to skip"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]
+                                          :indexer {:skip-txs [@!skiptxid]}
+                                          :compactor {:threads 0}})]
+          (t/testing "Can query one back out - skipped one"
+            (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
+          
+          (t/testing "Latest submitted tx id should be the one that was skipped" 
+            (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node))))))
+
+          ;; Call finish-block! to write files
+          (tu/finish-block! node)))
+
+      (t/testing "node can remove 'txs to skip' after block finished"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]
+                                          :compactor {:threads 0}})]
+          
+          (t/testing "Latest submitted tx id should still be the one that was skipped" 
+            (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node))))))
+          
+          (t/testing "Can send a new transaction after skipping one"
+            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
+            (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
+                     (set (xt/q node "SELECT * from xt_docs"))))))))))
+
 (t/deftest null-to-duv-promotion-halts-ingestion-4153
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: 1.5}"])
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, a: 2, b: 1}"])
