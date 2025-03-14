@@ -686,7 +686,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= [{:committed? false
                :error #xt/runtime-err [:xtdb.indexer/missing-xt-id-column "Runtime error: 'xtdb.indexer/missing-xt-id-column'"
-                                          {:column-names ["foo"]}]}]
+                                       {:column-names ["foo"]}]}]
              (xt/q tu/*node* '(from :xt/txs [{:xt/id 1, :committed committed?} error])))))
 
   (t/testing "insert-into with failing query"

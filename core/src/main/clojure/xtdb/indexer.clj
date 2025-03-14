@@ -81,6 +81,8 @@
 (defmacro with-crash-log [indexer msg data state & body]
   `(try
      ~@body
+     (catch xtdb.RuntimeException e# (throw e#))
+     (catch xtdb.IllegalArgumentException e# (throw e#))
      (catch InterruptedException e# (throw e#))
      (catch ClosedByInterruptException e# (throw e#))
      (catch Exception e#
@@ -373,37 +375,43 @@
               valid-from-rdr (.readerForName in-rel "_valid_from")
               valid-to-rdr (.readerForName in-rel "_valid_to")
 
-              live-table-tx (.liveTable live-idx-tx table)
-              live-idx-table-copier (-> (.getDocWriter live-table-tx)
-                                        (.rowCopier content-rel))]
+              live-table-tx (.liveTable live-idx-tx table)]
 
-          (when-not id-col
-            (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
-                                    {:column-names (vec (for [^IVectorReader col in-rel] (.getName col)))})))
+          (with-crash-log indexer "error upserting rows"
+              {:table-name table, :tx-key tx-key}
+              {:live-table-tx live-table-tx, :query-rel in-rel}
+            (let [live-idx-table-copier (-> (.getDocWriter live-table-tx)
+                                            (.rowCopier content-rel))]
+              (when-not id-col
+                (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
+                                        {:column-names (vec (for [^IVectorReader col in-rel] (.getName col)))})))
 
-          (dotimes [idx row-count]
-            (with-crash-log indexer "error upserting rows"
-                {:table-name table, :tx-key tx-key, :row-idx idx}
-                {:live-table-tx live-table-tx, :query-rel in-rel}
+              (dotimes [idx row-count]
+                (try
+                  (let [eid (.getObject id-col idx)
+                        valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))
+                                     (.getLong valid-from-rdr idx)
+                                     current-time-µs)
+                        valid-to (if (and valid-to-rdr (not (.isNull valid-to-rdr idx)))
+                                   (.getLong valid-to-rdr idx)
+                                   Long/MAX_VALUE)]
+                    (when (> valid-from valid-to)
+                      (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                              {:valid-from (time/micros->instant valid-from)
+                                               :valid-to (time/micros->instant valid-to)})))
 
-              (let [eid (.getObject id-col idx)
-                    valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))
-                                 (.getLong valid-from-rdr idx)
-                                 current-time-µs)
-                    valid-to (if (and valid-to-rdr (not (.isNull valid-to-rdr idx)))
-                               (.getLong valid-to-rdr idx)
-                               Long/MAX_VALUE)]
-                (when (> valid-from valid-to)
-                  (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                          {:valid-from (time/micros->instant valid-from)
-                                           :valid-to (time/micros->instant valid-to)})))
+                    ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
+                    (when (< valid-from valid-to)
+                      (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))
 
-                ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
-                (when (< valid-from valid-to)
-                  (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))
+                  (catch xtdb.RuntimeException e (throw e))
+                  (catch xtdb.IllegalArgumentException e (throw e))
+                  (catch InterruptedException e (throw e))
+                  (catch ClosedByInterruptException e (throw e))
+                  (catch Throwable t
+                    (throw (ex-info "error upserting row" {:table-name table, :tx-key tx-key, :row-idx idx} t))))))))))))
 
-(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx
-                                                           {:keys [indexer tx-key]}]
+(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx, {:keys [indexer tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (str table)
