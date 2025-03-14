@@ -83,17 +83,18 @@ class LogProcessor(
                     .register(meterRegistry)
             }
 
-    private val flusher = Flusher(flushTimeout, liveIndex)
-
-    private val subscription = log.subscribe(this)
-
     override fun close() {
         subscription.close()
         allocator.close()
     }
 
-    override val latestCompletedOffset: LogOffset
-        get() = liveIndex.latestCompletedTx?.txId ?: -1
+    override var latestCompletedOffset: LogOffset =
+        liveIndex.latestCompletedTx?.txId ?: -1
+        private set
+
+    private val flusher = Flusher(flushTimeout, liveIndex)
+
+    private val subscription = log.subscribe(this)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
@@ -115,7 +116,7 @@ class LogProcessor(
                                 ArrowStreamReader(txOpsCh, allocator).use { reader ->
                                     reader.vectorSchemaRoot.use { root ->
                                         reader.loadNextBatch()
-    
+
                                         indexer.indexTx(offset, record.logTimestamp, root)
                                     }
                                 }
@@ -133,6 +134,7 @@ class LogProcessor(
                         null
                     }
                 }
+                latestCompletedOffset = offset
                 watchers.notify(offset, res)
             } catch (e: InterruptedException) {
                 watchers.notify(offset, e)
@@ -144,12 +146,14 @@ class LogProcessor(
             } catch (e: Throwable) {
                 watchers.notify(offset, e)
                 LOG.error(e, "Ingestion stopped: error processing log record at offset $offset.")
-                LOG.error("""
+                LOG.error(
+                    """
                     XTDB transaction processing has encountered an unrecoverable error and has been stopped to prevent corruption of your data.
                     This node has also been marked unhealthy, so if it is running within a container orchestration system (e.g. Kubernetes) it should be restarted shortly.
                     
                     Please see https://docs.xtdb.com/ops/troubleshooting#ingestion-stopped for more information and next steps.
-                """.trimIndent())
+                """.trimIndent()
+                )
                 throw CancellationException(e)
             }
         }
