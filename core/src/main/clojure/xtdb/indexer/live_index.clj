@@ -400,7 +400,7 @@
                      latest-completed-tx latest-completed-tx
                      tables
 
-                     (Watermark. nil (open-live-idx-wm tables) (->schema nil metadata-mgr))
+                     (Watermark. latest-completed-tx (open-live-idx-wm tables) (->schema nil metadata-mgr))
                      (StampedLock.)
                      (RefCounter.)
 

@@ -1070,3 +1070,30 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                          JOIN bar ON bar.foo = foo._id
                          SELECT bar._id AS _id,
                          WHERE _id IN ('bar1')")))))
+
+(t/deftest test-finish-block-bug
+  (util/with-tmp-dirs #{path}
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
+                                      :storage [:local {:path (.resolve path "objects")}]
+                                      :compactor {:threads 0}})]
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+      (tu/finish-block! node)
+
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node "SELECT * FROM docs"))))
+
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
+                                      :storage [:local {:path (.resolve path "objects")}]
+                                      :compactor {:threads 0}})]
+
+      ;; FAILED - returned {:xt/id :foo} three times
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node "SELECT * FROM docs")))
+
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+
+      ;; SUCCEEDED - returned {:xt/id :foo} once
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node "SELECT * FROM docs"))))))
