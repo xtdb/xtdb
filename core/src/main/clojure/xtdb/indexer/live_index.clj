@@ -250,7 +250,7 @@
                      latest-completed-tx latest-completed-tx
                      tables
 
-                     (Watermark. nil (open-live-idx-wm tables) (->schema nil table-cat))
+                     (Watermark. latest-completed-tx (open-live-idx-wm tables) (->schema nil table-cat))
                      (StampedLock.)
                      (RefCounter.)
 

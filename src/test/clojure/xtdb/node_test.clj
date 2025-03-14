@@ -1009,3 +1009,30 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             {:xt/id 1, :a 1, :xt/valid-from (time/->zdt #inst "2025-01-01")}
             {:xt/id 2, :xt/valid-from (time/->zdt #inst "2000-01-01"), :xt/valid-to (time/->zdt #inst "2000-01-02")}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs2 FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))
+
+(t/deftest test-finish-block-bug
+  (util/with-tmp-dirs #{path}
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
+                                      :storage [:local {:path (.resolve path "objects")}]
+                                      :compactor {:threads 0}})]
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+      (tu/finish-block! node)
+
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node "SELECT * FROM docs"))))
+
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
+                                      :storage [:local {:path (.resolve path "objects")}]
+                                      :compactor {:threads 0}})]
+
+      ;; FAILED - returned {:xt/id :foo} three times
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node "SELECT * FROM docs")))
+
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+
+      ;; SUCCEEDED - returned {:xt/id :foo} once
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node "SELECT * FROM docs"))))))
