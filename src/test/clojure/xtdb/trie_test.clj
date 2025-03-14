@@ -587,9 +587,9 @@
   "Creates a local storage buffer pool from the given directory."
   ^xtdb.BufferPool [^BufferAllocator allocator, ^Path dir]
   (let [bp-path (util/tmp-dir "tmp-buffer-pool")
-        storage-root (.resolve bp-path Storage/storageRoot)]
+        storage-root (.resolve bp-path Storage/STORAGE_ROOT)]
     (util/copy-dir dir storage-root)
-    (LocalBufferPool. (Storage/localStorage bp-path) Storage/storageRoot allocator (SimpleMeterRegistry.))))
+    (LocalBufferPool. (Storage/localStorage bp-path) Storage/VERSION allocator (SimpleMeterRegistry.))))
 
 (deftest test-trie-cursor-with-multiple-recency-nodes-from-same-file-3298
   (let [eid #uuid "00000000-0000-0000-0000-000000000000"]

@@ -217,7 +217,7 @@
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-                             (.resolve node-dir (str "objects/" Storage/version "/tables/")))
+                             (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
 
               (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
                        (.getColumnNames page-metadata))))))
@@ -227,7 +227,7 @@
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
 
-                             (.resolve node-dir (str "objects/" Storage/version "/tables/")))
+                             (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
 
               (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
                        (.getColumnNames page-metadata))))))))))
@@ -249,7 +249,7 @@
             meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
-                         (.resolve node-dir (str "objects/" Storage/version "/tables/"))
+                         (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/"))
                          #"l01.*")
 
           (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "duration"}

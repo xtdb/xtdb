@@ -21,14 +21,18 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
 import java.nio.file.Path
 
+typealias StorageVersion = Int
+
 object Storage {
 
     // bump this if the storage format changes in a backwards-incompatible way
-    @JvmField
-    val version = "v${6L.asLexHex}"
+    const val VERSION: StorageVersion = 6
+
+    @JvmStatic
+    fun storageRoot(version: StorageVersion): Path = Path.of("v${version.asLexHex}")
 
     @JvmField
-    val storageRoot: Path = Path.of(version)
+    val STORAGE_ROOT: Path = storageRoot(VERSION)
 
     /**
      * Represents a factory interface for creating storage instances.
@@ -36,10 +40,11 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
-        fun setStorageRoot(path: Path): Factory =
-            throw UnsupportedOperationException("Storage root cannot be set on ${this.javaClass}")
-
-        fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry = SimpleMeterRegistry()): BufferPool
+        fun open(
+            allocator: BufferAllocator,
+            meterRegistry: MeterRegistry = SimpleMeterRegistry(),
+            storageVersion: StorageVersion = VERSION
+        ): BufferPool
     }
 
     internal fun arrowFooterCache(maxEntries: Long = 1024): Cache<Path, ArrowFooter> =
@@ -52,7 +57,7 @@ object Storage {
     @Serializable
     @SerialName("!InMemory")
     data object InMemoryStorageFactory : Factory {
-        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
+        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry, storageVersion: StorageVersion) =
             MemoryBufferPool(allocator, meterRegistry)
     }
 
@@ -79,7 +84,6 @@ object Storage {
     @SerialName("!Local")
     data class LocalStorageFactory(
         val path: Path,
-        var storageRoot: Path = Storage.storageRoot,
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long? = null,
     ) : Factory {
@@ -87,8 +91,8 @@ object Storage {
         fun maxCacheEntries(maxCacheEntries: Long) = apply { this.maxCacheEntries = maxCacheEntries }
         fun maxCacheBytes(maxCacheBytes: Long) = apply { this.maxCacheBytes = maxCacheBytes }
 
-        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
-            LocalBufferPool(this, storageRoot, allocator, meterRegistry)
+        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry, storageVersion: StorageVersion) =
+            LocalBufferPool(this, storageVersion, allocator, meterRegistry)
     }
 
     @JvmStatic
@@ -130,7 +134,6 @@ object Storage {
     @SerialName("!Remote")
     data class RemoteStorageFactory(
         val objectStore: ObjectStore.Factory,
-        var storageRoot: Path = Storage.storageRoot,
         val localDiskCache: Path,
         var maxCacheEntries: Long = 1024,
         var maxCacheBytes: Long? = null,
@@ -145,8 +148,8 @@ object Storage {
 
         fun maxDiskCacheBytes(maxDiskCacheBytes: Long) = apply { this.maxDiskCacheBytes = maxDiskCacheBytes }
 
-        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry) =
-            objectStore.openObjectStore(storageRoot).closeOnCatch { objectStore ->
+        override fun open(allocator: BufferAllocator, meterRegistry: MeterRegistry, storageVersion: StorageVersion) =
+            objectStore.openObjectStore(storageRoot(storageVersion)).closeOnCatch { objectStore ->
                 RemoteBufferPool(this, allocator, objectStore, meterRegistry)
             }
     }

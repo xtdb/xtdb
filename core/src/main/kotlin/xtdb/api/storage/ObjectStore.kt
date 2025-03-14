@@ -1,5 +1,6 @@
 package xtdb.api.storage
 
+import xtdb.api.storage.Storage.STORAGE_ROOT
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
@@ -14,7 +15,7 @@ interface ObjectStore : AutoCloseable {
     }
 
     interface Factory {
-        fun openObjectStore(storageRoot: Path = Storage.storageRoot): ObjectStore
+        fun openObjectStore(storageRoot: Path = STORAGE_ROOT): ObjectStore
     }
 
     data class StoredObject(val key: Path, val size: Long)

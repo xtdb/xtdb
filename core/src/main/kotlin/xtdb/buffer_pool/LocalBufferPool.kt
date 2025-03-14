@@ -10,9 +10,10 @@ import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore.StoredObject
-import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
+import xtdb.api.storage.Storage.storageRoot
+import xtdb.api.storage.StorageVersion
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
@@ -32,7 +33,7 @@ import kotlin.io.path.*
 
 class LocalBufferPool(
     factory: LocalStorageFactory,
-    storageRoot: Path,
+    storageVersion: StorageVersion,
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry? = null
 ) : BufferPool, IEvictBufferTest, Closeable {
@@ -43,7 +44,7 @@ class LocalBufferPool(
         MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
             .apply { meterRegistry?.registerMemoryCache("memory-cache") }
 
-    private val diskStore = factory.path.resolve(storageRoot).also { it.createDirectories() }
+    private val diskStore = factory.path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
 
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")

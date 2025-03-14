@@ -223,10 +223,10 @@
                             ["l03-r20200101-p1-b03"] ["l03-r20200101-p1-b07"] ["l03-r20200101-p1-b0b"]
 
                             ;; N.B. different recency in the first one
-                            ["l03-r20200102-p2-b03"] ["l03-r20200101-p2-b07"] ["l03-r20200101-p2-b0b"] ["l03-r20200101-p2-b0f"]
-                            )))))))
+                            ["l03-r20200102-p2-b03"] ["l03-r20200101-p2-b07"] ["l03-r20200101-p2-b0b"] ["l03-r20200101-p2-b0f"])))))))
 
-(defn tables-key ^String [table] (str "objects/" Storage/version "/tables/" table))
+
+(defn tables-key ^String [table] (str "objects/" Storage/STORAGE_ROOT "/tables/" table))
 
 (t/deftest test-l1-compaction
   (let [node-dir (util/->path "target/compactor/test-l1-compaction")]

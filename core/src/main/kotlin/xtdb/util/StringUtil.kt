@@ -156,6 +156,8 @@ object StringUtil {
             }
         }
 
+    val Int.asLexHex: String get() = toLong().asLexHex
+
     val Long.asLexHex: String
         get() {
             val body = toUnsignedString(this, 16)
