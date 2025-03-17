@@ -59,7 +59,7 @@ kaml={ group="com.charleskorn.kaml", name="kaml", version="0.56.0" }
 
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
 
-jsonista={ group="metosin", name="jsonista", version="0.3.3" }
+jsonista={ group="metosin", name="jsonista", version="0.3.13" }
 muuntaja={ group="metosin", name="muuntaja", version.ref="muuntaja" }
 reitit-core={ group="metosin", name="reitit-core", version.ref="reitit" }
 reitit-interceptors={ group="metosin", name="reitit-interceptors", version.ref="reitit" }
