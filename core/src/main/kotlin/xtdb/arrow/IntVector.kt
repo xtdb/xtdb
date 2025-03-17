@@ -7,11 +7,8 @@ import xtdb.util.Hasher
 
 internal val I32_TYPE = MinorType.INT.type
 
-class IntVector(
-    allocator: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(allocator, nullable, I32_TYPE, Int.SIZE_BYTES) {
+class IntVector(allocator: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(allocator, name, nullable, I32_TYPE, Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)

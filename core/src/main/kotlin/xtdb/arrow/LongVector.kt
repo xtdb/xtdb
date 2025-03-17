@@ -5,11 +5,8 @@ import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class LongVector(
-    allocator: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(allocator, nullable, MinorType.BIGINT.type, Long.SIZE_BYTES) {
+class LongVector(allocator: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(allocator, name, nullable, MinorType.BIGINT.type, Long.SIZE_BYTES) {
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

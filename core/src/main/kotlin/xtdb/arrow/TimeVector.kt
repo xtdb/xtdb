@@ -7,8 +7,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import java.time.LocalTime
 
-sealed class TimeVector(allocator: BufferAllocator, nullable: Boolean, arrowType: ArrowType, byteWidth: Int) :
-    FixedWidthVector(allocator, nullable, arrowType, byteWidth) {
+sealed class TimeVector(allocator: BufferAllocator, name: String, nullable: Boolean, arrowType: ArrowType, byteWidth: Int) :
+    FixedWidthVector(allocator, name, nullable, arrowType, byteWidth) {
 
     abstract val unit: TimeUnit
 
@@ -34,10 +34,10 @@ internal fun TimeUnit.toLocalTime(value: Long): LocalTime = when (this) {
 
 class Time32Vector(
     allocator: BufferAllocator,
-    override var name: String,
+    name: String,
     nullable: Boolean,
     override val unit: TimeUnit
-) : TimeVector(allocator, nullable, ArrowType.Time(unit, Int.SIZE_BITS), Int.SIZE_BYTES) {
+) : TimeVector(allocator, name, nullable, ArrowType.Time(unit, Int.SIZE_BITS), Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -51,10 +51,10 @@ class Time32Vector(
 
 class Time64Vector(
     allocator: BufferAllocator,
-    override var name: String,
+    name: String,
     nullable: Boolean,
     override val unit: TimeUnit
-) : TimeVector(allocator, nullable, ArrowType.Time(unit, Long.SIZE_BITS), Long.SIZE_BYTES) {
+) : TimeVector(allocator, name, nullable, ArrowType.Time(unit, Long.SIZE_BITS), Long.SIZE_BYTES) {
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

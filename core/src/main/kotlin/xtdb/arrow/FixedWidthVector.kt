@@ -21,6 +21,7 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
 
 sealed class FixedWidthVector(
     allocator: BufferAllocator,
+    final override var name: String,
     nullable: Boolean,
     arrowType: ArrowType,
     val byteWidth: Int

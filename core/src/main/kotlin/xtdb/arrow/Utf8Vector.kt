@@ -7,11 +7,8 @@ import java.nio.ByteBuffer
 
 internal val UTF8_TYPE = MinorType.VARCHAR.type
 
-class Utf8Vector(
-    al: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : VariableWidthVector(al, nullable, UTF8_TYPE) {
+class Utf8Vector(al: BufferAllocator, name: String, nullable: Boolean) :
+    VariableWidthVector(al, name, nullable, UTF8_TYPE) {
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): String = getByteArray(idx).toString(Charsets.UTF_8)
 

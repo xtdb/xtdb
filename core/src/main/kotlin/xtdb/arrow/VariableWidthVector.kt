@@ -13,6 +13,7 @@ import java.nio.ByteBuffer
 
 abstract class VariableWidthVector(
     allocator: BufferAllocator,
+    final override var name: String,
     nullable: Boolean,
     arrowType: ArrowType
 ) : Vector() {

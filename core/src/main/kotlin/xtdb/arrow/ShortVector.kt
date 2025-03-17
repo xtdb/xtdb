@@ -5,11 +5,8 @@ import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class ShortVector(
-    allocator: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(allocator, nullable, MinorType.SMALLINT.type, Short.SIZE_BYTES) {
+class ShortVector(allocator: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(allocator, name, nullable, MinorType.SMALLINT.type, Short.SIZE_BYTES) {
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(value: Short) = writeShort0(value)

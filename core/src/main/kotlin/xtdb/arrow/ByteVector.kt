@@ -5,8 +5,8 @@ import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class ByteVector(allocator: BufferAllocator, override var name: String, nullable: Boolean) :
-    FixedWidthVector(allocator, nullable, MinorType.TINYINT.type, Byte.SIZE_BYTES) {
+class ByteVector(allocator: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(allocator, name, nullable, MinorType.TINYINT.type, Byte.SIZE_BYTES) {
 
     override fun getByte(idx: Int) = getByte0(idx)
     override fun writeByte(value: Byte) = writeByte0(value)

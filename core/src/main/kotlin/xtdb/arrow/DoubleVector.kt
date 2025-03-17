@@ -5,11 +5,8 @@ import org.apache.arrow.vector.types.Types.MinorType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class DoubleVector(
-    allocator: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(allocator, nullable, MinorType.FLOAT8.type, Double.SIZE_BYTES) {
+class DoubleVector(allocator: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(allocator, name, nullable, MinorType.FLOAT8.type, Double.SIZE_BYTES) {
 
     override fun getDouble(idx: Int) = getDouble0(idx)
     override fun writeDouble(value: Double) = writeDouble0(value)

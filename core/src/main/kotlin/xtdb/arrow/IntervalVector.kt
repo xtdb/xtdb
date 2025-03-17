@@ -11,11 +11,8 @@ import java.nio.ByteOrder
 import java.time.Duration
 import java.time.Period
 
-class IntervalYearMonthVector(
-    al: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(al, nullable, MinorType.INTERVALYEAR.type, Int.SIZE_BYTES) {
+class IntervalYearMonthVector(al: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(al, name, nullable, MinorType.INTERVALYEAR.type, Int.SIZE_BYTES) {
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -27,11 +24,8 @@ class IntervalYearMonthVector(
         else throw InvalidWriteObjectException(fieldType, value)
 }
 
-class IntervalDayTimeVector(
-    al: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(al, nullable, MinorType.INTERVALDAY.type, Long.SIZE_BYTES) {
+class IntervalDayTimeVector(al: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(al, name, nullable, MinorType.INTERVALDAY.type, Long.SIZE_BYTES) {
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): IntervalDayTime {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
@@ -57,11 +51,8 @@ class IntervalDayTimeVector(
         } else throw InvalidWriteObjectException(fieldType, value)
 }
 
-class IntervalMonthDayNanoVector(
-    al: BufferAllocator,
-    override var name: String,
-    nullable: Boolean
-) : FixedWidthVector(al, nullable, MinorType.INTERVALMONTHDAYNANO.type, 16) {
+class IntervalMonthDayNanoVector(al: BufferAllocator, name: String, nullable: Boolean) :
+    FixedWidthVector(al, name, nullable, MinorType.INTERVALMONTHDAYNANO.type, 16) {
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): IntervalMonthDayNano {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)

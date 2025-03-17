@@ -5,7 +5,6 @@ import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
