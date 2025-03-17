@@ -9,11 +9,16 @@ import xtdb.util.Hasher
 import java.time.Duration
 import java.time.LocalDate
 
-class DateDayVector(
-    allocator: BufferAllocator,
-    name: String,
-    nullable: Boolean,
-) : FixedWidthVector(allocator, name, nullable, ArrowType.Date(DAY), Int.SIZE_BYTES) {
+class DateDayVector private constructor(
+    override var name: String, override var nullable: Boolean,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+) : FixedWidthVector() {
+
+    constructor(al: BufferAllocator, name: String, nullable: Boolean)
+            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+
+    override val byteWidth = Int.SIZE_BYTES
+    override val type = ArrowType.Date(DAY)
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -30,11 +35,16 @@ class DateDayVector(
 
 private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
 
-class DateMilliVector(
-    allocator: BufferAllocator,
-    name: String,
-    nullable: Boolean,
-) : FixedWidthVector(allocator, name, nullable, ArrowType.Date(MILLISECOND), Long.SIZE_BYTES) {
+class DateMilliVector internal constructor(
+    override var name: String, override var nullable: Boolean,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+) : FixedWidthVector() {
+
+    constructor(al: BufferAllocator, name: String, nullable: Boolean)
+            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+
+    override val byteWidth = Long.SIZE_BYTES
+    override val type = ArrowType.Date(MILLISECOND)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

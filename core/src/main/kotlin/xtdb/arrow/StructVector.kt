@@ -4,7 +4,6 @@ import clojure.lang.Keyword
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.BitVectorHelper.getValidityBufferSize
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
@@ -18,23 +17,18 @@ import xtdb.toFieldType
 import xtdb.util.Hasher
 import xtdb.util.normalForm
 import java.util.*
+import kotlin.collections.LinkedHashMap
 
 internal val STRUCT_TYPE = ArrowType.Struct.INSTANCE
 
 class StructVector(
     private val allocator: BufferAllocator,
     override var name: String,
-    override var fieldType: FieldType,
-    private val childWriters: SequencedMap<String, Vector>,
+    override var nullable: Boolean,
+    private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
 ) : Vector() {
 
-    constructor(
-        allocator: BufferAllocator,
-        name: String,
-        nullable: Boolean,
-        childrenByKey: SequencedMap<String, Vector> = LinkedHashMap()
-    )
-            : this(allocator, name, FieldType(nullable, STRUCT_TYPE, null), childrenByKey)
+    override val type: ArrowType = STRUCT_TYPE
 
     override val children: Iterable<Vector> get() = childWriters.sequencedValues()
 

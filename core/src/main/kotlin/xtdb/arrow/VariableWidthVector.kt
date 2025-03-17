@@ -1,29 +1,20 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
-import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseVariableWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
-import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-abstract class VariableWidthVector(
-    allocator: BufferAllocator,
-    final override var name: String,
-    nullable: Boolean,
-    arrowType: ArrowType
-) : Vector() {
+abstract class VariableWidthVector : Vector() {
 
-    override var fieldType = FieldType(nullable, arrowType, null)
     override val children = emptyList<Vector>()
 
-    private val validityBuffer = ExtensibleBuffer(allocator)
-    private val offsetBuffer = ExtensibleBuffer(allocator)
-    private val dataBuffer = ExtensibleBuffer(allocator)
+    internal abstract val validityBuffer: ExtensibleBuffer
+    internal abstract val offsetBuffer: ExtensibleBuffer
+    internal abstract val dataBuffer: ExtensibleBuffer
 
     private var lastOffset: Int = 0
 

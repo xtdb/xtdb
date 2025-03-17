@@ -8,7 +8,9 @@ import xtdb.types.ZonedDateTimeRange
 import xtdb.vector.extensions.TsTzRangeType
 import java.time.ZonedDateTime
 
-class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector(TsTzRangeType) {
+class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector() {
+    override val type = TsTzRangeType
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         inner.elementReader().let {
             ZonedDateTimeRange(

@@ -4,12 +4,11 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.util.Hasher
 import xtdb.vector.extensions.XtExtensionVector
 import java.nio.ByteBuffer
 
-abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
+abstract class ExtensionVector : Vector() {
     protected abstract val inner: Vector
 
     override var name
@@ -18,10 +17,10 @@ abstract class ExtensionVector(private val arrowType: ArrowType) : Vector() {
             inner.name = value
         }
 
-    final override var fieldType
-        get() = inner.fieldType.copy(type = arrowType)
+    final override var nullable: Boolean
+        get() = inner.nullable
         set(value) {
-            inner.fieldType = value.copy(type = inner.fieldType.type)
+            inner.nullable = value
         }
 
     final override val children get() = inner.children

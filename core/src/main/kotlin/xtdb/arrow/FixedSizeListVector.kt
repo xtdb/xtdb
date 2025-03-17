@@ -15,12 +15,12 @@ import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeList
 class FixedSizeListVector(
     private val allocator: BufferAllocator,
     override var name: String,
-    nullable: Boolean,
+    override var nullable: Boolean,
     private val listSize: Int,
     private var elVector: Vector
 ) : Vector() {
 
-    override var fieldType: FieldType = FieldType(nullable, ArrowType.FixedSizeList(listSize), null)
+    override val type = ArrowType.FixedSizeList(listSize)
 
     override val children get() = listOf(elVector)
 

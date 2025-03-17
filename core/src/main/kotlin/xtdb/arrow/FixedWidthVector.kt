@@ -1,14 +1,11 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
-import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseFixedWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
-import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -19,19 +16,13 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
     TimeUnit.NANOSECOND -> seconds * 1_000_000_000 + nanos
 }
 
-sealed class FixedWidthVector(
-    allocator: BufferAllocator,
-    final override var name: String,
-    nullable: Boolean,
-    arrowType: ArrowType,
-    val byteWidth: Int
-) : Vector() {
+sealed class FixedWidthVector : Vector() {
 
-    final override var fieldType = FieldType(nullable, arrowType, null)
+    protected abstract val byteWidth: Int
     override val children: Iterable<Vector> = emptyList()
 
-    private val validityBuffer = ExtensibleBuffer(allocator)
-    private val dataBuffer = ExtensibleBuffer(allocator)
+    internal abstract val validityBuffer: ExtensibleBuffer
+    internal abstract val dataBuffer: ExtensibleBuffer
 
     final override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 

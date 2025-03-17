@@ -1,12 +1,22 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
-class BitVector(al: BufferAllocator, name: String, nullable: Boolean) :
-    FixedWidthVector(al, name, nullable, BIT_TYPE, 0) {
+class BitVector private constructor(
+    override var name: String, override var nullable: Boolean,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+) : FixedWidthVector() {
+
+    constructor(
+        al: BufferAllocator, name: String, nullable: Boolean
+    ) : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+
+    override val byteWidth = 0
+    override val type: ArrowType = BIT_TYPE
 
     override fun getBoolean(idx: Int) = getBoolean0(idx)
     override fun writeBoolean(value: Boolean) = writeBoolean0(value)

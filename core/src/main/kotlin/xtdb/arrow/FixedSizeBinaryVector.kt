@@ -5,8 +5,15 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
-class FixedSizeBinaryVector(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int) :
-    FixedWidthVector(al, name, nullable, ArrowType.FixedSizeBinary(byteWidth), byteWidth) {
+class FixedSizeBinaryVector private constructor(
+    override var name: String, override var nullable: Boolean, override val byteWidth: Int,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+) : FixedWidthVector() {
+
+    override val type = ArrowType.FixedSizeBinary(byteWidth)
+
+    constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
+            : this(name, nullable, byteWidth, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 

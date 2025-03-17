@@ -12,19 +12,17 @@ import xtdb.api.query.IKeyFn
 import xtdb.toFieldType
 import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
-import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
 internal val LIST_TYPE = ArrowType.List.INSTANCE
 
 class ListVector(
     private val allocator: BufferAllocator,
     override var name: String,
-    override var fieldType: FieldType,
+    override var nullable: Boolean,
     private var elVector: Vector
 ) : Vector() {
 
-    constructor(allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector)
-            : this(allocator, name, FieldType(nullable, LIST_TYPE, null), elVector)
+    override val type: ArrowType = LIST_TYPE
 
     override val children: Iterable<Vector> get() = listOf(elVector)
 

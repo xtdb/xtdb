@@ -2,11 +2,20 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
+import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class FloatVector(allocator: BufferAllocator, name: String, nullable: Boolean) :
-    FixedWidthVector(allocator, name, nullable, MinorType.FLOAT4.type, Float.SIZE_BYTES) {
+class FloatVector private constructor(
+    override var name: String, override var nullable: Boolean,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+) : FixedWidthVector() {
+
+    override val byteWidth = Float.SIZE_BYTES
+    override val type: ArrowType = MinorType.FLOAT4.type
+
+    constructor(al: BufferAllocator, name: String, nullable: Boolean)
+            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getFloat(idx: Int) = getFloat0(idx)
     override fun writeFloat(value: Float) = writeFloat0(value)

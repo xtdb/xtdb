@@ -37,16 +37,11 @@ fun FieldType.copy(
 sealed class Vector : VectorReader, VectorWriter {
 
     abstract override var name: String
-
-    final override var nullable
-        get() = fieldType.isNullable
-        set(value) {
-            fieldType = fieldType.copy(nullable = value)
-        }
-
-    abstract override var fieldType: FieldType; internal set
+    abstract override var nullable: Boolean
+    abstract val type: ArrowType
     abstract val children: Iterable<Vector>
 
+    final override val fieldType: FieldType get() = FieldType(nullable, type, null)
     final override val field: Field get() = Field(name, fieldType, children.map { it.field })
 
     override var valueCount: Int = 0; internal set

@@ -5,7 +5,9 @@ import xtdb.vector.extensions.UuidType
 import java.nio.ByteBuffer
 import java.util.*
 
-class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(UuidType) {
+class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector() {
+
+    override val type = UuidType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         ByteBuffer.wrap(inner.getObject0(idx, keyFn)).let { buf ->

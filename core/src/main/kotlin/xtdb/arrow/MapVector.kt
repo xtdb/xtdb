@@ -8,7 +8,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
+class MapVector(private val listVector: ListVector, keysSorted: Boolean) : Vector() {
 
     override var name
         get() = listVector.name
@@ -16,10 +16,12 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
             listVector.name = value
         }
 
-    override var fieldType: FieldType
-        get() = listVector.fieldType.copy(type = ArrowType.Map(keysSorted))
+    override val type = ArrowType.Map(keysSorted)
+
+    override var nullable: Boolean
+        get() = listVector.nullable
         set(value) {
-            listVector.fieldType = value.copy(type = listVector.fieldType.type)
+            listVector.nullable = value
         }
 
     override val children get() = listVector.children

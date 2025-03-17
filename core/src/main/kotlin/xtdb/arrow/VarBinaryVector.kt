@@ -2,11 +2,21 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
-class VarBinaryVector(al: BufferAllocator, name: String, nullable: Boolean) :
-    VariableWidthVector(al, name, nullable, Types.MinorType.VARBINARY.type) {
+class VarBinaryVector private constructor(
+    override var name: String, override var nullable: Boolean,
+    override val validityBuffer: ExtensibleBuffer,
+    override val offsetBuffer: ExtensibleBuffer,
+    override val dataBuffer: ExtensibleBuffer
+) : VariableWidthVector() {
+
+    constructor(al: BufferAllocator, name: String, nullable: Boolean) :
+            this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al), ExtensibleBuffer(al))
+
+    override val type: ArrowType = Types.MinorType.VARBINARY.type
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
 

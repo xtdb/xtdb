@@ -23,6 +23,12 @@ class DenseUnionVector(
     legVectors: List<Vector>
 ) : Vector() {
 
+    override var nullable: Boolean
+        get() = false
+        set(_) { error("can't set DUV nullable") }
+
+    override val type = UNION_TYPE
+
     companion object {
         internal fun promote(al: BufferAllocator, vector: Vector, target: FieldType) =
             if (vector is NullVector)
@@ -42,10 +48,6 @@ class DenseUnionVector(
     }
 
     private val legVectors = legVectors.toMutableList()
-
-    private val fieldType0 get() = FieldType(false, UNION_TYPE, null)
-
-    override var fieldType = fieldType0
 
     override val children: Iterable<Vector> get() = legVectors
 
@@ -202,7 +204,6 @@ class DenseUnionVector(
 
         val typeId = legVectors.size.toByte()
         val legVec = fromField(allocator, Field(name, fieldType, emptyList())).also { legVectors.add(it) }
-        this.fieldType = fieldType0
         return LegWriter(typeId, legVec)
     }
 
