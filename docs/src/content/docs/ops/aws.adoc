@@ -277,6 +277,11 @@ Statement:
     - !Join [ '', [ !Ref S3BucketArn, '/*'] ]
 ----
 
+[Note]
+====
+If you are using an S3 compatible object storage you might need to pass the environment variable `AWS_S3_FORCE_PATH_STYLE=true`, because alternative S3 solutions often still use the older S3 path style.
+====
+
 === Authentication
 
 XTDB uses AWS SDK for Authentication, relying on the default AWS credential provider chain.
