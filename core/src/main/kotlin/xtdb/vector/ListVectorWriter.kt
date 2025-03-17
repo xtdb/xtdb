@@ -10,7 +10,6 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.*
-import xtdb.arrow.InvalidWriteObjectException
 import xtdb.toFieldType
 
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
@@ -99,12 +98,19 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override fun promoteChildren(field: Field) {
-        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
-            throw FieldMismatch(this.field.fieldType, field.fieldType)
-        val child = field.children.single()
-        if ((child.type != elWriter.field.type || (child.isNullable && !elWriter.field.isNullable)) && elWriter.field.type !is ArrowType.Union)
-            promoteElWriter(child.fieldType)
-        if (child.children.isNotEmpty()) elWriter.promoteChildren(child)
+        when {
+            field.type == NULL_TYPE && this.field.isNullable -> return
+
+            field.type != this.field.type || field.isNullable && !this.field.isNullable ->
+                throw FieldMismatch(this.field.fieldType, field.fieldType)
+
+            else -> {
+                val child = field.children.single()
+                if ((child.type != elWriter.field.type || (child.isNullable && !elWriter.field.isNullable)) && elWriter.field.type !is ArrowType.Union)
+                    promoteElWriter(child.fieldType)
+                if (child.children.isNotEmpty()) elWriter.promoteChildren(child)
+            }
+        }
     }
 
     override fun rowCopier(src: ValueVector) = when (src) {
