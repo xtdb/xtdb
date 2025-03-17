@@ -358,8 +358,6 @@
 
   (temporal-bounds [_mpg] (.temporalBounds page-metadata (int page-idx))))
 
-(def ^:private non-constraint-bounds (TemporalBounds.))
-
 (defrecord MemoryMergePlanPage [^RelationReader live-rel trie ^MemoryHashTrie$Leaf leaf]
   MergePlanPage
   (load-page [_mpg _buffer-pool _vsr-cache]
@@ -367,7 +365,7 @@
 
   (test-metadata [_mpg] true)
 
-  (temporal-bounds [_msg] non-constraint-bounds))
+  (temporal-metadata [_msg] util/unconstraint-temporal-metadata))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts

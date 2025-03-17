@@ -22,7 +22,8 @@
            (org.apache.arrow.vector BaseFixedWidthVector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector UnionVector)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
-           xtdb.util.NormalForm))
+           xtdb.util.NormalForm
+           (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -623,3 +624,13 @@
         attributes (.getMainAttributes manifest)]
     (when attributes
       (.getValue attributes "Implementation-Version"))))
+
+(def unconstraint-temporal-metadata
+  (let [^TemporalMetadata$Builder builder (TemporalMetadata/newBuilder)]
+    (.setMinValidFrom builder Long/MIN_VALUE)
+    (.setMaxValidFrom builder Long/MAX_VALUE)
+    (.setMinValidTo builder Long/MIN_VALUE)
+    (.setMaxValidTo builder Long/MAX_VALUE)
+    (.setMinSystemFrom builder Long/MIN_VALUE)
+    (.setMaxSystemFrom builder Long/MAX_VALUE)
+    (.build builder)))

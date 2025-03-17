@@ -41,8 +41,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 286)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 415)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 289)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 421)]
                  (.listAllObjects bp (table-cat/->table-block-dir "public/foo"))))
 
         (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b01.binpb"))
