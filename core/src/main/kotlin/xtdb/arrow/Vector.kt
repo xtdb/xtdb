@@ -44,7 +44,7 @@ sealed class Vector : VectorReader, VectorWriter {
     final override val fieldType: FieldType get() = FieldType(nullable, type, null)
     final override val field: Field get() = Field(name, fieldType, children.map { it.field })
 
-    override var valueCount: Int = 0; internal set
+    abstract override var valueCount: Int; internal set
 
     internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = if (isNull(idx)) null else getObject0(idx, keyFn)
@@ -110,7 +110,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
                 override fun visit(type: Union) = when (type.mode!!) {
                     UnionMode.Sparse -> TODO("Not yet implemented")
-                    UnionMode.Dense -> DenseUnionVector(al, name, field.children.map { fromField(al, it) })
+                    UnionMode.Dense -> DenseUnionVector(al, name, field.children.map { fromField(al, it) }, 0)
                 }
 
                 override fun visit(type: ArrowType.Map): MapVector {

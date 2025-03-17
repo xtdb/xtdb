@@ -97,13 +97,15 @@ class DenseUnionVectorTest {
 
     @Test
     fun `from null into duv vector`() {
-        NullVector("v1" ).use { nullVector ->
+        NullVector("v1").use { nullVector ->
             nullVector.writeNull()
             nullVector.writeNull()
             nullVector.writeNull()
 
-            DenseUnionVector(allocator, "v2",
-                listOf(LongVector(allocator, "i64", true))).use { copy ->
+            DenseUnionVector(
+                allocator, "v2",
+                listOf(LongVector(allocator, "i64", true))
+            ).use { copy ->
                 val copier = nullVector.rowCopier(copy)
                 copier.copyRow(0)
                 copier.copyRow(1)

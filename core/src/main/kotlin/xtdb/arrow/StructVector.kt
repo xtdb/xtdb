@@ -23,9 +23,9 @@ internal val STRUCT_TYPE = ArrowType.Struct.INSTANCE
 
 class StructVector(
     private val allocator: BufferAllocator,
-    override var name: String,
-    override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
+    override var valueCount: Int = 0,
 ) : Vector() {
 
     override val type: ArrowType = STRUCT_TYPE

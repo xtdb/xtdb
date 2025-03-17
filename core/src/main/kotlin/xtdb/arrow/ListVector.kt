@@ -17,9 +17,9 @@ internal val LIST_TYPE = ArrowType.List.INSTANCE
 
 class ListVector(
     private val allocator: BufferAllocator,
-    override var name: String,
-    override var nullable: Boolean,
-    private var elVector: Vector
+    override var name: String, override var nullable: Boolean,
+    private var elVector: Vector,
+    override var valueCount: Int = 0
 ) : Vector() {
 
     override val type: ArrowType = LIST_TYPE

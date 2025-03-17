@@ -25,7 +25,8 @@ internal fun TimeUnit.toLocalTime(value: Long): LocalTime = when (this) {
 }
 
 class Time32Vector private constructor(
-    override var name: String, override var nullable: Boolean, val unit: TimeUnit,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    val unit: TimeUnit,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -33,7 +34,7 @@ class Time32Vector private constructor(
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
-            : this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -46,7 +47,8 @@ class Time32Vector private constructor(
 }
 
 class Time64Vector private constructor(
-    override var name: String, override var nullable: Boolean, private val unit: TimeUnit,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    private val unit: TimeUnit,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -54,7 +56,7 @@ class Time64Vector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
-            : this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

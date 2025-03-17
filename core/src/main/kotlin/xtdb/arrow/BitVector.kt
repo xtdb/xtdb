@@ -7,13 +7,13 @@ import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
 class BitVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    ) : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = 0
     override val type: ArrowType = BIT_TYPE

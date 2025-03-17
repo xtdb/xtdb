@@ -6,14 +6,15 @@ import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
 class FixedSizeBinaryVector private constructor(
-    override var name: String, override var nullable: Boolean, override val byteWidth: Int,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    override val byteWidth: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
     override val type = ArrowType.FixedSizeBinary(byteWidth)
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
-            : this(name, nullable, byteWidth, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, byteWidth, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 

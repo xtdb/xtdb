@@ -10,12 +10,12 @@ import java.time.Duration
 import java.time.LocalDate
 
 class DateDayVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Int.SIZE_BYTES
     override val type = ArrowType.Date(DAY)
@@ -36,12 +36,12 @@ class DateDayVector private constructor(
 private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
 
 class DateMilliVector internal constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Long.SIZE_BYTES
     override val type = ArrowType.Date(MILLISECOND)

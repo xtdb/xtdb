@@ -7,7 +7,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
 class ShortVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -15,7 +15,7 @@ class ShortVector private constructor(
     override val byteWidth = Short.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(value: Short) = writeShort0(value)

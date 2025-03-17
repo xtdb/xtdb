@@ -19,8 +19,8 @@ internal val UNION_TYPE = ArrowType.Union(Dense, null)
 
 class DenseUnionVector(
     private val allocator: BufferAllocator,
-    override var name: String,
-    legVectors: List<Vector>
+    override var name: String, legVectors: List<Vector>,
+    override var valueCount: Int = 0
 ) : Vector() {
 
     override var nullable: Boolean
@@ -35,7 +35,7 @@ class DenseUnionVector(
                 fromField(al, Field(vector.name, target, emptyList()))
                     .also { newVec -> repeat(vector.valueCount) { newVec.writeNull() } }
             else
-                DenseUnionVector(al, vector.name, listOf(vector))
+                DenseUnionVector(al, vector.name, listOf(vector), 0)
                     .apply {
                         vector.name = vector.fieldType.type.toLeg()
 

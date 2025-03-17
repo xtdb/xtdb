@@ -7,14 +7,14 @@ import xtdb.api.query.IKeyFn
 import java.nio.ByteBuffer
 
 class VarBinaryVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer,
     override val offsetBuffer: ExtensibleBuffer,
     override val dataBuffer: ExtensibleBuffer
 ) : VariableWidthVector() {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean) :
-            this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al), ExtensibleBuffer(al))
+            this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val type: ArrowType = Types.MinorType.VARBINARY.type
 

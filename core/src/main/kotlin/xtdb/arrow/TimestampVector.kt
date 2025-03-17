@@ -19,7 +19,8 @@ private fun TimeUnit.toInstant(value: Long) = when (this) {
 }
 
 class TimestampLocalVector private constructor(
-    override var name: String, override var nullable: Boolean, val unit: TimeUnit = MICROSECOND,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    val unit: TimeUnit = MICROSECOND,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -27,7 +28,7 @@ class TimestampLocalVector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit) :
-            this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
@@ -54,7 +55,8 @@ class TimestampLocalVector private constructor(
 }
 
 class TimestampTzVector private constructor(
-    override var name: String, override var nullable: Boolean, val unit: TimeUnit = MICROSECOND, val zone: ZoneId = UTC,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    val unit: TimeUnit = MICROSECOND, val zone: ZoneId = UTC,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -62,7 +64,7 @@ class TimestampTzVector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit, zone: ZoneId)
-            : this(name, nullable, unit, zone, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, unit, zone, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)

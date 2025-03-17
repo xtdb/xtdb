@@ -7,13 +7,13 @@ import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
 class ByteVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    ) : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Byte.SIZE_BYTES
     override val type: ArrowType = MinorType.TINYINT.type

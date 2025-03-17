@@ -13,7 +13,7 @@ import java.time.Duration
 import java.time.Period
 
 class IntervalYearMonthVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -21,7 +21,7 @@ class IntervalYearMonthVector private constructor(
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -34,7 +34,7 @@ class IntervalYearMonthVector private constructor(
 }
 
 class IntervalDayTimeVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -43,7 +43,7 @@ class IntervalDayTimeVector private constructor(
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    ) : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): IntervalDayTime {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
@@ -70,7 +70,7 @@ class IntervalDayTimeVector private constructor(
 }
 
 class IntervalMonthDayNanoVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -78,7 +78,7 @@ class IntervalMonthDayNanoVector private constructor(
     override val byteWidth = 16
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): IntervalMonthDayNano {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)

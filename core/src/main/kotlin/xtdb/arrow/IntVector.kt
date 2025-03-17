@@ -9,7 +9,7 @@ import xtdb.util.Hasher
 internal val I32_TYPE = MinorType.INT.type
 
 class IntVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector() {
 
@@ -17,7 +17,7 @@ class IntVector private constructor(
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)

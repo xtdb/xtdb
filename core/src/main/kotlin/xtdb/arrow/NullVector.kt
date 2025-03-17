@@ -10,7 +10,7 @@ import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 internal val NULL_TYPE = ArrowType.Null.INSTANCE
 
-class NullVector(override var name: String) : Vector() {
+class NullVector(override var name: String, override var valueCount: Int = 0) : Vector() {
     override val children = emptyList<Vector>()
 
     override var nullable: Boolean
