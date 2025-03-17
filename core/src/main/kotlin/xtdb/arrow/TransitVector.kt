@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import clojure.lang.IFn
 import com.cognitect.transit.Reader
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.types.ClojureForm
 import xtdb.util.requiringResolve
@@ -25,5 +26,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector() {
 
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
+
+    override fun openSlice(al: BufferAllocator) = TransitVector(inner.openSlice(al))
 
 }

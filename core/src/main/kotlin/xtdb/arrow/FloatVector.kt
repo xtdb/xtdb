@@ -27,4 +27,7 @@ class FloatVector private constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())
+
+    override fun openSlice(al: BufferAllocator) =
+        FloatVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

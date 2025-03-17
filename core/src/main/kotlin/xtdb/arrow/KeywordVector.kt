@@ -1,7 +1,7 @@
 package xtdb.arrow
 
 import clojure.lang.Keyword
-import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 import xtdb.vector.extensions.KeywordType
@@ -18,6 +18,8 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector() {
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher) + HASH_CODE
+
+    override fun openSlice(al: BufferAllocator) = KeywordVector(inner.openSlice(al))
 
     companion object {
         private const val HASH_CODE = 0x7a7a7a7a

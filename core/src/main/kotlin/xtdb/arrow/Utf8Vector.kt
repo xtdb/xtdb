@@ -26,4 +26,10 @@ class Utf8Vector private constructor(
         value is String -> writeBytes(ByteBuffer.wrap(value.toByteArray()))
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        Utf8Vector(
+            name, nullable, valueCount,
+            validityBuffer.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
+        )
 }

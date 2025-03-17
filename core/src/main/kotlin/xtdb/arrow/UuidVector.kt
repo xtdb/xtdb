@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.vector.extensions.UuidType
 import java.nio.ByteBuffer
@@ -23,4 +24,6 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector() 
 
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) = UuidVector(inner.openSlice(al))
 }

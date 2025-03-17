@@ -37,4 +37,7 @@ class ByteVector private constructor(
         }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByte(idx).toDouble())
+
+    override fun openSlice(al: BufferAllocator) =
+        ByteVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

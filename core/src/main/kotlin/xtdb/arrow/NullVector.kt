@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -71,4 +72,5 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
     override fun close() {
     }
 
+    override fun openSlice(al: BufferAllocator) = NullVector(name)
 }

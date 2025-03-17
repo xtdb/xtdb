@@ -17,7 +17,6 @@ import xtdb.toFieldType
 import xtdb.util.Hasher
 import xtdb.util.normalForm
 import java.util.*
-import kotlin.collections.LinkedHashMap
 
 internal val STRUCT_TYPE = ArrowType.Struct.INSTANCE
 
@@ -164,6 +163,13 @@ class StructVector(
 
         valueCount = valCount
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        StructVector(
+            al, name, nullable,
+            childWriters.entries.associateTo(LinkedHashMap()) { it.key to it.value.openSlice(al) },
+            valueCount
+        )
 
     override fun clear() {
         validityBuffer.clear()

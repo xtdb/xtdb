@@ -31,6 +31,9 @@ class IntervalYearMonthVector private constructor(
     override fun writeObject0(value: Any) =
         if (value is IntervalYearMonth) writeInt(value.period.toTotalMonths().toInt())
         else throw InvalidWriteObjectException(fieldType, value)
+
+    override fun openSlice(al: BufferAllocator) =
+        IntervalYearMonthVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }
 
 class IntervalDayTimeVector private constructor(
@@ -67,6 +70,9 @@ class IntervalDayTimeVector private constructor(
                 writeBytes(this)
             }
         } else throw InvalidWriteObjectException(fieldType, value)
+
+    override fun openSlice(al: BufferAllocator) =
+        IntervalDayTimeVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }
 
 class IntervalMonthDayNanoVector private constructor(
@@ -102,4 +108,7 @@ class IntervalMonthDayNanoVector private constructor(
                 flip()
                 writeBytes(this)
             }
+
+    override fun openSlice(al: BufferAllocator) =
+        IntervalMonthDayNanoVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

@@ -129,4 +129,7 @@ class FixedSizeListVector(
         validityBuffer.close()
         elVector.close()
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        FixedSizeListVector(al, name, nullable, listSize, elVector.openSlice(al), valueCount)
 }

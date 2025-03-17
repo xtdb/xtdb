@@ -29,4 +29,7 @@ class IntVector private constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx).toDouble())
+
+    override fun openSlice(al: BufferAllocator) =
+        IntVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

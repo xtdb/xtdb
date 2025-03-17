@@ -31,6 +31,9 @@ class DateDayVector private constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx) * MILLIS_PER_DAY * 1_000_000L)
+
+    override fun openSlice(al: BufferAllocator) =
+        DateDayVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }
 
 private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
@@ -57,4 +60,7 @@ class DateMilliVector internal constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx) * 1_000_000L)
+
+    override fun openSlice(al: BufferAllocator) =
+        DateMilliVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

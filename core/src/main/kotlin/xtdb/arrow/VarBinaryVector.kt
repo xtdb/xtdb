@@ -25,4 +25,10 @@ class VarBinaryVector private constructor(
         is ByteBuffer -> writeBytes(value)
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        VarBinaryVector(
+            name, nullable, valueCount,
+            validityBuffer.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
+        )
 }

@@ -137,6 +137,8 @@ class ListVector(
         valueCount = vec.valueCount
     }
 
+    override fun openSlice(al: BufferAllocator) = ListVector(al, name, nullable, elVector.openSlice(al), valueCount)
+
     override fun valueReader(pos: VectorPosition): ValueReader = TODO("List.valueReader")
 
     override fun clear() {

@@ -27,4 +27,7 @@ class LongVector private constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getLong(idx).toDouble())
+
+    override fun openSlice(al: BufferAllocator) =
+        LongVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

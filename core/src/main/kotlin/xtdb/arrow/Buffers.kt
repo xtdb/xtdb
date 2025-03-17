@@ -133,8 +133,12 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()
-        buf = arrowBuf.writerIndex(writerIndex).let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
+        buf = arrowBuf.writerIndex(writerIndex)
+            .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
     }
+
+    fun openSlice(al: BufferAllocator) =
+        ExtensibleBuffer(al, buf.referenceManager.transferOwnership(buf, al).transferredBuffer)
 
     fun clear() {
         buf.setZero(0, buf.capacity())

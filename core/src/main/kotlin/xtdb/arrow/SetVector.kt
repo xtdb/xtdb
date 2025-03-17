@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 import xtdb.vector.extensions.SetType
@@ -19,4 +20,6 @@ class SetVector(override val inner: ListVector) : ExtensionVector() {
         return (inner.getListStartIndex(idx) until inner.getListEndIndex(idx))
             .sumOf { elIdx -> elVector.hashCode(elIdx, hasher) }
     }
+
+    override fun openSlice(al: BufferAllocator) = SetVector(inner.openSlice(al))
 }

@@ -35,4 +35,7 @@ class BitVector private constructor(
             if (src.nullable && !nullable) nullable = true
             valueCount.apply { if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx)) }
         }
+
+    override fun openSlice(al: BufferAllocator) =
+        BitVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

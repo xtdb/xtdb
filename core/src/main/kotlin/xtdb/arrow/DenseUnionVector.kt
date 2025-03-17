@@ -305,6 +305,9 @@ class DenseUnionVector(
         valueCount = vc
     }
 
+    override fun openSlice(al: BufferAllocator) =
+        DenseUnionVector(al, name, legVectors.map { it.openSlice(al) }, valueCount)
+
     override fun clear() {
         typeBuffer.clear()
         offsetBuffer.clear()

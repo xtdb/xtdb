@@ -27,4 +27,7 @@ class ShortVector private constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getShort(idx).toDouble())
+
+    override fun openSlice(al: BufferAllocator) =
+        ShortVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

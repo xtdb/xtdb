@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -30,4 +31,6 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
 
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) = TsTzRangeVector(inner.openSlice(al))
 }

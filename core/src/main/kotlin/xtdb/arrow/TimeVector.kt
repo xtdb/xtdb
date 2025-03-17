@@ -25,16 +25,16 @@ internal fun TimeUnit.toLocalTime(value: Long): LocalTime = when (this) {
 }
 
 class Time32Vector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    val unit: TimeUnit,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override var name: String, override var nullable: Boolean, val unit: TimeUnit,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer,
+    override var valueCount: Int
 ) : FixedWidthVector() {
 
     override val type = ArrowType.Time(unit, Int.SIZE_BITS)
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
-            : this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al), 0)
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(value: Int) = writeInt0(value)
@@ -44,19 +44,22 @@ class Time32Vector private constructor(
     override fun writeObject0(value: Any) {
         if (value is LocalTime) writeInt(unit.toInt(value)) else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        Time32Vector(name, nullable, unit, validityBuffer.openSlice(al), dataBuffer.openSlice(al), valueCount)
 }
 
 class Time64Vector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    private val unit: TimeUnit,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override var name: String, override var nullable: Boolean, private val unit: TimeUnit,
+    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer,
+    override var valueCount: Int
 ) : FixedWidthVector() {
 
     override val type = ArrowType.Time(unit, Long.SIZE_BITS)
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
-            : this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(value: Long) = writeLong0(value)
@@ -67,4 +70,7 @@ class Time64Vector private constructor(
         if (value is LocalTime) writeLong(unit.toLong(value.toSecondOfDay().toLong(), value.nano))
         else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        Time64Vector(name, nullable, unit, validityBuffer.openSlice(al), dataBuffer.openSlice(al), valueCount)
 }

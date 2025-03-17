@@ -27,4 +27,7 @@ class DoubleVector private constructor(
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getDouble(idx))
+
+    override fun openSlice(al: BufferAllocator) =
+        DoubleVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }

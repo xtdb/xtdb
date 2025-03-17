@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -8,7 +9,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class MapVector(private val listVector: ListVector, keysSorted: Boolean) : Vector() {
+class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
 
     override var name
         get() = listVector.name
@@ -102,6 +103,8 @@ class MapVector(private val listVector: ListVector, keysSorted: Boolean) : Vecto
         listVector.loadPage(nodes, buffers)
 
     override fun loadFromArrow(vec: ValueVector) = listVector.loadFromArrow(vec)
+
+    override fun openSlice(al: BufferAllocator) = MapVector(listVector.openSlice(al), keysSorted)
 
     override fun clear() = listVector.clear()
     override fun close() = listVector.close()

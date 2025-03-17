@@ -25,4 +25,7 @@ class FixedSizeBinaryVector private constructor(
         is ByteArray -> writeBytes(ByteBuffer.wrap(value))
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        FixedSizeBinaryVector(name, nullable, valueCount, byteWidth, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }
