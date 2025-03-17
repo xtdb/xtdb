@@ -114,7 +114,8 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     override fun structKeyWriter(key: String, fieldType: FieldType) =
         writers[key]?.let {
             if ((it.field.type == fieldType.type && (it.field.isNullable || !fieldType.isNullable)) ||
-                it.field.type is ArrowType.Union) it
+                it.field.type is ArrowType.Union
+            ) it
             else promoteChild(it, fieldType)
         }
             ?: newChildWriter(key, fieldType)
@@ -151,12 +152,18 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     }
 
     override fun promoteChildren(field: Field) {
-        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(this.field.fieldType, field.fieldType)
-        for (child in field.children) {
-            var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
-            if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is ArrowType.Union)
-                childWriter = promoteChild(childWriter, child.fieldType)
-            if (child.children.isNotEmpty()) childWriter.promoteChildren(child)
+        when {
+            field.type == NULL_TYPE && this.field.isNullable -> return
+
+            field.type != this.field.type || field.isNullable && !this.field.isNullable ->
+                throw FieldMismatch(this.field.fieldType, field.fieldType)
+
+            else -> for (child in field.children) {
+                var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
+                if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is ArrowType.Union)
+                    childWriter = promoteChild(childWriter, child.fieldType)
+                if (child.children.isNotEmpty()) childWriter.promoteChildren(child)
+            }
         }
     }
 

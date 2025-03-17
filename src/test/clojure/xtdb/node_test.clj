@@ -1081,3 +1081,24 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest ingestion-stopped-on-null-col-ref-4259
   (t/is (false? (:committed? (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"])))))
+
+(t/deftest test-field-mismatch-4271
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1.5}"])
+
+  (tu/finish-block! tu/*node*)
+
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, a: 3, b: [2, 3, 4], c: {d: 1}}"])
+
+  (xt/execute-tx tu/*node* ["UPDATE docs SET a = 'hello' WHERE _id = 1"])
+
+  (t/is (= [{:xt/id 1, :a 1.5,
+             :xt/valid-from (time/->zdt #inst "2020-01-01")
+             :xt/valid-to (time/->zdt #inst "2020-01-03")}
+            {:xt/id 1, :a "hello",
+             :xt/valid-from (time/->zdt #inst "2020-01-03")}
+            {:xt/id 2, :a 3, :b [2 3 4], :c {:d 1}
+             :xt/valid-from (time/->zdt #inst "2020-01-02")}]
+
+           (xt/q tu/*node* ["SELECT *, _valid_from, _valid_to
+                             FROM docs FOR ALL VALID_TIME
+                             ORDER BY _id, _valid_from"]))))
