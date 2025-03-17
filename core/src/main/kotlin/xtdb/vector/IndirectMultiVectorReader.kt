@@ -9,11 +9,16 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.*
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
+import xtdb.arrow.VectorIndirection
+import xtdb.arrow.VectorPosition
 import xtdb.toLeg
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
+
+private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
 
 class IndirectMultiVectorReader(
     private val readers: List<IVectorReader?>,
@@ -24,59 +29,36 @@ class IndirectMultiVectorReader(
     private val name = readers.filterNotNull().first().name
     private val fields: List<Field?> = readers.map { it?.field }
     private val legReaders = ConcurrentHashMap<String, IVectorReader>()
-    private val vectorField by lazy (LazyThreadSafetyMode.PUBLICATION){
+    private val vectorField by lazy(LazyThreadSafetyMode.PUBLICATION) {
         MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field
-    }
-
-    companion object {
-        private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
     }
 
     init {
         assert(readers.any { it != null })
     }
 
-    private fun unsupported(): RuntimeException {
-        throw UnsupportedOperationException("IndirectMultiVectoReader")
-    }
+    private fun unsupported(): Nothing = throw UnsupportedOperationException("IndirectMultiVectorReader")
 
-    private fun safeReader(idx: Int): IVectorReader {
-        return readers[readerIndirection[idx]] ?: throw unsupported()
-    }
+    private fun safeReader(idx: Int): IVectorReader = readers[readerIndirection[idx]] ?: unsupported()
 
-    override fun valueCount(): Int =  readerIndirection.valueCount()
+    override fun valueCount(): Int = readerIndirection.valueCount()
+    override fun getName(): String = name
+    override fun getField(): Field = vectorField
 
-    override fun getName(): String {
-        return name
-    }
-
-    override fun getField(): Field {
-        return vectorField
-    }
-
-    override fun hashCode(idx: Int, hasher: ArrowBufHasher): Int {
-        return safeReader(idx).hashCode(vectorIndirections[idx], hasher)
-    }
+    override fun hashCode(idx: Int, hasher: ArrowBufHasher) = safeReader(idx).hashCode(vectorIndirections[idx], hasher)
 
     override fun isNull(idx: Int): Boolean {
         val readerIdx = readerIndirection[idx]
         return readerIdx < 0 || readers[readerIdx] == null || readers[readerIdx]!!.isNull(vectorIndirections[idx])
     }
 
-    override fun getBoolean(idx: Int): Boolean = safeReader(idx).getBoolean(vectorIndirections[idx])
-
-    override fun getByte(idx: Int): Byte = safeReader(idx).getByte(vectorIndirections[idx])
-
-    override fun getShort(idx: Int): Short = safeReader(idx).getShort(vectorIndirections[idx])
-
-    override fun getInt(idx: Int): Int = safeReader(idx).getInt(vectorIndirections[idx])
-
-    override fun getLong(idx: Int): Long = safeReader(idx).getLong(vectorIndirections[idx])
-
-    override fun getFloat(idx: Int): Float = safeReader(idx).getFloat(vectorIndirections[idx])
-
-    override fun getDouble(idx: Int): Double = safeReader(idx).getDouble(vectorIndirections[idx])
-
+    override fun getBoolean(idx: Int) = safeReader(idx).getBoolean(vectorIndirections[idx])
+    override fun getByte(idx: Int) = safeReader(idx).getByte(vectorIndirections[idx])
+    override fun getShort(idx: Int) = safeReader(idx).getShort(vectorIndirections[idx])
+    override fun getInt(idx: Int) = safeReader(idx).getInt(vectorIndirections[idx])
+    override fun getLong(idx: Int) = safeReader(idx).getLong(vectorIndirections[idx])
+    override fun getFloat(idx: Int) = safeReader(idx).getFloat(vectorIndirections[idx])
+    override fun getDouble(idx: Int) = safeReader(idx).getDouble(vectorIndirections[idx])
     override fun getBytes(idx: Int): ByteBuffer = safeReader(idx).getBytes(vectorIndirections[idx])
 
     override fun getPointer(idx: Int): ArrowBufPointer = safeReader(idx).getPointer(vectorIndirections[idx])
@@ -90,14 +72,14 @@ class IndirectMultiVectorReader(
         safeReader(idx).getObject(vectorIndirections[idx], keyFn)
 
     override fun structKeyReader(colName: String) =
-        IndirectMultiVectorReader( readers.map { it?.structKeyReader(colName) }, readerIndirection, vectorIndirections )
+        IndirectMultiVectorReader(readers.map { it?.structKeyReader(colName) }, readerIndirection, vectorIndirections)
 
     override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys() }.toSet()
 
     // TODO - the following is a fairly dumb implementation requiring order O(n) where n is the total number of
     //        elements in all lists. Can we do something better?
     private fun range(start: Int, len: Int): IntArray = IntArray(len) { it + start }
-    private fun repeat(len: Int, item: Int) : IntArray = IntArray(len) { item }
+    private fun repeat(len: Int, item: Int): IntArray = IntArray(len) { item }
 
     override fun listElementReader(): IVectorReader {
         val listElementReaders = readers.map { it?.listElementReader() }
@@ -111,10 +93,14 @@ class IndirectMultiVectorReader(
             vectorIndirectionArray += range(rdr.getListStartIndex(vectorIndirections[i]), listCount)
         }
         return IndirectMultiVectorReader(
-            listElementReaders, VectorIndirection.selection(readerIndirectionArray), VectorIndirection.selection(vectorIndirectionArray))
+            listElementReaders,
+            VectorIndirection.selection(readerIndirectionArray),
+            VectorIndirection.selection(vectorIndirectionArray)
+        )
     }
 
-    override fun getListStartIndex(idx: Int): Int = (0 until idx).map { safeReader(it).getListCount(vectorIndirections[it]) }.sum()
+    override fun getListStartIndex(idx: Int): Int =
+        (0 until idx).sumOf { safeReader(it).getListCount(vectorIndirections[it]) }
 
     override fun getListCount(idx: Int): Int = safeReader(idx).getListCount(vectorIndirections[idx])
 
@@ -124,16 +110,14 @@ class IndirectMultiVectorReader(
     override fun mapValueReader(): IVectorReader =
         IndirectMultiVectorReader(readers.map { it?.mapValueReader() }, readerIndirection, vectorIndirections)
 
-    override fun getLeg(idx: Int): String {
-        val reader = safeReader(idx)
-        return when (val type = fields[readerIndirection[idx]]!!.fieldType.type) {
-            is ArrowType.Union -> reader.getLeg(vectorIndirections[idx])
+    override fun getLeg(idx: Int): String =
+        when (val type = fields[readerIndirection[idx]]!!.fieldType.type) {
+            is ArrowType.Union -> safeReader(idx).getLeg(vectorIndirections[idx])
             else -> type.toLeg()
         }
-    }
 
-    override fun legReader(legKey: String): IVectorReader {
-        return legReaders.computeIfAbsent(legKey) {
+    override fun legReader(legKey: String): IVectorReader =
+        legReaders.computeIfAbsent(legKey) {
             val validReaders = readers.zip(fields).map { (reader, field) ->
                 if (reader == null) null
                 else when (field!!.fieldType.type) {
@@ -148,47 +132,41 @@ class IndirectMultiVectorReader(
             IndirectMultiVectorReader(
                 validReaders,
                 object : VectorIndirection {
-                    override fun valueCount(): Int {
-                        return readerIndirection.valueCount()
-                    }
+                    override fun valueCount(): Int = readerIndirection.valueCount()
 
                     override fun getIndex(idx: Int): Int {
                         val readerIdx = readerIndirection[idx]
                         if (validReaders[readerIdx] != null) return readerIdx
                         return -1
                     }
-                }, vectorIndirections
+                },
+                vectorIndirections
             )
         }
-    }
 
-    override fun legs(): List<String> {
-        return fields.flatMapIndexed { index: Int, field: Field? ->
+    override fun legs(): List<String> =
+        fields.flatMapIndexed { index: Int, field: Field? ->
             if (field != null) {
                 when (val type = field.fieldType.type) {
                     is ArrowType.Union -> readers[index]!!.legs()
                     else -> listOf(type.toLeg())
                 }
-            } else {
-                emptyList()
-            }
-        }.toSet().toList()
-    }
+            } else emptyList()
+        }.distinct()
 
     override fun copyTo(vector: ValueVector): IVectorReader {
         val writer = writerFor(vector)
         val copier = rowCopier(writer)
 
-        for (i in 0 until valueCount()) {
-            copier.copyRow(i)
-        }
+        repeat(valueCount()) { copier.copyRow(it) }
 
         writer.syncValueCount()
         return ValueVectorReader.from(vector)
     }
 
     override fun rowCopier(writer: IVectorWriter): RowCopier {
-        readers.map { it?.also { writer.promoteChildren(it.field) }}
+
+        readers.map { it?.also { writer.promoteChildren(it.field) } }
         val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector()).rowCopier(writer) }
         return RowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }
@@ -197,9 +175,7 @@ class IndirectMultiVectorReader(
         return object : VectorPosition {
             override var position: Int
                 get() = vectorIndirections[pos.position]
-                set(@Suppress("UNUSED_PARAMETER") value) {
-                    throw unsupported()
-                }
+                set(_) = unsupported()
         }
     }
 
@@ -208,56 +184,25 @@ class IndirectMultiVectorReader(
         val valueReaders = readers.map { it?.valueReader(indirectPos) }.toTypedArray()
 
         return object : ValueReader {
-            private fun valueReader(): ValueReader {
-                return valueReaders[readerIndirection[pos.position]]!!
-            }
+            private fun valueReader(): ValueReader = valueReaders[readerIndirection[pos.position]]!!
 
-            override val leg: String?
-                get() = valueReader().leg
+            override val leg: String? get() = valueReader().leg
 
-            override val isNull: Boolean
-                get() = valueReader().isNull
-
-            override fun readBoolean(): Boolean {
-                return valueReader().readBoolean()
-            }
-
-            override fun readByte(): Byte {
-                return valueReader().readByte()
-            }
-
-            override fun readShort(): Short {
-                return valueReader().readShort()
-            }
-
-            override fun readInt(): Int {
-                return valueReader().readInt()
-            }
-
-            override fun readLong(): Long {
-                return valueReader().readLong()
-            }
-
-            override fun readFloat(): Float {
-                return valueReader().readFloat()
-            }
-
-            override fun readDouble(): Double {
-                return valueReader().readDouble()
-            }
-
-            override fun readBytes(): ByteBuffer {
-                return valueReader().readBytes()
-            }
-
-            override fun readObject(): Any? {
-                return valueReader().readObject()
-            }
+            override val isNull: Boolean get() = valueReader().isNull
+            override fun readBoolean(): Boolean = valueReader().readBoolean()
+            override fun readByte(): Byte = valueReader().readByte()
+            override fun readShort(): Short = valueReader().readShort()
+            override fun readInt(): Int = valueReader().readInt()
+            override fun readLong(): Long = valueReader().readLong()
+            override fun readFloat(): Float = valueReader().readFloat()
+            override fun readDouble(): Double = valueReader().readDouble()
+            override fun readBytes(): ByteBuffer = valueReader().readBytes()
+            override fun readObject(): Any? = valueReader().readObject()
         }
     }
 
     override fun close() {
-        readers.map { it?.close() }
+        readers.forEach { it?.close() }
     }
 
     override fun toString() = "(IndirectMultiVectorReader ${readers.map { it.toString() }})"
