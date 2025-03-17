@@ -50,7 +50,8 @@
            (xtdb.trie Trie)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector IVectorReader RelationReader)
+           (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -355,11 +356,26 @@
   ([min max] (->min-max-page-bounds min max min))
   ([vf-min vt-max sf-min] (->min-max-page-bounds vf-min vt-max sf-min Long/MAX_VALUE sf-min))
   ([vf-min vt-max sf-min st-max] (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max)))
-  ([vf-min vt-max sf-min st-max max-valid-from]
-   (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max) max-valid-from)))
+  ([vf-min vt-max sf-min st-max max-system-from]
+   (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max) max-system-from)))
 
-(defn ->page-bounds-fn [page-idx-pred->bounds]
-  (let [page-idx-pred->bounds (update-vals page-idx-pred->bounds #(apply ->min-max-page-bounds %))]
+(defn ->temporal-metadata
+  ([min max] (->temporal-metadata min max min))
+  ([vf-min vt-max sf-min] (->temporal-metadata vf-min vt-max sf-min Long/MAX_VALUE sf-min))
+  ([vf-min vt-max sf-min sf-max]
+   (->temporal-metadata vf-min vt-max sf-min sf-max Long/MAX_VALUE))
+  ([vf-min vt-max sf-min _st-max max-system-from]
+   (let [^TemporalMetadata$Builder builder (TemporalMetadata/newBuilder)]
+     (.setMinValidFrom builder vf-min)
+     (.setMaxValidFrom builder vf-min)
+     (.setMinValidTo builder vt-max)
+     (.setMaxValidTo builder vt-max)
+     (.setMinSystemFrom builder sf-min)
+     (.setMaxSystemFrom builder max-system-from)
+     (.build builder))))
+
+(defn ->temporal-metadata-fn [page-idx-pred->bounds]
+  (let [page-idx-pred->bounds (update-vals page-idx-pred->bounds #(apply ->temporal-metadata %))]
     (fn page-bounds-fn [page-idx]
       (if-let [bounds (reduce-kv (fn [_ page-idx-pred bounds]
                                    (when (page-idx-pred page-idx)

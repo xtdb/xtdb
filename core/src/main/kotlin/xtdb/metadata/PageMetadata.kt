@@ -9,6 +9,7 @@ import org.roaringbitmap.buffer.ImmutableRoaringBitmap
 import xtdb.BufferPool
 import xtdb.TEMPORAL_COL_TYPE
 import xtdb.arrow.Relation
+import xtdb.log.proto.TemporalMetadata
 import xtdb.toLeg
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.ColumnName
@@ -78,7 +79,7 @@ class PageMetadata private constructor(
 //        return readBloom(bloomReader, bloomVecIdx)
     }
 
-    fun temporalBounds(pageIdx: Int): TemporalBounds {
+    fun temporalMetadata(pageIdx: Int): TemporalMetadata {
         // it seems in some tests we have files without any temporal values in...?
         val minReader = requireNotNull(minReader)
         val maxReader = requireNotNull(maxReader)
@@ -87,16 +88,14 @@ class PageMetadata private constructor(
         val validFromIdx = pageIdxs[PageIndexKey("_valid_from", pageIdx)]
         val validToIdx = pageIdxs[PageIndexKey("_valid_to", pageIdx)]
 
-        val minValidFrom = minReader.getLong(validFromIdx)
-        val maxValidTo = maxReader.getLong(validToIdx)
-        val minSystemFrom = minReader.getLong(systemFromIdx)
-        val maxSystemFrom = maxReader.getLong(systemFromIdx)
-
-        return TemporalBounds(
-            TemporalDimension(minValidFrom, maxValidTo),
-            TemporalDimension(minSystemFrom, MAX_LONG),
-            maxSystemFrom
-        )
+        return TemporalMetadata.newBuilder()
+            .setMinValidFrom(minReader.getLong(validFromIdx))
+            .setMaxValidFrom(maxReader.getLong(validFromIdx))
+            .setMinValidTo(minReader.getLong(validToIdx))
+            .setMaxValidTo(maxReader.getLong(validToIdx))
+            .setMinSystemFrom(minReader.getLong(systemFromIdx))
+            .setMaxSystemFrom(maxReader.getLong(systemFromIdx))
+            .build()
     }
 
     override fun close() {
