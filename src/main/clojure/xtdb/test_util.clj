@@ -352,12 +352,10 @@
            ~@body)))
     `(do ~@body)))
 
-(defn ->min-max-page-bounds
-  ([min max] (->min-max-page-bounds min max min))
-  ([vf-min vt-max sf-min] (->min-max-page-bounds vf-min vt-max sf-min Long/MAX_VALUE sf-min))
-  ([vf-min vt-max sf-min st-max] (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max)))
-  ([vf-min vt-max sf-min st-max max-system-from]
-   (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max) max-system-from)))
+(defn ->min-max-query-bounds
+  ([min max] (->min-max-query-bounds min max min))
+  ([vf-min vt-max sf-min] (->min-max-query-bounds vf-min vt-max sf-min Long/MAX_VALUE))
+  ([vf-min vt-max sf-min st-max] (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max))))
 
 (defn ->temporal-metadata
   ([min max] (->temporal-metadata min max min))
