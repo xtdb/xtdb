@@ -54,13 +54,13 @@
 
                 (case (long (:status resp))
                   503 (do
-                        (t/is (= {"X-XTDB-Target-Offset" "2093"}
+                        (t/is (= {"X-XTDB-Target-Offset" "2097"}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Offset"]))))
                         (Thread/sleep 250)
                         (recur))
                   200 (do
-                        (t/is (= {"X-XTDB-Target-Offset" "2093", "X-XTDB-Current-Offset" "2093"}
+                        (t/is (= {"X-XTDB-Target-Offset" "2097", "X-XTDB-Current-Offset" "2097"}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Offset" "X-XTDB-Current-Offset"]))))
                         (t/is (= "Started." (:body resp)))))))))))))

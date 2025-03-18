@@ -1,11 +1,14 @@
 package xtdb.arrow
 
+import clojure.lang.Keyword
 import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer.getRootAsFooter
+import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
@@ -19,12 +22,11 @@ import xtdb.arrow.Relation.UnloadMode.FILE
 import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
 import xtdb.trie.FileSize
+import xtdb.types.NamelessField
+import xtdb.util.normalForm
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
-import java.nio.channels.ClosedByInterruptException
-import java.nio.channels.SeekableByteChannel
-import java.nio.channels.WritableByteChannel
+import java.nio.channels.*
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.READ
@@ -48,6 +50,10 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     @JvmOverloads
     constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
             : this(fields.map { fromField(allocator, it) }, rowCount)
+
+    @JvmOverloads
+    constructor(allocator: BufferAllocator, fields: SequencedMap<String, NamelessField>, rowCount: Int = 0)
+            : this(allocator, fields.map { (name, field) -> field.toArrowField(name) }, rowCount)
 
     fun endRow() =
         (++rowCount).also { rowCount ->
@@ -171,6 +177,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
             val baos = ByteArrayOutputStream()
             startUnload(Channels.newChannel(baos), STREAM).use { unl ->
                 unl.writePage()
+                unl.end()
             }
 
             return ByteBuffer.wrap(baos.toByteArray())
@@ -180,11 +187,39 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         val nodes = recordBatch.nodes.toMutableList()
         val buffers = recordBatch.buffers.toMutableList()
         vectors.values.forEach { it.loadPage(nodes, buffers) }
-
         require(nodes.isEmpty()) { "Unconsumed nodes: $nodes" }
         require(buffers.isEmpty()) { "Unconsumed buffers: $buffers" }
 
         rowCount = recordBatch.length
+    }
+
+    class StreamLoader(al: BufferAllocator, ch: ReadableByteChannel) : AutoCloseable {
+
+        private val reader = MessageChannelReader(ReadChannel(ch), al)
+
+        val schema: Schema
+
+        init {
+            val schemaMessage = (reader.readNext() ?: error("empty stream")).message
+            check(schemaMessage.headerType() == MessageHeader.Schema) { "expected schema message" }
+
+            schema = MessageSerializer.deserializeSchema(schemaMessage)
+        }
+
+        fun loadNextPage(rel: Relation): Boolean {
+            val msg = reader.readNext() ?: return false
+
+            msg.message.headerType().let {
+                check(it == MessageHeader.RecordBatch) { "unexpected Arrow message type: $it" }
+            }
+
+            MessageSerializer.deserializeRecordBatch(msg.message, msg.bodyBuffer)
+                .use { rel.load(it) }
+
+            return true
+        }
+
+        override fun close() = reader.close()
     }
 
     sealed class Loader : AutoCloseable {
@@ -247,7 +282,8 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
             override fun load(rel: Relation) {
                 buf.arrowBufToRecordBatch(
-                    arrowBlock.offset, arrowBlock.metadataLength, arrowBlock.bodyLength, "Failed to deserialize record batch $idx, offset ${arrowBlock.offset}"
+                    arrowBlock.offset, arrowBlock.metadataLength, arrowBlock.bodyLength,
+                    "Failed to deserialize record batch $idx, offset ${arrowBlock.offset}"
                 ).use { rel.load(it) }
             }
         }
@@ -374,6 +410,21 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
                 }
             ) as Map<*, *>
         }
+
+    fun writeRows(vararg rows: Map<*, *>) {
+        rows.forEach { row ->
+            row.forEach { (k, v) ->
+                val vector = this[when (k) {
+                    is String -> k
+                    is Keyword -> normalForm(k.sym).toString()
+                    else -> throw IllegalArgumentException("Column name must be a string or keyword")
+                }] ?: error("unknown column: $k")
+
+                vector.writeObject(v)
+            }
+            endRow()
+        }
+    }
 
     val oldRelReader: OldRelationReader
         get() = OldRelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::NewToOldAdapter), rowCount)

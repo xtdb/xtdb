@@ -3,11 +3,12 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
+import xtdb.types.Fields
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -183,5 +184,29 @@ class RelationTest {
                 assertEquals(duvValues, rel["duv"]!!.asList)
             }
         }
+    }
+
+    @Test
+    fun testStreamRoundTrip() {
+        val row1 = mapOf("i32" to 4)
+        val row2 = mapOf("i32" to 8)
+
+        val bytes = Relation(allocator, linkedMapOf("i32" to Fields.I32)).use { rel ->
+            rel.writeRows(row1, row2)
+            rel.asArrowStream
+        }
+
+        val rows = Relation.StreamLoader(allocator, bytes.asChannel).use { loader ->
+            Relation(allocator, loader.schema).use { rel ->
+                assertTrue(loader.loadNextPage(rel))
+
+                rel.toMaps(SNAKE_CASE_STRING)
+                    .also {
+                        assertFalse(loader.loadNextPage(rel))
+                    }
+            }
+        }
+
+        assertEquals(listOf(row1, row2), rows)
     }
 }
