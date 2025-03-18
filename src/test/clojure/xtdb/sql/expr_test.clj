@@ -491,34 +491,39 @@
   (t/is (= [{:duration #xt/duration "PT13M56S"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56' MINUTE TO SECOND AS DURATION) as \"duration\"")))
 
-  (t/is (= [{:duration #xt/duration "PT13M56.123456789S"}]
+  (t/is (= [{:duration #xt/duration "PT13M56.123456S"}]
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456' MINUTE TO SECOND AS DURATION) as \"duration\"")))
+  ;;
+  ;;TODO add interval(9) syntax?
+  #_(t/is (= [{:duration #xt/duration "PT13M56.123456789S"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as \"duration\""))))
 
 (t/deftest test-cast-duration-to-interval
+
   (t/testing "without interval qualifier"
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT26H13M56.111111S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT26H13M56.111111S"]}]
              (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL) as itvl")))
 
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT122H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT122H"]}]
              (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2021-10-21T12:00:00') AS INTERVAL) as itvl")))
 
-    (t/is (= [{:itvl #xt/interval-mdn  ["P0D" "PT8882H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm  ["P0D" "PT8882H"]}]
              (xt/q tu/*node* "SELECT CAST((TIMESTAMP '2021-10-26T14:00:00' - TIMESTAMP '2020-10-21T12:00:00') AS INTERVAL) as itvl"))))
 
   (t/testing "with interval qualifier"
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT0S"]}]
              (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY) as itvl")))
 
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT2H"]}]
              (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO HOUR) as itvl")))
 
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT2H13M"]}]
              (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO MINUTE) as itvl")))
 
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111111S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT2H13M56.111111S"]}]
              (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO SECOND) as itvl")))
 
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT2H13M56.111S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT2H13M56.111S"]}]
              (xt/q tu/*node* "SELECT CAST(DURATION 'PT26H13M56.111111S' AS INTERVAL DAY TO SECOND(3)) as itvl")))))
 
 (t/deftest test-cast-interval-to-interval
@@ -528,26 +533,26 @@
   (t/is (= [{:itvl #xt/interval-ym "P12M"}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1-10' YEAR TO MONTH AS INTERVAL YEAR) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT0S"]}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT11H"]}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO HOUR) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H11M"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT11H11M"]}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO MINUTE) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H11M11.111S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT11H11M11.111S"]}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO SECOND) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT11H11M11S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT11H11M11S"]}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL DAY TO SECOND(0)) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT35H"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT35H"]}]
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1 11:11:11.111' DAY TO SECOND AS INTERVAL HOUR) as itvl"))))
 
 (t/deftest test-cast-int-to-interval
-  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT0S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P3D" "PT0S"]}]
            (xt/q tu/*node* "SELECT CAST(3 AS INTERVAL DAY) as itvl")))
 
   (t/is (= [{:itvl #xt/interval-ym "P24M"}]
@@ -559,7 +564,7 @@
          (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl"))))
 
 (t/deftest test-cast-string-to-interval-with-qualifier
-  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT11H10M"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P3D" "PT11H10M"]}]
            (xt/q tu/*node* "SELECT CAST('3 11:10' AS INTERVAL DAY TO MINUTE) as itvl")))
 
   (t/is (= [{:itvl #xt/interval-ym "P24M"}]
@@ -571,22 +576,45 @@
   (t/is (thrown-with-msg?
          IllegalArgumentException
          #"Interval end field must have less significance than the start field."
-         (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl"))))
+         (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl")))
+
+  (t/testing "ISO with seconds precision"
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT10M10.123456S"]}]
+             (xt/q tu/*node* "SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND itvl")))
+
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT10M10.1234S"]}]
+             (xt/q tu/*node* "SELECT INTERVAL '10:10.1234' MINUTE TO SECOND itvl")))
+
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT10M10.1234S"]}]
+             (xt/q tu/*node* "SELECT INTERVAL '10:10.1234' MINUTE TO SECOND(5) itvl")))
+
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT10M10.123S"]}]
+             (xt/q tu/*node* "SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(3) itvl")))
+
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT10M10.123456S"]}]
+             (xt/q tu/*node* "SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(6) itvl")))
+
+    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT10M10.123456789S"]}]
+             (xt/q tu/*node* "SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(9) itvl")))))
 
 (t/deftest test-cast-string-to-interval-without-qualifier
-  (t/is (= [{:itvl #xt/interval-mdn ["P3D" "PT11H10M"]}]
+  ;;TODO interval(9) syntax
+  (t/is (= [{:itvl #xt/interval-mdm ["P3D" "PT11H10M"]}]
            (xt/q tu/*node* "SELECT CAST('P3DT11H10M' AS INTERVAL) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P24M" "PT0S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P24M" "PT0S"]}]
            (xt/q tu/*node* "SELECT CAST('P2Y' AS INTERVAL) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P22M" "PT0S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P22M" "PT0S"]}]
            (xt/q tu/*node* "SELECT CAST('P1Y10M' AS INTERVAL) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P1M1D" "PT1H1M1.11111S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1M1D" "PT1H1M1.11111S"]}]
            (xt/q tu/*node* "SELECT CAST('P1M1DT1H1M1.11111S' AS INTERVAL) as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT-1H-1M"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P1M1D" "PT1H1M1.111111S"]}]
+           (xt/q tu/*node* "SELECT CAST('P1M1DT1H1M1.11111111S' AS INTERVAL) as itvl")))
+
+  (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT-1H-1M"]}]
            (xt/q tu/*node* "SELECT CAST('PT-1H-1M' AS INTERVAL) as itvl"))))
 
 (t/deftest test-cast-interval-to-string
@@ -603,10 +631,7 @@
            (xt/q tu/*node* "SELECT CAST(INTERVAL '1' DAY AS VARCHAR) as string")))
 
   (t/is (= [{:string "P1DT10H10M10S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string")))
-
-  (t/is (= [{:string "P0DT10M10.111111111S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '10:10.111111111' MINUTE TO SECOND(9) AS VARCHAR) as string"))))
+           (xt/q tu/*node* "SELECT CAST(INTERVAL '1 10:10:10' DAY TO SECOND AS VARCHAR) as string"))))
 
 
 (t/deftest test-timestamp-literal
@@ -651,24 +676,28 @@
 
 (t/deftest interval-literal
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
-    "INTERVAL 'P1Y'" #xt/interval-mdn ["P1Y" "PT0S"]
-    "INTERVAL 'P1Y-2M3D'" #xt/interval-mdn ["P1Y-2M3D" "PT0S"]
-    "INTERVAL 'PT5H6M12.912S'" #xt/interval-mdn ["P0D" "PT5H6M12.912S"]
-    "INTERVAL 'PT5H-6M-12.912S'" #xt/interval-mdn ["P0D" "PT4H53M47.088S"]
-    "INTERVAL 'P1Y3DT12H52S'" #xt/interval-mdn ["P1Y3D" "PT12H52S"]
-    "INTERVAL 'P1Y10M3DT12H52S'" #xt/interval-mdn ["P1Y10M3D" "PT12H52S"]))
+    "INTERVAL 'P1Y'" #xt/interval-mdm ["P1Y" "PT0S"]
+    "INTERVAL 'P1Y-2M3D'" #xt/interval-mdm ["P1Y-2M3D" "PT0S"]
+    "INTERVAL 'PT5H6M12.912S'" #xt/interval-mdm ["P0D" "PT5H6M12.912S"]
+    "INTERVAL 'PT5H-6M-12.912S'" #xt/interval-mdm ["P0D" "PT4H53M47.088S"]
+    "INTERVAL 'P1Y3DT12H52S'" #xt/interval-mdm ["P1Y3D" "PT12H52S"]
+    "INTERVAL 'P1Y10M3DT12H52S'" #xt/interval-mdm ["P1Y10M3D" "PT12H52S"])
+
+  (t/is (thrown-with-msg?
+         RuntimeException #"Month Day Micro Interval only supports up to microsecond precision \(6\)"
+         (plan-expr-with-foo "INTERVAL 'P1DT1.123456789S'"))))
 
 (t/deftest interval-literal-query
-  (t/is (= [{:itvl #xt/interval-mdn ["P12M" "PT0S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P12M" "PT0S"]}]
            (xt/q tu/*node* "SELECT INTERVAL 'P1Y' as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P10M3D" "PT0S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P10M3D" "PT0S"]}]
            (xt/q tu/*node* "SELECT INTERVAL 'P1Y-2M3D' as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT5H6M12.912S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT5H6M12.912S"]}]
            (xt/q tu/*node* "SELECT INTERVAL 'PT5H6M12.912S' as itvl")))
 
-  (t/is (= [{:itvl #xt/interval-mdn ["P22M3D" "PT4H53M47.088S"]}]
+  (t/is (= [{:itvl #xt/interval-mdm ["P22M3D" "PT4H53M47.088S"]}]
            (xt/q tu/*node* "SELECT INTERVAL 'P1Y10M3DT5H-6M-12.912S' as itvl"))))
 
 (t/deftest duration-literal
@@ -775,16 +804,16 @@
          (xt/q tu/*node* "select date_trunc(hour, TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as \"timestamp\""))))
 
 (t/deftest test-date-trunc-with-interval-query
-  (t/is (= [{:interval #xt/interval-mdn ["P36M" "PT0S"]}]
+  (t/is (= [{:interval #xt/interval-mdm ["P36M" "PT0S"]}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(YEAR, INTERVAL '3' YEAR + INTERVAL 'P3M') as \"interval\"")))
 
-  (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT2S"]}]
+  (t/is (= [{:interval #xt/interval-mdm ["P3M4D" "PT2S"]}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(SECOND, INTERVAL '3' MONTH + INTERVAL 'P4DT2S') as `interval`")))
 
-  (t/is (= [{:interval #xt/interval-mdn ["P3M4D" "PT0S"]}]
+  (t/is (= [{:interval #xt/interval-mdm ["P3M4D" "PT0S"]}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(DAY, INTERVAL 'P3M' + INTERVAL '4' DAY + INTERVAL '2' SECOND) as \"interval\"")))
 
-  (t/is (= [{:interval #xt/interval-mdn ["P3M" "PT0S"]}]
+  (t/is (= [{:interval #xt/interval-mdm ["P3M" "PT0S"]}]
            (xt/q tu/*node* "SELECT DATE_TRUNC(MONTH, INTERVAL '3' MONTH + INTERVAL 'P4D' + INTERVAL '2' SECOND) as \"interval\""))))
 
 (t/deftest test-date-bin
@@ -942,33 +971,33 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
 (t/deftest test-age-function
   (t/testing "testing AGE with timestamps"
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT2H"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-02T01:00:00', TIMESTAMP '2022-05-01T23:00:00') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P6M" "PT0S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P6M" "PT0S"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-11-01T00:00:00', TIMESTAMP '2022-05-01T00:00:00') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT1H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT1H"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-01-01T01:00:00', TIMESTAMP '2023-01-01T00:00:00') as itvl"))))
 
   (t/testing "testing AGE with timestamp with timezone"
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT1H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT1H"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T11:00:00+01:00[Europe/London]', TIMESTAMP '2023-06-01T11:00:00+02:00[Europe/Berlin]') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT2H"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T09:00:00-05:00[America/Chicago]', TIMESTAMP '2023-06-01T12:00:00') as itvl"))))
 
   (t/testing "testing AGE with date"
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT0S"]}]
              (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', DATE '2023-01-01') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P-12M" "PT0S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P-12M" "PT0S"]}]
              (xt/q tu/*node* "SELECT AGE(DATE '2023-01-01', DATE '2024-01-01') as itvl"))))
 
   (t/testing "test with mixed types"
-    (t/is (= [{:itvl #xt/interval-mdn ["P1D" "PT0S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P1D" "PT0S"]}]
              (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', TIMESTAMP '2023-01-01T00:00:00') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P-6M" "PT0S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P-6M" "PT0S"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-01T00:00:00', TIMESTAMP '2022-11-01T00:00:00+00:00[Europe/London]') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT2H0.001S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT2H0.001S"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.501', TIMESTAMP '2023-07-01T12:00:30.500+02:00[Europe/Berlin]') as itvl")))
-    (t/is (= [{:itvl #xt/interval-mdn ["P0D" "PT-2H-0.001S"]}]
+    (t/is (= [{:itvl #xt/interval-mdm ["P0D" "PT-2H-0.001S"]}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl")))))
 
 (t/deftest test-period-predicates

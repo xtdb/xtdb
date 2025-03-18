@@ -18,9 +18,9 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
-           (xtdb.types IntervalMonthDayNano ZonedDateTimeRange)
+           (xtdb.types IntervalMonthDayMicro ZonedDateTimeRange)
            [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
+           (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType IntervalMDMType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -105,6 +105,7 @@
   ArrowType$Time (<-arrow-type [arrow-type] [:time-local (time-unit->kw (.getUnit arrow-type))])
   ArrowType$Duration (<-arrow-type [arrow-type] [:duration (time-unit->kw (.getUnit arrow-type))])
   ArrowType$Interval (<-arrow-type [arrow-type] [:interval (interval-unit->kw (.getUnit arrow-type))])
+  IntervalMDMType (<-arrow-type [arrow-type] [:interval :month-day-micro])
 
   ArrowType$Struct (<-arrow-type [_] :struct)
   ArrowType$List (<-arrow-type [_] :list)
@@ -180,7 +181,9 @@
                   (ArrowType$Duration. (kw->time-unit time-unit)))
 
       :interval (let [[_ interval-unit] col-type]
-                  (ArrowType$Interval. (kw->interval-unit interval-unit)))
+                  (if (= :month-day-micro interval-unit)
+                    IntervalMDMType/INSTANCE
+                    (ArrowType$Interval. (kw->interval-unit interval-unit))))
 
       :fixed-size-list (let [[_ list-size] col-type]
                          (ArrowType$FixedSizeList. list-size))
@@ -687,7 +690,11 @@
   (str (name type-head) "-" (name interval-unit)))
 
 (defmethod col-type->field* :interval [col-name nullable? [_type-head interval-unit]]
-  (->field col-name (ArrowType$Interval. (kw->interval-unit interval-unit)) nullable?))
+  (->field
+   col-name
+   (if (= :month-day-micro interval-unit)
+     IntervalMDMType/INSTANCE
+     (ArrowType$Interval. (kw->interval-unit interval-unit))) nullable?))
 
 (defmethod arrow-type->col-type ArrowType$Interval [^ArrowType$Interval arrow-type]
   [:interval (interval-unit->kw (.getUnit arrow-type))])
@@ -700,6 +707,7 @@
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)
 (defmethod arrow-type->col-type TransitType [_] :transit)
+(defmethod arrow-type->col-type IntervalMDMType [_] [:interval :month-day-micro])
 
 ;;; LUB
 
@@ -1250,7 +1258,7 @@
                            (utf8 (if (.getBoolean rdr idx) "t" "f")))}
 
    :interval {:typname "interval"
-              :col-type [:interval :month-day-nano]
+              :col-type [:interval :month-day-micro]
               :typlen 16
               :oid 1186
               :typsend "interval_send"
@@ -1261,19 +1269,19 @@
                            (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
               :write-binary (fn [_env ^IVectorReader rdr idx]
                             ;; Postgres only has month-day-micro intervals so we truncate the nanos
-                              (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
+                              (let [^IntervalMonthDayMicro itvl (.getObject rdr idx)
                                     p (.period itvl)
                                     d (trunc-duration-to-micros  (.duration itvl))]
                                 ;; we use the standard toString for encoding
                                 (byte-array
-                                 (utf8 (IntervalMonthDayNano. p d)))))
+                                 (utf8 (IntervalMonthDayMicro. p d)))))
               :write-text (fn [_env ^IVectorReader rdr idx]
                             ;; Postgres only has month-day-micro intervals so we truncate the nanos
-                            (let [^IntervalMonthDayNano itvl (.getObject rdr idx)
+                            (let [^IntervalMonthDayMicro itvl (.getObject rdr idx)
                                   p (.period itvl)
                                   d (trunc-duration-to-micros  (.duration itvl))]
                               ;; we use the standard toString for encoding
-                              (utf8 (IntervalMonthDayNano. p d))))}
+                              (utf8 (IntervalMonthDayMicro. p d))))}
 
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
@@ -1454,7 +1462,7 @@
    [:timestamp-local :nano] :timestamp
    [:timestamp-tz :nano] :timestamptz
    :tstz-range :tstz-range
-   [:interval :month-day-nano] :interval
+   [:interval :month-day-micro] :interval
    [:list :i32] :_int4
    [:list :i64] :_int8
    [:list :utf8] :_text
