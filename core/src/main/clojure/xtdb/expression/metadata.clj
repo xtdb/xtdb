@@ -205,7 +205,7 @@
            :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag PageMetadata))
                         ~(-> expr/args-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
-                     (let [~metadata-rdr-sym (VectorReader/from (.getMetadataLeafReader ~table-metadata-sym))
+                     (let [~metadata-rdr-sym (.getMetadataLeafReader ~table-metadata-sym)
                            ~cols-rdr-sym (.keyReader ~metadata-rdr-sym "columns")
                            ~col-rdr-sym (.elementReader ~cols-rdr-sym)
                            ~types-rdr-sym (.keyReader ~col-rdr-sym "types")

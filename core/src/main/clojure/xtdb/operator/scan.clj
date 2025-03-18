@@ -325,7 +325,7 @@
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    (let [metadata-rdr (VectorReader/from (.getMetadataLeafReader page-metadata))
+    (let [metadata-rdr (.getMetadataLeafReader page-metadata)
           bloom-rdr (-> (.keyReader metadata-rdr "columns")
                         (.elementReader)
                         (.keyReader "bloom"))]
