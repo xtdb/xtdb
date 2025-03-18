@@ -1102,3 +1102,27 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* ["SELECT *, _valid_from, _valid_to
                              FROM docs FOR ALL VALID_TIME
                              ORDER BY _id, _valid_from"]))))
+
+(t/deftest pushdown-bloom-col-renaming-at-cursor-build-time-4279
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node ["INSERT INTO foo (_id) VALUES ('foo1')"
+                         "INSERT INTO bar (_id, foo) VALUES ('bar1', 'foo1')"])
+    (tu/finish-block! node)
+
+    (t/is (= [{:foo "foo1", :bar "bar1"}]
+             (tu/query-ra '[:project [{bar _id} {foo foo/_id}]
+                            [:semi-join [{_id vals/_column_1}]
+                             [:rename {bar/_id _id}
+                              [:join [{foo/_id bar/foo}]
+                               [:rename foo [:scan {:table public/foo} [_id]]]
+                               [:rename bar [:scan {:table public/bar} [_id foo]]]]]
+                             [:rename vals
+                              [:table [_column_1]
+                               [{:_column_1 "bar1"}]]]]]
+                          {:node node})))
+
+    (t/is (= [{:xt/id "bar1"}]
+             (xt/q node "FROM foo
+                         JOIN bar ON bar.foo = foo._id
+                         SELECT bar._id AS _id,
+                         WHERE _id IN ('bar1')")))))

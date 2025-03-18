@@ -42,17 +42,20 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [emitted-child-relation (lp/emit-expr relation args)]
-    (lp/unary-expr emitted-child-relation
-      (fn [fields]
-        (let [col-name-mapping (->> (for [old-name (set (keys fields))]
-                                      [old-name
-                                       (cond-> (get columns old-name old-name)
-                                         prefix (->> name (symbol (name prefix))))])
-                                    (into {}))]
-          {:fields (->> fields
-                        (into {}
-                              (map (juxt (comp col-name-mapping key) val))))
-           :stats (:stats emitted-child-relation)
-           :->cursor (fn [_opts in-cursor]
-                       (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))})))))
+  (let [{->inner-cursor :->cursor, inner-fields :fields, :as emitted-child-relation} (lp/emit-expr relation args)
+        col-name-mapping (->> (for [old-name (set (keys inner-fields))]
+                                [old-name
+                                 (cond-> (get columns old-name old-name)
+                                   prefix (->> name (symbol (name prefix))))])
+                              (into {}))
+        col-name-reverse-mapping (set/map-invert col-name-mapping)]
+    {:fields (->> inner-fields
+                  (into {}
+                        (map (juxt (comp col-name-mapping key) val))))
+     :stats (:stats emitted-child-relation)
+     :->cursor (fn [opts]
+                 (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
+                                                                [(get col-name-reverse-mapping k) v])
+                                                              (into {}))]
+                   (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
+                     (RenameCursor. in-cursor col-name-mapping col-name-reverse-mapping))))}))
