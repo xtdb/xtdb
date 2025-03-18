@@ -169,7 +169,7 @@
         meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
     (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt/instant "2020-01-01T00:00:00.000000Z")
-            temporal-metadata (tu/->temporal-metadata sys-time-micros Long/MAX_VALUE sys-time-micros Long/MAX_VALUE sys-time-micros)]
+            temporal-metadata (tu/->temporal-metadata sys-time-micros Long/MAX_VALUE sys-time-micros sys-time-micros)]
         (t/is (= temporal-metadata (.temporalMetadata page-metadata 0)))))))
 
 (t/deftest test-boolean-metadata

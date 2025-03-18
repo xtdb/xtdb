@@ -185,10 +185,8 @@
    (->MockMergePlanPage page metadata-matches? (tu/->temporal-metadata min-valid-from max-valid-to)))
   ([page metadata-matches? min-vf max-vt min-sf]
    (->mock-merge-plan-page page metadata-matches? min-vf max-vt min-sf Long/MAX_VALUE))
-  ([page metadata-matches? min-vf max-vt min-sf max-st]
-   (->MockMergePlanPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-st)))
-  ([page metadata-matches? min-vf max-vt min-sf max-st max-sf]
-   (->MockMergePlanPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-st max-sf))))
+  ([page metadata-matches? min-vf max-vt min-sf max-sf]
+   (->MockMergePlanPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-sf))))
 
 (def ^:private inst->micros (comp time/instant->micros time/->instant))
 
@@ -221,25 +219,25 @@
 
       (t/testing "No constraints on query bounds"
 
-        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt3 sf1 Long/MAX_VALUE (dec sf2))
-                                               (->mock-merge-plan-page 1 true vt1 vt2 sf2 Long/MAX_VALUE sf2)]
+        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt3 sf1 (dec sf2))
+                                               (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
                                               (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 0 system from strictly before page 1.")
-        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 Long/MAX_VALUE sf2)
-                                                 (->mock-merge-plan-page 1 true vt1 vt2 sf2 Long/MAX_VALUE sf2)]
+        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 sf2)
+                                                 (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
                                                 (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 system from overlaps.")
 
-        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt1 sf1 Long/MAX_VALUE (inc sf2))
-                                               (->mock-merge-plan-page 1 true vt1 vt2 sf2 Long/MAX_VALUE sf2)]
+        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt1 sf1 (inc sf2))
+                                               (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
                                               (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 0 valid-time strictly before page 1.")
 
-        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 Long/MAX_VALUE (inc sf2))
-                                                 (->mock-merge-plan-page 1 true vt1 vt2 sf2 Long/MAX_VALUE sf2)]
+        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 (inc sf2))
+                                                 (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
                                                 (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas."))
@@ -247,14 +245,14 @@
 
       (t/testing "Tighter constraints on query bounds"
         ;; TODO could we filter page 0 in the two assertions below?
-        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt2 sf1 Long/MAX_VALUE sf2)
-                                                 (->mock-merge-plan-page 1 true vt1 vt2 sf2 Long/MAX_VALUE sf2)]
+        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt2 sf1 sf2)
+                                                 (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
                                                 (tu/->min-max-query-bounds vt0 Long/MAX_VALUE (inc sf2) Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 system from overlaps. Query system-time bounds don't touch page 0")
 
-        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt1 sf1 Long/MAX_VALUE (inc sf2))
-                                                 (->mock-merge-plan-page 1 true (dec vt1) vt2 sf2 Long/MAX_VALUE sf2)]
+        (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt1 sf1 (inc sf2))
+                                                 (->mock-merge-plan-page 1 true (dec vt1) vt2 sf2 sf2)]
                                                 (tu/->min-max-query-bounds (inc vt1) Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas. Query valid-time bounds don't touch page 0")))
@@ -263,20 +261,20 @@
 
       (t/testing "No constraints on query bounds"
 
-        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 vt2 sf2 Long/MAX_VALUE sf2)
-                                               (->mock-merge-plan-page 2 false vt2 vt3 sf3 Long/MAX_VALUE sf3)]
+        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)
+                                               (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
                                               (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 2 doesn't overlap in valid-time")
 
-        (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 Long/MAX_VALUE sf2)
-                                                 (->mock-merge-plan-page 2 false vt2 vt3 sf3 Long/MAX_VALUE sf3)]
+        (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
+                                                 (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
                                                 (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
-        (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 Long/MAX_VALUE sf2)
-                                                 (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 Long/MAX_VALUE sf3)]
+        (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
+                                                 (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 sf3)]
                                                 (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 can bound page 1 and we can't filter newer pages (no constraints on query system-time)."))
@@ -284,23 +282,23 @@
 
       (t/testing "Constraints on query bounds"
         ;; TODO can 2 be filtered here?
-        (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 Long/MAX_VALUE sf2)
-                                                 (->mock-merge-plan-page 2 false vt2 vt3 sf3 Long/MAX_VALUE sf3)]
+        (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
+                                                 (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
                                                 (tu/->min-max-query-bounds vt1 (dec vt2) sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
 
-        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 Long/MAX_VALUE sf3)
-                                               (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 Long/MAX_VALUE sf3)]
+        (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf3)
+                                               (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 sf3)]
                                               (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 sf3))
                            ->pages))
               "Take page 1. Page 2 can bound page 1 and we can filter newer pages because of query system-time constraints.")))
 
 
-    (t/is (= #{0 1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 0 true vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE sf1)
-                                               (->mock-merge-plan-page 1 false vt1 vt2 sf2 Long/MAX_VALUE sf2)
-                                               (->mock-merge-plan-page 2 false vt2 vt3 sf3 Long/MAX_VALUE sf3)])
+    (t/is (= #{0 1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 0 true vt0 Long/MAX_VALUE sf1 sf1)
+                                               (->mock-merge-plan-page 1 false vt1 vt2 sf2 sf2)
+                                               (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)])
                            ->pages))
           "All pages pages need to be taken if later pages bound valid-time")))
 

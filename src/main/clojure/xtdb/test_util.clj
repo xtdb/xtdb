@@ -359,17 +359,15 @@
 
 (defn ->temporal-metadata
   ([min max] (->temporal-metadata min max min))
-  ([vf-min vt-max sf-min] (->temporal-metadata vf-min vt-max sf-min Long/MAX_VALUE sf-min))
+  ([vf-min vt-max sf-min] (->temporal-metadata vf-min vt-max sf-min sf-min))
   ([vf-min vt-max sf-min sf-max]
-   (->temporal-metadata vf-min vt-max sf-min sf-max Long/MAX_VALUE))
-  ([vf-min vt-max sf-min _st-max max-system-from]
    (let [^TemporalMetadata$Builder builder (TemporalMetadata/newBuilder)]
      (.setMinValidFrom builder vf-min)
      (.setMaxValidFrom builder vf-min)
      (.setMinValidTo builder vt-max)
      (.setMaxValidTo builder vt-max)
      (.setMinSystemFrom builder sf-min)
-     (.setMaxSystemFrom builder max-system-from)
+     (.setMaxSystemFrom builder sf-max)
      (.build builder))))
 
 (defn ->temporal-metadata-fn [page-idx-pred->bounds]
