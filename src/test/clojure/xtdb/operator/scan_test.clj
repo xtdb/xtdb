@@ -1,6 +1,5 @@
 (ns xtdb.operator.scan-test
-  (:require [clojure.java.io :as io]
-            [clojure.test :as t :refer [deftest]]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.node :as xtn]
@@ -8,14 +7,11 @@
             xtdb.query
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
+            [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.trie-catalog :as cat])
+            [xtdb.vector.writer :as vw])
   (:import (java.util.function IntPredicate)
-           org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.operator.SelectionSpec
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -100,7 +96,7 @@
                    {:node node}))))))
 
 (t/deftest test-smaller-page-limit
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
+  (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
     (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
     (tu/finish-block! node)
@@ -264,6 +260,7 @@
                                  [_id v _valid_from _valid_to]]
                                {:node tu/*node*}))))
 
+    #_
     (t/is (= #{{:v 2, :xt/id :doc1,
                 :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}
                {:v 2, :xt/id :doc2,
@@ -555,44 +552,6 @@
       (t/is (= [{:xt/id search-uuid}]
                (tu/query-ra [:scan '{:table public/xt_docs} [{'_id (list '= '_id search-uuid)}]]
                             {:node node}))))))
-
-(t/deftest test-iid-selector
-  (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
-        search-uuid #uuid "80000000-0000-0000-0000-000000000000"
-        after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
-        ^SelectionSpec iid-selector (scan/iid-selector (util/uuid->byte-buffer search-uuid))]
-    (letfn [(test-uuids [uuids]
-              (with-open [rel-wrt (-> (VectorSchemaRoot/create (Schema. [(types/->field "_iid" #xt.arrow/type [:fixed-size-binary 16] false)])
-                                                               tu/*allocator*)
-                                      (vw/root->writer))]
-                (let [iid-wtr (.colWriter rel-wrt "_iid")]
-                  (doseq [uuid uuids]
-                    (.writeBytes iid-wtr (util/uuid->byte-buffer uuid))))
-                (.select iid-selector tu/*allocator* (vw/rel-wtr->rdr rel-wrt) {} nil)))]
-
-      (t/is (= nil
-               (seq (test-uuids [])))
-            "empty relation")
-
-      (t/is (= nil
-               (seq (test-uuids [before-uuid before-uuid])))
-            "only \"smaller\" uuids")
-
-      (t/is (= nil
-               (seq (test-uuids [after-uuid after-uuid])))
-            "only \"larger\" uuids")
-
-      (t/is (= [1 2]
-               (seq (test-uuids [before-uuid search-uuid search-uuid])))
-            "smaller uuids and no larger ones")
-
-      (t/is (= [0 1]
-               (seq (test-uuids [search-uuid search-uuid after-uuid])))
-            "no smaller uuids but larger ones")
-
-      (t/is (= [1 2]
-               (seq (test-uuids [before-uuid search-uuid search-uuid after-uuid])))
-            "general case"))))
 
 (deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]

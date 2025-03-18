@@ -1,27 +1,16 @@
 (ns xtdb.trie-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.operator.scan :as scan]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.trie :as trie :refer [MergePlanPage]]
-            [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
-  (:import io.micrometer.core.instrument.simple.SimpleMeterRegistry
-           (java.nio.file Paths)
-           java.nio.file.Path
-           (java.util.function IntPredicate Predicate)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (org.apache.arrow.vector.types.pojo Field)
-           (xtdb ICursor)
-           xtdb.api.storage.Storage
+            [xtdb.trie :as trie]
+            [xtdb.util :as util])
+  (:import (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.Relation
-           xtdb.buffer_pool.LocalBufferPool
+           xtdb.operator.scan.MergePlanPage
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrieKt MergePlanNode MergePlanTask)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector RelationWriter)))
+           (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -111,9 +100,9 @@
 
 (defrecord MockMergePlanPage [page metadata-matches? temporal-metadata]
   MergePlanPage
-  (load-page [_ _ _] (throw (UnsupportedOperationException.)))
-  (test-metadata [_] metadata-matches?)
-  (temporal-metadata [_] temporal-metadata))
+  (loadPage [_ _root-cache] (throw (UnsupportedOperationException.)))
+  (testMetadata [_] metadata-matches?)
+  (getTemporalMetadata [_] temporal-metadata))
 
 (defn ->mock-merge-plan-page
   ([page] (->mock-merge-plan-page page true))

@@ -1,13 +1,15 @@
 package xtdb.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.vector.VectorSchemaRoot;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.Relation;
 import xtdb.arrow.Vector;
 
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.toMap;
 
 public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
 
@@ -28,6 +30,25 @@ public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
         return new RelationReader(colsMap, rowCount);
     }
 
+    public static RelationReader from(VectorSchemaRoot root) {
+        return from(
+                root.getFieldVectors().stream().map(ValueVectorReader::from).toList(),
+                root.getRowCount()
+        );
+    }
+
+    public static RelationReader concat(RelationReader rel1, RelationReader rel2) {
+        if (rel1.cols.isEmpty()) return rel2;
+        if (rel2.cols.isEmpty()) return rel1;
+
+        assert (rel1.rowCount == rel2.rowCount) : "Cannot concatenate relations with different row counts";
+        var cols = new ArrayList<IVectorReader>();
+        cols.addAll(rel1.cols.values());
+        cols.addAll(rel2.cols.values());
+
+        return RelationReader.from(cols, rel1.rowCount);
+    }
+
     private RelationReader(Map<String, IVectorReader> cols, int rowCount) {
         this.cols = cols;
         this.rowCount = rowCount;
@@ -39,7 +60,7 @@ public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
 
     public <K> Map<K, ?> getRow(int idx, IKeyFn<K> keyFn) {
         return cols.values().stream()
-                .collect(Collectors.toMap(
+                .collect(toMap(
                         e -> keyFn.denormalize(e.getName()),
                         e -> e.getObject(idx)));
     }

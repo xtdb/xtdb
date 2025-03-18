@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [xtdb.types :as types])
   (:import clojure.lang.MapEntry
+           java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            xtdb.api.query.IKeyFn
@@ -11,7 +12,7 @@
   (ValueVectorReadersKt/from v))
 
 (defn rel-reader
-  (^xtdb.vector.RelationReader [cols] (RelationReader/from cols))
+  (^xtdb.vector.RelationReader [^List cols] (RelationReader/from cols))
   (^xtdb.vector.RelationReader [cols ^long row-count] (RelationReader/from cols row-count)))
 
 (defn <-root ^xtdb.vector.RelationReader [^VectorSchemaRoot root]
@@ -55,4 +56,4 @@
         :else (do
                 (assert (= (.rowCount rel1) (.rowCount rel2)))
                 (assert (empty? (set/intersection (available-col-names rel1) (available-col-names rel2))))
-                (RelationReader/from (into (seq rel1) (seq rel2))))))
+                (RelationReader/from ^List (into (seq rel1) (seq rel2))))))

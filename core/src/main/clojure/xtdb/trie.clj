@@ -5,11 +5,11 @@
            (java.nio.file Path)
            java.time.LocalDate
            (java.util ArrayList)
-           xtdb.BufferPool
+           (xtdb.log.proto TrieDetails TrieMetadata)
+           xtdb.operator.scan.MergePlanPage
            (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.util Temporal)
-           (xtdb.log.proto TrieDetails TrieMetadata TemporalMetadata)))
+           (xtdb.util Temporal)))
 
 (defn ->trie-details ^TrieDetails
   ([table-name, trie-key, ^long data-file-size]
@@ -61,11 +61,6 @@
   (getTrie [_] trie)
   (getDataRel [this] (:data-rel this)))
 
-(defprotocol MergePlanPage
-  (load-page [mpg ^BufferPool buffer-pool vsr-cache])
-  (test-metadata [msg])
-  (temporal-metadata [msg]))
-
 (defn ->live-trie ^MemoryHashTrie [log-limit page-limit iid-rdr]
   (-> (doto (MemoryHashTrie/builder iid-rdr)
         (.setLogLimit log-limit)
@@ -76,15 +71,15 @@
   ([mp-pages] (->merge-task mp-pages (TemporalBounds.)))
   ([mp-pages ^TemporalBounds query-bounds]
    (let [leaves (ArrayList.)]
-     (loop [[mp-page & more-mp-pages] mp-pages
+     (loop [[^MergePlanPage mp-page & more-mp-pages] mp-pages
             smallest-valid-from Long/MAX_VALUE
             largest-valid-to Long/MIN_VALUE
             smallest-system-from Long/MAX_VALUE
             non-taken-pages []]
        (if mp-page
-         (let [^TemporalMetadata page-temp-meta (temporal-metadata mp-page)
+         (let [page-temp-meta (.getTemporalMetadata mp-page)
                take-node? (and (Temporal/intersects page-temp-meta query-bounds)
-                               (test-metadata mp-page))]
+                               (.testMetadata mp-page))]
 
            (if take-node?
              (do
@@ -105,9 +100,9 @@
 
          (when (seq leaves)
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
-             (loop [[page & more-pages] non-taken-pages]
+             (loop [[^MergePlanPage page & more-pages] non-taken-pages]
                (when page
-                 (let [^TemporalMetadata page-temp-meta (temporal-metadata page)
+                 (let [page-temp-meta (.getTemporalMetadata page)
                        page-largest-system-from (.getMaxSystemFrom page-temp-meta)]
                    (when (and (<= smallest-system-from page-largest-system-from)
                               (.intersects (TemporalDimension. (.getMinValidFrom page-temp-meta)

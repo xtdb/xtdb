@@ -42,11 +42,6 @@
                      max-disk-cache-bytes (.maxDiskCacheBytes max-disk-cache-bytes)
                      max-disk-cache-percentage (.maxDiskCachePercentage max-disk-cache-percentage))))
 
-(defn open-vsr ^VectorSchemaRoot [^BufferPool bp ^Path path allocator]
-  (let [footer (.getFooter bp path)
-        schema (.getSchema footer)]
-    (VectorSchemaRoot/create schema allocator)))
-
 (defmethod xtn/apply-config! ::storage [config _ [tag opts]]
   (xtn/apply-config! config
                      (case tag

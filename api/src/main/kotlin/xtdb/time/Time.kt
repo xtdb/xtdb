@@ -71,3 +71,5 @@ fun String.asSqlTimestamp(): TemporalAccessor =
                 { LocalDate.from(it).atStartOfDay().maybeWithZoneFrom(it) },
             )
         }
+
+val TEMPORAL_COL_NAMES = setOf("_valid_from", "_valid_to", "_system_from", "_system_to")
