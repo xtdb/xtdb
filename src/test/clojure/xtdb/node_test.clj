@@ -4,6 +4,7 @@
             [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
@@ -1049,6 +1050,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (xt/execute-tx node ["INSERT INTO foo (_id) VALUES ('foo1')"
                          "INSERT INTO bar (_id, foo) VALUES ('bar1', 'foo1')"])
     (tu/finish-block! node)
+
+    (c/compact-all! node)
 
     (t/is (= [{:foo "foo1", :bar "bar1"}]
              (tu/query-ra '[:project [{bar _id} {foo foo/_id}]
