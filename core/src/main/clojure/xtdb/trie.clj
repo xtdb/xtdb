@@ -77,7 +77,6 @@
   ([mp-pages ^TemporalBounds query-bounds]
    (let [leaves (ArrayList.)]
      (loop [[mp-page & more-mp-pages] mp-pages
-            node-taken? false
             smallest-valid-from Long/MAX_VALUE
             largest-valid-to Long/MIN_VALUE
             smallest-system-from Long/MAX_VALUE
@@ -91,14 +90,12 @@
              (do
                (.add leaves mp-page)
                (recur more-mp-pages
-                      true
                       (min smallest-valid-from (.getMinValidFrom page-temp-meta))
                       (max largest-valid-to (.getMaxValidTo page-temp-meta))
                       (min smallest-system-from (.getMinSystemFrom page-temp-meta))
                       non-taken-pages))
 
              (recur more-mp-pages
-                    node-taken?
                     smallest-valid-from
                     largest-valid-to
                     smallest-system-from
@@ -106,7 +103,7 @@
                       (Temporal/intersectsSystemTime page-temp-meta query-bounds)
                       (conj mp-page)))))
 
-         (when node-taken?
+         (when (seq leaves)
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
              (loop [[page & more-pages] non-taken-pages]
                (when page
