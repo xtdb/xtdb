@@ -15,7 +15,6 @@ export default defineConfig({
 
             social: {
                 github: 'https://github.com/xtdb/xtdb',
-                twitter: 'https://twitter.com/xtdb_com',
             },
 
             favicon: '/shared/favicon.svg',
@@ -28,7 +27,7 @@ export default defineConfig({
             sidebar: [
                 { label: '← xtdb.com', link: 'https://xtdb.com', attrs: { target: '_blank' } },
 
-                { label: '← 1.x (stable release) docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
+                { label: '← 1.x docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
 
                 {
                     label: 'Introduction',
@@ -210,6 +209,8 @@ export default defineConfig({
                 TableOfContents: './src/components/table-of-contents.astro',
                 MobileTableOfContents: './src/components/mobile-table-of-contents.astro',
                 Head: './src/components/Head.astro',
+                SiteTitle: './src/components/SiteTitle.astro',
+                Header: './src/components/Header.astro',
             },
         }),
 

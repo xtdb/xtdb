@@ -1,0 +1,28 @@
+---
+import Default from '@astrojs/starlight/components/Header.astro';
+---
+
+<Default {...Astro.props} />
+
+<script>
+    const titleWrapper = document.querySelector('.title-wrapper');
+    if (titleWrapper) {
+        titleWrapper.style.overflow = 'visible';
+    }
+
+    const header = document.querySelector('header');
+    if (header) {
+        header.style.backgroundColor = '#000c';
+        header.style.backdropFilter = 'blur(10px)';
+    }
+
+    const select = document.querySelector('select');
+    if (select) {
+        select.style.color = 'white';
+    }
+
+    const svg = document.querySelector('.label-icon');
+    if (svg) {
+        svg.setAttribute("fill","white")
+    }
+</script>
