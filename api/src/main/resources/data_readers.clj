@@ -15,6 +15,7 @@
  xt/interval-ym xtdb.serde/interval-ym-reader
  xt/interval-dt xtdb.serde/interval-dt-reader
  xt/interval-mdn xtdb.serde/interval-mdn-reader
+ xt/interval-mdm xtdb.serde/interval-mdm-reader
  xt/tstz-range xtdb.serde/tstz-range-reader
  xt/uri xtdb.serde/uri-reader
 

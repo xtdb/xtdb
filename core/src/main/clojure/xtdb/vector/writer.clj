@@ -12,7 +12,7 @@
            (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth ZonedDateTimeRange)
            (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -87,11 +87,14 @@
   IntervalMonthDayNano
   (value->col-type [_] [:interval :month-day-nano])
 
+  IntervalMonthDayMicro
+  (value->col-type [_] [:interval :month-day-micro])
+
   ZonedDateTimeRange
   (value->col-type [_] :tstz-range)
 
-  PeriodDuration
-  (value->col-type [_] [:interval :month-day-nano]))
+  PeriodDuration ;;TODO Is there any need to expose this?
+  (value->col-type [_] [:interval :month-day-micro]))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")

@@ -2660,8 +2660,8 @@ UNION ALL
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'PT1H'};"])
 
   (t/is (= [{:xt/id 1,
-             :tx-interval #xt/interval-mdn ["P0D" "PT1H"],
-             :q-interval #xt/interval-mdn ["P0D" "PT1H"]}]
+             :tx-interval #xt/interval-mdm ["P0D" "PT1H"],
+             :q-interval #xt/interval-mdm ["P0D" "PT1H"]}]
            (xt/q tu/*node* "FROM docs SELECT *, INTERVAL 'PT1H' AS q_interval"))))
 
 (t/deftest test-push-selection-down-past-unnest
@@ -2824,3 +2824,17 @@ UNION ALL
   (xt/execute-tx tu/*node* ["UPDATE \"test_null_values\" SET \"metadata\" = NULL WHERE (\"_id\" = UUID 'b5e2705f-5ba7-46c5-b595-afc96370742d')"])
 
   (xt/q tu/*node* "SELECT * FROM `test_null_values`"))
+
+(t/deftest interval-mdm
+  (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'P1DT1.123456S'}"])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 2, tx_interval: ?}" [#xt/interval-mdm ["P1D" "PT1.123456S"]]]])
+
+  (t/is (= [{:xt/id 2, :tx-interval #xt/interval-mdm ["P1D" "PT1.123456S"]}
+            {:xt/id 1, :tx-interval #xt/interval-mdm ["P1D" "PT1.123456S"]}]
+           (xt/q tu/*node* "FROM docs SELECT *")))
+
+  (t/is (= [{:mdm #xt/interval-mdm ["P1D" "PT1.123456S"],
+             :mdn [#xt/interval-mdn ["P1D" "PT1.123456789S"]],
+             :mdm-literal #xt/interval-mdm ["P1D" "PT1.123456S"]}]
+           (xt/q tu/*node* "SELECT ? mdm, ? mdn, INTERVAL 'P1DT1.123456S' mdm_literal"
+                 {:args [#xt/interval-mdm ["P1D" "PT1.123456S"] [#xt/interval-mdn ["P1D" "PT1.123456789S"]]]}))))

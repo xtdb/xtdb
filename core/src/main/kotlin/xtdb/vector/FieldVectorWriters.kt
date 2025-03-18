@@ -30,6 +30,7 @@ import xtdb.arrow.*
 import xtdb.types.*
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.*
+import xtdb.vector.extensions.IntervalMonthDayMicroVector
 import xtdb.vector.extensions.KeywordVector
 import xtdb.vector.extensions.SetVector
 import xtdb.vector.extensions.TransitVector
@@ -424,6 +425,16 @@ internal class UuidVectorWriter(vector: UuidVector) : ExtensionVectorWriter(vect
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
 }
 
+internal class IntervalMonthDayMicroVectorWriter(vector: IntervalMonthDayMicroVector) : ExtensionVectorWriter(vector, null) {
+    override fun writeObject0(obj: Any) = when (obj) {
+        is IntervalMonthDayMicro -> super.writeObject0(IntervalMonthDayNano(obj.period, obj.duration))
+        is PeriodDuration -> super.writeObject0(obj)
+        else -> throw InvalidWriteObjectException(field.fieldType, obj)
+    }
+
+    override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
+}
+
 internal class UriVectorWriter(vector: UriVector) : ExtensionVectorWriter(vector, null) {
     override fun writeObject0(obj: Any) =
         if (obj !is URI) throw InvalidWriteObjectException(field.fieldType, obj)
@@ -484,6 +495,7 @@ internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) 
         inner.promoteChildren(Field(field.name, inner.field.fieldType, field.children))
     }
 }
+
 
 private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChangeListener?> {
     override fun visit(vec: BaseFixedWidthVector, notify: FieldChangeListener?) = when (vec) {
@@ -557,6 +569,7 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
         is UuidVector -> UuidVectorWriter(vec)
         is UriVector -> UriVectorWriter(vec)
         is TransitVector -> TransitVectorWriter(vec)
+        is IntervalMonthDayMicroVector -> IntervalMonthDayMicroVectorWriter(vec)
         is TsTzRangeVector -> TsTzRangeVectorWriter(vec) { notify(vec.field) }
         is SetVector -> SetVectorWriter(vec) { notify(vec.field) }
         else -> throw UnsupportedOperationException("unknown vector: ${vec.javaClass.simpleName}")

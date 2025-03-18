@@ -5,6 +5,7 @@
            [java.time.format DateTimeParseException]
            java.time.temporal.ChronoUnit
            (java.util Date)
+           (org.apache.arrow.vector PeriodDuration)
            xtdb.time.Time))
 
 (defn ->duration [d]
@@ -123,3 +124,15 @@
                               {::err/message (str "invalid timestamp: " (ex-message e))
                                :timestamp ts-str}
                               e)))))
+
+(defn alter-duration-precision ^Duration [^long precision ^Duration duration]
+  (if (= precision 0)
+    (.withNanos duration 0)
+    (.withNanos duration (let [nanos (.getNano duration)
+                               factor (Math/pow 10 (- 9 precision))]
+                           (* (Math/floor (/ nanos factor)) factor)))))
+
+(defn alter-md*-interval-precision ^PeriodDuration [^long precision ^PeriodDuration pd]
+  (PeriodDuration.
+   (.getPeriod pd)
+   (alter-duration-precision precision (.getDuration pd))))

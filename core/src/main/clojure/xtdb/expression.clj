@@ -23,7 +23,7 @@
            (xtdb.arrow ListValueReader RelationReader ValueReader VectorPosition VectorReader)
            xtdb.arrow.ValueBox
            (xtdb.operator ProjectionSpec SelectionSpec)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth)
            (xtdb.util StringUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -393,6 +393,10 @@
 (defmethod emit-value IntervalMonthDayNano [_ code]
   `(let [imdn# ~code]
      (PeriodDuration. (.-period imdn#) (.-duration imdn#))))
+
+(defmethod emit-value IntervalMonthDayMicro [_ code]
+  `(let [imdm# ~code]
+     (PeriodDuration. (.-period imdm#) (.-duration imdm#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (vw/value->col-type literal)

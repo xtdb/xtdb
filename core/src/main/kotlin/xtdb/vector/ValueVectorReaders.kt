@@ -71,6 +71,7 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
         is UriVector -> uriVector(v)
         is TransitVector -> transitVector(v)
         is TsTzRangeVector -> tstzRangeVector(v)
+        is IntervalMonthDayMicroVector -> intervalMdmVector(v)
 
         is SetVector -> setVector(v)
 
