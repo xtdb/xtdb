@@ -1,6 +1,7 @@
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import java.nio.file.Files
 import java.nio.file.Path
@@ -26,8 +27,11 @@ class DiskCache(
 
     val stats get() = pinningCache.stats
 
-    fun registerMetrics(meterName: String, registry: MeterRegistry) {
-        pinningCache.registerMetrics(meterName, registry)
+    fun MeterRegistry.registerDiskCache(meterName: String) {
+        pinningCache.registerMetrics(meterName, this)
+
+        Gauge.builder("$meterName.maxSizeBytes", this) { maxSizeBytes.toDouble() }
+            .baseUnit("bytes").register(this)
     }
 
     inner class Entry(
@@ -50,6 +54,7 @@ class DiskCache(
     }
 
     init {
+        LOGGER.debug("Creating disk cache with maxSizeBytes=$maxSizeBytes")
         val syncInnerCache = pinningCache.cache.synchronous()
         Files.walk(rootPath)
             .filter { Files.isRegularFile(it) }

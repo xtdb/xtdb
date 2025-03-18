@@ -58,11 +58,12 @@ class RemoteBufferPool(
         MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
             .also { it.registerMetrics("memory-cache", meterRegistry) }
 
-    val diskCache = DiskCache(
-        factory.localDiskCache.also { it.createDirectories() },
-        factory.maxDiskCacheBytes
-            ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0).toLong())
-    )
+    val diskCache =
+        DiskCache(
+            factory.localDiskCache.also { it.createDirectories() },
+            factory.maxDiskCacheBytes
+                ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0).toLong())
+        ).apply { meterRegistry?.registerDiskCache("disk-cache")}
 
     private val recordBatchRequests: Counter = meterRegistry.counter("record-batch-requests")
     private val memCacheMisses: Counter = meterRegistry.counter("mem-cache-misses")
