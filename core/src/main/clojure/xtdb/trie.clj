@@ -8,7 +8,8 @@
            xtdb.BufferPool
            (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
            (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.log.proto TrieDetails TrieMetadata)))
+           (xtdb.util Temporal)
+           (xtdb.log.proto TrieDetails TrieMetadata TemporalMetadata)))
 
 (defn ->trie-details ^TrieDetails
   ([table-name, trie-key, ^long data-file-size]
@@ -63,25 +64,13 @@
 (defprotocol MergePlanPage
   (load-page [mpg ^BufferPool buffer-pool vsr-cache])
   (test-metadata [msg])
-  (temporal-bounds [msg]))
+  (temporal-metadata [msg]))
 
 (defn ->live-trie ^MemoryHashTrie [log-limit page-limit iid-rdr]
   (-> (doto (MemoryHashTrie/builder iid-rdr)
         (.setLogLimit log-limit)
         (.setPageLimit page-limit))
       (.build)))
-
-(defn max-valid-to ^long [^TemporalBounds tb]
-  (.getUpper (.getValidTime tb)))
-
-(defn min-valid-from ^long [^TemporalBounds tb]
-  (.getLower (.getValidTime tb)))
-
-(defn min-system-from ^long [^TemporalBounds tb]
-  (.getLower (.getSystemTime tb)))
-
-(defn max-system-from ^long [^TemporalBounds tb]
-  (.getMaxSystemFrom tb))
 
 (defn ->merge-task
   ([mp-pages] (->merge-task mp-pages (TemporalBounds.)))
@@ -94,8 +83,8 @@
             smallest-system-from Long/MAX_VALUE
             non-taken-pages []]
        (if mp-page
-         (let [^TemporalBounds page-bounds (temporal-bounds mp-page)
-               take-node? (and (.intersects page-bounds query-bounds)
+         (let [^TemporalMetadata page-temp-meta (temporal-metadata mp-page)
+               take-node? (and (Temporal/intersects page-temp-meta query-bounds)
                                (test-metadata mp-page))]
 
            (if take-node?
@@ -103,9 +92,9 @@
                (.add leaves mp-page)
                (recur more-mp-pages
                       true
-                      (min smallest-valid-from (min-valid-from page-bounds))
-                      (max largest-valid-to (max-valid-to page-bounds))
-                      (min smallest-system-from (min-system-from page-bounds))
+                      (min smallest-valid-from (.getMinValidFrom page-temp-meta))
+                      (max largest-valid-to (.getMaxValidTo page-temp-meta))
+                      (min smallest-system-from (.getMinSystemFrom page-temp-meta))
                       non-taken-pages))
 
              (recur more-mp-pages
@@ -114,17 +103,19 @@
                     largest-valid-to
                     smallest-system-from
                     (cond-> non-taken-pages
-                      (.intersects (.getSystemTime page-bounds) (.getSystemTime query-bounds))
+                      (Temporal/intersectsSystemTime page-temp-meta query-bounds)
                       (conj mp-page)))))
 
          (when node-taken?
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
              (loop [[page & more-pages] non-taken-pages]
                (when page
-                 (let [page-valid-time (.getValidTime ^TemporalBounds (temporal-bounds page))
-                       page-largest-system-from (max-system-from (temporal-bounds page))]
+                 (let [^TemporalMetadata page-temp-meta (temporal-metadata page)
+                       page-largest-system-from (.getMaxSystemFrom page-temp-meta)]
                    (when (and (<= smallest-system-from page-largest-system-from)
-                              (.intersects valid-time page-valid-time))
+                              (.intersects (TemporalDimension. (.getMinValidFrom page-temp-meta)
+                                                               (.getMaxValidTo page-temp-meta))
+                                           valid-time))
                      (.add leaves page))
                    (recur more-pages)))))
            (vec leaves)))))))

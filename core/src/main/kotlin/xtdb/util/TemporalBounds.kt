@@ -1,5 +1,7 @@
+@file:JvmName("Temporal")
 package xtdb.util
 
+import xtdb.log.proto.TemporalMetadata
 import java.time.Instant
 
 data class TemporalDimension(
@@ -28,11 +30,20 @@ data class TemporalDimension(
 data class TemporalBounds(
     val validTime: TemporalDimension = TemporalDimension(),
     val systemTime: TemporalDimension = TemporalDimension(),
-    val maxSystemFrom: Long = Long.MAX_VALUE,
 ){
-    constructor(validTime: TemporalDimension, systemTime: TemporalDimension) : this(validTime, systemTime, Long.MAX_VALUE)
-
     fun intersects(other: TemporalBounds) = this.validTime.intersects(other.validTime) && this.systemTime.intersects(other.systemTime)
     fun intersects(validFrom: Long, validTo: Long, systemFrom: Long, systemTo: Long) =
         (this.validTime.intersects(validFrom, validTo) && this.systemTime.intersects(systemFrom, systemTo))
+
+    fun intersects(temporalMetadata : TemporalMetadata): Boolean =
+        intersects(temporalMetadata.minValidFrom, temporalMetadata.maxValidTo, temporalMetadata.minSystemFrom, Long.MAX_VALUE)
 }
+
+fun TemporalMetadata.intersects(bounds: TemporalBounds) =
+    bounds.intersects(this.minValidFrom , this.maxValidTo , this.minSystemFrom , Long.MAX_VALUE)
+
+fun TemporalMetadata.intersectsSystemTime(bounds: TemporalBounds) =
+    bounds.systemTime.intersects(this.minSystemFrom , Long.MAX_VALUE)
+
+fun TemporalMetadata.intersectsValidTime(bounds: TemporalBounds) =
+    bounds.validTime.intersects(this.minValidFrom , this.maxValidTo)

@@ -10,7 +10,7 @@
            [java.util.concurrent ConcurrentHashMap]
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           (xtdb.log.proto TrieDetails TrieMetadata)))
+           (xtdb.log.proto TrieDetails TrieMetadata TemporalMetadata)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -205,15 +205,16 @@
        (sort-by :block-idx)))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
-  (when (.hasMinValidFrom trie-metadata)
-    {:min-valid-from (time/micros->instant  (.getMinValidFrom trie-metadata))
-     :max-valid-from (time/micros->instant (.getMaxValidFrom trie-metadata))
-     :min-valid-to (time/micros->instant (.getMinValidTo trie-metadata))
-     :max-valid-to (time/micros->instant (.getMaxValidTo trie-metadata))
-     :min-system-from (time/micros->instant (.getMinSystemFrom trie-metadata))
-     :max-system-from (time/micros->instant (.getMaxSystemFrom trie-metadata))
-     :row-count (.getRowCount trie-metadata)
-     :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))}))
+  (when (.hasTemporalMetadata trie-metadata)
+    (let [^TemporalMetadata temporal-metadata (.getTemporalMetadata trie-metadata)]
+      {:min-valid-from (time/micros->instant  (.getMinValidFrom temporal-metadata))
+       :max-valid-from (time/micros->instant (.getMaxValidFrom temporal-metadata))
+       :min-valid-to (time/micros->instant (.getMinValidTo temporal-metadata))
+       :max-valid-to (time/micros->instant (.getMaxValidTo temporal-metadata))
+       :min-system-from (time/micros->instant (.getMinSystemFrom temporal-metadata))
+       :max-system-from (time/micros->instant (.getMaxSystemFrom temporal-metadata))
+       :row-count (.getRowCount trie-metadata)
+       :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog

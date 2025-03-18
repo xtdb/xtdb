@@ -13,6 +13,7 @@ import xtdb.arrow.VectorReader
 import xtdb.bloom.bloomHashes
 import xtdb.bloom.toByteBuffer
 import xtdb.compactor.PageTree
+import xtdb.log.proto.TemporalMetadata
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadataWriter
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
@@ -61,6 +62,7 @@ class TrieWriter(
 
         private var pageIdx = 0
 
+        private val temporalMetadataBuilder = TemporalMetadata.newBuilder()
         private val trieMetadataBuilder = TrieMetadata.newBuilder()
         private val iidBloom = RoaringBitmap()
 
@@ -93,17 +95,17 @@ class TrieWriter(
             val temporalCols = listOf(systemFrom, validFrom, validTo, iidVec)
 
             if(writeTrieMetadata) {
-                val (minValidFrom, maxValidFrom) = getMinMax(validFrom ,trieMetadataBuilder.minValidFrom, trieMetadataBuilder.maxValidFrom)
-                trieMetadataBuilder.minValidFrom = minValidFrom
-                trieMetadataBuilder.maxValidFrom = maxValidFrom
+                val (minValidFrom, maxValidFrom) = getMinMax(validFrom, temporalMetadataBuilder.minValidFrom, temporalMetadataBuilder.maxValidFrom)
+                temporalMetadataBuilder.minValidFrom = minValidFrom
+                temporalMetadataBuilder.maxValidFrom = maxValidFrom
 
-                val (minValidTo, maxValidTo) = getMinMax(validTo,trieMetadataBuilder.minValidTo, trieMetadataBuilder.maxValidTo)
-                trieMetadataBuilder.minValidTo = minValidTo
-                trieMetadataBuilder.maxValidTo = maxValidTo
+                val (minValidTo, maxValidTo) = getMinMax(validTo, temporalMetadataBuilder.minValidTo, temporalMetadataBuilder.maxValidTo)
+                temporalMetadataBuilder.minValidTo = minValidTo
+                temporalMetadataBuilder.maxValidTo = maxValidTo
 
-                val (minSystemFrom, maxSystemFrom) = getMinMax(systemFrom, trieMetadataBuilder.minSystemFrom, trieMetadataBuilder.maxSystemFrom)
-                trieMetadataBuilder.minSystemFrom = minSystemFrom
-                trieMetadataBuilder.maxSystemFrom = maxSystemFrom
+                val (minSystemFrom, maxSystemFrom) = getMinMax(systemFrom, temporalMetadataBuilder.minSystemFrom, temporalMetadataBuilder.maxSystemFrom)
+                temporalMetadataBuilder.minSystemFrom = minSystemFrom
+                temporalMetadataBuilder.maxSystemFrom = maxSystemFrom
 
                 trieMetadataBuilder.rowCount = iidVec.valueCount.toLong()
 
@@ -153,7 +155,8 @@ class TrieWriter(
                 metaFileWriter.end()
             }
 
-            if(writeTrieMetadata) {
+            if(writeTrieMetadata && trieMetadataBuilder.rowCount > 0) {
+                trieMetadataBuilder.temporalMetadata = temporalMetadataBuilder.build()
                 trieMetadataBuilder.iidBloom  = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
             }
 

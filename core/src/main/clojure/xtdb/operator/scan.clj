@@ -41,7 +41,8 @@
            (xtdb.trie ArrowHashTrie$Leaf EventRowPointer EventRowPointer$Arrow HashTrie HashTrieKt MemoryHashTrie$Leaf MergePlanNode MergePlanTask TrieCatalog Trie)
            (xtdb.util TemporalBounds TemporalDimension)
            (xtdb.vector IMultiVectorRelationFactory IRelationWriter IVectorReader IVectorWriter IndirectMultiVectorReader RelationReader RelationWriter)
-           (xtdb.bloom BloomUtils)))
+           (xtdb.bloom BloomUtils)
+           (xtdb.log.proto TemporalMetadata)))
 
 (s/def ::table symbol?)
 
@@ -356,9 +357,7 @@
   (test-metadata [_mpg]
     (.test page-idx-pred page-idx))
 
-  (temporal-bounds [_mpg] (.temporalBounds page-metadata (int page-idx))))
-
-(def ^:private non-constraint-bounds (TemporalBounds.))
+  (temporal-metadata [_mpg] (.temporalMetadata page-metadata (int page-idx))))
 
 (defrecord MemoryMergePlanPage [^RelationReader live-rel trie ^MemoryHashTrie$Leaf leaf]
   MergePlanPage
@@ -367,7 +366,7 @@
 
   (test-metadata [_mpg] true)
 
-  (temporal-bounds [_msg] non-constraint-bounds))
+  (temporal-metadata [_msg] util/unconstraint-temporal-metadata))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts

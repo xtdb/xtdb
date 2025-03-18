@@ -10,6 +10,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.VectorReader
 import xtdb.bloom.bloomHashes
 import xtdb.bloom.toByteBuffer
+import xtdb.log.proto.TemporalMetadata
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
 import xtdb.types.Fields
@@ -30,6 +31,7 @@ class LiveTable
 
     private val trieWriter = TrieWriter(al, bp, false)
     private val trieMetadataBuilder = TrieMetadata.newBuilder()
+    private val temporalMetadataBuilder = TemporalMetadata.newBuilder()
     private var iidBloom = RoaringBitmap()
 
     @FunctionalInterface
@@ -127,12 +129,12 @@ class LiveTable
         fun commit() = this@LiveTable.also {
             val pos = liveRelation.writerPosition().position
             for (i in startPos until pos) {
-                trieMetadataBuilder.minValidFrom = minOf(trieMetadataBuilder.minValidFrom, validFromRdr.getLong(i))
-                trieMetadataBuilder.maxValidFrom = maxOf(trieMetadataBuilder.maxValidFrom, validFromRdr.getLong(i))
-                trieMetadataBuilder.minValidTo = minOf(trieMetadataBuilder.minValidTo , validToRdr.getLong(i))
-                trieMetadataBuilder.maxValidTo = maxOf(trieMetadataBuilder.maxValidTo, validToRdr.getLong(i))
-                trieMetadataBuilder.minSystemFrom = minOf(trieMetadataBuilder.minSystemFrom, systemFromRdr.getLong(i))
-                trieMetadataBuilder.maxSystemFrom = maxOf(trieMetadataBuilder.maxSystemFrom, systemFromRdr.getLong(i))
+                temporalMetadataBuilder.minValidFrom = minOf(temporalMetadataBuilder.minValidFrom, validFromRdr.getLong(i))
+                temporalMetadataBuilder.maxValidFrom = maxOf(temporalMetadataBuilder.maxValidFrom, validFromRdr.getLong(i))
+                temporalMetadataBuilder.minValidTo = minOf(temporalMetadataBuilder.minValidTo , validToRdr.getLong(i))
+                temporalMetadataBuilder.maxValidTo = maxOf(temporalMetadataBuilder.maxValidTo, validToRdr.getLong(i))
+                temporalMetadataBuilder.minSystemFrom = minOf(temporalMetadataBuilder.minSystemFrom, systemFromRdr.getLong(i))
+                temporalMetadataBuilder.maxSystemFrom = maxOf(temporalMetadataBuilder.maxSystemFrom, systemFromRdr.getLong(i))
                 trieMetadataBuilder.rowCount += (pos - startPos)
                 it.iidBloom.add(*bloomHashes(VectorReader.from(iidRdr) , i))
             }
@@ -187,6 +189,7 @@ class LiveTable
         val rowCount = liveRelation.writerPosition().position
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
+        trieMetadataBuilder.temporalMetadata = temporalMetadataBuilder.build()
         trieMetadataBuilder.iidBloom  = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
 
         return liveRelation.openAsRelation().useAll { dataRel ->
