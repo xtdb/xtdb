@@ -61,15 +61,13 @@
 
 (deftest test-merge-plan-with-nil-nodes-2700
   (with-open [al (RootAllocator.)
-              t1-rel (tu/open-arrow-hash-trie-rel al [{Long/MAX_VALUE [nil 0 nil 1]} 2 nil
-                                                      {(time/instant->micros (time/->instant #inst "2023-01-01")) 3
-                                                       Long/MAX_VALUE 4}])
+              t1-rel (tu/open-arrow-hash-trie-rel al [[nil 0 nil 1] 2 nil 3])
               log-rel (tu/open-arrow-hash-trie-rel al 0)
               log2-rel (tu/open-arrow-hash-trie-rel al [nil nil 0 1])]
 
     (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
               {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
-              {:path [3], :pages [{:page-idx 3, :seg :t1} {:page-idx 4, :seg :t1} {:page-idx 0, :seg :log} {:page-idx 1, :seg :log2}]}
+              {:path [3], :pages [{:page-idx 3, :seg :t1} {:page-idx 0, :seg :log} {:page-idx 1, :seg :log2}]}
               {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
               {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
@@ -80,96 +78,36 @@
                                                (assoc :seg :log))
                                            (-> (trie/->Segment (->arrow-hash-trie log2-rel))
                                                (assoc :seg :log2))]
-                                          nil
-                                          (TemporalBounds.))
-                  (merge-plan-nodes->path+pages))))))
+                                          nil)
+                  (merge-plan-nodes->path+pages)))))
 
-(deftest test-merge-plan-recency-filtering
   (with-open [al (RootAllocator.)
-              t1-rel (tu/open-arrow-hash-trie-rel al [{Long/MAX_VALUE [nil 0 nil 1]}
-                                                      {Long/MAX_VALUE 2}
-                                                      nil
-                                                      {(time/instant->micros (time/->instant #inst "2020-01-01")) 3
-                                                       Long/MAX_VALUE 4}])
-              t2-rel (tu/open-arrow-hash-trie-rel al [{(time/instant->micros (time/->instant #inst "2019-01-01")) 0
-                                                       (time/instant->micros (time/->instant #inst "2020-01-01")) 1
-                                                       Long/MAX_VALUE [nil 2 nil 3]}
-                                                      nil
-                                                      nil
-                                                      {(time/instant->micros (time/->instant #inst "2020-01-01")) 4
-                                                       Long/MAX_VALUE 5}])]
-    (t/testing "pages 3 of t1 and 0,1 and 4 of t2 should not make it to the output"
-      ;; setting up bounds for a current-time 2020-01-01
-      (let [current-time (time/instant->micros (time/->instant #inst "2020-01-01"))
-            temporal-bounds (TemporalBounds. (TemporalDimension. current-time (inc current-time))
-                                             (TemporalDimension. current-time (inc current-time)))]
+              t1-rel (tu/open-arrow-hash-trie-rel al [[nil 0 nil 1] 2 nil 3])
+              t2-rel (tu/open-arrow-hash-trie-rel al [[0 1 nil [nil 2 nil 3]] nil nil [nil 4 nil 5]])]
 
+    (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
+              {:path [0 0], :pages [{:seg :t2, :page-idx 0}]}
+              {:path [0 1],
+               :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 1}]}
+              {:path [3 0], :pages [{:seg :t1, :page-idx 3}]}
+              {:path [3 1],
+               :pages [{:seg :t1, :page-idx 3} {:seg :t2, :page-idx 4}]}
+              {:path [3 2], :pages [{:seg :t1, :page-idx 3}]}
+              {:path [3 3],
+               :pages [{:seg :t1, :page-idx 3} {:seg :t2, :page-idx 5}]}
+              {:path [0 3 0], :pages [{:seg :t1, :page-idx 1}]}
+              {:path [0 3 1],
+               :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 2}]}
+              {:path [0 3 2], :pages [{:seg :t1, :page-idx 1}]}
+              {:path [0 3 3],
+               :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
 
-        (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                  {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 5}]}
-                  {:path [0 1],
-                   :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
-                  {:path [0 3],
-                   :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
-                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                                   (assoc :seg :t1))
-                                               (-> (trie/->Segment (->arrow-hash-trie t2-rel))
-                                                   (assoc :seg :t2))]
-                                              nil
-                                              temporal-bounds)
-                      (merge-plan-nodes->path+pages))))))
-
-    (t/testing "going one chronon below should bring in pages 3 of t1 and pages 1 and 4 of t2"
-      (let [current-time (dec (time/instant->micros (time/->instant #inst "2020-01-01")))
-            temporal-bounds (TemporalBounds. (TemporalDimension. current-time (inc current-time))
-                                             (TemporalDimension. current-time (inc current-time)))]
-
-        (t/is (=
-               [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                {:path [3],
-                 :pages [{:seg :t1, :page-idx 3} {:seg :t1, :page-idx 4} {:seg :t2, :page-idx 4} {:seg :t2, :page-idx 5}]}
-                {:path [0 0],
-                 :pages [{:seg :t2, :page-idx 1}]}
-                {:path [0 1],
-                 :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 1} {:seg :t2, :page-idx 2}]}
-                {:path [0 2],
-                 :pages [{:seg :t2, :page-idx 1}]}
-                {:path [0 3],
-                 :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 1} {:seg :t2, :page-idx 3}]}]
-               (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                                 (assoc :seg :t1))
-                                             (-> (trie/->Segment (->arrow-hash-trie t2-rel))
-                                                 (assoc :seg :t2))]
-                                            nil
-                                            temporal-bounds)
-                    (merge-plan-nodes->path+pages))))))
-
-    (t/testing "no bounds on system-time should bring in all pages"
-      (let [current-time (time/instant->micros (time/->instant #inst "2020-01-01"))
-            temporal-bounds (TemporalBounds. (TemporalDimension. current-time (inc current-time)) (TemporalDimension.))]
-
-        (t/is (= [{:seg :t1, :page-idx 0}
-                  {:seg :t1, :page-idx 1}
-                  {:seg :t1, :page-idx 2}
-                  {:seg :t1, :page-idx 3}
-                  {:seg :t1, :page-idx 4}
-                  {:seg :t2, :page-idx 0}
-                  {:seg :t2, :page-idx 1}
-                  {:seg :t2, :page-idx 2}
-                  {:seg :t2, :page-idx 3}
-                  {:seg :t2, :page-idx 4}
-                  {:seg :t2, :page-idx 5}]
-                 (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                                   (assoc :seg :t1))
-                                               (-> (trie/->Segment (->arrow-hash-trie t2-rel))
-                                                   (assoc :seg :t2))]
-                                              nil
-                                              temporal-bounds)
-                      (merge-plan-nodes->path+pages)
-                      (mapcat :pages)
-                      (sort-by (juxt :seg :page-idx))
-                      distinct)))))))
-
+             (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
+                                               (assoc :seg :t1))
+                                           (-> (trie/->Segment (->arrow-hash-trie t2-rel))
+                                               (assoc :seg :t2))]
+                                          nil)
+                  (merge-plan-nodes->path+pages))))))
 
 (defrecord MockMergePlanPage [page metadata-matches? temporal-metadata]
   MergePlanPage
@@ -382,179 +320,6 @@
           (t/is (= [2 3] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
                 "2020, but only 3 can bound page 2 in 2020"))))))
 
-(defn ->constantly-int-pred [v]
-  (reify IntPredicate (test [_ _] v)))
-
-(defn ->constantly-pred [v]
-  (reify Predicate (test [_ _] v)))
-
-(defn ->merge-tasks [segments query-bounds]
-  (->> (HashTrieKt/toMergePlan segments (->constantly-pred true) query-bounds)
-       (into [] (keep (fn [^MergePlanTask mpt]
-                        (when-let [leaves (trie/->merge-task
-                                           (for [^MergePlanNode mpn (.getMpNodes mpt)
-                                                 :let [{:keys [seg page-bounds-fn]} (.getSegment mpn)
-                                                       node (.getNode mpn)]]
-                                             (->MockMergePlanPage {:seg seg :page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf node)}
-                                                                  true
-                                                                  (page-bounds-fn (.getDataPageIndex ^ArrowHashTrie$Leaf node))))
-                                           query-bounds)]
-                          {:path (vec (.getPath mpt))
-                           :pages (mapv :page leaves)}))))
-       (sort-by :path)))
-
-(deftest test-to-merge-tasks-with-temporal-filters
-  (let [[micros-2018 micros-2019 micros-2020 micros-2021 micros-2022 micros-2023]
-        (->> (tu/->instants :year 1 #inst "2018-01-01") (take 6) (map inst->micros))
-        eot Long/MAX_VALUE
-
-        t1 [{micros-2021 [nil 0 nil 1]}
-            {micros-2021 2}
-            nil
-            {micros-2020 3
-             micros-2021 4
-             eot 5}]
-        t2 [{micros-2019 0
-             micros-2020 1
-             micros-2021 [nil 2 nil 3]
-             micros-2022 [nil 4 nil 5]
-             eot 6}
-            nil
-            nil
-            {micros-2020 7
-             micros-2021 8}]]
-
-    (with-open [al (RootAllocator.)
-                t1-root (tu/open-arrow-hash-trie-rel al t1)
-                t2-root (tu/open-arrow-hash-trie-rel al t2)]
-
-      ;; valid-from - valid-to (if not otherwise specified valid-from = system-from)
-      (let [t1-page-bounds {#{3}       [micros-2019 micros-2020]
-                            #{0 1 2 4} [micros-2020 micros-2021]
-                            #{5}       [micros-2022 micros-2023]}
-            t2-page-bounds {#{0}     [micros-2018 micros-2019]
-                            #{1 7}   [micros-2019 micros-2020]
-                            #{2 3 8} [micros-2020 micros-2021]
-                            #{4 5}   [micros-2021 micros-2022]
-                            #{6}     [micros-2022 micros-2023]}
-            _ (tu/verify-hash-tries+page-bounds t1 t1-page-bounds)
-            _ (tu/verify-hash-tries+page-bounds t2 t2-page-bounds)
-
-            ;; vt [2020 2021) st at 2020
-            query-bounds (tu/->min-max-query-bounds micros-2020 micros-2021 micros-2020 (inc micros-2020))
-            ;; vt [2020 2021) st unbounded
-            query-bounds-no-sys-time-filter (TemporalBounds. (TemporalDimension. micros-2020 micros-2021) (TemporalDimension.))]
-
-        (t/testing "recency and valid-time range filtering"
-          (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                    {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 8}]}
-                    {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
-                    {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
-                   (->merge-tasks [(-> (trie/->Segment (->arrow-hash-trie t1-root))
-                                       (assoc :seg :t1
-                                              :page-bounds-fn (tu/->temporal-metadata-fn t1-page-bounds)))
-                                   (-> (trie/->Segment (->arrow-hash-trie t2-root))
-                                       (assoc :seg :t2
-                                              :page-bounds-fn (tu/->temporal-metadata-fn t2-page-bounds)))]
-                                  query-bounds))
-                "recency filtering")
-
-          (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                    {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t2, :page-idx 8}]}
-                    {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2}]}
-                    {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
-                   (->merge-tasks [(-> (trie/->Segment (->arrow-hash-trie t1-root))
-                                       (assoc :seg :t1
-                                              :page-bounds-fn (tu/->temporal-metadata-fn t1-page-bounds)))
-                                   (-> (trie/->Segment (->arrow-hash-trie t2-root))
-                                       (assoc :seg :t2
-                                              :page-bounds-fn (tu/->temporal-metadata-fn t2-page-bounds)))]
-                                  query-bounds-no-sys-time-filter))
-                "valid-time range filtering"))
-
-        (t/testing "the current pages have retrospective updates"
-          (let [t1-page-bounds (assoc t1-page-bounds #{5} [micros-2019 micros-2023])
-                t2-page-bounds (assoc t2-page-bounds #{6} [micros-2019 micros-2023])]
-            (tu/verify-hash-tries+page-bounds t1 t1-page-bounds)
-            (tu/verify-hash-tries+page-bounds t2 t2-page-bounds)
-
-            (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                      {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 5} {:seg :t2, :page-idx 8}]}
-                      {:path [0 0], :pages [{:seg :t2, :page-idx 6}]}
-                      {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2} {:seg :t2, :page-idx 6}]}
-                      {:path [0 2], :pages [{:seg :t2, :page-idx 6}]}
-                      {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t2, :page-idx 6}]}]
-
-                     (->merge-tasks [(-> (trie/->Segment (->arrow-hash-trie t1-root))
-                                         (assoc :seg :t1
-                                                :page-bounds-fn (tu/->temporal-metadata-fn t1-page-bounds)))
-                                     (-> (trie/->Segment (->arrow-hash-trie t2-root))
-                                         (assoc :seg :t2
-                                                :page-bounds-fn (tu/->temporal-metadata-fn t2-page-bounds)))]
-                                    query-bounds)))))))))
-
-(deftest test-to-merge-tasks-with-temporal-filters-and-retrospective-updates
-  (t/testing (str "some pages have retrospective updates. The newer ones (6 for t2) should be included because of potential"
-                  "valid-to bounding effects")
-    (let [[micros-2018 micros-2019 micros-2020 micros-2021 micros-2022 micros-2023 _micros-2024]
-          (->> (tu/->instants :year 1 #inst "2018-01-01") (take 6) (map inst->micros))
-          eot Long/MAX_VALUE
-
-          t1 [{micros-2021 [nil 0 nil 1]}
-              {micros-2021 2}
-              nil
-              {micros-2020 3
-               micros-2021 4
-               eot 5}]
-          t2 [{micros-2019 0
-               micros-2020 1
-               micros-2021 [nil 2 nil 3]
-               micros-2023 [nil 4 nil 5]
-               eot 6}
-              nil
-              nil
-              {micros-2020 7
-               micros-2021 8}]]
-
-      ;; valid-from - valid-to (if not otherwise specified valid-from = system-from)
-      (with-open [al (RootAllocator.)
-                  t1-root (tu/open-arrow-hash-trie-rel al t1)
-                  t2-root (tu/open-arrow-hash-trie-rel al t2)]
-
-        (let [t1-page-bounds {#{3}       [micros-2019 micros-2020]
-                              #{0 1 2 4} [micros-2020 micros-2021]
-                              ;; 5 has an retrospective update
-                              #{5}     [micros-2019 micros-2023 micros-2022]}
-              t2-page-bounds {#{0}     [micros-2018 micros-2019]
-                              #{1 7}   [micros-2019 micros-2020]
-                              #{2 3 8} [micros-2020 micros-2021]
-                              ;; 4 5 have retrospective updates
-                              #{4 5}   [micros-2019 micros-2022 micros-2021]
-                              ;; we let page 6 overlap slightly with pages inside the query bounds
-                              #{6}     [(dec micros-2022) micros-2023]}
-              _ (tu/verify-hash-tries+page-bounds t1 t1-page-bounds)
-              _ (tu/verify-hash-tries+page-bounds t2 t2-page-bounds)
-
-              ;; vt [2020 2021) st unbounded
-              query-bounds-no-sys-time-filter (TemporalBounds. (TemporalDimension. micros-2020 micros-2021) (TemporalDimension.))]
-
-          (tu/verify-hash-tries+page-bounds t1 t1-page-bounds)
-          (tu/verify-hash-tries+page-bounds t2 t2-page-bounds)
-          (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-                    {:path [3], :pages [{:seg :t1, :page-idx 4} {:seg :t1, :page-idx 5} {:seg :t2, :page-idx 8}]}
-                    {:path [0 1],
-                     :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 2} {:seg :t2, :page-idx 4} {:seg :t2, :page-idx 6}]}
-                    {:path [0 3],
-                     :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3} {:seg :t2, :page-idx 5} {:seg :t2, :page-idx 6}]}]
-
-                   (->merge-tasks [(-> (trie/->Segment (->arrow-hash-trie t1-root))
-                                       (assoc :seg :t1
-                                              :page-bounds-fn (tu/->temporal-metadata-fn t1-page-bounds)))
-                                   (-> (trie/->Segment (->arrow-hash-trie t2-root))
-                                       (assoc :seg :t2
-                                              :page-bounds-fn (tu/->temporal-metadata-fn t2-page-bounds)))]
-                                  query-bounds-no-sys-time-filter))))))))
-
 (deftest test-data-file-writing
   (let [page-idx->documents
         {0 [[:put {:xt/id #uuid "00000000-0000-0000-0000-000000000000"
@@ -570,86 +335,3 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/trie-test/data-file-writing")))
                        tmp-dir)))))
-
-(defn- str->path [s]
-  (Paths/get s, (make-array String 0)))
-
-
-(defn ->mock-arrow-merge-plan-page [data-file page-idx]
-  (scan/->ArrowMergePlanPage (str->path data-file)
-                             (->constantly-int-pred true)
-                             page-idx
-                             nil))
-
-(defn dir->buffer-pool
-  "Creates a local storage buffer pool from the given directory."
-  ^xtdb.BufferPool [^BufferAllocator allocator, ^Path dir]
-  (let [bp-path (util/tmp-dir "tmp-buffer-pool")
-        storage-root (.resolve bp-path Storage/STORAGE_ROOT)]
-    (util/copy-dir dir storage-root)
-    (LocalBufferPool. (Storage/localStorage bp-path) Storage/VERSION allocator (SimpleMeterRegistry.))))
-
-(deftest test-trie-cursor-with-multiple-recency-nodes-from-same-file-3298
-  (let [eid #uuid "00000000-0000-0000-0000-000000000000"]
-    (util/with-tmp-dirs #{tmp-dir}
-      (with-open [al (RootAllocator.)
-                  iid-arrow-buf (util/->arrow-buf-view al (util/->iid eid))
-                  t1-rel (tu/open-arrow-hash-trie-rel al [{(time/instant->micros (time/->instant #inst "2023-01-01"))
-                                                           [0 nil nil 1]
-                                                           Long/MAX_VALUE [2 nil nil 3]}
-                                                          nil nil 4])
-                  t2-rel (tu/open-arrow-hash-trie-rel al [0 nil nil nil])]
-        (let [id #uuid "00000000-0000-0000-0000-000000000000"
-              t1-data-file "t1-data-file.arrow"
-              t2-data-file "t2-data-file.arrow"]
-
-
-          (tu/write-arrow-data-file al
-                                    {0 [[:put {:xt/id id :foo "bar2" :xt/system-from 2}]
-                                        [:put {:xt/id id :foo "bar1" :xt/system-from 1}]]
-                                     1 []
-                                     2 [[:put {:xt/id id :foo "bar0" :xt/system-from 0}]]
-                                     3 []
-                                     4 []}
-                                    (.resolve tmp-dir t1-data-file))
-
-          (tu/write-arrow-data-file al
-                                    {0 [[:put {:xt/id id :foo "bar3" :xt/system-from 3}]]}
-                                    (.resolve tmp-dir t2-data-file))
-
-          (with-open [buffer-pool (dir->buffer-pool al tmp-dir)]
-
-            (let [arrow-hash-trie1 (->arrow-hash-trie t1-rel)
-                  arrow-hash-trie2 (->arrow-hash-trie t2-rel)
-                  leaves [(->mock-arrow-merge-plan-page t1-data-file 0)
-                          (->mock-arrow-merge-plan-page t1-data-file 2)
-                          (->mock-arrow-merge-plan-page t2-data-file 0)]
-                  merge-tasks [{:leaves leaves :path (byte-array [0 0])}]]
-              (util/with-close-on-catch [out-rel (RelationWriter. al (for [^Field field
-                                                                           [(types/->field "_id" (types/->arrow-type :uuid) false)
-                                                                            (types/->field "foo" (types/->arrow-type :utf8) false)]]
-                                                                       (vw/->writer (.createVector field al))))]
-
-                (let [^ICursor trie-cursor (scan/->TrieCursor al (.iterator ^Iterable merge-tasks) out-rel
-                                                              ["_id" "foo"] {}
-                                                              (TemporalBounds.)
-                                                              {} nil
-                                                              (scan/->vsr-cache buffer-pool al)
-                                                              buffer-pool)]
-
-                  (t/is (= [[{:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar3"}
-                             {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar2"}
-                             {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar1"}
-                             {:xt/id #uuid "00000000-0000-0000-0000-000000000000", :foo "bar0"}]]
-                           (tu/<-cursor trie-cursor)))
-                  (.close trie-cursor))
-
-                (t/is (= [{:path [0 0],
-                           :pages [{:seg :t1, :page-idx 0}
-                                   {:seg :t1, :page-idx 2}
-                                   {:seg :t2, :page-idx 0}]}]
-                         (->> (HashTrieKt/toMergePlan [(-> (trie/->Segment arrow-hash-trie1) (assoc :seg :t1))
-                                                       (-> (trie/->Segment arrow-hash-trie2) (assoc :seg :t2))]
-                                                      (scan/->path-pred iid-arrow-buf)
-                                                      (TemporalBounds.))
-                              (merge-plan-nodes->path+pages))))))))))))

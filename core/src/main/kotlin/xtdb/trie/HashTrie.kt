@@ -3,13 +3,10 @@ package xtdb.trie
 import com.carrotsearch.hppc.ObjectStack
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.trie.ArrowHashTrie.IidBranch
-import xtdb.trie.ArrowHashTrie.RecencyBranch
 import xtdb.trie.HashTrie.Node
-import xtdb.util.TemporalBounds
 import java.util.*
 import java.util.function.Predicate
 import java.util.stream.Stream
-import kotlin.math.min
 
 internal typealias RecencyArray = LongArray
 
@@ -31,15 +28,9 @@ interface HashTrie<N : Node<N>, L : N> {
 
         val iidChildren: Array<N?>?
 
-        val recencies: RecencyArray?
-        fun recencyNode(idx: Int): N
-
         fun leafStream(): Stream<out Node<N>> =
             when {
                 iidChildren != null -> Arrays.stream(iidChildren).flatMap { child -> child?.leafStream() }
-                recencies != null -> recencies!!.indices.toList().stream()
-                    .flatMap { idx -> recencyNode(idx).leafStream() }
-
                 else -> Stream.of(this)
             }
 
@@ -100,11 +91,9 @@ class MergePlanTask(val mpNodes: List<MergePlanNode<*, *>>, val path: ByteArray)
 @Suppress("UNUSED_EXPRESSION")
 fun List<ISegment<*, *>>.toMergePlan(
     pathPred: Predicate<ByteArray>?,
-    temporalBounds: TemporalBounds = TemporalBounds()
 ): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
-    val minRecency = min(temporalBounds.validTime.lower, temporalBounds.systemTime.lower)
 
     val initialMpNodes = mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode.create(seg, it) } }
     if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
@@ -114,25 +103,6 @@ fun List<ISegment<*, *>>.toMergePlan(
         val mpNodes = mergePlanTask.mpNodes
 
         when {
-            mpNodes.any { it.node is RecencyBranch } -> {
-                val newMpNodes = mutableListOf<MergePlanNode<*, *>>()
-                for (mpNode in mergePlanTask.mpNodes) {
-                    val recencies = mpNode.node.recencies
-                    if (recencies != null) {
-                        val tempMpNodes = mutableListOf<MergePlanNode<*, *>>()
-                        for (i in recencies.indices.reversed()) {
-                            // the recency of a bucket is exclusive, i.e. no event in the bucket has the recency of the bucket
-                            if (recencies[i] <= minRecency) break
-                            tempMpNodes += MergePlanNode.create(mpNode.segment, mpNode.node.recencyNode(i))
-                        }
-                        newMpNodes += tempMpNodes.reversed()
-                    } else {
-                        newMpNodes += mpNode
-                    }
-                }
-                stack.push(MergePlanTask(newMpNodes, mergePlanTask.path))
-            }
-
             pathPred != null && !pathPred.test(mergePlanTask.path) -> null
 
             mpNodes.any { it.node is IidBranch || it.node is MemoryHashTrie.Branch } -> {

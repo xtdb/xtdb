@@ -474,7 +474,7 @@
                                                                   template-table? (conj (let [[memory-rel trie] (table->template-rel+trie (symbol table-name))]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]
-                                                   (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf) temporal-bounds)
+                                                   (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf))
                                                         (into [] (keep (fn [^MergePlanTask mpt]
                                                                          (when-let [leaves (trie/->merge-task
                                                                                             (for [^MergePlanNode mpn (.getMpNodes mpt)

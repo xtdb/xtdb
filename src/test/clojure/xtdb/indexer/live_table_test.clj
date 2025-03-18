@@ -19,7 +19,7 @@
            xtdb.BufferPool
            xtdb.compactor.Compactor
            (xtdb.indexer LiveIndex LiveTable LiveTable$Watermark)
-           (xtdb.trie MemoryHashTrie MemoryHashTrie$Leaf)
+           (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
 (t/use-fixtures :each tu/with-node)

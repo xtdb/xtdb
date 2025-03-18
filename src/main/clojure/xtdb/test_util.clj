@@ -387,10 +387,6 @@
           nil-wtr (.legWriter nodes-wtr "nil")
           iid-branch-wtr (.legWriter nodes-wtr "branch-iid")
           iid-branch-el-wtr (.elementWriter iid-branch-wtr)
-          recency-branch-wtr (.legWriter nodes-wtr "branch-recency")
-          recency-branch-el-wtr (.elementWriter recency-branch-wtr)
-          recency-wtr (.keyWriter recency-branch-el-wtr "recency")
-          recency-idx-wtr (.keyWriter recency-branch-el-wtr "idx")
 
           data-wtr (.legWriter nodes-wtr "leaf")
           data-page-idx-wtr (.keyWriter data-wtr "data-page-idx")
@@ -417,19 +413,7 @@
                                                   (if (= idx -1)
                                                     (.writeNull iid-branch-el-wtr)
                                                     (.writeInt iid-branch-el-wtr idx)))))
-                                    (.endList iid-branch-wtr))
-
-                  (map? paths) (let [!page-idxs (TreeMap.)]
-                                 (doseq [[recency child] paths]
-                                   (write-paths child)
-                                   (.put !page-idxs recency (dec (.getRowCount meta-rel))))
-
-                                 (doseq [[^long recency, ^long idx] !page-idxs]
-                                   (.writeLong recency-wtr recency)
-                                   (.writeInt recency-idx-wtr idx)
-                                   (.endStruct recency-branch-el-wtr))
-
-                                 (.endList recency-branch-wtr)))
+                                    (.endList iid-branch-wtr)))
 
                 (.endRow meta-rel))]
         (write-paths paths)))

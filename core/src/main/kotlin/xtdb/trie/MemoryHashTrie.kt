@@ -53,9 +53,6 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
         override val path: ByteArray,
         override val iidChildren: Array<Node?>,
     ) : Node {
-        override val recencies = null
-        override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
-
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size)
 
@@ -87,9 +84,6 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
     ) : Node {
 
         override val iidChildren = null
-
-        override val recencies = null
-        override fun recencyNode(idx: Int) = throw UnsupportedOperationException()
 
         fun mergeSort(trie: MemoryHashTrie): IntArray {
             if (log.isEmpty()) return data

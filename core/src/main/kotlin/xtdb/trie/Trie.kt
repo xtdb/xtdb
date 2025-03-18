@@ -102,10 +102,6 @@ object Trie {
         "nodes" to Fields.Union(
             "nil" to Fields.NULL,
             "branch-iid" to Fields.List(nullable(Fields.I32)),
-            "branch-recency" to Fields.Map(
-                "recency" to Fields.TEMPORAL,
-                "idx" to nullable(Fields.I32),
-            ),
             "leaf" to Fields.Struct(
                 "data-page-idx" to Fields.I32,
                 "columns" to metadataField
