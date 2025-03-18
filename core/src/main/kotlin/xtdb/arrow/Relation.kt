@@ -1,6 +1,5 @@
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.flatbuf.MessageHeader
@@ -23,7 +22,6 @@ import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
 import xtdb.trie.FileSize
 import xtdb.types.NamelessField
-import xtdb.util.normalForm
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.*
@@ -35,7 +33,7 @@ import xtdb.vector.RelationReader as OldRelationReader
 
 private val MAGIC = "ARROW1".toByteArray()
 
-class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationReader {
+class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationWriter<Vector> {
 
     override val schema get() = Schema(vectors.sequencedValues().map { it.field })
 
@@ -55,7 +53,9 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     constructor(allocator: BufferAllocator, fields: SequencedMap<String, NamelessField>, rowCount: Int = 0)
             : this(allocator, fields.map { (name, field) -> field.toArrowField(name) }, rowCount)
 
-    fun endRow() =
+    override operator fun get(colName: String): Vector = vectors[colName] ?: error("missing column: $colName")
+
+    override fun endRow() =
         (++rowCount).also { rowCount ->
             vectors.forEach { (_, vec) ->
                 repeat(rowCount - vec.valueCount) { vec.writeNull() }
@@ -64,18 +64,13 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
     override fun iterator() = vectors.values.iterator()
 
-    fun rowCopier(rel: RelationReader): RowCopier {
+    override fun rowCopier(rel: RelationReader<*>): RowCopier {
         val copiers = rel.map { it.rowCopier(vectors[it.name] ?: error("missing ${it.name} vector")) }
 
         return RowCopier { srcIdx ->
             copiers.forEach { it.copyRow(srcIdx) }
             endRow()
         }
-    }
-
-    fun append(rel: RelationReader) {
-        val copier = rowCopier(rel)
-        repeat(rel.rowCount) { copier.copyRow(it) }
     }
 
     fun loadFromArrow(root: VectorSchemaRoot) {
@@ -381,7 +376,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     /**
      * Resets the row count and all vectors, leaving the buffers allocated.
      */
-    fun clear() {
+    override fun clear() {
         vectors.forEach { (_, vec) -> vec.clear() }
         rowCount = 0
     }
@@ -389,43 +384,4 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     override fun close() {
         vectors.forEach { (_, vec) -> vec.close() }
     }
-
-    override operator fun get(colName: String) = vectors[colName]
-
-    @Suppress("unused")
-    @JvmOverloads
-    fun toTuples(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
-        (0..<rowCount).map { idx -> vectors.map { it.value.getObject(idx, keyFn) } }
-
-    @Suppress("unused")
-    @JvmOverloads
-    fun toMaps(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
-        (0..<rowCount).map { idx ->
-            PersistentHashMap.create(
-                vectors.entries.associate {
-                    Pair(
-                        keyFn.denormalize(it.key),
-                        it.value.getObject(idx, keyFn)
-                    )
-                }
-            ) as Map<*, *>
-        }
-
-    fun writeRows(vararg rows: Map<*, *>) {
-        rows.forEach { row ->
-            row.forEach { (k, v) ->
-                val vector = this[when (k) {
-                    is String -> k
-                    is Keyword -> normalForm(k.sym).toString()
-                    else -> throw IllegalArgumentException("Column name must be a string or keyword")
-                }] ?: error("unknown column: $k")
-
-                vector.writeObject(v)
-            }
-            endRow()
-        }
-    }
-
-    val oldRelReader: OldRelationReader
-        get() = OldRelationReader.from(vectors.sequencedValues().map(VectorReader.Companion::NewToOldAdapter), rowCount)
 }

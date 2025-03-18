@@ -34,7 +34,7 @@ private fun ByteArray.toPathPredicate() =
         Arrays.equals(this, 0, len, pagePath, 0, len)
     }
 
-private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
+private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader<*>? =
     segment.dataRel?.loadPage(node)
 
 internal class SegmentMerge(private val al: BufferAllocator) {

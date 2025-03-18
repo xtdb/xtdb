@@ -190,5 +190,8 @@ interface VectorReader : AutoCloseable {
 
         @JvmStatic
         fun from(old: IVectorReader): VectorReader = OldToNewAdapter(old)
+
     }
+
+    val asOldReader: IVectorReader get() = NewToOldAdapter(this)
 }

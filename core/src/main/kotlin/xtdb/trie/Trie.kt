@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.Relation
 import xtdb.types.Fields
 import xtdb.types.NamelessField
 import xtdb.types.NamelessField.Companion.nullable

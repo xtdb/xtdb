@@ -18,14 +18,14 @@ interface EventRowPointer {
     fun getIidPointer(reuse: ArrowBufPointer): ArrowBufPointer
     fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean
 
-    class XtArrow(val relReader: RelationReader, path: ByteArray): EventRowPointer {
-        private val iidReader: VectorReader = relReader["_iid"]!!
+    class XtArrow(val relReader: RelationReader<*>, path: ByteArray): EventRowPointer {
+        private val iidReader: VectorReader = relReader["_iid"]
 
-        private val sysFromReader: VectorReader = relReader["_system_from"]!!
-        private val validFromReader: VectorReader = relReader["_valid_from"]!!
-        private val validToReader: VectorReader = relReader["_valid_to"]!!
+        private val sysFromReader: VectorReader = relReader["_system_from"]
+        private val validFromReader: VectorReader = relReader["_valid_from"]
+        private val validToReader: VectorReader = relReader["_valid_to"]
 
-        private val opReader: VectorReader = relReader["op"]!!
+        private val opReader: VectorReader = relReader["op"]
 
         override var index: Int private set
 
