@@ -175,6 +175,7 @@ sealed class Vector : VectorReader, VectorWriter {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
                     UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
                     TransitType -> TransitVector(VarBinaryVector(al, name, isNullable))
+                    IntervalMDMType -> IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(al, name, isNullable))
                     TsTzRangeType -> TsTzRangeVector(
                         FixedSizeListVector(
                             al, name, isNullable, 2,

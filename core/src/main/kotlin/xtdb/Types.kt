@@ -90,6 +90,7 @@ fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
         RegClassType -> "regclass"
         RegProcType -> "regproc"
         SetType -> "set"
+        IntervalMDMType -> "interval-month-day-micro"
         TsTzRangeType -> "tstz-range"
         else -> throw UnsupportedOperationException("not supported for $type")
     }
@@ -143,7 +144,8 @@ fun valueToArrowType(obj: Any?) = when (obj) {
 
     is IntervalYearMonth -> MinorType.INTERVALYEAR.type
     is IntervalDayTime -> MinorType.INTERVALDAY.type
-    is IntervalMonthDayNano, is PeriodDuration -> MinorType.INTERVALMONTHDAYNANO.type
+    is IntervalMonthDayNano -> MinorType.INTERVALMONTHDAYNANO.type
+    is IntervalMonthDayMicro , is PeriodDuration -> IntervalMDMType
 
     is ZonedDateTimeRange -> TsTzRangeType
 

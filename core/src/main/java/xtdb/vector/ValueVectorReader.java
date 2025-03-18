@@ -28,9 +28,11 @@ import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
 import xtdb.types.IntervalDayTime;
+import xtdb.types.IntervalMonthDayMicro;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
 import xtdb.util.Hasher;
+import xtdb.vector.extensions.IntervalMonthDayMicroVector;
 import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
 import xtdb.vector.extensions.TransitVector;
@@ -879,6 +881,28 @@ public class ValueVectorReader implements IVectorReader {
             public int hashCode0(int idx, Hasher hasher) {
                 v.get(idx, holder);
                 return hasher.hash(holder.months + holder.days + holder.nanoseconds);
+            }
+        };
+    }
+
+    public static IVectorReader intervalMdmVector(IntervalMonthDayMicroVector v) {
+        var underlyingVec = intervalMdnVector(v.getUnderlyingVector());
+
+        return new ValueVectorReader(v) {
+            @Override
+            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
+                IntervalMonthDayNano inner = (IntervalMonthDayNano) underlyingVec.getObject(idx, keyFn);
+                return new IntervalMonthDayMicro(inner.period, inner.duration);
+            }
+
+            @Override
+            public ValueReader valueReader(VectorPosition pos) {
+                return underlyingVec.valueReader(pos);
+            }
+
+            @Override
+            public int hashCode0(int idx, Hasher hasher) {
+                return underlyingVec.hashCode(idx, hasher);
             }
         };
     }

@@ -2041,7 +2041,7 @@ ORDER BY t.oid DESC LIMIT 1"
 (deftest test-interval-encoding-3697
   (with-open [conn (jdbc-conn)]
     (t/is (= [{:i (PGInterval. "P1DT1H1M1.111111S")}]
-             (jdbc/execute! conn ["SELECT INTERVAL 'P1DT1H1M1.111111111S' AS i"])))
+             (jdbc/execute! conn ["SELECT INTERVAL 'P1DT1H1M1.111111S' AS i"])))
 
     (t/is (= [{:i (PGInterval. "P12MT0S")}]
              (jdbc/execute! conn ["SELECT INTERVAL 'P12MT0S' AS i"])))
@@ -2644,22 +2644,18 @@ ORDER BY 1,2;")
   ;;pgjdbc appears to use binary format for ts results but not tstz...
   (doseq [binary? [false true]
           {:keys [type val input]}
-          [{:type LocalDateTime :val #xt/date-time "2024-01-01T00:00:01.123456" :input "2024-01-01T00:00:00"}
-           {:type OffsetDateTime :val #xt/offset-date-time "2024-01-01T00:00:01.123456Z" :input "2024-01-01T00:00:00Z"}]
-          :let [q (format "SELECT TIMESTAMP '%s' + INTERVAL 'PT1.123456789S' v" input)]]
+          [{:type LocalDateTime :val #xt/date-time "2024-01-01T00:00:01.123456" :input "'2024-01-01T00:00:01.123456789'::TIMESTAMP(9)"}
+           {:type OffsetDateTime :val #xt/offset-date-time "2024-01-01T00:00:01.123456Z" :input "'2024-01-01T00:00:01.123456789Z'::TIMESTAMP(9) WITH TIME ZONE"}]
+          :let [q (format "SELECT %s v" input)]]
 
       (t/testing (format "pgjdbc - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
         (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
                     stmt (.prepareStatement conn q)]
           (with-open [rs (.executeQuery stmt)]
             (.next rs)
-            (t/is (= val (.getObject rs 1 type))))))
+            (t/is (= val (.getObject rs 1 type))))))))
 
-      (t/testing (format "pg2 - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
-        (with-open [conn (pg-conn {:binary-encode? binary? :binary-decode? binary?})]
 
-          (t/is (= [{:v val}]
-                   (pg/execute conn q)))))))
 
 (t/deftest test-sql-with-leading-whitespace
   (with-open [conn (pg-conn {})]

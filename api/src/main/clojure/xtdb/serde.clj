@@ -19,7 +19,7 @@
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
            (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth ZonedDateTimeRange)
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
 
 (defrecord TxKey [tx-id system-time]
@@ -84,6 +84,15 @@
   (.write w (format "#xt/interval-mdn %s" (pr-str [(str (.period i)) (str (.duration i))]))))
 
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
+  (print-dup i w))
+
+(defn interval-mdm-reader [[p d]]
+  (IntervalMonthDayMicro. (Period/parse p) (Duration/parse d)))
+
+(defmethod print-dup IntervalMonthDayMicro [^IntervalMonthDayMicro i, ^Writer w]
+  (.write w (format "#xt/interval-mdm %s" (pr-str [(str (.period i)) (str (.duration i))]))))
+
+(defmethod print-method IntervalMonthDayMicro [i ^Writer w]
   (print-dup i w))
 
 (defn- render-tstz-range [^ZonedDateTimeRange range]
@@ -228,6 +237,7 @@
             "xtdb.interval/year-month" interval-ym-reader
             "xtdb.interval/day-time" interval-dt-reader
             "xtdb.interval/month-day-nano" interval-mdn-reader
+            "xtdb.interval/month-day-micro" interval-mdm-reader
             "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
             "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
             "xtdb.tx/sql" (transit/read-handler sql-op-reader)
@@ -279,6 +289,10 @@
           IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
                                                       #(vector (str (.period ^IntervalMonthDayNano %))
                                                                (str (.duration ^IntervalMonthDayNano %))))
+
+          IntervalMonthDayMicro (transit/write-handler "xtdb.interval/month-day-micro"
+                                                       #(vector (str (.period ^IntervalMonthDayMicro %))
+                                                                (str (.duration ^IntervalMonthDayMicro %))))
 
           ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
           ByteBuffer (transit/write-handler "xtdb/byte-array" #(str "0x" (Hex/encodeHexString (bb->ba %))))
