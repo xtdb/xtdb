@@ -62,7 +62,7 @@ class RemoteBufferPool(
         DiskCache(
             factory.localDiskCache.also { it.createDirectories() },
             factory.maxDiskCacheBytes
-                ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0).toLong())
+                ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0)).toLong()
         ).apply { meterRegistry?.registerDiskCache("disk-cache")}
 
     private val recordBatchRequests: Counter = meterRegistry.counter("record-batch-requests")
@@ -73,10 +73,12 @@ class RemoteBufferPool(
         internal var minMultipartPartSize = 5 * 1024 * 1024
         private const val MAX_CONCURRENT_PART_UPLOADS = 4
 
-        private val Path.totalSpace get() = Files.getFileStore(this).totalSpace
-
         private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
 
+        private val Path.totalSpace get() = Files.getFileStore(this).totalSpace.also {
+            LOGGER.debug("Total disk space for $this: ${Files.getFileStore(this).totalSpace}")
+        }
+        
         private val multipartUploadDispatcher =
             Dispatchers.IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
 
