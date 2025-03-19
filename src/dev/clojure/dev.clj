@@ -17,7 +17,7 @@
            [org.apache.arrow.memory BaseAllocator RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            (xtdb.arrow Relation StructVector Vector)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node ArrowHashTrie$RecencyBranch)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)))
 
 #_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
 (require '[xtdb.logging :refer [set-log-level!]])
@@ -144,14 +144,6 @@
     (letfn [(render-trie [^ArrowHashTrie$Node node]
               (cond
                 (instance? ArrowHashTrie$Leaf node) (.getDataPageIndex ^ArrowHashTrie$Leaf node)
-
-                (instance? ArrowHashTrie$RecencyBranch node)
-                (let [^ArrowHashTrie$RecencyBranch node node
-                      recencies (.getRecencies node)]
-                  (into (sorted-map) (zipmap (mapv time/micros->instant recencies)
-                                             (mapv (comp render-trie #(.recencyNode node ^long %))
-                                                   (range (alength recencies))))))
-
                 (instance? ArrowHashTrie$IidBranch node) (mapv render-trie (.getIidChildren ^ArrowHashTrie$IidBranch node))
                 :else node))]
 
