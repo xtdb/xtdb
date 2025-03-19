@@ -148,7 +148,7 @@ class KafkaLog internal constructor(
             kafkaConfigMap.openConsumer().use { c ->
                 TopicPartition(topic, 0).also { tp ->
                     c.assign(listOf(tp))
-                    c.seek(tp, subscriber.latestCompletedOffset + 1)
+                    c.seek(tp, subscriber.latestProcessedMsgId + 1)
                 }
 
                 runInterruptible(Dispatchers.IO) {

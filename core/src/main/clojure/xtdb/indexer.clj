@@ -645,7 +645,7 @@
                     ^Timer tx-timer
                     ^Counter tx-error-counter]
   IIndexer
-  (indexTx [this tx-id msg-ts tx-root]
+  (indexTx [this msg-id msg-ts tx-root]
     (let [lc-tx (.getLatestCompletedTx live-idx)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                     (when-not (neg? (compare lc-sys-time msg-ts))
@@ -658,10 +658,10 @@
 
       (if (and system-time lc-tx
                (neg? (compare system-time (.getSystemTime lc-tx))))
-        (let [tx-key (serde/->TxKey tx-id default-system-time)
+        (let [tx-key (serde/->TxKey msg-id default-system-time)
               err (err/illegal-arg :invalid-system-time
                                    {::err/message "specified system-time older than current tx"
-                                    :tx-key (serde/->TxKey tx-id system-time)
+                                    :tx-key (serde/->TxKey msg-id system-time)
                                     :latest-completed-tx (.getLatestCompletedTx live-idx)})]
           (log/warnf "specified system-time '%s' older than current tx '%s'"
                      (pr-str system-time)
@@ -673,10 +673,10 @@
             (add-tx-row! live-idx-tx tx-key err)
             (.commit live-idx-tx))
 
-          (serde/->tx-aborted tx-id default-system-time err))
+          (serde/->tx-aborted msg-id default-system-time err))
 
         (let [system-time (or system-time default-system-time)
-              tx-key (serde/->TxKey tx-id system-time)]
+              tx-key (serde/->TxKey msg-id system-time)]
           (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
             (if (nil? tx-root)
               (do
@@ -685,7 +685,7 @@
                   (add-tx-row! live-idx-tx tx-key skipped-exn)
                   (.commit live-idx-tx))
 
-                (serde/->tx-aborted tx-id system-time skipped-exn))
+                (serde/->tx-aborted msg-id system-time skipped-exn))
 
               (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                                      (.getDataVector))
@@ -748,14 +748,14 @@
                           (add-tx-row! live-idx-tx tx-key e)
                           (.commit live-idx-tx))
 
-                        (serde/->tx-aborted tx-id system-time
+                        (serde/->tx-aborted msg-id system-time
                                             (when-not (= e abort-exn)
                                               e)))
 
                       (do
                         (add-tx-row! live-idx-tx tx-key nil)
                         (.commit live-idx-tx)
-                        (serde/->tx-committed tx-id system-time))))))))))))
+                        (serde/->tx-committed msg-id system-time))))))))))))
 
   Closeable
   (close [_]

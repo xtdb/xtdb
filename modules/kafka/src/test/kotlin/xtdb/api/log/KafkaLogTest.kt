@@ -45,7 +45,7 @@ class KafkaLogTest {
 
         val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
-            every { latestCompletedOffset } returns -1
+            every { latestProcessedMsgId } returns -1
         }
 
         fun trieDetails(key: String, size: Long) =

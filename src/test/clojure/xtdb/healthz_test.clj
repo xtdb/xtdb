@@ -17,9 +17,9 @@
         (t/testing "started endpoint"
           (let [resp (clj-http/get (->healthz-url port "started"))]
             (t/is (= 200 (:status resp)))
-            (t/is (= {"X-XTDB-Target-Offset" "-1", "X-XTDB-Current-Offset" "-1"}
+            (t/is (= {"X-XTDB-Target-Message-Id" "-1", "X-XTDB-Current-Message-Id" "-1"}
                      (-> (:headers resp)
-                         (select-keys ["X-XTDB-Target-Offset" "X-XTDB-Current-Offset"]))))
+                         (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
             (t/is (= "Started." (:body resp)))))
 
         (t/testing "alive endpoint"
@@ -54,15 +54,15 @@
 
                 (case (long (:status resp))
                   503 (do
-                        (t/is (= {"X-XTDB-Target-Offset" "2097"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" "2097"}
                                  (-> (:headers resp)
-                                     (select-keys ["X-XTDB-Target-Offset"]))))
+                                     (select-keys ["X-XTDB-Target-Message-Id"]))))
                         (Thread/sleep 250)
                         (recur))
                   200 (do
-                        (t/is (= {"X-XTDB-Target-Offset" "2097", "X-XTDB-Current-Offset" "2097"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" "2097", "X-XTDB-Current-Message-Id" "2097"}
                                  (-> (:headers resp)
-                                     (select-keys ["X-XTDB-Target-Offset" "X-XTDB-Current-Offset"]))))
+                                     (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
                         (t/is (= "Started." (:body resp)))))))))))))
 
 (t/deftest test-indexer-error

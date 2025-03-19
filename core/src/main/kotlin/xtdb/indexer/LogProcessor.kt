@@ -9,7 +9,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
-import xtdb.api.log.LogOffset
+import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
@@ -29,7 +29,7 @@ class LogProcessor(
     private val trieCatalog: TrieCatalog,
     meterRegistry: MeterRegistry,
     flushTimeout: Duration,
-    private val skipTxs: Set<LogOffset>
+    private val skipTxs: Set<MessageId>
 ) : Log.Subscriber, AutoCloseable {
 
     companion object {
@@ -89,7 +89,10 @@ class LogProcessor(
         allocator.close()
     }
 
-    override var latestCompletedOffset: LogOffset =
+    override val latestSubmittedMsgId: MessageId
+        get() = log.latestSubmittedOffset
+
+    override var latestProcessedMsgId: MessageId =
         liveIndex.latestCompletedTx?.txId ?: -1
         private set
 
@@ -103,22 +106,22 @@ class LogProcessor(
         }
 
         records.forEach { record ->
-            val offset = record.logOffset
+            val msgId = record.logOffset
 
             try {
                 val res = when (val msg = record.message) {
                     is Message.Tx -> {
-                        if (skipTxs.isNotEmpty() && skipTxs.contains(offset)) {
-                            LOGGER.warn("Skipping transaction offset $offset - within XTDB_SKIP_TXS")
+                        if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
+                            LOGGER.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
                             // use abort flow in indexTx
-                            indexer.indexTx(offset, record.logTimestamp, null)
+                            indexer.indexTx(msgId, record.logTimestamp, null)
                         } else {
                             msg.payload.asChannel.use { txOpsCh ->
                                 ArrowStreamReader(txOpsCh, allocator).use { reader ->
                                     reader.vectorSchemaRoot.use { root ->
                                         reader.loadNextBatch()
 
-                                        indexer.indexTx(offset, record.logTimestamp, root)
+                                        indexer.indexTx(msgId, record.logTimestamp, root)
                                     }
                                 }
                             }
@@ -126,7 +129,7 @@ class LogProcessor(
                     }
 
                     is Message.FlushBlock -> {
-                        liveIndex.forceFlush(record, msg)
+                        liveIndex.forceFlush(msg, msgId, record.logTimestamp)
                         null
                     }
 
@@ -136,18 +139,18 @@ class LogProcessor(
                         null
                     }
                 }
-                latestCompletedOffset = offset
-                watchers.notify(offset, res)
+                latestProcessedMsgId = msgId
+                watchers.notify(msgId, res)
             } catch (e: InterruptedException) {
-                watchers.notify(offset, e)
+                watchers.notify(msgId, e)
                 throw CancellationException(e)
             } catch (e: ClosedByInterruptException) {
                 val ie = InterruptedException(e.toString())
-                watchers.notify(offset, ie)
+                watchers.notify(msgId, ie)
                 throw CancellationException(ie)
             } catch (e: Throwable) {
-                watchers.notify(offset, e)
-                LOG.error(e, "Ingestion stopped: error processing log record at offset $offset.")
+                watchers.notify(msgId, e)
+                LOG.error(e, "Ingestion stopped: error processing log record at id $msgId.")
                 LOG.error(
                     """
                     XTDB transaction processing has encountered an unrecoverable error and has been stopped to prevent corruption of your data.
@@ -162,5 +165,5 @@ class LogProcessor(
     }
 
     @JvmOverloads
-    fun awaitAsync(offset: LogOffset = log.latestSubmittedOffset) = watchers.awaitAsync(offset)
+    fun awaitAsync(msgId: MessageId = latestSubmittedMsgId) = watchers.awaitAsync(msgId)
 }
