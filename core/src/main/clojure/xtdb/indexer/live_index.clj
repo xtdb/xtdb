@@ -153,7 +153,8 @@
                                                            :trie-key (.getTrieKey finished-block)
                                                            :row-count (.getRowCount finished-block)
                                                            :data-file-size (.getDataFileSize finished-block)
-                                                           :trie-metadata (.getTrieMetadata finished-block)}])
+                                                           :trie-metadata (.getTrieMetadata finished-block)
+                                                           :hlls (.getHllDeltas finished-block)}])
                                             (catch InterruptedException e
                                               (throw e))
                                             (catch Exception e
@@ -173,13 +174,13 @@
               (.appendMessage log (Log$Message$TriesAdded. added-tries)))
 
             (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
-                  table->current-tries (->> all-tables
-                                            (map (fn [table-name]
-                                                   (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
-                                                                                    trie-cat/all-tries))))
-                                            (into {}))
+                  table->all-tries (->> all-tables
+                                        (map (fn [table-name]
+                                               (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
+                                                                                trie-cat/all-tries))))
+                                        (into {}))
                   table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata
-                                                             table->current-tries)]
+                                                             table->all-tries)]
               (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))
 
       (.nextBlock row-counter)

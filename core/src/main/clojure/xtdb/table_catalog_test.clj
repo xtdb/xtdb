@@ -12,7 +12,8 @@
            [xtdb.log.proto TrieDetails]
            [xtdb.trie TrieCatalog]
            [xtdb.bloom BloomUtils]
-           [xtdb.arrow VectorReader]))
+           [xtdb.arrow VectorReader]
+           (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
   (cond-> {:table-name (.getTableName trie)
@@ -41,13 +42,18 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 289)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 421)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4396)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4528)]
                  (.listAllObjects bp (table-cat/->table-block-dir "public/foo"))))
 
-        (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b01.binpb"))
-                                 TableBlock/parseFrom
-                                 table-cat/<-table-block
+        (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
+                                                   TableBlock/parseFrom
+                                                   table-cat/<-table-block)
+              {hlls2 :hlls :as table-block2} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b01.binpb"))
+                                                  TableBlock/parseFrom
+                                                  table-cat/<-table-block)
+
+              current-tries (->> table-block2
                                  :current-tries
                                  (mapv trie-details->edn))
               trie-metas (map :trie-metadata current-tries)
@@ -77,7 +83,10 @@
                    (map #(dissoc % :iid-bloom) trie-metas)))
 
           (t/is (true? (BloomUtils/contains trie1-bloom (BloomUtils/bloomHashes (->singleton-rdr 1) 0))))
-          (t/is (false? (BloomUtils/contains trie1-bloom (BloomUtils/bloomHashes (->singleton-rdr 2) 0)))))
+          (t/is (false? (BloomUtils/contains trie1-bloom (BloomUtils/bloomHashes (->singleton-rdr 2) 0))))
+
+          (t/is (<= 0.99 (HyperLogLog/estimate (get hlls1 "_id")) 1.01))
+          (t/is (<= 1.99 (HyperLogLog/estimate (get hlls2 "_id")) 2.01)))
 
         (t/testing "artifically adding tries (simulating another node finishing and compacting these)"
           (.addTries trie-catalog

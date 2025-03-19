@@ -528,8 +528,8 @@
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                          (.resolve node-dir "objects"))
 
-          (cpb/check-pbuf  (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
-                           (.resolve node-dir "objects")))))))
+          (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
+                          (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
   (t/is (= {:tx-id 0,
