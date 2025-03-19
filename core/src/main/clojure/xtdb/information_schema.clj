@@ -3,6 +3,7 @@
             xtdb.metadata
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -13,7 +14,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
-           (xtdb.trie MemoryHashTrie Trie)
+           (xtdb.trie MemoryHashTrie Trie TrieCatalog)
            (xtdb.vector IVectorReader RelationReader)))
 
 (defn name->oid [s]
@@ -74,8 +75,12 @@
   (def ^:private pg-catalog-template-tables
     '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
 
+  (def ^:private xt-derived-tables
+    '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
+                     trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}})
+
   (def derived-tables
-    (-> (merge info-tables pg-catalog-tables)
+    (-> (merge info-tables pg-catalog-tables xt-derived-tables)
         (update-vals (fn [col-types]
                        (->> (for [[col-name col-type] col-types]
                               [col-name (types/col-type->field col-name col-type)])
@@ -305,6 +310,21 @@
 (defn table->template-rel+tries [allocator]
   {'pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
+(defn trie-stats [^TrieCatalog trie-catalog]
+  (for [table-name (.getTableNames trie-catalog)
+        :let [trie-state (trie-cat/trie-state trie-catalog table-name)
+              fq-table (symbol table-name)
+              schema-name (namespace fq-table)
+              table-name (name fq-table)]
+        [_ tries] (:tries trie-state)
+        {:keys [trie-key level recency state data-file-size trie-metadata] :as trie} tries
+        :let [{:keys [row-count] :as trie-meta} (trie-cat/<-trie-metadata trie-metadata)]]
+    (do
+      (prn row-count)
+      {:schema-name schema-name, :table-name table-name,
+       :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
+       :trie-state (name state), :row-count row-count, :temporal-metadata (dissoc trie-meta :row-count :iid-bloom)})))
+
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
   (tryAdvance [this c]
@@ -323,7 +343,7 @@
     (some-> out-rel .close)))
 
 (defn ->cursor [allocator derived-table-schema table col-names col-preds schema params
-                table-catalog ^Watermark wm]
+                table-catalog trie-catalog ^Watermark wm]
   (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (vec (vals derived-table-schema)))
                                                            allocator)]
     ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
@@ -355,6 +375,7 @@
                                                    pg_catalog/pg_settings (pg-settings)
                                                    pg_catalog/pg_range (pg-range)
                                                    pg_catalog/pg_am (pg-am)
+                                                   xt/trie_stats (trie-stats trie-catalog)
                                                    (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))
                                      (.syncRowCount)))]
 

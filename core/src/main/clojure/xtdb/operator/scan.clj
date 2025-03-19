@@ -215,7 +215,7 @@
            :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args table-catalog watermark))
+                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args table-catalog trie-catalog watermark))
 
                          (let [template-table? (info-schema/template-tables table)
                                iid-bb (selects->iid-byte-buffer selects args)
