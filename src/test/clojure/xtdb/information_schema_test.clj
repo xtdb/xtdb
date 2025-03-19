@@ -4,9 +4,10 @@
             [xtdb.authn :as authn]
             [xtdb.information-schema :as i-s]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            [xtdb.time :as time]
+            [xtdb.compactor :as c]))
 
-(t/use-fixtures :each tu/with-allocator tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
 (def test-data [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]
                 [:put-docs :beanie {:xt/id :bar, :col1 123}]
@@ -613,3 +614,52 @@
                                       (and (= table_schema "pg_catalog") (= table_name "pg_user")))
                           [:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]]
                         {:node tu/*node*}))))
+
+(t/deftest trie-stats
+  (xt/execute-tx tu/*node* [[:put-docs :foo
+                             {:xt/id 1, :xt/valid-from #inst "2020-01-01", :xt/valid-to #inst "2020-01-02"}
+                             {:xt/id 1, :xt/valid-from #inst "2020-01-04", :xt/valid-to #inst "2020-01-05"}]])
+
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
+
+  (t/is (= [{:schema-name "public", :table-name "foo", :trie-key "l00-rc-b00",
+             :level 0, :trie-state "garbage", :row-count 4, :data-file-size 2446,
+             :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
+                                 :max-valid-from (time/->zdt #inst "2020-01-04")
+                                 :min-valid-to (time/->zdt #inst "2020-01-02")
+                                 :max-valid-to (time/->zdt #inst "2020-01-05")
+                                 :min-system-from (time/->zdt #inst "2020-01-01")
+                                 :max-system-from (time/->zdt #inst "2020-01-01")}}
+
+            {:schema-name "public", :table-name "foo", :trie-key "l01-r20200106-b00",
+             :level 1, :trie-state "live", :row-count 2, :data-file-size 2446, :recency #xt/date "2020-01-06",
+             :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
+                                 :max-valid-from (time/->zdt #inst "2020-01-04")
+                                 :min-valid-to (time/->zdt #inst "2020-01-02")
+                                 :max-valid-to (time/->zdt #inst "2020-01-05")
+                                 :min-system-from (time/->zdt #inst "2020-01-01")
+                                 :max-system-from (time/->zdt #inst "2020-01-01")}}
+
+            {:schema-name "public", :table-name "foo", :trie-key "l01-rc-b00",
+             :level 1, :trie-state "live", :data-file-size 1670}
+
+            {:schema-name "xt", :table-name "txs", :trie-key "l00-rc-b00",
+             :level 0, :trie-state "garbage", :row-count 1, :data-file-size 2806,
+             :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
+                                 :max-valid-from (time/->zdt #inst "2020-01-01")
+                                 :min-valid-to (time/->zdt time/end-of-time)
+                                 :max-valid-to (time/->zdt time/end-of-time)
+                                 :min-system-from (time/->zdt #inst "2020-01-01")
+                                 :max-system-from (time/->zdt #inst "2020-01-01")}}
+
+            {:schema-name "xt", :table-name "txs", :trie-key "l01-rc-b00",
+             :level 1, :trie-state "live", :row-count 1, :data-file-size 2806,
+             :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
+                                 :max-valid-from (time/->zdt #inst "2020-01-01")
+                                 :min-valid-to (time/->zdt time/end-of-time)
+                                 :max-valid-to (time/->zdt time/end-of-time)
+                                 :min-system-from (time/->zdt #inst "2020-01-01")
+                                 :max-system-from (time/->zdt #inst "2020-01-01")}}]
+
+           (xt/q tu/*node* "SELECT * FROM xt.trie_stats ORDER BY table_name, trie_key"))))
