@@ -63,7 +63,7 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
         val job = scope.launch(SupervisorJob()) {
             var latestCompletedOffset = subscriber.latestCompletedOffset
 
-            val ch = Channel<Record>()
+            val ch = Channel<Record>(100)
 
             committedCh
                 .onEach {

@@ -1129,3 +1129,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                          JOIN bar ON bar.foo = foo._id
                          SELECT bar._id AS _id,
                          WHERE _id IN ('bar1')")))))
+
+(t/deftest ^:integration log-backpressure-doesnt-halt-indexer-4285
+  (doseq [batch (partition-all 1000 (range 400000))]
+    (xt/submit-tx tu/*node* [(into [:put-docs :docs] (map (fn [idx] {:xt/id idx})) batch)]))
+  (t/is (= [{:v 1 }] (xt/q tu/*node* "SELECT 1 AS v"))))
