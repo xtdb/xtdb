@@ -1,15 +1,11 @@
 package xtdb.indexer
 
-import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import org.roaringbitmap.RoaringBitmap
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.arrow.VectorReader
-import xtdb.bloom.bloomHashes
-import xtdb.bloom.toByteBuffer
 import xtdb.indexer.LiveTable.LiveTrieFactory
 import xtdb.log.proto.TrieMetadata
 import xtdb.time.InstantUtil.asMicros
@@ -55,7 +51,8 @@ constructor(
     private val trieMetadataCalculator = TrieMetadataCalculator(
         VectorReader.from(iidRdr), validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
     )
-    private val hlls = mutableMapOf<String, HLL> ()
+
+    private val hllCalculator = HllCalculator()
 
     class Watermark(
         val columnFields: Map<String, Field>,
@@ -126,18 +123,10 @@ constructor(
             rowCounter.addRows(1)
         }
 
-        fun commit() : LiveTable {
-            val putRdr = putWtr.asReader
-            val columns = putRdr.structKeys()
-            val keyRdrs = columns.map { it to VectorReader.from(putRdr.structKeyReader(it)!!) }
+        fun commit(): LiveTable {
             val pos = liveRelation.writerPosition().position
             trieMetadataCalculator.update(startPos, pos)
-
-            for (i in startPos until pos) {
-                for ((col, rdr) in keyRdrs) {
-                    hlls.compute(col) { _, hll -> (hll ?: createHLL()).also { it.add( rdr, i) } }
-                }
-            }
+            hllCalculator.update(putWtr.asReader, startPos, pos)
 
             liveTrie = transientTrie
 
@@ -180,12 +169,12 @@ constructor(
     fun openWatermark() = openWatermark(liveTrie)
 
     data class FinishedBlock(
-        val fields: Map<String, Field>,
+        val fields: Map<ColumnName, Field>,
         val trieKey: TrieKey,
         val dataFileSize: FileSize,
         val rowCount: Int,
         val trieMetadata: TrieMetadata,
-        val hllDeltas: Map<String, HLL>
+        val hllDeltas: Map<ColumnName, HLL>
     )
 
     fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
@@ -196,7 +185,10 @@ constructor(
 
         return liveRelation.openAsRelation().useAll { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
-            FinishedBlock(liveRelation.fields, trieKey, dataFileSize, rowCount, trieMetadataCalculator.build(), hlls.toMap())
+            FinishedBlock(
+                liveRelation.fields, trieKey, dataFileSize, rowCount,
+                trieMetadataCalculator.build(), hllCalculator.build()
+            )
         }
     }
 
