@@ -30,7 +30,7 @@
 
 (t/deftest no-config
   (t/testing "if no config present via file, returns an empty map as the node-opts"
-    (t/is (= {::cli/node-opts {}} (cli/parse-args [])))))
+    (t/is (= {::cli/node-opts {}, :migrate-from-version nil} (cli/parse-args [])))))
 
 (t/deftest test-config
   (letfn [(->system [cli-args]
