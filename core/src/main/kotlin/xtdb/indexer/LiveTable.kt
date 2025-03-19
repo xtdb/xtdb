@@ -52,12 +52,9 @@ constructor(
     private val eraseWtr = opWtr.legWriter("erase")
 
     private val trieWriter = TrieWriter(al, bp, false)
-    private val trieMetadataBuilder = TrieMetadata.newBuilder()
-
-    private val temporalMetadataCalculator =
-        TemporalMetadataCalculator(validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader)
-
-    private var iidBloom = RoaringBitmap()
+    private val trieMetadataCalculator = TrieMetadataCalculator(
+        VectorReader.from(iidRdr), validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
+    )
 
     class Watermark(
         val columnFields: Map<String, Field>,
@@ -128,16 +125,13 @@ constructor(
             rowCounter.addRows(1)
         }
 
-        fun commit() = this@LiveTable.also {
+        fun commit(): LiveTable {
             val pos = liveRelation.writerPosition().position
-            temporalMetadataCalculator.update(startPos, pos)
+            trieMetadataCalculator.update(startPos, pos)
 
-            for (i in startPos until pos) {
-                trieMetadataBuilder.rowCount += (pos - startPos)
-                it.iidBloom.add(*bloomHashes(VectorReader.from(iidRdr), i))
-            }
+            liveTrie = transientTrie
 
-            it.liveTrie = transientTrie
+            return this@LiveTable
         }
 
         fun abort() {
@@ -188,12 +182,10 @@ constructor(
         val rowCount = liveRelation.writerPosition().position
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
-        trieMetadataBuilder.temporalMetadata = temporalMetadataCalculator.build()
-        trieMetadataBuilder.iidBloom = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
 
         return liveRelation.openAsRelation().useAll { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
-            FinishedBlock(liveRelation.fields, trieKey, dataFileSize, rowCount, trieMetadataBuilder.build())
+            FinishedBlock(liveRelation.fields, trieKey, dataFileSize, rowCount, trieMetadataCalculator.build())
         }
     }
 

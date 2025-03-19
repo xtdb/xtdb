@@ -624,7 +624,7 @@
   (c/compact-all! tu/*node*)
 
   (t/is (= [{:schema-name "public", :table-name "foo", :trie-key "l00-rc-b00",
-             :level 0, :trie-state "garbage", :row-count 4, :data-file-size 2446,
+             :level 0, :trie-state "garbage", :row-count 2, :data-file-size 2446,
              :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
                                  :max-valid-from (time/->zdt #inst "2020-01-04")
                                  :min-valid-to (time/->zdt #inst "2020-01-02")
