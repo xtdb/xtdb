@@ -10,29 +10,25 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.VectorReader
 import xtdb.bloom.bloomHashes
 import xtdb.bloom.toByteBuffer
-import xtdb.log.proto.TemporalMetadata
+import xtdb.indexer.LiveTable.LiveTrieFactory
+import xtdb.log.proto.TrieMetadata
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
 import xtdb.types.Fields
-import xtdb.vector.*
-import xtdb.log.proto.TrieMetadata
 import xtdb.util.*
+import xtdb.vector.*
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
 class LiveTable
-@JvmOverloads constructor(
+@JvmOverloads
+constructor(
     al: BufferAllocator, bp: BufferPool,
     private val tableName: TableName,
     private val rowCounter: RowCounter,
     liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) }
 ) : AutoCloseable {
-
-    private val trieWriter = TrieWriter(al, bp, false)
-    private val trieMetadataBuilder = TrieMetadata.newBuilder()
-    private val temporalMetadataBuilder = TemporalMetadata.newBuilder()
-    private var iidBloom = RoaringBitmap()
 
     @FunctionalInterface
     fun interface LiveTrieFactory {
@@ -46,17 +42,22 @@ class LiveTable
     private val validFromWtr = liveRelation.colWriter("_valid_from")
     private val validToWtr = liveRelation.colWriter("_valid_to")
 
+    var liveTrie: MemoryHashTrie = liveTrieFactory(iidWtr.vector.asReader)
+
     private val iidRdr = iidWtr.asReader
-    private val systemFromRdr = systemFromWtr.asReader
-    private val validFromRdr = validFromWtr.asReader
-    private val validToRdr = validToWtr.asReader
 
     private val opWtr = liveRelation.colWriter("op")
     private val putWtr = opWtr.legWriter("put")
     private val deleteWtr = opWtr.legWriter("delete")
     private val eraseWtr = opWtr.legWriter("erase")
 
-    var liveTrie: MemoryHashTrie = liveTrieFactory(iidWtr.vector.asReader)
+    private val trieWriter = TrieWriter(al, bp, false)
+    private val trieMetadataBuilder = TrieMetadata.newBuilder()
+
+    private val temporalMetadataCalculator =
+        TemporalMetadataCalculator(validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader)
+
+    private var iidBloom = RoaringBitmap()
 
     class Watermark(
         val columnFields: Map<String, Field>,
@@ -80,7 +81,8 @@ class LiveTable
         fun openWatermark(): Watermark = openWatermark(transientTrie)
         val docWriter: IVectorWriter = putWtr
         val liveRelation: IRelationWriter = this@LiveTable.liveRelation
-        val startPos = liveRelation.writerPosition().position
+
+        private val startPos = liveRelation.writerPosition().position
 
         fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
             val pos = liveRelation.writerPosition().position
@@ -128,16 +130,13 @@ class LiveTable
 
         fun commit() = this@LiveTable.also {
             val pos = liveRelation.writerPosition().position
+            temporalMetadataCalculator.update(startPos, pos)
+
             for (i in startPos until pos) {
-                temporalMetadataBuilder.minValidFrom = minOf(temporalMetadataBuilder.minValidFrom, validFromRdr.getLong(i))
-                temporalMetadataBuilder.maxValidFrom = maxOf(temporalMetadataBuilder.maxValidFrom, validFromRdr.getLong(i))
-                temporalMetadataBuilder.minValidTo = minOf(temporalMetadataBuilder.minValidTo , validToRdr.getLong(i))
-                temporalMetadataBuilder.maxValidTo = maxOf(temporalMetadataBuilder.maxValidTo, validToRdr.getLong(i))
-                temporalMetadataBuilder.minSystemFrom = minOf(temporalMetadataBuilder.minSystemFrom, systemFromRdr.getLong(i))
-                temporalMetadataBuilder.maxSystemFrom = maxOf(temporalMetadataBuilder.maxSystemFrom, systemFromRdr.getLong(i))
                 trieMetadataBuilder.rowCount += (pos - startPos)
-                it.iidBloom.add(*bloomHashes(VectorReader.from(iidRdr) , i))
+                it.iidBloom.add(*bloomHashes(VectorReader.from(iidRdr), i))
             }
+
             it.liveTrie = transientTrie
         }
 
@@ -189,8 +188,8 @@ class LiveTable
         val rowCount = liveRelation.writerPosition().position
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
-        trieMetadataBuilder.temporalMetadata = temporalMetadataBuilder.build()
-        trieMetadataBuilder.iidBloom  = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
+        trieMetadataBuilder.temporalMetadata = temporalMetadataCalculator.build()
+        trieMetadataBuilder.iidBloom = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
 
         return liveRelation.openAsRelation().useAll { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
