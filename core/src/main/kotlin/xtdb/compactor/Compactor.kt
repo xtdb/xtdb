@@ -11,6 +11,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.BufferPool
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
+import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.log.proto.TrieDetails
@@ -157,7 +158,7 @@ interface Compactor : AutoCloseable {
                                     // add the trie to the catalog eagerly so that it's present
                                     // next time we run `availableJobs` (it's idempotent)
                                     trieCatalog.addTries(addedTries)
-                                    log.appendMessage(TriesAdded(addedTries)).await()
+                                    log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
                                 }
 
                                 doneCh.send(jobKey)

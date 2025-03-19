@@ -16,6 +16,7 @@ message FlushBlock {
 }
 
 message TriesAdded {
+    int32 storage_version = 2;
     repeated TrieDetails tries = 1;
 }
 
@@ -25,7 +26,7 @@ message TemporalMetadata {
     int64 min_valid_to = 3 [default = 9223372036854775807];
     int64 max_valid_to = 4 [default = -9223372036854775808];
     int64 min_system_from = 5 [default = 9223372036854775807];
-    int64 max_system_from = 6  [default = -9223372036854775808];
+    int64 max_system_from = 6 [default = -9223372036854775808];
 }
 
 message TrieMetadata {

@@ -20,6 +20,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api IndexerConfig TransactionKey)
            (xtdb.api.log Log Log$Message$TriesAdded)
+           xtdb.api.storage.Storage
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable LiveTable$Tx LiveTable$Watermark Watermark)
@@ -170,7 +171,7 @@
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
                                 (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
               (.addTries trie-cat added-tries)
-              (.appendMessage log (Log$Message$TriesAdded. added-tries)))
+              (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
 
             (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
                   table->current-tries (->> all-tables

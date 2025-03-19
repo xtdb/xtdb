@@ -68,7 +68,9 @@ interface Log : AutoCloseable {
                         .let {
                             when (val msgCase = it.messageCase) {
                                 MessageCase.FLUSH_BLOCK -> FlushBlock(it.flushBlock.expectedBlockTxId)
-                                MessageCase.TRIES_ADDED -> TriesAdded(it.triesAdded.triesList)
+                                MessageCase.TRIES_ADDED ->
+                                    TriesAdded(it.triesAdded.storageVersion, it.triesAdded.triesList)
+
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
@@ -81,9 +83,12 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class TriesAdded(val tries: List<TrieDetails>) : ProtobufMessage() {
+        data class TriesAdded(val storageVersion: Int, val tries: List<TrieDetails>) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
-                triesAdded = triesAdded { tries.addAll(this@TriesAdded.tries) }
+                triesAdded = triesAdded {
+                    storageVersion = this@TriesAdded.storageVersion
+                    tries.addAll(this@TriesAdded.tries)
+                }
             }
         }
     }
@@ -101,7 +106,7 @@ interface Log : AutoCloseable {
 
     fun appendMessage(message: Message): CompletableFuture<LogOffset>
 
-    fun subscribe(subscriber: Subscriber) : Subscription
+    fun subscribe(subscriber: Subscriber): Subscription
 
     @FunctionalInterface
     fun interface Subscription : AutoCloseable

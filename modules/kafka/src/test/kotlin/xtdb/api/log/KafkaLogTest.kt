@@ -14,6 +14,7 @@ import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log.Message
 import xtdb.api.log.Log.Record
 import xtdb.api.log.Log.Subscriber
+import xtdb.api.storage.Storage
 import xtdb.log.proto.TrieDetails
 import java.nio.ByteBuffer
 import java.time.Duration
@@ -64,7 +65,7 @@ class KafkaLogTest {
 
                     log.appendMessage(Message.FlushBlock(12)).await()
 
-                    log.appendMessage(Message.TriesAdded(addedTrieDetails)).await()
+                    log.appendMessage(Message.TriesAdded(Storage.VERSION, addedTrieDetails)).await()
 
                     while (msgs.flatten().size < 3) delay(100)
                 }

@@ -11,6 +11,7 @@ import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.LogOffset
 import xtdb.api.log.Watchers
+import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
 import xtdb.trie.TrieCatalog
 import xtdb.util.error
@@ -130,7 +131,8 @@ class LogProcessor(
                     }
 
                     is Message.TriesAdded -> {
-                        trieCatalog.addTries(msg.tries)
+                        if (msg.storageVersion == Storage.VERSION)
+                            trieCatalog.addTries(msg.tries)
                         null
                     }
                 }
