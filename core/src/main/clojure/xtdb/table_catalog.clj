@@ -5,20 +5,24 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (com.google.protobuf ByteString)
+           (io.netty.buffer ByteBuf)
            [java.nio ByteBuffer]
            [java.nio.file Path]
-           [java.util ArrayList]
+           [java.util ArrayList Map]
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb BufferPool)
            (xtdb.block.proto TableBlock)
-           xtdb.catalog.BlockCatalog))
+           xtdb.catalog.BlockCatalog
+           (xtdb.util HyperLogLog)))
 
 (defprotocol PTableCatalog
   (finish-block! [table-cat block-idx delta-tables->metadata table->current-tries])
   (column-fields [table-cat table-name])
   (row-count [table-cat table-name])
   (column-field [table-cat talbe-name col-name])
-  (all-column-fields [table-cat]))
+  (all-column-fields [table-cat])
+  (get-hll [table-cat table-name col-name])
+  (get-hlls [table-cat table-name]))
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
@@ -30,12 +34,16 @@
   (.resolve (.resolve table-path block-table-metadata-path)
             (format "b%s.binpb" (util/->lex-hex-string block-idx))))
 
+(defn- byte-buf->nio-buf ^ByteBuffer [^ByteBuf byte-buf]
+  (.nioBuffer byte-buf 0 (.capacity byte-buf)))
+
 (defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count
-                                                   current-tries]
+                                                   current-tries hlls]
   (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
                          (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
                          (.setRowCount row-count)
-                         (.addAllCurrentTries current-tries))
+                         (.addAllCurrentTries current-tries)
+                         (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom (byte-buf->nio-buf %)))))
                        (.build)
                        (.toByteArray))))
 
@@ -46,17 +54,23 @@
      :fields (->> (for [^Field field (.getFields schema)]
                     (MapEntry/create (.getName field) field))
                   (into {}))
-     :current-tries (into [] (.getCurrentTriesList table-block))}))
+     :current-tries (into [] (.getCurrentTriesList table-block))
+     :hlls (-> (.getColumnNameToHllMap table-block)
+               (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))}))
 
 (defn- merge-fields [old-fields new-fields]
   (->> (merge-with types/merge-fields old-fields new-fields)
        (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
        (into {})))
 
-(defn- merge-tables [old-table {:keys [row-count fields] :as delta-table}]
+(defn- merge-hlls [old-hlls new-hlls]
+  (merge-with #(HyperLogLog/combine %1 %2) old-hlls new-hlls))
+
+(defn- merge-tables [old-table {:keys [row-count fields hlls] :as delta-table}]
   (cond-> old-table
     delta-table (-> (update :row-count (fnil + 0) row-count)
-                    (update :fields merge-fields fields))))
+                    (update :fields merge-fields fields)
+                    (update :hlls merge-hlls hlls))))
 
 (defn- new-tables-metadata [old-tables-metadata new-deltas-metadata]
   (let [table-names (set (concat (keys old-tables-metadata) (keys new-deltas-metadata)))]
@@ -85,7 +99,7 @@
     (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
       (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
             table-names (ArrayList.)]
-        (doseq [[table-name {:keys [row-count fields]}] new-table->metadata]
+        (doseq [[table-name {:keys [row-count fields hlls]}] new-table->metadata]
           (let [current-tries (get table->current-tries table-name)
                 fields (for [[col-name field] fields]
                          (types/field-with-name field col-name))
@@ -95,7 +109,8 @@
                         (write-table-block-data (Schema. fields) row-count
                                                 (map (fn [{:keys [trie-key data-file-size trie-metadata]}]
                                                        (trie/->trie-details table-name trie-key data-file-size trie-metadata))
-                                                     current-tries)))))
+                                                     current-tries)
+                                                hlls))))
         (set! (.block-idx this) block-idx)
         (set! (.table->metadata this) new-table->metadata)
         (vec table-names))))
@@ -105,7 +120,9 @@
   (column-field [_ table-name col-name]
     (some-> (get-in table->metadata [table-name :fields])
             (get col-name (types/->field col-name #xt.arrow/type :null true))))
-  (all-column-fields [_] (update-vals table->metadata :fields)))
+  (all-column-fields [_] (update-vals table->metadata :fields))
+  (get-hll [_ table-name col-name] (get-in table->metadata [table-name :hlls col-name]))
+  (get-hlls [_ table-name] (get-in table->metadata [table-name :hlls])))
 
 (defmethod ig/prep-key :xtdb/table-catalog [_ _]
   {:buffer-pool (ig/ref :xtdb/buffer-pool)

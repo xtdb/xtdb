@@ -55,6 +55,7 @@ constructor(
     private val trieMetadataCalculator = TrieMetadataCalculator(
         VectorReader.from(iidRdr), validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
     )
+    private val hlls = mutableMapOf<String, HLL> ()
 
     class Watermark(
         val columnFields: Map<String, Field>,
@@ -125,9 +126,18 @@ constructor(
             rowCounter.addRows(1)
         }
 
-        fun commit(): LiveTable {
+        fun commit() : LiveTable {
+            val putRdr = putWtr.asReader
+            val columns = putRdr.structKeys()
+            val keyRdrs = columns.map { it to VectorReader.from(putRdr.structKeyReader(it)!!) }
             val pos = liveRelation.writerPosition().position
             trieMetadataCalculator.update(startPos, pos)
+
+            for (i in startPos until pos) {
+                for ((col, rdr) in keyRdrs) {
+                    hlls.compute(col) { _, hll -> (hll ?: createHLL()).also { it.add( rdr, i) } }
+                }
+            }
 
             liveTrie = transientTrie
 
@@ -174,7 +184,8 @@ constructor(
         val trieKey: TrieKey,
         val dataFileSize: FileSize,
         val rowCount: Int,
-        val trieMetadata: TrieMetadata
+        val trieMetadata: TrieMetadata,
+        val hllDeltas: Map<String, HLL>
     )
 
     fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
@@ -185,7 +196,7 @@ constructor(
 
         return liveRelation.openAsRelation().useAll { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
-            FinishedBlock(liveRelation.fields, trieKey, dataFileSize, rowCount, trieMetadataCalculator.build())
+            FinishedBlock(liveRelation.fields, trieKey, dataFileSize, rowCount, trieMetadataCalculator.build(), hlls.toMap())
         }
     }
 
