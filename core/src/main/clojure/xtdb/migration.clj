@@ -1,5 +1,6 @@
 (ns xtdb.migration
-  (:require [integrant.core :as ig]
+  (:require [clojure.tools.logging :as log]
+            [integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.migration.v05 :as v05]
             [xtdb.node :as xtn]
@@ -43,6 +44,9 @@
         5 (v05/migrate->v06! system)
         (throw (err/illegal-arg :unsupported-migration-version
                                 {::err/message (format "Unsupported migration version: %d" from-version)})))
+
+      (log/info "\nThe migration is complete, and this task will now exit.\nYou may now upgrade your new XTDB nodes in the usual green/blue manner.")
+
       (finally
         (ig/halt! system)))))
 
