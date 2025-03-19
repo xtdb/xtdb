@@ -82,6 +82,18 @@ interface Xtdb : AutoCloseable {
         fun configure() = Config()
 
         @JvmStatic
+        fun readConfig(path: Path): Config {
+            if (path.extension != "yaml") {
+                throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
+            } else if (!path.toFile().exists()) {
+                throw IllegalArgumentException("Provided config file does not exist")
+            }
+
+            val yamlString = Files.readString(path)
+            return nodeConfig(yamlString)
+        }
+
+        @JvmStatic
         @JvmOverloads
         fun openNode(config: Config = Config()) = config.open()
 
@@ -90,18 +102,7 @@ interface Xtdb : AutoCloseable {
          * or is not a valid `.yaml` extension file.
          */
         @JvmStatic
-        fun openNode(path: Path): Xtdb {
-            if (path.extension != "yaml") {
-                throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
-            } else if (!path.toFile().exists()) {
-                throw IllegalArgumentException("Provided config file does not exist")
-            }
-
-            val yamlString = Files.readString(path)
-            val config = nodeConfig(yamlString)
-
-            return config.open()
-        }
+        fun openNode(path: Path): Xtdb = readConfig(path).open()
 
         @JvmSynthetic
         fun openNode(configure: Config.() -> Unit) = openNode(Config().also(configure))

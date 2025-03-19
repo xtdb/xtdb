@@ -66,6 +66,18 @@
 (defmethod apply-config! ::default [_ k _]
   (log/warn "Unknown configuration key:" k))
 
+(defn ->config ^xtdb.api.Xtdb$Config [opts]
+  (cond
+    (instance? Xtdb$Config opts) opts
+    (instance? Path opts) (Xtdb/readConfig ^Path opts)
+    (instance? File opts) (->config (.toPath ^File opts))
+    (map? opts) (doto (Xtdb$Config.)
+                  (as-> config (reduce-kv (fn [config k v]
+                                            (doto config
+                                              (apply-config! k v)))
+                                          config
+                                          opts)))))
+
 (defn start-node
   "Starts an in-process node with the given configuration.
 
@@ -83,13 +95,4 @@
   (^xtdb.api.Xtdb [] (start-node {}))
 
   (^xtdb.api.Xtdb [opts]
-   (cond
-     (instance? Xtdb$Config opts) (Xtdb/openNode ^Xtdb$Config opts)
-     (instance? Path opts) (Xtdb/openNode ^Path opts)
-     (instance? File opts) (Xtdb/openNode (.toPath ^File opts))
-     (map? opts) (Xtdb/openNode (doto (Xtdb$Config.)
-                                  (as-> config (reduce-kv (fn [config k v]
-                                                            (doto config
-                                                              (apply-config! k v)))
-                                                          config
-                                                          opts)))))))
+   (Xtdb/openNode (->config opts))))
