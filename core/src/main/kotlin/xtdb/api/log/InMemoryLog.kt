@@ -61,7 +61,7 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
 
     override fun subscribe(subscriber: Subscriber): Subscription {
         val job = scope.launch(SupervisorJob()) {
-            var latestCompletedOffset = subscriber.latestCompletedOffset
+            var latestCompletedOffset = subscriber.latestProcessedMsgId
 
             val ch = Channel<Record>(100)
 

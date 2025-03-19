@@ -1,4 +1,4 @@
 package xtdb.api.log
 
-class IngestionStoppedException(val logOffset: LogOffset, cause: Throwable) :
+class IngestionStoppedException(val msgId: MessageId, cause: Throwable) :
     IllegalStateException("Ingestion stopped: ${cause.message}", cause)

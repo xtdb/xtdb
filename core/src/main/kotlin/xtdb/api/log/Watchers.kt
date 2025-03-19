@@ -8,11 +8,11 @@ import xtdb.api.log.Watchers.Event.*
 import java.util.concurrent.PriorityBlockingQueue
 import kotlin.time.Duration.Companion.seconds
 
-class Watchers(currentOffset: LogOffset) : AutoCloseable {
-    private class Watcher(val offset: LogOffset, val onDone: CompletableDeferred<TransactionResult?>)
+class Watchers(currentMsgId: MessageId) : AutoCloseable {
+    private class Watcher(val msgId: MessageId, val onDone: CompletableDeferred<TransactionResult?>)
 
     @Volatile
-    var currentOffset = currentOffset
+    var currentMsgId = currentMsgId
         private set
 
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -21,24 +21,24 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
         private set
 
     private sealed interface Event {
-        data class Notify(val offset: LogOffset, val result: TransactionResult?) : Event
-        data class NotifyException(val offset: LogOffset, val exception: Throwable) : Event
+        data class Notify(val msgId: MessageId, val result: TransactionResult?) : Event
+        data class NotifyException(val msgId: MessageId, val exception: Throwable) : Event
         data class NewWatcher(val watcher: Watcher) : Event
     }
 
     private val channel = Channel<Event>(Channel.UNLIMITED)
 
-    private val watchers = PriorityBlockingQueue<Watcher>(16) { a, b -> a.offset.compareTo(b.offset) }
+    private val watchers = PriorityBlockingQueue<Watcher>(16) { a, b -> a.msgId.compareTo(b.msgId) }
 
     private suspend fun processEvents() {
         for (event in channel) {
             when (event) {
                 is Notify -> {
-                    check(event.offset > currentOffset)
+                    check(event.msgId > currentMsgId)
 
-                    currentOffset = event.offset
+                    currentMsgId = event.msgId
                     for (watcher in watchers) {
-                        if (watcher.offset > event.offset) break
+                        if (watcher.msgId > event.msgId) break
                         watchers.remove(watcher)
                         watcher.onDone.complete(event.result)
                     }
@@ -46,7 +46,7 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
 
                 is NotifyException -> {
                     val ex = event.exception
-                        .let { if (it is IngestionStoppedException) it else IngestionStoppedException(event.offset, it) }
+                        .let { if (it is IngestionStoppedException) it else IngestionStoppedException(event.msgId, it) }
                         .also { exception = it }
 
                     watchers.forEach { it.onDone.completeExceptionally(ex) }
@@ -60,7 +60,7 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
 
                     when {
                         ex != null -> watcher.onDone.completeExceptionally(ex)
-                        currentOffset >= watcher.offset -> watcher.onDone.complete(null)
+                        currentMsgId >= watcher.msgId -> watcher.onDone.complete(null)
                         else -> watchers.add(watcher)
                     }
                 }
@@ -77,26 +77,26 @@ class Watchers(currentOffset: LogOffset) : AutoCloseable {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 
-    fun notify(offset: LogOffset, result: TransactionResult?) {
-        channel.trySend(Notify(offset, result)).getOrThrow()
+    fun notify(msgId: MessageId, result: TransactionResult?) {
+        channel.trySend(Notify(msgId, result)).getOrThrow()
     }
 
-    fun notify(offset: LogOffset, exception: Throwable) {
-        channel.trySend(NotifyException(offset, exception)).getOrThrow()
+    fun notify(msgId: MessageId, exception: Throwable) {
+        channel.trySend(NotifyException(msgId, exception)).getOrThrow()
     }
 
-    internal suspend fun await0(offset: LogOffset): TransactionResult? {
+    internal suspend fun await0(msgId: MessageId): TransactionResult? {
         exception?.let { throw it }
-        if (currentOffset >= offset) return null
+        if (currentMsgId >= msgId) return null
 
         val res = CompletableDeferred<TransactionResult?>()
-        channel.trySend(NewWatcher(Watcher(offset, res))).getOrThrow()
+        channel.trySend(NewWatcher(Watcher(msgId, res))).getOrThrow()
 
         return res.await()
     }
 
-    fun awaitAsync(offset: LogOffset) = scope.future { await0(offset) }
+    fun awaitAsync(msgId: MessageId) = scope.future { await0(msgId) }
 
     override fun toString() =
-        "(Watchers {watcherCount=${watchers.size}, firstWatcherOffset=${watchers.firstOrNull()?.offset}, currentOffset=$currentOffset, exception=$exception)})"
+        "(Watchers {watcherCount=${watchers.size}, firstWatcherMsgId=${watchers.firstOrNull()?.msgId}, currentMsgId=$currentMsgId, exception=$exception)})"
 }

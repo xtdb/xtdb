@@ -212,15 +212,14 @@
         (defonce -log-skip-txs-once
           (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable.")))))
 
-  (forceFlush [this record msg]
+  (forceFlush [this msg msg-id msg-timestamp]
     (let [expected-last-block-tx-id (.getExpectedBlockTxId msg)
           latest-block-tx-id (some-> latest-completed-block-tx (.getTxId))]
       (when (= (or latest-block-tx-id -1) expected-last-block-tx-id)
         (.finishBlock this)))
 
     (set! (.latest-completed-tx this)
-          (serde/->TxKey (.getLogOffset record)
-                         (.getLogTimestamp record))))
+          (serde/->TxKey msg-id msg-timestamp)))
 
   AutoCloseable
   (close [_]

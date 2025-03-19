@@ -13,6 +13,7 @@ import java.time.Instant
 import java.util.concurrent.CompletableFuture
 
 typealias LogOffset = Long
+typealias MessageId = Long
 
 interface Log : AutoCloseable {
     companion object {
@@ -118,7 +119,8 @@ interface Log : AutoCloseable {
     )
 
     interface Subscriber {
-        val latestCompletedOffset: LogOffset
+        val latestProcessedMsgId: MessageId
+        val latestSubmittedMsgId: MessageId
         fun processRecords(records: List<Record>)
     }
 }

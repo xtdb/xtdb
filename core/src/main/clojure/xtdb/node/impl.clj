@@ -148,7 +148,7 @@
 
   xtp/PStatus
   (latest-completed-tx [_] (.getLatestCompletedTx live-idx))
-  (latest-submitted-tx-id [_] (.getLatestSubmittedOffset log))
+  (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId log-processor))
   (status [this]
     {:latest-completed-tx (.getLatestCompletedTx live-idx)
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
