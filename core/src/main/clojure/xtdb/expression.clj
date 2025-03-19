@@ -938,7 +938,7 @@
 (defmethod codegen-call [:_iid :uuid] [_]
     {:return-type [:fixed-size-binary 16]
      :->call-code (fn [[id]]
-                    `(resolve-buf (util/->iid (util/bytes->uuid ~id))))})
+                    `(resolve-buf (util/->iid (util/byte-buffer->uuid ~id))))})
 
 (defmethod codegen-call [:_iid :keyword] [_]
   {:return-type [:fixed-size-binary 16]
