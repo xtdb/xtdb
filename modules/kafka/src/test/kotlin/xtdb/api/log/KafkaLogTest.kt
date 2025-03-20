@@ -59,7 +59,7 @@ class KafkaLogTest {
         KafkaLog.kafka(container.bootstrapServers, "test-topic")
             .pollDuration(Duration.ofMillis(100))
             .openLog().use { log ->
-                log.subscribe(subscriber).use { _ ->
+                log.subscribe(subscriber, 0).use { _ ->
                     val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
                     log.appendMessage(Message.Tx(txPayload)).await()
 

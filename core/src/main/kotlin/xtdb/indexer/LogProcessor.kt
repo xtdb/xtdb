@@ -98,7 +98,8 @@ class LogProcessor(
 
     private val flusher = Flusher(flushTimeout, liveIndex)
 
-    private val subscription = log.subscribe(this)
+    private val subscriberOffset = latestProcessedMsgId
+    private val subscription = log.subscribe(this, subscriberOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
