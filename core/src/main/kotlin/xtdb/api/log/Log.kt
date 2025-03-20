@@ -105,6 +105,8 @@ interface Log : AutoCloseable {
      */
     val latestSubmittedOffset: LogOffset
 
+    val epoch: Int
+
     fun appendMessage(message: Message): CompletableFuture<LogOffset>
 
     fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription
