@@ -244,7 +244,8 @@
                                                                                                                 col-names)
                                                                                          :page-metadata page-metadata})))
                                                                               (-> (cat/trie-state trie-catalog table-name)
-                                                                                  (cat/current-tries)))
+                                                                                  (cat/current-tries)
+                                                                                  (cat/filter-tries temporal-bounds)))
 
                                                                   live-table-wm (conj (-> (trie/->Segment (.getLiveTrie live-table-wm))
                                                                                           (assoc :memory-rel (.getLiveRelation live-table-wm))))
