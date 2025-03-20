@@ -55,11 +55,14 @@ class LogProcessor(
         return (txId and mask)
     }
 
-    private val lastCompletedOffset = liveIndex.latestCompletedTx?.txId?.let {
-        if (txIdToEpoch(it) == currentEpoch) txIdToOffset(it) else -1
-    } ?: -1
+    override val latestSubmittedMsgId: MessageId
+        get() = offsetToTxId(log.latestSubmittedOffset)
 
-    private val watchers = Watchers(lastCompletedOffset)
+    override var latestProcessedMsgId: MessageId =
+        liveIndex.latestCompletedTx?.txId ?: -1
+        private set
+
+    private val watchers = Watchers(latestProcessedMsgId)
     private val LOGGER = LoggerFactory.getLogger(LogProcessor::class.java)
 
     val ingestionError get() = watchers.exception
@@ -112,16 +115,13 @@ class LogProcessor(
         allocator.close()
     }
 
-    override val latestSubmittedMsgId: MessageId
-        get() = offsetToTxId(log.latestSubmittedOffset)
-
-    override var latestProcessedMsgId: MessageId =
-        liveIndex.latestCompletedTx?.txId ?: -1
-        private set
-
     private val flusher = Flusher(flushTimeout, liveIndex)
 
-    private val subscription = log.subscribe(this)
+    private val subscriberOffset = latestProcessedMsgId.let {
+        if (currentEpoch == txIdToEpoch(it)) txIdToOffset(it)
+        else -1
+    }
+    private val subscription = log.subscribe(this, subscriberOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->

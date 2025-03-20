@@ -198,8 +198,8 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
             onCommit.await().logOffset
         }
 
-    override fun subscribe(subscriber: Subscriber): Subscription {
-        var latestCompletedOffset = subscriber.latestProcessedMsgId
+    override fun subscribe(subscriber: Subscriber, offset: LogOffset): Subscription {
+        var latestCompletedOffset = offset
 
         val ch = Channel<Record>(100)
 

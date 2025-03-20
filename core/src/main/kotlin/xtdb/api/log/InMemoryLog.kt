@@ -63,9 +63,9 @@ class InMemoryLog(private val instantSource: InstantSource, override val current
             res.await()
         }
 
-    override fun subscribe(subscriber: Subscriber): Subscription {
+    override fun subscribe(subscriber: Subscriber, offset: LogOffset): Subscription {
         val job = scope.launch(SupervisorJob()) {
-            var latestCompletedOffset = subscriber.latestProcessedMsgId
+            var latestCompletedOffset = offset
 
             val ch = Channel<Record>(100)
 

@@ -109,7 +109,7 @@ interface Log : AutoCloseable {
 
     fun appendMessage(message: Message): CompletableFuture<LogOffset>
 
-    fun subscribe(subscriber: Subscriber): Subscription
+    fun subscribe(subscriber: Subscriber, offset: LogOffset): Subscription
 
     @FunctionalInterface
     fun interface Subscription : AutoCloseable
