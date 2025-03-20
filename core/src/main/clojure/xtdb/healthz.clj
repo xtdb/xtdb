@@ -74,7 +74,7 @@
    :log-processor (ig/ref :xtdb.log/processor)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, log-processor]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, ^LogProcessor log-processor]}]
   (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
         ^Server server (-> (handler {:prometheus-registry prometheus-registry
                                      :log-processor log-processor
