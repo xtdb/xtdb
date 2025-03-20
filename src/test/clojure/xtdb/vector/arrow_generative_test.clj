@@ -164,7 +164,7 @@
                              (apply concat))
           vec-indirects (mapcat #(range (.getValueCount ^IVectorReader %)) rdrs)
           [rdr-indirects vec-indirects] (same-shuffle rdr-indirects vec-indirects)]
-      (IndirectMultiVectorReader. rdrs
+      (IndirectMultiVectorReader. "foo" rdrs
                                   (VectorIndirection/selection (int-array rdr-indirects))
                                   (VectorIndirection/selection (int-array vec-indirects))))))
 

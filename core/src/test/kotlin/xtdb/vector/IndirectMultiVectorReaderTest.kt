@@ -58,6 +58,7 @@ class IndirectMultiVectorReaderTest {
         val rdr1 = ValueVectorReader.intVector(intVec1)
         val rdr2 = ValueVectorReader.intVector(intVec2)
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2),
             selection(intArrayOf(0, 1, 0, 1)),
             selection(intArrayOf(0, 0, 1, 1))
@@ -111,6 +112,7 @@ class IndirectMultiVectorReaderTest {
         val rdr1 = ValueVectorReader.structVector(structVec1)
         val rdr2 = ValueVectorReader.structVector(structVec2)
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2),
             selection(intArrayOf(0, 1, 0, 1)),
             selection(intArrayOf(0, 0, 1, 1))
@@ -151,6 +153,7 @@ class IndirectMultiVectorReaderTest {
         val rdr1 = ValueVectorReader.intVector(intVec)
         val rdr2 = ValueVectorReader.varCharVector(stringVec)
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2),
             selection(intArrayOf(0, 1, 0, 1)),
             selection(intArrayOf(0, 0, 1, 1))
@@ -202,6 +205,7 @@ class IndirectMultiVectorReaderTest {
         val rdr2 = ValueVectorReader.varCharVector(stringVec)
         val rdr3 = ValueVectorReader.denseUnionVector(duvVec)
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2, rdr3),
             selection(intArrayOf(0, 1, 2, 0, 1, 2)),
             selection(intArrayOf(0, 0, 0, 1, 1, 1))
@@ -246,6 +250,7 @@ class IndirectMultiVectorReaderTest {
         val rdr1 = ValueVectorReader.denseUnionVector(duvVec1)
         val rdr2 = ValueVectorReader.denseUnionVector(duvVec2)
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2),
             selection(intArrayOf(0, 1, 0, 1, 0, 1)),
             selection(intArrayOf(0, 0, 1, 1, 2, 2))
@@ -291,6 +296,7 @@ class IndirectMultiVectorReaderTest {
 
         val rdr1 = ValueVectorReader.denseUnionVector(duvVec1)
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1),
             selection(intArrayOf(0, 0)),
             selection(intArrayOf(0, 1))
@@ -331,6 +337,7 @@ class IndirectMultiVectorReaderTest {
 
         // This represents the vector [[0, 1, 2], [6, 7], [3, 4, 5], [8, 9]]
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2),
 
             selection(intArrayOf(0, 1, 0, 1)),
@@ -377,6 +384,7 @@ class IndirectMultiVectorReaderTest {
 
         // This represents the vector [[0, 1, 2], 0, [3, 4, 5], 1]
         val indirectRdr = IndirectMultiVectorReader(
+            "foo",
             listOf(rdr1, rdr2),
 
             selection(intArrayOf(0, 1, 0, 1)),

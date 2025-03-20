@@ -19,12 +19,12 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
 class IndirectMultiVectorReader(
+    override val name: String,
     private val readers: List<IVectorReader?>,
     private val readerIndirection: VectorIndirection,
     private val vectorIndirections: VectorIndirection,
 ) : IVectorReader {
 
-    override val name = readers.filterNotNull().first().name
     private val fields: List<Field?> = readers.map { it?.field }
     private val legReaders = ConcurrentHashMap<String, IVectorReader>()
     private val vectorField by lazy (LazyThreadSafetyMode.PUBLICATION){
@@ -85,7 +85,7 @@ class IndirectMultiVectorReader(
         safeReader(idx).getObject(vectorIndirections[idx], keyFn)
 
     override fun structKeyReader(colName: String) =
-        IndirectMultiVectorReader( readers.map { it?.structKeyReader(colName) }, readerIndirection, vectorIndirections )
+        IndirectMultiVectorReader( colName, readers.map { it?.structKeyReader(colName) }, readerIndirection, vectorIndirections )
 
     override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys().orEmpty() }.toSet()
 
@@ -107,6 +107,7 @@ class IndirectMultiVectorReader(
                 vectorIndirectionArray += range(rdr.getListStartIndex(vectorIndirections[i]), listCount)
             }
             return IndirectMultiVectorReader(
+                "\$data\$",
                 listElementReaders,
                 VectorIndirection.selection(readerIndirectionArray),
                 VectorIndirection.selection(vectorIndirectionArray)
@@ -118,10 +119,10 @@ class IndirectMultiVectorReader(
     override fun getListCount(idx: Int): Int = safeReader(idx).getListCount(vectorIndirections[idx])
 
     override val mapKeys: IVectorReader
-        get() = IndirectMultiVectorReader(readers.map { it?.mapKeys }, readerIndirection, vectorIndirections)
+        get() = IndirectMultiVectorReader("key", readers.map { it?.mapKeys }, readerIndirection, vectorIndirections)
 
     override val mapValues: IVectorReader
-        get() = IndirectMultiVectorReader(readers.map { it?.mapValues }, readerIndirection, vectorIndirections)
+        get() = IndirectMultiVectorReader("value", readers.map { it?.mapValues }, readerIndirection, vectorIndirections)
 
     override fun getLeg(idx: Int): String? {
         val reader = safeReader(idx)
@@ -145,6 +146,7 @@ class IndirectMultiVectorReader(
             }
 
             IndirectMultiVectorReader(
+                legKey,
                 validReaders,
                 object : VectorIndirection {
                     override fun valueCount(): Int {
@@ -188,7 +190,7 @@ class IndirectMultiVectorReader(
 
     override fun rowCopier(writer: IVectorWriter): RowCopier {
         readers.map { it?.also { writer.promoteChildren(it.field) }}
-        val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector()).rowCopier(writer) }
+        val rowCopiers = readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector(it?.name)).rowCopier(writer) }
         return RowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }
 

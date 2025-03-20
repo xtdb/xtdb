@@ -291,7 +291,7 @@
             str-rdr (vr/vec->reader struct-str-vec)
             rdr-ind (VectorIndirection/selection (int-array (concat (repeat 2 0) (repeat 2 1))))
             vec-ind (VectorIndirection/selection (int-array (concat (range 2) (range 2))))
-            indirect-rdr (IndirectMultiVectorReader. [int-rdr str-rdr] rdr-ind vec-ind)
+            indirect-rdr (IndirectMultiVectorReader. "foo" [int-rdr str-rdr] rdr-ind vec-ind)
             vpos (VectorPosition/build)
             value-rdr (.valueReader indirect-rdr vpos)]
 
