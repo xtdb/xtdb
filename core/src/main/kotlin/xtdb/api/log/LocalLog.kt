@@ -198,8 +198,8 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
             onCommit.await().logOffset
         }
 
-    override fun subscribe(subscriber: Subscriber): Subscription {
-        var latestCompletedOffset = subscriber.latestProcessedMsgId
+    override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
+        var latestCompletedOffset = latestProcessedOffset
 
         val ch = Channel<Record>(100)
 
@@ -212,7 +212,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
 
                         runInterruptible {
                             FileChannel.open(logFilePath).use { ch ->
-                                val latestCompleted = subscriber.latestProcessedMsgId
+                                val latestCompleted = latestCompletedOffset
                                 if (latestCompleted >= 0) {
                                     ch.position(latestCompleted)
                                     ch.readMessage()
