@@ -148,24 +148,24 @@
 
         (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt3 sf1 (dec sf2))
                                                (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
-                                              (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 0 system from strictly before page 1.")
         (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 sf2)
                                                  (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
-                                                (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 system from overlaps.")
 
         (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt1 sf1 (inc sf2))
                                                (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
-                                              (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 0 valid-time strictly before page 1.")
 
         (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 (inc sf2))
                                                  (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
-                                                (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas."))
 
@@ -174,13 +174,13 @@
         ;; TODO could we filter page 0 in the two assertions below?
         (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt2 sf1 sf2)
                                                  (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
-                                                (tu/->min-max-query-bounds vt0 Long/MAX_VALUE (inc sf2) Long/MAX_VALUE))
+                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE (inc sf2) Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 system from overlaps. Query system-time bounds don't touch page 0")
 
         (t/is (= #{0 1} (->> (trie/->merge-task [(->mock-merge-plan-page 0 false vt0 vt1 sf1 (inc sf2))
                                                  (->mock-merge-plan-page 1 true (dec vt1) vt2 sf2 sf2)]
-                                                (tu/->min-max-query-bounds (inc vt1) Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                (tu/->temporal-bounds (inc vt1) Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas. Query valid-time bounds don't touch page 0")))
 
@@ -190,19 +190,19 @@
 
         (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)
                                                (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
-                                              (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 2 doesn't overlap in valid-time")
 
         (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
                                                  (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
-                                                (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
         (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
                                                  (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 sf3)]
-                                                (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 can bound page 1 and we can't filter newer pages (no constraints on query system-time)."))
 
@@ -211,14 +211,14 @@
         ;; TODO can 2 be filtered here?
         (t/is (= #{1 2} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
                                                  (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
-                                                (tu/->min-max-query-bounds vt1 (dec vt2) sf1 Long/MAX_VALUE))
+                                                (tu/->temporal-bounds vt1 (dec vt2) sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
 
         (t/is (= #{1} (->> (trie/->merge-task [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf3)
                                                (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 sf3)]
-                                              (tu/->min-max-query-bounds vt0 Long/MAX_VALUE sf1 sf3))
+                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 sf3))
                            ->pages))
               "Take page 1. Page 2 can bound page 1 and we can filter newer pages because of query system-time constraints.")))
 
@@ -249,13 +249,13 @@
                                             [3 micros-2021 micros-2022]
                                             [4 micros-2022 Long/MAX_VALUE]])]
 
-          (t/is (= [2] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 micros-2021 micros-2020 (inc micros-2020))))
+          (t/is (= [2] (query-bounds->pages (tu/->temporal-bounds micros-2020 micros-2021 micros-2020 (inc micros-2020))))
                 "only 2020")
 
-          (t/is (= [1 2] (query-bounds->pages (tu/->min-max-query-bounds (dec micros-2020) micros-2021 micros-2020 (inc micros-2020))))
+          (t/is (= [1 2] (query-bounds->pages (tu/->temporal-bounds (dec micros-2020) micros-2021 micros-2020 (inc micros-2020))))
                 "end of 2019 + 2020")
 
-          (t/is (= [2] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 (inc micros-2021) micros-2020 (inc micros-2020))))
+          (t/is (= [2] (query-bounds->pages (tu/->temporal-bounds micros-2020 (inc micros-2021) micros-2020 (inc micros-2020))))
                 "2020 + start of 2021 + system time bounds")
 
           (t/is (= [1 2 3] (query-bounds->pages (TemporalBounds. (TemporalDimension. (dec micros-2020) (inc micros-2021)) (TemporalDimension.))))
@@ -271,17 +271,17 @@
                                             [2 micros-2020 micros-2021]
                                             [3 micros-2021 micros-2022]
                                             [4 micros-2020 Long/MAX_VALUE]])]
-          (t/is (= [2 4] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 micros-2021 micros-2020 (inc micros-2020))))
+          (t/is (= [2 4] (query-bounds->pages (tu/->temporal-bounds micros-2020 micros-2021 micros-2020 (inc micros-2020))))
                 "only 2020")
 
           ;; end of 2019 + 2020
-          (t/is (= [1 2 4] (query-bounds->pages (tu/->min-max-query-bounds (dec micros-2020) micros-2021 micros-2020 (inc micros-2020))))
+          (t/is (= [1 2 4] (query-bounds->pages (tu/->temporal-bounds (dec micros-2020) micros-2021 micros-2020 (inc micros-2020))))
                 "end of 2019 + 2020")
 
           (t/is (= [1 2 3 4] (query-bounds->pages (TemporalBounds. (TemporalDimension. (dec micros-2020) (inc micros-2021)) (TemporalDimension.))))
                 "end of 2019 + 2020 + start of 2021 + no system time bounds")
 
-          (t/is (= [2 4] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 (inc micros-2021) micros-2020 (inc micros-2020))))
+          (t/is (= [2 4] (query-bounds->pages (tu/->temporal-bounds micros-2020 (inc micros-2021) micros-2020 (inc micros-2020))))
                 "2020 + start of 2021 + system time bounds")
 
           (t/is (= [0 1 2 3 4] (query-bounds->pages (TemporalBounds.)))
@@ -295,7 +295,7 @@
                                             [3 micros-2021 micros-2022]
                                             [4 micros-2022 Long/MAX_VALUE]])]
 
-          (t/is (= [2 3 4] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
+          (t/is (= [2 3 4] (query-bounds->pages (tu/->temporal-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
                 "2020, but page 3 and 4 can bound page 2")))
 
       (t/testing "page two can be bounded by some, but not all pages in system time future"
@@ -306,7 +306,7 @@
                                             [3 micros-2021 micros-2022]
                                             [4 micros-2022 Long/MAX_VALUE]])]
 
-          (t/is (= [2 3] (query-bounds->pages (tu/->min-max-query-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
+          (t/is (= [2 3] (query-bounds->pages (tu/->temporal-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
                 "2020, but only 3 can bound page 2 in 2020"))))))
 
 (deftest test-data-file-writing
