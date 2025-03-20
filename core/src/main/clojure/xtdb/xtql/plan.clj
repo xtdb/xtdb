@@ -8,10 +8,9 @@
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
-           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents)
-           (xtdb.tx_ops AssertExists AssertNotExists Delete Erase Insert Update)
+           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
            (xtdb.util NormalForm)
-           (xtdb.xtql From Where With Without Return DocsRelation ParamRelation Unify Join LeftJoin Pipeline Aggregate OrderBy Limit Offset Unnest)))
+           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify Unnest Where With Without)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -32,9 +31,6 @@
 (defprotocol PlanTemporalFilter
   (plan-temporal-filter [temporal-filter]))
 
-(defprotocol PlanDml
-  (plan-dml [query tx-opts]))
-
 (def ^:dynamic *gensym* gensym)
 
 (defprotocol ExprPlan
@@ -46,8 +42,8 @@
    (-> (symbol col)
        util/symbol->normal-form-symbol
        (vary-meta assoc :column? true)))
-  ([prefix col]
-   (col-sym (str (format "%s_%s" prefix col)))))
+
+  ([prefix col] (col-sym (format "%s_%s" prefix col))))
 
 (defn- param-sym [v]
   (-> (symbol (str "?" v))
@@ -903,122 +899,3 @@
               #_(->> (binding [*print-meta* true]))
               (doto (lp/validate-plan)))))
       util/lru-memoize))
-
-(def ^:private extra-dml-bind-specs
-  [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))
-   (Binding. "_valid_from" (Exprs/lVar "xt$dml$valid_from"))
-   (Binding. "_valid_to" (Exprs/lVar "xt$dml$valid_to"))])
-
-(defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time]
-  [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))
-
-   (let [vf-var (Exprs/lVar "xt$dml$valid_from")
-
-         default-vf-expr (Expr$Call. "current-timestamp" [])]
-
-     (Binding. "_valid_from"
-               (Expr$Call. "cast-tstz"
-                          [(if-let [vf-expr (some-> for-valid-time .getFrom)]
-                             (Expr$Call. "greatest" [vf-var (Expr$Call. "coalesce" [vf-expr default-vf-expr])])
-                             default-vf-expr)])))
-
-   (Binding. "_valid_to"
-             (Expr$Call. "cast-tstz"
-                         [(Expr$Call. "least"
-                                      [(Exprs/lVar "xt$dml$valid_to")
-                                       (if-let [vt-expr (some-> for-valid-time .getTo)]
-                                         (Expr$Call. "coalesce" [vt-expr (Exprs/val 'xtdb/end-of-time)])
-                                         (Exprs/val 'xtdb/end-of-time))])]))])
-
-(extend-protocol PlanDml
-  Insert
-  (plan-dml [{:keys [query table]} _tx-opts]
-    (let [{:keys [ra-plan provided-vars]} (plan-query query)]
-      [:insert {:table (symbol table)}
-       [:project (vec (for [col provided-vars]
-                        (let [col-sym (util/symbol->normal-form-symbol col)]
-                          {col-sym (if (contains? '#{_valid_from _valid_to} col-sym)
-                                     `(~'cast-tstz ~col)
-                                     col)})))
-        ra-plan]]))
-
-  Delete
-  (plan-dml [{:keys [table for-valid-time bind-specs unify-clauses]} _tx-opts]
-    (let [table-name (util/with-default-schema table)
-          target-query (xtql/->Pipeline (xtql/->Unify (into [(xtql/map->From {:table table-name
-                                                                              :bindings (concat bind-specs extra-dml-bind-specs)})]
-                                                            unify-clauses))
-
-                                        [(xtql/->Return (dml-colspecs for-valid-time))])
-
-          {target-plan :ra-plan} (plan-query target-query)]
-      [:delete {:table (str (symbol table-name))}
-       target-plan]))
-
-  Erase
-  (plan-dml [{:keys [table bind-specs unify-clauses]} _tx-opts]
-    (let [table-name (util/with-default-schema table)
-          target-query (xtql/->Pipeline (xtql/->Unify (into [(xtql/map->From {:table table-name
-                                                                              :bindings (concat bind-specs [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])})]
-                                                            unify-clauses))
-
-                                        [(xtql/->Return [(Binding. "_iid" (Exprs/lVar "xt$dml$iid"))])])
-
-          {target-plan :ra-plan} (plan-query target-query)]
-      [:erase {:table (str (symbol table-name))}
-       target-plan]))
-
-  Update
-  (plan-dml [{:keys [table for-valid-time set-specs bind-specs unify-clauses]} tx-opts]
-    (let [table-name (util/with-default-schema table)
-          known-columns (set (get-in tx-opts [:table-info (str (symbol table-name))]))
-          unspecified-columns (-> (set/difference known-columns
-                                                  (set (for [^Binding set-spec set-specs]
-                                                         (util/str->normal-form-str (.getBinding set-spec)))))
-                                  (disj "_id"))
-
-          target-query (xtql/->Pipeline (xtql/->Unify (into [(xtql/map->From {:table table-name
-                                                                              :for-valid-time for-valid-time
-                                                                              :bindings (concat bind-specs
-                                                                                                [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
-                                                                                                (for [^String col unspecified-columns]
-                                                                                                  (Binding. col (Exprs/lVar (str "xt$update$" col))))
-                                                                                                extra-dml-bind-specs)})]
-                                                            unify-clauses))
-
-                                        [(xtql/->Return (concat (dml-colspecs for-valid-time)
-                                                                [(Binding. "_id" (Exprs/lVar "xt$dml$id"))]
-                                                                (for [^String col unspecified-columns]
-                                                                  (Binding. col (Exprs/lVar (str "xt$update$" col))))
-                                                                set-specs))])
-
-          {target-plan :ra-plan} (plan-query target-query)]
-      [:update {:table (str (symbol table-name))}
-       target-plan]))
-
-  AssertNotExists
-  (plan-dml [{:keys [query]} _tx-opts]
-    [:assert {}
-     [:anti-join []
-      [:table [{}]]
-      (:ra-plan (plan-query query))]])
-
-  AssertExists
-  (plan-dml [{:keys [query]} _tx-opts]
-    [:assert {}
-     [:semi-join []
-      [:table [{}]]
-      (:ra-plan (plan-query query))]]))
-
-(defn compile-dml [query {:keys [table-info] :as tx-opts}]
-  (let [ra-plan (binding [*gensym* (util/seeded-gensym "_" 0)
-                          *table-info* table-info]
-                  (plan-dml query tx-opts))
-        [dml-op dml-op-opts plan] ra-plan]
-    [dml-op dml-op-opts
-     (-> plan
-         #_(doto clojure.pprint/pprint)
-         #_(->> (binding [*print-meta* true]))
-         (lp/rewrite-plan {})
-         #_(doto clojure.pprint/pprint)
-         (doto (lp/validate-plan)))]))

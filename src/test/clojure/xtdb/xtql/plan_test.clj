@@ -2312,23 +2312,6 @@
                                  '(from :docs [{:xt/id user-id} first-name last-name])
                                  (list 'return {:full-name (cons 'concat (list 'first-name " " 'last-name))}))))))
 
-(deftest delete-ingester-error-3016
-  ;; Query works before insert
-  (t/is (empty? (xt/q tu/*node* '(from :comments []))))
-
-  (xt/submit-tx tu/*node*
-                [[:put-docs :comments {:xt/id 1}]])
-
-  ;; Query works after insert
-  (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
-
-  (xt/submit-tx tu/*node* [[:delete '{:from :comments
-                                      :bind [{:something logic-var}]
-                                      :unify [(from :anything [{:else logic-var}])]}]])
-
-  ;; Ingester error after delete
-  (t/is (empty? (xt/q tu/*node* '(from :xt/txs [{:committed false}])))))
-
 (deftest plan-expr-test
   (let [required-vars (comp plan/required-vars xtql/parse-expr)]
     (t/testing "required-vars"

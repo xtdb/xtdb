@@ -675,31 +675,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
                  (xt/q node '(from :docs [{:xt/id e} inst]))))))))
 
-(deftest assert-exists-on-empty-tables-3061
-  (t/is (= (serde/->tx-aborted 0 #xt/instant "2020-01-01T00:00:00Z"
-                                 #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}])
-           (xt/execute-tx tu/*node* [[:assert-exists '(from :users [{:xt/id :john}])]])))
-
-  (t/is (= [{:xt/id 0, :committed? false,
-             :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]}]
-           (xt/q tu/*node*
-                 '(from :xt/txs [xt/id {:committed committed?} error])))
-
-        "assert fails on empty table")
-
-  (t/is (= (serde/->tx-aborted 1 #xt/instant "2020-01-02T00:00:00Z"
-                               #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}])
-
-           (xt/execute-tx tu/*node* [[:put-docs :users {:xt/id :not-john}]
-                                     [:assert-exists '(from :users [{:xt/id :john}])]])))
-
-  (t/is (= [{:xt/id 1,
-             :committed? false,
-             :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]}]
-           (xt/q tu/*node*
-                 '(from :xt/txs [{:xt/id 1, :committed committed?} xt/id error])))
-        "when the table has an (non-matching) entry the assert also fails"))
-
 (defn- random-maps [n]
   (let [nb-ks 5
         ks [:foo :bar :baz :toto :fufu]]

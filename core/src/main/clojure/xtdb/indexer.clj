@@ -604,55 +604,6 @@
 
         nil))))
 
-(defn- wrap-xtql-args [f]
-  (fn [^RelationReader args]
-    (f (when args
-         (vr/rel-reader (for [^IVectorReader col args]
-                          (.withName col (str "?" (.getName col)))))))))
-
-(defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
-                                               ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
-                                               tx-opts]
-  (let [xtql-leg (.legReader tx-ops-rdr "xtql")
-        op-rdr (.structKeyReader xtql-leg "op")
-        args-rdr (.structKeyReader xtql-leg "args")
-        upsert-idxer (->upsert-rel-indexer live-idx-tx tx-opts)
-        delete-idxer (->delete-rel-indexer live-idx-tx tx-opts)
-        erase-idxer (->erase-rel-indexer live-idx-tx tx-opts)]
-    (reify OpIndexer
-      (indexOp [_ tx-op-idx]
-        (let [xtql-op (.form ^ClojureForm (.getObject op-rdr tx-op-idx))]
-          (util/with-open [args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
-            (zmatch (xtql/compile-dml xtql-op (assoc tx-opts :table-info (scan/tables-with-cols wm-src)))
-              [:insert query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-args)))
-
-              [:update query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-args)))
-
-              [:delete query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-args)))
-
-              [:erase query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                   (wrap-xtql-args)))
-
-              [:assert _query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer q-src wm-src inner-query tx-opts)
-                                   (wrap-xtql-args)))
-
-              (throw (UnsupportedOperationException. "xtql query")))))
-
-        nil))))
-
 (def ^:private ^:const ^String txs-table "xt/txs")
 
 (defn- add-tx-row! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
@@ -758,13 +709,15 @@
                                 !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
                                 !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
                                 !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
-                                !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
                                 !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
                             (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                               (when-let [more-tx-ops
                                          (.recordCallable tx-timer
                                                           #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                             "xtql" (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
+                                                             "xtql" (throw (err/illegal-arg :xtdb/xtql-dml-removed
+                                                                                            {::err/message (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
+                                                                                                                      "Please use SQL DML statements instead - "
+                                                                                                                      "see the release notes for more information."])}))
                                                              "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
                                                              "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
                                                              "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)

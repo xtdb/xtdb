@@ -254,7 +254,6 @@
              (set (xt/q tu/*node* (sql-example "pull-sql-1")))))))
 
 (deftest bitemporality
-
   (xt/submit-tx tu/*node* users)
 
   (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
@@ -291,33 +290,6 @@
                  ;; end::bitemp-xtql-3[]
                  ))))
 
-(deftest DML-Insert-xtql
-  (xt/submit-tx tu/*node* old-users)
-
-  (t/is (= []
-           (xt/q tu/*node*
-                 '(from :users [first-name last-name]))))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Insert-xtql[]
-    (xt/submit-tx node
-      [[:insert-into :users
-        '(from :old-users [xt/id {:given-name first-name, :surname last-name}
-                           xt/valid-from xt/valid-to])]])
-    ;; end::DML-Insert-xtql[]
-    ,)
-
-  (t/is (= #{{:first-name "Ivan"
-              :last-name "Ivanov"
-              :xt/valid-from #xt/zoned-date-time "2017-01-01T00:00Z[UTC]"}
-             {:first-name "Petr"
-              :last-name "Petrov"
-              :xt/valid-from #xt/zoned-date-time "2018-01-01T00:00Z[UTC]"}}
-           (set
-            (xt/q tu/*node*
-                  '(from :users [first-name last-name
-                                 xt/valid-from xt/valid-to]))))))
-
 (deftest DML-Insert-sql
   (xt/submit-tx tu/*node* old-users)
 
@@ -339,26 +311,6 @@
                   '(from :users [first-name last-name
                                  xt/valid-from xt/valid-to]))))))
 
-;; tag::DML-Delete-xtql[]
-(defn delete-a-post [node the-post-id]
-  (xt/submit-tx node
-    [[:delete {:from :comments, :bind '[{:post-id $post-id}]}
-      {:post-id the-post-id}]]))
-;; end::DML-Delete-xtql[]
-
-(deftest DML-Delete-xtql
-  (xt/submit-tx tu/*node* comments)
-
-  (delete-a-post tu/*node* 1)
-
-  (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
-                      {:args {:post-id 1}})))
-
-  (t/is (not (empty?
-              (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
-                                                :for-valid-time :all-time})
-                    {:args {:post-id 1}})))))
-
 (deftest DML-Delete-sql
   (xt/submit-tx tu/*node* comments)
 
@@ -373,31 +325,6 @@
               (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
                                                 :for-valid-time :all-time})
                     {:args {:post-id 1}})))))
-
-(deftest DML-Delete-additional-unify-clauses-xtql
-  (xt/submit-tx tu/*node* (concat posts comments))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Delete-additional-unify-clauses-xtql[]
-    (xt/submit-tx node
-      [[:delete '{:from :comments
-                  :bind [{:post-id pid}]
-                  :unify [(from :posts [{:xt/id pid, :author-id $author}])]}
-        {:author "ivan"}]])
-    ;; end::DML-Delete-additional-unify-clauses-xtql[]
-    )
-
-  (t/is (empty? (xt/q tu/*node*
-                      '(unify (from :comments [{:post-id pid}])
-                              (from :posts [{:xt/id pid, :author-id $author}]))
-                      {:args {:author "ivan"}})))
-
-  (t/is (not (empty?
-               (xt/q tu/*node*
-                     '(unify (from :comments {:bind [{:post-id pid}]
-                                              :for-valid-time :all-time})
-                             (from :posts [{:xt/id pid, :author-id $author}]))
-                     {:args {:author "ivan"}})))))
 
 (deftest DML-Delete-additional-unify-clauses-sql
   (xt/submit-tx tu/*node* (concat posts comments))
@@ -417,35 +344,6 @@
                                               :for-valid-time :all-time})
                              (from :posts [{:xt/id pid, :author-id $author}]))
                      {:args {:author "ivan"}})))))
-
-(deftest DML-Delete-bitemporal-xtql
-  (xt/submit-tx tu/*node* promotions)
-
-  (t/is (= #{{:promotion-type "christmas"}
-             {:promotion-type "general"}}
-           (set
-            (xt/q tu/*node*
-                  '(unify (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-25")})
-                          (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-26")}))))))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Delete-bitemporal-xtql[]
-    (xt/submit-tx node
-      [[:delete '{:from :promotions
-                  :for-valid-time (from #inst "2023-12-26")
-                  :bind [{:promotion-type "christmas"}]}]])
-    ;; end::DML-Delete-bitemporal-xtql[]
-    ,)
-
-  (t/is (= #{{:promotion-type "general"}}
-           (set
-            (xt/q tu/*node*
-                  '(unify (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-25")})
-                          (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-26")})))))))
 
 (deftest DML-Delete-bitemporal-xtql
   (xt/submit-tx tu/*node* promotions)
@@ -492,22 +390,6 @@
                           (from :promotions {:bind [promotion-type]
                                              :for-valid-time (from #inst "2023-12-26")})))))))
 
-(deftest DML-Delete-everything-xtql
-  (xt/submit-tx tu/*node* comments)
-
-  (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Delete-everything-xtql[]
-    (xt/submit-tx node
-      [[:delete {:from :comments}]])
-    ;; end::DML-Delete-everything-xtql[]
-    ,)
-
-  (t/is (empty? (xt/q tu/*node* '(from :comments []))))
-
-  (t/is (not (empty? (xt/q tu/*node* '(from :comments {:bind [] :for-valid-time :all-time}))))))
-
 (deftest DML-Delete-everything-sql
   (xt/submit-tx tu/*node* comments)
 
@@ -519,26 +401,6 @@
   (t/is (empty? (xt/q tu/*node* '(from :comments []))))
 
   (t/is (not (empty? (xt/q tu/*node* '(from :comments {:bind [] :for-valid-time :all-time}))))))
-
-(deftest DML-Update-xtql
-  (xt/submit-tx tu/*node*
-    [[:put-docs :documents {:xt/id "doc-id", :version 1}]])
-
-  (t/is (= [{:version 1}]
-           (xt/q tu/*node* '(from :documents [version]))))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Update-xtql[]
-    (xt/submit-tx node
-      [[:update '{:table :documents
-                  :bind [{:xt/id $doc-id, :version v}]
-                  :set {:version (+ v 1)}}
-        {:doc-id "doc-id"}]])
-    ;; end::DML-Update-xtql[]
-    ,)
-
-  (t/is (= [{:version 2}]
-           (xt/q tu/*node* '(from :documents [version])))))
 
 (deftest DML-Update-sql
   (xt/submit-tx tu/*node*
@@ -553,30 +415,6 @@
 
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))
-
-(deftest DML-Update-bitemporal-xtql
-  (xt/submit-tx tu/*node*
-                [[:put-docs :posts {:xt/id "my-post-id" :comment-count 1}]
-                 [:put-docs :comments {:xt/id 1, :post-id "my-post-id"}]])
-
-  (t/is (= [{:comment-count 1}]
-           (xt/q tu/*node* '(from :posts [comment-count]))))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Update-bitemporal-xtql[]
-    (xt/submit-tx node
-                  [[:put-docs :comments {:xt/id (random-uuid), :post-id "my-post-id"}]
-                   [:update '{:table :posts
-                              :bind [{:xt/id $post-id}]
-                              :unify [(with {cc (q (-> (from :comments [{:post-id $post-id}])
-                                                       (aggregate {:cc (row-count)})))})]
-                              :set {:comment-count cc}}
-                    {:post-id "my-post-id"}]])
-    ;; end::DML-Update-bitemporal-xtql[]
-    ,)
-
-  (t/is (= [{:comment-count 2}]
-           (xt/q tu/*node* '(from :posts [comment-count])))))
 
 #_ ;; TODO: Uncomment when supported: https://github.com/xtdb/xtdb/issues/3050
 (deftest DML-Update-bitemporal-sql
@@ -596,22 +434,6 @@
   (t/is (= [{:comment-count 2}]
            (xt/q tu/*node* '(from :posts [comment-count])))))
 
-(deftest DML-Erase-xtql
-  (xt/submit-tx tu/*node*
-    [[:put-docs :users {:xt/id "user-id", :email "jms@example.com"}]])
-
-  (t/is (not (empty? (xt/q tu/*node* '(from :users [])))))
-
-  (let [node tu/*node*]
-    ;; tag::DML-Erase-xtql[]
-    (xt/submit-tx node
-      [[:erase {:from :users, :bind '[{:email "jms@example.com"}]}]])
-    ;; end::DML-Erase-xtql[]
-    ,)
-
-  (t/is (empty? (xt/q tu/*node* '(from :users []))))
-  (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
-
 (deftest DML-Erase-sql
   (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :james, :email "jms@example.com"}]])
 
@@ -621,43 +443,3 @@
 
   (t/is (empty? (xt/q tu/*node* '(from :users []))))
   (t/is (empty? (xt/q tu/*node* '(from :users {:bind [] :for-valid-time :all-time})))))
-
-(deftest DML-Assert-3110
-  (let [node tu/*node*
-        my-tx-id (xt/submit-tx node
-                               [[:assert-exists '(from :users [{:xt/id :james}])]
-                                [:put-docs :orders {:xt/id :james, :item "fewer bugs"}]])]
-    (t/is (= [{:committed? false
-               :error (err/runtime-err :xtdb/assert-failed {::err/message "Assert failed"})}]
-             (-> (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
-                       {:args {:tx-id my-tx-id}}))))))
-
-
-(deftest DML-Assert-Not
-  (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :james, :email "james@example.com"}]])
-
-  (let [node tu/*node*
-        my-tx-id
-        ;; tag::DML-Assert-xtql[]
-        (xt/submit-tx node
-                      [[:assert-not-exists '(from :users [{:email $email}])
-                        {:email "james@example.com"}]
-
-                       [:put-docs :users {:xt/id :james, :email "james@example.com"}]])
-        ;; end::DML-Assert-xtql[]
-        ,]
-    (t/is (= ;; tag::DML-Assert-query-result[]
-           [{:committed? false
-             :error (err/runtime-err :xtdb/assert-failed {::err/message "Assert failed"})}]
-           ;; end::DML-Assert-query-result[]
-           (-> ;; tag::DML-Assert-query[]
-            (xt/q node '(from :xt/txs [{:xt/id $tx-id, :committed committed?} error])
-                  {:args {:tx-id my-tx-id}})
-            ;; end::DML-Assert-query[]
-            ))))
-
-  (let [tx-id (xt/submit-tx tu/*node*
-                            [[:sql (sql-example "DML-Assert-Not-sql")]])]
-    (t/is (= [{:committed? false}]
-             (xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
-                   {:args {:tx-id tx-id}})))))

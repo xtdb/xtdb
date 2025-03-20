@@ -96,16 +96,6 @@
                           [:sql "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE _id = ?"
                            [1]]]))
 
-(t/deftest can-write-xtql
-  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-xtdml.json")
-                         [[:update '{:table :users
-                                     :bind [{:xt/id $uid, :version v}]
-                                     :set {:v (inc v)}}
-                           {:uid :jms}]
-
-                          [:delete '{:from :users, :bind [{:xt/id $uid}]}
-                           {:uid :jms}]]))
-
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.json")
                          [[:sql "INSERT INTO foo (_id) VALUES (0)"]]

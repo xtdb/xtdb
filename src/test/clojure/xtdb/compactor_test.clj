@@ -524,7 +524,7 @@
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
-        (xt/execute-tx node [[:erase {:from :foo :bind [{:xt/id id}]}]])
+        (xt/execute-tx node [["ERASE FROM foo WHERE _id = ?" id]])
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
@@ -534,7 +534,7 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id id}]])
 
         (t/testing "an id where there is no previous data shouldn't show up in the compacted files"
-          (xt/execute-tx node [[:erase {:from :foo :bind [{:xt/id #uuid "20000000-0000-0000-0000-000000000000"}]}]]))
+          (xt/execute-tx node [["ERASE FROM foo WHERE _id = ?" #uuid "20000000-0000-0000-0000-000000000000"]]))
 
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
