@@ -1,5 +1,6 @@
 (ns xtdb.log
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.error :as err]
@@ -17,10 +18,11 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api Xtdb$Config)
+           (xtdb.api Xtdb$Config TransactionKey)
            (xtdb.api.log Log Log$Factory Log$Message$Tx)
            (xtdb.api.tx TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
+           xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
            (xtdb.tx_ops Abort DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)))
 
@@ -229,15 +231,17 @@
 
       (.getAsArrowStream rel))))
 
-(defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src]}]
+(defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src current-epoch]}]
   (doto config
     (.setLog (cond-> (Log/getInMemoryLog)
-                   instant-src (.instantSource instant-src)))))
+               instant-src (.instantSource instant-src)
+               current-epoch (.currentEpoch current-epoch)))))
 
-(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src]}]
+(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src current-epoch]}]
   (doto config
     (.setLog (cond-> (Log/localLog (util/->path path))
-                   instant-src (.instantSource instant-src)))))
+               instant-src (.instantSource instant-src)
+               current-epoch (.currentEpoch current-epoch)))))
 
 (defmethod xtn/apply-config! :xtdb/log [config _ [tag opts]]
   (xtn/apply-config! config
@@ -247,8 +251,53 @@
                        :kafka :xtdb.kafka/log)
                      opts))
 
-(defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]
-  (.openLog factory))
+(defmethod ig/prep-key :xtdb/log [_ factory]
+  {:block-cat (ig/ref :xtdb/block-catalog)
+   :factory factory})
+
+(defn tx-id->offset [^long tx-id]
+  (bit-and tx-id (dec (bit-shift-left 1 48))))
+
+(defn tx-id->epoch [^long tx-id]
+  (bit-shift-right tx-id 48))
+
+(def out-of-sync-log-message
+  "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
+Please check your log configuration and make sure the log's underlying storage/state has not been modified.
+If you wish to start the node anyway and resume transaction processing based on the indexed storage alone, (i.e. you are willing to accept some potential loss of previously written transactions since the most recently indexed transaction), you can configure a new epoch using an empty log.
+   
+WARNING: Please note that beginning a new epoch will affect all nodes attempting to write to the log and therefore the configuration change should be applied universally and atomically (i.e. any new transactions submitted by other nodes that attempt to use a prior epoch will be rejected). Furthermore, beginning a new epoch will make the recovery of unindexed transactions from any previous epoch nearly impossible. Therefore, you should only increment the epoch when you are confident that the original log is irrecoverable and you understand the potential consequences. In any case, we strongly recommend ensuring you create a fresh backup of the indexed storage prior to changing the epoch config.
+   
+Assuming you are satisfied with the above explanations, you can set the following in your config to begin a new epoch:
+   
+log: !<LogType>
+  currentEpoch: %s
+   
+See the XTDB documentation for more guidance and recovery information.")
+
+(defn ->out-of-sync-exception [latest-completed-offset ^long latest-submitted-offset ^long current-epoch]
+  (let [log-state-str (if (= -1 latest-submitted-offset)
+                        "the log is empty"
+                        (format "epoch=%s, offset=%s" current-epoch latest-submitted-offset))]
+    (IllegalStateException.
+     (format out-of-sync-log-message log-state-str current-epoch latest-completed-offset (inc current-epoch)))))
+
+(defn validate-offsets [^Log log ^TransactionKey latest-completed-tx]
+  (when latest-completed-tx
+    (let [latest-completed-tx-id (.getTxId latest-completed-tx)
+          latest-completed-offset (tx-id->offset latest-completed-tx-id)
+          latest-completed-epoch (tx-id->epoch latest-completed-tx-id)
+          current-epoch (.getCurrentEpoch log)
+          latest-submitted-offset (.getLatestSubmittedOffset log)]
+      (if (= latest-completed-epoch current-epoch)
+        (cond
+          (< latest-submitted-offset latest-completed-offset)
+          (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset current-epoch)))
+        (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
+
+(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat ^Log$Factory factory]}]
+  (doto (.openLog factory)
+    (validate-offsets (.getLatestCompletedTx block-cat))))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
