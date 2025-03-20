@@ -47,7 +47,6 @@ dependencies {
     api(libs.integrant)
     api(libs.clj.yaml)
 
-    api(libs.sci)
     api(libs.commons.codec)
     api(libs.hppc)
 

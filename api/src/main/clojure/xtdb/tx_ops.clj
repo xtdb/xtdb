@@ -141,12 +141,6 @@
 (defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]
   TxOp)
 
-(defrecord Call [fn-id args]
-  TxOp
-  Unparse
-  (unparse-tx-op [_]
-    (into [:call fn-id] args)))
-
 (defrecord Abort []
   TxOp
   Unparse
@@ -204,24 +198,11 @@
                (some-> valid-from time/expect-instant)
                (some-> valid-to time/expect-instant))))
 
-(defn- expect-fn-id [fn-id]
-  (if-not (eid? fn-id)
-    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :fn-id fn-id}))
-    fn-id))
-
-(defn- expect-tx-fn [tx-fn]
-  (or tx-fn
-      (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-fn tx-fn}))))
-
-(defmethod parse-tx-op :put-fn [[_ id-or-opts tx-fn]]
-  (let [{:keys [fn-id valid-from valid-to]} (if (map? id-or-opts)
-                                              id-or-opts
-                                              {:fn-id id-or-opts})]
-    (->PutDocs "xt/tx_fns"
-               [{"_id" (expect-fn-id fn-id)
-                 "fn" (ClojureForm. (expect-tx-fn tx-fn))}]
-               (some-> valid-from time/expect-instant)
-               (some-> valid-to time/expect-instant))))
+(defmethod parse-tx-op :put-fn [_]
+  (throw (err/illegal-arg :xtdb/tx-fns-removed
+                          {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                    "Please use ASSERTs and SQL DML statements instead - "
+                                                    "see the release notes for more information."])})))
 
 (defmethod parse-tx-op :patch-docs [[_ table-or-opts & docs]]
   (let [{table :into, :keys [valid-from valid-to]} (cond
@@ -302,8 +283,11 @@
   (cond-> (->AssertNotExists (xtql/parse-query query))
     (seq arg-rows) (->XtqlAndArgs arg-rows)))
 
-(defmethod parse-tx-op :call [[_ f & args]]
-  (->Call (expect-fn-id f) (or args [])))
+(defmethod parse-tx-op :call [_]
+  (throw (err/illegal-arg :xtdb/tx-fns-removed
+                          {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                    "Please use ASSERTs and SQL DML statements instead - "
+                                                    "see the release notes for more information."])})))
 
 (defmethod parse-tx-op :abort [_] abort)
 

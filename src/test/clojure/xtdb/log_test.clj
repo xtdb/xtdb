@@ -76,17 +76,6 @@
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx.json") devices-docs))
 
-(t/deftest can-write-put-fns
-  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-put-fns.json")
-                         [[:put-fn :foo '(fn [id] [[:put-docs :foo {:xt/id id}]])]
-                          [:put-fn {:fn-id :bar, :valid-from #inst "2020"}
-                           '(fn [id] [[:put-docs :bar {:xt/id id}]])]]))
-
-(t/deftest can-write-tx-fn-calls
-  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-tx-fn-calls.json")
-                         [[:call :foo 12 nil :bar]
-                          [:call :foo2 "hello" "world"]]))
-
 (t/deftest can-write-docs-with-different-keys
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/docs-with-different-keys.json")
                          [[:put-docs :foo {:xt/id :a, :a 1}]

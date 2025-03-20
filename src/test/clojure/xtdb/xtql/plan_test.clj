@@ -1477,18 +1477,8 @@
                              {:system-time #inst "1998-01-28"})
 
           tx6 (xt/execute-tx tu/*node*
-                             [[:put-fn :delete-1-week-records,
-                               '(fn delete-1-weeks-records []
-                                  (->> (q '(-> (from :docs {:bind [{:xt/id id
-                                                                    :xt/valid-from app-from
-                                                                    :xt/valid-to app-to}]
-                                                            :for-valid-time :all-time})
-                                               (where (= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                         (- app-to app-from)))))
-                                       (map (fn [{:keys [id app-from app-to]}]
-                                              [:delete-docs {:from :docs, :valid-from app-from, :valid-to app-to}
-                                               id]))))]
-                              [:call :delete-1-week-records]]
+                             ["DELETE FROM docs FOR VALID_TIME FROM TIMESTAMP '1998-01-05Z' TO TIMESTAMP '1998-01-12Z'
+                               WHERE customer_number = 145"]
                              {:system-time #inst "1998-01-30"})
 
           tx7 (xt/execute-tx tu/*node*
