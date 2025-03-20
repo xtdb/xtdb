@@ -701,61 +701,56 @@
                              :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                              (.getObject 0))))
                              :tx-key tx-key
-                             :indexer this}]
+                             :indexer this}
 
-                (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
-                          (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
-                                !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
-                                !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
-                                !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
-                                !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
-                                !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
-                            (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
-                              (when-let [more-tx-ops
-                                         (.recordCallable tx-timer
-                                                          #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                             "xtql" (throw (err/illegal-arg :xtdb/xtql-dml-removed
-                                                                                            {::err/message (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
-                                                                                                                      "Please use SQL DML statements instead - "
-                                                                                                                      "see the release notes for more information."])}))
-                                                             "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                             "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                             "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
-                                                             "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                             "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                             "call" (throw (err/illegal-arg :xtdb/tx-fns-removed
-                                                                                            {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
-                                                                                                                      "Please use ASSERTs and SQL DML statements instead - "
-                                                                                                                      "see the release notes for more information."])}))
-                                                             "abort" (throw abort-exn)))]
-                                (try
-                                  (index-tx-ops more-tx-ops)
-                                  (finally
-                                    (util/try-close more-tx-ops)))))))]
-                  (let [e (try
-                            (index-tx-ops tx-ops-vec)
-                            (catch xtdb.RuntimeException e e)
-                            (catch xtdb.IllegalArgumentException e e))]
-                    (if e
-                      (do
-                        (when-not (= e abort-exn)
-                          (log/debug e "aborted tx")
-                          (.abort live-idx-tx))
+                    tx-ops-rdr (vr/vec->reader tx-ops-vec)
 
-                        (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
-                          (when tx-error-counter
-                            (.increment tx-error-counter))
-                          (add-tx-row! live-idx-tx tx-key e)
-                          (.commit live-idx-tx))
+                    !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
+                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
+                    !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
+                    !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
+                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
 
-                        (serde/->tx-aborted msg-id system-time
-                                            (when-not (= e abort-exn)
-                                              e)))
+                (if-let [e (try
+                             (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
+                               (.recordCallable tx-timer
+                                                #(case (.getLeg tx-ops-rdr tx-op-idx)
+                                                   "xtql" (throw (err/illegal-arg :xtdb/xtql-dml-removed
+                                                                                  {::err/message (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
+                                                                                                            "Please use SQL DML statements instead - "
+                                                                                                            "see the release notes for more information."])}))
+                                                   "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                   "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                   "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
+                                                   "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                   "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                   "call" (throw (err/illegal-arg :xtdb/tx-fns-removed
+                                                                                  {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                                                                            "Please use ASSERTs and SQL DML statements instead - "
+                                                                                                            "see the release notes for more information."])}))
+                                                   "abort" (throw abort-exn))))
+                             (catch xtdb.RuntimeException e e)
+                             (catch xtdb.IllegalArgumentException e e))]
 
-                      (do
-                        (add-tx-row! live-idx-tx tx-key nil)
-                        (.commit live-idx-tx)
-                        (serde/->tx-committed msg-id system-time))))))))))))
+                  (do
+                    (when-not (= e abort-exn)
+                      (log/debug e "aborted tx")
+                      (.abort live-idx-tx))
+
+                    (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+                      (when tx-error-counter
+                        (.increment tx-error-counter))
+                      (add-tx-row! live-idx-tx tx-key e)
+                      (.commit live-idx-tx))
+
+                    (serde/->tx-aborted msg-id system-time
+                                        (when-not (= e abort-exn)
+                                          e)))
+
+                  (do
+                    (add-tx-row! live-idx-tx tx-key nil)
+                    (.commit live-idx-tx)
+                    (serde/->tx-committed msg-id system-time))))))))))
 
   Closeable
   (close [_]
