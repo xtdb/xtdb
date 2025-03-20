@@ -19,7 +19,7 @@
 (defn- ->instant [[tag value] {:keys [^RelationReader args] :as opts}]
   (-> (case tag
         :literal value
-        :param (-> (.readerForName args (str value))
+        :param (-> (.vectorForOrNull args (str value))
                    (.getObject 0)))
       (time/->instant opts)))
 

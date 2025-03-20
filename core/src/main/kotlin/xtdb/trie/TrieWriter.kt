@@ -46,7 +46,7 @@ class TrieWriter(
                 .onFailure { dataRel.close(); dataFileWriter.close() }
                 .getOrThrow()
 
-        private val nodeWtr = metaRel["nodes"]!!
+        private val nodeWtr = metaRel["nodes"]
         private val nullBranchWtr = nodeWtr.legWriter("nil")
 
         private val iidBranchWtr = nodeWtr.legWriter("branch-iid")
@@ -75,7 +75,7 @@ class TrieWriter(
         private fun getMinMax(col: Vector, initMin: Long, initMax: Long): Pair<Long, Long> {
             var min = initMin
             var max = initMax
-            for (i in 0 until col.valueCount) {
+            repeat(col.valueCount) { i ->
                 val v = col.getLong(i)
                 min = minOf(min, v)
                 max = maxOf(max, v)
@@ -84,13 +84,13 @@ class TrieWriter(
         }
 
         fun writeLeaf(): RowIndex {
-            val putReader = dataRel["op"]!!.vectorForOrNull("put")
+            val putReader = dataRel["op"].vectorForOrNull("put")
             val metaPos = nodeWtr.valueCount
 
-            val systemFrom = dataRel["_system_from"]!!
-            val validFrom = dataRel["_valid_from"]!!
-            val validTo = dataRel["_valid_to"]!!
-            val iidVec = dataRel["_iid"]!!
+            val systemFrom = dataRel["_system_from"]
+            val validFrom = dataRel["_valid_from"]
+            val validTo = dataRel["_valid_to"]
+            val iidVec = dataRel["_iid"]
 
             val temporalCols = listOf(systemFrom, validFrom, validTo, iidVec)
 
@@ -225,7 +225,7 @@ class TrieWriter(
 
     private fun OpenWriter.writeRelation(rel: Relation, depth: Int, pageSize: Int): RowIndex {
         val rowCopier = dataRel.rowCopier(rel)
-        val iidReader = rel["_iid"]!!
+        val iidReader = rel["_iid"]
         val startPtr = ArrowBufPointer()
         val endPtr = ArrowBufPointer()
 

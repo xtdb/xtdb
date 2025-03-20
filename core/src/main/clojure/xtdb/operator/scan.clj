@@ -60,7 +60,7 @@
             (case tag
               :literal (-> arg
                            (time/sql-temporal->micros expr/*default-tz*))
-              :param (some-> (-> (.readerForName args (name arg))
+              :param (some-> (-> (.vectorForOrNull args (name arg))
                                  (.getObject 0))
                              (time/sql-temporal->micros expr/*default-tz*))
               :now (-> (expr/current-time)
@@ -117,7 +117,7 @@
           (util/->iid eid)
 
           (s/valid? ::lp/param eid)
-          (let [eid-rdr (.readerForName args-rel (name eid))]
+          (let [eid-rdr (.vectorForOrNull args-rel (name eid))]
             (when (= 1 (.getValueCount eid-rdr))
               (let [eid (.getObject eid-rdr 0)]
                 (if (util/valid-iid? eid)

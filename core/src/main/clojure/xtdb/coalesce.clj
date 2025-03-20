@@ -24,7 +24,7 @@
                 advanced? (.tryAdvance cursor (reify Consumer
                                                 (accept [_ read-rel]
                                                   (let [^RelationReader read-rel read-rel
-                                                        row-count (.rowCount read-rel)
+                                                        row-count (.getRowCount read-rel)
                                                         seen-rows (.seen-rows this)]
                                                     (cond
                                                       ;; haven't seen many rows yet, send this one straight through

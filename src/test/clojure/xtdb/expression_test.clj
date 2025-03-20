@@ -324,7 +324,7 @@
                #"Extract \"TIMEZONE_MINUTE\" not supported for type date"
                (extract "TIMEZONE_MINUTE" ld)))))))
 
-(defn run-projection [rel form]
+(defn run-projection [^RelationReader rel form]
   (let [col-types (->> rel
                        (into {} (map (juxt #(symbol (.getName ^IVectorReader %))
                                            #(types/field->col-type (.getField ^IVectorReader %))))))

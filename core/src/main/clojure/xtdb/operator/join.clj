@@ -19,10 +19,10 @@
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
            (org.apache.arrow.vector.types.pojo Field)
-           org.roaringbitmap.RoaringBitmap
            (org.roaringbitmap.buffer MutableRoaringBitmap)
+           org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
-           xtdb.arrow.VectorReader
+           (xtdb.arrow VectorReader)
            (xtdb.bloom BloomUtils)
            (xtdb.expression.map IRelationMap)
            (xtdb.operator ProjectionSpec)
@@ -97,21 +97,20 @@
       (update :right #(lp/emit-expr % args))) )
 
 (defn- cross-product ^xtdb.vector.RelationReader [^RelationReader left-rel, ^RelationReader right-rel]
-  (let [left-row-count (.rowCount left-rel)
-        right-row-count (.rowCount right-rel)
+  (let [left-row-count (.getRowCount left-rel)
+        right-row-count (.getRowCount right-rel)
         row-count (* left-row-count right-row-count)]
-    (vr/rel-reader (concat (.select left-rel
-                                    (let [idxs (int-array row-count)]
-                                      (dotimes [idx row-count]
-                                        (aset idxs idx ^long (quot idx right-row-count)))
-                                      idxs))
+    (RelationReader/concatCols (.select left-rel
+                                        (let [idxs (int-array row-count)]
+                                          (dotimes [idx row-count]
+                                            (aset idxs idx ^long (quot idx right-row-count)))
+                                          idxs))
 
-                           (.select right-rel
-                                    (let [idxs (int-array row-count)]
-                                      (dotimes [idx row-count]
-                                        (aset idxs idx ^long (rem idx right-row-count)))
-                                      idxs)))
-                   row-count)))
+                               (.select right-rel
+                                        (let [idxs (int-array row-count)]
+                                          (dotimes [idx row-count]
+                                            (aset idxs idx ^long (rem idx right-row-count)))
+                                          idxs)))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
@@ -169,15 +168,15 @@
                        (accept [_ build-rel]
                          (let [^RelationReader build-rel build-rel rel-map-builder (.buildFromRelation rel-map build-rel)
                                build-key-col-names (vec (.buildKeyColumnNames rel-map))]
-                           (dotimes [build-idx (.rowCount build-rel)]
+                           (dotimes [build-idx (.getRowCount build-rel)]
                              (.add rel-map-builder build-idx))
 
                            (when pushdown-blooms
                              (dotimes [col-idx (count build-key-col-names)]
                                (let [build-col-name (nth build-key-col-names col-idx)
-                                     build-col (.readerForName build-rel (str build-col-name))
+                                     build-col (.vectorForOrNull build-rel (str build-col-name))
                                      ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
-                                 (dotimes [build-idx (.rowCount build-rel)]
+                                 (dotimes [build-idx (.getRowCount build-rel)]
                                    (.add pushdown-bloom ^ints (BloomUtils/bloomHashes (VectorReader/from build-col) build-idx)))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -196,7 +195,7 @@
         matching-build-idxs (IntStream/builder)
         matching-probe-idxs (IntStream/builder)]
 
-    (dotimes [probe-idx (.rowCount probe-rel)]
+    (dotimes [probe-idx (.getRowCount probe-rel)]
       (.forEachMatch rel-map-prober probe-idx
                      (reify IntConsumer
                        (accept [_ build-idx]
@@ -209,7 +208,7 @@
   "Takes a relation (probe-rel) and its mapped relation (via rel-map) and returns a relation with the columns of both."
   [^RelationReader probe-rel
    ^IRelationMap rel-map
-   [probe-sel build-sel :as _selection-pair]]
+   [^ints probe-sel, ^ints build-sel :as _selection-pair]]
   (let [built-rel (.getBuiltRelation rel-map)]
     (vr/rel-reader (concat (.select built-rel build-sel)
                            (.select probe-rel probe-sel)))))
@@ -219,7 +218,7 @@
   ^ints [^RelationReader probe-rel, ^IRelationMap rel-map]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-probe-idxs (IntStream/builder)]
-    (dotimes [probe-idx (.rowCount probe-rel)]
+    (dotimes [probe-idx (.getRowCount probe-rel)]
       (when-not (neg? (.indexOf rel-map-prober probe-idx false))
         (.add matching-probe-idxs probe-idx)))
     (.toArray (.build matching-probe-idxs))))
@@ -242,7 +241,7 @@
   [_join-type, ^RelationReader probe-rel, ^IRelationMap rel-map, _matched-build-idxs]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-probe-idxs (IntStream/builder)]
-    (dotimes [probe-idx (.rowCount probe-rel)]
+    (dotimes [probe-idx (.getRowCount probe-rel)]
       (when (neg? (.matches rel-map-prober probe-idx))
         (.add matching-probe-idxs probe-idx)))
 
@@ -271,7 +270,7 @@
         probe-int-stream (IntStream/builder)
         build-int-stream (IntStream/builder)
 
-        _ (dotimes [idx (.rowCount probe-rel)]
+        _ (dotimes [idx (.getRowCount probe-rel)]
             (when-not (.contains probe-bm idx)
               (.add probe-int-stream idx)
               (.add build-int-stream emap/nil-row-idx)))
@@ -305,7 +304,7 @@
         matching-build-idxs (IntStream/builder)
         matching-probe-idxs (IntStream/builder)]
 
-    (dotimes [probe-idx (.rowCount probe-rel)]
+    (dotimes [probe-idx (.getRowCount probe-rel)]
       (let [!matched (boolean-array 1)]
         (.forEachMatch rel-map-prober probe-idx
                        (reify IntConsumer
@@ -347,17 +346,17 @@
                          (.tryAdvance ^ICursor (.probe-cursor this)
                                       (reify Consumer
                                         (accept [_ probe-rel]
-                                          (when (pos? (.rowCount ^RelationReader probe-rel))
+                                          (when (pos? (.getRowCount ^RelationReader probe-rel))
                                             (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
                                                                     (.copy allocator))]
-                                              (when (pos? (.rowCount out-rel))
+                                              (when (pos? (.getRowCount out-rel))
                                                 (aset advanced? 0 true)
                                                 (.accept c out-rel))))))))))
            (aget advanced? 0))
 
          (when (= ::full-outer-join join-type)
            (let [build-rel (.getBuiltRelation rel-map)
-                 build-row-count (long (.rowCount build-rel))
+                 build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
              (.remove unmatched-build-idxs emap/nil-row-idx)
 
@@ -540,7 +539,7 @@
 
 (defn- mark-join-probe-phase [^IRelationMap rel-map, ^RelationReader probe-rel, ^BitVector mark-col]
   (let [rel-prober (.probeFromRelation rel-map probe-rel)]
-    (dotimes [idx (.rowCount probe-rel)]
+    (dotimes [idx (.getRowCount probe-rel)]
       (let [match-res (.matches rel-prober idx)]
         (if (zero? match-res)
           (.setNull mark-col idx)
@@ -582,7 +581,7 @@
                                                  (reify Consumer
                                                    (accept [_ probe-rel]
                                                      (let [^RelationReader probe-rel probe-rel
-                                                           row-count (.rowCount probe-rel)]
+                                                           row-count (.getRowCount probe-rel)]
                                                        (when (pos? row-count)
                                                          (aset advanced? 0 true)
 

@@ -1,6 +1,5 @@
 package xtdb.arrow
 
-import clojure.lang.PersistentHashMap
 import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.ArrowBuf
@@ -14,14 +13,13 @@ import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
-import xtdb.api.query.IKeyFn
-import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation.UnloadMode.FILE
 import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
 import xtdb.trie.FileSize
 import xtdb.types.NamelessField
+import xtdb.util.closeAll
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.*
@@ -29,13 +27,13 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.READ
 import java.util.*
-import xtdb.vector.RelationReader as OldRelationReader
 
 private val MAGIC = "ARROW1".toByteArray()
 
-class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationWriter<Vector> {
+class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationWriter {
 
-    override val schema get() = Schema(vectors.sequencedValues().map { it.field })
+    override val schema get() = Schema(vecs.sequencedValues().map { it.field })
+    override val vectors get() = vecs.values
 
     @JvmOverloads
     constructor(vectors: List<Vector>, rowCount: Int = 0)
@@ -53,19 +51,19 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     constructor(allocator: BufferAllocator, fields: SequencedMap<String, NamelessField>, rowCount: Int = 0)
             : this(allocator, fields.map { (name, field) -> field.toArrowField(name) }, rowCount)
 
-    override operator fun get(colName: String): Vector = vectors[colName] ?: error("missing column: $colName")
+    override fun vectorForOrNull(name: String) = vecs[name]
+    override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    override operator fun get(name: String) = vectorFor(name)
 
     override fun endRow() =
         (++rowCount).also { rowCount ->
-            vectors.forEach { (_, vec) ->
+            vecs.forEach { (_, vec) ->
                 repeat(rowCount - vec.valueCount) { vec.writeNull() }
             }
         }
 
-    override fun iterator() = vectors.values.iterator()
-
-    override fun rowCopier(rel: RelationReader<*>): RowCopier {
-        val copiers = rel.map { it.rowCopier(vectors[it.name] ?: error("missing ${it.name} vector")) }
+    override fun rowCopier(rel: RelationReader): RowCopier {
+        val copiers = rel.vectors.map { it.rowCopier(vecs[it.name] ?: error("missing ${it.name} vector")) }
 
         return RowCopier { srcIdx ->
             copiers.forEach { it.copyRow(srcIdx) }
@@ -74,7 +72,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     }
 
     fun loadFromArrow(root: VectorSchemaRoot) {
-        vectors.forEach { (name, vec) -> vec.loadFromArrow(root.getVector(name)) }
+        vecs.forEach { (name, vec) -> vec.loadFromArrow(root.getVector(name)) }
         rowCount = root.rowCount
     }
 
@@ -115,13 +113,13 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         val nodes = mutableListOf<ArrowFieldNode>()
         val buffers = mutableListOf<ArrowBuf>()
 
-        vectors.values.forEach { it.unloadPage(nodes, buffers) }
+        vecs.values.forEach { it.unloadPage(nodes, buffers) }
 
         return ArrowRecordBatch(rowCount, nodes, buffers)
     }
 
     fun openAsRoot(al: BufferAllocator): VectorSchemaRoot =
-        VectorSchemaRoot.create(Schema(vectors.values.map { it.field }), al)
+        VectorSchemaRoot.create(Schema(vecs.values.map { it.field }), al)
             .also { vsr ->
                 openArrowRecordBatch().use { recordBatch ->
                     VectorLoader(vsr).load(recordBatch)
@@ -130,7 +128,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
 
     inner class RelationUnloader(private val ch: WriteChannel, private val mode: UnloadMode) : ArrowWriter {
 
-        private val schema = Schema(this@Relation.vectors.values.map { it.field })
+        private val schema = Schema(this@Relation.vecs.values.map { it.field })
         private val arrowBlocks = mutableListOf<ArrowBlock>()
 
         init {
@@ -181,7 +179,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
     private fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
         val buffers = recordBatch.buffers.toMutableList()
-        vectors.values.forEach { it.loadPage(nodes, buffers) }
+        vecs.values.forEach { it.loadPage(nodes, buffers) }
         require(nodes.isEmpty()) { "Unconsumed nodes: $nodes" }
         require(buffers.isEmpty()) { "Unconsumed buffers: $buffers" }
 
@@ -267,10 +265,7 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
         override fun close() = arrowCh.close()
     }
 
-    private class BufferLoader(
-        private val buf: ArrowBuf,
-        footer: ArrowFooter
-    ) : Loader() {
+    private class BufferLoader(private val buf: ArrowBuf, footer: ArrowFooter) : Loader() {
         override val schema: Schema = footer.schema
 
         inner class Page(private val idx: Int, private val arrowBlock: ArrowBlock) : Loader.Page {
@@ -377,11 +372,12 @@ class Relation(val vectors: SequencedMap<String, Vector>, override var rowCount:
      * Resets the row count and all vectors, leaving the buffers allocated.
      */
     override fun clear() {
-        vectors.forEach { (_, vec) -> vec.clear() }
+        vecs.forEach { (_, vec) -> vec.clear() }
         rowCount = 0
     }
 
     override fun close() {
-        vectors.forEach { (_, vec) -> vec.close() }
+        vecs.closeAll()
+        rowCount = 0
     }
 }

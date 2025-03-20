@@ -43,13 +43,13 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
   (^org.apache.arrow.vector.IntVector groupMapping [^xtdb.vector.RelationReader inRelation])
-  (^java.util.List #_<IVectorReader> finish []))
+  (^Iterable #_<IVectorReader> finish []))
 
 (deftype NullGroupMapper [^IntVector group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
     (.clear group-mapping)
-    (let [row-count (.rowCount in-rel)]
+    (let [row-count (.getRowCount in-rel)]
       (.setValueCount group-mapping row-count)
       (dotimes [idx row-count]
         (.set group-mapping idx 0))
@@ -66,7 +66,7 @@
                       ^IntVector group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
-    (let [row-count (.rowCount in-rel)]
+    (let [row-count (.getRowCount in-rel)]
       (.allocateNew group-mapping row-count)
 
       (let [builder (.buildFromRelation rel-map in-rel)]
@@ -124,7 +124,7 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (dotimes [idx (.rowCount in-rel)]
+            (dotimes [idx (.getRowCount in-rel)]
               (let [group-idx (.get group-mapping idx)]
                 (when (<= (.getValueCount out-vec) group-idx)
                   (.setValueCount out-vec (inc group-idx))
@@ -152,8 +152,8 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-col (.readerForName in-rel (str from-name))]
-              (dotimes [idx (.rowCount in-rel)]
+            (let [in-col (.vectorForOrNull in-rel (str from-name))]
+              (dotimes [idx (.getRowCount in-rel)]
                 (let [group-idx (.get group-mapping idx)]
                   (when (<= (.getValueCount out-vec) group-idx)
                     (.setValueCount out-vec (inc group-idx))
@@ -231,7 +231,7 @@
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [in-rel (RelationReader/from in-rel)
-                    input-opts {:var->col-type (->> (seq in-rel)
+                    input-opts {:var->col-type (->> in-rel
                                                     (into {acc-col-sym to-type}
                                                           (map (juxt #(symbol (.getName ^VectorReader %))
                                                                      #(-> (.getField ^VectorReader %) types/field->col-type)))))}
@@ -334,7 +334,7 @@
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
-              (let [in-vec (.readerForName in-rel (str from-name))]
+              (let [in-vec (.vectorForOrNull in-rel (str from-name))]
                 (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) {} vw/empty-args)]
                   (.aggregate sumx-agg in-rel group-mapping)
                   (.aggregate sumx2-agg (vr/rel-reader [x2]) group-mapping)
@@ -442,7 +442,7 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-vec (.readerForName in-rel (str from-name))
+            (let [in-vec (.vectorForOrNull in-rel (str from-name))
                   builders (ArrayList. (.size rel-maps))
                   distinct-idxs (IntStream/builder)]
               (dotimes [idx (.getValueCount in-vec)]
@@ -508,7 +508,7 @@
                                 on-empty]
   IAggregateSpec
   (aggregate [this in-rel group-mapping]
-    (let [in-vec (.readerForName in-rel (str from-name))
+    (let [in-vec (.vectorForOrNull in-rel (str from-name))
           row-count (.getValueCount in-vec)]
       (vw/append-vec acc-col in-vec)
 
@@ -611,7 +611,7 @@
 
          (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
            (let [out-rel (vr/rel-reader (concat (.finish group-mapper) agg-cols))]
-             (if (pos? (.rowCount out-rel))
+             (if (pos? (.getRowCount out-rel))
                (do
                  (.accept c out-rel)
                  true)

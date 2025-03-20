@@ -13,7 +13,7 @@ interface DataRel<L> : AutoCloseable {
 
     val schema: Schema
 
-    fun loadPage(leaf: L): RelationReader<*>
+    fun loadPage(leaf: L): RelationReader
 
     companion object {
         @JvmStatic
@@ -34,7 +34,7 @@ interface DataRel<L> : AutoCloseable {
             }
 
         @JvmStatic
-        fun live(liveRel: RelationReader<*>) = Live(liveRel)
+        fun live(liveRel: RelationReader) = Live(liveRel)
     }
 
     class Arrow(
@@ -44,7 +44,7 @@ interface DataRel<L> : AutoCloseable {
 
         private val relsToClose = mutableListOf<Relation>()
 
-        override fun loadPage(leaf: ArrowHashTrie.Leaf): RelationReader<*> =
+        override fun loadPage(leaf: ArrowHashTrie.Leaf): RelationReader =
             bp.getRecordBatch(dataFile, leaf.dataPageIndex).use { rb ->
                 Relation.fromRecordBatch(al, schema, rb).also { relsToClose.add(it) }
             }
@@ -54,7 +54,7 @@ interface DataRel<L> : AutoCloseable {
         }
     }
 
-    class Live(private val liveRel: RelationReader<*>) : DataRel<MemoryHashTrie.Leaf> {
+    class Live(private val liveRel: RelationReader) : DataRel<MemoryHashTrie.Leaf> {
         override val schema get() = liveRel.schema
 
         override fun loadPage(leaf: MemoryHashTrie.Leaf) = liveRel.select(leaf.data)

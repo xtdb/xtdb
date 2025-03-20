@@ -3,14 +3,18 @@ package xtdb.arrow
 import clojure.lang.Keyword
 import xtdb.util.normalForm
 
-interface RelationWriter<V : VectorWriter> : Iterable<V>, RelationReader<V> {
-    override operator fun get(colName: String): V
+interface RelationWriter : RelationReader {
+
+    override val vectors: Iterable<VectorWriter>
+    override fun vectorForOrNull(name: String): VectorWriter?
+    override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    override fun get(name: String) = vectorFor(name)
 
     fun endRow(): Int
 
-    fun rowCopier(rel: RelationReader<*>): RowCopier
+    fun rowCopier(rel: RelationReader): RowCopier
 
-    fun append(rel: RelationReader<*>) {
+    fun append(rel: RelationReader) {
         val copier = rowCopier(rel)
         repeat(rel.rowCount) { copier.copyRow(it) }
     }

@@ -147,7 +147,7 @@ class StructVectorTest {
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             Relation(allocator, loader.schema).use { rel ->
-                val structVec = rel["struct"]!!
+                val structVec = rel["struct"]
 
                 assertEquals(2, loader.pageCount)
 

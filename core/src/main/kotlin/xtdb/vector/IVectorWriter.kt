@@ -50,7 +50,7 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
 
     fun rowCopier(src: RelationReader): RowCopier {
         val wp = writerPosition()
-        val copiers = src.map { it.rowCopier(structKeyWriter(it.name)) }
+        val copiers = src.vectors.map { it.rowCopier(structKeyWriter(it.name)) }
 
         return RowCopier { srcIdx ->
             val pos = wp.position

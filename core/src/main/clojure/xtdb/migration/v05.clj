@@ -37,10 +37,10 @@
   (with-open [file-reader (ArrowFileReader. (util/->seekable-byte-channel data-buf) al)
               root (.getVectorSchemaRoot file-reader)]
     (let [rdr (vr/<-root root)
-          tm-calc (TrieMetadataCalculator. (VectorReader/from (.readerForName rdr "_iid"))
-                                           (.readerForName rdr "_valid_from")
-                                           (.readerForName rdr "_valid_to")
-                                           (.readerForName rdr "_system_from"))
+          tm-calc (TrieMetadataCalculator. (VectorReader/from (.vectorForOrNull rdr "_iid"))
+                                           (.vectorForOrNull rdr "_valid_from")
+                                           (.vectorForOrNull rdr "_valid_to")
+                                           (.vectorForOrNull rdr "_system_from"))
           hll-calc (HllCalculator.)
           !row-count (volatile! 0)]
 
@@ -49,7 +49,7 @@
           (vswap! !row-count + row-count)
           (.update tm-calc 0 row-count)
           (.update hll-calc
-                   (-> (.readerForName rdr "op") (.legReader "put"))
+                   (-> (.vectorForOrNull rdr "op") (.legReader "put"))
                    0 row-count)))
 
       {:trie-metadata (.build tm-calc)

@@ -15,29 +15,29 @@ class RelationAsStructReader(
     override val name: String,
     private val rel: RelationReader
 ) : IVectorReader {
-    override val valueCount get() = rel.rowCount()
+    override val valueCount get() = rel.rowCount
 
     override val field get() =
-        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.map(IVectorReader::field))
+        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.vectors.map(IVectorReader::field))
 
     override fun isNull(idx: Int) = false
 
-    override fun structKeys() = rel.map { it.name }
-    override fun structKeyReader(colName: String): IVectorReader = rel.readerForName(colName)
+    override fun structKeys() = rel.vectors.map { it.name }
+    override fun structKeyReader(colName: String): IVectorReader? = rel.vectorForOrNull(colName)
 
-    override fun getObject(idx: Int): Any = rel.getRow(idx)
+    override fun getObject(idx: Int): Any = rel[idx]
 
-    override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any = rel.getRow(idx, keyFn)
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any = rel[idx, keyFn]
 
     override fun copyTo(vector: ValueVector) = TODO("Not yet implemented")
 
     override fun rowCopier(writer: IVectorWriter): RowCopier {
-        val copiers = rel.map { it.rowCopier(writer) }
+        val copiers = rel.vectors.map { it.rowCopier(writer) }
         return RowCopier { idx -> copiers.forEach { it.copyRow(idx) }; idx }
     }
 
     override fun valueReader(pos: VectorPosition): ValueReader {
-        val rdrs = rel.associate { it.name to it.valueReader(pos) }
+        val rdrs = rel.vectors.associate { it.name to it.valueReader(pos) }
 
         return object : ValueReader {
             override val isNull get() = false
@@ -46,7 +46,7 @@ class RelationAsStructReader(
     }
 
     override fun hashCode(idx: Int, hasher: Hasher): Int =
-        rel.fold(0) { hash, col -> ByteFunctionHelpers.combineHash(hash, col.hashCode(idx, hasher)) }
+        rel.vectors.fold(0) { hash, col -> ByteFunctionHelpers.combineHash(hash, col.hashCode(idx, hasher)) }
 
     override fun close() = rel.close()
 }

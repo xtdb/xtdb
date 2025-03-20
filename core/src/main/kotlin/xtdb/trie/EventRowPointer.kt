@@ -18,7 +18,7 @@ interface EventRowPointer {
     fun getIidPointer(reuse: ArrowBufPointer): ArrowBufPointer
     fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean
 
-    class XtArrow(val relReader: RelationReader<*>, path: ByteArray): EventRowPointer {
+    class XtArrow(val relReader: RelationReader, path: ByteArray): EventRowPointer {
         private val iidReader: VectorReader = relReader["_iid"]
 
         private val sysFromReader: VectorReader = relReader["_system_from"]
@@ -55,19 +55,19 @@ interface EventRowPointer {
     }
 
     class Arrow(val relReader: OldRelationReader, path: ByteArray): EventRowPointer {
-        private val iidReader: IVectorReader = relReader.readerForName("_iid")
+        private val iidReader = relReader["_iid"]
 
-        private val sysFromReader: IVectorReader = relReader.readerForName("_system_from")
-        private val validFromReader: IVectorReader = relReader.readerForName("_valid_from")
-        private val validToReader: IVectorReader = relReader.readerForName("_valid_to")
+        private val sysFromReader = relReader["_system_from"]
+        private val validFromReader = relReader["_valid_from"]
+        private val validToReader = relReader["_valid_to"]
 
-        private val opReader: IVectorReader = relReader.readerForName("op")
+        private val opReader = relReader["op"]
 
         override var index: Int private set
 
         init {
             var left = 0
-            var right = relReader.rowCount()
+            var right = relReader.rowCount
             var mid: Int
             while (left < right) {
                 mid = (left + right) / 2
@@ -87,7 +87,7 @@ interface EventRowPointer {
         override val op get() = opReader.getLeg(index)!!
 
         override fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =
-            index < relReader.rowCount() && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0
+            index < relReader.rowCount && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0
     }
 
     companion object {

@@ -39,7 +39,7 @@
                                (reify Consumer
                                  (accept [_ in-rel]
                                    (let [^RelationReader in-rel in-rel
-                                         row-count (.rowCount in-rel)
+                                         row-count (.getRowCount in-rel)
                                          old-idx (.idx this)]
 
                                      (set! (.-idx this) (+ old-idx row-count))
@@ -53,7 +53,7 @@
     (.close in-cursor)))
 
 (defn- read-param [^RelationReader args param]
-  (let [v (some-> args (.readerForName (str param)) (.getObject 0))]
+  (let [v (some-> args (.vectorForOrNull (str param)) (.getObject 0))]
     (if (nat-int? v)
       v
       (throw (err/illegal-arg :xtdb/expected-number

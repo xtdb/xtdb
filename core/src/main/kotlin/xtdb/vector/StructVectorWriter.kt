@@ -187,7 +187,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
     override fun rowCopier(src: RelationReader): RowCopier {
         val innerCopiers =
-            src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> child.rowCopier(w) } }
+            src.vectors.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> child.rowCopier(w) } }
 
         return RowCopier { srcIdx ->
             wp.position.also {

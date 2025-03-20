@@ -1,49 +1,47 @@
 package xtdb.arrow
 
+import clojure.lang.Counted
+import clojure.lang.ILookup
+import clojure.lang.ISeq
 import clojure.lang.PersistentHashMap
+import clojure.lang.RT
+import clojure.lang.Seqable
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.util.closeAll
 import java.util.*
 import xtdb.vector.RelationReader as OldRelationReader
 
-interface RelationReader<V : VectorReader> : Iterable<V>, AutoCloseable {
+interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     val schema: Schema
     val rowCount: Int
 
-    operator fun get(colName: String): V
+    val vectors: Iterable<VectorReader>
 
-    private class IndirectRelation(
-        private val vecs: SequencedMap<String, VectorReader>,
-        override val rowCount: Int
-    ) : RelationReader<VectorReader> {
-        override val schema get() = Schema(vecs.map { it.value.field })
+    fun vectorForOrNull(name: String): VectorReader?
+    fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    operator fun get(name: String) = vectorFor(name)
 
-        override fun get(colName: String) = vecs[colName] ?: error("missing col: $colName")
+    operator fun get(idx: Int, keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD): Map<*, Any?> =
+        vectors.associate { keyFn.denormalize(it.name) to it.getObject(idx, keyFn) }
 
-        override fun iterator() = vecs.values.iterator()
+    fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
+    fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
 
-        override fun close() = vecs.forEach { it.value.close() }
-    }
-
-    fun select(idxs: IntArray): RelationReader<*> =
-        IndirectRelation(associateTo(linkedMapOf()) { it.name to it.select(idxs) }, idxs.size)
-
-    override fun close() = forEach { it.close() }
+    override fun close() = vectors.closeAll()
 
     fun toTuples() = toTuples(KEBAB_CASE_KEYWORD)
 
-    @Suppress("unused")
     fun toTuples(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
-        (0..<rowCount).map { idx -> map { it.getObject(idx, keyFn) } }
+        List(rowCount) { idx -> vectors.map { it.getObject(idx, keyFn) } }
 
     fun toMaps() = toMaps(KEBAB_CASE_KEYWORD)
 
-    @Suppress("unused")
     fun toMaps(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
-        (0..<rowCount).map { idx ->
+        List(rowCount) { idx ->
             PersistentHashMap.create(
-                associate {
+                vectors.associate {
                     Pair(
                         keyFn.denormalize(it.name),
                         it.getObject(idx, keyFn)
@@ -52,38 +50,41 @@ interface RelationReader<V : VectorReader> : Iterable<V>, AutoCloseable {
             ) as Map<*, *>
         }
 
-    fun getRow(idx: Int, keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD): Map<*, Any?> =
-        associate { keyFn.denormalize(it.name) to it.getObject(idx, keyFn) }
+    class FromCols(private val cols: SequencedMap<String, VectorReader>, override val rowCount: Int) : RelationReader {
+        override val schema get() = Schema(cols.values.map { it.field })
+
+        override fun vectorForOrNull(name: String) = cols[name]
+        override val vectors get() = cols.values
+
+        override fun select(idxs: IntArray): RelationReader =
+            FromCols(cols.entries.associateTo(linkedMapOf()) { it.key to it.value.select(idxs) }, idxs.size)
+    }
 
     companion object {
-        private class FromOldRelation(private val oldReader: OldRelationReader) :
-            RelationReader<VectorReader> {
-            override val schema = Schema(oldReader.map { it.field })
-            override val rowCount: Int get() = oldReader.rowCount()
+        private class FromOldRelation(private val oldReader: OldRelationReader) : RelationReader {
+            override val schema = Schema(oldReader.vectors.map { it.field })
+            override val rowCount: Int get() = oldReader.rowCount
+            override val vectors get() = oldReader.vectors.map { VectorReader.from(it) }
 
-            override operator fun get(colName: String): VectorReader =
-                oldReader.readerForName(colName)!!.let { VectorReader.from(it) }
+            override fun vectorForOrNull(name: String): VectorReader? =
+                oldReader.vectorForOrNull(name)?.let { VectorReader.from(it) }
 
-            override fun iterator() = oldReader.asSequence().map { VectorReader.from(it) }.iterator()
+            override fun select(idxs: IntArray): RelationReader = FromOldRelation(oldReader.select(idxs))
         }
 
         @JvmStatic
-        fun from(oldReader: OldRelationReader): RelationReader<*> = FromOldRelation(oldReader)
+        fun from(oldReader: OldRelationReader): RelationReader = FromOldRelation(oldReader)
 
-        class FromCols(
-            private val cols: SequencedMap<String, VectorReader>, override val rowCount: Int
-        ) : RelationReader<VectorReader> {
-            override val schema get() = Schema(cols.values.map { it.field })
-
-            override fun get(colName: String) = cols[colName] ?: error("missing column: $colName")
-
-            override fun iterator() = cols.values.iterator()
-        }
-
-        fun from(cols: Iterable<VectorReader>, rowCount: Int) =
+        fun from(cols: Iterable<VectorReader>, rowCount: Int): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
     }
 
     val oldRelReader: xtdb.vector.RelationReader
-        get() = OldRelationReader.from(map(VectorReader.Companion::NewToOldAdapter), rowCount)
+        get() = OldRelationReader.from(vectors.map(VectorReader.Companion::NewToOldAdapter), rowCount)
+
+    override fun valAt(key: Any?) = valAt(key, null)
+    override fun valAt(key: Any?, notFound: Any?) = vectorForOrNull(key as String) ?: notFound
+
+    override fun seq(): ISeq? = RT.seq(vectors)
+    override fun count() = vectors.count()
 }

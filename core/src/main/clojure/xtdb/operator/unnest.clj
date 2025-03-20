@@ -42,7 +42,7 @@
                                            out-cols (LinkedList.)
 
                                            ^RelationReader in-rel in-rel
-                                           vec-rdr (.readerForName in-rel from-column-name)
+                                           vec-rdr (.vectorForOrNull in-rel from-column-name)
                                            vec-type (.getType (.getField vec-rdr))
 
                                            rdrs+copiers

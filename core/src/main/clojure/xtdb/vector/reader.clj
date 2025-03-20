@@ -30,12 +30,12 @@
 ;; we don't allocate anything here, but we need it because BaseValueVector
 ;; (a distant supertype of NullVector) thinks it needs one.
 (defn with-absent-cols ^xtdb.vector.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
-  (let [row-count (.rowCount rel)
+  (let [row-count (.getRowCount rel)
         available-col-names (available-col-names rel)]
     (rel-reader (concat rel
                         (->> (set/difference col-names available-col-names)
                              (map #(->absent-col % allocator row-count))))
-                (.rowCount rel))))
+                (.getRowCount rel))))
 
 (defn rel->rows
   (^java.util.List [^RelationReader rel] (rel->rows rel #xt/key-fn :kebab-case-keyword))
@@ -48,12 +48,5 @@
                                    (let [v (.getObject col idx key-fn)]
                                      (when (some? v)
                                        (MapEntry/create k v))))))))
-           (range (.rowCount rel))))))
+           (range (.getRowCount rel))))))
 
-(defn concat-rels [^RelationReader rel1 ^RelationReader rel2]
-  (cond (empty? (seq rel1)) rel2
-        (empty? (seq rel2)) rel1
-        :else (do
-                (assert (= (.rowCount rel1) (.rowCount rel2)))
-                (assert (empty? (set/intersection (available-col-names rel1) (available-col-names rel2))))
-                (RelationReader/from ^List (into (seq rel1) (seq rel2))))))

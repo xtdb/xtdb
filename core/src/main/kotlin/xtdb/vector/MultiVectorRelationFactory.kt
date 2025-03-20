@@ -10,11 +10,11 @@ class MultiVectorRelationFactory(leafRels: List<RelationReader>, colNames: List<
     private val readers: Map<ColumnName, List<IVectorReader>>
 
     init {
-        val putReaders = leafRels.map { it.readerForName("op").legReader("put") }
+        val putReaders = leafRels.map { it["op"].legReader("put") }
 
         readers = colNames.associateWith { colName ->
             if (colName == "_iid") {
-                leafRels.map { it.readerForName("_iid") }
+                leafRels.map { it["_iid"] }
             } else {
                 putReaders.filterNotNull().map { putReader ->
                     putReader.structKeyReader(colName)?.withName(colName)

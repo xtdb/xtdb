@@ -36,7 +36,7 @@
                                  :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
                            (.add out-cols (.withName in-col col-name)))
 
-                         (.accept c (vr/rel-reader out-cols (.rowCount in-rel)))))))))
+                         (.accept c (vr/rel-reader out-cols (.getRowCount in-rel)))))))))
 
   (close [_]
     (util/try-close in-cursor)))

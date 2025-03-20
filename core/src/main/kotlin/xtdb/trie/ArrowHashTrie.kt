@@ -10,10 +10,10 @@ private const val DATA_PAGE_IDX = "data-page-idx"
 class ArrowHashTrie(private val nodesVec: Vector) :
     HashTrie<ArrowHashTrie.Node, ArrowHashTrie.Leaf> {
 
-    private val iidBranchVec = nodesVec.vectorForOrNull(BRANCH_IID)!!
+    private val iidBranchVec = nodesVec[BRANCH_IID]
     private val iidBranchElVec = iidBranchVec.listElements
 
-    private val dataPageIdxVec = nodesVec.vectorForOrNull(LEAF)!!.vectorForOrNull(DATA_PAGE_IDX)!!
+    private val dataPageIdxVec = nodesVec[LEAF][DATA_PAGE_IDX]
 
     interface Node : HashTrie.Node<Node>
 

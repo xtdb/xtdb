@@ -258,17 +258,17 @@
   (let [current-time-µs (time/instant->micros current-time)]
     (reify RelationIndexer
       (indexOp [_ in-rel {:keys [table]}]
-        (let [row-count (.rowCount in-rel)
+        (let [row-count (.getRowCount in-rel)
               ^RelationReader content-rel (vr/rel-reader (->> in-rel
                                                               (remove (comp types/temporal-column? #(.getName ^IVectorReader %))))
-                                                         (.rowCount in-rel))
+                                                         (.getRowCount in-rel))
               table (str table)
 
               _ (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
-              id-col (.readerForName in-rel "_id")
-              valid-from-rdr (.readerForName in-rel "_valid_from")
-              valid-to-rdr (.readerForName in-rel "_valid_to")
+              id-col (.vectorForOrNull in-rel "_id")
+              valid-from-rdr (.vectorForOrNull in-rel "_valid_from")
+              valid-to-rdr (.vectorForOrNull in-rel "_valid_to")
 
               live-table-tx (.liveTable live-idx-tx table)]
 
@@ -310,10 +310,10 @@
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (str table)
-            row-count (.rowCount in-rel)
-            iid-rdr (.readerForName in-rel "_iid")
-            valid-from-rdr (.readerForName in-rel "_valid_from")
-            valid-to-rdr (.readerForName in-rel "_valid_to")]
+            row-count (.getRowCount in-rel)
+            iid-rdr (.vectorFor in-rel "_iid")
+            valid-from-rdr (.vectorFor in-rel "_valid_from")
+            valid-to-rdr (.vectorFor in-rel "_valid_to")]
 
         (when (xt-log/forbidden-table? table)
           (throw (xt-log/forbidden-table-ex table)))
@@ -340,8 +340,8 @@
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (str table)
-            row-count (.rowCount in-rel)
-            iid-rdr (.readerForName in-rel "_iid")]
+            row-count (.getRowCount in-rel)
+            iid-rdr (.vectorForOrNull in-rel "_iid")]
 
         (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
@@ -368,7 +368,7 @@
                            (reify Consumer
                              (accept [_ in-rel]
                                (let [^RelationReader in-rel in-rel]
-                                 (when-not (pos? (.rowCount in-rel))
+                                 (when-not (pos? (.getRowCount in-rel))
                                    (throw-assert-failed))))))
 
               (throw-assert-failed)))
@@ -401,16 +401,16 @@
       (while (.loadNextBatch asr)
         (let [param-rel (vr/<-root param-root)
               selection (int-array 1)]
-          (dotimes [idx (.rowCount param-rel)]
+          (dotimes [idx (.getRowCount param-rel)]
             (aset selection 0 idx)
             (eval-query (-> param-rel (.select selection)))))))))
 
 (defn- patch-rel! [table-name ^LiveTable$Tx live-table, ^RelationReader rel {:keys [indexer tx-key]}]
-  (let [iid-rdr (.readerForName rel "_iid")
-        doc-copier (.rowCopier (.readerForName rel "doc") (.getDocWriter live-table))
-        from-rdr (.readerForName rel "_valid_from")
-        to-rdr (.readerForName rel "_valid_to")]
-    (dotimes [idx (.rowCount rel)]
+  (let [iid-rdr (.vectorForOrNull rel "_iid")
+        doc-copier (.rowCopier (.vectorForOrNull rel "doc") (.getDocWriter live-table))
+        from-rdr (.vectorForOrNull rel "_valid_from")
+        to-rdr (.vectorForOrNull rel "_valid_to")]
+    (dotimes [idx (.getRowCount rel)]
       (with-crash-log indexer "error patching rows"
           {:table-name table-name, :tx-key tx-key, :row-idx idx}
           {:live-table live-table, :query-rel rel}
@@ -504,7 +504,7 @@
                                 {::err/message "Arguments list was expected but not provided"
                                  :param-count param-count})))
 
-      (let [arg-count (count (seq args))]
+      (let [arg-count (count args)]
         (if (not= arg-count param-count)
           (throw (err/runtime-err :xtdb.indexer/incorrect-sql-arg-count
                                   {::err/message (format "Parameter error: %d provided, %d expected" arg-count param-count)

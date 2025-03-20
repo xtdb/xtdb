@@ -1823,7 +1823,7 @@
       (project [_ allocator in-rel schema args]
         (let [in-rel (RelationReader/from in-rel)
               args (RelationReader/from args)
-              var->col-type (->> (seq in-rel)
+              var->col-type (->> in-rel
                                  (into {} (map (fn [^VectorReader iv]
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField iv))]))))

@@ -50,7 +50,7 @@
                                        (reify Consumer
                                          (accept [_ dep-rel]
                                            (let [vp (VectorPosition/build)
-                                                 match-vec (.readerForName ^RelationReader dep-rel "_expr")
+                                                 match-vec (.vectorForOrNull ^RelationReader dep-rel "_expr")
                                                  match-rdr (.valueReader match-vec vp)]
                                              (dotimes [idx (.getValueCount match-vec)]
                                                (.setPosition vp idx)
@@ -77,7 +77,7 @@
                                  (let [^RelationReader dep-rel dep-rel]
                                    (vw/append-rel dep-out-writer dep-rel)
 
-                                   (dotimes [_ (.rowCount dep-rel)]
+                                   (dotimes [_ (.getRowCount dep-rel)]
                                      (.add idxs in-idx))))))))
 
       :left-outer-join
@@ -91,11 +91,11 @@
                                (reify Consumer
                                  (accept [_ dep-rel]
                                    (let [^RelationReader dep-rel dep-rel]
-                                     (when (pos? (.rowCount dep-rel))
+                                     (when (pos? (.getRowCount dep-rel))
                                        (aset match? 0 true)
                                        (vw/append-rel dep-out-writer dep-rel)
 
-                                       (dotimes [_ (.rowCount dep-rel)]
+                                       (dotimes [_ (.getRowCount dep-rel)]
                                          (.add idxs in-idx)))))))
 
             (when-not (aget match? 0)
@@ -114,7 +114,7 @@
                                      (reify Consumer
                                        (accept [_ dep-rel]
                                          (let [^RelationReader dep-rel dep-rel]
-                                           (when (pos? (.rowCount dep-rel))
+                                           (when (pos? (.getRowCount dep-rel))
                                              (aset match? 0 true)
                                              (.add idxs in-idx)))))))))))
 
@@ -127,7 +127,7 @@
                                      (reify Consumer
                                        (accept [_ dep-rel]
                                          (let [^RelationReader dep-rel dep-rel]
-                                           (when (pos? (.rowCount dep-rel))
+                                           (when (pos? (.getRowCount dep-rel))
                                              (aset match? 0 true))))))))
             (when-not (aget match? 0)
               (.add idxs in-idx)))))
@@ -143,7 +143,7 @@
                                (reify Consumer
                                  (accept [_ dep-rel]
                                    (let [^RelationReader dep-rel dep-rel
-                                         row-count (.rowCount dep-rel)]
+                                         row-count (.getRowCount dep-rel)]
                                      (cond
                                        (zero? row-count) nil
 
@@ -177,7 +177,7 @@
                            idxs (IntStream/builder)]
 
                        (with-open [dep-out-writer (vw/->rel-writer allocator)]
-                         (dotimes [in-idx (.rowCount in-rel)]
+                         (dotimes [in-idx (.getRowCount in-rel)]
                            (with-open [dep-cursor (.openDependentCursor dependent-cursor-factory
                                                                         in-rel in-idx)]
                              (.accept mode-strategy dep-cursor dep-out-writer idxs in-idx)))
@@ -253,10 +253,10 @@
                                        (openDependentCursor [_this in-rel idx]
                                          (open-dependent-cursor (-> query-opts
                                                                     (update :args
-                                                                            (fn [args]
+                                                                            (fn [^RelationReader args]
                                                                               (vr/rel-reader (concat args
                                                                                                      (for [[ik dk] columns]
-                                                                                                       (-> (.readerForName in-rel (str ik))
+                                                                                                       (-> (.vectorForOrNull in-rel (str ik))
                                                                                                            (.select (int-array [idx]))
                                                                                                            (.withName (str dk)))))
                                                                                              1))))))))))}))))

@@ -77,14 +77,14 @@
                              (reify Consumer
                                (accept [_ in-rel]
                                  (let [^RelationReader in-rel in-rel]
-                                   (when (pos? (.rowCount in-rel))
+                                   (when (pos? (.getRowCount in-rel))
                                      (aset advanced? 0 true)
                                      (.accept c in-rel))))))
                 (.tryAdvance right-cursor
                              (reify Consumer
                                (accept [_ in-rel]
                                  (let [^RelationReader in-rel in-rel]
-                                   (when (pos? (.rowCount in-rel))
+                                   (when (pos? (.getRowCount in-rel))
                                      (aset advanced? 0 true)
                                      (.accept c in-rel)))))))
           (if (aget advanced? 0)
@@ -113,7 +113,7 @@
                          (accept [_ in-rel]
                            (let [^RelationReader in-rel in-rel
                                  builder (.buildFromRelation rel-map in-rel)]
-                             (dotimes [idx (.rowCount in-rel)]
+                             (dotimes [idx (.getRowCount in-rel)]
                                (.add builder idx))))))
 
     (boolean
@@ -123,7 +123,7 @@
                                 (reify Consumer
                                   (accept [_ in-rel]
                                     (let [^RelationReader in-rel in-rel
-                                          row-count (.rowCount in-rel)
+                                          row-count (.getRowCount in-rel)
                                           prober (.probeFromRelation rel-map in-rel)]
 
                                       (when (pos? row-count)
@@ -177,7 +177,7 @@
                                (reify Consumer
                                  (accept [_ in-rel]
                                    (let [^RelationReader in-rel in-rel
-                                         row-count (.rowCount in-rel)]
+                                         row-count (.getRowCount in-rel)]
                                      (when (pos? row-count)
                                        (let [builder (.buildFromRelation rel-map in-rel)
                                              idxs (IntStream/builder)]
@@ -248,10 +248,10 @@
             inner-c (reify Consumer
                       (accept [_ in-rel]
                         (let [^RelationReader in-rel in-rel]
-                          (when (pos? (.rowCount in-rel))
+                          (when (pos? (.getRowCount in-rel))
                             (let [rel-builder (.buildFromRelation rel-map in-rel)
                                   new-idxs (IntStream/builder)]
-                              (dotimes [idx (.rowCount in-rel)]
+                              (dotimes [idx (.getRowCount in-rel)]
                                 (let [map-idx (.addIfNotPresent rel-builder idx)]
                                   (when (neg? map-idx)
                                     (.add new-idxs (emap/inserted-idx map-idx)))))

@@ -52,7 +52,7 @@
   (getColumnName [_] col-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _schema _args]
-    (.readerForName in-rel (str col-name))))
+    (.vectorForOrNull in-rel (str col-name))))
 
 (defn ->identity-projection-spec ^ProjectionSpec [col-name field]
   (->IdentityProjectionSpec col-name (types/field->col-type field)))
@@ -65,7 +65,7 @@
       (project [_ allocator in-rel _schema _args]
         (util/with-close-on-catch [row-num-wtr (vw/->writer (BigIntVector. (str col-name) (FieldType/notNullable #xt.arrow/type :i64) allocator))]
           (let [start-row-num (aget row-num 0)
-                row-count (.rowCount in-rel)]
+                row-count (.getRowCount in-rel)]
             (dotimes [idx row-count]
               (.writeLong row-num-wtr (+ idx start-row-num)))
             (aset row-num 0 (+ start-row-num row-count))
@@ -76,7 +76,7 @@
     (getColumnName [_] col-name)
     (getColumnType [_] col-type)
     (project [_ allocator in-rel _schema _args]
-      (let [row-count (.rowCount in-rel)]
+      (let [row-count (.getRowCount in-rel)]
         (util/with-close-on-catch [^StructVector struct-vec (-> ^Field (apply types/->field (str col-name) #xt.arrow/type :struct false
                                                                               (for [^IVectorReader col in-rel]
                                                                                 (types/field-with-name (.getField col) (.getName col))))
@@ -89,7 +89,7 @@
           (doseq [^IVectorReader col in-rel]
             (.copyTo col (.getChild struct-vec (.getName col))))
 
-          (.setValueCount struct-vec (.rowCount in-rel))
+          (.setValueCount struct-vec (.getRowCount in-rel))
 
           (vr/vec->reader struct-vec))))))
 
@@ -98,7 +98,7 @@
   (getColumnName [_] to-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _schema _args]
-    (or (some-> (.readerForName in-rel (str from-name))
+    (or (some-> (.vectorForOrNull in-rel (str from-name))
                 (.withName (str to-name)))
         (throw (ex-info (str "Column " from-name " not found in relation")
                         {:from-name from-name
@@ -130,7 +130,7 @@
                                (.add close-cols out-col))
                              (.add out-cols out-col)))
 
-                         (.accept c (vr/rel-reader out-cols (.rowCount read-rel)))
+                         (.accept c (vr/rel-reader out-cols (.getRowCount read-rel)))
 
                          (finally
                            (run! util/try-close close-cols))))))))

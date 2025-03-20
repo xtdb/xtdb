@@ -221,4 +221,4 @@
     (append-vec (.colWriter dest-rel (.getName src-col)) src-col))
 
   (let [wp (.writerPosition dest-rel)]
-    (.setPosition wp (+ (.getPosition wp) (.rowCount src-rel)))))
+    (.setPosition wp (+ (.getPosition wp) (.getRowCount src-rel)))))

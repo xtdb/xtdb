@@ -55,11 +55,11 @@
         (.start) (.writeBatch) (.end)))))
 
 (defn sorted-idxs ^ints [^RelationReader read-rel, order-specs]
-  (-> (IntStream/range 0 (.rowCount read-rel))
+  (-> (IntStream/range 0 (.getRowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                                       :or {direction :asc, null-ordering :nulls-last}}]]
-                         (let [read-col (VectorReader/from (.readerForName read-rel (str column)))
+                         (let [read-col (VectorReader/from (.vectorForOrNull read-rel (str column)))
                                col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
                                comparator (cond-> ^Comparator (fn [left right]

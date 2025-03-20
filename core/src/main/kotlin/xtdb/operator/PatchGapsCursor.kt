@@ -32,16 +32,16 @@ class PatchGapsCursor(
     override fun tryAdvance(c: Consumer<in RelationReader>) = inner.tryAdvance { inRel ->
         out.clear()
 
-        val iidReader = inRel.readerForName("_iid")
+        val iidReader = inRel["_iid"]
         val iidCopier = iidReader.rowCopier(iidWriter)
-        val vfReader = inRel.readerForName("_valid_from")
-        val vtReader = inRel.readerForName("_valid_to")
-        val docCopier = inRel.readerForName("doc").rowCopier(docWriter)
+        val vfReader = inRel["_valid_from"]
+        val vtReader = inRel["_valid_to"]
+        val docCopier = inRel["doc"].rowCopier(docWriter)
 
         val currentIid = ArrowBufPointer()
         val prevIid = ArrowBufPointer()
 
-        val rowCount = inRel.rowCount()
+        val rowCount = inRel.rowCount
         if (rowCount > 0) {
             var currentValidTime = validFrom
 

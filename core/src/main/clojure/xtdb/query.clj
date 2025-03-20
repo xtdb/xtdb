@@ -52,7 +52,7 @@
            (xtdb.indexer Watermark$Source)
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
-           xtdb.vector.IVectorReader))
+           [xtdb.vector IVectorReader RelationReader]))
 
 (definterface BoundQuery
   (^java.util.List columnFields [])
@@ -130,7 +130,7 @@
          (mapv (fn [[field-name field]]
                  (types/field-with-name field (str field-name)))))))
 
-(defn ->arg-fields [args]
+(defn ->arg-fields [^RelationReader args]
   (->> args
        (into {} (map (fn [^IVectorReader col]
                        (MapEntry/create (symbol (.getName col)) (.getField col)))))))

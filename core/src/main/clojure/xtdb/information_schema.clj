@@ -382,7 +382,7 @@
                                           (.select rel (.select col-pred allocator rel schema params)))
                                         (-> out-rel
                                             (->> (filter (comp (set col-names) #(.getName ^IVectorReader %))))
-                                            (vr/rel-reader (.rowCount out-rel))
+                                            (vr/rel-reader (.getRowCount out-rel))
                                             (vr/with-absent-cols allocator col-names))
                                         (vals col-preds))
                                 root))))

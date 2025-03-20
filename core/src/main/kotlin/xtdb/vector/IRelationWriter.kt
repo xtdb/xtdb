@@ -48,7 +48,7 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
     fun colWriter(colName: String, fieldType: FieldType): IVectorWriter
 
     fun rowCopier(inRel: RelationReader): RowCopier {
-        val copiers = inRel.map { inVec -> inVec.rowCopier(colWriter(inVec.name)) }
+        val copiers = inRel.vectors.map { inVec -> inVec.rowCopier(colWriter(inVec.name)) }
 
         return RowCopier { srcIdx ->
             val pos = writerPosition().position

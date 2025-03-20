@@ -126,8 +126,8 @@
                                                     (into [[window-groups]] order-specs))]
              (util/with-open [window-cols (->> window-specs
                                                (mapv #(.aggregate ^IWindowFnSpec % (.getVector grouping-wtr) sort-mapping rel-rdr)))]
-               (let [out-rel (vr/rel-reader (concat (seq (.select rel-rdr sort-mapping)) window-cols))]
-                 (if (pos? (.rowCount out-rel))
+               (let [out-rel (vr/rel-reader (concat (.select rel-rdr sort-mapping) window-cols))]
+                 (if (pos? (.getRowCount out-rel))
                    (do
                      (.accept c out-rel)
                      true)

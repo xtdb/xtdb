@@ -68,7 +68,7 @@
 
                                          {:ks ks
                                           :write-row! (fn write-param-row! [{:keys [^RelationReader args]}, ^IRelationWriter out-rel]
-                                                        (let [param-rdr (.readerForName args (str row-arg))]
+                                                        (let [param-rdr (.vectorForOrNull args (str row-arg))]
                                                           (.startRow out-rel)
                                                           (doseq [k ks
                                                                   :let [k (str k)]]
@@ -93,7 +93,7 @@
                                                                                   (.add field-set (get param-fields param))
                                                                                   (MapEntry/create k (fn write-param! [{:keys [^RelationReader args]} ^IVectorWriter out-col]
                                                                                                        (.writeValue out-col
-                                                                                                                    (-> (.readerForName args (str param))
+                                                                                                                    (-> (.vectorForOrNull args (str param))
                                                                                                                         (.valueReader (VectorPosition/build 0)))))))
 
                                                                          ;; HACK: this is quite heavyweight to calculate a single value -
@@ -187,7 +187,7 @@
 
     {:fields fields
      :->out-rel (fn [{:keys [^RelationReader args]}]
-                  (let [vec-rdr (.readerForName args (str (symbol param)))
+                  (let [vec-rdr (.vectorForOrNull args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
                                    (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader "list"))
                         el-rdr (some-> list-rdr (.getListElements))
@@ -195,7 +195,7 @@
                                         (instance? ArrowType$Union (.getType (.getField el-rdr))) (.legReader "struct"))]
 
                     (vr/rel-reader (for [k (some-> el-struct-rdr .structKeys)
-                                         :when (contains? fields (symbol k)) ]
+                                         :when (contains? fields (symbol k))]
                                      (.structKeyReader el-struct-rdr k))
                                    (.getValueCount el-rdr))))}))
 

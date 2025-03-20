@@ -161,7 +161,7 @@ constructor(
 
     private fun openWatermark(trie: MemoryHashTrie): Watermark {
         val wmLiveRel = liveRelation.openWatermarkLiveRel()
-        val wmLiveTrie = trie.withIidReader(wmLiveRel.readerForName("_iid"))
+        val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
 
         return Watermark(liveRelation.fields, wmLiveRel, wmLiveTrie)
     }
@@ -183,7 +183,7 @@ constructor(
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
 
-        return liveRelation.openAsRelation().useAll { dataRel ->
+        return liveRelation.openAsRelation().use { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 liveRelation.fields, trieKey, dataFileSize, rowCount,

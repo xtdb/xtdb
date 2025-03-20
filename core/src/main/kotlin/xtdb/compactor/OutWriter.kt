@@ -27,7 +27,7 @@ internal fun RecencyMicros.toPartition(): LocalDate =
         .toLocalDate()
 
 internal interface OutWriter : AutoCloseable {
-    fun rowCopier(reader: RelationReader<*>): RecencyRowCopier
+    fun rowCopier(reader: RelationReader): RecencyRowCopier
     fun endPage(path: ByteArrayList)
 
     /**
@@ -47,7 +47,7 @@ internal interface OutWriter : AutoCloseable {
             private val vtWtr = dataRel["_valid_to"]
             private val opWtr = dataRel["op"]
 
-            fun rowCopier(dataReader: RelationReader<*>) = object : RecencyRowCopier {
+            fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
                 private val iidCopier = dataReader["_iid"].rowCopier(iidWtr)
                 private val sfCopier = dataReader["_system_from"].rowCopier(sfWtr)
                 private val vfCopier = dataReader["_valid_from"].rowCopier(vfWtr)
@@ -86,7 +86,7 @@ internal interface OutWriter : AutoCloseable {
 
             val leaves: List<PageTree.Leaf> get() = leaves0
 
-            override fun rowCopier(reader: RelationReader<*>) = copierFactory.rowCopier(reader)
+            override fun rowCopier(reader: RelationReader) = copierFactory.rowCopier(reader)
 
             override fun endPage(path: ByteArrayList) {
                 if (outRel.rowCount == 0) return
@@ -118,7 +118,7 @@ internal interface OutWriter : AutoCloseable {
                 OutRel(schema, outDir.resolve("r${Trie.RECENCY_FMT.format(it)}.arrow"), recencyPartition)
             }
 
-            override fun rowCopier(reader: RelationReader<*>) = object : RecencyRowCopier {
+            override fun rowCopier(reader: RelationReader) = object : RecencyRowCopier {
                 private val currentCopier = currentRel.rowCopier(reader)
                 private val historicalCopiers = mutableMapOf<LocalDate, RecencyRowCopier>()
 
