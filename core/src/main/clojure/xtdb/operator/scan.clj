@@ -254,7 +254,7 @@
                                                                                               (assoc :memory-rel memory-rel)))))]
                                                    (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf))
                                                         (into [] (keep (fn [^MergePlanTask mpt]
-                                                                         (when-let [leaves (trie/->merge-task
+                                                                         (when-let [leaves (trie/filter-meta-objects
                                                                                             (for [^MergePlanNode mpn (.getMpNodes mpt)
                                                                                                   :let [{:keys [data-file-path page-metadata page-idx-pred trie memory-rel]} (.getSegment mpn)
                                                                                                         node (.getNode mpn)]]

@@ -2,11 +2,10 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
             [xtdb.trie :as trie]
-            [xtdb.trie-catalog :as cat]
+            [xtdb.trie-catalog :as cat :refer [PCatalogEntry]]
             [xtdb.util :as util])
-  (:import [java.time LocalDate]))
+  (:import (xtdb.operator.scan Metadata)))
 
 (defn- apply-msgs [& trie-keys]
   (-> trie-keys
@@ -41,17 +40,24 @@
       (t/is (false? (stale? l1 "l01-rc-b01")))
       (t/is (false? (stale? l1 "l01-rc-b02"))))))
 
+(defrecord MockCatalogEntry [recency temporal-metadata]
+  PCatalogEntry
+  (recency [_] recency)
+
+  Metadata
+  (testMetadata [_] true)
+  (getTemporalMetadata [_] temporal-metadata))
 
 (defn apply-filter-msgs [& trie-keys]
   (map (fn [[trie-key recency temporal-metadata]]
-         {:trie-key trie-key
-          :recency recency
-          :temporal-metadata (apply tu/->temporal-metadata temporal-metadata)})
+         (map->MockCatalogEntry {:trie-key trie-key
+                                 :recency recency
+                                 :temporal-metadata (apply tu/->temporal-metadata temporal-metadata)}))
        trie-keys))
 
 (defn- filter-tries [trie-keys query-bounds]
   (-> (apply apply-filter-msgs trie-keys)
-      (cat/filter-tries* query-bounds)
+      (cat/filter-tries query-bounds)
       (->> (into #{} (map :trie-key)))))
 
 (t/deftest test-filter-tries
