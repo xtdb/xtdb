@@ -59,44 +59,48 @@
        :row-count @!row-count
        :data-file-size (.capacity data-buf)})))
 
-(defn migrate->v06! [{^BufferAllocator al :xtdb/allocator
-                      ^BufferPool src :xtdb.migration/source
-                      ^BufferPool target :xtdb/buffer-pool
+(defn migrate->v06! [{^BufferPool src :xtdb.migration/source
                       ^BlockCatalog block-cat :xtdb/block-catalog
                       table-cat :xtdb/table-catalog
                       ^TrieCatalog trie-cat :xtdb/trie-catalog
                       :as system}]
-  (dorun
-   (->> (.listAllObjects src (util/->path "chunk-metadata"))
-        (map-indexed (fn [block-idx obj]
-                       (when (Thread/interrupted) (throw (InterruptedException.)))
+  (let [chunk-meta-objs (.listAllObjects src (util/->path "chunk-metadata"))]
+    (log/infof "%d blocks to migrate..." (count chunk-meta-objs))
+    (dorun
+     (->> chunk-meta-objs
+          (map-indexed (fn [block-idx obj]
+                         (log/infof "Migrating block %d..." block-idx)
+                         (when (Thread/interrupted) (throw (InterruptedException.)))
 
-                       (let [{obj-key :key} (os/<-StoredObject obj)
-                             {:keys [tables latest-completed-tx]} (-> (.getByteArray src obj-key)
-                                                                      (serde/read-transit :json))
-                             table-res (->> (for [[table-name {:keys [trie-key]}] tables
-                                                  :let [table-path (trie/table-name->table-path table-name)
-                                                        data-path (.resolve table-path "data")
-                                                        meta-path (.resolve table-path "meta")
-                                                        new-trie-key (trie/->l0-trie-key block-idx)]]
-                                              (do
-                                                (log/tracef "Copying '%s' '%s' -> '%s'" table-name trie-key new-trie-key)
-                                                (copy-file! system
-                                                            (.resolve meta-path (str trie-key ".arrow"))
-                                                            (.resolve meta-path (str new-trie-key ".arrow")))
+                         (let [{obj-key :key} (os/<-StoredObject obj)
+                               {:keys [tables latest-completed-tx]} (-> (.getByteArray src obj-key)
+                                                                        (serde/read-transit :json))
+                               table-res (->> (for [[table-name {:keys [trie-key]}] tables
+                                                    :let [table-path (trie/table-name->table-path table-name)
+                                                          data-path (.resolve table-path "data")
+                                                          meta-path (.resolve table-path "meta")
+                                                          new-trie-key (trie/->l0-trie-key block-idx)]]
+                                                (do
+                                                  (log/debugf "Copying '%s' '%s' -> '%s'" table-name trie-key new-trie-key)
+                                                  (copy-file! system
+                                                              (.resolve meta-path (str trie-key ".arrow"))
+                                                              (.resolve meta-path (str new-trie-key ".arrow")))
 
-                                                (let [buf (copy-file! system
-                                                                      (.resolve data-path (str trie-key ".arrow"))
-                                                                      (.resolve data-path (str new-trie-key ".arrow")))]
-                                                  [table-name (into {:trie-key new-trie-key} (trie-details system buf))])))
-                                            (into {}))]
+                                                  (let [buf (copy-file! system
+                                                                        (.resolve data-path (str trie-key ".arrow"))
+                                                                        (.resolve data-path (str new-trie-key ".arrow")))]
+                                                    [table-name (into {:trie-key new-trie-key} (trie-details system buf))])))
+                                              (into {}))]
 
-                         (.addTries trie-cat (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-res]
-                                               (trie/->trie-details table-name trie-key data-file-size trie-metadata)))
+                           (.addTries trie-cat (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-res]
+                                                 (trie/->trie-details table-name trie-key data-file-size trie-metadata)))
 
-                         (let [table-block-paths (table-cat/finish-block! table-cat block-idx table-res
-                                                                          (->> (for [table-name (.getTableNames trie-cat)]
-                                                                                 [table-name (->> (trie-cat/trie-state trie-cat table-name)
-                                                                                                  trie-cat/all-tries)])
-                                                                               (into {})))]
-                           (.finishBlock block-cat block-idx latest-completed-tx table-block-paths))))))))
+                           (log/infof "Writing table-block files for block %d" block-idx)
+                           (let [table-block-paths (table-cat/finish-block! table-cat block-idx table-res
+                                                                            (->> (for [table-name (.getTableNames trie-cat)]
+                                                                                   [table-name (->> (trie-cat/trie-state trie-cat table-name)
+                                                                                                    trie-cat/all-tries)])
+                                                                                 (into {})))]
+
+                             (log/infof "Writing block file for block %d" block-idx)
+                             (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))))))

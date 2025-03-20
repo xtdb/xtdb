@@ -36,6 +36,8 @@
       (doto ig/load-namespaces)))
 
 (defn migrate-from [^long from-version node-opts]
+  (log/infof "Starting migration tool: from storage version %d to %d" from-version Storage/VERSION)
+
   (let [system (-> (migration-system (xtn/->config node-opts) from-version)
                    ig/prep
                    ig/init)]
