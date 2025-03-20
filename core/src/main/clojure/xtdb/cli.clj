@@ -28,8 +28,7 @@
                #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]]
 
    [nil "--migrate-from VERSION" "Migrates the database from the given version to the latest schema version"
-    :id :migrate-from-version
-    :required false
+    :id :migrate-from-version 
     :parse-fn parse-long]
 
    [nil "--playground" "Starts an XTDB playground on the default port"
