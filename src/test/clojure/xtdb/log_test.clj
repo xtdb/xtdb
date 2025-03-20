@@ -2,12 +2,19 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [jsonista.core :as json]
+            [xtdb.api :as xt]
             [xtdb.log :as log]
+            [xtdb.node :as xtn]
+            [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops])
-  (:import xtdb.api.tx.TxOp))
+            [xtdb.tx-ops :as tx-ops]
+            [xtdb.util :as util])
+  (:import [java.time Instant]
+           [xtdb.api.tx TxOp]
+           [xtdb.api.log Log]
+           [xtdb.util TxIdUtil]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -103,3 +110,138 @@
                          {:system-time (time/->instant #inst "2021")
                           :default-tz #xt/zone "Europe/London"
                           :authn {:user "xtdb"}}))
+
+(t/deftest validate-offset-returns-proper-errors
+  (letfn [(->simulated-log [epoch latest-submitted-offset]
+            (reify Log
+              (getEpoch [_] epoch)
+              (getLatestSubmittedOffset [_] latest-submitted-offset)))
+
+          (->latest-completed-tx [epoch offset]
+            (serde/->TxKey (TxIdUtil/offsetToTxId epoch offset) (Instant/now)))]
+
+    (t/testing "no error when latestSubmittedOffset >= latestCompletedOffset and same epoch"
+      (t/is (nil? (log/validate-offsets (->simulated-log 0 5) (->latest-completed-tx 0 5))))
+      (t/is (nil? (log/validate-offsets (->simulated-log 0 10) (->latest-completed-tx 0 5))))
+      (t/is (nil? (log/validate-offsets (->simulated-log 1 5) (->latest-completed-tx 1 5)))))
+
+    (t/testing "throws when latestSubmittedOffset < latestCompletedOffset and same epoch - stale log"
+      (t/is (thrown-with-msg? IllegalStateException
+                              #"Node failed to start due to an invalid transaction log state \(epoch=0, offset=1\)"
+                              (log/validate-offsets (->simulated-log 0 1) (->latest-completed-tx 0 2))))
+      (t/is (thrown-with-msg? IllegalStateException
+                              #"Node failed to start due to an invalid transaction log state \(epoch=1, offset=1\)"
+                              (log/validate-offsets (->simulated-log 1 1) (->latest-completed-tx 1 2)))))
+
+    (t/testing "throws when latestSubmittedOffset is -1 and latestCompletedOffset is not for the same epoch - empty log"
+      (t/is (thrown-with-msg? IllegalStateException
+                              #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
+                              (log/validate-offsets (->simulated-log 0 -1) (->latest-completed-tx 0 2))))
+      (t/is (thrown-with-msg? IllegalStateException
+                              #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
+                              (log/validate-offsets (->simulated-log 1 -1) (->latest-completed-tx 1 2)))))
+
+    (t/testing "no error for empty log when epochs differ - validation skipped"
+      (t/is (nil? (log/validate-offsets (->simulated-log 1 -1) (->latest-completed-tx 0 2)))))
+
+    (t/testing "no error when latestCompletedTx is nil"
+      (t/is (nil? (log/validate-offsets (->simulated-log 0 5) nil))))))
+
+(t/deftest test-memory-log-epochs
+  (util/with-tmp-dirs #{local-disk-path}
+    ;; Node with local storage and memory log 
+    (with-open [node (xtn/start-node {:log [:in-memory {}]
+                                      :storage [:local {:path local-disk-path}]})]
+      ;; Submit a few transactions
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
+      (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
+               (set (xt/q node "SELECT _id FROM xt_docs"))))
+      ;; Finish the block
+      (t/is (nil? (tu/finish-block! node)))
+  
+      ;; Submit a few more transactions
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :willbe}]])
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :lost}]])
+      (t/is (= (set [{:xt/id :foo}
+                     {:xt/id :bar}
+                     {:xt/id :willbe}
+                     {:xt/id :lost}])
+               (set (xt/q node "SELECT _id FROM xt_docs")))))
+    
+    ;; Node with intact storage and (now) empty memory log 
+    (t/is
+     (thrown-with-msg?
+      IllegalStateException
+      #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
+      (xtn/start-node {:log [:in-memory {}]
+                       :storage [:local {:path local-disk-path}]})))
+  
+    ;; Node with intact storage and empty memory log with epoch set to 1
+    (with-open [node (xtn/start-node {:log [:in-memory {:epoch 1}]
+                                      :storage [:local {:path local-disk-path}]})]
+      (t/testing "can query previous indexed values, unindexed values will be lost"
+        (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
+                 (set (xt/q node "SELECT _id FROM xt_docs")))))
+  
+      (t/testing "can index/query new transactions"
+        (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new}]]))
+        (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new2}]]))
+        (t/is (= (set [{:xt/id :foo}
+                       {:xt/id :bar}
+                       {:xt/id :new}
+                       {:xt/id :new2}])
+                 (set (xt/q node "SELECT _id FROM xt_docs")))))
+  
+      (t/testing "can finish the block"
+        (t/is (nil? (tu/finish-block! node)))))))
+
+(t/deftest test-local-log-epochs
+  (util/with-tmp-dirs #{node-dir}
+    ;; Node with local storage and local directory log 
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
+      ;; Submit a few transactions
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
+      (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
+               (set (xt/q node "SELECT _id FROM xt_docs"))))
+      ;; Finish the block
+      (t/is (nil? (tu/finish-block! node)))
+
+      ;; Submit a few more transactions
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :willbe}]])
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :lost}]])
+      (t/is (= (set [{:xt/id :foo}
+                     {:xt/id :bar}
+                     {:xt/id :willbe}
+                     {:xt/id :lost}])
+               (set (xt/q node "SELECT _id FROM xt_docs")))))
+
+    ;; Node with intact storage and empty directory-log
+    (t/is
+     (thrown-with-msg?
+      IllegalStateException
+      #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
+      (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")}]
+                       :storage [:local {:path (.resolve node-dir "objects")}]})))
+
+    ;; Node with intact storage and empty directory-log with epoch set to 1
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
+                                                    :epoch 1}]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
+      (t/testing "can query previous indexed values, unindexed values will be lost"
+        (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
+                 (set (xt/q node "SELECT _id FROM xt_docs")))))
+
+      (t/testing "can index/query new transactions"
+        (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new}]]))
+        (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new2}]]))
+        (t/is (= (set [{:xt/id :foo}
+                       {:xt/id :bar}
+                       {:xt/id :new}
+                       {:xt/id :new2}])
+                 (set (xt/q node "SELECT _id FROM xt_docs")))))
+
+      (t/testing "can finish the block"
+        (t/is (nil? (tu/finish-block! node)))))))

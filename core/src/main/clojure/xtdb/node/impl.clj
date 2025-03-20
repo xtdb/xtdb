@@ -29,7 +29,8 @@
            (xtdb.api.query XtqlQuery)
            [xtdb.api.tx TxOp]
            (xtdb.indexer IIndexer LiveIndex LogProcessor)
-           (xtdb.query IQuerySource PreparedQuery)))
+           (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.util TxIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -100,8 +101,9 @@
 
   xtp/PNode
   (submit-tx [this tx-ops opts]
-    (try
-      @(xt-log/submit-tx& this (->TxOps tx-ops) opts)
+    (try 
+      (let [offset @(xt-log/submit-tx& this (->TxOps tx-ops) opts)]
+        (TxIdUtil/offsetToTxId (.getEpoch log) offset)) 
       (catch ExecutionException e
         (throw (ex-cause e)))
       (catch IllegalArgumentException e
