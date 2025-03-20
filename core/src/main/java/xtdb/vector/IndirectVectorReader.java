@@ -44,7 +44,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public int valueCount() {
+    public int getValueCount() {
         return indirection.valueCount();
     }
 
@@ -110,11 +110,6 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public ArrowBufPointer getPointer(int idx) {
-        return reader.getPointer(indirection.getIndex(idx));
-    }
-
-    @Override
     public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
         return reader.getPointer(indirection.getIndex(idx), reuse);
     }
@@ -141,8 +136,8 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader listElementReader() {
-        return reader.listElementReader();
+    public IVectorReader getListElements() {
+        return reader.getListElements();
     }
 
     @Override
@@ -156,13 +151,13 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader mapKeyReader() {
-        return reader.mapKeyReader();
+    public IVectorReader getMapKeys() {
+        return reader.getMapKeys();
     }
 
     @Override
-    public IVectorReader mapValueReader() {
-        return reader.mapValueReader();
+    public IVectorReader getMapValues() {
+        return reader.getMapValues();
     }
 
     @Override
@@ -186,7 +181,7 @@ class IndirectVectorReader implements IVectorReader {
         IVectorWriter writer = (IVectorWriter) VEC_TO_WRITER.invoke(vector);
         var copier = rowCopier(writer);
 
-        for (int i = 0; i < valueCount(); i++) {
+        for (int i = 0; i < getValueCount(); i++) {
             copier.copyRow(i);
         }
 
@@ -233,7 +228,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public void close() {
+    public void close() throws Exception {
         reader.close();
     }
 

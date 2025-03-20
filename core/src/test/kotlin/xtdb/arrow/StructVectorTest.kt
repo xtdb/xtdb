@@ -43,7 +43,7 @@ class StructVectorTest {
             structVec.writeObject(m2)
             structVec.writeObject(m3)
 
-            assertEquals(listOf(m1, m2, m3), structVec.asList)
+            assertEquals(listOf(m1, m2, m3), structVec.toList())
         }
     }
 
@@ -75,7 +75,7 @@ class StructVectorTest {
                     mapOf("i32" to 8),
                     mapOf("i32" to 12, "utf8" to "world!")
                 ),
-                structVec.asList
+                structVec.toList()
             )
         }
     }
@@ -104,7 +104,7 @@ class StructVectorTest {
                     mapOf("i32" to 8, "utf8" to "Hello"),
                     mapOf("i32" to 12, "utf8" to "world!")
                 ),
-                structVec.asList
+                structVec.toList()
             )
         }
 
@@ -219,7 +219,7 @@ class StructVectorTest {
                     mapOf("i32" to 1, "duv" to "one"),
                     mapOf("i32" to 2),
                 ),
-                structVec.asList
+                structVec.toList()
             )
         }
     }
@@ -236,7 +236,7 @@ class StructVectorTest {
             structVec.writeObject(els[1])
             structVec.writeObject(els[2])
 
-            assertEquals(els, structVec.asList)
+            assertEquals(els, structVec.toList())
 
             assertEquals(
                 Field("struct", FieldType(false, STRUCT_TYPE, null), listOf(
@@ -256,7 +256,7 @@ class StructVectorTest {
 
             assertEquals(
                 listOf(mapOf("i32" to 4, "utf8" to "Hello"), null),
-                structVec.asList
+                structVec.toList()
             )
 
             assertEquals(
@@ -275,7 +275,7 @@ class StructVectorTest {
             val els = listOf(mapOf("a" to 4), mapOf("a" to "Hello"))
                 .onEach(structVec::writeObject)
 
-            assertEquals(els, structVec.asList)
+            assertEquals(els, structVec.toList())
 
             assertEquals(
                 Field("struct", FieldType(false, STRUCT_TYPE, null), listOf(

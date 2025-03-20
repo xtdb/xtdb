@@ -54,9 +54,9 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         val startIdx = listVector.getListStartIndex(idx)
         val entryCount = listVector.getListCount(idx)
 
-        val elReader = listVector.elementReader()
-        val keyReader = elReader.mapKeyReader()
-        val valueReader = elReader.mapValueReader()
+        val elReader = listVector.listElements
+        val keyReader = elReader.mapKeys
+        val valueReader = elReader.mapValues
 
         return (0 until entryCount).associate { elIdx ->
             (startIdx + elIdx).let { entryIdx ->
@@ -83,14 +83,14 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun elementReader() = listVector.elementReader()
+    override val listElements get() = listVector.listElements
     override fun elementWriter() = listVector.elementWriter()
     override fun elementWriter(fieldType: FieldType) = listVector.elementWriter(fieldType)
 
     override fun endList() = listVector.endList()
 
-    override fun mapKeyReader() = elementReader().mapKeyReader()
-    override fun mapValueReader() = elementReader().mapValueReader()
+    override val mapKeys get() = listElements.mapKeys
+    override val mapValues get() = listElements.mapValues
     override fun mapKeyWriter() = elementWriter().mapKeyWriter()
     override fun mapKeyWriter(fieldType: FieldType) = elementWriter().mapKeyWriter(fieldType)
     override fun mapValueWriter() = elementWriter().mapValueWriter()

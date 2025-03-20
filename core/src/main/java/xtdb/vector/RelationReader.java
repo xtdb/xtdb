@@ -17,7 +17,7 @@ public class RelationReader implements Iterable<IVectorReader>, AutoCloseable {
     private final int rowCount;
 
     public static RelationReader from(List<IVectorReader> cols) {
-        return from(cols, cols.stream().mapToInt(IVectorReader::valueCount).findFirst().orElse(0));
+        return from(cols, cols.stream().mapToInt(IVectorReader::getValueCount).findFirst().orElse(0));
     }
 
     public static RelationReader from(List<IVectorReader> cols, int rowCount) {

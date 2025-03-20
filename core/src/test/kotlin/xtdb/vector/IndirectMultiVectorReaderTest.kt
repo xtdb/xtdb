@@ -313,7 +313,7 @@ class IndirectMultiVectorReaderTest {
 
 
     @Test
-    fun testListElementReader () {
+    fun testListElements () {
         val listField = Field("my-list", FieldType(false, LIST_TYPE, null), listOf(Field("\$data\$", I32, null)))
         val listVec1 = listField.createVector(alloc) as ListVector
         val listVec2 = listField.createVector(alloc) as ListVector
@@ -347,7 +347,7 @@ class IndirectMultiVectorReaderTest {
         assertEquals(2, indirectRdr.getListCount(1))
 
         // The elementRdr should contain [0, 1, 2, 6, 7, 3, 4, 5, 8, 9]a
-        val listElementRdr = indirectRdr.listElementReader()
+        val listElementRdr = indirectRdr.listElements
 
         val r = 0..9
         assertEquals(listOf(0, 1, 2, 6, 7, 3, 4, 5, 8, 9) , r.map { listElementRdr.getInt(it) }.toList())
@@ -358,7 +358,7 @@ class IndirectMultiVectorReaderTest {
     }
 
     @Test
-    fun testListElementReaderWithPolymophicUnderlyingVectors () {
+    fun testListElementsWithPolymophicUnderlyingVectors () {
         val listField = Field("my-list", FieldType(false, LIST_TYPE, null), listOf(Field("\$data\$", I32, null)))
         val listVec = listField.createVector(alloc) as ListVector
         val intVec = IntVector("my-int", alloc)
@@ -391,9 +391,9 @@ class IndirectMultiVectorReaderTest {
         assertEquals(0, listRdr.getListStartIndex(0))
         assertEquals(3, listRdr.getListStartIndex(1))
 
-        val listElementRdr = listRdr.listElementReader()
+        val listElementRdr = listRdr.listElements
 
-        val r = 0 until listElementRdr.valueCount()
+        val r = 0 until listElementRdr.valueCount
         assertEquals(listOf(0, 1, 2, 3, 4, 5) , r.map { listElementRdr.getInt(it) }.toList())
 
         indirectRdr.close()

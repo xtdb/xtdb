@@ -16,7 +16,7 @@ class SetVector(override val inner: ListVector) : ExtensionVector() {
         else inner.writeObject(value.toList())
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int {
-        val elVector = inner.elementReader()
+        val elVector = inner.listElements
         return (inner.getListStartIndex(idx) until inner.getListEndIndex(idx))
             .sumOf { elIdx -> elVector.hashCode(elIdx, hasher) }
     }

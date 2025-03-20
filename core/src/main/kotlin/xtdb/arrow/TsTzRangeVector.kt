@@ -13,7 +13,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
     override val type = TsTzRangeType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
-        inner.elementReader().let {
+        inner.listElements.let {
             ZonedDateTimeRange(
                 it.getObject(idx * 2) as ZonedDateTime,
                 it.getObject(idx * 2 + 1) as? ZonedDateTime

@@ -266,7 +266,7 @@
   ([^IVectorReader col ^IKeyFn key-fn]
    (mapv (fn [idx]
            (.getObject col idx key-fn))
-         (range (.valueCount col)))))
+         (range (.getValueCount col)))))
 
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
@@ -532,7 +532,7 @@
 (defn vec->vals
   ([^IVectorReader rdr] (vec->vals rdr #xt/key-fn :kebab-case-keyword))
   ([^IVectorReader rdr ^IKeyFn key-fn]
-   (->> (for [i (range (.valueCount rdr))]
+   (->> (for [i (range (.getValueCount rdr))]
           (.getObject rdr i key-fn))
         (into []))))
 

@@ -71,15 +71,14 @@ class DenseUnionVector(
 
         override fun getListCount(idx: Int) = inner.getListCount(getOffset(idx))
         override fun getListStartIndex(idx: Int) = inner.getListStartIndex(getOffset(idx))
-        override fun elementReader() = inner.elementReader()
+        override val listElements get() = inner.listElements
 
-        override val keys: Set<String>? get() = inner.keys
-        override fun keyReader(name: String) = inner.keyReader(name)?.let { LegReader(typeId, it) }
-        override fun mapKeyReader() = inner.mapKeyReader()
-        override fun mapValueReader() = inner.mapValueReader()
+        override val keyNames: Set<String>? get() = inner.keyNames
+        override val legNames get() = inner.legNames
+        override fun vectorForOrNull(name: String) = inner.vectorForOrNull(name)?.let { LegReader(typeId, it) }
 
-        override val legs get() = inner.legs
-        override fun legReader(name: String) = inner.legReader(name)?.let { LegReader(typeId, it) }
+        override val mapKeys get() = inner.mapKeys
+        override val mapValues get() = inner.mapValues
 
         override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(getOffset(idx), hasher)
 
@@ -88,7 +87,7 @@ class DenseUnionVector(
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
-        override val asList get() = inner.asList
+        override fun toList() = inner.toList()
 
         override fun close() = Unit
     }
@@ -137,7 +136,7 @@ class DenseUnionVector(
         override fun clear() = inner.clear()
         override fun close() = Unit
 
-        override val asList get() = inner.asList
+        override fun toList() = inner.toList()
     }
 
     private val typeBuffer = ExtensibleBuffer(allocator)
@@ -170,9 +169,9 @@ class DenseUnionVector(
 
     override fun getLeg(idx: Int) = leg(idx)?.name
 
-    override val legs get() = legVectors.mapTo(mutableSetOf()) { it.name }
+    override val legNames get() = legVectors.mapTo(mutableSetOf()) { it.name }
 
-    override fun legReader(name: String): VectorReader? {
+    override fun vectorForOrNull(name: String): VectorReader? {
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) return LegReader(i.toByte(), leg)

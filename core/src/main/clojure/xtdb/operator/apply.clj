@@ -52,7 +52,7 @@
                                            (let [vp (VectorPosition/build)
                                                  match-vec (.readerForName ^RelationReader dep-rel "_expr")
                                                  match-rdr (.valueReader match-vec vp)]
-                                             (dotimes [idx (.valueCount match-vec)]
+                                             (dotimes [idx (.getValueCount match-vec)]
                                                (.setPosition vp idx)
                                                (if (.isNull match-rdr)
                                                  (aset !match 0 (max (aget !match 0) 0))

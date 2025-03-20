@@ -16,9 +16,9 @@ class MultiVectorRelationFactory(leafRels: List<RelationReader>, colNames: List<
             if (colName == "_iid") {
                 leafRels.map { it.readerForName("_iid") }
             } else {
-                putReaders.map { putReader ->
+                putReaders.filterNotNull().map { putReader ->
                     putReader.structKeyReader(colName)?.withName(colName)
-                        ?: ValueVectorReader.from(NullVector(colName, putReader.valueCount()))
+                        ?: ValueVectorReader.from(NullVector(colName, putReader.valueCount))
                 }
             }
         }

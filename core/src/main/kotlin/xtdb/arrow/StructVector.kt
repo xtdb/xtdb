@@ -40,9 +40,9 @@ class StructVector(
         childWriters.sequencedValues().forEach { it.writeUndefined() }
     }
 
-    override val keys get() = childWriters.keys
+    override val keyNames get() = childWriters.keys
 
-    override fun keyReader(name: String) = childWriters[name]
+    override fun vectorForOrNull(name: String) = childWriters[name]
 
     override fun keyWriter(name: String) = childWriters[name] ?: error("missing child vector: $name")
 
@@ -69,8 +69,10 @@ class StructVector(
         }
     }
 
-    override fun mapKeyReader(): VectorReader = childWriters.sequencedValues().firstOrNull() ?: TODO("auto-creation")
-    override fun mapValueReader(): VectorReader = childWriters.sequencedValues().lastOrNull() ?: TODO("auto-creation")
+    override val mapKeys: VectorReader
+        get() = childWriters.sequencedValues().firstOrNull() ?: TODO("auto-creation")
+    override val mapValues: VectorReader
+        get() = childWriters.sequencedValues().lastOrNull() ?: TODO("auto-creation")
     override fun mapKeyWriter(): VectorWriter = childWriters.sequencedValues().firstOrNull() ?: TODO("auto-creation")
     override fun mapValueWriter(): VectorWriter = childWriters.sequencedValues().lastOrNull() ?: TODO("auto-creation")
 

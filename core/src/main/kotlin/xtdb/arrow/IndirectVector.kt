@@ -11,7 +11,7 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override val name: String get() = inner.name
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
-    override val fieldType: FieldType get() = this.field.fieldType
+    override val fieldType: FieldType get() = inner.fieldType
     override val field: Field get() = inner.field
 
     override fun isNull(idx: Int) = inner.isNull(sel[idx])
@@ -26,16 +26,18 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun getPointer(idx: Int, reuse: ArrowBufPointer) = inner.getPointer(sel[idx], reuse)
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = inner.getObject(sel[idx], keyFn)
 
-    override val legs get() = inner.legs
+    override val keyNames get() = inner.keyNames
+    override val legNames get() = inner.legNames
+    override fun vectorForOrNull(name: String) = inner.vectorForOrNull(name)?.let { IndirectVector(it, sel) }
+
     override fun getLeg(idx: Int) = inner.getLeg(sel[idx])
-    override fun legReader(name: String) = inner.legReader(name)?.let { IndirectVector(it, sel) }
 
-    override val keys get() = inner.keys
-    override fun keyReader(name: String) = inner.keyReader(name)?.let { IndirectVector(it, sel) }
-
-    override fun elementReader() = inner.elementReader()
+    override val listElements get() = inner.listElements
     override fun getListStartIndex(idx: Int) = inner.getListStartIndex(sel[idx])
     override fun getListCount(idx: Int) = inner.getListCount(sel[idx])
+
+    override val mapKeys: VectorReader get() = inner.mapKeys
+    override val mapValues: VectorReader get() = inner.mapValues
 
     override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(sel[idx], hasher)
 
@@ -45,5 +47,4 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     }
 
     override fun close() = inner.close()
-
 }

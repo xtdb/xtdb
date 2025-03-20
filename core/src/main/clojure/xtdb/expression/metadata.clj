@@ -179,8 +179,8 @@
                                    (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
         {:return-type :bool
          :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
-                           `(some-> (.keyReader ~types-rdr-sym ~(.getName col-field))
-                                    (.keyReader ~(name meta-value)))]]
+                           `(some-> (.vectorForOrNull ~types-rdr-sym ~(.getName col-field))
+                                    (.vectorForOrNull ~(name meta-value)))]]
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
@@ -206,16 +206,16 @@
                         ~(-> expr/args-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~metadata-rdr-sym (.getMetadataLeafReader ~table-metadata-sym)
-                           ~cols-rdr-sym (.keyReader ~metadata-rdr-sym "columns")
-                           ~col-rdr-sym (.elementReader ~cols-rdr-sym)
-                           ~types-rdr-sym (.keyReader ~col-rdr-sym "types")
-                           ~bloom-rdr-sym (.keyReader ~col-rdr-sym "bloom")
+                           ~cols-rdr-sym (.vectorForOrNull ~metadata-rdr-sym "columns")
+                           ~col-rdr-sym (.getListElements ~cols-rdr-sym)
+                           ~types-rdr-sym (.vectorForOrNull ~col-rdr-sym "types")
+                           ~bloom-rdr-sym (.vectorForOrNull ~col-rdr-sym "bloom")
                            ~content-metadata-present-sym (contains? (.getColumnNames ~table-metadata-sym) "_id")
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
                          (~'test [_ ~page-idx-sym]
-                          ~(continue (fn [_ code] code))))))
+                           ~(continue (fn [_ code] code))))))
                   #_(doto clojure.pprint/pprint)
                   (eval))}))
 
@@ -225,8 +225,8 @@
   (let [params (RelationReader/from params)
         param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
-                                                                   :col-types col-types})
-                                            {:param-types param-types
+                                                                   :col-types   col-types})
+                                            {:param-types            param-types
                                              :col-types col-types
                                              :extract-vecs-from-rel? false})
         bloom-hashes (->bloom-hashes expr params)]

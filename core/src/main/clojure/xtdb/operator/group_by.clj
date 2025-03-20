@@ -215,8 +215,8 @@
                                                   ~(expr/write-value-code acc-type acc-writer-sym acc-code))))))))
                          #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                          eval)}))
-      (util/lru-memoize) ;; <<no-commit>>
-      ))
+      (util/lru-memoize))) ;; <<no-commit>>
+
 
 (defn- reducing-agg-factory [{:keys [to-name to-type zero-row?] :as agg-opts}]
   (let [to-type [:union (conj #{:null} to-type)]
@@ -445,7 +445,7 @@
             (let [in-vec (.readerForName in-rel (str from-name))
                   builders (ArrayList. (.size rel-maps))
                   distinct-idxs (IntStream/builder)]
-              (dotimes [idx (.valueCount in-vec)]
+              (dotimes [idx (.getValueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
                     (.add rel-maps (emap/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
@@ -509,7 +509,7 @@
   IAggregateSpec
   (aggregate [this in-rel group-mapping]
     (let [in-vec (.readerForName in-rel (str from-name))
-          row-count (.valueCount in-vec)]
+          row-count (.getValueCount in-vec)]
       (vw/append-vec acc-col in-vec)
 
       (dotimes [idx row-count]

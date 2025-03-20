@@ -20,7 +20,7 @@ class IidSelector(private val iid: ByteBuffer) : SelectionSpec {
             val iidPtr = ArrowBufPointer(iidBuf, 0, iid.capacity().toLong())
             val ptr = ArrowBufPointer()
             val iidReader = readRelation.readerForName("_iid")
-            val valueCount = iidReader.valueCount()
+            val valueCount = iidReader.valueCount
             if (valueCount == 0) return@use IntArray(0)
 
             var left = 0

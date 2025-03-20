@@ -160,9 +160,9 @@
   (gen/let [n (gen/choose 1 10)
             vecs (gen/vector (generate-vector al) n)]
     (let [rdrs (map vr/vec->reader vecs)
-          rdr-indirects (->> (map-indexed #(repeat (.valueCount ^IVectorReader %2) %1) rdrs)
+          rdr-indirects (->> (map-indexed #(repeat (.getValueCount ^IVectorReader %2) %1) rdrs)
                              (apply concat))
-          vec-indirects (mapcat #(range (.valueCount ^IVectorReader %)) rdrs)
+          vec-indirects (mapcat #(range (.getValueCount ^IVectorReader %)) rdrs)
           [rdr-indirects vec-indirects] (same-shuffle rdr-indirects vec-indirects)]
       (IndirectMultiVectorReader. rdrs
                                   (VectorIndirection/selection (int-array rdr-indirects))
@@ -171,7 +171,7 @@
 #_
 (defspec ^:integration read-multi-vec 20
   (prop/for-all [^IVectorReader multi-rdr (multi-vec-reader tu/*allocator*)]
-    (let [res (= (.valueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
+    (let [res (= (.getValueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
       (.close multi-rdr)
       res)))
 
@@ -184,7 +184,7 @@
   (let [v (.createVector (.getField rdr) al)
         wrt (vw/->writer v)
         copier (.rowCopier rdr wrt)]
-    (dotimes [i (.valueCount rdr)]
+    (dotimes [i (.getValueCount rdr)]
       (.copyRow copier i))
     (vw/vec-wtr->rdr wrt)))
 
@@ -221,7 +221,7 @@
 
   (defn- read-multi-vec-prop [^BufferAllocator al]
     (prop/for-all [^IVectorReader multi-rdr (multi-vec-reader al)]
-      (let [res (= (.valueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
+      (let [res (= (.getValueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
         (.close multi-rdr)
         res)))
 

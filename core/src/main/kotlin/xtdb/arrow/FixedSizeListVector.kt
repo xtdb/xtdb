@@ -53,7 +53,7 @@ class FixedSizeListVector(
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun elementReader() = elVector
+    override val listElements get() = elVector
 
     override fun elementWriter() = elVector
 
