@@ -52,6 +52,9 @@ interface RelationReader<V : VectorReader> : Iterable<V>, AutoCloseable {
             ) as Map<*, *>
         }
 
+    fun getRow(idx: Int, keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD): Map<*, Any?> =
+        associate { keyFn.denormalize(it.name) to it.getObject(idx, keyFn) }
+
     companion object {
         private class FromOldRelation(private val oldReader: OldRelationReader) :
             RelationReader<VectorReader> {

@@ -71,6 +71,7 @@ interface VectorReader : AutoCloseable {
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     val asList get() = List(valueCount) { getObject(it) }
+    fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }
 
     fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)
