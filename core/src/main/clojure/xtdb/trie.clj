@@ -8,8 +8,7 @@
            (xtdb.log.proto TrieDetails TrieMetadata)
            xtdb.operator.scan.MergePlanPage
            (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.util Temporal)))
+           (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
   ([table-name, trie-key, ^long data-file-size]
