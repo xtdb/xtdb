@@ -2,11 +2,11 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import [java.time LocalDate]))
+  (:import (xtdb.operator.scan Metadata)
+           (xtdb.util TemporalBounds)))
 
 (defn- apply-msgs [& trie-keys]
   (-> trie-keys
@@ -41,18 +41,28 @@
       (t/is (false? (stale? l1 "l01-rc-b01")))
       (t/is (false? (stale? l1 "l01-rc-b02"))))))
 
+(defrecord MockCatalogEntry [recency temporal-metadata ^TemporalBounds query-bounds]
+  Metadata
+  (testMetadata [_]
+    ;; copied from the actual implementation
+    (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
+      (if recency
+        (< min-query-recency recency)
+        true)) )
+  (getTemporalMetadata [_] temporal-metadata))
 
 (defn apply-filter-msgs [& trie-keys]
   (map (fn [[trie-key recency temporal-metadata]]
-         {:trie-key trie-key
-          :recency recency
-          :temporal-metadata (apply tu/->temporal-metadata temporal-metadata)})
+         (map->MockCatalogEntry {:trie-key trie-key
+                                 :recency recency
+                                 :temporal-metadata (apply tu/->temporal-metadata temporal-metadata)}))
        trie-keys))
 
 (defn- filter-tries [trie-keys query-bounds]
-  (-> (apply apply-filter-msgs trie-keys)
-      (cat/filter-tries* query-bounds)
-      (->> (into #{} (map :trie-key)))))
+  (with-redefs [cat/map->CatalogEntry map->MockCatalogEntry]
+    (-> (apply apply-filter-msgs trie-keys)
+        (cat/filter-tries query-bounds)
+        (->> (into #{} (map :trie-key))))))
 
 (t/deftest test-filter-tries
   (let [current-time 20200101]
@@ -69,15 +79,15 @@
 
         (t/is (= #{"l01-current-block-00" "l01-current-block-01"}
                  (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2019-block-01" 20190101 [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 20190101]]
                                 ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2020-block-01" 20200101 [20200101 Long/MAX_VALUE]]]
+                                ["l01-recency-2020-block-01" 20200101 [20190101 20200101]]]
                                query-bounds))
               "older recency files get filtered (even at boundary)")
 
         (t/is (= #{"l01-current-block-00" "l01-current-block-01" "l01-recency-2022-block-01"}
                  (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2022-block-01" 20220101 [20200101 Long/MAX_VALUE] ]
+                                ["l01-recency-2022-block-01" 20220101 [20210101 20220101] ]
                                 ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]]
                                query-bounds))
               "newer recency files get taken"))
@@ -89,7 +99,7 @@
 
         (t/is (= #{"l01-current-block-00" "l01-recency-2019-block-01" "l01-current-block-01" "l01-recency-2021-block-01"}
                  (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2019-block-01" 20190101 [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 Long/MAX_VALUE]]
                                 ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
                                 ["l01-recency-2021-block-01" 20210101 [20200101 Long/MAX_VALUE]]]
                                all-st-query)
@@ -102,14 +112,14 @@
 
         (t/is (= #{"l01-current-block-00" "l01-current-block-01" "l01-recency-2021-block-01"}
                  (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2019-block-01" 20190101 [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 20190101]]
                                 ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2021-block-01" 20210101 [20200101 Long/MAX_VALUE]]]
+                                ["l01-recency-2021-block-01" 20210101 [20200101 20210101]]]
                                st-range-query)
                  (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2019-block-01" 20190101 [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 20190101]]
                                 ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2021-block-01" 20210101 [20200101 Long/MAX_VALUE]]]
+                                ["l01-recency-2021-block-01" 20210101 [20200101 20210101]]]
                                vt-range-query))
               "system-time range or valid-time range can filter certain pages")))
 
