@@ -46,7 +46,6 @@ transit-java={ group="com.cognitect", name="transit-java", version.ref="transit"
 next-jdbc={ group="com.github.seancorfield", name="next.jdbc", version="1.3.1002" }
 honeysql={ group="com.github.seancorfield", name="honeysql", version="2.6.1203" }
 integrant={ group="integrant", name="integrant", version="0.13.1" }
-sci={ group="org.babashka", name="sci", version="0.6.37" }
 buddy-hashers={ group="buddy", name="buddy-hashers", version="2.0.167" }
 
 pgjdbc={ group="org.postgresql", name="postgresql", version="42.7.3" }

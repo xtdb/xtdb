@@ -22,7 +22,7 @@
            (xtdb.api.tx TxOp$Sql)
            (xtdb.arrow Relation Vector VectorWriter)
            xtdb.indexer.LogProcessor
-           (xtdb.tx_ops Abort AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PatchDocs PutDocs SqlByteArgs Update XtqlAndArgs)
+           (xtdb.tx_ops Abort AssertExists AssertNotExists Delete DeleteDocs Erase EraseDocs Insert PatchDocs PutDocs SqlByteArgs Update XtqlAndArgs)
            xtdb.types.ClojureForm))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -207,18 +207,6 @@
 
           (.endStruct erase-writer))))))
 
-(defn- ->call-writer [^VectorWriter op-writer]
-  (let [call-writer (.legWriter op-writer "call" (FieldType/notNullable #xt.arrow/type :struct))
-        fn-iid-writer (.keyWriter call-writer "fn-iid" (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16]))
-        args-list-writer (.keyWriter call-writer "args" (FieldType/notNullable #xt.arrow/type :transit))]
-    (fn write-call! [{:keys [fn-id args]}]
-      (.writeObject fn-iid-writer (util/->iid fn-id))
-
-      (let [clj-form (xt/->ClojureForm (vec args))]
-        (.writeObject args-list-writer clj-form))
-
-      (.endStruct call-writer))))
-
 (defn- ->abort-writer [^VectorWriter op-writer]
   (let [abort-writer (.legWriter op-writer "abort" (FieldType/nullable #xt.arrow/type :null))]
     (fn [_op]
@@ -236,7 +224,6 @@
         !write-patch! (delay (->patch-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
         !write-erase! (delay (->erase-writer op-writer))
-        !write-call! (delay (->call-writer op-writer))
         !write-abort! (delay (->abort-writer op-writer))]
 
     (doseq [tx-op tx-ops]
@@ -261,7 +248,6 @@
         PatchDocs (@!write-patch! tx-op)
         DeleteDocs (@!write-delete! tx-op)
         EraseDocs (@!write-erase! tx-op)
-        Call (@!write-call! tx-op)
         Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 

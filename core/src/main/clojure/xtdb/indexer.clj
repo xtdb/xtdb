@@ -3,14 +3,12 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [sci.core :as sci]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
-            [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
             [xtdb.operator.scan :as scan]
             [xtdb.query :as q]
@@ -19,11 +17,9 @@
             [xtdb.sql :as sql]
             [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
             [xtdb.xtql.plan :as xtql])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Counter Timer)
@@ -38,7 +34,6 @@
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           (xtdb.api.tx TxOp)
            (xtdb.arrow RowCopier)
            xtdb.BufferPool
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
@@ -256,126 +251,6 @@
               (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))))))
 
         nil))))
-
-(defn- find-fn [allocator ^IQuerySource q-src, wm-src, sci-ctx tx-opts fn-iid]
-  (let [lp '[:scan {:table xt/tx_fns} [{_iid (= _iid ?iid)} _id fn]]
-        ^PreparedQuery pq (.prepareRaQuery q-src lp wm-src tx-opts)]
-    (with-open [^RelationReader
-                args (vr/rel-reader [(-> (vw/open-vec allocator '?iid [fn-iid])
-                                         (vr/vec->reader))]
-                                    1)
-
-                bq (.bind pq
-                          (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                              (assoc :args args, :close-args? false)))
-
-                res (.openCursor bq)]
-
-      (let [!fn-doc (object-array 1)]
-        (.tryAdvance res
-                     (reify Consumer
-                       (accept [_ in-rel]
-                         (when (pos? (.rowCount ^RelationReader in-rel))
-                           (aset !fn-doc 0 (first (vr/rel->rows in-rel)))))))
-
-        (let [{fn-id :xt/id, fn-body :fn, :as fn-doc} (or (aget !fn-doc 0)
-                                                          (throw (err/runtime-err :xtdb.call/no-such-tx-fn
-                                                                                  {:fn-iid (util/byte-buffer->uuid fn-iid)})))]
-
-          (when-not (instance? ClojureForm fn-body)
-            (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc (dissoc fn-doc :xt/iid)})))
-
-          (let [fn-form (.form ^ClojureForm fn-body)]
-            (try
-              {:tx-fn (sci/eval-form sci-ctx fn-form)
-               :fn-id fn-id}
-
-              (catch Throwable t
-                (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
-
-(defn- tx-fn-q [allocator ^IQuerySource q-src wm-src tx-opts]
-  (fn tx-fn-q*
-    ([query] (tx-fn-q* query {}))
-
-    ([query opts]
-     (let [{:keys [args] :as query-opts} (-> (reduce into [{:key-fn :kebab-case-keyword} tx-opts opts])
-                                             (update :key-fn serde/read-key-fn))
-           prepared-query (.prepareRaQuery q-src (.planQuery q-src query wm-src query-opts) wm-src query-opts)]
-
-       (util/with-open [args (when args
-                               (vw/open-args allocator args))
-                        res (-> (.bind prepared-query (assoc query-opts :args args, :close-args? false))
-                                (q/open-cursor-as-stream query-opts))]
-         (vec (.toList res)))))))
-
-(def ^:private !last-tx-fn-error (atom nil))
-
-(defn reset-tx-fn-error! []
-  (first (reset-vals! !last-tx-fn-error nil)))
-
-(def ^:private xt-sci-ns
-  (-> (sci/copy-ns xtdb.api (sci/create-ns 'xtdb.api))
-      (select-keys ['put 'put-fn
-                    'during 'starting-at 'until])))
-
-(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, q-src, wm-src
-                                               ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
-  (let [call-leg (.legReader tx-ops-rdr "call")
-        fn-id-rdr (.structKeyReader call-leg "fn-id")
-        fn-iid-rdr (.structKeyReader call-leg "fn-iid")
-        args-rdr (.structKeyReader call-leg "args")
-
-        ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator q-src wm-src tx-opts)
-                                      'sleep (fn [^long n] (Thread/sleep n))
-                                      '*current-tx* tx-key}
-                           :namespaces {'xt xt-sci-ns}})]
-
-    (reify OpIndexer
-      (indexOp [_ tx-op-idx]
-        (try
-          (let [fn-iid (if fn-iid-rdr
-                         (.getBytes fn-iid-rdr tx-op-idx)
-                         (util/->iid (.getObject fn-id-rdr tx-op-idx)))
-                {:keys [fn-id tx-fn]} (find-fn allocator q-src wm-src (sci/fork sci-ctx) tx-opts fn-iid)
-                args (.form ^ClojureForm (.getObject args-rdr tx-op-idx))
-
-                res (try
-                      (sci/binding [sci/out *out*
-                                    sci/in *in*]
-                        (let [res (apply tx-fn args)]
-                          (cond->> res
-                            (seqable? res) (mapv (fn [tx-op]
-                                                   (cond-> tx-op
-                                                     (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))))))
-                      (catch InterruptedException ie (throw ie))
-                      (catch xtdb.IllegalArgumentException e
-                        (log/warn e "unhandled error evaluating tx fn")
-                        (throw e))
-                      (catch xtdb.RuntimeException e
-                        (log/warn e "unhandled error evaluating tx fn")
-                        (throw e))
-                      (catch Throwable t
-                        (log/warn t "unhandled error evaluating tx fn")
-                        (throw (err/runtime-err :xtdb.call/error-evaluating-tx-fn
-                                                {:fn-id fn-id, :args args}
-                                                t))))]
-            (when (false? res)
-              (throw abort-exn))
-
-            ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
-            (when-not (or (nil? res) (true? res))
-              ;; HACK an adapter 'til this is all migrated to xtdb.arrow
-              (util/with-open [tx-ops-rel (xt-log/open-tx-ops-rel allocator)]
-                (let [xt-vec (.get tx-ops-rel "tx-ops")]
-                  (xt-log/write-tx-ops! allocator xt-vec res tx-opts)
-                  (.setRowCount tx-ops-rel (.getValueCount xt-vec)))
-                (-> (.openAsRoot tx-ops-rel allocator)
-                    (.getVector "tx-ops")))))
-
-          (catch Throwable t
-            (reset! !last-tx-fn-error t)
-            (throw t)))))))
 
 (defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx
                                                            {:keys [^Instant current-time, indexer tx-key]}]
@@ -883,7 +758,6 @@
                                 !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
                                 !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
                                 !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
-                                !call-idxer (delay (->call-indexer allocator q-src wm-src tx-ops-rdr tx-opts))
                                 !xtql-idxer (delay (->xtql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
                                 !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
                             (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
@@ -896,7 +770,10 @@
                                                              "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
                                                              "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
                                                              "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                             "call" (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                                             "call" (throw (err/illegal-arg :xtdb/tx-fns-removed
+                                                                                            {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                                                                                      "Please use ASSERTs and SQL DML statements instead - "
+                                                                                                                      "see the release notes for more information."])}))
                                                              "abort" (throw abort-exn)))]
                                 (try
                                   (index-tx-ops more-tx-ops)

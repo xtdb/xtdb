@@ -384,13 +384,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
 
     (t/is (= (serde/->tx-aborted 3 #xt/instant "2020-01-04T00:00:00Z"
-                                 #xt/runtime-err [:xtdb.call/error-evaluating-tx-fn
-                                                  "Runtime error: 'xtdb.call/error-evaluating-tx-fn'"
-                                                  {:fn-id :tx-fn-fail, :args []}])
-             (-> (xt/execute-tx tu/*node* [[:put-fn :tx-fn-fail
-                                            '(fn []
-                                               (throw (Exception. "boom")))]
-                                           [:call :tx-fn-fail]])
+                                 #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}])
+             (-> (xt/execute-tx tu/*node* ["ASSERT 1 = 2"])
 
                  ;; can't compare `:cause`, because Exceptions are identity-equal
                  (update :error (comp read-string pr-str)))))
@@ -409,7 +404,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (thrown-with-msg?
            RuntimeException
-           #"xtdb\.call/error-evaluating-tx-fn"
+           #"Assert failed"
 
            (throw (-> (xt/q tu/*node*
                             '(from :xt/txs [{:xt/id $tx-id, :error err}])

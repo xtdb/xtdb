@@ -18,7 +18,7 @@
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
-           (xtdb.tx_ops AssertExists AssertNotExists Call Delete DeleteDocs Erase EraseDocs Insert PutDocs Update XtqlAndArgs)
+           (xtdb.tx_ops AssertExists AssertNotExists Delete DeleteDocs Erase EraseDocs Insert PutDocs Update XtqlAndArgs)
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
 
@@ -235,7 +235,6 @@
             "xtdb.tx/put-docs" (transit/read-handler tx-ops/map->PutDocs)
             "xtdb.tx/delete-docs" (transit/read-handler tx-ops/map->DeleteDocs)
             "xtdb.tx/erase-docs" (transit/read-handler tx-ops/map->EraseDocs)
-            "xtdb.tx/call" (transit/read-handler tx-ops/map->Call)
             "f64" (transit/read-handler double)
             "f32" (transit/read-handler float)
             "i64" (transit/read-handler long)
@@ -310,7 +309,6 @@
           PutDocs (transit/write-handler "xtdb.tx/put-docs" (partial into {}))
           DeleteDocs (transit/write-handler "xtdb.tx/delete-docs" (partial into {}))
           EraseDocs (transit/write-handler "xtdb.tx/erase-docs" (partial into {}))
-          Call (transit/write-handler "xtdb.tx/call" (partial into {}))
 
           XtqlAndArgs (transit/write-handler "xtdb.tx/xtql" tx-ops/unparse-tx-op)
           Insert (transit/write-handler "xtdb.tx/xtql" tx-ops/unparse-tx-op)
