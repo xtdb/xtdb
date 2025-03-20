@@ -5,14 +5,14 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           (java.time LocalDate)
-           [java.util Map]
+           [java.util ArrayList Map]
            [java.util.concurrent ConcurrentHashMap]
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap
+           [java.time LocalDate ZoneId]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)))
+           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
+           (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -210,6 +210,62 @@
   (->> (into [] (mapcat val) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
+
+(defn- recency->micros [^LocalDate recency]
+  (time/instant->micros (time/->instant recency {:default-tz (ZoneId/of "UTC")})))
+
+(defn filter-tries*
+  ([tries] (filter-tries* tries (TemporalBounds.)))
+  ([tries ^TemporalBounds query-bounds]
+   (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))
+         leaves (ArrayList.)]
+     (loop [[{:keys [^long recency ^TemporalMetadata temporal-metadata] :as trie} & more-tries] tries
+            smallest-valid-from Long/MAX_VALUE
+            largest-valid-to Long/MIN_VALUE
+            smallest-system-from Long/MAX_VALUE
+            non-taken-pages []]
+       (if trie
+         ;; the recency of a trie is exclusive, no row in that file has a recency equal to it
+         (let [larger-recency? (or (nil? recency) (< min-query-recency recency))
+               take-node? (and larger-recency? (Temporal/intersects temporal-metadata query-bounds))]
+
+           (if take-node?
+             (do
+               (.add leaves trie)
+               (recur more-tries
+                      (min smallest-valid-from (.getMinValidFrom temporal-metadata))
+                      (max largest-valid-to (.getMaxValidTo temporal-metadata))
+                      ;; we could potentially lower bound this by query-system-from
+                      (min smallest-system-from (.getMinSystemFrom temporal-metadata))
+                      non-taken-pages))
+
+             (recur more-tries
+                    smallest-valid-from
+                    largest-valid-to
+                    smallest-system-from
+                    (cond-> non-taken-pages
+                      (and larger-recency? (Temporal/intersectsSystemTime temporal-metadata query-bounds))
+                      (conj trie)))))
+
+         (when (seq leaves)
+           (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
+             (loop [[{:keys [^TemporalMetadata temporal-metadata] :as trie} & more-tries] non-taken-pages]
+               (when trie
+                 (let [trie-largest-system-from (.getMaxSystemFrom temporal-metadata)]
+                   (when (and (<= smallest-system-from trie-largest-system-from)
+                              (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
+                                                               (.getMaxValidTo temporal-metadata))
+                                           valid-time))
+                     (.add leaves trie))
+                   (recur more-tries)))))
+           (vec leaves)))))))
+
+(defn filter-tries [tries query-bounds]
+  (-> (map (fn [trie] (-> trie
+                          (assoc :temporal-metadata (.getTemporalMetadata ^TrieMetadata (:trie-metadata trie)))
+                          (update :recency #(and % (recency->micros %)))))
+           tries)
+      (filter-tries* query-bounds)))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
   (when (and trie-metadata (.hasTemporalMetadata trie-metadata))
