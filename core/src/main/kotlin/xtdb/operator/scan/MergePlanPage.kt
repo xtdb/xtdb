@@ -5,6 +5,7 @@ import xtdb.BufferPool
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.trie.MemoryHashTrie
+import xtdb.util.TemporalBounds
 import xtdb.vector.RelationReader
 import java.nio.file.Path
 import java.util.function.IntPredicate
@@ -26,7 +27,7 @@ interface Metadata {
     val temporalMetadata: TemporalMetadata
 }
 
-interface MergePlanPage  : Metadata {
+interface MergePlanPage : Metadata {
     fun loadPage(rootCache: RootCache): RelationReader
 
     class Arrow(
