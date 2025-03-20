@@ -118,7 +118,7 @@
 
           (s/valid? ::lp/param eid)
           (let [eid-rdr (.readerForName args-rel (name eid))]
-            (when (= 1 (.valueCount eid-rdr))
+            (when (= 1 (.getValueCount eid-rdr))
               (let [eid (.getObject eid-rdr 0)]
                 (if (util/valid-iid? eid)
                   (util/->iid eid)
@@ -127,9 +127,9 @@
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
     (let [metadata-rdr (.getMetadataLeafReader page-metadata)
-          bloom-rdr (-> (.keyReader metadata-rdr "columns")
-                        (.elementReader)
-                        (.keyReader "bloom"))]
+          bloom-rdr (-> (.vectorForOrNull metadata-rdr "columns")
+                        (.getListElements)
+                        (.vectorForOrNull "bloom"))]
       (reify IntPredicate
         (test [_ page-idx]
           (boolean

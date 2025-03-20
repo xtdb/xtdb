@@ -73,7 +73,7 @@ class ListVector(
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun elementReader() = elVector
+    override val listElements get() = elVector
     override fun elementWriter() = elVector
 
     override fun elementWriter(fieldType: FieldType): VectorWriter =

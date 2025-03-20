@@ -84,7 +84,7 @@ interface EventRowPointer {
         override val systemFrom get() = sysFromReader.getLong(index)
         override val validFrom get() = validFromReader.getLong(index)
         override val validTo get() = validToReader.getLong(index)
-        override val op get() = opReader.getLeg(index)
+        override val op get() = opReader.getLeg(index)!!
 
         override fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =
             index < relReader.rowCount() && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0

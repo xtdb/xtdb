@@ -104,7 +104,7 @@
                                                    {:keys [indexer tx-key]}]
   (let [put-leg (.legReader tx-ops-rdr "put-docs")
         iids-rdr (.structKeyReader put-leg "iids")
-        iid-rdr (.listElementReader iids-rdr)
+        iid-rdr (.getListElements iids-rdr)
         docs-rdr (.structKeyReader put-leg "documents")
 
         ;; HACK: can remove this once we're sure a few more people have migrated their logs
@@ -119,7 +119,7 @@
                                     (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
 
                                     (let [table-docs-rdr (.legReader docs-rdr table-name)
-                                          doc-rdr (.listElementReader table-docs-rdr)
+                                          doc-rdr (.getListElements table-docs-rdr)
                                           ks (.structKeys doc-rdr)]
                                       (when-let [forbidden-cols (not-empty (->> ks
                                                                                 (into #{} (filter (every-pred #(str/starts-with? % "_")
@@ -130,7 +130,7 @@
                                                                  :forbidden-cols forbidden-cols})))
                                       (let [^RelationReader table-rel-rdr (vr/rel-reader (for [sk ks]
                                                                                            (.structKeyReader doc-rdr sk))
-                                                                                         (.valueCount doc-rdr))
+                                                                                         (.getValueCount doc-rdr))
                                             live-table-tx (.liveTable live-idx-tx table-name)]
                                         (MapEntry/create table-name
                                                          {:id-rdr (.structKeyReader doc-rdr "_id")
@@ -196,7 +196,7 @@
   (let [delete-leg (.legReader tx-ops-rdr "delete-docs")
         table-rdr (.structKeyReader delete-leg "table")
         iids-rdr (.structKeyReader delete-leg "iids")
-        iid-rdr (.listElementReader iids-rdr)
+        iid-rdr (.getListElements iids-rdr)
         valid-from-rdr (.structKeyReader delete-leg "_valid_from")
         valid-to-rdr (.structKeyReader delete-leg "_valid_to")
         current-time-µs (time/instant->micros current-time)]
@@ -234,7 +234,7 @@
   (let [erase-leg (.legReader tx-ops-rdr "erase-docs")
         table-rdr (.structKeyReader erase-leg "table")
         iids-rdr (.structKeyReader erase-leg "iids")
-        iid-rdr (.listElementReader iids-rdr)]
+        iid-rdr (.getListElements iids-rdr)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
@@ -426,7 +426,7 @@
                              {:keys [snapshot-time] :as tx-opts}]
   (let [patch-leg (.legReader tx-ops-rdr "patch-docs")
         iids-rdr (.structKeyReader patch-leg "iids")
-        iid-rdr (.listElementReader iids-rdr)
+        iid-rdr (.getListElements iids-rdr)
         docs-rdr (.structKeyReader patch-leg "documents")
 
         valid-from-rdr (.structKeyReader patch-leg "_valid_from")
@@ -438,7 +438,7 @@
                 (throw (xt-log/forbidden-table-ex table-name)))
 
               (let [table-docs-rdr (.legReader docs-rdr table-name)
-                    doc-rdr (.listElementReader table-docs-rdr)
+                    doc-rdr (.getListElements table-docs-rdr)
                     ks (.structKeys doc-rdr)]
                 (when-let [forbidden-cols (not-empty (->> ks
                                                           (into #{} (filter (every-pred #(str/starts-with? % "_")
@@ -710,7 +710,7 @@
                     !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
 
                 (if-let [e (try
-                             (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
+                             (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
                                (.recordCallable tx-timer
                                                 #(case (.getLeg tx-ops-rdr tx-op-idx)
                                                    "xtql" (throw (err/illegal-arg :xtdb/xtql-dml-removed

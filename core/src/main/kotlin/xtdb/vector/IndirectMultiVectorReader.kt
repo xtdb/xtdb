@@ -24,7 +24,7 @@ class IndirectMultiVectorReader(
     private val vectorIndirections: VectorIndirection,
 ) : IVectorReader {
 
-    private val name = readers.filterNotNull().first().name
+    override val name = readers.filterNotNull().first().name
     private val fields: List<Field?> = readers.map { it?.field }
     private val legReaders = ConcurrentHashMap<String, IVectorReader>()
     private val vectorField by lazy (LazyThreadSafetyMode.PUBLICATION){
@@ -47,15 +47,10 @@ class IndirectMultiVectorReader(
         return readers[readerIndirection[idx]] ?: throw unsupported()
     }
 
-    override fun valueCount(): Int =  readerIndirection.valueCount()
+    override val valueCount: Int
+        get() = readerIndirection.valueCount()
 
-    override fun getName(): String {
-        return name
-    }
-
-    override fun getField(): Field {
-        return vectorField
-    }
+    override val field get() = vectorField
 
     override fun hashCode(idx: Int, hasher: Hasher): Int =
         safeReader(idx).hashCode(vectorIndirections[idx], hasher)
@@ -81,52 +76,54 @@ class IndirectMultiVectorReader(
 
     override fun getBytes(idx: Int): ByteBuffer = safeReader(idx).getBytes(vectorIndirections[idx])
 
-    override fun getPointer(idx: Int): ArrowBufPointer = safeReader(idx).getPointer(vectorIndirections[idx])
-
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         safeReader(idx).getPointer(vectorIndirections[idx], reuse)
 
     override fun getObject(idx: Int): Any? = safeReader(idx).getObject(vectorIndirections[idx])
 
-    override fun getObject(idx: Int, keyFn: IKeyFn<*>?): Any? =
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? =
         safeReader(idx).getObject(vectorIndirections[idx], keyFn)
 
     override fun structKeyReader(colName: String) =
         IndirectMultiVectorReader( readers.map { it?.structKeyReader(colName) }, readerIndirection, vectorIndirections )
 
-    override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys() }.toSet()
+    override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys().orEmpty() }.toSet()
 
     // TODO - the following is a fairly dumb implementation requiring order O(n) where n is the total number of
     //        elements in all lists. Can we do something better?
     private fun range(start: Int, len: Int): IntArray = IntArray(len) { it + start }
     private fun repeat(len: Int, item: Int) : IntArray = IntArray(len) { item }
 
-    override fun listElementReader(): IVectorReader {
-        val listElementReaders = readers.map { it?.listElementReader() }
-        var readerIndirectionArray = intArrayOf()
-        var vectorIndirectionArray = intArrayOf()
-        for (i in 0 until this.valueCount()) {
-            if (readerIndirection[i] < 0 || readers[readerIndirection[i]] == null) continue
-            val rdr = safeReader(i)
-            val listCount = rdr.getListCount(vectorIndirections[i])
-            readerIndirectionArray += repeat(listCount, readerIndirection[i])
-            vectorIndirectionArray += range(rdr.getListStartIndex(vectorIndirections[i]), listCount)
+    override val listElements: IVectorReader
+        get() {
+            val listElementReaders = readers.map { it?.listElements }
+            var readerIndirectionArray = intArrayOf()
+            var vectorIndirectionArray = intArrayOf()
+            for (i in 0 until this.valueCount) {
+                if (readerIndirection[i] < 0 || readers[readerIndirection[i]] == null) continue
+                val rdr = safeReader(i)
+                val listCount = rdr.getListCount(vectorIndirections[i])
+                readerIndirectionArray += repeat(listCount, readerIndirection[i])
+                vectorIndirectionArray += range(rdr.getListStartIndex(vectorIndirections[i]), listCount)
+            }
+            return IndirectMultiVectorReader(
+                listElementReaders,
+                VectorIndirection.selection(readerIndirectionArray),
+                VectorIndirection.selection(vectorIndirectionArray)
+            )
         }
-        return IndirectMultiVectorReader(
-            listElementReaders, VectorIndirection.selection(readerIndirectionArray), VectorIndirection.selection(vectorIndirectionArray))
-    }
 
     override fun getListStartIndex(idx: Int): Int = (0 until idx).map { safeReader(it).getListCount(vectorIndirections[it]) }.sum()
 
     override fun getListCount(idx: Int): Int = safeReader(idx).getListCount(vectorIndirections[idx])
 
-    override fun mapKeyReader(): IVectorReader =
-        IndirectMultiVectorReader(readers.map { it?.mapKeyReader() }, readerIndirection, vectorIndirections)
+    override val mapKeys: IVectorReader
+        get() = IndirectMultiVectorReader(readers.map { it?.mapKeys }, readerIndirection, vectorIndirections)
 
-    override fun mapValueReader(): IVectorReader =
-        IndirectMultiVectorReader(readers.map { it?.mapValueReader() }, readerIndirection, vectorIndirections)
+    override val mapValues: IVectorReader
+        get() = IndirectMultiVectorReader(readers.map { it?.mapValues }, readerIndirection, vectorIndirections)
 
-    override fun getLeg(idx: Int): String {
+    override fun getLeg(idx: Int): String? {
         val reader = safeReader(idx)
         return when (val type = fields[readerIndirection[idx]]!!.fieldType.type) {
             is ArrowType.Union -> reader.getLeg(vectorIndirections[idx])
@@ -168,7 +165,7 @@ class IndirectMultiVectorReader(
         return fields.flatMapIndexed { index: Int, field: Field? ->
             if (field != null) {
                 when (val type = field.fieldType.type) {
-                    is ArrowType.Union -> readers[index]!!.legs()
+                    is ArrowType.Union -> readers[index]!!.legs().orEmpty()
                     else -> listOf(type.toLeg())
                 }
             } else {
@@ -181,7 +178,7 @@ class IndirectMultiVectorReader(
         val writer = writerFor(vector)
         val copier = rowCopier(writer)
 
-        for (i in 0 until valueCount()) {
+        for (i in 0 until valueCount) {
             copier.copyRow(i)
         }
 

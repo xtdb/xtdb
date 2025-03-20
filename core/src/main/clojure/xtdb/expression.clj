@@ -1855,7 +1855,7 @@
       (select [_ al in-rel schema args]
         (with-open [selection (.project projector al in-rel schema args)]
           (let [res (IntStream/builder)]
-            (dotimes [idx (.valueCount selection)]
+            (dotimes [idx (.getValueCount selection)]
               (when (.getBoolean selection idx)
                 (.add res idx)))
             (.toArray (.build res))))))))

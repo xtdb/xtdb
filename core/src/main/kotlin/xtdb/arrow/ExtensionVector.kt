@@ -41,7 +41,7 @@ abstract class ExtensionVector : Vector() {
 
     override fun getListCount(idx: Int) = inner.getListCount(idx)
     override fun getListStartIndex(idx: Int) = inner.getListStartIndex(idx)
-    override fun elementReader() = inner.elementReader()
+    override val listElements get() = inner.listElements
 
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
 

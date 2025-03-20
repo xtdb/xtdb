@@ -157,7 +157,7 @@
          [(symbol col-name) (->> rows
                                  (into #{} (map (fn [row]
                                                   (types/col-type->field (value->col-type (get row col-name))))))
-                                 (apply types/merge-fields ))])
+                                 (apply types/merge-fields))])
        (into {})))
 
 (defn ->vec-writer ^xtdb.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name, ^FieldType field-type]
@@ -213,7 +213,7 @@
 
 (defn append-vec [^IVectorWriter vec-writer, ^IVectorReader in-col]
   (let [row-copier (.rowCopier in-col vec-writer)]
-    (dotimes [src-idx (.valueCount in-col)]
+    (dotimes [src-idx (.getValueCount in-col)]
       (.copyRow row-copier src-idx))))
 
 (defn append-rel [^IRelationWriter dest-rel, ^RelationReader src-rel]

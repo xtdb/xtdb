@@ -12,14 +12,15 @@ import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 class RelationAsStructReader(
-    private val name: String,
+    override val name: String,
     private val rel: RelationReader
 ) : IVectorReader {
-    override fun valueCount() = rel.rowCount()
-    override fun getName() = name
+    override val valueCount get() = rel.rowCount()
 
-    override fun getField() =
-        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.map(IVectorReader::getField))
+    override val field get() =
+        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.map(IVectorReader::field))
+
+    override fun isNull(idx: Int) = false
 
     override fun structKeys() = rel.map { it.name }
     override fun structKeyReader(colName: String): IVectorReader = rel.readerForName(colName)
@@ -35,7 +36,7 @@ class RelationAsStructReader(
         return RowCopier { idx -> copiers.forEach { it.copyRow(idx) }; idx }
     }
 
-    override fun valueReader(pos: VectorPosition?): ValueReader {
+    override fun valueReader(pos: VectorPosition): ValueReader {
         val rdrs = rel.associate { it.name to it.valueReader(pos) }
 
         return object : ValueReader {

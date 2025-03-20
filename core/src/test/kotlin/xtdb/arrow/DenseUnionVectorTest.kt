@@ -40,9 +40,9 @@ class DenseUnionVectorTest {
             utf8Leg.writeNull()
 
             assertEquals(5, duv.valueCount)
-            assertEquals(listOf(12, 34), i32Leg.asList)
-            assertEquals(listOf("hello", "world!", null), utf8Leg.asList)
-            assertEquals(listOf(12, "hello", "world!", 34, null), duv.asList)
+            assertEquals(listOf(12, 34), i32Leg.toList())
+            assertEquals(listOf("hello", "world!", null), utf8Leg.toList())
+            assertEquals(listOf(12, "hello", "world!", 34, null), duv.toList())
 
             assertEquals(listOf(0, 1, 1, 0, 1).map { it.toByte() }, duv.typeIds())
             assertEquals(listOf(0, 0, 1, 1, 2), duv.offsets())
@@ -67,7 +67,7 @@ class DenseUnionVectorTest {
                     copyRow(0)
                 }
 
-                assertEquals(listOf(64, 32), destVec.asList)
+                assertEquals(listOf(64, 32), destVec.toList())
             }
         }
     }
@@ -89,7 +89,7 @@ class DenseUnionVectorTest {
                     copyRow(2)
                 }
 
-                assertEquals(listOf(3.14, null, 2.71), destVec.asList)
+                assertEquals(listOf(3.14, null, 2.71), destVec.toList())
             }
         }
     }

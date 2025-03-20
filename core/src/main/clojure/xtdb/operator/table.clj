@@ -157,11 +157,11 @@
                                      (instance? ArrowType$Union list-rdr-type) (.legReader list-rdr "list")
                                      :else list-rdr)]
 
-                      (util/with-close-on-catch [el-rdr (.copy (or (some-> list-rdr .listElementReader (.withName (str out-col)))
+                      (util/with-close-on-catch [el-rdr (.copy (or (some-> list-rdr .getListElements (.withName (str out-col)))
                                                                    (vr/vec->reader (ZeroVector. (str out-col))))
                                                                allocator)]
 
-                        (vr/rel-reader [el-rdr] (.valueCount el-rdr))))))}))
+                        (vr/rel-reader [el-rdr] (.getValueCount el-rdr))))))}))
 
 (defn- emit-arg-table [param table-expr {:keys [param-fields]}]
   (let [fields (-> (into {} (for [^Field field (-> (or (get param-fields param)
@@ -190,14 +190,14 @@
                   (let [vec-rdr (.readerForName args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
                                    (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader "list"))
-                        el-rdr (some-> list-rdr .listElementReader)
+                        el-rdr (some-> list-rdr (.getListElements))
                         el-struct-rdr (cond-> el-rdr
                                         (instance? ArrowType$Union (.getType (.getField el-rdr))) (.legReader "struct"))]
 
                     (vr/rel-reader (for [k (some-> el-struct-rdr .structKeys)
                                          :when (contains? fields (symbol k)) ]
                                      (.structKeyReader el-struct-rdr k))
-                                   (.valueCount el-rdr))))}))
+                                   (.getValueCount el-rdr))))}))
 
 (defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
   (let [[{:keys [fields ->out-rel]} param?] (zmatch table

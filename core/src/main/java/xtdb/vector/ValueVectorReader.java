@@ -67,7 +67,7 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public int valueCount() {
+    public int getValueCount() {
         return vector.getValueCount();
     }
 
@@ -140,16 +140,6 @@ public class ValueVectorReader implements IVectorReader {
         throw unsupported();
     }
 
-
-    @Override
-    public ArrowBufPointer getPointer(int idx) {
-        if (vector instanceof ElementAddressableVector eav) {
-            return eav.getDataPointer(idx);
-        } else {
-            throw unsupported();
-        }
-    }
-
     @Override
     public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
         if (vector instanceof ElementAddressableVector eav) {
@@ -184,7 +174,7 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader listElementReader() {
+    public IVectorReader getListElements() {
         throw unsupported();
     }
 
@@ -199,12 +189,12 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader mapKeyReader() {
+    public IVectorReader getMapKeys() {
         throw unsupported();
     }
 
     @Override
-    public IVectorReader mapValueReader() {
+    public IVectorReader getMapValues() {
         throw unsupported();
     }
 
@@ -225,7 +215,7 @@ public class ValueVectorReader implements IVectorReader {
 
     @Override
     public IVectorReader copyTo(ValueVector vector) {
-        this.vector.makeTransferPair(vector).splitAndTransfer(0, valueCount());
+        this.vector.makeTransferPair(vector).splitAndTransfer(0, getValueCount());
         return from(vector);
     }
 
@@ -546,11 +536,6 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public ArrowBufPointer getPointer(int idx) {
-                return underlyingVector.getDataPointer(idx);
-            }
-
-            @Override
             public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
                 return underlyingVector.getDataPointer(idx, reuse);
             }
@@ -713,8 +698,8 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IVectorReader listElementReader() {
-                return inner.listElementReader();
+            public IVectorReader getListElements() {
+                return inner.getListElements();
             }
 
             @Override
@@ -996,7 +981,7 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public IVectorReader listElementReader() {
+        public IVectorReader getListElements() {
             return elReader;
         }
 
@@ -1072,7 +1057,7 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public IVectorReader listElementReader() {
+        public IVectorReader getListElements() {
             return elReader;
         }
 
@@ -1139,8 +1124,8 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IVectorReader listElementReader() {
-                return listReader.listElementReader();
+            public IVectorReader getListElements() {
+                return listReader.getListElements();
             }
 
             @Override
@@ -1198,18 +1183,18 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IVectorReader mapKeyReader() {
+            public IVectorReader getMapKeys() {
                 return keyReader;
             }
 
             @Override
-            public IVectorReader mapValueReader() {
+            public IVectorReader getMapValues() {
                 return valueReader;
             }
 
             @Override
-            public IVectorReader listElementReader() {
-                return listReader.listElementReader();
+            public IVectorReader getListElements() {
+                return listReader.getListElements();
             }
 
             @Override

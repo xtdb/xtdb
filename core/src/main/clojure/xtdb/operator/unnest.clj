@@ -48,18 +48,18 @@
                                            rdrs+copiers
                                            (condp instance? vec-type
                                              ArrowType$List
-                                             [[vec-rdr (-> (.listElementReader vec-rdr)
+                                             [[vec-rdr (-> (.getListElements vec-rdr)
                                                            (.rowCopier out-writer))]]
 
                                              SetType
-                                             [[vec-rdr (-> (.listElementReader vec-rdr)
+                                             [[vec-rdr (-> (.getListElements vec-rdr)
                                                            (.rowCopier out-writer))]]
 
                                              ArrowType$Union
                                              (concat (when-let [list-rdr (.legReader vec-rdr "list")]
-                                                       [[list-rdr (-> (.rowCopier (.listElementReader list-rdr) out-writer))]])
+                                                       [[list-rdr (-> (.rowCopier (.getListElements list-rdr) out-writer))]])
                                                      (when-let [set-rdr (.legReader vec-rdr "set")]
-                                                       [[set-rdr (-> (.rowCopier (.listElementReader set-rdr) out-writer))]]))
+                                                       [[set-rdr (-> (.rowCopier (.getListElements set-rdr) out-writer))]]))
 
                                              nil)
 
@@ -76,7 +76,7 @@
                                            ^IVectorWriter ordinal-wtr (some-> ordinal-vec vw/->writer)]
 
                                        (try
-                                         (dotimes [n (.valueCount vec-rdr)]
+                                         (dotimes [n (.getValueCount vec-rdr)]
                                            (doseq [[^IVectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
                                              (when (and coll-rdr (not (.isNull coll-rdr n)))
                                                (let [len (.getListCount coll-rdr n)

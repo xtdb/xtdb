@@ -40,7 +40,7 @@ class PageMetadata private constructor(
         private val TEMPORAL_COL_TYPE_LEG_NAME: String = TEMPORAL_COL_TYPE.toLeg()
     }
 
-    val metadataLeafReader: VectorReader = rel["nodes"]!!.legReader("leaf")!!
+    val metadataLeafReader: VectorReader = rel["nodes"]!!.vectorForOrNull("leaf")!!
 
     private val minReader: VectorReader?
     private val maxReader: VectorReader?
@@ -48,13 +48,13 @@ class PageMetadata private constructor(
     init {
         val temporalColTypesReader =
             metadataLeafReader
-                .keyReader("columns")
-                ?.elementReader()
-                ?.keyReader("types")
-                ?.keyReader(TEMPORAL_COL_TYPE_LEG_NAME)
+                .vectorForOrNull("columns")
+                ?.listElements
+                ?.vectorForOrNull("types")
+                ?.vectorForOrNull(TEMPORAL_COL_TYPE_LEG_NAME)
 
-        minReader = temporalColTypesReader?.keyReader("min")
-        maxReader = temporalColTypesReader?.keyReader("max")
+        minReader = temporalColTypesReader?.vectorForOrNull("min")
+        maxReader = temporalColTypesReader?.vectorForOrNull("max")
     }
 
     internal data class PageIndexKey(val columnName: String, val pageIdx: Int)
@@ -64,9 +64,9 @@ class PageMetadata private constructor(
 
     fun iidBloomBitmap(pageIdx: Int): ImmutableRoaringBitmap? {
         val bloomReader = metadataLeafReader
-            .keyReader("columns")!!
-            .elementReader()
-            .keyReader("bloom")!!
+            .vectorForOrNull("columns")!!
+            .listElements
+            .vectorForOrNull("bloom")!!
 
         val bloomVecIdx = pageIdxs[PageIndexKey("bloom", pageIdx)]
         if (bloomReader.isNull(bloomVecIdx)) return null
@@ -104,12 +104,12 @@ class PageMetadata private constructor(
         companion object {
             private fun readPageIdxs(metadataReader: VectorReader): PageIdxCacheEntry {
                 val pageIdxs: PageIdxsMap = ObjectIntHashMap()
-                val dataPageIdxReader = metadataReader.keyReader("data-page-idx")!!
+                val dataPageIdxReader = metadataReader.vectorForOrNull("data-page-idx")!!
 
-                val columnsReader = metadataReader.keyReader("columns")!!
-                val columnReader = columnsReader.elementReader()
-                val colNameReader = columnReader.keyReader("col-name")!!
-                val rootColReader = columnReader.keyReader("root-col?")!!
+                val columnsReader = metadataReader.vectorForOrNull("columns")!!
+                val columnReader = columnsReader.listElements
+                val colNameReader = columnReader.vectorForOrNull("col-name")!!
+                val rootColReader = columnReader.vectorForOrNull("root-col?")!!
 
                 val colNames = HashSet<ColumnName>()
 
@@ -142,7 +142,7 @@ class PageMetadata private constructor(
             bp.getRecordBatch(metaFilePath, 0).use { rb ->
                 val footer = bp.getFooter(metaFilePath)
                 Relation.fromRecordBatch(al, footer.schema, rb).closeAllOnCatch { rel ->
-                    val metadataReader = rel["nodes"]!!.legReader("leaf")!!
+                    val metadataReader = rel["nodes"]!!.vectorForOrNull("leaf")!!
 
                     val (colNames, pageIdxs) = pageIdxCache.get(metaFilePath) { readPageIdxs(metadataReader) }
                     PageMetadata(rel, colNames, pageIdxs)

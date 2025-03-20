@@ -72,24 +72,25 @@ class MultiVectorReader(
 
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = reader(idx).getObject(vectorIndirections[idx], keyFn)
 
-    override fun keyReader(name: String) =
-        MultiVectorReader(readers.map { it?.keyReader(name) }, readerIndirection, vectorIndirections)
+    override fun vectorForOrNull(name: String) =
+        MultiVectorReader(readers.map { it?.vectorForOrNull(name) }, readerIndirection, vectorIndirections)
 
 //    override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys() }.toSet()
 
-    override fun elementReader(): VectorReader = MultiVectorReader(
-        readers.map { it?.elementReader() }, readerIndirection, vectorIndirections
-    )
+    override val listElements: VectorReader
+        get() = MultiVectorReader(
+            readers.map { it?.listElements }, readerIndirection, vectorIndirections
+        )
 
     override fun getListStartIndex(idx: Int): Int = reader(idx).getListStartIndex(vectorIndirections[idx])
 
     override fun getListCount(idx: Int): Int = reader(idx).getListCount(vectorIndirections[idx])
 
-    override fun mapKeyReader(): VectorReader =
-        MultiVectorReader(readers.map { it?.mapKeyReader() }, readerIndirection, vectorIndirections)
+    override val mapKeys: VectorReader
+        get() = MultiVectorReader(readers.map { it?.mapKeys }, readerIndirection, vectorIndirections)
 
-    override fun mapValueReader(): VectorReader =
-        MultiVectorReader(readers.map { it?.mapValueReader() }, readerIndirection, vectorIndirections)
+    override val mapValues: VectorReader
+        get() = MultiVectorReader(readers.map { it?.mapValues }, readerIndirection, vectorIndirections)
 
     override fun getLeg(idx: Int): String? {
         val reader = reader(idx)
@@ -99,12 +100,12 @@ class MultiVectorReader(
         }
     }
 
-    override fun legReader(name: String): VectorReader {
+    override fun vectorFor(name: String): VectorReader {
         return legReaders.computeIfAbsent(name) {
             val validReaders = readers.zip(fields).map { (reader, field) ->
                 if (reader == null) null
                 else when (field!!.fieldType.type) {
-                    is ArrowType.Union -> reader.legReader(name)
+                    is ArrowType.Union -> reader.vectorForOrNull(name)
                     else -> {
                         if (field.fieldType.type.toLeg() == name) reader
                         else null

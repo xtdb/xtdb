@@ -111,7 +111,7 @@
                                     (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
-          (write-col-meta! (.elementReader ^VectorReader content-col))
+          (write-col-meta! (.getListElements ^VectorReader content-col))
 
           (let [data-meta-idx (dec (.getValueCount types-wtr))]
             (reify ContentMetadataWriter
@@ -124,7 +124,7 @@
                                    (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
-          (write-col-meta! (.elementReader ^VectorReader content-col))
+          (write-col-meta! (.getListElements ^VectorReader content-col))
 
           (let [data-meta-idx (dec (.getValueCount types-wtr))]
             (reify ContentMetadataWriter
@@ -139,11 +139,11 @@
           struct-type-el-wtr (.elementWriter struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
-          (let [struct-keys (.getKeys content-col)
+          (let [struct-keys (.getKeyNames content-col)
                 sub-col-idxs (IntStream/builder)]
 
             (doseq [^String struct-key struct-keys]
-              (write-col-meta! (.keyReader content-col struct-key))
+              (write-col-meta! (.vectorForOrNull content-col struct-key))
               (.add sub-col-idxs (dec (.getValueCount types-wtr))))
 
             (reify ContentMetadataWriter
@@ -177,9 +177,9 @@
 
             (write-col-meta! [root-col?, ^VectorReader content-col]
               (let [content-writers (->> (if (instance? ArrowType$Union (.getType (.getField content-col)))
-                                           (->> (.getLegs content-col)
+                                           (->> (.getLegNames content-col)
                                                 (mapv (fn [leg]
-                                                        (->nested-meta-writer (.legReader content-col leg)))))
+                                                        (->nested-meta-writer (.vectorForOrNull content-col leg)))))
                                            [(->nested-meta-writer content-col)])
                                          (remove nil?))]
                 (.writeBoolean root-col-wtr root-col?)

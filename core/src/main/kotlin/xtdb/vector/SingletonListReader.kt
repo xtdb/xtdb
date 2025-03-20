@@ -12,19 +12,20 @@ import xtdb.arrow.VectorPosition
 import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
-class SingletonListReader(private val name: String, private val elReader: IVectorReader) : IVectorReader {
-    override fun valueCount() = 1
-    override fun getName() = name
-    override fun getField() = Field(name, FieldType.notNullable(LIST_TYPE), listOf(elReader.getField()))
+class SingletonListReader(override val name: String, private val elReader: IVectorReader) : IVectorReader {
+    override val valueCount get() = 1
+    override val field get() = Field(name, FieldType.notNullable(LIST_TYPE), listOf(elReader.field))
+
+    override fun isNull(idx: Int) = false
 
     override fun getObject(idx: Int) = listOf(elReader.toList())
-    override fun getObject(idx: Int, keyFn: IKeyFn<*>?) = listOf(elReader.toList(keyFn))
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>) = listOf(elReader.toList(keyFn))
 
-    override fun listElementReader() = elReader
+    override val listElements get() = elReader
     override fun getListStartIndex(idx: Int) = 0
-    override fun getListCount(idx: Int) = elReader.valueCount()
+    override fun getListCount(idx: Int) = elReader.valueCount
 
-    override fun copyTo(vector: ValueVector?) = TODO("Not yet implemented")
+    override fun copyTo(vector: ValueVector) = TODO("Not yet implemented")
 
     override fun rowCopier(writer: IVectorWriter): RowCopier {
         val elCopier = elReader.rowCopier(writer.listElementWriter(elReader.field.fieldType))
@@ -32,7 +33,7 @@ class SingletonListReader(private val name: String, private val elReader: IVecto
         return RowCopier { idx ->
             check(idx == 0)
 
-            for (i in 0 until valueCount()) {
+            for (i in 0 until valueCount) {
                 elCopier.copyRow(i)
             }
             writer.endList()
@@ -42,7 +43,7 @@ class SingletonListReader(private val name: String, private val elReader: IVecto
 
     override fun hashCode(idx: Int, hasher: Hasher): Int {
         var hash = 0
-        for (i in 0 until valueCount()) {
+        for (i in 0 until valueCount) {
             hash = ByteFunctionHelpers.combineHash(hash, elReader.hashCode(i, hasher))
         }
         return hash

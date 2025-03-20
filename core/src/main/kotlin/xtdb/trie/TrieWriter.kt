@@ -84,7 +84,7 @@ class TrieWriter(
         }
 
         fun writeLeaf(): RowIndex {
-            val putReader = dataRel["op"]!!.legReader("put")
+            val putReader = dataRel["op"]!!.vectorForOrNull("put")
             val metaPos = nodeWtr.valueCount
 
             val systemFrom = dataRel["_system_from"]!!
@@ -115,7 +115,7 @@ class TrieWriter(
             }
 
             val contentCols = writeContentMetadata.takeIf { it }
-                ?.let { putReader?.keys?.mapNotNull { putReader.keyReader(it) } }
+                ?.let { putReader?.keyNames?.mapNotNull { putReader.vectorForOrNull(it) } }
                 .orEmpty()
 
             pageMetaWriter.writeMetadata(temporalCols + contentCols)

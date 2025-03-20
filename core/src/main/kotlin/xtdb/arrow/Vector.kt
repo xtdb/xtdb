@@ -69,7 +69,7 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
-    override val asList get() = (0 until valueCount).map { getObject(it) }
+    override fun toList() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)
 
