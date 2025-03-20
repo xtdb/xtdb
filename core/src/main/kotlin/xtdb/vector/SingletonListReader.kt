@@ -32,7 +32,6 @@ class SingletonListReader(private val name: String, private val elReader: IVecto
         return RowCopier { idx ->
             check(idx == 0)
 
-            writer.startList()
             for (i in 0 until valueCount()) {
                 elCopier.copyRow(i)
             }

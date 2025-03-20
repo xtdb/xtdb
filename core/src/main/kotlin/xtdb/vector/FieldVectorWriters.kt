@@ -390,12 +390,10 @@ abstract class ExtensionVectorWriter(
 
     override fun structKeyWriter(key: String) = inner.structKeyWriter(key)
     override fun structKeyWriter(key: String, fieldType: FieldType) = inner.structKeyWriter(key, fieldType)
-    override fun startStruct() = inner.startStruct()
     override fun endStruct() = inner.endStruct()
 
     override fun listElementWriter() = inner.listElementWriter()
     override fun listElementWriter(fieldType: FieldType) = inner.listElementWriter(fieldType)
-    override fun startList() = inner.startList()
     override fun endList() = inner.endList()
 
     override fun rowCopier(src: ValueVector): RowCopier = when {
@@ -457,7 +455,6 @@ internal class TsTzRangeVectorWriter(vector: TsTzRangeVector, notify: FieldChang
 
     override fun writeObject0(obj: Any) = when (obj) {
         is ZonedDateTimeRange -> {
-            startList()
             listElementWriter(FieldType.notNullable(Timestamp(MICROSECOND, "UTC"))).let {
                 it.writeObject(obj.from)
                 if (obj.to == null) it.writeLong(Long.MAX_VALUE) else it.writeObject(obj.to)

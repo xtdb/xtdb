@@ -530,7 +530,6 @@
             el-writer (.listElementWriter list-writer)
             row-copier (.rowCopier (vw/vec-wtr->rdr acc-col) el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
-          (.startList list-writer)
           (.forEach (.build isb)
                     (reify IntConsumer
                       (accept [_ idx]
@@ -539,7 +538,6 @@
 
         (let [value-count (.size group-idxmaps)]
           (when (and (zero? value-count) (= :empty-vec on-empty))
-            (.startList list-writer)
             (.endList list-writer))
           (.setValueCount out-vec (if (zero? value-count)
                                     (case on-empty

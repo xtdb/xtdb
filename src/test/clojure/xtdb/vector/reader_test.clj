@@ -192,7 +192,6 @@
     (let [duv-wrt (vw/->writer duv)
           list-wrt (vw/->writer list-vec)
           duv-list-wrt (.legWriter duv-wrt "list" (FieldType/notNullable #xt.arrow/type :list))]
-      (.startList duv-list-wrt)
       (doto (-> duv-list-wrt
                 (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
         (.writeLong 42)
@@ -220,7 +219,6 @@
     (let [duv-wrt (vw/->writer duv)
           struct-wrt (vw/->writer struct-vec)
           duv-struct-wrt (.legWriter duv-wrt "struct" (FieldType/notNullable #xt.arrow/type :struct))]
-      (.startStruct duv-struct-wrt)
       (-> (.structKeyWriter duv-struct-wrt "foo" (FieldType/notNullable #xt.arrow/type :i64))
           (.writeLong 42))
       (-> (.structKeyWriter duv-struct-wrt "bar" (FieldType/notNullable #xt.arrow/type :utf8))
@@ -252,7 +250,6 @@
   (t/testing "structs"
     (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)]
       (let [my-column-wtr1 (.colWriter rel-wtr1 "my_column" (FieldType/notNullable #xt.arrow/type :struct))]
-        (.startStruct my-column-wtr1)
         (-> (.structKeyWriter my-column-wtr1 "long_name" (FieldType/notNullable #xt.arrow/type :i64))
             (.writeLong 42))
         (-> (.structKeyWriter my-column-wtr1 "short_name" (FieldType/notNullable #xt.arrow/type :utf8))

@@ -524,7 +524,6 @@
 
     (.logPut live-table (util/->iid user) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
-               (.startStruct doc-writer)
                (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.writeObject user))
 
@@ -615,7 +614,6 @@
 
     (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
-               (.startStruct doc-writer)
                (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 

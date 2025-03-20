@@ -82,16 +82,12 @@ class DenseUnionVectorWriter(
         override fun structKeyWriter(key: String) = inner.structKeyWriter(key)
         override fun structKeyWriter(key: String, fieldType: FieldType) = inner.structKeyWriter(key, fieldType)
 
-        override fun startStruct() = inner.startStruct()
-
         override fun endStruct() {
             writeValue(); inner.endStruct()
         }
 
         override fun listElementWriter() = inner.listElementWriter()
         override fun listElementWriter(fieldType: FieldType) = inner.listElementWriter(fieldType)
-
-        override fun startList() = inner.startList()
 
         override fun endList() {
             writeValue(); inner.endList()

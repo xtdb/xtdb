@@ -56,43 +56,35 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         return elWriter
     }
 
-    override fun startList() {
-        vector.startNewValue(wp.position)
-    }
-
     override fun endList() {
+        vector.startNewValue(wp.position)
         val pos = wp.getPositionAndIncrement()
         val endPos = elWriter.writerPosition().position
         vector.endValue(pos, endPos - vector.getElementStartIndex(pos))
     }
 
-    private inline fun writeList(f: () -> Unit) {
-        startList(); f(); endList()
-    }
-
     override fun writeObject0(obj: Any) {
-        writeList {
-            when (obj) {
-                is ListValueReader ->
-                    for (i in 0..<obj.size()) {
-                        try {
-                            elWriter.writeValue(obj.nth(i))
-                        } catch (e: InvalidWriteObjectException) {
-                            promoteElWriter(e.obj.toFieldType()).writeObject(obj.nth(i))
-                        }
-                    }
-
-                is List<*> -> obj.forEach {
+        when (obj) {
+            is ListValueReader ->
+                for (i in 0..<obj.size()) {
                     try {
-                        elWriter.writeObject(it)
+                        elWriter.writeValue(obj.nth(i))
                     } catch (e: InvalidWriteObjectException) {
-                        promoteElWriter(e.obj.toFieldType()).writeObject(it)
+                        promoteElWriter(e.obj.toFieldType()).writeObject(obj.nth(i))
                     }
                 }
 
-                else -> throw InvalidWriteObjectException(field.fieldType, obj)
+            is List<*> -> obj.forEach {
+                try {
+                    elWriter.writeObject(it)
+                } catch (e: InvalidWriteObjectException) {
+                    promoteElWriter(e.obj.toFieldType()).writeObject(it)
+                }
             }
+
+            else -> throw InvalidWriteObjectException(field.fieldType, obj)
         }
+        endList()
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
@@ -125,10 +117,11 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
             RowCopier { srcIdx ->
                 wp.position.also {
                     if (src.isNull(srcIdx)) writeNull()
-                    else writeList {
+                    else {
                         for (i in src.getElementStartIndex(srcIdx)..<src.getElementEndIndex(srcIdx)) {
                             innerCopier.copyRow(i)
                         }
+                        endList()
                     }
                 }
             }

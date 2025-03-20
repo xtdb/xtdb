@@ -51,16 +51,13 @@ internal class FixedSizeListVectorWriter(
         return elWriter
     }
 
-    override fun startList() {
-        vector.startNewValue(wp.position)
-    }
-
     override fun endList() {
+        vector.startNewValue(wp.position)
         wp.getPositionAndIncrement()
     }
 
     private inline fun writeList(f: () -> Unit) {
-        startList(); f(); endList()
+        f(); endList()
     }
 
     override fun writeObject0(obj: Any) {

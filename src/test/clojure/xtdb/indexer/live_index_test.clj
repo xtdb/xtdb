@@ -40,12 +40,9 @@
       (let [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))
             live-table-tx (.liveTable live-idx-tx "my-table")
             put-doc-wrt (.getDocWriter live-table-tx)]
-        (let [wp (VectorPosition/build)]
-          (doseq [^UUID iid iids]
-            (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
-                     #(do
-                        (.getPositionAndIncrement wp)
-                        (.writeObject put-doc-wrt {:some :doc})))))
+        (doseq [^UUID iid iids]
+          (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
+                   #(.writeObject put-doc-wrt {:some :doc})))
 
         (.commit live-idx-tx)
 
@@ -143,7 +140,6 @@
           doc-wtr (.getDocWriter foo-table-tx)]
       (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                (fn []
-                 (.startStruct doc-wtr)
                  (.endStruct doc-wtr)))
       (.commit live-tx0))
 
@@ -153,7 +149,6 @@
           doc-wtr (.getDocWriter bar-table-tx)]
       (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
                (fn []
-                 (.startStruct doc-wtr)
                  (.endStruct doc-wtr)))
 
       (t/testing "doesn't get added in the tx either"
@@ -170,7 +165,6 @@
             doc-wtr (.getDocWriter foo-table-tx)]
         (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
-                   (.startStruct doc-wtr)
                    (.endStruct doc-wtr)))
         (.abort live-tx2))
 
@@ -182,7 +176,6 @@
             doc-wtr (.getDocWriter bar-table-tx)]
         (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
-                   (.startStruct doc-wtr)
                    (.endStruct doc-wtr)))
         (.commit live-tx3))
 

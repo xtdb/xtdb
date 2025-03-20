@@ -54,7 +54,6 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
 
         return RowCopier { srcIdx ->
             val pos = wp.position
-            startStruct()
             copiers.forEach { it.copyRow(srcIdx) }
             endStruct()
             pos
@@ -89,12 +88,10 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
 
     fun structKeyWriter(key: String): IVectorWriter = unsupported("structKeyWriter")
     fun structKeyWriter(key: String, fieldType: FieldType): IVectorWriter = unsupported("structKeyWriter")
-    fun startStruct(): Unit = unsupported("startStruct")
     fun endStruct(): Unit = unsupported("endStruct")
 
     fun listElementWriter(): IVectorWriter = unsupported("listElementWriter")
     fun listElementWriter(fieldType: FieldType): IVectorWriter = unsupported("listElementWriter")
-    fun startList(): Unit = unsupported("startList")
     fun endList(): Unit = unsupported("endList")
 
     fun legWriter(leg: ArrowType): IVectorWriter = unsupported("legWriter")

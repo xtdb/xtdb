@@ -389,10 +389,7 @@
             k-wtr (.structKeyWriter entry-wtr "username")
             v-wtr (.structKeyWriter entry-wtr "first-name")]
         (doseq [m maps]
-          (.startList map-wtr)
-
           (doseq [[k v] (sort-by key m)]
-            (.startStruct entry-wtr)
             (.writeObject k-wtr k)
             (.writeObject v-wtr v)
             (.endStruct entry-wtr))

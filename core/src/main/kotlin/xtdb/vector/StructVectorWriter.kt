@@ -73,27 +73,25 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
     override fun writeObject0(obj: Any) {
         if (obj !is Map<*, *>) throw InvalidWriteObjectException(field.fieldType, obj)
 
-        writeStruct {
-            val structPos = wp.position
-
-            for ((k, v) in obj) {
-                val key = when (k) {
-                    is Keyword -> normalForm(k.sym.toString())
-                    is String -> k
-                    else -> throw IllegalArgumentException("invalid struct key: '$k'")
-                }
-
-                val writer = writers[key] ?: newChildWriter(key, v.toFieldType())
-
-                if (writer.writerPosition().position != structPos)
-                    throw xtdb.IllegalArgumentException(
-                        "xtdb/key-already-set".asKeyword,
-                        data = mapOf("ks".asKeyword to obj.keys, "k".asKeyword to k)
-                    )
-
-                writer.writeChildObject(v)
+        val structPos = wp.position
+        for ((k, v) in obj) {
+            val key = when (k) {
+                is Keyword -> normalForm(k.sym.toString())
+                is String -> k
+                else -> throw IllegalArgumentException("invalid struct key: '$k'")
             }
+
+            val writer = writers[key] ?: newChildWriter(key, v.toFieldType())
+
+            if (writer.writerPosition().position != structPos)
+                throw xtdb.IllegalArgumentException(
+                    "xtdb/key-already-set".asKeyword,
+                    data = mapOf("ks".asKeyword to obj.keys, "k".asKeyword to k)
+                )
+
+            writer.writeChildObject(v)
         }
+        endStruct()
     }
 
     private fun newChildWriter(key: String, fieldType: FieldType): IVectorWriter {
@@ -120,9 +118,8 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         }
             ?: newChildWriter(key, fieldType)
 
-    override fun startStruct() = vector.setIndexDefined(wp.position)
-
     override fun endStruct() {
+        vector.setIndexDefined(wp.position)
         val pos = ++wp.position
         writers.values.forEach { w ->
             try {
@@ -131,10 +128,6 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
                 promoteChild(w, FieldType.nullable(NULL_TYPE)).populateWithAbsents(pos)
             }
         }
-    }
-
-    private inline fun writeStruct(f: () -> Unit) {
-        startStruct(); f(); endStruct()
     }
 
     private inline fun childRowCopier(
@@ -181,8 +174,9 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
                 wp.position.also {
                     if (src.isNull(srcIdx))
                         writeNull()
-                    else writeStruct {
+                    else {
                         innerCopiers.forEach { it.copyRow(srcIdx) }
+                        endStruct()
                     }
                 }
             }
@@ -197,9 +191,8 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
         return RowCopier { srcIdx ->
             wp.position.also {
-                writeStruct {
-                    innerCopiers.forEach { it.copyRow(srcIdx) }
-                }
+                innerCopiers.forEach { it.copyRow(srcIdx) }
+                endStruct()
             }
         }
     }
