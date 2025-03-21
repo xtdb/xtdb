@@ -17,10 +17,12 @@
     (util/with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                      rel-wtr2 (vw/->rel-writer tu/*allocator*)
                      rel-wtr3 (vw/->rel-writer tu/*allocator*)]
-      (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :i64))
-            my-colun-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :utf8))]
-        (.writeLong my-column-wtr1 42)
-        (.writeObject my-colun-wtr2 "forty-two"))
+      (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :union))
+            my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :union))]
+        (-> (.vectorFor my-column-wtr1 "i64" (FieldType/notNullable #xt.arrow/type :i64))
+            (.writeLong 42))
+        (-> (.vectorFor my-column-wtr2 "utf8" (FieldType/notNullable #xt.arrow/type :utf8))
+            (.writeObject "forty-two")))
       (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
             copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
         (.copyRow copier1 0)
@@ -41,8 +43,8 @@
                          rel-wtr2 (vw/->rel-writer tu/*allocator*)
                          rel-wtr3 (RelationWriter. tu/*allocator*
                                                    [(vw/->writer (.createVector combined-field tu/*allocator*))])]
-          (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))
-                my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
+          (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))
+                my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
             (.writeObject my-column-wtr1 {"foo" 42 "bar" "forty-two"})
             (.writeObject my-column-wtr2 {"foo" 42.0 "toto" :my-keyword}))
 
@@ -55,14 +57,14 @@
                     {:my-column {:foo 42.0, :toto :my-keyword}}]
                    (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
           (t/is (= combined-field
-                   (.getField (.colWriter rel-wtr3 "my-column")))))))
+                   (.getField (.vectorFor rel-wtr3 "my-column")))))))
 
     (t/testing "unions"
       (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                   rel-wtr2 (vw/->rel-writer tu/*allocator*)
                   rel-wtr3 (vw/->rel-writer tu/*allocator*)]
-        (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :union))
-              my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :union))]
+        (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :union))
+              my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :union))]
           (.writeObject my-column-wtr1 42)
           (.writeObject my-column-wtr1 "forty-two")
           (.writeObject my-column-wtr2 42)
@@ -83,14 +85,14 @@
                                 (types/col-type->field "i64" :i64)
                                 (types/col-type->field "utf8" :utf8)
                                 (types/col-type->field "keyword" :keyword))
-                 (.getField (.colWriter rel-wtr3 "my-column"))))))
+                 (.getField (.vectorFor rel-wtr3 "my-column"))))))
 
     (t/testing "list"
       (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                   rel-wtr2 (vw/->rel-writer tu/*allocator*)
                   rel-wtr3 (vw/->rel-writer tu/*allocator*)]
-        (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :list))
-              my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :list))]
+        (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :list))
+              my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :list))]
           (.writeObject my-column-wtr1 [42 43])
           (.writeObject my-column-wtr2 ["forty-two" "forty-three"])
 
@@ -111,14 +113,14 @@
                                                (types/->field "$data$" #xt.arrow/type :union false
                                                               (types/col-type->field :i64)
                                                               (types/col-type->field :utf8))))
-                 (.getField (.colWriter rel-wtr3 "my-column"))))))
+                 (.getField (.vectorFor rel-wtr3 "my-column"))))))
 
     (t/testing "set"
       (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                   rel-wtr2 (vw/->rel-writer tu/*allocator*)
                   rel-wtr3 (vw/->rel-writer tu/*allocator*)]
-        (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :set))
-              my-column-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :set))]
+        (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :set))
+              my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :set))]
           (.writeObject my-column-wtr1 #{42 43})
           (.writeObject my-column-wtr2 #{"forty-two" "forty-three"})
 
@@ -139,18 +141,18 @@
                                                  (types/->field "$data$" #xt.arrow/type :union false
                                                                 (types/col-type->field :i64)
                                                                 (types/col-type->field :utf8))))
-                   (.getField (.colWriter rel-wtr3 "my-column")))))))))
+                   (.getField (.vectorFor rel-wtr3 "my-column")))))))))
 
 (deftest copying-union-legs-with-different-types-throws
   (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
               rel-wtr2 (vw/->rel-writer tu/*allocator*)
               rel-wtr3 (vw/->rel-writer tu/*allocator*)]
     (-> rel-wtr1
-        (.colWriter "my-column" (FieldType/notNullable #xt.arrow/type :union))
+        (.vectorFor "my-column" (FieldType/notNullable #xt.arrow/type :union))
         (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :i64))
         (.writeLong 42))
     (-> rel-wtr2
-        (.colWriter "my-column" (FieldType/notNullable #xt.arrow/type :union))
+        (.vectorFor "my-column" (FieldType/notNullable #xt.arrow/type :union))
         (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :f64))
         (.writeDouble 42.0))
     (t/is (thrown-with-msg?
@@ -249,7 +251,7 @@
 (deftest struct-normalisation-testing
   (t/testing "structs"
     (with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)]
-      (let [my-column-wtr1 (.colWriter rel-wtr1 "my_column" (FieldType/notNullable #xt.arrow/type :struct))]
+      (let [my-column-wtr1 (.vectorFor rel-wtr1 "my_column" (FieldType/notNullable #xt.arrow/type :struct))]
         (-> (.vectorFor my-column-wtr1 "long_name" (FieldType/notNullable #xt.arrow/type :i64))
             (.writeLong 42))
         (-> (.vectorFor my-column-wtr1 "short_name" (FieldType/notNullable #xt.arrow/type :utf8))

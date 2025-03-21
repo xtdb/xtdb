@@ -460,12 +460,12 @@
                        aw (ArrowFileWriter. data-vsr nil write-ch)]
         (.start aw)
         (let [!last-iid (atom nil)
-              iid-wtr (.colWriter data-wtr "_iid")
-              system-from-wtr (.colWriter data-wtr "_system_from")
-              valid-from-wtr (.colWriter data-wtr "_valid_from")
-              valid-to-wtr (.colWriter data-wtr "_valid_to")
-              op-wtr (.colWriter data-wtr "op")
-              put-wtr (.legWriter op-wtr "put")
+              iid-wtr (.vectorFor data-wtr "_iid")
+              system-from-wtr (.vectorFor data-wtr "_system_from")
+              valid-from-wtr (.vectorFor data-wtr "_valid_from")
+              valid-to-wtr (.vectorFor data-wtr "_valid_to")
+              op-wtr (.vectorFor data-wtr "op")
+              put-wtr (.vectorFor op-wtr "put")
               max-page-id (-> (keys page-idx->documents) sort last)]
           (doseq [i (range (inc max-page-id))]
             (doseq [[op doc] (get page-idx->documents i)]
@@ -473,7 +473,6 @@
                 :put (let [iid-bytes (util/->iid (:xt/id doc))]
                        (when (and @!last-iid (> (util/compare-nio-buffers-unsigned @!last-iid iid-bytes) 0))
                          (log/error "IID's not in required order!" (:xt/id doc)))
-                       (.startRow data-wtr)
                        (.writeObject iid-wtr iid-bytes)
                        (.writeLong system-from-wtr (or (:xt/system-from doc) 0))
                        (.writeLong valid-from-wtr (or (:xt/valid-from doc) 0))

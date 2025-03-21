@@ -259,37 +259,36 @@
   (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
     (t/is (= (types/->field "my-union" #xt.arrow/type :union false)
              (-> rel-wtr
-                 (.colWriter "my-union")
+                 (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
                  (.getField))))
 
     (t/is (= (types/->field "my-union" #xt.arrow/type :union false)
              (-> rel-wtr
-                 (.colWriter "my-union" (FieldType/notNullable #xt.arrow/type :union))
+                 (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
                  (.getField))))
 
     (t/is (thrown-with-msg? RuntimeException #"Field type mismatch"
                             (-> rel-wtr
-                                (.colWriter "my-union" (FieldType/notNullable #xt.arrow/type :i64))
+                                (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :i64))
                                 (.getField))))
 
     (t/is (= (types/->field "my-i64" #xt.arrow/type :i64 false)
              (-> rel-wtr
-                 (doto (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :i64)))
-                 (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
+                 (doto (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64)))
+                 (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField))))
 
     (t/is (thrown-with-msg? RuntimeException #"Field type mismatch"
                             (-> rel-wtr
-                                (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :f64))
+                                (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :f64))
                                 (.getField)))))
 
   (t/testing "promotion doesn't (yet) work in rel-wtrs"
     (t/is (thrown-with-msg? RuntimeException
                             #"invalid writeObject"
                             (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
-                              (let [int-wtr (.colWriter rel-wtr "my-int" (FieldType/notNullable #xt.arrow/type :i64))
-                                    _str-wtr (.colWriter rel-wtr "my-str" (FieldType/notNullable #xt.arrow/type :utf8))]
-                                (.startRow rel-wtr)
+                              (let [int-wtr (.vectorFor rel-wtr "my-int" (FieldType/notNullable #xt.arrow/type :i64))
+                                    _str-wtr (.vectorFor rel-wtr "my-str" (FieldType/notNullable #xt.arrow/type :utf8))]
                                 (.writeObject int-wtr 42)
                                 (.endRow rel-wtr)))))))
 
@@ -308,29 +307,29 @@
                               (types/->field "$data$" #xt.arrow/type :struct true
                                              (types/col-type->field "my-int" :i64)
                                              (types/col-type->field "my-string" :utf8)))
-               (-> rel-wtr (.colWriter "my-list") (.getField))))
+               (-> rel-wtr (.vectorFor "my-list") (.getField))))
 
       (t/is (= (types/col-type->field "my-int" :i64)
                (-> rel-wtr
-                   (.colWriter "my-list")
+                   (.vectorFor "my-list")
                    (.getListElements)
                    (.vectorFor "my-int")
                    (.getField))))
 
-      (t/is (thrown-with-msg? RuntimeException #"Dynamic column creation unsupported in RootWriter"
+      (t/is (thrown-with-msg? RuntimeException #"missing vector: my-list2"
                               (-> rel-wtr
-                                  (.colWriter "my-list2" (FieldType/notNullable #xt.arrow/type :i64))
+                                  (.vectorFor "my-list2" (FieldType/notNullable #xt.arrow/type :i64))
                                   (.getField))))
 
       (t/is (= (types/->field "my-union" #xt.arrow/type :union false
                               (types/col-type->field "my-double" :f64)
                               (types/col-type->field "my-temporal-type" types/nullable-temporal-type))
 
-               (-> rel-wtr (.colWriter "my-union") (.getField))))
+               (-> rel-wtr (.vectorFor "my-union") (.getField))))
 
       (t/is (= (types/col-type->field "my-double" :f64)
                (-> rel-wtr
-                   (.colWriter "my-union")
+                   (.vectorFor "my-union")
                    (.vectorFor "my-double")
                    (.getField)))))))
 
@@ -338,12 +337,10 @@
   (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
     (let [some-nested-structs [{:foo {:bibble true} :bar {:baz -4113466} :flib {:true false}}
                                {:foo {:bibble true}  :bar {:baz 1001}}]
-          col-writer (.colWriter rel-wtr "my-column")
+          col-writer (.vectorFor rel-wtr "my-column" (FieldType/notNullable #xt.arrow/type :union))
           struct-wtr (.vectorFor col-writer "struct" (FieldType/notNullable #xt.arrow/type :struct))]
-      (.startRow rel-wtr)
       (.writeObject struct-wtr (first some-nested-structs))
       (.endRow rel-wtr)
-      (.startRow rel-wtr)
       (.writeObject struct-wtr (second some-nested-structs))
       (.endRow rel-wtr)
 

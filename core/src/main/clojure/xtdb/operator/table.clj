@@ -69,10 +69,9 @@
                                          {:ks ks
                                           :write-row! (fn write-param-row! [{:keys [^RelationReader args]}, ^IRelationWriter out-rel]
                                                         (let [param-rdr (.vectorForOrNull args (str row-arg))]
-                                                          (.startRow out-rel)
                                                           (doseq [k ks
                                                                   :let [k (str k)]]
-                                                            (.writeValue (.colWriter out-rel k)
+                                                            (.writeValue (.vectorFor out-rel k)
                                                                          (-> (.structKeyReader param-rdr k)
                                                                              (.valueReader (VectorPosition/build 0)))))
                                                           (.endRow out-rel)))})
@@ -108,9 +107,8 @@
 
                                        {:ks (set (keys out-row))
                                         :write-row! (fn write-row! [opts ^IRelationWriter out-rel]
-                                                      (.startRow out-rel)
                                                       (doseq [[k write-val!] out-row]
-                                                        (write-val! opts (.colWriter out-rel (str k))))
+                                                        (write-val! opts (.vectorFor out-rel (str k))))
                                                       (.endRow out-rel))})))))
 
         key-freqs (->> (into [] (mapcat :ks) out-rows)

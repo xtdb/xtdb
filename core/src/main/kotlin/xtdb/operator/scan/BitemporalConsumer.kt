@@ -18,7 +18,7 @@ class BitemporalConsumer(outRel: IRelationWriter, colNames: Set<ColumnName>) : I
     init {
         fun writerFor(colName: ColumnName, nullable: Boolean) =
             if (colName in colNames)
-                outRel.colWriter(colName, FieldType(nullable, TEMPORAL_COL_TYPE, null))
+                outRel.vectorFor(colName, FieldType(nullable, TEMPORAL_COL_TYPE, null))
             else null
 
         validFromVec = writerFor("_valid_from", false)

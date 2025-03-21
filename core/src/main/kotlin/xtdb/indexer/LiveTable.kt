@@ -33,16 +33,16 @@ constructor(
 
     val liveRelation: IRelationWriter = Trie.openLogDataWriter(al)
 
-    private val iidWtr = liveRelation.colWriter("_iid")
-    private val systemFromWtr = liveRelation.colWriter("_system_from")
-    private val validFromWtr = liveRelation.colWriter("_valid_from")
-    private val validToWtr = liveRelation.colWriter("_valid_to")
+    private val iidWtr = liveRelation.vectorFor("_iid")
+    private val systemFromWtr = liveRelation.vectorFor("_system_from")
+    private val validFromWtr = liveRelation.vectorFor("_valid_from")
+    private val validToWtr = liveRelation.vectorFor("_valid_to")
 
     var liveTrie: MemoryHashTrie = liveTrieFactory(iidWtr.vector.asReader)
 
     private val iidRdr = iidWtr.asReader
 
-    private val opWtr = liveRelation.colWriter("op")
+    private val opWtr = liveRelation.vectorFor("op")
     private val putWtr = opWtr.vectorFor("put")
     private val deleteWtr = opWtr.vectorFor("delete")
     private val eraseWtr = opWtr.vectorFor("erase")
@@ -144,7 +144,7 @@ constructor(
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
     private val IRelationWriter.fields
-        get() = colWriter("op").vectorFor("put").field
+        get() = this@fields.vectorFor("op").vectorFor("put").field
             .also { assert(it.type is ArrowType.Struct) }
             .children
             .associateBy { it.name }

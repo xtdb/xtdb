@@ -12,10 +12,11 @@
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
+           (xtdb.arrow VectorReader VectorWriter)
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector RelationReader)))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
@@ -289,13 +290,14 @@
 
 (defn pg-user-template-page+trie [allocator]
   (util/with-close-on-catch [out-rel-writer (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]
-    (let [iid-wrt (.colWriter out-rel-writer "_iid")
-          sys-wrt (.colWriter out-rel-writer "_system_from")
-          vf-wrt (.colWriter out-rel-writer "_valid_from")
-          vt-wrt (.colWriter out-rel-writer "_valid_to")
-          put-wrt (.legWriter (.colWriter out-rel-writer "op") "put")]
+    (let [{^VectorWriter iid-wrt "_iid",
+           ^VectorWriter sys-wrt "_system_from"
+           ^VectorWriter vf-wrt "_valid_from",
+           ^VectorWriter vt-wrt "_valid_to"} out-rel-writer
+
+          ^VectorWriter put-wrt (get-in out-rel-writer ["op" "put"])]
+
       (doseq [user initial-user-data]
-        (.startRow out-rel-writer)
         (.writeObject iid-wrt (util/->iid (:_id user)))
         (.writeLong sys-wrt 0)
         (.writeLong vf-wrt 0)
@@ -355,33 +357,34 @@
 
           out-rel-wtr (vw/root->writer root)
           out-rel (vw/rel-wtr->rdr (doto out-rel-wtr
-                                     (.writeRows (case table
-                                                   information_schema/tables (tables schema-info)
-                                                   information_schema/columns (columns (schema-info->col-rows schema-info))
-                                                   information_schema/schemata schemas
-                                                   pg_catalog/pg_tables (pg-tables schema-info)
-                                                   pg_catalog/pg_type (pg-type)
-                                                   pg_catalog/pg_class (pg-class schema-info)
-                                                   pg_catalog/pg_description nil
-                                                   pg_catalog/pg_views nil
-                                                   pg_catalog/pg_matviews nil
-                                                   pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
-                                                   pg_catalog/pg_namespace (pg-namespace)
-                                                   pg_catalog/pg_proc (pg-proc)
-                                                   pg_catalog/pg_database (pg-database)
-                                                   pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
-                                                   pg_catalog/pg_settings (pg-settings)
-                                                   pg_catalog/pg_range (pg-range)
-                                                   pg_catalog/pg_am (pg-am)
-                                                   xt/trie_stats (trie-stats trie-catalog)
-                                                   (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table)))))
+                                     (.writeRows (->> (case table
+                                                        information_schema/tables (tables schema-info)
+                                                        information_schema/columns (columns (schema-info->col-rows schema-info))
+                                                        information_schema/schemata schemas
+                                                        pg_catalog/pg_tables (pg-tables schema-info)
+                                                        pg_catalog/pg_type (pg-type)
+                                                        pg_catalog/pg_class (pg-class schema-info)
+                                                        pg_catalog/pg_description nil
+                                                        pg_catalog/pg_views nil
+                                                        pg_catalog/pg_matviews nil
+                                                        pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
+                                                        pg_catalog/pg_namespace (pg-namespace)
+                                                        pg_catalog/pg_proc (pg-proc)
+                                                        pg_catalog/pg_database (pg-database)
+                                                        pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
+                                                        pg_catalog/pg_settings (pg-settings)
+                                                        pg_catalog/pg_range (pg-range)
+                                                        pg_catalog/pg_am (pg-am)
+                                                        xt/trie_stats (trie-stats trie-catalog)
+                                                        (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
+                                                      (into-array java.util.Map)))
                                      (.syncRowCount)))]
 
       ;;TODO reuse relation selector code from trie cursor
       (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
                                           (.select rel (.select col-pred allocator rel schema params)))
                                         (-> out-rel
-                                            (->> (filter (comp (set col-names) #(.getName ^IVectorReader %))))
+                                            (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
                                             (vr/rel-reader (.getRowCount out-rel))
                                             (vr/with-absent-cols allocator col-names))
                                         (vals col-preds))

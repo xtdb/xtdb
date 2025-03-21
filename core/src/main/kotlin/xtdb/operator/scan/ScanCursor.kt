@@ -80,7 +80,6 @@ class ScanCursor(
                                     temporalBounds.intersects(validFrom, validTo, sysFrom, sysTo)
                                     && validFrom != validTo && sysFrom != sysTo
                                 ) {
-                                    outRel.startRow()
                                     contentRelFactory.accept(leafPtr.relIdx, idx)
                                     bitemporalConsumer.accept(validFrom, validTo, sysFrom, sysTo)
                                     outRel.endRow()

@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import clojure.lang.Keyword
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.util.normalForm
 
 interface RelationWriter : RelationReader {
@@ -8,6 +9,7 @@ interface RelationWriter : RelationReader {
     override val vectors: Iterable<VectorWriter>
     override fun vectorForOrNull(name: String): VectorWriter?
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    fun vectorFor(name: String, fieldType: FieldType): VectorWriter = unsupported("vectorFor/2")
     override fun get(name: String) = vectorFor(name)
 
     fun endRow(): Int

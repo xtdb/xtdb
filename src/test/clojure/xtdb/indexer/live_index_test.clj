@@ -48,7 +48,7 @@
 
         (let [live-table (.liveTable live-index "my-table")
               live-rel (.getLiveRelation live-table)
-              iid-vec (.getVector (.colWriter live-rel "_iid"))
+              iid-vec (.getVector (.vectorFor live-rel "_iid"))
 
               trie (.getLiveTrie live-table)]
 

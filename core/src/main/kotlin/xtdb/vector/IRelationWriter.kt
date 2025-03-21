@@ -1,39 +1,26 @@
 package xtdb.vector
 
-import clojure.lang.Keyword
 import org.apache.arrow.vector.types.pojo.FieldType
+import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
+import xtdb.arrow.RelationWriter
 import xtdb.arrow.RowCopier
-import xtdb.util.normalForm
+import xtdb.arrow.unsupported
 
-interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
+interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
     /**
      * Maintains the next position to be written to.
      *
      * This is incremented either by using the [IRelationWriter.rowCopier], or by explicitly calling [IRelationWriter.endRow]
      */
-    var rowCount: Int
+    override var rowCount: Int
+    override val schema get() = Schema(vectors.map { it.field })
 
-    fun startRow()
-    fun endRow()
+    override fun endRow(): Int
 
-    fun writeRow(row: Map<*, *>?) {
-        if (row == null) return
-
-        startRow()
-        row.forEach { (colName, value) ->
-            colWriter(
-                when (colName) {
-                    is String -> colName
-                    is Keyword -> normalForm(colName.sym).toString()
-                    else -> throw IllegalArgumentException("Column name must be a string or keyword")
-                }
-            ).writeObject(value)
-        }
-        endRow()
-    }
-
-    fun writeRows(rows: List<Map<*, *>?>?) = rows?.forEach { writeRow(it) }
+    override fun vectorForOrNull(name: String): IVectorWriter?
+    override fun vectorFor(name: String): IVectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
+    override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter
 
     /**
      * This method syncs the value counts on the underlying writers/root (e.g. [org.apache.arrow.vector.VectorSchemaRoot.setRowCount])
@@ -42,30 +29,25 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
      */
     fun syncRowCount() = this.forEach { it.value.syncValueCount() }
 
-    fun colWriter(colName: String): IVectorWriter
-
-    fun colWriter(colName: String, fieldType: FieldType): IVectorWriter
-
     fun rowCopier(inRel: RelationReader): RowCopier {
-        val copiers = inRel.vectors.map { inVec -> inVec.rowCopier(colWriter(inVec.name)) }
+        val copiers = inRel.vectors.map {
+            it.rowCopier(vectorFor(it.name, UNION_FIELD_TYPE))
+        }
 
         return RowCopier { srcIdx ->
-            val pos = rowCount
-
-            startRow()
             copiers.forEach { it.copyRow(srcIdx) }
             endRow()
-
-            pos
         }
     }
+
+    override fun rowCopier(rel: xtdb.arrow.RelationReader) = unsupported("IRelationWriter/rowCopier")
 
     fun openAsRelation(): Relation
 
     fun toReader() =
         RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, rowCount)
 
-    fun clear() {
+    override fun clear() {
         this.forEach { it.value.clear() }
         rowCount = 0
     }

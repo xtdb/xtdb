@@ -42,7 +42,7 @@
     (let [[col-name _expr] (first (:mark-join mark-spec))]
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
-          (let [out-writer (.colWriter dep-out-writer (str col-name) (FieldType/nullable #xt.arrow/type :bool))]
+          (let [out-writer (.vectorFor dep-out-writer (str col-name) (FieldType/nullable #xt.arrow/type :bool))]
             (.add idxs in-idx)
             (let [!match (int-array [-1])]
               (while (and (not (== 1 (aget !match 0)))
@@ -66,7 +66,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name ^Field field] dependent-fields]
-            (.colWriter dep-out-writer (str col-name) (.getFieldType field)))
+            (.vectorFor dep-out-writer (str col-name) (.getFieldType field)))
 
           (.forEachRemaining dep-cursor
                              (reify Consumer
@@ -81,7 +81,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name ^Field field] dependent-fields]
-            (.colWriter dep-out-writer (str col-name) (.getFieldType field)))
+            (.vectorFor dep-out-writer (str col-name) (.getFieldType field)))
 
           (let [match? (boolean-array [false])]
             (.forEachRemaining dep-cursor
@@ -98,7 +98,7 @@
             (when-not (aget match? 0)
               (.add idxs in-idx)
               (doseq [[col-name ^Field field] dependent-fields]
-                (vw/append-vec (.colWriter dep-out-writer (str col-name) (.getFieldType field))
+                (vw/append-vec (.vectorFor dep-out-writer (str col-name) (.getFieldType field))
                                (vr/vec->reader (doto (NullVector. (str col-name))
                                                  (.setValueCount 1)))))))))
 
@@ -133,7 +133,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name ^Field field] dependent-fields]
-            (.colWriter dep-out-writer (str col-name) (.getFieldType field)))
+            (.vectorFor dep-out-writer (str col-name) (.getFieldType field)))
 
           (let [match? (boolean-array [false])]
             (.forEachRemaining dep-cursor
@@ -157,7 +157,7 @@
             (when-not (aget match? 0)
               (.add idxs in-idx)
               (doseq [[col-name ^Field field] dependent-fields]
-                (vw/append-vec (.colWriter dep-out-writer (str col-name) (.getFieldType field))
+                (vw/append-vec (.vectorFor dep-out-writer (str col-name) (.getFieldType field))
                                (vr/vec->reader (doto (NullVector. (str col-name))
                                                  (.setValueCount 1))))))))))))
 

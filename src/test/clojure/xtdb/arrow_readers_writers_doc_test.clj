@@ -163,29 +163,26 @@
       (t/is (= [42 "forty-two"]
                (tu/vec->vals (vw/vec-wtr->rdr duv-writer))))))
 
-  ;; Writing to a relation is done similarly to `vectorFor` but with the method being called `colWriter`.
+  ;; Writing to a relation is done in the same way as `VectorReader/vectorFor`
 
   (with-open [allocator (RootAllocator.)
               rel-wtr (vw/->rel-writer allocator)]
-    (.startRow rel-wtr)
     (-> rel-wtr
-        (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
+        (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
         (.writeLong 42))
 
     (-> rel-wtr
-        (.colWriter "my-union")
+        (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
         (.writeObject 42))
 
     (.endRow rel-wtr)
 
-    (.startRow rel-wtr)
-
     (-> rel-wtr
-        (.colWriter "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
+        (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
         (.writeLong 43))
 
     (-> rel-wtr
-        (.colWriter "my-union")
+        (.vectorFor "my-union")
         (.writeObject "forty-three"))
 
     (.endRow rel-wtr)
@@ -199,12 +196,10 @@
 
   (with-open [allocator (RootAllocator.)
               rel-wtr (vw/->rel-writer allocator)]
-    (.startRow rel-wtr)
-    (.writeObject (.colWriter rel-wtr "my-first-column") 42)
+    (.writeObject (.vectorFor rel-wtr "my-first-column" (FieldType/nullable #xt.arrow/type :i64)) 42)
     (.endRow rel-wtr)
 
-    (.startRow rel-wtr)
-    (.writeObject (.colWriter rel-wtr "my-second-column") "forty-three")
+    (.writeObject (.vectorFor rel-wtr "my-second-column" (FieldType/nullable #xt.arrow/type :utf8)) "forty-three")
     (.endRow rel-wtr)
     (t/is (= [{:my-first-column 42} {:my-second-column "forty-three"}]
              (-> (vw/rel-wtr->rdr rel-wtr)
@@ -241,10 +236,12 @@
               rel-wtr3 (vw/->rel-writer allocator)]
 
     ;; populating rel-wtr1 and rel-wtr2
-    (let [my-column-wtr1 (.colWriter rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :i64))
-          my-colun-wtr2 (.colWriter rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :utf8))]
-      (.writeLong my-column-wtr1 42)
-      (.writeObject my-colun-wtr2 "forty-two"))
+    (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :union))
+          my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :union))]
+      (-> (.vectorFor my-column-wtr1 "i64" (FieldType/notNullable #xt.arrow/type :i64))
+          (.writeLong 42))
+      (-> (.vectorFor my-column-wtr2 "utf8" (FieldType/notNullable #xt.arrow/type :utf8))
+          (.writeObject "forty-two")))
 
     ;; copying to rel-wtr3
     (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
@@ -256,7 +253,7 @@
     (t/is (= (types/->field "my-column" #xt.arrow/type :union false
                             (types/->field "i64" #xt.arrow/type :i64 false)
                             (types/->field "utf8" #xt.arrow/type :utf8 false))
-             (.getField (.colWriter rel-wtr3 "my-column"))))
+             (.getField (.vectorFor rel-wtr3 "my-column"))))
 
     (t/is (= [{:my-column 42} {:my-column "forty-two"}]
              (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))))

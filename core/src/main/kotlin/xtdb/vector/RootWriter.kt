@@ -9,24 +9,20 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
         root.fieldVectors.associateTo(mutableMapOf()) { it.name to writerFor(it) }
 
     override var rowCount = 0
+    override val vectors get() = writers.values
 
     override fun iterator() = writers.entries.iterator()
 
-    override fun startRow() = Unit
-
-    override fun endRow() {
-        val pos = ++rowCount
-        writers.values.forEach { it.populateWithAbsents(pos) }
+    override fun endRow(): Int {
+        val pos = rowCount++
+        writers.values.forEach { it.populateWithAbsents(rowCount) }
+        return pos
     }
 
-    internal data class MissingColException(private val colNames: Set<String>, private val colName: String) :
-        NullPointerException("Dynamic column creation unsupported in RootWriter")
-
-    override fun colWriter(colName: String): IVectorWriter =
-        writers[colName] ?: throw MissingColException(writers.keys, colName)
+    override fun vectorForOrNull(name: String) = writers[name]
 
     // dynamic column creation unsupported in RootWriters
-    override fun colWriter(colName: String, fieldType: FieldType) = colWriter(colName)
+    override fun vectorFor(name: String, fieldType: FieldType) = vectorFor(name)
 
     override fun syncRowCount() {
         root.syncSchema()

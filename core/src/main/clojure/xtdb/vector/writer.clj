@@ -208,7 +208,7 @@
   (vr/vec->reader (.getVector (doto w (.syncValueCount)))))
 
 (defn rel-wtr->rdr ^xtdb.vector.RelationReader [^xtdb.vector.IRelationWriter w]
-  (vr/rel-reader (map vec-wtr->rdr (vals w)) (.getRowCount w)))
+  (vr/rel-reader (map vec-wtr->rdr w) (.getRowCount w)))
 
 (defn append-vec [^IVectorWriter vec-writer, ^IVectorReader in-col]
   (let [row-copier (.rowCopier in-col vec-writer)]
@@ -217,6 +217,8 @@
 
 (defn append-rel [^IRelationWriter dest-rel, ^RelationReader src-rel]
   (doseq [^IVectorReader src-col src-rel]
-    (append-vec (.colWriter dest-rel (.getName src-col)) src-col))
+    (-> (or (.vectorForOrNull dest-rel (.getName src-col))
+            (.vectorFor dest-rel (.getName src-col) (.getFieldType src-col)))
+        (append-vec src-col)))
 
   (.setRowCount dest-rel (+ (.getRowCount dest-rel) (.getRowCount src-rel))))

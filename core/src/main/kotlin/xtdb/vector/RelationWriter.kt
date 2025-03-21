@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
 import xtdb.arrow.Vector
-import xtdb.arrow.VectorPosition
+import xtdb.arrow.VectorWriter
 
 @Suppress("unused")
 class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
@@ -17,24 +17,24 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
     override fun iterator() = writers.iterator()
 
     override var rowCount = 0
+    override val vectors: Iterable<VectorWriter> get() = writers.values
 
-    override fun startRow() = Unit
-
-    override fun endRow() {
-        val pos = ++rowCount
-        writers.values.forEach { it.populateWithAbsents(pos) }
+    override fun endRow(): Int {
+        val pos = rowCount++
+        writers.values.forEach { it.populateWithAbsents(rowCount) }
+        return pos
     }
 
-    override fun colWriter(colName: String) = writers[colName] ?: colWriter(colName, UNION_FIELD_TYPE)
+    override fun vectorForOrNull(name: String) = writers[name]
 
-    override fun colWriter(colName: String, fieldType: FieldType) =
-        writers[colName]
+    override fun vectorFor(name: String, fieldType: FieldType) =
+        writers[name]
             ?.also { it.checkFieldType(fieldType) }
 
-            ?: writerFor(fieldType.createNewSingleVector(colName, allocator, null))
+            ?: writerFor(fieldType.createNewSingleVector(name, allocator, null))
                 .also {
                     it.populateWithAbsents(rowCount)
-                    writers[colName] = it
+                    writers[name] = it
                 }
 
     override fun openAsRelation() = Relation(writers.values.map { Vector.fromArrow(it.vector) }, rowCount)

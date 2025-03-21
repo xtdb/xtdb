@@ -161,7 +161,7 @@
 
 (defn ->nil-rel
   "Returns a single row relation where all columns are nil. (Useful for outer joins)."
-  [col-names]
+  ^xtdb.vector.RelationReader [col-names]
   (vr/rel-reader (for [col-name col-names]
                    (vr/vec->reader (doto (NullVector. (str col-name))
                                      (.setValueCount 1))))))
@@ -192,7 +192,7 @@
           (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
             (.copyRow 0)))
 
-        (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (str %))) build-key-col-names)]
+        (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
           (letfn [(compute-hash-bitmap [^long row-hash]
                     (or (.get hash->bitmap row-hash)
                         (let [bitmap (RoaringBitmap.)]
