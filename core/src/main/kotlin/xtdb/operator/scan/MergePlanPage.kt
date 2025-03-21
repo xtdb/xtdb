@@ -21,10 +21,13 @@ private val UNBOUND_TEMPORAL_METADATA =
         .setMaxSystemFrom(MAX_LONG)
         .build()
 
-interface MergePlanPage {
-    fun loadPage(rootCache: RootCache): RelationReader
+interface Metadata {
     fun testMetadata(): Boolean
     val temporalMetadata: TemporalMetadata
+}
+
+interface MergePlanPage  : Metadata {
+    fun loadPage(rootCache: RootCache): RelationReader
 
     class Arrow(
         private val bp: BufferPool,

@@ -1,16 +1,19 @@
 (ns xtdb.trie-catalog
   (:require [integrant.core :as ig]
-            [xtdb.trie :as trie]
-            [xtdb.util :as util]
+            [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
-            [xtdb.table-catalog :as table-cat])
-  (:import org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           [java.nio ByteBuffer]
-           [java.util Map]
+            [xtdb.trie :as trie]
+            [xtdb.util :as util])
+  (:import [java.nio ByteBuffer]
+           [java.time LocalDate ZoneOffset]
+           [java.util ArrayList Map]
            [java.util.concurrent ConcurrentHashMap]
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           (xtdb.log.proto TrieDetails TrieMetadata TemporalMetadata)))
+           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
+           xtdb.operator.scan.Metadata
+           (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -194,15 +197,38 @@
     (cond-> table-cat
       (not (stale-msg? table-cat trie)) (insert-trie trie trie-cat))))
 
+(defprotocol PCatalogEntry
+  (recency [_]))
+
+(defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata]
+  PCatalogEntry
+  (recency [_] (and recency (time/instant->micros (time/->instant recency {:default-tz ZoneOffset/UTC}))))
+
+  Metadata
+  (testMetadata [_] true)
+  (getTemporalMetadata [_] (.getTemporalMetadata trie-metadata)))
+
 (defn current-tries [{:keys [tries]}]
   (->> tries
        (into [] (comp (mapcat val)
                       (filter #(= (:state %) :live))))
-       (sort-by :block-idx)))
+       (sort-by :block-idx)
+       (map map->CatalogEntry)))
 
 (defn all-tries [{:keys [tries]}]
   (->> (into [] (mapcat val) tries)
-       (sort-by :block-idx)))
+       (sort-by :block-idx)
+       (map map->CatalogEntry)))
+
+(defn filter-by-recency [tries ^TemporalBounds query-bounds]
+  (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
+    ;; the recency of a trie is exclusive, no row in that file has a recency equal to it
+    (filter (fn [^CatalogEntry trie] (if-let [^long recency (recency trie)] (< min-query-recency recency) true)) tries)))
+
+(defn filter-tries [tries query-bounds]
+  (-> tries
+      (filter-by-recency query-bounds)
+      (trie/filter-meta-objects query-bounds)))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
   (when (.hasTemporalMetadata trie-metadata)
