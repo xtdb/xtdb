@@ -109,6 +109,7 @@ class KafkaLog internal constructor(
     private val kafkaConfigMap: KafkaConfigMap,
     private val topic: String,
     private val pollDuration: Duration,
+    override val currentEpoch: Int
 ) : Log {
 
     private val producer = kafkaConfigMap.openProducer()
@@ -143,12 +144,12 @@ class KafkaLog internal constructor(
                 .also { offset -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(offset) } }
         }
 
-    override fun subscribe(subscriber: Subscriber): Subscription {
+    override fun subscribe(subscriber: Subscriber, offset: LogOffset): Subscription {
         val job = scope.launch {
             kafkaConfigMap.openConsumer().use { c ->
                 TopicPartition(topic, 0).also { tp ->
                     c.assign(listOf(tp))
-                    c.seek(tp, subscriber.latestProcessedMsgId + 1)
+                    c.seek(tp, offset + 1)
                 }
 
                 runInterruptible(Dispatchers.IO) {
@@ -225,15 +226,15 @@ class KafkaLog internal constructor(
         var autoCreateTopic: Boolean = true,
         var pollDuration: Duration = Duration.ofSeconds(1),
         var propertiesMap: Map<String, String> = emptyMap(),
-        var propertiesFile: Path? = null
+        var propertiesFile: Path? = null,
+        var currentEpoch: Int = 0
     ) : Log.Factory {
 
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
-
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
-
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
+        fun currentEpoch(currentEpoch: Int) = apply { this.currentEpoch = currentEpoch }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -253,7 +254,7 @@ class KafkaLog internal constructor(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return KafkaLog(configMap, topic, pollDuration)
+            return KafkaLog(configMap, topic, pollDuration, currentEpoch)
         }
     }
 
