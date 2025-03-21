@@ -20,6 +20,7 @@
            xtdb.api.storage.Storage
            (xtdb.arrow RelationReader)
            [xtdb.block.proto TableBlock]
+           (xtdb.compactor RecencyPartition)
            (xtdb.trie DataRel Trie)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -600,3 +601,18 @@
                         (into {} (map (juxt :trie-key
                                             (fn [{:keys [trie-metadata]}]
                                               (dissoc trie-metadata :iid-bloom)))))))))))))
+
+(t/deftest different-recency-partitioning
+  (binding [c/*recency-partition* RecencyPartition/YEAR]
+    (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
+      (let [tc (tu/component node :xtdb/trie-catalog)]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 1}]])
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 2}]])
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 3}]])
+        (tu/finish-block! node)
+        (c/compact-all! node)
+
+        (t/is (= #{"l01-r20210101-b00" "l01-r20220101-b00" "l01-rc-b00"}
+                 (->> (cat/trie-state tc "public/docs")
+                      (cat/current-tries)
+                      (into #{} (map :trie-key)))))))))

@@ -9,6 +9,7 @@ import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
+import xtdb.compactor.RecencyPartition.*
 import xtdb.trie.*
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
@@ -122,15 +123,17 @@ internal class SegmentMerge(private val al: BufferAllocator) {
         class Preserve(val recency: LocalDate?) : RecencyPartitioning
     }
 
+    @JvmOverloads
     fun mergeSegments(
         segments: List<ISegment<*, *>>,
         pathFilter: ByteArray?,
         recencyPartitioning: RecencyPartitioning,
+        recencyPartition: RecencyPartition? = WEEK
     ): Results {
         val schema = logDataRelSchema(segments.map { it.dataRel!!.schema })
 
         val outWriter = when(recencyPartitioning) {
-            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema)
+            RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)
             is RecencyPartitioning.Preserve -> outWriters.OutRel(schema, recency = recencyPartitioning.recency)
         }
 

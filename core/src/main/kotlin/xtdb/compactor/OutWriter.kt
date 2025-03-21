@@ -5,25 +5,61 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.compactor.RecencyPartition.*
 import xtdb.compactor.SegmentMerge.Results
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
 import xtdb.util.closeAll
 import xtdb.util.openWritableChannel
+import xtdb.util.requiringResolve
 import java.nio.file.Path
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.temporal.TemporalAdjusters
 import java.time.temporal.TemporalAdjusters.next
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.createTempFile
 
 private typealias RecencyMicros = Long
 
-internal fun RecencyMicros.toPartition(): LocalDate =
+enum class RecencyPartition {
+    WEEK,
+    MONTH,
+    QUARTER,
+    YEAR;
+}
+
+internal fun ZonedDateTime.roundToNextPartition(recencyPartition: RecencyPartition): ZonedDateTime =
+    // No need to round below day level as these get dropped in the TrieKey anyway
+    when (recencyPartition) {
+        WEEK -> this.with(next(DayOfWeek.MONDAY))
+        MONTH -> this.with(TemporalAdjusters.firstDayOfNextMonth())
+        QUARTER -> {
+            val month = this.monthValue
+            val nextQuarterMonth = when {
+                month < 4 -> 4
+                month < 7 -> 7
+                month < 10 -> 10
+                else -> 1
+            }
+
+            var result = this
+            if (month >= 10) {
+                result = result.plusYears(1)
+            }
+
+            result.withMonth(nextQuarterMonth)
+                .withDayOfMonth(1)
+        }
+        YEAR -> this.with(TemporalAdjusters.firstDayOfNextYear())
+    }
+
+internal fun RecencyMicros.toPartition(recencyPartition: RecencyPartition = WEEK): LocalDate =
     microsAsInstant.minusNanos(1)
         .atZone(ZoneOffset.UTC)
-        .with(next(DayOfWeek.MONDAY))
+        .roundToNextPartition(recencyPartition)
         .toLocalDate()
 
 internal interface OutWriter : AutoCloseable {
@@ -108,7 +144,7 @@ internal interface OutWriter : AutoCloseable {
             }
         }
 
-        internal inner class PartitionedOutWriter(private val schema: Schema) : OutWriter {
+        internal inner class PartitionedOutWriter(private val schema: Schema, private val recencyPartition: RecencyPartition?) : OutWriter {
             private val outDir = createTempDirectory("merged-segments")
             private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
 
@@ -124,7 +160,7 @@ internal interface OutWriter : AutoCloseable {
 
                 private fun copier(recency: RecencyMicros) =
                     if (recency == Long.MAX_VALUE) currentCopier
-                    else historicalCopiers.computeIfAbsent(recency.toPartition()) { historicalRel(it).rowCopier(reader) }
+                    else historicalCopiers.computeIfAbsent(recency.toPartition(this@PartitionedOutWriter.recencyPartition ?: WEEK)) { historicalRel(it).rowCopier(reader) }
 
                 override fun copyRow(recency: RecencyMicros, sourceIndex: Int) =
                     copier(recency).copyRow(recency, sourceIndex)

@@ -50,6 +50,7 @@ interface Compactor : AutoCloseable {
         private val jobCalculator: JobCalculator,
         private val ignoreBlockSignal: Boolean,
         threadCount: Int, private val pageSize: Int,
+        private val recencyPartition: RecencyPartition?
     ) : Compactor {
         private val al = al.openChildAllocator("compactor")
             .also { meterRegistry?.register(it) }
@@ -86,7 +87,7 @@ interface Compactor : AutoCloseable {
                             if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
                             else SegmentMerge.RecencyPartitioning.Preserve(outputTrieKey.recency)
 
-                        segMerge.mergeSegments(segments, part, recencyPartitioning)
+                        segMerge.mergeSegments(segments, part, recencyPartitioning, this@Impl.recencyPartition)
                             .useAll { mergeRes ->
                                 mergeRes.map {
                                     it.openForRead().use { mergeReadCh ->
