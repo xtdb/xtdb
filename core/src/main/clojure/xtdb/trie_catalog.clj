@@ -200,11 +200,11 @@
 (defn current-tries [{:keys [tries]}]
   (->> tries
        (into [] (comp (mapcat val)
-                      (filter #(= (:state %) :live))))
-       (sort-by :block-idx)))
+                      (filter #(= (:state %) :live))))))
 
 (defn all-tries [{:keys [tries]}]
   (->> (into [] (mapcat val) tries)
+       ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by :block-idx)))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
