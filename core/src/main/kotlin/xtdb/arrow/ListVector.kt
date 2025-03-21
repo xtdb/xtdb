@@ -74,9 +74,8 @@ class ListVector(
     }
 
     override val listElements get() = elVector
-    override fun elementWriter() = elVector
 
-    override fun elementWriter(fieldType: FieldType): VectorWriter =
+    override fun getListElements(fieldType: FieldType): VectorWriter =
         when {
             elVector.field.fieldType == fieldType -> elVector
 

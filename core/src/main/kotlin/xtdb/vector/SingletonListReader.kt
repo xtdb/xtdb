@@ -28,7 +28,7 @@ class SingletonListReader(override val name: String, private val elReader: IVect
     override fun copyTo(vector: ValueVector) = TODO("Not yet implemented")
 
     override fun rowCopier(writer: IVectorWriter): RowCopier {
-        val elCopier = elReader.rowCopier(writer.listElementWriter(elReader.field.fieldType))
+        val elCopier = elReader.rowCopier(writer.getListElements(elReader.field.fieldType))
 
         return RowCopier { idx ->
             check(idx == 0)

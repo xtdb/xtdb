@@ -6,9 +6,9 @@ import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.NULL_TYPE
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
-import xtdb.arrow.VectorPosition
 import xtdb.toArrowType
 import xtdb.toLeg
 import java.nio.ByteBuffer
@@ -17,7 +17,7 @@ class DenseUnionVectorWriter(
     override val vector: DenseUnionVector,
     private val notify: FieldChangeListener?,
 ) : IVectorWriter {
-    private val wp = VectorPosition.build(vector.valueCount)
+    override var valueCount = vector.valueCount
     override var field: Field = vector.field
 
     private val childFields: MutableMap<String, Field> =
@@ -27,16 +27,19 @@ class DenseUnionVectorWriter(
         override val vector get() = inner.vector
         override val field: Field get() = inner.field
         private val parentDuv get() = this@DenseUnionVectorWriter.vector
-        private val parentWP get() = this@DenseUnionVectorWriter.wp
 
-        override fun writerPosition() = inner.writerPosition()
+        override var valueCount: Int
+            get() = inner.valueCount
+            set(value) {
+                inner.valueCount = value
+            }
 
         override fun clear() = inner.clear()
 
         private fun writeValue() {
-            val pos = parentWP.getPositionAndIncrement()
+            val pos = this@DenseUnionVectorWriter.valueCount++
             parentDuv.setTypeId(pos, typeId)
-            parentDuv.setOffset(pos, this.writerPosition().position)
+            parentDuv.setOffset(pos, valueCount)
         }
 
         override fun writeNull() {
@@ -79,15 +82,15 @@ class DenseUnionVectorWriter(
             writeValue(); inner.writeObject0(obj)
         }
 
-        override fun structKeyWriter(key: String) = inner.structKeyWriter(key)
-        override fun structKeyWriter(key: String, fieldType: FieldType) = inner.structKeyWriter(key, fieldType)
+        override fun vectorFor(name: String, fieldType: FieldType) = inner.vectorFor(name, fieldType)
 
         override fun endStruct() {
             writeValue(); inner.endStruct()
         }
 
-        override fun listElementWriter() = inner.listElementWriter()
-        override fun listElementWriter(fieldType: FieldType) = inner.listElementWriter(fieldType)
+        override val listElements get() = inner.listElements
+
+        override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)
 
         override fun endList() {
             writeValue(); inner.endList()
@@ -129,8 +132,6 @@ class DenseUnionVectorWriter(
         child.name to writerFor(child, typeId.toByte())
     }.toMap(HashMap())
 
-    override fun writerPosition() = wp
-
     override fun clear() {
         super.clear()
         writersByLeg.values.forEach(IVectorWriter::clear)
@@ -140,23 +141,25 @@ class DenseUnionVectorWriter(
         // DUVs can't technically contain null, but when they're stored within a nullable struct/list vector,
         // we don't have anything else to write here :/
 
-        wp.getPositionAndIncrement()
+        valueCount++
     }
 
-    override fun writeObject(obj: Any?): Unit = if (obj == null) legWriter(ArrowType.Null.INSTANCE).writeNull() else writeObject0(obj)
-    override fun writeObject0(obj: Any): Unit = legWriter(obj.toArrowType()).writeObject0(obj)
+    override fun writeObject(obj: Any?): Unit =
+        if (obj == null) vectorFor(NULL_TYPE.toLeg(), FieldType.nullable(NULL_TYPE)).writeNull() else writeObject0(obj)
+
+    override fun writeObject0(obj: Any) {
+        val leg = obj.toArrowType()
+        vectorFor(leg.toLeg(), FieldType.notNullable(leg)).writeObject0(obj)
+    }
 
     // DUV overrides the nullable one because DUVs themselves can't be null.
     override fun writeValue(v: ValueReader) {
-        legWriter(v.leg!!).writeValue(v)
+        vectorFor(v.leg!!).writeValue(v)
     }
 
     override fun writeValue0(v: ValueReader) = throw UnsupportedOperationException()
 
-    private data class MissingLegException(val available: Set<String>, val requested: String) : NullPointerException()
-
-    override fun legWriter(leg: String) =
-        writersByLeg[leg] ?: throw MissingLegException(writersByLeg.keys, leg)
+    override fun vectorForOrNull(name: String) = writersByLeg[name]
 
     private fun promoteLeg(legWriter: IVectorWriter, fieldType: FieldType): IVectorWriter {
         val typeId = (legWriter as ChildWriter).typeId
@@ -168,11 +171,10 @@ class DenseUnionVectorWriter(
         }
     }
 
-    @Suppress("NAME_SHADOWING")
-    override fun legWriter(leg: String, fieldType: FieldType): IVectorWriter {
-        val isNew = leg !in writersByLeg
+    override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter {
+        val isNew = name !in writersByLeg
 
-        var w: IVectorWriter = writersByLeg.computeIfAbsent(leg) { leg ->
+        var w: IVectorWriter = writersByLeg.computeIfAbsent(name) { leg ->
             val field = Field(leg, fieldType, emptyList())
             val typeId = vector.registerNewTypeId(field)
 
@@ -182,7 +184,7 @@ class DenseUnionVectorWriter(
 
         if (isNew) {
             upsertChildField(w.field)
-        } else if(fieldType.isNullable && !w.field.isNullable) {
+        } else if (fieldType.isNullable && !w.field.isNullable) {
             w = promoteLeg(w, fieldType)
         }
 
@@ -193,12 +195,10 @@ class DenseUnionVectorWriter(
         return w
     }
 
-    override fun legWriter(leg: ArrowType) = legWriter(leg.toLeg(), FieldType.notNullable(leg))
-
     private fun duvRowCopier(src: DenseUnionVector): RowCopier {
         val copierMapping = src.map { childVec ->
             val childField = childVec.field
-            legWriter(childField.name, childField.fieldType).rowCopier(childVec)
+            vectorFor(childField.name, childField.fieldType).rowCopier(childVec)
         }
 
         return RowCopier { srcIdx ->
@@ -210,18 +210,18 @@ class DenseUnionVectorWriter(
     override fun promoteChildren(field: Field) {
         if (field.type is ArrowType.Union) {
             for (child in field.children) {
-                val legWriter = legWriter(child.type.toLeg(), child.fieldType)
+                val legWriter = vectorFor(child.type.toLeg(), child.fieldType)
                 if (child.children.isNotEmpty()) legWriter.promoteChildren(child)
             }
         } else {
-            val legWriter = legWriter(field.type.toLeg(), field.fieldType)
+            val legWriter = vectorFor(field.type.toLeg(), field.fieldType)
             if (field.children.isNotEmpty()) legWriter.promoteChildren(field)
         }
     }
 
     private fun rowCopier0(src: ValueVector): RowCopier {
         val srcField = src.field
-        return legWriter(srcField.type.toLeg(), srcField.fieldType).rowCopier(src)
+        return vectorFor(srcField.type.toLeg(), srcField.fieldType).rowCopier(src)
     }
 
     override fun rowCopier(src: ValueVector) =

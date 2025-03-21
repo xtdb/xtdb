@@ -9,31 +9,31 @@ import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.api.query.IKeyFn
 import xtdb.arrow.*
 import xtdb.toLeg
+import xtdb.util.Hasher
 import xtdb.vector.extensions.SetType
 import xtdb.vector.extensions.SetVector
-import java.nio.ByteBuffer
 
-interface IVectorWriter : ValueWriter, AutoCloseable {
-    /**
-     *  Maintains the next position to be written to.
-     *
-     *  Automatically incremented by the various `write` methods, and any [IVectorWriter.rowCopier]s.
-     */
-    fun writerPosition(): VectorPosition
-
+interface IVectorWriter : ValueWriter, VectorWriter, AutoCloseable {
     val vector: FieldVector
 
-    val field: Field
+    override var valueCount: Int
+
+    override val name: String get() = vector.name
+    override val nullable get() = this.field.isNullable
+    override val fieldType: FieldType get() = this.field.fieldType
+    override val field: Field
 
     /**
-     * This method calls [ValueVector.setValueCount] on the underlying vector, so that all of the values written
-     * become visible through the Arrow Java API - we don't call this after every write because (for composite vectors, and especially unions)
+     * This method calls [ValueVector.setValueCount] on the underlying vector, so that all the values written
+     * become visible through the Arrow Java API.
+     * we don't call this after every write because (for composite vectors, and especially unions)
      * it's not the cheapest call.
      */
     fun syncValueCount() {
-        vector.valueCount = writerPosition().position
+        vector.valueCount = this.valueCount
     }
 
     fun promoteChildren(field: Field) {
@@ -49,32 +49,27 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
     fun rowCopier(src: ValueVector): RowCopier
 
     fun rowCopier(src: RelationReader): RowCopier {
-        val wp = writerPosition()
-        val copiers = src.vectors.map { it.rowCopier(structKeyWriter(it.name)) }
+        val copiers = src.vectors.map {
+            it.rowCopier(vectorForOrNull(it.name) ?: vectorFor(it.name, it.fieldType))
+        }
 
         return RowCopier { srcIdx ->
-            val pos = wp.position
+            val pos = valueCount
             copiers.forEach { it.copyRow(srcIdx) }
             endStruct()
             pos
         }
     }
 
-    private fun unsupported(method: String): Nothing =
-        throw UnsupportedOperationException("$method not implemented for ${vector.javaClass.simpleName}")
+    override fun rowCopier0(src: VectorReader): RowCopier =
+        if (src is IVectorReader) src.rowCopier(this) else unsupported("IVectorWriter/rowCopier0")
+
+    override fun writeUndefined() = TODO("writeUndefined on IVectorWriter...? could probably do this")
 
     override fun writeNull() {
-        vector.setNull(writerPosition().getPositionAndIncrement())
+        vector.setNull(valueCount++)
     }
 
-    override fun writeBoolean(v: Boolean): Unit = unsupported("writeBoolean")
-    override fun writeByte(v: Byte): Unit = unsupported("writeByte")
-    override fun writeShort(v: Short): Unit = unsupported("writeShort")
-    override fun writeInt(v: Int): Unit = unsupported("writeInt")
-    override fun writeLong(v: Long): Unit = unsupported("writeLong")
-    override fun writeFloat(v: Float): Unit = unsupported("writeFloat")
-    override fun writeDouble(v: Double): Unit = unsupported("writeDouble")
-    override fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
     override fun writeObject(obj: Any?): Unit = when {
         obj != null -> writeObject0(obj)
         !field.isNullable -> throw InvalidWriteObjectException(field.fieldType, null)
@@ -86,33 +81,36 @@ interface IVectorWriter : ValueWriter, AutoCloseable {
     fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)
     fun writeValue0(v: ValueReader)
 
-    fun structKeyWriter(key: String): IVectorWriter = unsupported("structKeyWriter")
-    fun structKeyWriter(key: String, fieldType: FieldType): IVectorWriter = unsupported("structKeyWriter")
-    fun endStruct(): Unit = unsupported("endStruct")
+    override fun endStruct(): Unit = unsupported("endStruct")
 
-    fun listElementWriter(): IVectorWriter = unsupported("listElementWriter")
-    fun listElementWriter(fieldType: FieldType): IVectorWriter = unsupported("listElementWriter")
-    fun endList(): Unit = unsupported("endList")
+    override val listElements: IVectorWriter get() = unsupported("listElementWriter")
+    override fun getListElements(fieldType: FieldType): IVectorWriter = unsupported("getListElements")
+    override fun endList(): Unit = unsupported("endList")
 
-    fun legWriter(leg: ArrowType): IVectorWriter = unsupported("legWriter")
-    override fun legWriter(leg: String): IVectorWriter = unsupported("legWriter")
-    fun legWriter(leg: String, fieldType: FieldType): IVectorWriter = unsupported("legWriter")
+    override fun vectorForOrNull(name: String): IVectorWriter? = unsupported("vectorForOrNull")
+    override fun vectorFor(name: String): IVectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
+    override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter = unsupported("vectorFor")
 
-    fun clear() {
+    // New VectorWriters are also VectorReaders; old ones weren't, so we throw unsupported
+    override fun hashCode(idx: Int, hasher: Hasher) = unsupported("IVectorWriter/hashCode")
+    override fun isNull(idx: Int): Boolean = unsupported("IVectorWriter/isNull")
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = unsupported("IVectorWriter/getObject")
+
+    override fun clear() {
         vector.clear()
-        writerPosition().position = 0
+        valueCount = 0
     }
 
     override fun close() {
         vector.close()
-        writerPosition().position = 0
+        valueCount = 0
     }
 }
 
 internal val UNION_FIELD_TYPE = FieldType.notNullable(ArrowType.Union(UnionMode.Dense, null))
 
 internal fun IVectorWriter.populateWithAbsents(pos: Int) =
-    repeat(pos - writerPosition().position) { writeObject(null) }
+    repeat(pos - valueCount) { writeObject(null) }
 
 internal data class FieldMismatch(val expected: FieldType, val given: FieldType) :
     IllegalArgumentException("Field type mismatch")
@@ -149,7 +147,7 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
                 else ->
                     Field(
                         field.name,
-                        FieldType(writerPosition().position > 0 || fieldType.isNullable, fieldType.type, null),
+                        FieldType(valueCount > 0 || fieldType.isNullable, fieldType.type, null),
                         emptyList()
                     ).createVector(al).also { it.valueCount = vector.valueCount }
             }
@@ -160,11 +158,11 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
             val valueCount = vector.valueCount
 
             writerFor(duv).also { duvWriter ->
-                val legWriter = duvWriter.legWriter(field.type.toLeg(), field.fieldType)
+                val legWriter = duvWriter.vectorFor(field.type.toLeg(), field.fieldType)
                 vector.makeTransferPair(legWriter.vector).transfer()
 
                 if (fieldType.type !is ArrowType.Union)
-                    duvWriter.legWriter(fieldType.type.toLeg(), fieldType)
+                    duvWriter.vectorFor(fieldType.type.toLeg(), fieldType)
             }
 
             duv.apply {
@@ -175,7 +173,8 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
     }
 }
 
-internal val IVectorWriter.asReader: IVectorReader get() {
-    syncValueCount()
-    return ValueVectorReader.from(vector)
-}
+internal val IVectorWriter.asReader: IVectorReader
+    get() {
+        syncValueCount()
+        return ValueVectorReader.from(vector)
+    }

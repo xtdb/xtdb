@@ -524,16 +524,16 @@
 
     (.logPut live-table (util/->iid user) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
-               (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
+               (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.writeObject user))
 
-               (doto (.structKeyWriter doc-writer "username" (FieldType/notNullable #xt.arrow/type :utf8))
+               (doto (.vectorFor doc-writer "username" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.writeObject user))
 
-               (doto (.structKeyWriter doc-writer "usesuper" (FieldType/notNullable #xt.arrow/type :bool))
+               (doto (.vectorFor doc-writer "usesuper" (FieldType/notNullable #xt.arrow/type :bool))
                  (.writeObject false))
 
-               (doto (.structKeyWriter doc-writer "passwd" (FieldType/nullable #xt.arrow/type :utf8))
+               (doto (.vectorFor doc-writer "passwd" (FieldType/nullable #xt.arrow/type :utf8))
                  (.writeObject (authn/encrypt-pw password)))
 
                (.endStruct doc-writer)))))
@@ -614,16 +614,16 @@
 
     (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
-               (doto (.structKeyWriter doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
+               (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 
-               (doto (.structKeyWriter doc-writer "system_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
+               (doto (.vectorFor doc-writer "system_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
-               (doto (.structKeyWriter doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))
+               (doto (.vectorFor doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
 
-               (let [e-wtr (.structKeyWriter doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
+               (let [e-wtr (.vectorFor doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (or (nil? t) (= t abort-exn))
                    (.writeNull e-wtr)
                    (try

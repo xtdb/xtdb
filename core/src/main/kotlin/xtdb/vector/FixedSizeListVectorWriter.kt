@@ -16,7 +16,6 @@ internal class FixedSizeListVectorWriter(
     private val notify: FieldChangeListener?
 ) : IVectorWriter {
     private val listSize = (vector.field.type as FixedSizeList).listSize
-    private val wp = VectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
     private fun upsertElField(elField: Field) {
@@ -26,7 +25,7 @@ internal class FixedSizeListVectorWriter(
 
     private var elWriter = writerFor(vector.dataVector, ::upsertElField)
 
-    override fun writerPosition() = wp
+    override var valueCount = vector.valueCount
 
     override fun clear() {
         super.clear()
@@ -38,22 +37,21 @@ internal class FixedSizeListVectorWriter(
         repeat(listSize) { elWriter.writeNull() }
     }
 
-    override fun listElementWriter(): IVectorWriter =
-        if (vector.dataVector is NullVector) listElementWriter(UNION_FIELD_TYPE) else elWriter
+    override val listElements: IVectorWriter
+        get() = if (vector.dataVector is NullVector) getListElements(UNION_FIELD_TYPE) else elWriter
 
-    override fun listElementWriter(fieldType: FieldType): IVectorWriter {
+    override fun getListElements(fieldType: FieldType): IVectorWriter {
         val res = vector.addOrGetVector<FieldVector>(fieldType)
         if (!res.isCreated) return elWriter
 
         val newDataVec = res.vector
         upsertElField(newDataVec.field)
-        elWriter = writerFor(newDataVec, ::upsertElField).also { it.writerPosition().position = wp.position * listSize }
+        elWriter = writerFor(newDataVec, ::upsertElField).also { it.valueCount = valueCount * listSize }
         return elWriter
     }
 
     override fun endList() {
-        vector.startNewValue(wp.position)
-        wp.getPositionAndIncrement()
+        vector.startNewValue(valueCount++)
     }
 
     private inline fun writeList(f: () -> Unit) {
@@ -109,10 +107,10 @@ internal class FixedSizeListVectorWriter(
                 || src.field.fieldType != field.fieldType)
                 throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
 
-            val innerCopier = listElementWriter(src.dataVector.field.fieldType).rowCopier(src.dataVector)
+            val innerCopier = getListElements(src.dataVector.field.fieldType).rowCopier(src.dataVector)
 
             RowCopier { srcIdx ->
-                wp.position.also {
+                valueCount.also {
                     if (src.isNull(srcIdx)) writeNull()
                     else writeList {
                         for (i in src.getElementStartIndex(srcIdx)..<src.getElementEndIndex(srcIdx)) {

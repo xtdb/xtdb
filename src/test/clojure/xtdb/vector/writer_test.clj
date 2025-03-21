@@ -24,8 +24,8 @@
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)]
     (let [duv-wtr (vw/->writer duv)
-          my-list-wtr (.legWriter duv-wtr #xt.arrow/type :list)
-          my-set-wtr (.legWriter duv-wtr #xt.arrow/type :set)]
+          my-list-wtr (.vectorFor duv-wtr "list" (FieldType/notNullable #xt.arrow/type :list))
+          my-set-wtr (.vectorFor duv-wtr "set" (FieldType/notNullable #xt.arrow/type :set))]
 
       (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                               (types/->field "list" #xt.arrow/type :list false
@@ -37,13 +37,13 @@
 
                (.getField duv-wtr))
 
-            "legWriter creates lists/sets with uninitialized data vectors")
+            "vectorFor creates lists/sets with uninitialized data vectors")
 
-      (doto (.listElementWriter my-list-wtr)
-        (.legWriter (.getType (types/col-type->field :i64))))
+      (doto (.getListElements my-list-wtr)
+        (.vectorFor "i64" (FieldType/notNullable (.getType (types/col-type->field :i64)))))
 
-      (doto (.listElementWriter my-set-wtr)
-        (.legWriter (.getType (types/col-type->field :f64))))
+      (doto (.getListElements my-set-wtr)
+        (.vectorFor "f64" (FieldType/notNullable (.getType (types/col-type->field :f64)))))
 
       (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                               (types/->field "list" #xt.arrow/type :list false
@@ -55,8 +55,8 @@
                                                             (types/col-type->field :f64))))
                (.getField duv-wtr)))
 
-      (doto (.listElementWriter my-list-wtr)
-        (.legWriter (.getType (types/col-type->field :f64))))
+      (doto (.getListElements my-list-wtr)
+        (.vectorFor "f64" (FieldType/notNullable (.getType (types/col-type->field :f64)))))
 
       (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                               (types/->field "list" #xt.arrow/type :list false
@@ -71,20 +71,20 @@
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)]
     (let [duv-wtr (vw/->writer duv)
-          my-struct-wtr (.legWriter duv-wtr #xt.arrow/type :struct)]
+          my-struct-wtr (.vectorFor duv-wtr "struct" (FieldType/notNullable #xt.arrow/type :struct))]
       (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                               (types/->field "struct" #xt.arrow/type :struct false))
 
                (.getField duv-wtr)))
 
-      (let [a-wtr (.structKeyWriter my-struct-wtr "a" (FieldType/notNullable #xt.arrow/type :union))]
+      (let [a-wtr (.vectorFor my-struct-wtr "a" (FieldType/notNullable #xt.arrow/type :union))]
         (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                                 (types/->field "struct" #xt.arrow/type :struct false
                                                (types/->field "a" #xt.arrow/type :union false)))
 
                  (.getField duv-wtr)))
 
-        (.legWriter a-wtr (.getType Types$MinorType/BIGINT))
+        (.vectorFor a-wtr "i64" (FieldType/notNullable (.getType Types$MinorType/BIGINT)))
 
         (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                                 (types/->field "struct" #xt.arrow/type :struct false
@@ -93,10 +93,10 @@
 
                  (.getField duv-wtr)))
 
-        (-> (.structKeyWriter my-struct-wtr "b" (FieldType/notNullable #xt.arrow/type :union))
-            (.legWriter (.getType Types$MinorType/FLOAT8)))
+        (-> (.vectorFor my-struct-wtr "b" (FieldType/notNullable #xt.arrow/type :union))
+            (.vectorFor "f64" (FieldType/notNullable (.getType Types$MinorType/FLOAT8))))
 
-        (-> a-wtr (.legWriter (.getType Types$MinorType/VARCHAR)))
+        (.vectorFor a-wtr "utf8" (FieldType/notNullable (.getType Types$MinorType/VARCHAR)))
 
         (t/is (= (types/->field "my-duv" #xt.arrow/type :union false
                                 (types/->field "struct" #xt.arrow/type :struct false
@@ -120,12 +120,12 @@
         (t/is (= (types/->field "my-list" #xt.arrow/type :list true
                                 (types/->field "$data$" #xt.arrow/type :union false))
                  (-> list-wrt
-                     (doto (.listElementWriter))
+                     (doto (.getListElements))
                      (.getField)))
               "call listElementWriter initializes it with a dense union")
         (t/is (thrown-with-msg? RuntimeException #"Inner vector type mismatch"
                                 (-> list-wrt
-                                    (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
+                                    (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
                                     (.getField)))
               "can't now ask for a :i64"))))
 
@@ -137,20 +137,20 @@
       (t/is (= (types/->field "my-list" #xt.arrow/type :list true
                               (types/->field "$data$" #xt.arrow/type :i64 false))
                (-> list-wrt
-                   (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
-                   (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64)))
+                   (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
+                   (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
                    (.getField)))
             "explicit monomorphic :i64 requested")
 
       (t/is (= (types/->field "$data$" #xt.arrow/type :i64 false)
                (-> list-wrt
-                   (.listElementWriter)
+                   (.getListElements)
                    (.getField)))
             "nested field correct")
 
       (t/is (thrown-with-msg? RuntimeException #"Inner vector type mismatch"
                               (-> list-wrt
-                                  (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :f64)))
+                                  (doto (.getListElements (FieldType/notNullable #xt.arrow/type :f64)))
                                   (.getField)))
             "can't now ask for a :f64")))
 
@@ -165,19 +165,19 @@
 
         (t/is (= (types/->field "$data$" #xt.arrow/type :i64 false)
                  (-> list-wrt
-                     (.listElementWriter)
+                     (.getListElements)
                      (.getField)))
               "call listElementWriter honours the underlying vector")
 
         (t/is (= (types/->field "$data$" #xt.arrow/type :i64 false)
                  (-> list-wrt
-                     (.listElementWriter (FieldType/notNullable #xt.arrow/type :i64))
+                     (.getListElements (FieldType/notNullable #xt.arrow/type :i64))
                      (.getField)))
               "can ask for :i64")
 
         (t/is (thrown-with-msg? RuntimeException #"Inner vector type mismatch"
                                 (-> list-wrt
-                                    (doto (.listElementWriter (FieldType/notNullable #xt.arrow/type :f64)))
+                                    (doto (.getListElements (FieldType/notNullable #xt.arrow/type :f64)))
                                     (.getField)))
               "can't ask for :f64")))))
 
@@ -188,23 +188,16 @@
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true)
                (.getField struct-wtr)))
 
-      (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
-                              (types/->field "foo" #xt.arrow/type :null true))
-               (-> struct-wtr
-                   (doto (.structKeyWriter "foo"))
-                   (.getField)))
-            "structKeyWriter creates null vector by default")
-
       (t/is (= (types/->field "foo" #xt.arrow/type :null true)
                (-> struct-wtr
-                   (.structKeyWriter "foo" (FieldType/nullable #xt.arrow/type :null))
+                   (.vectorFor "foo" (FieldType/nullable #xt.arrow/type :null))
                    (.getField)))
-            "call to structKeyWriter with same field should not throw")
+            "call to vectorFor with a field-type creates the key")
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
                               (types/->field "foo" #xt.arrow/type :f64 false))
                (-> struct-wtr
-                   (doto (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :f64)))
+                   (doto (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :f64)))
                    (.getField)))
             "new type promotes the struct key")
 
@@ -212,18 +205,18 @@
                               (types/->field "bar" #xt.arrow/type :i64 false)
                               (types/->field "foo" #xt.arrow/type :f64 false))
                (-> struct-wtr
-                   (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
-                   (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
+                   (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
+                   (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                    (.getField))))
 
       (t/is (= (types/->field "bar" #xt.arrow/type :i64 false)
                (-> struct-wtr
-                   (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64))
+                   (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64))
                    (.getField))))
 
       (t/is (= (types/->field "bar" #xt.arrow/type :i64 false)
                (-> struct-wtr
-                   (.structKeyWriter "bar")
+                   (.vectorFor "bar")
                    (.getField))))
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct true
@@ -232,7 +225,7 @@
                                              (types/->field "f64" #xt.arrow/type :f64 false))
                               (types/->field "foo" #xt.arrow/type :f64 false))
                (-> struct-wtr
-                   (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :f64)))
+                   (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :f64)))
                    (.getField))))))
 
   (with-open [struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {baz :i64}]) tu/*allocator*)]
@@ -243,24 +236,24 @@
 
       (t/is (= (types/->field "baz" #xt.arrow/type :i64 false)
                (-> struct-wtr
-                   (.structKeyWriter "baz")
+                   (.vectorFor "baz")
                    (.getField)))
-            "structKeyWriter should return the writer for the existing field")
+            "vectorFor should return the writer for the existing field")
 
       (t/is (= (types/->field "baz" #xt.arrow/type :i64 false)
                (-> struct-wtr
-                   (.structKeyWriter "baz" (FieldType/notNullable #xt.arrow/type :i64))
+                   (.vectorFor "baz" (FieldType/notNullable #xt.arrow/type :i64))
                    (.getField)))
-            "call to structKeyWriter with correct field should not throw")
+            "call to vectorFor with correct field should not throw")
 
       (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
                               (types/->field "baz" #xt.arrow/type :union false
                                              (types/->field "i64" #xt.arrow/type :i64 false)
                                              (types/->field "f64" #xt.arrow/type :f64 false)))
                (-> struct-wtr
-                   (doto (.structKeyWriter "baz" (FieldType/notNullable #xt.arrow/type :f64)))
+                   (doto (.vectorFor "baz" (FieldType/notNullable #xt.arrow/type :f64)))
                    (.getField)))
-            "structKeyWriter promotes non pre-existing union type"))))
+            "vectorFor promotes non pre-existing union type"))))
 
 (deftest rel-writer-dynamic-testing
   (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
@@ -320,8 +313,8 @@
       (t/is (= (types/col-type->field "my-int" :i64)
                (-> rel-wtr
                    (.colWriter "my-list")
-                   (.listElementWriter)
-                   (.structKeyWriter "my-int")
+                   (.getListElements)
+                   (.vectorFor "my-int")
                    (.getField))))
 
       (t/is (thrown-with-msg? RuntimeException #"Dynamic column creation unsupported in RootWriter"
@@ -338,7 +331,7 @@
       (t/is (= (types/col-type->field "my-double" :f64)
                (-> rel-wtr
                    (.colWriter "my-union")
-                   (.legWriter "my-double")
+                   (.vectorFor "my-double")
                    (.getField)))))))
 
 (deftest rel-writer-dynamic-struct-writing
@@ -346,7 +339,7 @@
     (let [some-nested-structs [{:foo {:bibble true} :bar {:baz -4113466} :flib {:true false}}
                                {:foo {:bibble true}  :bar {:baz 1001}}]
           col-writer (.colWriter rel-wtr "my-column")
-          struct-wtr (.legWriter col-writer #xt.arrow/type :struct)]
+          struct-wtr (.vectorFor col-writer "struct" (FieldType/notNullable #xt.arrow/type :struct))]
       (.startRow rel-wtr)
       (.writeObject struct-wtr (first some-nested-structs))
       (.endRow rel-wtr)
@@ -385,9 +378,9 @@
 
       ;; with maps, we write them as [:list [:struct #{k v}]]
       (let [map-wtr (vw/->writer map-vec)
-            entry-wtr (.listElementWriter map-wtr)
-            k-wtr (.structKeyWriter entry-wtr "username")
-            v-wtr (.structKeyWriter entry-wtr "first-name")]
+            entry-wtr (.getListElements map-wtr)
+            k-wtr (.vectorFor entry-wtr "username")
+            v-wtr (.vectorFor entry-wtr "first-name")]
         (doseq [m maps]
           (doseq [[k v] (sort-by key m)]
             (.writeObject k-wtr k)

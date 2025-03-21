@@ -30,7 +30,7 @@
   (type->metadata-writer [arrow-type write-col-meta! types-vec]))
 
 (defn- ->bool-type-handler [^VectorWriter types-wtr, arrow-type]
-  (let [bit-wtr (.keyWriter types-wtr (if (instance? ArrowType$FixedSizeBinary arrow-type)
+  (let [bit-wtr (.vectorFor types-wtr (if (instance? ArrowType$FixedSizeBinary arrow-type)
                                         "fixed-size-binary"
                                         (name (types/arrow-type->leg arrow-type)))
                             (FieldType/nullable #xt.arrow/type :bool))]
@@ -41,10 +41,10 @@
             (.writeBoolean bit-wtr true)))))))
 
 (defn- ->min-max-type-handler [^VectorWriter types-wtr, arrow-type]
-  (let [struct-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type)) (FieldType/nullable #xt.arrow/type :struct))
+  (let [struct-wtr (.vectorFor types-wtr (name (types/arrow-type->leg arrow-type)) (FieldType/nullable #xt.arrow/type :struct))
 
-        min-wtr (.keyWriter struct-wtr "min" (FieldType/nullable arrow-type))
-        max-wtr (.keyWriter struct-wtr "max" (FieldType/nullable arrow-type))]
+        min-wtr (.vectorFor struct-wtr "min" (FieldType/nullable arrow-type))
+        max-wtr (.vectorFor struct-wtr "max" (FieldType/nullable arrow-type))]
 
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-col]
@@ -107,7 +107,7 @@
 (extend-protocol MetadataWriterFactory
   ArrowType$List
   (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
-    (let [list-type-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type))
+    (let [list-type-wtr (.vectorFor types-wtr (name (types/arrow-type->leg arrow-type))
                                     (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
@@ -120,7 +120,7 @@
 
   SetType
   (type->metadata-writer [arrow-type write-col-meta! ^VectorWriter types-wtr]
-    (let [set-type-wtr (.keyWriter types-wtr (name (types/arrow-type->leg arrow-type))
+    (let [set-type-wtr (.vectorFor types-wtr (name (types/arrow-type->leg arrow-type))
                                    (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
@@ -133,10 +133,10 @@
 
   ArrowType$Struct
   (type->metadata-writer [arrow-type write-col-meta! ^Vector types-wtr]
-    (let [struct-type-wtr (.keyWriter types-wtr
+    (let [struct-type-wtr (.vectorFor types-wtr
                                       (str (name (types/arrow-type->leg arrow-type)) "-" (count (.getChildren types-wtr)))
                                       (FieldType/nullable #xt.arrow/type :list))
-          struct-type-el-wtr (.elementWriter struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
+          struct-type-el-wtr (.getListElements struct-type-wtr (FieldType/nullable #xt.arrow/type :i32))]
       (reify NestedMetadataWriter
         (appendNestedMetadata [_ content-col]
           (let [struct-keys (.getKeyNames content-col)
@@ -154,12 +154,12 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->page-meta-wtr ^xtdb.metadata.PageMetadataWriter [^VectorWriter cols-wtr]
-  (let [col-wtr (.elementWriter cols-wtr)
-        col-name-wtr (.keyWriter col-wtr "col-name")
-        root-col-wtr (.keyWriter col-wtr "root-col?")
-        count-wtr (.keyWriter col-wtr "count")
-        types-wtr (.keyWriter col-wtr "types")
-        bloom-wtr (.keyWriter col-wtr "bloom")
+  (let [col-wtr (.getListElements cols-wtr)
+        col-name-wtr (.vectorFor col-wtr "col-name")
+        root-col-wtr (.vectorFor col-wtr "root-col?")
+        count-wtr (.vectorFor col-wtr "count")
+        types-wtr (.vectorFor col-wtr "types")
+        bloom-wtr (.vectorFor col-wtr "bloom")
 
         type-metadata-writers (HashMap.)]
 

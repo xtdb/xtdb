@@ -30,8 +30,8 @@ class DenseUnionVectorTest {
                 Utf8Vector(allocator, "utf8", true)
             )
         ).use { duv ->
-            val i32Leg = duv.legWriter("i32")
-            val utf8Leg = duv.legWriter("utf8")
+            val i32Leg = duv.vectorFor("i32")
+            val utf8Leg = duv.vectorFor("utf8")
 
             i32Leg.writeInt(12)
             utf8Leg.writeObject("hello")

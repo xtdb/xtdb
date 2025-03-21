@@ -1746,7 +1746,8 @@
                              (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
         {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
                                 (mapcat (fn [[value-type writer-sym]]
-                                          [writer-sym `(.legWriter ~out-writer-sym ~(types/->arrow-type value-type))]))
+                                          [writer-sym `(.vectorFor ~out-writer-sym
+                                                                   ~(types/arrow-type->leg (types/->arrow-type value-type)))]))
                                 writer-syms)
 
          :write-value-out! (fn [value-type code]

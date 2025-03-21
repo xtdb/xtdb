@@ -55,8 +55,8 @@ class StructVectorTest {
         )
 
         StructVector(allocator, "struct", false, children).use { structVec ->
-            val i32Writer = structVec.keyWriter("i32")
-            val utf8Writer = structVec.keyWriter("utf8")
+            val i32Writer = structVec.vectorFor("i32")
+            val utf8Writer = structVec.vectorFor("utf8")
 
             i32Writer.writeInt(4)
             utf8Writer.writeObject("Hello")
@@ -83,12 +83,12 @@ class StructVectorTest {
     @Test
     fun createsMissingVectors() {
         StructVector(allocator, "struct", false).use { structVec ->
-            val i32Writer = structVec.keyWriter("i32", 4.toFieldType())
+            val i32Writer = structVec.vectorFor("i32", 4.toFieldType())
 
             i32Writer.writeInt(4)
             structVec.endStruct()
 
-            val utf8Writer = structVec.keyWriter("utf8", "foo".toFieldType())
+            val utf8Writer = structVec.vectorFor("utf8", "foo".toFieldType())
 
             i32Writer.writeInt(8)
             utf8Writer.writeObject("Hello")
@@ -204,9 +204,9 @@ class StructVectorTest {
             )))
 
         StructVector(allocator, "struct", false, children).use { structVec ->
-            val i32Writer = structVec.keyWriter("i32")
-            val duvWriter = structVec.keyWriter("duv")
-            val nestedUtf8Writer = duvWriter.legWriter("utf8")
+            val i32Writer = structVec.vectorFor("i32")
+            val duvWriter = structVec.vectorFor("duv")
+            val nestedUtf8Writer = duvWriter.vectorFor("utf8")
             i32Writer.writeInt(1)
             nestedUtf8Writer.writeObject("one")
             structVec.endStruct()

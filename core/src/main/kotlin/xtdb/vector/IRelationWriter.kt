@@ -4,7 +4,6 @@ import clojure.lang.Keyword
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
 import xtdb.arrow.RowCopier
-import xtdb.arrow.VectorPosition
 import xtdb.util.normalForm
 
 interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
@@ -13,7 +12,7 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
      *
      * This is incremented either by using the [IRelationWriter.rowCopier], or by explicitly calling [IRelationWriter.endRow]
      */
-    fun writerPosition(): VectorPosition
+    var rowCount: Int
 
     fun startRow()
     fun endRow()
@@ -51,7 +50,7 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
         val copiers = inRel.vectors.map { inVec -> inVec.rowCopier(colWriter(inVec.name)) }
 
         return RowCopier { srcIdx ->
-            val pos = writerPosition().position
+            val pos = rowCount
 
             startRow()
             copiers.forEach { it.copyRow(srcIdx) }
@@ -64,10 +63,10 @@ interface IRelationWriter : AutoCloseable, Iterable<Map.Entry<String, IVectorWri
     fun openAsRelation(): Relation
 
     fun toReader() =
-        RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, writerPosition().position)
+        RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, rowCount)
 
     fun clear() {
         this.forEach { it.value.clear() }
-        writerPosition().position = 0
+        rowCount = 0
     }
 }

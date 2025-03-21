@@ -116,12 +116,12 @@ class StructVectorWriterTest {
         StructVector.empty("src", al).use { srcVec ->
             val structWriter = writerFor(srcVec)
 
-            val nullWriter = structWriter.structKeyWriter("a", FieldType.nullable(MinorType.BIGINT.type))
+            val nullWriter = structWriter.vectorFor("a", FieldType.nullable(MinorType.BIGINT.type))
 
             assertEquals(structField, structWriter.field)
             assertEquals(aField, nullWriter.field)
 
-            val nnWriter = structWriter.structKeyWriter("a", FieldType.notNullable(MinorType.BIGINT.type))
+            val nnWriter = structWriter.vectorFor("a", FieldType.notNullable(MinorType.BIGINT.type))
 
             assertEquals(structField, structWriter.field)
             assertEquals(aField, nnWriter.field)

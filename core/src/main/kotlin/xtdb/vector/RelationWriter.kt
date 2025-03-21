@@ -8,7 +8,6 @@ import xtdb.arrow.VectorPosition
 
 @Suppress("unused")
 class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
-    private val wp = VectorPosition.build()
     private val writers = mutableMapOf<String, IVectorWriter>()
 
     constructor(allocator: BufferAllocator, writers: List<IVectorWriter>) : this(allocator) {
@@ -17,12 +16,12 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
 
     override fun iterator() = writers.iterator()
 
-    override fun writerPosition() = wp
+    override var rowCount = 0
 
     override fun startRow() = Unit
 
     override fun endRow() {
-        val pos = ++wp.position
+        val pos = ++rowCount
         writers.values.forEach { it.populateWithAbsents(pos) }
     }
 
@@ -34,11 +33,11 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
 
             ?: writerFor(fieldType.createNewSingleVector(colName, allocator, null))
                 .also {
-                    it.populateWithAbsents(wp.position)
+                    it.populateWithAbsents(rowCount)
                     writers[colName] = it
                 }
 
-    override fun openAsRelation() = Relation(writers.values.map { Vector.fromArrow(it.vector) }, wp.position)
+    override fun openAsRelation() = Relation(writers.values.map { Vector.fromArrow(it.vector) }, rowCount)
 
     override fun close() {
         writers.values.forEach(IVectorWriter::close)

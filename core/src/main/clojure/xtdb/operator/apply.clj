@@ -49,15 +49,12 @@
                           (.tryAdvance dep-cursor
                                        (reify Consumer
                                          (accept [_ dep-rel]
-                                           (let [vp (VectorPosition/build)
-                                                 match-vec (.vectorForOrNull ^RelationReader dep-rel "_expr")
-                                                 match-rdr (.valueReader match-vec vp)]
+                                           (let [match-vec (.vectorForOrNull ^RelationReader dep-rel "_expr")]
                                              (dotimes [idx (.getValueCount match-vec)]
-                                               (.setPosition vp idx)
-                                               (if (.isNull match-rdr)
+                                               (if (.isNull match-vec idx)
                                                  (aset !match 0 (max (aget !match 0) 0))
                                                  (aset !match 0 (max (aget !match 0)
-                                                                     (if (.readBoolean match-rdr) 1 -1)))))))))))
+                                                                     (if (.getBoolean match-vec idx) 1 -1)))))))))))
               (let [match (aget !match 0)]
                 (if (zero? match)
                   (.writeNull out-writer)

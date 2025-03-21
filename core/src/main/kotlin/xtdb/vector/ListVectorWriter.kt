@@ -13,7 +13,6 @@ import xtdb.arrow.*
 import xtdb.toFieldType
 
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
-    private val wp = VectorPosition.build(vector.valueCount)
     override var field: Field = vector.field
 
     private fun upsertElField(elField: Field) {
@@ -30,7 +29,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
         return writerFor(newVec, ::upsertElField).also { elWriter = it }
     }
 
-    override fun writerPosition() = wp
+    override var valueCount = vector.valueCount
 
     override fun clear() {
         super.clear()
@@ -40,13 +39,13 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     override fun writeNull() {
         // see https://github.com/apache/arrow/issues/40796
         super.writeNull()
-        vector.lastSet = wp.position - 1
+        vector.lastSet = valueCount - 1
     }
 
-    override fun listElementWriter(): IVectorWriter =
-        if (vector.dataVector is NullVector) listElementWriter(UNION_FIELD_TYPE) else elWriter
+    override val listElements: IVectorWriter
+        get() = if (vector.dataVector is NullVector) getListElements(UNION_FIELD_TYPE) else elWriter
 
-    override fun listElementWriter(fieldType: FieldType): IVectorWriter {
+    override fun getListElements(fieldType: FieldType): IVectorWriter {
         val res = vector.addOrGetVector<FieldVector>(fieldType)
         if (!res.isCreated) return elWriter
 
@@ -57,9 +56,9 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     }
 
     override fun endList() {
-        vector.startNewValue(wp.position)
-        val pos = wp.getPositionAndIncrement()
-        val endPos = elWriter.writerPosition().position
+        val pos = valueCount++
+        vector.startNewValue(pos)
+        val endPos = elWriter.valueCount
         vector.endValue(pos, endPos - vector.getElementStartIndex(pos))
     }
 
@@ -112,10 +111,10 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
             if (src.field.isNullable && !field.isNullable)
                 throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
 
-            val innerCopier = listElementWriter().rowCopier(src.dataVector)
+            val innerCopier = listElements.rowCopier(src.dataVector)
 
             RowCopier { srcIdx ->
-                wp.position.also {
+                valueCount.also {
                     if (src.isNull(srcIdx)) writeNull()
                     else {
                         for (i in src.getElementStartIndex(srcIdx)..<src.getElementEndIndex(srcIdx)) {

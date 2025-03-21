@@ -11,7 +11,7 @@
            (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType)
+           (org.apache.arrow.vector.types.pojo ArrowType FieldType)
            (xtdb.types IntervalDayTime IntervalYearMonth RegClass RegProc)
            (xtdb.vector IVectorWriter)
            (xtdb.vector.extensions KeywordVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
@@ -23,8 +23,9 @@
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
     (let [duv-writer (vw/->writer duv)]
       (doseq [v vs]
-        (doto (.legWriter duv-writer ^ArrowType (arrow-type-fn v))
-          (write-fn v)))
+        (let [^ArrowType arrow-type (arrow-type-fn v)]
+          (doto (.vectorFor duv-writer (types/arrow-type->leg arrow-type) (FieldType. (= arrow-type #xt.arrow/type :null) arrow-type nil))
+            (write-fn v))))
 
       (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
         {:vs (vec (for [idx (range (count vs))]

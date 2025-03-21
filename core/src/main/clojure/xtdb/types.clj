@@ -26,7 +26,7 @@
 
 ;;;; fields
 
-(defn arrow-type->leg [^ArrowType arrow-type]
+(defn arrow-type->leg ^String [^ArrowType arrow-type]
   (Types/toLeg arrow-type))
 
 (defprotocol FromArrowType

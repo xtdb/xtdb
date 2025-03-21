@@ -211,7 +211,7 @@
 
                                   ~(continue (fn [acc-type acc-code]
                                                `(do
-                                                  (.setPosition (.writerPosition ~acc-writer-sym) ~group-idx-sym)
+                                                  (.setValueCount ~acc-writer-sym ~group-idx-sym)
                                                   ~(expr/write-value-code acc-type acc-writer-sym acc-code))))))))
                          #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                          eval)}))
@@ -527,7 +527,7 @@
       (set! (.out-vec this) out-vec)
 
       (let [list-writer (vw/->writer out-vec)
-            el-writer (.listElementWriter list-writer)
+            el-writer (.getListElements list-writer)
             row-copier (.rowCopier (vw/vec-wtr->rdr acc-col) el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
           (.forEach (.build isb)

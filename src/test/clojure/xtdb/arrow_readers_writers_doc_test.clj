@@ -104,7 +104,7 @@
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
     (t/is (= (types/->field "foo" #xt.arrow/type :i64 false)
              (-> (vw/->writer struct-vec)
-                 (.structKeyWriter "foo")
+                 (.vectorFor "foo")
                  (.getField)))))
 
   ;; You can also ask for a writer specifying a field type. In this case it works as the writer matches the
@@ -113,7 +113,7 @@
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
     (t/is (= (types/->field "foo" #xt.arrow/type :i64 false)
              (-> (vw/->writer struct-vec)
-                 (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :i64))
+                 (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField)))))
 
   ;; If you are asking for a different field type then the one specified in the beginning it'll promote the writer
@@ -124,32 +124,22 @@
                                            (types/->field "i64" #xt.arrow/type :i64 false)
                                            (types/->field "utf8" #xt.arrow/type :utf8 false)))
              (-> (vw/->writer struct-vec)
-                 (doto (.structKeyWriter "foo" (FieldType/notNullable #xt.arrow/type :utf8)))
+                 (doto (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :utf8)))
                  (.getField)))))
 
-  ;; Let's now look at the defaulting behaviour if you do not specify the field type up front.
-  ;; By default you are going to get a `:null` type, because this is the easiest to create.
-  ;; We can promote it later
-  (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
-    (t/is (= (types/->field "bar" #xt.arrow/type :null true)
-             (-> (vw/->writer struct-vec)
-                 (.structKeyWriter "bar")
-                 (.getField)))))
-
-  ;; But you can also ask for a type explicitly and then it will be honoured.
+  ;; You can also create a struct key by providing a field-type
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
     (t/is (= (types/->field "bar" #xt.arrow/type :utf8 false)
              (-> (vw/->writer struct-vec)
-                 (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
+                 (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.getField)))))
 
   ;; If you first ask for one type and then later for different one, the underlying vector gets promoted to a union vector.
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
     (-> (vw/->writer struct-vec)
-        (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :utf8))
+        (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
         (.getField))
 
     (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
@@ -157,7 +147,7 @@
                                            (types/->field "utf8" #xt.arrow/type :utf8 false)
                                            (types/->field "i64" #xt.arrow/type :i64 false)))
              (-> (vw/->writer struct-vec)
-                 (doto (.structKeyWriter "bar" (FieldType/notNullable #xt.arrow/type :i64)))
+                 (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                  (.getField)))))
 
   ;; Lets also look at how one would write to a duv.
@@ -173,7 +163,7 @@
       (t/is (= [42 "forty-two"]
                (tu/vec->vals (vw/vec-wtr->rdr duv-writer))))))
 
-  ;; Writing to a relation is done similarly to `structKeyWriter` but with the method being called `colWriter`.
+  ;; Writing to a relation is done similarly to `vectorFor` but with the method being called `colWriter`.
 
   (with-open [allocator (RootAllocator.)
               rel-wtr (vw/->rel-writer allocator)]
@@ -269,8 +259,8 @@
              (.getField (.colWriter rel-wtr3 "my-column"))))
 
     (t/is (= [{:my-column 42} {:my-column "forty-two"}]
-             (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3)))))
+             (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))))
 
   ;; What is nice about the above example is that even though the types of "my-column" of rel-wtr1 and rel-wtr2
   ;; are base types the row copiers take care to create "union" types.
-  )
+

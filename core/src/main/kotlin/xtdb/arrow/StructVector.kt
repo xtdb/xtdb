@@ -44,9 +44,9 @@ class StructVector(
 
     override fun vectorForOrNull(name: String) = childWriters[name]
 
-    override fun keyWriter(name: String) = childWriters[name] ?: error("missing child vector: $name")
+    override fun vectorFor(name: String) = childWriters[name] ?: error("missing child vector: $name")
 
-    override fun keyWriter(name: String, fieldType: FieldType) =
+    override fun vectorFor(name: String, fieldType: FieldType) =
         childWriters.compute(name) { _, v ->
             if (v == null) {
                 fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
@@ -69,12 +69,8 @@ class StructVector(
         }
     }
 
-    override val mapKeys: VectorReader
-        get() = childWriters.sequencedValues().firstOrNull() ?: TODO("auto-creation")
-    override val mapValues: VectorReader
-        get() = childWriters.sequencedValues().lastOrNull() ?: TODO("auto-creation")
-    override fun mapKeyWriter(): VectorWriter = childWriters.sequencedValues().firstOrNull() ?: TODO("auto-creation")
-    override fun mapValueWriter(): VectorWriter = childWriters.sequencedValues().lastOrNull() ?: TODO("auto-creation")
+    override val mapKeys get() = childWriters.sequencedValues().firstOrNull() ?: TODO("auto-creation")
+    override val mapValues get() = childWriters.sequencedValues().lastOrNull() ?: TODO("auto-creation")
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any =
         childWriters.sequencedEntrySet()
@@ -93,7 +89,7 @@ class StructVector(
             value.forEach {
                 val key = keyString(it.key)
                 val obj = it.value
-                val childWriter = childWriters[key] ?: keyWriter(key, obj.toFieldType())
+                val childWriter = childWriters[key] ?: vectorFor(key, obj.toFieldType())
 
                 if (childWriter.valueCount != this.valueCount)
                     throw xtdb.IllegalArgumentException(

@@ -69,9 +69,9 @@
           (run! util/try-close vecs))))))
 
 (defn- ->sql-writer [^VectorWriter op-writer, ^BufferAllocator allocator]
-  (let [sql-writer (.legWriter op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
-        query-writer (.keyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
-        args-writer (.keyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
+  (let [sql-writer (.vectorFor op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
+        query-writer (.vectorFor sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
+        args-writer (.vectorFor sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-sql! [^TxOp$Sql op]
       (let [sql (.sql op)]
         (.writeObject query-writer sql)
@@ -82,9 +82,9 @@
       (.endStruct sql-writer))))
 
 (defn- ->sql-byte-args-writer [^VectorWriter op-writer]
-  (let [sql-writer (.legWriter op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
-        query-writer (.keyWriter sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
-        args-writer (.keyWriter sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
+  (let [sql-writer (.vectorFor op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
+        query-writer (.vectorFor sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
+        args-writer (.vectorFor sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
     (fn write-sql! [{:keys [sql arg-bytes]}]
       (.writeObject query-writer sql)
 
@@ -94,12 +94,12 @@
       (.endStruct sql-writer))))
 
 (defn- ->docs-op-writer [^VectorWriter op-writer]
-  (let [iids-writer (.keyWriter op-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
+  (let [iids-writer (.vectorFor op-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
-                           (.elementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
-        doc-writer (.keyWriter op-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
-        valid-from-writer (.keyWriter op-writer "_valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.keyWriter op-writer "_valid_to" types/nullable-temporal-field-type)
+                           (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
+        doc-writer (.vectorFor op-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
+        valid-from-writer (.vectorFor op-writer "_valid_from" types/nullable-temporal-field-type)
+        valid-to-writer (.vectorFor op-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [table-name docs valid-from valid-to]}]
       (let [table-name (str (symbol (util/with-default-schema table-name)))]
@@ -108,8 +108,8 @@
         (let [^VectorWriter table-doc-writer
               (.computeIfAbsent table-doc-writers table-name
                                 (fn [table]
-                                  (doto (.legWriter doc-writer table (FieldType/notNullable #xt.arrow/type :list))
-                                    (.elementWriter (FieldType/notNullable #xt.arrow/type :struct)))))]
+                                  (doto (.vectorFor doc-writer table (FieldType/notNullable #xt.arrow/type :list))
+                                    (.getListElements (FieldType/notNullable #xt.arrow/type :struct)))))]
 
           (.writeObject table-doc-writer docs)
 
@@ -128,19 +128,19 @@
         (.endStruct op-writer)))))
 
 (defn- ->put-writer [^VectorWriter op-writer]
-  (->docs-op-writer (.legWriter op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))))
+  (->docs-op-writer (.vectorFor op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))))
 
 (defn- ->patch-writer [^VectorWriter op-writer]
-  (->docs-op-writer (.legWriter op-writer "patch-docs" (FieldType/notNullable #xt.arrow/type :struct))))
+  (->docs-op-writer (.vectorFor op-writer "patch-docs" (FieldType/notNullable #xt.arrow/type :struct))))
 
 (defn- ->delete-writer [^VectorWriter op-writer]
-  (let [delete-writer (.legWriter op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
-        table-writer (.keyWriter delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        iids-writer (.keyWriter delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
+  (let [delete-writer (.vectorFor op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
+        table-writer (.vectorFor delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
+        iids-writer (.vectorFor delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
-                           (.elementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
-        valid-from-writer (.keyWriter delete-writer "_valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.keyWriter delete-writer "_valid_to" types/nullable-temporal-field-type)]
+                           (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
+        valid-from-writer (.vectorFor delete-writer "_valid_from" types/nullable-temporal-field-type)
+        valid-to-writer (.vectorFor delete-writer "_valid_to" types/nullable-temporal-field-type)]
     (fn write-delete! [{:keys [table-name doc-ids valid-from valid-to]}]
       (let [table-name (str (symbol (util/with-default-schema table-name)))]
         (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
@@ -157,11 +157,11 @@
           (.endStruct delete-writer))))))
 
 (defn- ->erase-writer [^VectorWriter op-writer]
-  (let [erase-writer (.legWriter op-writer "erase-docs" (FieldType/notNullable #xt.arrow/type :struct))
-        table-writer (.keyWriter erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        iids-writer (.keyWriter erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
+  (let [erase-writer (.vectorFor op-writer "erase-docs" (FieldType/notNullable #xt.arrow/type :struct))
+        table-writer (.vectorFor erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
+        iids-writer (.vectorFor erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
-                           (.elementWriter (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
+                           (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
     (fn [{:keys [table-name doc-ids]}]
       (let [table-name (str (symbol (util/with-default-schema table-name)))]
         (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
@@ -175,7 +175,7 @@
           (.endStruct erase-writer))))))
 
 (defn- ->abort-writer [^VectorWriter op-writer]
-  (let [abort-writer (.legWriter op-writer "abort" (FieldType/nullable #xt.arrow/type :null))]
+  (let [abort-writer (.vectorFor op-writer "abort" (FieldType/nullable #xt.arrow/type :null))]
     (fn [_op]
       (.writeNull abort-writer))))
 
@@ -222,7 +222,7 @@
       (when default-tz
         (.writeObject default-tz-writer (str default-tz)))
 
-      (write-tx-ops! allocator (.elementWriter ops-list-writer) tx-ops opts)
+      (write-tx-ops! allocator (.getListElements ops-list-writer) tx-ops opts)
       (.endList ops-list-writer)
 
       (.endRow rel)

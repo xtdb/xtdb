@@ -105,28 +105,29 @@ class DenseUnionVector(
         override fun writeUndefined() = writeValueThen().writeUndefined()
         override fun writeNull() = writeValueThen().writeNull()
 
-        override fun writeByte(value: Byte) = writeValueThen().writeByte(value)
-        override fun writeShort(value: Short) = writeValueThen().writeShort(value)
-        override fun writeInt(value: Int) = writeValueThen().writeInt(value)
-        override fun writeLong(value: Long) = writeValueThen().writeLong(value)
-        override fun writeFloat(value: Float) = writeValueThen().writeFloat(value)
-        override fun writeDouble(value: Double) = writeValueThen().writeDouble(value)
+        override fun writeByte(v: Byte) = writeValueThen().writeByte(v)
+        override fun writeShort(v: Short) = writeValueThen().writeShort(v)
+        override fun writeInt(v: Int) = writeValueThen().writeInt(v)
+        override fun writeLong(v: Long) = writeValueThen().writeLong(v)
+        override fun writeFloat(v: Float) = writeValueThen().writeFloat(v)
+        override fun writeDouble(v: Double) = writeValueThen().writeDouble(v)
 
-        override fun writeBytes(buf: ByteBuffer) = writeValueThen().writeBytes(buf)
-        override fun writeObject(value: Any?) = writeValueThen().writeObject(value)
+        override fun writeBytes(v: ByteBuffer) = writeValueThen().writeBytes(v)
+        override fun writeObject(obj: Any?) = writeValueThen().writeObject(obj)
 
-        override fun keyWriter(name: String) = inner.keyWriter(name)
-        override fun keyWriter(name: String, fieldType: FieldType) = inner.keyWriter(name, fieldType)
+        override fun vectorForOrNull(name: String) = inner.vectorForOrNull(name)
+        override fun vectorFor(name: String) = inner.vectorFor(name)
+        override fun vectorFor(name: String, fieldType: FieldType) = inner.vectorFor(name, fieldType)
         override fun endStruct() = writeValueThen().endStruct()
 
-        override fun elementWriter() = inner.elementWriter()
-        override fun elementWriter(fieldType: FieldType) = inner.elementWriter(fieldType)
+        override val listElements get() = inner.listElements
+        override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)
         override fun endList() = writeValueThen().endList()
 
-        override fun mapKeyWriter() = inner.mapKeyWriter()
-        override fun mapKeyWriter(fieldType: FieldType) = inner.mapKeyWriter(fieldType)
-        override fun mapValueWriter() = inner.mapValueWriter()
-        override fun mapValueWriter(fieldType: FieldType) = inner.mapValueWriter(fieldType)
+        override val mapKeys get() = inner.mapKeys
+        override fun getMapKeys(fieldType: FieldType) = inner.getMapKeys(fieldType)
+        override val mapValues get() = inner.mapValues
+        override fun getMapValues(fieldType: FieldType) = inner.getMapValues(fieldType)
 
         override fun rowCopier0(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
@@ -171,25 +172,16 @@ class DenseUnionVector(
 
     override val legNames get() = legVectors.mapTo(mutableSetOf()) { it.name }
 
-    override fun vectorForOrNull(name: String): VectorReader? {
-        for (i in legVectors.indices) {
-            val leg = legVectors[i]
-            if (leg.name == name) return LegReader(i.toByte(), leg)
-        }
-
-        return null
-    }
-
-    override fun legWriter(name: String): VectorWriter {
+    override fun vectorForOrNull(name: String): VectorWriter? {
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) return LegWriter(i.toByte(), leg)
         }
 
-        TODO("auto-creation: $name vs ${legVectors.map { it.name }}")
+        return null
     }
 
-    override fun legWriter(name: String, fieldType: FieldType): VectorWriter {
+    override fun vectorFor(name: String, fieldType: FieldType): VectorWriter {
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
@@ -206,7 +198,7 @@ class DenseUnionVector(
         return LegWriter(typeId, legVec)
     }
 
-    private fun legWriter(fieldType: FieldType) = legWriter(fieldType.type.toLeg(), fieldType)
+    private fun legWriter(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
 
     override fun valueReader(pos: VectorPosition): ValueReader {
         val legReaders = legVectors
@@ -237,7 +229,7 @@ class DenseUnionVector(
         when (src) {
             is DenseUnionVector -> {
                 val copierMapping = src.legVectors.map { childVec ->
-                    childVec.rowCopier(legWriter(childVec.name, childVec.fieldType))
+                    childVec.rowCopier(vectorFor(childVec.name, childVec.fieldType))
                 }
 
                 RowCopier { srcIdx ->
@@ -254,11 +246,11 @@ class DenseUnionVector(
                             vector.takeIf { it.nullable }?.let { LegWriter(idx.toByte(), it) }
                         }
                         .firstOrNull()
-                        ?: legWriter("null", src.fieldType))
+                        ?: vectorFor("null", src.fieldType))
             }
 
             else -> {
-                legWriter(src.fieldType.type.toLeg()).rowCopier0(src)
+                vectorFor(src.fieldType.type.toLeg()).rowCopier0(src)
             }
         }
 

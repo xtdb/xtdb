@@ -32,7 +32,10 @@ class TrieWriter(
 ) {
 
     private inner class OpenWriter(
-        private val tableName: TableName, private val trieKey: TrieKey, dataSchema: Schema, private val writeTrieMetadata: Boolean = true
+        private val tableName: TableName,
+        private val trieKey: TrieKey,
+        dataSchema: Schema,
+        private val writeTrieMetadata: Boolean = true
     ) : AutoCloseable {
         val dataRel: Relation = Relation(allocator, dataSchema)
 
@@ -47,17 +50,17 @@ class TrieWriter(
                 .getOrThrow()
 
         private val nodeWtr = metaRel["nodes"]
-        private val nullBranchWtr = nodeWtr.legWriter("nil")
+        private val nullBranchWtr = nodeWtr.vectorFor("nil")
 
-        private val iidBranchWtr = nodeWtr.legWriter("branch-iid")
-        private val iidBranchElWtr = iidBranchWtr.elementWriter
+        private val iidBranchWtr = nodeWtr.vectorFor("branch-iid")
+        private val iidBranchElWtr = iidBranchWtr.listElements
 
-        private val leafWtr = nodeWtr.legWriter("leaf")
-        private val pageIdxWtr = leafWtr.keyWriter("data-page-idx")
+        private val leafWtr = nodeWtr.vectorFor("leaf")
+        private val pageIdxWtr = leafWtr.vectorFor("data-page-idx")
 
         private val pageMetaWriter =
             requiringResolve("xtdb.metadata/->page-meta-wtr")
-                .invoke(leafWtr.keyWriter("columns"))
+                .invoke(leafWtr.vectorFor("columns"))
                 .let { it as PageMetadataWriter }
 
         private var pageIdx = 0
@@ -94,23 +97,35 @@ class TrieWriter(
 
             val temporalCols = listOf(systemFrom, validFrom, validTo, iidVec)
 
-            if(writeTrieMetadata) {
-                val (minValidFrom, maxValidFrom) = getMinMax(validFrom, temporalMetadataBuilder.minValidFrom, temporalMetadataBuilder.maxValidFrom)
+            if (writeTrieMetadata) {
+                val (minValidFrom, maxValidFrom) = getMinMax(
+                    validFrom,
+                    temporalMetadataBuilder.minValidFrom,
+                    temporalMetadataBuilder.maxValidFrom
+                )
                 temporalMetadataBuilder.minValidFrom = minValidFrom
                 temporalMetadataBuilder.maxValidFrom = maxValidFrom
 
-                val (minValidTo, maxValidTo) = getMinMax(validTo, temporalMetadataBuilder.minValidTo, temporalMetadataBuilder.maxValidTo)
+                val (minValidTo, maxValidTo) = getMinMax(
+                    validTo,
+                    temporalMetadataBuilder.minValidTo,
+                    temporalMetadataBuilder.maxValidTo
+                )
                 temporalMetadataBuilder.minValidTo = minValidTo
                 temporalMetadataBuilder.maxValidTo = maxValidTo
 
-                val (minSystemFrom, maxSystemFrom) = getMinMax(systemFrom, temporalMetadataBuilder.minSystemFrom, temporalMetadataBuilder.maxSystemFrom)
+                val (minSystemFrom, maxSystemFrom) = getMinMax(
+                    systemFrom,
+                    temporalMetadataBuilder.minSystemFrom,
+                    temporalMetadataBuilder.maxSystemFrom
+                )
                 temporalMetadataBuilder.minSystemFrom = minSystemFrom
                 temporalMetadataBuilder.maxSystemFrom = maxSystemFrom
 
                 trieMetadataBuilder.rowCount = iidVec.valueCount.toLong()
 
-                for(i in 0 until iidVec.valueCount) {
-                    iidBloom.add(*bloomHashes(iidVec , i))
+                for (i in 0 until iidVec.valueCount) {
+                    iidBloom.add(*bloomHashes(iidVec, i))
                 }
             }
 
@@ -155,9 +170,9 @@ class TrieWriter(
                 metaFileWriter.end()
             }
 
-            if(writeTrieMetadata && trieMetadataBuilder.rowCount > 0) {
+            if (writeTrieMetadata && trieMetadataBuilder.rowCount > 0) {
                 trieMetadataBuilder.temporalMetadata = temporalMetadataBuilder.build()
-                trieMetadataBuilder.iidBloom  = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
+                trieMetadataBuilder.iidBloom = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
             }
 
             return Pair(dataFileSize, trieMetadataBuilder.build())

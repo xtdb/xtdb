@@ -383,14 +383,14 @@
 
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
   (util/with-close-on-catch [meta-rel (Relation. al (Trie/getMetaRelSchema))]
-    (let [nodes-wtr (.get meta-rel "nodes")
-          nil-wtr (.legWriter nodes-wtr "nil")
-          iid-branch-wtr (.legWriter nodes-wtr "branch-iid")
-          iid-branch-el-wtr (.elementWriter iid-branch-wtr)
+    (let [nodes-wtr (.vectorFor meta-rel "nodes")
+          nil-wtr (.vectorFor nodes-wtr "nil")
+          iid-branch-wtr (.vectorFor nodes-wtr "branch-iid")
+          iid-branch-el-wtr (.getListElements iid-branch-wtr)
 
-          data-wtr (.legWriter nodes-wtr "leaf")
-          data-page-idx-wtr (.keyWriter data-wtr "data-page-idx")
-          metadata-wtr (.keyWriter data-wtr "columns")]
+          data-wtr (.vectorFor nodes-wtr "leaf")
+          data-page-idx-wtr (.vectorFor data-wtr "data-page-idx")
+          metadata-wtr (.vectorFor data-wtr "columns")]
       (letfn [(write-paths [paths]
                 (cond
                   (nil? paths) (.writeNull nil-wtr)

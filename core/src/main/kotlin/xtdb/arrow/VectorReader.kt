@@ -51,7 +51,15 @@ interface VectorReader : ILookup, AutoCloseable {
     val keyNames: Set<String>? get() = null
     val legNames: Set<String>? get() = null
 
+    /**
+     * @return an existing vector, or null if a vector doesn't exist with the given name
+     */
     fun vectorForOrNull(name: String): VectorReader? = unsupported("vectorFor")
+
+    /**
+     * @return an existing vector
+     * @throws IllegalStateException if the vector doesn't exist
+     */
     fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
 
     /**

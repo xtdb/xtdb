@@ -50,10 +50,8 @@ fun interface FieldChangeListener {
 
 internal operator fun FieldChangeListener?.invoke(f: Field) = this?.notify(f)
 
-internal fun nullToVecCopier(dest: IVectorWriter): RowCopier {
-    val wp = dest.writerPosition()
-    return RowCopier { _ -> wp.position.also { dest.writeNull() } }
-}
+internal fun nullToVecCopier(dest: IVectorWriter) =
+    RowCopier { _ -> dest.valueCount.also { dest.writeNull() } }
 
 internal fun duvToVecCopier(dest: IVectorWriter, src: DenseUnionVector): RowCopier {
     val copiers = src.map { dest.rowCopier(it) }
@@ -62,11 +60,9 @@ internal fun duvToVecCopier(dest: IVectorWriter, src: DenseUnionVector): RowCopi
 
 abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
 
-    protected val wp = VectorPosition.build(vector.valueCount)
+    override var valueCount = vector.valueCount
 
     override val field: Field = vector.field
-
-    override fun writerPosition() = wp
 
     override fun rowCopier(src: ValueVector): RowCopier {
         return when {
@@ -76,7 +72,7 @@ abstract class ScalarVectorWriter(vector: FieldVector) : IVectorWriter {
                 throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
 
             else -> RowCopier { srcIdx ->
-                wp.getPositionAndIncrement().also { pos ->
+                valueCount++.also { pos ->
                     vector.copyFromSafe(srcIdx, pos, src)
                 }
             }
@@ -89,55 +85,55 @@ class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vec
     override fun writeObject0(obj: Any): Unit = throw InvalidWriteObjectException(field.fieldType, obj)
     override fun rowCopier(src: ValueVector) = when (src) {
         is DenseUnionVector -> duvToVecCopier(this, src)
-        is NullVector -> RowCopier { _ -> wp.position.also { writeNull() } }
+        is NullVector -> RowCopier { _ -> valueCount.also { writeNull() } }
         else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
 }
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
-    override fun writeBoolean(v: Boolean) = vector.setSafe(wp.getPositionAndIncrement(), if (v) 1 else 0)
+    override fun writeBoolean(v: Boolean) = vector.setSafe(valueCount++, if (v) 1 else 0)
     override fun writeObject0(obj: Any) = writeBoolean(obj as? Boolean ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeBoolean(v.readBoolean())
 }
 
 private class TinyIntVectorWriter(override val vector: TinyIntVector) : ScalarVectorWriter(vector) {
-    override fun writeByte(v: Byte) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeByte(v: Byte) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = writeByte(obj as? Byte ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeByte(v.readByte())
 }
 
 private class SmallIntVectorWriter(override val vector: SmallIntVector) : ScalarVectorWriter(vector) {
-    override fun writeShort(v: Short) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeShort(v: Short) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = writeShort(obj as? Short ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeShort(v.readShort())
 }
 
 private class IntVectorWriter(override val vector: IntVector) : ScalarVectorWriter(vector) {
-    override fun writeInt(v: Int) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeInt(v: Int) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = writeInt(obj as? Int ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
 }
 
 private class BigIntVectorWriter(override val vector: BigIntVector) : ScalarVectorWriter(vector) {
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = writeLong(obj as? Long ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
 }
 
 private class Float4VectorWriter(override val vector: Float4Vector) : ScalarVectorWriter(vector) {
-    override fun writeFloat(v: Float) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeFloat(v: Float) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = writeFloat(obj as? Float ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeFloat(v.readFloat())
 }
 
 private class Float8VectorWriter(override val vector: Float8Vector) : ScalarVectorWriter(vector) {
-    override fun writeDouble(v: Double) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeDouble(v: Double) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = writeDouble(obj as? Double ?: throw InvalidWriteObjectException(field.fieldType, obj))
     override fun writeValue0(v: ValueReader) = writeDouble(v.readDouble())
 }
 
 private class DateDayVectorWriter(override val vector: DateDayVector) : ScalarVectorWriter(vector) {
-    override fun writeInt(v: Int) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeInt(v: Int) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any) = when (obj) {
         is LocalDate -> writeInt(obj.toEpochDay().toInt())
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
@@ -148,7 +144,7 @@ private class DateDayVectorWriter(override val vector: DateDayVector) : ScalarVe
 
 private class DateMilliVectorWriter(override val vector: DateMilliVector) : ScalarVectorWriter(vector) {
     // `v` in days here
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v * 86_400_000)
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v * 86_400_000)
 
     override fun writeObject0(obj: Any) = when (obj) {
         is LocalDate -> writeLong(obj.toEpochDay())
@@ -168,7 +164,7 @@ private class TimestampVectorWriter(override val vector: TimeStampVector) : Scal
         TimeUnit.NANOSECOND -> time * 1_000_000
     }
 
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v)
 
     override fun writeObject0(obj: Any): Unit = when (obj) {
         is Date -> writeLong(obj.toLong())
@@ -199,19 +195,19 @@ private abstract class TimeVectorWriter(vector: FieldVector) : ScalarVectorWrite
 }
 
 private class TimeSecVectorWriter(override val vector: TimeSecVector) : TimeVectorWriter(vector) {
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v.toInt())
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v.toInt())
 }
 
 private class TimeMilliVectorWriter(override val vector: TimeMilliVector) : TimeVectorWriter(vector) {
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v.toInt())
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v.toInt())
 }
 
 private class TimeMicroVectorWriter(override val vector: TimeMicroVector) : TimeVectorWriter(vector) {
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v)
 }
 
 private class TimeNanoVectorWriter(override val vector: TimeNanoVector) : TimeVectorWriter(vector) {
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v)
 }
 
 private val DECIMAL_ERROR_KEY = Keyword.intern("xtdb.error", "decimal-error")
@@ -221,7 +217,7 @@ private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVe
     override fun writeObject0(obj: Any) {
         if (obj !is BigDecimal) throw InvalidWriteObjectException(field.fieldType, obj)
         try {
-            vector.setSafe(wp.getPositionAndIncrement(), obj.setScale(vector.scale))
+            vector.setSafe(valueCount++, obj.setScale(vector.scale))
         } catch (e: Exception) {
             throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
         } catch (e: ArithmeticException) {
@@ -235,7 +231,7 @@ private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVe
 private class DurationVectorWriter(override val vector: DurationVector) : ScalarVectorWriter(vector) {
     private val unit: TimeUnit = (vector.field.type as ArrowType.Duration).unit
 
-    override fun writeLong(v: Long) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeLong(v: Long) = vector.setSafe(valueCount++, v)
     override fun writeObject0(obj: Any): Unit = when (obj) {
         is Duration -> writeLong(unit.toLong(obj.seconds, obj.nano))
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
@@ -248,7 +244,7 @@ private operator fun PeriodDuration.component1() = period
 private operator fun PeriodDuration.component2() = duration
 
 private class IntervalYearVectorWriter(override val vector: IntervalYearVector) : ScalarVectorWriter(vector) {
-    override fun writeInt(v: Int) = vector.setSafe(wp.getPositionAndIncrement(), v)
+    override fun writeInt(v: Int) = vector.setSafe(valueCount++, v)
 
     override fun writeObject0(obj: Any): Unit = when (obj) {
         is PeriodDuration -> writeInt(obj.period.toTotalMonths().toInt())
@@ -266,7 +262,7 @@ private class IntervalDayVectorWriter(override val vector: IntervalDayVector) : 
             require(p.years == 0 && p.months == 0)
 
             vector.setSafe(
-                wp.getPositionAndIncrement(),
+                valueCount++,
                 p.days,
                 Math.addExact(Math.multiplyExact(d.seconds, 1_000).toInt(), d.toMillisPart())
             )
@@ -286,7 +282,7 @@ private class IntervalMdnVectorWriter(override val vector: IntervalMonthDayNanoV
             val (p, d) = obj
 
             vector.setSafe(
-                wp.getPositionAndIncrement(),
+                valueCount++,
                 p.toTotalMonths().toInt(),
                 p.days,
                 Math.addExact(Math.multiplyExact(d.seconds, 1_000_000_000), d.toNanosPart().toLong())
@@ -306,7 +302,7 @@ private class FixedSizeBinaryVectorWriter(override val vector: FixedSizeBinaryVe
     override fun writeBytes(v: ByteBuffer) {
         val pos = v.position()
 
-        val idx = wp.getPositionAndIncrement()
+        val idx = valueCount++
         vector.setIndexDefined(idx)
         vector.dataBuffer.setBytes((idx * vector.byteWidth).toLong(), v)
 
@@ -330,7 +326,7 @@ abstract class VariableWidthVectorWriter(vector: BaseVariableWidthVector) : Scal
 
     override fun writeBytes(v: ByteBuffer) {
         val bufPos = v.position()
-        vector.setSafe(wp.getPositionAndIncrement(), v, v.position(), v.remaining())
+        vector.setSafe(valueCount++, v, v.position(), v.remaining())
         v.position(bufPos)
     }
 
@@ -365,9 +361,12 @@ private class VarBinaryVectorWriter(override val vector: VarBinaryVector) : Vari
 abstract class ExtensionVectorWriter(
     final override val vector: XtExtensionVector<*>,
     notify: FieldChangeListener? = null,
-) :
-    ScalarVectorWriter(vector) {
+) : ScalarVectorWriter(vector) {
     override val field get() = vector.field
+
+    override var valueCount: Int
+        get() = inner.valueCount
+        set(value) { inner.valueCount = value }
 
     internal val inner = writerFor(vector.underlyingVector) {
         vector.field = Field(field.name, field.fieldType, it.children)
@@ -375,7 +374,6 @@ abstract class ExtensionVectorWriter(
     }
 
     override fun clear() = inner.clear()
-    override fun writerPosition() = inner.writerPosition()
 
     override fun writeNull() = inner.writeNull()
     override fun writeByte(v: Byte) = inner.writeByte(v)
@@ -388,12 +386,11 @@ abstract class ExtensionVectorWriter(
     override fun writeObject0(obj: Any) = inner.writeObject(obj)
     override fun writeValue0(v: ValueReader) = inner.writeValue(v)
 
-    override fun structKeyWriter(key: String) = inner.structKeyWriter(key)
-    override fun structKeyWriter(key: String, fieldType: FieldType) = inner.structKeyWriter(key, fieldType)
+    override fun vectorFor(name: String, fieldType: FieldType) = inner.vectorFor(name, fieldType)
     override fun endStruct() = inner.endStruct()
 
-    override fun listElementWriter() = inner.listElementWriter()
-    override fun listElementWriter(fieldType: FieldType) = inner.listElementWriter(fieldType)
+    override val listElements: IVectorWriter get() = inner.listElements
+    override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)
     override fun endList() = inner.endList()
 
     override fun rowCopier(src: ValueVector): RowCopier = when {
@@ -450,12 +447,12 @@ internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWrite
 internal class TsTzRangeVectorWriter(vector: TsTzRangeVector, notify: FieldChangeListener?) :
     ExtensionVectorWriter(vector, notify) {
 
-    override fun listElementWriter(): IVectorWriter =
-        inner.listElementWriter(FieldType.notNullable(Timestamp(MICROSECOND, "UTC")))
+    override val listElements: IVectorWriter
+        get() = inner.getListElements(FieldType.notNullable(Timestamp(MICROSECOND, "UTC")))
 
     override fun writeObject0(obj: Any) = when (obj) {
         is ZonedDateTimeRange -> {
-            listElementWriter(FieldType.notNullable(Timestamp(MICROSECOND, "UTC"))).let {
+            getListElements(FieldType.notNullable(Timestamp(MICROSECOND, "UTC"))).let {
                 it.writeObject(obj.from)
                 if (obj.to == null) it.writeLong(Long.MAX_VALUE) else it.writeObject(obj.to)
             }

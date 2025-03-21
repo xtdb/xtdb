@@ -3,21 +3,19 @@ package xtdb.vector
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
-import xtdb.arrow.VectorPosition
 
 class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
-    private val wp = VectorPosition.build(root.rowCount)
     private val writers: MutableMap<String, IVectorWriter> =
         root.fieldVectors.associateTo(mutableMapOf()) { it.name to writerFor(it) }
 
-    override fun writerPosition() = wp
+    override var rowCount = 0
 
     override fun iterator() = writers.entries.iterator()
 
     override fun startRow() = Unit
 
     override fun endRow() {
-        val pos = ++wp.position
+        val pos = ++rowCount
         writers.values.forEach { it.populateWithAbsents(pos) }
     }
 
@@ -32,7 +30,7 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
 
     override fun syncRowCount() {
         root.syncSchema()
-        root.rowCount = wp.position
+        root.rowCount = rowCount
 
         writers.values.forEach { it.syncValueCount() }
     }

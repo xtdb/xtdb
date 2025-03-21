@@ -78,20 +78,19 @@
          ;; file-idx 1 as first-filename contains 0
          file-idx 1]
     (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
-                        (let [pos (.writerPosition rel-writer)]
-                          (while (and (<= (.getPosition pos) ^int *block-size*)
-                                      (.tryAdvance in-cursor
-                                                   (reify Consumer
-                                                     (accept [_ src-rel]
-                                                       (vw/append-rel rel-writer src-rel))))))
-                          (when (pos? (.getPosition pos))
-                            (let [read-rel (vw/rel-wtr->rdr rel-writer)
-                                  out-filename (->file tmp-dir 0 file-idx)]
-                              (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))
+                        (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
+                                    (.tryAdvance in-cursor
+                                                 (reify Consumer
+                                                   (accept [_ src-rel]
+                                                     (vw/append-rel rel-writer src-rel))))))
+                        (when (pos? (.getRowCount rel-writer))
+                          (let [read-rel (vw/rel-wtr->rdr rel-writer)
+                                out-filename (->file tmp-dir 0 file-idx)]
+                            (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))
 
-                                          os (io/output-stream out-filename)]
-                                (write-rel allocator out-rel os)
-                                out-filename)))))]
+                                        os (io/output-stream out-filename)]
+                              (write-rel allocator out-rel os)
+                              out-filename))))]
       (recur (conj filenames filename) (inc file-idx))
       (mapv io/file filenames))))
 
@@ -230,37 +229,37 @@
           (load-next-batch)
           (with-open [rel-writer (RelationWriter. allocator (for [^Field field static-fields]
                                                               (vw/->writer (.createVector field allocator))))]
-            (let [pos (.writerPosition rel-writer)]
-              (while (and (<= (.getPosition pos) ^int *block-size*)
-                          (.tryAdvance in-cursor
-                                       (reify Consumer
-                                         (accept [_ src-rel]
-                                           (vw/append-rel rel-writer src-rel))))))
-              (let [read-rel (vw/rel-wtr->rdr rel-writer)]
-                (if (<= (.getPosition pos) ^int *block-size*)
-                  ;; in memory case
-                  (if (zero? (.getPosition pos))
-                    (do (set! (.consumed? this) true)
-                        false)
-                    (do (.accept c (.select read-rel (sorted-idxs read-rel order-specs)))
-                        (set! (.consumed? this) true)
-                        true))
+            (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
+                        (.tryAdvance in-cursor
+                                     (reify Consumer
+                                       (accept [_ src-rel]
+                                         (vw/append-rel rel-writer src-rel))))))
+            (let [pos (.getRowCount rel-writer)
+                  read-rel (vw/rel-wtr->rdr rel-writer)]
+              (if (<= pos ^int *block-size*)
+                ;; in memory case
+                (if (zero? pos)
+                  (do (set! (.consumed? this) true)
+                      false)
+                  (do (.accept c (.select read-rel (sorted-idxs read-rel order-specs)))
+                      (set! (.consumed? this) true)
+                      true))
 
-                  ;; first batch from external sort
-                  (let [sort-dir (util/tmp-dir "external-sort")
-                        ^java.io.File tmp-dir (io/file (.getPath (.toUri sort-dir)))
-                        first-filename (->file tmp-dir 0 0)]
-                    (set! (.sort-dir this) sort-dir)
-                    (.mkdirs tmp-dir)
-                    (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))
-                                os (io/output-stream first-filename)]
-                      (write-rel allocator out-rel os))
+                ;; first batch from external sort
+                (let [sort-dir (util/tmp-dir "external-sort")
+                      ^java.io.File tmp-dir (io/file (.getPath (.toUri sort-dir)))
+                      first-filename (->file tmp-dir 0 0)]
+                  (set! (.sort-dir this) sort-dir)
+                  (.mkdirs tmp-dir)
+                  (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))
+                              os (io/output-stream first-filename)]
+                    (write-rel allocator out-rel os))
 
-                    (let [sorted-file (external-sort allocator in-cursor order-specs static-fields tmp-dir first-filename)]
-                      (set! (.sorted-file this) sorted-file)
-                      (set! (.reader this) (ArrowFileReader. (util/->file-channel (util/->path sorted-file)) allocator))
-                      (set! (.read-root this) (.getVectorSchemaRoot reader))
-                      (load-next-batch)))))))))
+                  (let [sorted-file (external-sort allocator in-cursor order-specs static-fields tmp-dir first-filename)]
+                    (set! (.sorted-file this) sorted-file)
+                    (set! (.reader this) (ArrowFileReader. (util/->file-channel (util/->path sorted-file)) allocator))
+                    (set! (.read-root this) (.getVectorSchemaRoot reader))
+                    (load-next-batch))))))))
       false))
 
   (close [_]
