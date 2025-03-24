@@ -416,7 +416,8 @@
                 (->field-default-name #xt.arrow/type :union false (map kv->field arrow-type-map)))))]
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
-        (map->field))))
+        (map->field)
+        (cond-> (some identity fields) (field-with-name (.getName ^Field (some identity fields)))))))
 
 (def merge-fields (util/lru-memoize merge-fields*))
 

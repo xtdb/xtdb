@@ -100,7 +100,7 @@
                                                                          (let [input-types (assoc opts :param-types param-types)
                                                                                expr (expr/form->expr v input-types)
                                                                                projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
-                                                                           (.add field-set (types/col-type->field (.getColumnType projection-spec)))
+                                                                           (.add field-set (.getField projection-spec))
                                                                            (MapEntry/create k (fn write-expr! [{:keys [allocator args]} ^IVectorWriter out-col]
                                                                                                 (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
                                                                                                   (.writeValue out-col (.valueReader out-vec (VectorPosition/build 0)))))))))))))]
@@ -140,7 +140,7 @@
         expr (expr/form->expr v (assoc opts :param-types param-types))
         input-types (assoc opts :param-types param-types)
         projection-spec (expr/->expression-projection-spec out-col expr input-types)
-        field (-> (types/col-type->field (.getColumnType projection-spec))
+        field (-> (.getField projection-spec)
                   (types/unnest-field)
                   (types/field-with-name (str out-col)))]
 

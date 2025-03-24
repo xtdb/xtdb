@@ -229,8 +229,8 @@
   (t/is (= (types/col-type->field :utf8)
            (types/merge-fields (types/col-type->field :utf8) (types/col-type->field :utf8))))
 
-  (t/is (= (types/col-type->field [:union #{:utf8 :i64}])
-           (types/merge-fields (types/col-type->field :utf8) (types/col-type->field :i64))))
+  (t/is (= (types/col-type->field "a" [:union #{:utf8 :i64}])
+           (types/merge-fields (types/col-type->field "a" :utf8) (types/col-type->field "a" :i64))))
 
   (t/is (=
          ;; ordering seems to be important
@@ -269,8 +269,8 @@
     (t/is (= (types/col-type->field "struct" '[:union #{[:struct {a :utf8
                                                                   b [:union #{:utf8 :i64}]}]
                                                         :null}])
-             (types/merge-fields (types/col-type->field '[:union #{[:struct {a :utf8, b :utf8}] :null}])
-                                 (types/col-type->field '[:struct {a :utf8, b :i64}]))))
+             (types/merge-fields (types/col-type->field "struct" '[:union #{[:struct {a :utf8, b :utf8}] :null}])
+                                 (types/col-type->field "struct" '[:struct {a :utf8, b :i64}]))))
 
     (let [struct0 (types/col-type->field '[:struct {a :utf8, b :utf8}])
           struct1 (types/col-type->field '[:struct {b :utf8, c :i64}])]
@@ -314,18 +314,18 @@
     (t/is (= (types/col-type->field :null)
              (types/merge-fields (types/col-type->field :null) (types/col-type->field :null))))
 
-    (t/is (= (types/col-type->field "i64" [:union #{:null :i64}])
-             (types/merge-fields (types/col-type->field :null) (types/col-type->field :i64))))
+    (t/is (= (types/col-type->field "a" [:union #{:null :i64}])
+             (types/merge-fields (types/col-type->field "a" :null) (types/col-type->field "a" :i64))))
 
-    (t/is (= (types/col-type->field "union" [:union #{:null :i64 :f64}])
-             (types/merge-fields (types/col-type->field :f64) (types/col-type->field :null) (types/col-type->field :i64))))
+    (t/is (= (types/col-type->field "a" [:union #{:null :i64 :f64}])
+             (types/merge-fields (types/col-type->field "a" :f64) (types/col-type->field "a" :null) (types/col-type->field "a" :i64))))
 
     (t/testing "nulls kept within the legs they were originally in"
-      (t/is (= (types/->field "union" #xt.arrow/type :union false
+      (t/is (= (types/->field "a" #xt.arrow/type :union false
                               (types/col-type->field :f64)
                               (types/col-type->field "i64" [:union #{:null :i64}]))
-               (types/merge-fields (types/col-type->field :f64)
-                                   (types/col-type->field [:union #{:null :i64}]))))
+               (types/merge-fields (types/col-type->field "a" :f64)
+                                   (types/col-type->field "a" [:union #{:null :i64}]))))
 
       (t/is (= (types/->field "union" #xt.arrow/type :union false
                               (types/col-type->field :f64)

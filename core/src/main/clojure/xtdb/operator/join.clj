@@ -394,8 +394,8 @@
 
 (defn- projection-specs->fields [projection-specs]
   (->> projection-specs
-       (into {} (map (juxt #(.getColumnName ^ProjectionSpec %)
-                           (comp types/col-type->field #(.getColumnType ^ProjectionSpec %)))))))
+       (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
+                           #(.getField ^ProjectionSpec %))))))
 
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-fields] :as _args} f]
   (let [{left-fields :fields, ->left-cursor :->cursor} left
@@ -409,12 +409,12 @@
                         (into [] (map-indexed (fn [idx condition]
                                                 (equi-spec idx condition left-fields right-fields param-fields)))))
 
-        left-projections (vec (concat (for [[col-name ^Field field] left-fields]
-                                        (project/->identity-projection-spec col-name field))
+        left-projections (vec (concat (for [[_col-name ^Field field] left-fields]
+                                        (project/->identity-projection-spec field))
                                       (keep (comp :projection :left) equi-specs)))
 
-        right-projections (vec (concat (for [[col-name field] right-fields]
-                                         (project/->identity-projection-spec col-name field))
+        right-projections (vec (concat (for [[_col-name field] right-fields]
+                                         (project/->identity-projection-spec field))
                                        (keep (comp :projection :right) equi-specs)))
 
         {:keys [fields ->cursor]} (f {:left-fields (projection-specs->fields left-projections)
@@ -428,7 +428,7 @@
                                                      (into #{} (comp (mapcat (juxt :left :right))
                                                                      (filter :projection)
                                                                      (map :key-col-name)))))
-                                (mapv #(project/->identity-projection-spec % (get fields %))))]
+                                (mapv #(project/->identity-projection-spec (get fields %))))]
 
     {:fields (projection-specs->fields project-away-specs)
      :->cursor (fn [opts]
@@ -488,7 +488,7 @@
 (defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-fields] :as args}]
   (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
-      {:fields (merge-with types/merge-col-types (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields))
+      {:fields (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields))
        :->cursor (fn [{:keys [allocator args]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [left-cursor (->left-cursor)]
                      (JoinCursor. allocator left-cursor nil ->right-cursor
@@ -549,7 +549,7 @@
   (let [[mark-col-name mark-condition] (first mark-spec)]
     (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
       (fn [{:keys [left-fields right-fields left-key-col-names right-key-col-names theta-expr]}]
-        {:fields (assoc left-fields mark-col-name (types/->field-default-name #xt.arrow/type :bool true nil))
+        {:fields (assoc left-fields mark-col-name (types/col-type->field mark-col-name [:union #{:null :bool}]))
 
          :->cursor
          (fn [{:keys [^BufferAllocator allocator args]} ->probe-cursor ->build-cursor]

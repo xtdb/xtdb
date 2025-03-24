@@ -252,7 +252,8 @@
          :pages vector?))
 
 (defmethod lp/emit-expr ::pages [{:keys [col-types pages stats]} _args]
-  (let [fields (or (some-> col-types (update-vals types/col-type->field))
+  (let [fields (or (some->> col-types (into {} (map (fn [[col-name col-type]]
+                                                      [col-name (types/col-type->field col-name col-type)]))))
                    (vw/rows->fields (into [] cat pages)))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]

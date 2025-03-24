@@ -297,7 +297,7 @@
             vpos (VectorPosition/build)
             value-rdr (.valueReader indirect-rdr vpos)]
 
-        (t/is (= (types/->field "struct" #xt.arrow/type :struct false
+        (t/is (= (types/->field "foo" #xt.arrow/type :struct false
                                 (types/->field "bar" #xt.arrow/type :union false
                                                (types/col-type->field :i64)
                                                (types/col-type->field :utf8)))

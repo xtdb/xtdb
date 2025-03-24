@@ -3,10 +3,12 @@
             [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.scan :as scan]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
            java.util.function.Consumer
+           (org.apache.arrow.vector.types.pojo Field)
            xtdb.ICursor
            (xtdb.vector IVectorReader RelationReader)))
 
@@ -51,7 +53,11 @@
         col-name-reverse-mapping (set/map-invert col-name-mapping)]
     {:fields (->> inner-fields
                   (into {}
-                        (map (juxt (comp col-name-mapping key) val))))
+                        (map (juxt (comp col-name-mapping key)
+                                   (comp (fn [^Field field]
+                                           (-> field
+                                               (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
+                                         val)))))
      :stats (:stats emitted-child-relation)
      :->cursor (fn [opts]
                  (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
