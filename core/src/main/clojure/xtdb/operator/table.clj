@@ -192,7 +192,7 @@
                         el-struct-rdr (cond-> el-rdr
                                         (instance? ArrowType$Union (.getType (.getField el-rdr))) (.legReader "struct"))]
 
-                    (vr/rel-reader (for [k (some-> el-struct-rdr .structKeys)
+                    (vr/rel-reader (for [k (some-> el-struct-rdr .getKeyNames)
                                          :when (contains? fields (symbol k))]
                                      (.structKeyReader el-struct-rdr k))
                                    (.getValueCount el-rdr))))}))

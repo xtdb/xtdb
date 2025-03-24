@@ -14,7 +14,7 @@ interface IVectorReader : VectorReader, AutoCloseable {
     override fun withName(newName: String): IVectorReader = RenamedVectorReader(this, newName)
 
     fun structKeyReader(colName: String): IVectorReader? = unsupported("structKeyReader")
-    fun structKeys(): Collection<String>? = unsupported("structKeys")
+    override val keyNames: Set<String>? get() = unsupported("keyNames")
 
     override val listElements: IVectorReader get() = unsupported("listElements")
 
@@ -23,7 +23,7 @@ interface IVectorReader : VectorReader, AutoCloseable {
 
     fun legReader(legKey: String): IVectorReader? = unsupported("legReader")
 
-    fun legs(): List<String>? = unsupported("legs")
+    override val legNames: Set<String>? get() = unsupported("legs")
 
     fun copy(allocator: BufferAllocator): IVectorReader = copyTo(field.createVector(allocator)).withName(name)
     fun copyTo(vector: ValueVector): IVectorReader

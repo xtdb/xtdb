@@ -13,6 +13,7 @@ import xtdb.util.Hasher;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 public class RenamedVectorReader implements IVectorReader {
 
@@ -115,8 +116,8 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<String> structKeys() {
-        return reader.structKeys();
+    public Set<String> getKeyNames() {
+        return reader.getKeyNames();
     }
 
     @Override
@@ -155,8 +156,8 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public List<String> legs() {
-        return reader.legs();
+    public Set<String> getLegNames() {
+        return reader.getLegNames();
     }
 
     @Override

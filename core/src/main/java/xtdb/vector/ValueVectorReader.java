@@ -41,10 +41,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -169,7 +166,7 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<String> structKeys() {
+    public Set<String> getKeyNames() {
         return null;
     }
 
@@ -204,8 +201,8 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public List<String> legs() {
-        return List.of(Types.toLeg(vector.getField().getFieldType().getType()));
+    public Set<String> getLegNames() {
+        return Set.of(Types.toLeg(vector.getField().getFieldType().getType()));
     }
 
     @Override
@@ -915,7 +912,7 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            public Collection<String> structKeys() {
+            public Set<String> getKeyNames() {
                 return rdrs.keySet();
             }
 
@@ -940,7 +937,7 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             public ValueReader valueReader(VectorPosition pos) {
                 @SuppressWarnings("resource")
-                var readers = structKeys().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
+                var readers = getKeyNames().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
 
                 return new BaseValueReader(pos) {
                     @Override
@@ -1338,8 +1335,8 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public List<String> legs() {
-            return legs;
+        public Set<String> getLegNames() {
+            return Set.copyOf(legs);
         }
 
         @Override

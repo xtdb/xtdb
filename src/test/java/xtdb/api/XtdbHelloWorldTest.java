@@ -3,13 +3,12 @@ package xtdb.api;
 import org.junit.jupiter.api.Test;
 
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 import static java.lang.String.format;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static xtdb.api.XtdbHelloWorld.*;
+import static xtdb.api.XtdbHelloWorld.User;
 
 public class XtdbHelloWorldTest {
 

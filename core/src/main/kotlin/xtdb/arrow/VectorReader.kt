@@ -147,7 +147,7 @@ interface VectorReader : ILookup, AutoCloseable {
 
             override fun structKeyReader(colName: String) = vector.vectorForOrNull(colName)?.let { NewToOldAdapter(it) }
 
-            override fun structKeys() = TODO()
+            override val keyNames get() = TODO()
 
             override val listElements get() = NewToOldAdapter(vector.listElements)
             override fun getListStartIndex(idx: Int) = vector.getListStartIndex(idx)
@@ -160,7 +160,7 @@ interface VectorReader : ILookup, AutoCloseable {
 
             override fun legReader(legKey: String) = vector.vectorForOrNull(legKey)?.let { NewToOldAdapter(it) }
 
-            override fun legs() = vector.legNames?.toList()
+            override val legNames get() = vector.legNames
 
             override fun copyTo(vector: ValueVector) = error("copyTo")
 
@@ -196,7 +196,7 @@ interface VectorReader : ILookup, AutoCloseable {
 
             override fun hashCode(idx: Int, hasher: Hasher) = old.hashCode(idx, hasher)
 
-            override val keyNames: Set<String>? get() = old.structKeys()?.toSet()
+            override val keyNames: Set<String>? get() = old.keyNames?.toSet()
             override fun vectorForOrNull(name: String) = old.structKeyReader(name)?.let { OldToNewAdapter(it) }
             override val listElements get() = OldToNewAdapter(old.listElements)
 

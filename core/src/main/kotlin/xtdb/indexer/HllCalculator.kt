@@ -12,7 +12,7 @@ class HllCalculator {
     private val hlls = mutableMapOf<ColumnName, HLL>()
 
     fun update(putRdr: IVectorReader, startPos: Int, endPos: Int) {
-        val columns = putRdr.structKeys().orEmpty()
+        val columns = putRdr.keyNames.orEmpty()
         val keyRdrs = columns.map { it to VectorReader.from(putRdr.structKeyReader(it)!!) }
 
         for ((col, rdr) in keyRdrs) {

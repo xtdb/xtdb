@@ -114,13 +114,13 @@
 
         valid-to-rdr (.structKeyReader put-leg "_valid_to")
         system-time-µs (time/instant->micros system-time)
-        tables (->> (.legs docs-rdr)
+        tables (->> (.getLegNames docs-rdr)
                     (into {} (map (fn [table-name]
                                     (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
 
                                     (let [table-docs-rdr (.legReader docs-rdr table-name)
                                           doc-rdr (.getListElements table-docs-rdr)
-                                          ks (.structKeys doc-rdr)]
+                                          ks (.getKeyNames doc-rdr)]
                                       (when-let [forbidden-cols (not-empty (->> ks
                                                                                 (into #{} (filter (every-pred #(str/starts-with? % "_")
                                                                                                               (complement #{"_id" "_fn" "_valid_from" "_valid_to"}))))))]
@@ -439,7 +439,7 @@
 
               (let [table-docs-rdr (.legReader docs-rdr table-name)
                     doc-rdr (.getListElements table-docs-rdr)
-                    ks (.structKeys doc-rdr)]
+                    ks (.getKeyNames doc-rdr)]
                 (when-let [forbidden-cols (not-empty (->> ks
                                                           (into #{} (filter (every-pred #(str/starts-with? % "_")
                                                                                         (complement #{"_id" "_fn"}))))))]
@@ -488,7 +488,7 @@
                                                (fn [^RelationReader rel]
                                                  (patch-rel! table-name live-table rel tx-opts)))))))))))]
 
-      (let [tables (->> (.legs docs-rdr)
+      (let [tables (->> (.getLegNames docs-rdr)
                         (into {} (map (juxt identity ->table-idxer))))]
         (reify OpIndexer
           (indexOp [_ tx-op-idx]

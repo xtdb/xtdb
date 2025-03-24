@@ -16,6 +16,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import static xtdb.arrow.VectorIndirection.selection;
@@ -131,8 +132,8 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<String> structKeys() {
-        return reader.structKeys();
+    public Set<String> getKeyNames() {
+        return reader.getKeyNames();
     }
 
     @Override
@@ -166,8 +167,8 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public List<String> legs() {
-        return reader.legs();
+    public Set<String> getLegNames() {
+        return reader.getLegNames();
     }
 
     @Override
