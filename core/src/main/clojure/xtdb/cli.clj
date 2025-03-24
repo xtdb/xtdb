@@ -66,7 +66,7 @@
                 (true? playground-port) {::playground-port 5432}
                 (integer? playground-port) {::playground-port playground-port}
 
-                :else {:migrate-from-version migrate-from-version
+                :else {::migrate-from-version migrate-from-version
                        ::node-opts (let [file-extension (some-> file util/file-extension)
                                          yaml-file (if (= file-extension "yaml")
                                                      file

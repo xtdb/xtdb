@@ -30,7 +30,7 @@
 
 (t/deftest no-config
   (t/testing "if no config present via file, returns an empty map as the node-opts"
-    (t/is (= {::cli/node-opts {}, :migrate-from-version nil} (cli/parse-args [])))))
+    (t/is (= {::cli/node-opts {}, ::cli/migrate-from-version nil} (cli/parse-args [])))))
 
 (t/deftest test-config
   (letfn [(->system [cli-args]
@@ -63,15 +63,15 @@
 
 (t/deftest test-parsers
   (t/testing "Playground port should work as expected"
-    (t/is (= {:xtdb.cli/playground-port 5432}
+    (t/is (= {::cli/playground-port 5432}
              (cli/parse-args ["--playground"]))))
   
   (t/testing "Playground port should work as expected"
-    (t/is (= {:xtdb.cli/playground-port 5055}
+    (t/is (= {::cli/playground-port 5055}
              (cli/parse-args ["--playground-port" "5055"]))))
   
   (t/testing "Migrate from should work as expected"
-    (t/is (= {:migrate-from-version 5, :xtdb.cli/node-opts {}}
+    (t/is (= {::cli/migrate-from-version 5, ::cli/node-opts {}}
              (cli/parse-args ["--migrate-from" "5"])))))
 
 (defmethod ig/init-key ::bar [_ opts] opts)
