@@ -5,19 +5,15 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import java.time.Clock
            java.util.ArrayList
            java.util.function.Consumer
            java.util.List
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.BigIntVector
-           org.apache.arrow.vector.complex.StructVector
-           (org.apache.arrow.vector.types.pojo Field FieldType)
+           (org.apache.arrow.vector.types.pojo Field)
            xtdb.ICursor
-           xtdb.operator.ProjectionSpec
-           xtdb.vector.IVectorReader
+           (xtdb.operator ProjectionSpec ProjectionSpec$Identity ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)
            xtdb.vector.RelationReader))
 
 (s/def ::append-columns? boolean?)
@@ -47,61 +43,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord IdentityProjectionSpec [^Field field]
-  ProjectionSpec
-  (getField [_] field)
-  (project [_ _allocator in-rel _schema _args]
-    (.vectorForOrNull in-rel (.getName field))))
-
 (defn ->identity-projection-spec ^ProjectionSpec [field]
-  (->IdentityProjectionSpec field))
-
-(defn ->row-number-projection-spec ^ProjectionSpec [col-name]
-  (let [row-num (long-array [1])]
-    (reify ProjectionSpec
-      (getField [_] (Field. (str col-name) (FieldType/notNullable #xt.arrow/type :i64) []))
-      (project [_ allocator in-rel _schema _args]
-        (util/with-close-on-catch [row-num-wtr (vw/->writer (BigIntVector. (str col-name) (FieldType/notNullable #xt.arrow/type :i64) allocator))]
-          (let [start-row-num (aget row-num 0)
-                row-count (.getRowCount in-rel)]
-            (dotimes [idx row-count]
-              (.writeLong row-num-wtr (+ idx start-row-num)))
-            (aset row-num 0 (+ start-row-num row-count))
-            (vw/vec-wtr->rdr row-num-wtr)))))))
-
-(defn ->star-projection-spec ^ProjectionSpec [^Field field]
-  (reify ProjectionSpec
-    (getField [_] field)
-
-    (project [_ allocator in-rel _schema _args]
-      (let [row-count (.getRowCount in-rel)]
-        (util/with-close-on-catch [^StructVector struct-vec (-> ^Field (apply types/->field (.getName field) #xt.arrow/type :struct false
-                                                                              (for [^IVectorReader col in-rel]
-                                                                                (types/field-with-name (.getField col) (.getName col))))
-                                                                (.createVector allocator))]
-
-          ;; TODO can we quickly set all of these to 1?
-          (dotimes [idx row-count]
-            (.setIndexDefined struct-vec idx))
-
-          (doseq [^IVectorReader col in-rel]
-            (.copyTo col (.getChild struct-vec (.getName col))))
-
-          (.setValueCount struct-vec (.getRowCount in-rel))
-
-          (vr/vec->reader struct-vec))))))
-
-(defrecord RenameProjectionSpec [from-name, ^Field to-field]
-  ProjectionSpec
-  (getField [_] to-field)
-
-  (project [_ _allocator in-rel _schema _args]
-    (or (some-> (.vectorForOrNull in-rel (str from-name))
-                (.withName (.getName to-field)))
-        (throw (ex-info (str "Column " from-name " not found in relation")
-                        {:from-name from-name
-                         :to-field to-field
-                         :relation (into #{} (map #(.getName ^IVectorReader %)) in-rel)})))))
+  (ProjectionSpec$Identity. field))
 
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
@@ -120,8 +63,8 @@
                        (try
                          (doseq [^ProjectionSpec projection-spec projection-specs]
                            (let [out-col (.project projection-spec allocator read-rel schema args)]
-                             (when-not (or (instance? IdentityProjectionSpec projection-spec)
-                                           (instance? RenameProjectionSpec projection-spec))
+                             (when-not (or (instance? ProjectionSpec$Identity projection-spec)
+                                           (instance? ProjectionSpec$Rename projection-spec))
                                (.add close-cols out-col))
                              (.add out-cols out-col)))
 
@@ -149,16 +92,16 @@
                                                                                    (types/field-with-name (str arg))))
 
                                            :row-number-column (let [[col-name _form] (first arg)]
-                                                                (->row-number-projection-spec col-name))
+                                                                (ProjectionSpec$RowNumber. (str col-name)))
 
                                            :star (let [[col-name _star] (first arg)]
-                                                   (->star-projection-spec (apply types/->field (str col-name) #xt.arrow/type :struct false (vals inner-fields))))
+                                                   (ProjectionSpec$Star. (apply types/->field (str col-name) #xt.arrow/type :struct false (vals inner-fields))))
 
                                            :rename (let [[to-name from-name] (first arg)
                                                          field (some-> (get inner-fields from-name)
                                                                        (types/field-with-name (str to-name)))]
                                                      (assert field (format "Field %s not found in relation, available %s" from-name (pr-str (keys inner-fields))))
-                                                     (->RenameProjectionSpec from-name field))
+                                                     (ProjectionSpec$Rename. (str from-name) field))
 
                                            :extend (let [[col-name form] (first arg)
                                                          input-types {:col-types (update-vals inner-fields types/field->col-type)

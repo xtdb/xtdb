@@ -33,6 +33,9 @@ data class NamelessField(val fieldType: FieldType, val children: List<ArrowField
     val nullable get() = copy(fieldType = FieldType.nullable(fieldType.type))
 
     companion object {
+        fun ArrowType.asField(children: List<ArrowField>) =
+            NamelessField(FieldType.notNullable(this), children)
+
         fun ArrowType.asField(vararg children: Pair<FieldName, NamelessField>) =
             NamelessField(FieldType.notNullable(this), *children)
 
@@ -70,6 +73,8 @@ object Fields {
 
     fun Struct(vararg fields: Pair<FieldName, NamelessField>) =
         STRUCT_TYPE.asField(*fields)
+
+    fun Struct(fields: List<ArrowField>) = STRUCT_TYPE.asField(fields)
 
     fun List(el: NamelessField, elName: FieldName = "\$data\$") =
         LIST_TYPE.asField(elName to el)

@@ -23,6 +23,7 @@ import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import org.jetbrains.annotations.NotNull;
 import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
@@ -52,6 +53,7 @@ import static xtdb.time.Time.*;
 
 public class ValueVectorReader implements IVectorReader {
 
+    @NotNull
     public static IVectorReader from(ValueVector v) {
         return ValueVectorReadersKt.from(v);
     }
