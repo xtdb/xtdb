@@ -14,10 +14,10 @@
 
 (t/deftest test-valid-time-capping-for-cas
   (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2020"} #inst "2020"]])
-  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2025"} #inst "2025"]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2035"} #inst "2035"]])
 
 
-  (t/is (false? (xt/tx-committed? *api* (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :version "2025"}]
+  (t/is (false? (xt/tx-committed? *api* (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :version "2035"}]
                                                               [::xt/put {:xt/id :ivan :name "present-day"}]]))))
   (t/is (true? (xt/tx-committed? *api* (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :version "2020"}]
                                                              [::xt/put {:xt/id :ivan :name "present-day"}]])))))
