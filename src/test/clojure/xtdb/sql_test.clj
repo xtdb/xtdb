@@ -2816,3 +2816,11 @@ UNION ALL
 
   (t/is (= [{:xt/id #uuid "2f64d726-b528-4897-b3b1-db41cd9e887b"}]
            (xt/q tu/*node* "SELECT * FROM foo"))))
+
+(t/deftest null->struct-ingestion-stopped-4300
+  ;; FIXME #4300
+  #_#_#_
+  (xt/execute-tx tu/*node* ["INSERT INTO \"test_null_values\" RECORDS {\"metadata\": {\"key\": 'value', \"value\": NULL}, \"_id\": UUID 'b5e2705f-5ba7-46c5-b595-afc96370742d'}"])
+  (xt/execute-tx tu/*node* ["UPDATE \"test_null_values\" SET \"metadata\" = NULL WHERE (\"_id\" = UUID 'b5e2705f-5ba7-46c5-b595-afc96370742d')"])
+
+  (xt/q tu/*node* "SELECT * FROM `test_null_values`"))
