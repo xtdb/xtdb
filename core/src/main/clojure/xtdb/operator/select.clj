@@ -3,13 +3,8 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
-            [xtdb.util :as util]
             [xtdb.types :as types])
-  (:import java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator
-           xtdb.ICursor
-           xtdb.operator.SelectionSpec
-           xtdb.vector.RelationReader))
+  (:import (xtdb.operator SelectCursor)))
 
 (defmethod lp/ra-expr :select [_]
   (s/cat :op #{:σ :sigma :select}
@@ -17,24 +12,6 @@
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^SelectionSpec selector, schema, args]
-  ICursor
-  (tryAdvance [_ c]
-    (let [advanced? (boolean-array 1)]
-      (while (and (.tryAdvance in-cursor
-                               (reify Consumer
-                                 (accept [_ in-rel]
-                                   (let [^RelationReader in-rel in-rel]
-                                     (when-let [idxs (.select selector allocator in-rel schema args)]
-                                       (when-not (zero? (alength idxs))
-                                         (.accept c (.select in-rel idxs))
-                                         (aset advanced? 0 true)))))))
-                  (not (aget advanced? 0))))
-      (aget advanced? 0)))
-
-  (close [_]
-    (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-fields] :as args}]
   (lp/unary-expr (lp/emit-expr relation args)
