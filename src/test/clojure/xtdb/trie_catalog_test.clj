@@ -191,3 +191,9 @@
                    "l02-rc-p3-b01"}
                  (->> (cat/current-tries (cat/trie-state cat "public/foo"))
                       (into (sorted-set) (map :trie-key)))))))))
+
+(t/deftest handles-l1h-l1c-ordering-4301
+  ;; L1H and L1C are in different partitions, so (strictly speaking) we should handle these out of order
+  ;; (in practice, we always submit L1C after L1H - but this keeps the invariant definition simpler to understand)
+  (t/is (= #{"l01-r20200101-b01" "l01-r20200102-b01" "l01-rc-b01"}
+           (curr-tries ["l01-r20200101-b01" 5] ["l01-rc-b01" 15] ["l01-r20200102-b01" 5]))))
