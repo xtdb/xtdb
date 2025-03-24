@@ -8,6 +8,7 @@
            [java.nio ByteBuffer]
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
+           (java.time LocalDate)
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TrieDetails TrieMetadata TemporalMetadata)))
@@ -205,7 +206,7 @@
 (defn all-tries [{:keys [tries]}]
   (->> (into [] (mapcat val) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
-       (sort-by :block-idx)))
+       (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
   (when (.hasTemporalMetadata trie-metadata)
