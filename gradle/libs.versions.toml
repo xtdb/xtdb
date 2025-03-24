@@ -48,7 +48,7 @@ honeysql={ group="com.github.seancorfield", name="honeysql", version="2.6.1203" 
 integrant={ group="integrant", name="integrant", version="0.13.1" }
 buddy-hashers={ group="buddy", name="buddy-hashers", version="2.0.167" }
 
-pgjdbc={ group="org.postgresql", name="postgresql", version="42.7.3" }
+pgjdbc={ group="org.postgresql", name="postgresql", version="42.7.5" }
 
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlin-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }

@@ -23,7 +23,7 @@ dependencies {
 
     compileOnlyApi(files("src/main/resources"))
     api(kotlin("stdlib-jdk8"))
-    implementation("org.postgresql:postgresql:42.2.23")
+    implementation("org.postgresql:postgresql:42.7.5")
 
     testImplementation(libs.next.jdbc)
 }
