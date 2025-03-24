@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.ArrowUtil.openArrowBufView
 import xtdb.operator.SelectionSpec
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import java.nio.ByteBuffer
 import java.util.stream.IntStream
 

@@ -1,7 +1,7 @@
 package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 
 interface SelectionSpec {
     /**
