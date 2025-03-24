@@ -144,7 +144,7 @@ constructor(
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
     private val IRelationWriter.fields
-        get() = this@fields.vectorFor("op").vectorFor("put").field
+        get() = this.vectorFor("op").vectorFor("put").field
             .also { assert(it.type is ArrowType.Struct) }
             .children
             .associateBy { it.name }
