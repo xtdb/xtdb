@@ -204,7 +204,7 @@
     (util/delete-dir node-dir)
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
 
-      (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
 
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
