@@ -3,18 +3,9 @@
             [clojure.string :as str]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
-  (:import java.time.Clock
-           java.util.ArrayList
-           java.util.function.Consumer
-           java.util.List
-           org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector.types.pojo Field)
-           xtdb.ICursor
-           (xtdb.operator ProjectionSpec ProjectionSpec$Identity ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)
-           xtdb.vector.RelationReader))
+            [xtdb.types :as types])
+  (:import (org.apache.arrow.vector.types.pojo Field)
+           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
 
 (s/def ::append-columns? boolean?)
 
@@ -46,38 +37,8 @@
 (defn ->identity-projection-spec ^ProjectionSpec [field]
   (ProjectionSpec$Identity. field))
 
-(deftype ProjectCursor [^BufferAllocator allocator
-                        ^ICursor in-cursor
-                        ^List #_<ProjectionSpec> projection-specs
-                        ^Clock clock
-                        schema
-                        args]
-  ICursor
-  (tryAdvance [_ c]
-    (.tryAdvance in-cursor
-                 (reify Consumer
-                   (accept [_ read-rel]
-                     (let [^RelationReader read-rel read-rel
-                           close-cols (ArrayList.)
-                           out-cols (ArrayList.)]
-                       (try
-                         (doseq [^ProjectionSpec projection-spec projection-specs]
-                           (let [out-col (.project projection-spec allocator read-rel schema args)]
-                             (when-not (or (instance? ProjectionSpec$Identity projection-spec)
-                                           (instance? ProjectionSpec$Rename projection-spec))
-                               (.add close-cols out-col))
-                             (.add out-cols out-col)))
-
-                         (.accept c (vr/rel-reader out-cols (.getRowCount read-rel)))
-
-                         (finally
-                           (run! util/try-close close-cols))))))))
-
-  (close [_]
-    (util/try-close in-cursor)))
-
-(defn ->project-cursor [{:keys [allocator clock args schema]} in-cursor projection-specs]
-  (->ProjectCursor allocator in-cursor projection-specs clock schema args))
+(defn ->project-cursor [{:keys [allocator args schema]} in-cursor projection-specs]
+  (ProjectCursor. allocator in-cursor projection-specs schema args))
 
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-fields] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]

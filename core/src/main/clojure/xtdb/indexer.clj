@@ -373,7 +373,7 @@
 
               (throw-assert-failed)))
 
-        (assert (not (.tryAdvance res nil))
+        (assert (not (.tryAdvance res (fn [_])))
                 "only expecting one batch in assert")))))
 
 (defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, tx-opts, query-opts]
