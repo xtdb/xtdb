@@ -13,7 +13,7 @@ testcontainers="1.20.3"
 micrometer="1.14.5"
 transit="1.0.329"
 
-slf4j="2.0.16"
+slf4j="2.0.17"
 logback="1.5.16"
 
 [libraries]
