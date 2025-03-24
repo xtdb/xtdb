@@ -56,7 +56,7 @@ class ScanCursor(
                 val contentRelFactory = MultiVectorRelationFactory(leafReaders, colNames.toList())
 
                 leafReaders.forEachIndexed { idx, leafReader ->
-                    EventRowPointer.Arrow(leafReader, taskPath)
+                    EventRowPointer(leafReader, taskPath)
                         .takeIf { it.isValid(isValidPtr, taskPath) }
                         ?.let { mergeQueue.add(LeafPointer(it, idx)) }
                 }

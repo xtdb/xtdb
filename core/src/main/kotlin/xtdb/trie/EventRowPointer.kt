@@ -2,93 +2,41 @@ package xtdb.trie
 
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorReader
-import xtdb.vector.IVectorReader
-import xtdb.vector.RelationReader as OldRelationReader
 
-interface EventRowPointer {
-    val index: Int
+class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
+    private val iidReader = relReader["_iid"]
 
-    val systemFrom: Long
-    val validFrom: Long
-    val validTo: Long
-    val op: String
+    private val sysFromReader = relReader["_system_from"]
+    private val validFromReader = relReader["_valid_from"]
+    private val validToReader = relReader["_valid_to"]
 
-    fun nextIndex(): Int
-    fun getIidPointer(reuse: ArrowBufPointer): ArrowBufPointer
-    fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean
+    private val opReader = relReader["op"]
 
-    class XtArrow(val relReader: RelationReader, path: ByteArray): EventRowPointer {
-        private val iidReader: VectorReader = relReader["_iid"]
+    var index: Int private set
 
-        private val sysFromReader: VectorReader = relReader["_system_from"]
-        private val validFromReader: VectorReader = relReader["_valid_from"]
-        private val validToReader: VectorReader = relReader["_valid_to"]
-
-        private val opReader: VectorReader = relReader["op"]
-
-        override var index: Int private set
-
-        init {
-            var left = 0
-            var right = relReader.rowCount
-            var mid: Int
-            while (left < right) {
-                mid = (left + right) / 2
-                if (HashTrie.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1
-                else right = mid
-            }
-            this.index = left
+    init {
+        var left = 0
+        var right = relReader.rowCount
+        var mid: Int
+        while (left < right) {
+            mid = (left + right) / 2
+            if (HashTrie.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1
+            else right = mid
         }
-
-        override fun nextIndex() = ++index
-
-        override fun getIidPointer(reuse: ArrowBufPointer) = iidReader.getPointer(index, reuse)
-
-        override val systemFrom get() = sysFromReader.getLong(index)
-        override val validFrom get() = validFromReader.getLong(index)
-        override val validTo get() = validToReader.getLong(index)
-        override val op get() = opReader.getLeg(index)!!
-
-        override fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =
-            index < relReader.rowCount && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0
+        this.index = left
     }
 
-    class Arrow(val relReader: OldRelationReader, path: ByteArray): EventRowPointer {
-        private val iidReader = relReader["_iid"]
+    fun nextIndex() = ++index
 
-        private val sysFromReader = relReader["_system_from"]
-        private val validFromReader = relReader["_valid_from"]
-        private val validToReader = relReader["_valid_to"]
+    fun getIidPointer(reuse: ArrowBufPointer) = iidReader.getPointer(index, reuse)
 
-        private val opReader = relReader["op"]
+    val systemFrom get() = sysFromReader.getLong(index)
+    val validFrom get() = validFromReader.getLong(index)
+    val validTo get() = validToReader.getLong(index)
+    val op get() = opReader.getLeg(index)!!
 
-        override var index: Int private set
-
-        init {
-            var left = 0
-            var right = relReader.rowCount
-            var mid: Int
-            while (left < right) {
-                mid = (left + right) / 2
-                if (HashTrie.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1
-                else right = mid
-            }
-            this.index = left
-        }
-
-        override fun nextIndex() = ++index
-
-        override fun getIidPointer(reuse: ArrowBufPointer) = iidReader.getPointer(index, reuse)
-
-        override val systemFrom get() = sysFromReader.getLong(index)
-        override val validFrom get() = validFromReader.getLong(index)
-        override val validTo get() = validToReader.getLong(index)
-        override val op get() = opReader.getLeg(index)!!
-
-        override fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =
-            index < relReader.rowCount && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0
-    }
+    fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =
+        index < relReader.rowCount && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0
 
     companion object {
         @JvmStatic

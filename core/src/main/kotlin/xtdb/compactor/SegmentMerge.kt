@@ -84,7 +84,7 @@ internal class SegmentMerge(private val al: BufferAllocator) {
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
         for (dataReader in mpNodes.mapNotNull { it.loadDataPage() }) {
-            val evPtr = EventRowPointer.XtArrow(dataReader, path)
+            val evPtr = EventRowPointer(dataReader, path)
             val rowCopier = outWriter.rowCopier(dataReader)
 
             if (evPtr.isValid(isValidPtr, path))
