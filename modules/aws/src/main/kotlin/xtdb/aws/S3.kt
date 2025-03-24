@@ -218,7 +218,7 @@ class S3(
         client.deleteObject {
             it.bucket(bucket)
             it.key(prefix.resolve(k).toString())
-        }
+        }.await()
 
         Unit
     }

@@ -5,7 +5,7 @@
             [xtdb.migration :as mig]
             [xtdb.node :as xtn]
             [xtdb.table-catalog :as table-cat]
-            [xtdb.trie-catalog :as trie-cat]
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.io File]
            [java.nio.file Path]
@@ -86,3 +86,16 @@
 
       (t/is (= [{:prices 2500}]
                (xt/q v6-node "SELECT COUNT(*) AS prices FROM prices FOR ALL VALID_TIME"))))))
+
+(t/deftest test-wont-migrate-into-existing-directory
+  (util/with-tmp-dirs #{node-dir}
+    (util/with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                           :storage [:local {:path (.resolve node-dir "objects")}]})]
+
+      (xt/execute-tx node ["INSERT INTO foo RECORDS {_id: 1}"])
+      (tu/finish-block! node)
+      (c/compact-all! node #xt/duration "PT0.5S"))
+
+    (t/is (pos? (mig/migrate-from 5 {:storage [:local {:path (.resolve node-dir "objects")}]})))
+
+    (t/is (zero? (mig/migrate-from 5 {:storage [:local {:path (.resolve node-dir "objects")}]} {:force? true})))))

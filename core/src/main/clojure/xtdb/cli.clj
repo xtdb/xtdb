@@ -39,6 +39,9 @@
     :id :playground-port
     :parse-fn parse-long]
 
+   [nil "--force" "Confirm any destructive operations without prompting"
+    :id :force?]
+
    ["-h" "--help"]])
 
 (defn edn-file->config-opts
@@ -99,7 +102,7 @@
   (logging/set-from-env! (System/getenv))
 
   (try
-    (let [{::keys [errors help migrate-from-version playground-port node-opts]} (parse-args args)]
+    (let [{::keys [errors help migrate-from-version playground-port node-opts force?]} (parse-args args)]
       (cond
         errors (binding [*out* *err*]
                  (doseq [error errors]
@@ -110,7 +113,7 @@
                (println help)
                (System/exit 0))
 
-        migrate-from-version (System/exit (mig/migrate-from migrate-from-version node-opts))
+        migrate-from-version (System/exit (mig/migrate-from migrate-from-version node-opts {:force? force?}))
 
         :else (util/with-open [_node (if playground-port
                                        (pgw/open-playground {:port playground-port})

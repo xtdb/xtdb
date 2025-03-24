@@ -4,6 +4,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.Relation
+import xtdb.arrow.unsupported
 import java.nio.ByteBuffer
 import java.nio.file.Path
 
@@ -45,21 +46,24 @@ interface BufferPool : AutoCloseable {
      */
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
+    fun deleteAllObjects()
+
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
 
     companion object {
         @JvmField
         val UNUSED = object : BufferPool {
-            private fun throwUnused(): Nothing = error("using supposedly unused buffer pool")
 
-            override fun getByteArray(key: Path) = throwUnused()
-            override fun getFooter(key: Path) = throwUnused()
-            override fun getRecordBatch(key: Path, idx: Int) = throwUnused()
-            override fun putObject(key: Path, buffer: ByteBuffer) = throwUnused()
-            override fun listAllObjects() = throwUnused()
-            override fun listAllObjects(dir: Path) = throwUnused()
-            override fun openArrowWriter(key: Path, rel: Relation) = throwUnused()
-            override fun close() = throwUnused()
+            override fun getByteArray(key: Path) = unsupported("getByteArray")
+            override fun getFooter(key: Path) = unsupported("getFooter")
+            override fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")
+            override fun putObject(key: Path, buffer: ByteBuffer) = unsupported("putObject")
+            override fun listAllObjects() = unsupported("listAllObjects")
+            override fun listAllObjects(dir: Path) = unsupported("listAllObjects")
+            override fun deleteAllObjects() = unsupported("deleteObject")
+            override fun openArrowWriter(key: Path, rel: Relation) = unsupported("openArrowWriter")
+
+            override fun close() = Unit
         }
     }
 }

@@ -75,6 +75,13 @@ class MemoryBufferPool(
                 .map { StoredObject(it.key, it.value.capacity()) }
         }
 
+    override fun deleteAllObjects() {
+        synchronized(memoryStore) {
+            memoryStore.values.forEach { it.close() }
+            memoryStore.clear()
+        }
+    }
+
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val baos = ByteArrayOutputStream()
         return newChannel(baos).closeOnCatch { writeChannel ->
@@ -106,10 +113,7 @@ class MemoryBufferPool(
     override fun evictCachedBuffer(key: Path) {}
 
     override fun close() {
-        synchronized(memoryStore) {
-            memoryStore.values.forEach { it.close() }
-            memoryStore.clear()
-        }
+        deleteAllObjects()
         allocator.close()
     }
 }

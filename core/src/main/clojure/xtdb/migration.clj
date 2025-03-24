@@ -5,6 +5,7 @@
             [xtdb.migration.v05 :as v05]
             [xtdb.node :as xtn]
             xtdb.node.impl
+            [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.storage Storage Storage$Factory]
@@ -35,20 +36,37 @@
 
       (doto ig/load-namespaces)))
 
-(defn migrate-from [^long from-version node-opts]
-  (log/infof "Starting migration tool: from storage version %d to %d" from-version Storage/VERSION)
+(defn migrate-from
+  ([^long from-version node-opts] (migrate-from from-version node-opts {}))
 
-  (let [system (-> (migration-system (xtn/->config node-opts) from-version)
-                   ig/prep
-                   ig/init)]
-    (try
-      (case from-version
-        5 (v05/migrate->v06! system)
-        (throw (err/illegal-arg :unsupported-migration-version
-                                {::err/message (format "Unsupported migration version: %d" from-version)})))
+  ([^long from-version node-opts {:keys [force?]}]
+   (log/infof "Starting migration tool: from storage version %d to %d" from-version Storage/VERSION)
 
-      (log/info "\nThe migration is complete, and this task will now exit.\nYou may now upgrade your new XTDB nodes in the usual green/blue manner.")
+   (let [{^BufferPool bp :xtdb/buffer-pool, :as system} (-> (migration-system (xtn/->config node-opts) from-version)
+                                                            ig/prep
+                                                            ig/init)]
+     (try
+       (let [existing-objs? (boolean (seq (.listAllObjects bp)))]
+         (if (and existing-objs? (not force?))
+           (do
+             (log/error "Existing objects in the target directory - use the `--force` flag to clear the target directory.")
+             1)
 
-      (finally
-        (ig/halt! system)))))
+           (do
+             (when (and existing-objs? force?)
+               (log/info "`--force` provided: clearing existing objects in the target directory.")
+               (.deleteAllObjects bp))
 
+             (assert (empty? (.listAllObjects bp)) "Target directory not empty.")
+
+             (case from-version
+               5 (v05/migrate->v06! system)
+               (throw (err/illegal-arg :unsupported-migration-version
+                                       {::err/message (format "Unsupported migration version: %d" from-version)})))
+
+             (log/info "\nThe migration is complete, and this task will now exit.\nYou may now upgrade your new XTDB nodes in the usual green/blue manner.")
+
+             0)))
+
+       (finally
+         (ig/halt! system))))))

@@ -2,10 +2,11 @@ package xtdb.buffer_pool
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -58,7 +59,7 @@ class RemoteBufferPool(
             factory.localDiskCache.also { it.createDirectories() },
             factory.maxDiskCacheBytes
                 ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0)).toLong()
-        ).apply { meterRegistry?.registerDiskCache("disk-cache")}
+        ).apply { meterRegistry?.registerDiskCache("disk-cache") }
 
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("mem-cache-misses")
@@ -70,12 +71,13 @@ class RemoteBufferPool(
 
         private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
 
-        private val Path.totalSpace get() = Files.getFileStore(this).totalSpace.also {
-            LOGGER.debug("Total disk space for $this: ${Files.getFileStore(this).totalSpace}")
-        }
-        
+        private val Path.totalSpace
+            get() = Files.getFileStore(this).totalSpace.also {
+                LOGGER.debug("Total disk space for $this: ${Files.getFileStore(this).totalSpace}")
+            }
+
         private val multipartUploadDispatcher =
-            Dispatchers.IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
+            IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
 
         @JvmStatic
         fun <P> SupportsMultipart<P>.uploadMultipartBuffers(key: Path, nioBuffers: List<ByteBuffer>) = runBlocking {
@@ -192,6 +194,13 @@ class RemoteBufferPool(
 
     override fun listAllObjects() = objectStore.listAllObjects()
     override fun listAllObjects(dir: Path) = objectStore.listAllObjects(dir)
+
+    override fun deleteAllObjects() {
+        runBlocking(IO.limitedParallelism(8, "xtdb-delete-all-objects")) {
+            for (obj in listAllObjects())
+                future { objectStore.deleteObject(obj.key) }
+        }
+    }
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()
