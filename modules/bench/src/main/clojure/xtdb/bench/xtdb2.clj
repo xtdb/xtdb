@@ -7,25 +7,22 @@
             [xtdb.bench.measurement :as bm]
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.io File)
            (java.nio.file Path)
-           (java.time Duration InstantSource)
-           (xtdb.indexer IIndexer)))
+           (java.time Duration InstantSource)))
 
 (set! *warn-on-reflection* false)
 
 (defn sync-node
-  ([node]
-   (sync-node node nil))
+  ([node] (sync-node node nil))
 
   ([node ^Duration timeout]
-   (.awaitTx ^IIndexer (util/component node :xtdb/indexer)
-             (xtp/latest-submitted-tx-id node)
-             timeout)))
+   (xt-log/await-tx node (xtp/latest-submitted-tx-id node) timeout)))
 
 (defn finish-block! [node]
   (li/finish-block! node))

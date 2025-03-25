@@ -76,46 +76,49 @@
 
 (defn ->ingestion-stage
   ([size devices] (->ingestion-stage size devices {}))
-  ([size devices {:keys [backfill?] :or {backfill? false}}]
+  ([size devices {:keys [backfill?] :or {backfill? true}}]
    [{:t :do
      :stage :ingest
      :tasks [{:t :call :f (fn [{:keys [sut]}]
                             ;; batching by day
                             (doseq [batch (partition-all (* 24 12) (docs size devices))]
-                              (xt/submit-tx sut batch (if backfill?
-                                                        {}
+                              (xt/submit-tx sut batch (when backfill?
                                                         {:system-time (batch->largest-valid-time batch)}))))}]}
     {:t :do
      :stage :sync
-     :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofMinutes 5)))}]}
+     :tasks [{:t :call
+              :f (fn [{:keys [sut]}]
+                   (bxt/sync-node sut (Duration/ofMinutes 5)))}]}
 
     {:t :do
      :stage :compact
-     :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/compact! sut))}]}]))
+     :tasks [{:t :call
+              :f (fn [{:keys [sut]}]
+                   (bxt/compact! sut))}]}]))
 
 (defn benchmark [{:keys [size devices seed load-phase] :or {seed 0}}]
   {:title "Readings benchmarks"
    :seed seed
-   :tasks
-   (concat (if load-phase
-             (->ingestion-stage size devices)
-             [])
+   :tasks (concat (if load-phase
+                    (->ingestion-stage size devices)
+                    [])
 
-           [{:t :call :f (fn [{:keys [sut ^AbstractMap custom-state]}]
-                           (let [{:keys [latest-completed-tx]} (xt/status sut)
-                                 max-valid-time (-> (xt/q sut max-valid-time-q)
-                                                    first
-                                                    :max-valid-time)]
-                             (.putAll custom-state {:latest-completed-tx latest-completed-tx
-                                                    :max-valid-time max-valid-time})))}]
+                  [{:t :call
+                    :f (fn [{:keys [sut ^AbstractMap custom-state]}]
+                         (let [{:keys [latest-completed-tx]} (xt/status sut)
+                               max-valid-time (-> (xt/q sut max-valid-time-q)
+                                                  first
+                                                  :max-valid-time)]
+                           (.putAll custom-state {:latest-completed-tx latest-completed-tx
+                                                  :max-valid-time max-valid-time})))}]
 
-           ;; this accumulates over the most recent interval
-           (for [interval [:now :day :week :month :quarter :year]]
-             (->query-stage interval))
+                  ;; this accumulates over the most recent interval
+                  (for [interval [:now :day :week :month :quarter :year]]
+                    (->query-stage interval))
 
-           ;; running the same queries but a year (valid-time) in the past
-           (for [interval [:now :day :week :month :quarter :year]]
-             (->query-stage interval :year)))})
+                  ;; running the same queries but a year (valid-time) in the past
+                  (for [interval [:now :day :week :month :quarter :year]]
+                    (->query-stage interval :year)))})
 
 
 (defn overwritten-readings [{:keys [size devices seed load-phase] :or {seed 0}}]
@@ -137,7 +140,9 @@
 
 (comment
   (require '[clojure.java.io :as io]
-           '[xtdb.api :as xt])
+           '[xtdb.bench :as bench]
+           '[xtdb.util :as util]
+           '[clojure.test :as t])
 
   (def node-dir (.toPath (io/file "dev/readings")))
   (def node (tu/->local-node {:node-dir node-dir}))
@@ -146,4 +151,20 @@
   (def max-valid-time (time (-> (xt/q node max-valid-time-q) first :max-valid-time)))
 
   (time (aggregate-query node (subtract-period max-valid-time :now) max-valid-time
-                         {:current-time (:system-time latest-completed-tx)})))
+                         {:current-time (:system-time latest-completed-tx)}))
+
+
+  (t/deftest run-benchmark
+    (let [path (util/->path "/tmp/readings-bench")
+          reload? false]
+      (when reload?
+        (util/delete-dir path))
+
+      (let [f (bench/compile-benchmark (benchmark {:size 1000, :devices 10000, :load-phase reload?})
+                                       @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
+
+        (with-open [node (tu/->local-node {:node-dir path})]
+          (f node))
+
+        #_
+        (f dev/node)))))
