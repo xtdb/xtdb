@@ -32,9 +32,9 @@
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.sql PreparedStatement Types)
-           (java.time Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
+           (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util LinkedList TreeMap)
+           (java.util LinkedList)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -46,12 +46,12 @@
            xtdb.api.query.IKeyFn
            xtdb.arrow.Relation
            (xtdb.indexer LiveTable Watermark Watermark$Source)
+           (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie Trie)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader RelationReader)
-           (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -177,8 +177,9 @@
                (->> (iterate #(.plus ^YearMonth % len unit) (YearMonth/of year month))
                     (map #(Instant/ofEpochSecond (.toEpochSecond (.atDay ^YearMonth % 1) LocalTime/MIDNIGHT ZoneOffset/UTC)))))]
        (case u
-         :second (iterate #(.plusMillis ^Instant % (* 1000 len)) inst)
-         :minute (iterate #(.plusMillis ^Instant % (* 1000 60 len)) inst)
+         :second (iterate #(.plus ^Instant % (Duration/ofSeconds len)) inst)
+         :minute (iterate #(.plus ^Instant % (Duration/ofMinutes len)) inst)
+         :hour (iterate #(.plus ^Instant % (Duration/ofHours len)) inst)
          :day (iterate #(.plus ^Instant % (Period/ofDays len)) inst)
          :month (to-seq ChronoUnit/MONTHS)
          :quarter (->> (iterate #(.plusMonths ^YearMonth % (* 3 len)) (YearMonth/of year month))

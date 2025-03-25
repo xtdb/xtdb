@@ -1,27 +1,27 @@
 (ns xtdb.bench.readings
-  (:require [xtdb.api :as xt]
+  (:require [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.bench.xtdb2 :as bxt]
-            [xtdb.time :as time]
-            [xtdb.test-util :as tu])
-  (:import (java.util AbstractMap)
-           (java.time Duration Instant)))
+            [xtdb.test-util :as tu]
+            [xtdb.time :as time])
+  (:import (java.time Duration Instant)
+           (java.util AbstractMap)))
 
 (defn random-float [min max] (+ min (* (rand) (- max min))))
 
 (defn docs
   ([n] (docs n 10000))
   ([n devices]
-   (->> (tu/->instants :minute 5 #inst "2020-01-01")
+   (->> (tu/->instants :minute 30 #inst "2020-01-01")
         (partition 2 1)
-        (mapcat (fn [[start end]]
-                  (for [i (range 0 devices 1000)]
-                    (into [:put-docs {:into :readings :valid-from start :valid-to end}]
-                          (for [j (range i (min devices (+ i 1000)))]
-                            {:xt/id j :value (random-float -100 100)})))))
-        (take (* n (inc (quot devices 1000)))))))
+        (take n)
+        (map (fn [[start end]]
+               (into [:put-docs {:into :readings :valid-from start :valid-to end}]
+                     (for [i (range 0 devices)]
+                       {:xt/id i :value (random-float -100 100)})))))))
 
 (defn batch->largest-valid-time [batch]
-  (-> batch last second :valid-to))
+  (-> batch second :valid-to))
 
 (def max-valid-time-q "SELECT max(_valid_from) AS max_valid_time FROM readings FOR ALL VALID_TIME
                        WHERE _id = 0")
@@ -80,10 +80,11 @@
    [{:t :do
      :stage :ingest
      :tasks [{:t :call :f (fn [{:keys [sut]}]
-                            ;; batching by day
-                            (doseq [batch (partition-all (* 24 12) (docs size devices))]
-                              (xt/submit-tx sut batch (when backfill?
-                                                        {:system-time (batch->largest-valid-time batch)}))))}]}
+                            (doseq [[idx batch] (map vector (range) (docs size devices))]
+                              (xt/submit-tx sut [batch]
+                                            (when backfill?
+                                              {:system-time (.plus (batch->largest-valid-time batch)
+                                                                   (Duration/ofMicros idx))}))))}]}
     {:t :do
      :stage :sync
      :tasks [{:t :call
@@ -160,7 +161,7 @@
       (when reload?
         (util/delete-dir path))
 
-      (let [f (bench/compile-benchmark (benchmark {:size 1000, :devices 10000, :load-phase reload?})
+      (let [f (bench/compile-benchmark (benchmark {:size 100000, :devices 10000, :load-phase reload?})
                                        @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
 
         (with-open [node (tu/->local-node {:node-dir path})]
