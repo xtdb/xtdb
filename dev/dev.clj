@@ -123,12 +123,17 @@
 
 
 (def standalone-config
-  {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                     :db-dir (io/file dev-node-dir "indexes"),
+  {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
+                                                     :db-dir (io/file dev-node-dir "indexes")
                                                      :block-cache :xtdb.rocksdb/block-cache}}
-                       :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
+                       :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                         :db-dir (io/file dev-node-dir "documents")
-                                                        :block-cache :xtdb.rocksdb/block-cache}}
+                                                        :block-cache :xtdb.rocksdb/block-cache}
+                                             :document-cache
+                                             {:xtdb/module 'xtdb.cache.kv-cache/->kv-cache
+                                              :kv-store {:xtdb/module `rocks/->kv-store
+                                                         :db-dir (io/file dev-node-dir "doc-cache")
+                                                         :block-cache :xtdb.rocksdb/block-cache}}}
                        :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
                                                 :db-dir (io/file dev-node-dir "tx-log")
                                                 :block-cache :xtdb.rocksdb/block-cache}}
