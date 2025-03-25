@@ -42,6 +42,11 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
 
     override fun rowCopier(rel: xtdb.arrow.RelationReader) = unsupported("IRelationWriter/rowCopier")
 
+    fun append(rel: RelationReader) {
+        rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }
+        rowCount += rel.rowCount
+    }
+
     fun openAsRelation(): Relation
 
     fun toReader() =
