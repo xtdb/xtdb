@@ -65,7 +65,7 @@
                       ^TrieCatalog trie-cat :xtdb/trie-catalog
                       :as system}]
   (let [chunk-meta-objs (.listAllObjects src (util/->path "chunk-metadata"))]
-    (log/infof "%d blocks to migrate..." (count chunk-meta-objs))
+    #_(log/infof "%d blocks to migrate..." (count chunk-meta-objs))
     (dorun
      (->> chunk-meta-objs
           (map-indexed (fn [block-idx obj]
