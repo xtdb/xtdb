@@ -11,7 +11,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.util.function IntPredicate)
+  (:import java.util.Date
+           (java.util.function IntPredicate)
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -818,3 +819,60 @@
                            (tu/query-ra '[:scan {:table public/docs :for-valid-time [:between #inst "2026" #inst "2027"]}
                                           [_id _valid_from _valid_to]]
                                         (assoc query-opts :snapshot-time (:system-time tx-key3))))))))))))))
+
+(t/deftest test-page-filtering
+  (util/with-open [n1 (xtn/start-node)
+                   n2 (xtn/start-node)]
+    (let [intervals (vec (for [dir [:normal :inverse]
+
+                               ;; could add in some end-of-times here
+                               [interval range1 range2] [["precedes" [#inst "2020" #inst "2021"] [#inst "2022" #inst "2023"]]
+                                                         ["meets" [#inst "2020" #inst "2021"], [#inst "2021" #inst "2022"]]
+                                                         ["overlaps" [#inst "2020" #inst "2022"], [#inst "2021" #inst "2023"]]
+                                                         ["starts" [#inst "2020" #inst "2022"], [#inst "2020" #inst "2023"]]
+                                                         ["during" [#inst "2020" #inst "2023"], [#inst "2021" #inst "2022"]]
+                                                         ["finishes" [#inst "2020" #inst "2022"], [#inst "2021" #inst "2022"]]
+                                                         ["equals" [#inst "2020" #inst "2022"], [#inst "2020" #inst "2022"]]]
+
+                               :let [[range1 range2] (case dir
+                                                       :normal [range1 range2]
+                                                       :inverse [range2 range1])]]
+                           {:interval interval, :dir dir
+                            :range1 range1, :range2 range2}))
+
+          tx1 [(into [:put-docs :foo]
+                     (map-indexed (fn [idx {[vf vt] :range1}]
+                                    {:xt/id idx, :version 1
+                                     :xt/valid-from vf, :xt/valid-to vt}))
+                     intervals)]
+
+          tx2 [(into [:put-docs :foo]
+                     (map-indexed (fn [idx {[vf vt] :range2}]
+                                    {:xt/id idx, :version 2,
+                                     :xt/valid-from vf, :xt/valid-to vt}))
+                     intervals)]]
+
+      (xt/execute-tx n1 tx1)
+      (xt/execute-tx n2 tx1)
+      (tu/finish-block! n2)
+      (c/compact-all! n2)
+      (xt/execute-tx n1 tx2)
+      (xt/execute-tx n2 tx2)
+      (tu/finish-block! n2)
+      (c/compact-all! n2)
+
+      (doseq [[idx {:keys [interval dir range1 range2]}] (map vector (range) intervals)]
+        (t/testing (format "%s interval: '%s'" (name dir) interval)
+          (doseq [date (into #{(Date. Long/MIN_VALUE) (Date. Long/MAX_VALUE)}
+                             (comp cat
+                                   (mapcat (fn [^Date date]
+                                             (for [^long delta (range -2 3)]
+                                               (Date. (+ (.getTime date) delta))))))
+                             [range1 range2])]
+            (t/testing (format "date: '%s'" (pr-str date))
+              (doseq [q ["SELECT * FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"
+                         "SELECT *, _valid_from, _valid_to FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"]]
+                (t/testing (format "query: '%s'" q)
+                  ;; params the wrong way around - see #4305
+                  (t/is (= (xt/q n1 [q idx date])
+                           (xt/q n2 [q idx date]))))))))))))
