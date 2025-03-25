@@ -14,4 +14,4 @@
   :dependencies [[org.clojure/clojure]
                  [com.xtdb/xtdb-core]
                  [com.xtdb/xtdb-metrics :scope "provided"]
-                 [org.rocksdb/rocksdbjni "7.7.3"]])
+                 [org.rocksdb/rocksdbjni "9.10.0"]])
