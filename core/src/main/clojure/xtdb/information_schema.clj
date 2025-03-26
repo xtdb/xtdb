@@ -320,10 +320,10 @@
               table-name (name fq-table)]
         [_ tries] (:tries trie-state)
         {:keys [trie-key level recency state data-file-size trie-metadata]} tries
-        :let [{:keys [row-count] :as trie-meta} (trie-cat/<-trie-metadata trie-metadata)]]
+        :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
     {:schema-name schema-name, :table-name table-name,
      :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
-     :trie-state (name state), :row-count row-count, :temporal-metadata (dissoc trie-meta :row-count :iid-bloom)}))
+     :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor

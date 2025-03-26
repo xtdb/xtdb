@@ -69,7 +69,7 @@
     (dorun
      (->> chunk-meta-objs
           (map-indexed (fn [block-idx obj]
-                         (log/infof "Migrating block %d..." block-idx)
+                         (log/debugf "Migrating block %d..." block-idx)
                          (when (Thread/interrupted) (throw (InterruptedException.)))
 
                          (let [{obj-key :key} (os/<-StoredObject obj)
@@ -95,12 +95,12 @@
                            (.addTries trie-cat (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-res]
                                                  (trie/->trie-details table-name trie-key data-file-size trie-metadata)))
 
-                           (log/infof "Writing table-block files for block %d" block-idx)
+                           (log/debugf "Writing table-block files for block %d" block-idx)
                            (let [table-block-paths (table-cat/finish-block! table-cat block-idx table-res
                                                                             (->> (for [table-name (.getTableNames trie-cat)]
                                                                                    [table-name (->> (trie-cat/trie-state trie-cat table-name)
                                                                                                     trie-cat/all-tries)])
                                                                                  (into {})))]
 
-                             (log/infof "Writing block file for block %d" block-idx)
+                             (log/debugf "Writing block file for block %d" block-idx)
                              (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))))))

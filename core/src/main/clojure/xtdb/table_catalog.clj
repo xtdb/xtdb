@@ -48,8 +48,7 @@
                        (.toByteArray))))
 
 (defn <-table-block [^TableBlock table-block]
-  (let [^Schema schema
-        (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]
+  (let [schema (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]
     {:row-count (.getRowCount table-block)
      :fields (->> (for [^Field field (.getFields schema)]
                     (MapEntry/create (.getName field) field))

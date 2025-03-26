@@ -90,7 +90,8 @@
                         (and (= other-state :live)
                              (< other-size file-size-target)
                              (<= other-block-idx block-idx))
-                        (assoc :state :garbage)))))))
+                        (-> (assoc :state :garbage)
+                            (dissoc :trie-metadata))))))))
 
 (defn- conj-trie [tries trie state]
   (conj (or tries '()) (assoc trie :state state)))
@@ -105,7 +106,8 @@
        (map-while (fn [{other-state :state, ^long other-block-idx :block-idx, :as trie}]
                     (when-not (= other-state :garbage)
                       (cond-> trie
-                        (<= other-block-idx block-idx) (assoc :state :garbage)))))))
+                        (<= other-block-idx block-idx) (-> (assoc :state :garbage)
+                                                           (dissoc :trie-metadata))))))))
 
 (defn- sibling-tries [table-tries, {:keys [^long level, recency, part]}]
   (let [pop-part (pop part)]
@@ -210,7 +212,7 @@
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
-  (when (.hasTemporalMetadata trie-metadata)
+  (when (and trie-metadata (.hasTemporalMetadata trie-metadata))
     (let [^TemporalMetadata temporal-metadata (.getTemporalMetadata trie-metadata)]
       {:min-valid-from (time/micros->instant  (.getMinValidFrom temporal-metadata))
        :max-valid-from (time/micros->instant (.getMaxValidFrom temporal-metadata))

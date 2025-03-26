@@ -12,19 +12,15 @@
            (xtdb.util Temporal)))
 
 (defn ->trie-details ^TrieDetails
-  ([table-name, trie-key, ^long data-file-size]
-   (.. (TrieDetails/newBuilder)
-       (setTableName table-name)
-       (setTrieKey trie-key)
-       (setDataFileSize data-file-size)
-       (build)))
+  ([table-name, trie-key, ^long data-file-size] (->trie-details table-name trie-key data-file-size nil))
+
   ([table-name, trie-key, ^long data-file-size, ^TrieMetadata trie-metadata]
-   (.. (TrieDetails/newBuilder)
-       (setTableName table-name)
-       (setTrieKey trie-key)
-       (setDataFileSize data-file-size)
-       (setTrieMetadata trie-metadata)
-       (build))))
+   (-> (TrieDetails/newBuilder)
+       (.setTableName table-name)
+       (.setTrieKey trie-key)
+       (.setDataFileSize data-file-size)
+       (cond-> trie-metadata (.setTrieMetadata trie-metadata))
+       (.build))))
 
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
   (str (Trie$Key. level recency (some-> part ByteArrayList/from) block-idx)))

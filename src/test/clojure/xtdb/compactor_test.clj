@@ -569,7 +569,7 @@
         (tu/finish-block! node)
 
 
-        (t/is (= (os/->StoredObject "tables/public$foo/blocks/b02.binpb" 4858)
+        (t/is (= (os/->StoredObject "tables/public$foo/blocks/b02.binpb" 4656)
                  (last (.listAllObjects bp (table-cat/->table-block-dir "public/foo")))))
 
         (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))

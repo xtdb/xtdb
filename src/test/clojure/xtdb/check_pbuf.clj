@@ -42,8 +42,8 @@
                                       (fn [^TrieDetails trie-details]
                                         {:trie-key (.getTrieKey trie-details)
                                          :data-file-size (.getDataFileSize trie-details)
-                                         :trie-metadata (-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
-                                                            (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))
+                                         :trie-metadata (some-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
+                                                                (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))
 
 (defn- write-pbuf-edn-file [^Path path parse-fn]
   (let [edn-file (.resolveSibling path (str (.getFileName path) ".edn"))]
