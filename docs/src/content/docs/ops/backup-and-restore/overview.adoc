@@ -1,0 +1,50 @@
+---
+title: Backup and Restore
+---
+
+This document provides an overview of XTDB's stateful components, what data is held where, what backups typically contain, and what data is at risk in various failure scenarios. It also links out to specific documented recovery scenarios and guidance.
+
+== What Does XTDB Store?
+
+XTDB has two major stateful components:
+
+=== 1. Log
+- A totally ordered log of all database operations - transactions, files written, etc.
+- Ensures serial transaction processing and full auditability.
+- Backed by pluggable implementations:
+  * *In-memory* (ephemeral)
+  * *Local disk* (single-node persistence)
+  * *Remote/Kafka* (multi-node durability and distribution)
+- Critical for replaying and restoring state from past transactions between indexing.
+
+=== 2. Storage Module
+- Stores the actual data and indexes used by XTDB.
+- Backed by:
+  * *In-memory* (ephemeral)
+  * *Local disk* (single-node)
+  * *Remote* (e.g., cloud object stores like Azure Blob Storage, with local caching)
+- Data is written to the storage module in blocks, which are periodically compacted into higher levels.
+- Written to disk as https://arrow.apache.org[Apache Arrow^] files.
+- Level-0 files contain full historical snapshots. Higher-level files are cache optimizations.
+
+== What Data Is at Risk?
+
+[cols="1,3", options="header"]
+|===
+| Component | Risk if Lost
+
+| Log
+| All transactions on the log since the last indexed offset. Writes after the last indexed offset would be lost.
+
+| Storage
+| Complete loss of all indexed data. Without an infinitely retained tx-log, full state cannot be reconstructed.
+
+| Local caches (disk/in-memory)
+| None - these are not essential and recreated automatically as needed.
+|===
+
+== Failure & Recovery Scenarios
+
+The following are potential failure scenarios and links to specific recovery guidance for each:
+
+* link:empty-log[**Log is empty/missing, but storage is intact.**]
