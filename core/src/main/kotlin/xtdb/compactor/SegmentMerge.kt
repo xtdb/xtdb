@@ -38,7 +38,7 @@ private fun ByteArray.toPathPredicate() =
 private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
     segment.dataRel?.loadPage(node)
 
-internal class SegmentMerge(private val al: BufferAllocator) {
+internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     class Result(internal val path: Path, val recency: LocalDate?, val leaves: List<PageTree.Leaf>) : AutoCloseable {
         fun openForRead() = path.openReadableChannel()
@@ -147,4 +147,6 @@ internal class SegmentMerge(private val al: BufferAllocator) {
             it.end()
         }
     }
+
+    override fun close() = outWriters.close()
 }

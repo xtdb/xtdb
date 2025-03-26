@@ -12,7 +12,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-merges-segments
-  (let [seg-merge (SegmentMerge. tu/*allocator*)]
+  (with-open [seg-merge (SegmentMerge. tu/*allocator*)]
     (util/with-open [lt0 (tu/open-live-table "foo")
                      lt1 (tu/open-live-table "foo")]
 

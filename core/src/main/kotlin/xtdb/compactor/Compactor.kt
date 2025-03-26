@@ -197,7 +197,14 @@ interface Compactor : AutoCloseable {
         }
 
         override fun close() {
-            runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+            runBlocking {
+                withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() }
+                    ?: LOGGER.warn("failed to close compactor cleanly in 10s")
+            }
+
+            segMerge.close()
+
+            LOGGER.debug("compactor closed")
         }
     }
 

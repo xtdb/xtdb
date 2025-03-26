@@ -11,7 +11,6 @@ import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
 import xtdb.util.closeAll
 import xtdb.util.openWritableChannel
-import xtdb.util.requiringResolve
 import java.nio.file.Path
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -19,8 +18,10 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import java.time.temporal.TemporalAdjusters.next
+import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.createTempFile
+import kotlin.io.path.deleteRecursively
 
 private typealias RecencyMicros = Long
 
@@ -75,7 +76,9 @@ internal interface OutWriter : AutoCloseable {
         fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int
     }
 
-    class OutWriters(private val al: BufferAllocator) {
+    class OutWriters(private val al: BufferAllocator): AutoCloseable {
+
+        private val tempDir = createTempDirectory("compactor")
 
         private class CopierFactory(private val dataRel: Relation) {
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
@@ -87,7 +90,7 @@ internal interface OutWriter : AutoCloseable {
 
         internal inner class OutRel(
             schema: Schema,
-            private val outPath: Path = createTempFile("merged-segments", ".arrow"),
+            private val outPath: Path = createTempFile(tempDir, "merged-segments", ".arrow"),
             val recency: LocalDate?
         ) : OutWriter {
             private val outRel = Relation(al, schema)
@@ -126,7 +129,7 @@ internal interface OutWriter : AutoCloseable {
         }
 
         internal inner class PartitionedOutWriter(private val schema: Schema, private val recencyPartition: RecencyPartition?) : OutWriter {
-            private val outDir = createTempDirectory("merged-segments")
+            private val outDir = createTempDirectory(tempDir, "merged-segments")
             private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
 
             private val historicalRels = mutableMapOf<LocalDate, OutRel>()
@@ -159,6 +162,11 @@ internal interface OutWriter : AutoCloseable {
                 historicalRels.closeAll()
                 currentRel.close()
             }
+        }
+
+        @OptIn(ExperimentalPathApi::class)
+        override fun close() {
+            tempDir.deleteRecursively()
         }
     }
 }
