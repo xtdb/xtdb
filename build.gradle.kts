@@ -45,7 +45,7 @@ val twelveGBJvmArgs = listOf(
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
-val buildEnv="standard"
+val buildEnv = "standard"
 
 layout.buildDirectory.set(
     when (buildEnv) {
@@ -432,7 +432,7 @@ fun createBench(benchName: String, properties: Map<String, String>) {
         classpath = sourceSets.dev.get().runtimeClasspath
         mainClass.set("clojure.main")
         jvmArgs(defaultJvmArgs + sixGBJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
-        val args = mutableListOf("-m", "xtdb.bench.xtdb2", benchName)
+        val args = mutableListOf("-m", "xtdb.bench", benchName)
 
         properties.forEach { (k, v) ->
             if (project.hasProperty(v)) {

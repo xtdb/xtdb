@@ -4,7 +4,6 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
-            [xtdb.bench.xtdb2 :as bxt]
             [xtdb.log :as xt-log])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random UUID)
@@ -616,13 +615,13 @@
 (defn load-phase-submit-tasks [sf]
   [{:t :call, :f (fn [_] (log/info "start submitting load stage"))}
    {:t :call, :f load-categories-tsv}
-   {:t :call, :f [bxt/generate :region generate-region 75]}
-   {:t :call, :f [bxt/generate :category generate-category 16908]}
-   {:t :call, :f [bxt/generate :user generate-user (* sf 1e6)]}
-   {:t :call, :f [bxt/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
-   {:t :call, :f [bxt/generate :item generate-item (* sf 1e6 10)]}
-   {:t :call, :f [bxt/generate :gag generate-global-attribute-group 100]}
-   {:t :call, :f [bxt/generate :gav generate-global-attribute-value 1000]}
+   {:t :call, :f [b/generate :region generate-region 75]}
+   {:t :call, :f [b/generate :category generate-category 16908]}
+   {:t :call, :f [b/generate :user generate-user (* sf 1e6)]}
+   {:t :call, :f [b/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
+   {:t :call, :f [b/generate :item generate-item (* sf 1e6 10)]}
+   {:t :call, :f [b/generate :gag generate-global-attribute-group 100]}
+   {:t :call, :f [b/generate :gav generate-global-attribute-value 1000]}
    {:t :call, :f (fn [_] (log/info "finished submitting load stage"))}
    {:t :call, :f (fn [_] (log/info "start awaiting load stage"))}
    {:t :call, :f #(then-await-tx (:sut %))}
@@ -637,73 +636,76 @@
               :stage :load
               :tasks (load-phase-submit-tasks sf)}]}))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn benchmark [{:keys [seed,
-                         threads,
-                         duration
-                         scale-factor
-                         load-phase
-                         sync]
-                  :or {seed 0,
-                       threads 8,
-                       duration "PT30S"
-                       scale-factor 0.1
-                       load-phase true
-                       sync false}}]
-  (let [^Duration duration (cond-> duration (string? duration) Duration/parse)
-        sf scale-factor]
+(defmethod b/cli-flags :auctionmark [_]
+  [["-d" "--duration DURATION"
+    :parse-fn #(Duration/parse %)
+    :default #xt/duration "PT30S"]
+
+   ["-s" "--scale-factor SCALE_FACTOR"
+    :parse-fn parse-double
+    :default 0.01]
+
+   ["-t" "--threads THREADS"
+    :parse-fn parse-long
+    :default (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))]
+
+   ["-h" "--help"]])
+
+(defmethod b/->benchmark :auctionmark [{:keys [seed threads duration scale-factor load-phase sync]
+                                        :or {seed 0, threads 8, sync false
+                                             duration "PT30S", scale-factor 0.1, load-phase true}}]
+  (let [^Duration duration (cond-> duration (string? duration) Duration/parse)]
     (log/trace {:scale-factor scale-factor})
     {:title "Auction Mark OLTP"
      :seed seed
-     :tasks
-     (into (if load-phase
-             [{:t :do
-               :stage :load
-               :tasks (load-phase-submit-tasks sf)}]
+     :tasks (into (if load-phase
+                    [{:t :do
+                      :stage :load
+                      :tasks (load-phase-submit-tasks scale-factor)}]
 
-             [])
-           [{:t :do
-             :stage :setup-worker
-             :tasks [{:t :call, :f (fn [_] (log/info "setting up worker with stats"))}
-                     ;; wait for node to catch up
-                     {:t :call, :f #(when-not load-phase
-                                      ;; otherwise nothing has come through the log yet
-                                      (Thread/sleep 1000)
-                                      (catchup (:sut %)))}
-                     {:t :call, :f load-stats-into-worker}
-                     {:t :call, :f log-stats}
-                     {:t :call, :f (fn [_] (log/info "finished setting up worker with stats"))}]}
+                    [])
+                  [{:t :do
+                    :stage :setup-worker
+                    :tasks [{:t :call, :f (fn [_] (log/info "setting up worker with stats"))}
+                            ;; wait for node to catch up
+                            {:t :call, :f #(when-not load-phase
+                                             ;; otherwise nothing has come through the log yet
+                                             (Thread/sleep 1000)
+                                             (catchup (:sut %)))}
+                            {:t :call, :f load-stats-into-worker}
+                            {:t :call, :f log-stats}
+                            {:t :call, :f (fn [_] (log/info "finished setting up worker with stats"))}]}
 
-            {:t :concurrently
-             :stage :oltp
-             :duration duration
-             :join-wait (Duration/ofMinutes 1)
-             :thread-tasks [{:t :pool
-                             :duration duration
-                             :join-wait (Duration/ofMinutes 1)
-                             :thread-count threads
-                             :think Duration/ZERO
-                             :pooled-task {:t :pick-weighted
-                                           :choices [[{:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)} 5.0]
-                                                     [{:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)} 10.0]
-                                                     [{:t :call, :transaction :new-bid,  :f (b/wrap-in-catch proc-new-bid)}  18.0]
-                                                     [{:t :call, :transaction :new-comment,
-                                                       :f (b/wrap-in-catch proc-new-comment)}  2.0]
-                                                     [{:t :call, :transaction :new-comment-response,
-                                                       :f (b/wrap-in-catch proc-new-comment-response)}  1.0]
-                                                     [{:t :call, :transaction :new-purchase,
-                                                       :f (b/wrap-in-catch proc-new-purchase)}  2.0]
-                                                     [{:t :call, :transaction :new-feedback,
-                                                       :f (b/wrap-in-catch proc-new-feedback)}  3.0]
-                                                     [{:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)} 45.0]
-                                                     [{:t :call, :transaction :update-item,
-                                                       :f (b/wrap-in-catch proc-update-item)} 2.0]
-                                                     [{:t :call, :transaction :get-comment,
-                                                       :f (b/wrap-in-catch proc-get-comment)} 2.0]
-                                                     [{:t :call, :transaction :get-user-info,
-                                                       :f (b/wrap-in-catch proc-get-user-info)} 10.0]]}}
-                            {:t :freq-job
-                             :duration duration
-                             :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
-                             :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups)}}]}
-            (when sync {:t :call, :f #(then-await-tx (:sut %))})])}))
+                   {:t :concurrently
+                    :stage :oltp
+                    :duration duration
+                    :join-wait (Duration/ofMinutes 1)
+                    :thread-tasks [{:t :pool
+                                    :duration duration
+                                    :join-wait (Duration/ofMinutes 1)
+                                    :thread-count threads
+                                    :think Duration/ZERO
+                                    :pooled-task {:t :pick-weighted
+                                                  :choices [[{:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)} 5.0]
+                                                            [{:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)} 10.0]
+                                                            [{:t :call, :transaction :new-bid,  :f (b/wrap-in-catch proc-new-bid)}  18.0]
+                                                            [{:t :call, :transaction :new-comment,
+                                                              :f (b/wrap-in-catch proc-new-comment)}  2.0]
+                                                            [{:t :call, :transaction :new-comment-response,
+                                                              :f (b/wrap-in-catch proc-new-comment-response)}  1.0]
+                                                            [{:t :call, :transaction :new-purchase,
+                                                              :f (b/wrap-in-catch proc-new-purchase)}  2.0]
+                                                            [{:t :call, :transaction :new-feedback,
+                                                              :f (b/wrap-in-catch proc-new-feedback)}  3.0]
+                                                            [{:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)} 45.0]
+                                                            [{:t :call, :transaction :update-item,
+                                                              :f (b/wrap-in-catch proc-update-item)} 2.0]
+                                                            [{:t :call, :transaction :get-comment,
+                                                              :f (b/wrap-in-catch proc-get-comment)} 2.0]
+                                                            [{:t :call, :transaction :get-user-info,
+                                                              :f (b/wrap-in-catch proc-get-user-info)} 10.0]]}}
+                                   {:t :freq-job
+                                    :duration duration
+                                    :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
+                                    :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups)}}]}
+                   (when sync {:t :call, :f #(then-await-tx (:sut %))})])}))

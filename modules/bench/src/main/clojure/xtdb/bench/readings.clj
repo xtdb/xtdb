@@ -1,12 +1,11 @@
 (ns xtdb.bench.readings
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.bench :as bench]
-            [xtdb.bench.xtdb2 :as bxt]
+            [xtdb.bench :as b]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import (java.time Duration Instant)
+  (:import (java.time Duration)
            (java.util AbstractMap)))
 
 (defn random-float [min max] (+ min (* (rand) (- max min))))
@@ -22,7 +21,7 @@
                      (for [i (range 0 devices)]
                        {:xt/id i :value (random-float -100 100)})))))))
 
-(defn batch->largest-valid-time [batch]
+(defn batch->largest-valid-time ^java.time.Instant [batch]
   (:valid-to (second batch)))
 
 (def max-valid-time-q
@@ -79,27 +78,22 @@
 (defn ->ingestion-stage
   ([size devices] (->ingestion-stage size devices {}))
   ([size devices {:keys [backfill?], :or {backfill? true}}]
-   [{:t :do
-     :stage :ingest
-     :tasks [{:t :call :f (fn [{:keys [sut]}]
-                            (doseq [[idx batch] (map vector (range) (docs size devices))]
-                              (xt/submit-tx sut [batch]
-                                            (when backfill?
-                                              {:system-time (.plus (batch->largest-valid-time batch)
-                                                                   (Duration/ofMicros idx))}))))}]}
-    {:t :do
-     :stage :sync
-     :tasks [{:t :call
-              :f (fn [{:keys [sut]}]
-                   (bxt/sync-node sut (Duration/ofMinutes 5)))}]}
+   [{:t :call, :stage :ingest
+     :f (fn [{:keys [sut]}]
+          (doseq [[idx batch] (map vector (range) (docs size devices))]
+            (xt/submit-tx sut [batch]
+                          (when backfill?
+                            {:system-time (.plus (batch->largest-valid-time batch)
+                                                 (Duration/ofNanos (* idx 1000)))}))))}
+    {:t :call, :stage :sync
+     :f (fn [{:keys [sut]}]
+          (b/sync-node sut (Duration/ofMinutes 5)))}
 
-    {:t :do
-     :stage :compact
-     :tasks [{:t :call
-              :f (fn [{:keys [sut]}]
-                   (bxt/compact! sut))}]}]))
+    {:t :call, :stage :compact
+     :f (fn [{:keys [sut]}]
+          (b/compact! sut))}]))
 
-(defn benchmark [{:keys [size devices seed load-phase] :or {seed 0}}]
+(defmethod b/->benchmark :readings [_ {:keys [size devices seed load-phase] :or {seed 0}}]
   {:title "Readings benchmarks"
    :seed seed
    :tasks (concat (if load-phase
@@ -124,14 +118,11 @@
                     (->query-stage interval :year)))})
 
 ;; not intended to be run as a test - more for ease of REPL dev
-(t/deftest ^:benchmark run-benchmark
+(t/deftest ^:benchmark run-readings
   (let [path (util/->path "/tmp/readings-bench")
         reload? false]
     (when reload?
       (util/delete-dir path))
 
-    (let [f (bench/compile-benchmark (benchmark {:size 100000, :devices 10000, :load-phase reload?})
-                                     @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
-
-      (with-open [node (tu/->local-node {:node-dir path})]
-        (f node)))))
+    (-> (b/->benchmark :readings {:size 100000, :devices 100000, :load-phase reload?})
+        (b/run-benchmark {:node-dir path}))))

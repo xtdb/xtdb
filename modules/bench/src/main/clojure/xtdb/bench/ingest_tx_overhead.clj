@@ -74,8 +74,7 @@
                (filter (comp batch-sizes :batch-size)))})
 
 (comment
-  (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000}})
-                                   @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
+  (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000}}))]
     (with-open [in-mem (xtn/start-node)
 
                 ^AutoCloseable

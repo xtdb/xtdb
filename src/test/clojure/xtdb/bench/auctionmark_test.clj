@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.auctionmark :as am]
-            [xtdb.bench.xtdb2 :as bxt2]
             [xtdb.test-util :as tu :refer [*node*]])
   (:import (java.time Clock)
            (java.util Random UUID)
@@ -21,7 +20,7 @@
 
 (deftest generate-user-test
   (let [worker (->worker *node*)]
-    (bxt2/generate worker :user am/generate-user 1)
+    (b/generate worker :user am/generate-user 1)
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
                                                     (aggregate {:count-id (row-count)}))))))
@@ -30,7 +29,7 @@
 (deftest generate-categories-test
   (let [worker (->worker *node*)]
     (am/load-categories-tsv worker)
-    (bxt2/generate worker :category am/generate-category 1)
+    (b/generate worker :category am/generate-category 1)
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :category [])
                                                     (aggregate {:count-id (row-count)}))))))
@@ -38,7 +37,7 @@
 
 (deftest generate-region-test
   (let [worker (->worker *node*)]
-    (bxt2/generate worker :region am/generate-region 1)
+    (b/generate worker :region am/generate-region 1)
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :region [])
                                                     (aggregate {:count-id (row-count)}))))))
@@ -47,8 +46,8 @@
 (deftest generate-global-attribute-group-test
   (let [worker (->worker *node*)]
     (am/load-categories-tsv worker)
-    (bxt2/generate worker :category am/generate-category 1)
-    (bxt2/generate worker :gag am/generate-global-attribute-group 1)
+    (b/generate worker :category am/generate-category 1)
+    (b/generate worker :gag am/generate-global-attribute-group 1)
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :gag [])
                                                     (aggregate {:count-id (row-count)}))))))
@@ -57,9 +56,9 @@
 (deftest generate-global-attribute-value-test
   (let [worker (->worker *node*)]
     (am/load-categories-tsv worker)
-    (bxt2/generate worker :category am/generate-category 1)
-    (bxt2/generate worker :gag am/generate-global-attribute-group 1)
-    (bxt2/generate worker :gav am/generate-global-attribute-value 1)
+    (b/generate worker :category am/generate-category 1)
+    (b/generate worker :gag am/generate-global-attribute-group 1)
+    (b/generate worker :gav am/generate-global-attribute-value 1)
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :gav [])
                                                     (aggregate {:count-id (row-count)}))))))
@@ -67,8 +66,8 @@
 
 (deftest generate-user-attributes-test
   (let [worker (->worker *node*)]
-    (bxt2/generate worker :user am/generate-user 1)
-    (bxt2/generate worker :user-attribute am/generate-user-attributes 1)
+    (b/generate worker :user am/generate-user 1)
+    (b/generate worker :user-attribute am/generate-user-attributes 1)
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user-attribute [])
                                                     (aggregate {:count-id (row-count)}))))))
     (t/is (= (am/user-attribute-id 0) (b/sample-flat worker am/user-attribute-id)))))
@@ -76,10 +75,10 @@
 (deftest generate-item-test
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
-      (bxt2/generate worker :user am/generate-user 1)
+      (b/generate worker :user am/generate-user 1)
       (am/load-categories-tsv worker)
-      (bxt2/generate worker :category am/generate-category 1)
-      (bxt2/generate worker :item am/generate-item 1)
+      (b/generate worker :category am/generate-category 1)
+      (b/generate worker :item am/generate-item 1)
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :item [])
                                                       (aggregate {:count-id (row-count)}))))))
@@ -96,10 +95,10 @@
 (deftest proc-get-item-test
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
-      (bxt2/generate worker :user am/generate-user 1)
+      (b/generate worker :user am/generate-user 1)
       (am/load-categories-tsv worker)
-      (bxt2/generate worker :category am/generate-category 1)
-      (bxt2/generate worker :item am/generate-item 1)
+      (b/generate worker :category am/generate-category 1)
+      (b/generate worker :item am/generate-item 1)
       ;; to wait for indexing
       (Thread/sleep 10)
       (t/is (not (nil? (-> (am/proc-get-item worker) first :i_id)))))))
@@ -108,7 +107,7 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (am/load-categories-tsv worker)
-      (bxt2/generate worker :category am/generate-category 1)
+      (b/generate worker :category am/generate-category 1)
       (am/proc-new-user worker)
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :user [])
@@ -124,10 +123,10 @@
 
       (let [worker (->worker *node*)]
         (t/testing "new bid"
-          (bxt2/generate worker :user am/generate-user 2)
+          (b/generate worker :user am/generate-user 2)
           (am/load-categories-tsv worker)
-          (bxt2/generate worker :category am/generate-category 1)
-          (bxt2/generate worker :item am/generate-item 1)
+          (b/generate worker :category am/generate-category 1)
+          (b/generate worker :item am/generate-item 1)
 
           (am/proc-new-bid worker)
 
@@ -149,7 +148,7 @@
 
         (t/testing "new bid but does not exceed max"
           (with-redefs [am/random-price (constantly Double/MIN_VALUE)]
-            (bxt2/generate worker :user am/generate-user 1)
+            (b/generate worker :user am/generate-user 1)
             (am/proc-new-bid worker)
 
             ;; new bid
@@ -163,7 +162,7 @@
 
         (t/testing "new exceeds max bid"
           (with-redefs [am/random-price (constantly Double/MAX_VALUE)]
-            ;; (bxt2/generate worker :user am/generate-user 1)
+            ;; (b/generate worker :user am/generate-user 1)
             (am/proc-new-bid worker)
 
             ;; new bid
@@ -180,11 +179,11 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (t/testing "new item"
-        (bxt2/generate worker :user am/generate-user 1)
+        (b/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 10)
-        (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-        (bxt2/generate worker :gav am/generate-global-attribute-value 100)
+        (b/generate worker :category am/generate-category 10)
+        (b/generate worker :gag am/generate-global-attribute-group 10)
+        (b/generate worker :gav am/generate-global-attribute-value 100)
         (am/proc-new-item worker)
 
         ;; new item
@@ -203,12 +202,12 @@
     (let [worker (->worker *node*)
           ic_id #uuid "d526fcdf-9b10-329b-0000-000000000000"]
       (t/testing "new comment"
-        (bxt2/generate worker :user am/generate-user 1)
+        (b/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 10)
-        (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-        (bxt2/generate worker :gav am/generate-global-attribute-value 100)
-        (bxt2/generate worker :item am/generate-item 1)
+        (b/generate worker :category am/generate-category 10)
+        (b/generate worker :gag am/generate-global-attribute-group 10)
+        (b/generate worker :gav am/generate-global-attribute-value 100)
+        (b/generate worker :item am/generate-item 1)
 
         (am/proc-new-comment worker)
 
@@ -232,12 +231,12 @@
   (with-redefs [am/sample-status (constantly :waiting-for-purchase)]
     (let [worker (->worker *node*)]
       (t/testing "new purchase"
-        (bxt2/generate worker :user am/generate-user 1)
+        (b/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 10)
-        (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-        (bxt2/generate worker :gav am/generate-global-attribute-value 100)
-        (bxt2/generate worker :item am/generate-item 1)
+        (b/generate worker :category am/generate-category 10)
+        (b/generate worker :gag am/generate-global-attribute-group 10)
+        (b/generate worker :gav am/generate-global-attribute-value 100)
+        (b/generate worker :item am/generate-item 1)
 
         (t/is (= [{:i-status :waiting-for-purchase}]
                  (xt/q *node* '(from :item [i_status]))))
@@ -253,12 +252,12 @@
   (with-redefs [am/sample-status (constantly :closed)]
     (let [worker (->worker *node*)]
       (t/testing "new feedback"
-        (bxt2/generate worker :user am/generate-user 1)
+        (b/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 10)
-        (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-        (bxt2/generate worker :gav am/generate-global-attribute-value 100)
-        (bxt2/generate worker :item am/generate-item 1)
+        (b/generate worker :category am/generate-category 10)
+        (b/generate worker :gag am/generate-global-attribute-group 10)
+        (b/generate worker :gav am/generate-global-attribute-value 100)
+        (b/generate worker :item am/generate-item 1)
 
         (am/proc-new-feedback worker)
 
@@ -268,12 +267,12 @@
 (deftest proc-check-winning-bids-test
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
-      (bxt2/generate worker :user am/generate-user 2)
+      (b/generate worker :user am/generate-user 2)
       (am/load-categories-tsv worker)
-      (bxt2/generate worker :category am/generate-category 10)
-      (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-      (bxt2/generate worker :gav am/generate-global-attribute-value 100)
-      (bxt2/generate worker :item am/generate-item 2)
+      (b/generate worker :category am/generate-category 10)
+      (b/generate worker :gag am/generate-global-attribute-group 10)
+      (b/generate worker :gav am/generate-global-attribute-value 100)
+      (b/generate worker :item am/generate-item 2)
 
       (am/proc-new-bid worker)
       (am/proc-check-winning-bids worker)
@@ -286,12 +285,12 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (t/testing "non-answered-comments"
-        (bxt2/generate worker :user am/generate-user 1)
+        (b/generate worker :user am/generate-user 1)
         (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 10)
-        (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-        (bxt2/generate worker :gav am/generate-global-attribute-value 100)
-        (bxt2/generate worker :item am/generate-item 1)
+        (b/generate worker :category am/generate-category 10)
+        (b/generate worker :gag am/generate-global-attribute-group 10)
+        (b/generate worker :gav am/generate-global-attribute-value 100)
+        (b/generate worker :item am/generate-item 1)
         (am/proc-new-comment worker)
 
         (t/is (= [#uuid "d526fcdf-9b10-329b-0000-000000000000"]
@@ -302,13 +301,13 @@
                 b/random-bool (constantly true)]
     (let [worker (->worker *node*)]
       (t/testing "non-answered-comments"
-        (bxt2/generate worker :region am/generate-region 1)
-        (bxt2/generate worker :user am/generate-user 2)
+        (b/generate worker :region am/generate-region 1)
+        (b/generate worker :user am/generate-user 2)
         (am/load-categories-tsv worker)
-        (bxt2/generate worker :category am/generate-category 10)
-        (bxt2/generate worker :gag am/generate-global-attribute-group 10)
-        (bxt2/generate worker :gav am/generate-global-attribute-value 100)
-        (bxt2/generate worker :item am/generate-item 1)
+        (b/generate worker :category am/generate-category 10)
+        (b/generate worker :gag am/generate-global-attribute-group 10)
+        (b/generate worker :gav am/generate-global-attribute-value 100)
+        (b/generate worker :item am/generate-item 1)
 
         (am/proc-new-bid worker)
         (am/proc-check-winning-bids worker)

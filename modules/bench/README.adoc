@@ -1,13 +1,4 @@
 = Bench
-== Auctionmark (WIP)
-
-Auctionmark runs in some capacity currently - this guide describes the requirements and steps to use the get-user query as a performance benchmark.
-Full auctionmark benchmark may or may not be working.
-Currently the auctionmark dataset is committed to the codebase so you can skip straight to the instructions in `xtdb/bench/xtdb2.clj`
-
-- Set up AWS CLI credentials (skip)
-- Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
-- See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
 
 == Running from Gradle
 
@@ -21,6 +12,17 @@ AuctionMark::
 
 Products::
 `./gradlew products`
+
+== Auctionmark (WIP)
+
+Auctionmark runs in some capacity currently - this guide describes the requirements and steps to use the get-user query as a performance benchmark.
+Full auctionmark benchmark may or may not be working.
+Currently the auctionmark dataset is committed to the codebase so you can skip straight to the instructions in `xtdb/bench/xtdb2.clj`
+
+- Set up AWS CLI credentials (skip)
+- Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
+- See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
+
 
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
@@ -45,7 +47,7 @@ java -Dclojure.main.report=stderr \
      --add-opens=java.base/java.nio=ALL-UNNAMED \
      -Dio.netty.tryReflectionSetAccessible=true \
      -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench.xtdb2 tpch --scale-factor 0.01
+     clojure.main -m xtdb.bench tpch --scale-factor 0.01
 ----
 AuctionMark::
 [source,bash]
@@ -54,7 +56,7 @@ java -Dclojure.main.report=stderr \
      --add-opens=java.base/java.nio=ALL-UNNAMED \
      -Dio.netty.tryReflectionSetAccessible=true \
      -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench.xtdb2 auctionmark \
+     clojure.main -m xtdb.bench auctionmark \
      --duration PT30S --scale-factor 0.1 --threads 8
 ----
 Products::
@@ -68,7 +70,7 @@ java -Dclojure.main.report=stderr \
      --add-opens=java.base/java.nio=ALL-UNNAMED \
      -Dio.netty.tryReflectionSetAccessible=true \
      -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench.xtdb2 products
+     clojure.main -m xtdb.bench products
 ----
 --
 

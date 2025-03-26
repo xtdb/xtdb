@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [xtdb.api :as xt]
-            [xtdb.bench.xtdb2 :as bxt])
+            [xtdb.bench :as b])
   (:import [java.io File]
            [java.time Duration]
            java.util.zip.GZIPInputStream
@@ -41,35 +41,39 @@
                              (log/debug "batch" idx)
                              (xt/submit-tx node [(into [:put-docs :products] docs)]))))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn benchmark [{:keys [load-phase limit], :or {load-phase true}}]
+(defmethod b/cli-flags :products [_]
+  [["-l" "--limit LIMIT"
+    :parse-fn parse-long]
+
+   ["-h" "--help"]])
+
+(defmethod b/->benchmark :products [_ {:keys [load-phase limit], :or {load-phase true}}]
   {:title "Products"
-   :tasks
-   [{:t :do
-     :stage :download
-     :tasks [{:t :do
-              :stage :download
-              :tasks [{:t :call :f (fn [_]
-                                     (download-dataset))}]}]}
-    {:t :do
-     :stage :ingest
-     :tasks (into (if load-phase
-                    [{:t :do
-                      :stage :submit-docs
-                      :tasks [{:t :call
-                               :f (fn [{:keys [sut]}]
-                                    (with-open [is (-> products-file
-                                                       io/input-stream
-                                                       (GZIPInputStream.))]
-                                      (store-documents! sut (cond->> (transit-seq (transit/reader is :msgpack))
-                                                              limit (take limit)))))}]}]
-                    [])
-                  [{:t :do
-                    :stage :sync
-                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/sync-node sut (Duration/ofHours 5)))}]}
-                   {:t :do
-                    :stage :finish-block
-                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/finish-block! sut))}]}
-                   {:t :do
-                    :stage :compact
-                    :tasks [{:t :call :f (fn [{:keys [sut]}] (bxt/compact! sut))}]}])}]})
+   :tasks [{:t :call, :stage :download
+            :f (fn [_]
+                 (download-dataset))}
+
+           {:t :do, :stage :ingest
+            :tasks (into (if load-phase
+                           [{:t :do
+                             :stage :submit-docs
+                             :tasks [{:t :call
+                                      :f (fn [{:keys [sut]}]
+                                           (with-open [is (-> products-file
+                                                              io/input-stream
+                                                              (GZIPInputStream.))]
+                                             (store-documents! sut (cond->> (transit-seq (transit/reader is :msgpack))
+                                                                     limit (take limit)))))}]}]
+                           [])
+
+                         [{:t :call, :stage :sync
+                           :f (fn [{:keys [sut]}]
+                                (b/sync-node sut (Duration/ofHours 5)))}
+
+                          {:t :call, :stage :finish-block
+                           :f (fn [{:keys [sut]}]
+                                (b/finish-block! sut))}
+
+                          {:t :call, :stage :compact
+                           :f (fn [{:keys [sut]}]
+                                (b/compact! sut))}])}]})

@@ -6,7 +6,6 @@
             [clojure.tools.logging :as log]
             [xtdb.bench :as b]
             [xtdb.bench.auctionmark :as am]
-            [xtdb.bench.measurement :as bm]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import [clojure.lang ExceptionInfo]))
@@ -63,7 +62,7 @@
   (let [am-config {:seed 0
                    :scale-factor scale-factor}
         load-phase-bench (am/load-phase-only am-config)
-        load-phase-fn (b/compile-benchmark load-phase-bench bm/wrap-task)]
+        load-phase-fn (b/compile-benchmark load-phase-bench)]
     (log/info "Running Load Phase with the following config... \n" am-config)
     (try
       (binding [bm/*registry* (util/component node :xtdb.metrics/registry)]
@@ -85,7 +84,7 @@
                    ;; May as well sync data after running the threads prior to closing the node to check for oddities
                    :sync true}
         benchmark (am/benchmark am-config)
-        benchmark-fn (b/compile-benchmark benchmark bm/wrap-task)]
+        benchmark-fn (b/compile-benchmark benchmark)]
     (log/info "Running Auctionmark Benchmark with the following config... \n" am-config)
     (try
       (binding [bm/*registry* (util/component node :xtdb.metrics/registry)]
