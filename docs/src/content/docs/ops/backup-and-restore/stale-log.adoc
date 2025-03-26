@@ -1,0 +1,71 @@
+---
+title: Scenario - Stale Log & Intact Storage
+---
+
+If the log contains transaction entries but the most recent offset is **lower than the last indexed transaction**, XTDB will refuse to start. This typically indicates the log has been truncated, rotated, or replaced unexpectedly, resulting in **missing historical entries** that the system relies on to maintain consistency.
+
+You may encounter an error such as:
+
+> "*Node failed to start due to an invalid transaction log state (epoch=0, offset=200) that does not correspond with the latest indexed transaction (epoch=0 and offset=289).*"
+
+
+== What Is Preserved
+
+If the storage backend remains intact, then all previously compacted and indexed data is still available.
+
+* Historical data in all compacted Arrow files (Level-0 and higher)
+* The full queryable state of the database, up to the last successfully indexed offset
+
+== What Is Lost
+
+Any recently submitted transactions _after_ the last indexed offset that were truncated or lost from the log:
+
+* These are **unrecoverable** unless separately backed up or tracked externally.
+
+== Recovery Strategy: Using Epochs
+
+XTDB supports a mechanism called `epoch` to reset log offset tracking. By starting a new epoch, the node disregards the old log and resumes processing from the indexed storage.
+
+This allows you to reinitialize the log (even if it's partially truncated) and continue safely from a known-good state.
+
+== Recovery Steps
+
+1. **Determine the current epoch value**  
+   See the contents of the error message for the current epoch. This is typically `0` for a new installation.
+
+2. **Choose a new `epoch` value.**  
+Select an integer greater than the previously used epoch — generally, `epoch + 1`.
+
+3. **Prepare a clean log state.**  
+Depending on your log implementation:
+* Create a new topic or file location for the log
+The log **must** be empty to begin a new epoch.
+
+4. **Update the node configuration:**  
++
+[source,yaml]
+----
+log: !<LogType>
+epoch: <new-epoch>
+----
+
+5. **Restart the node.**  
+   XTDB will skip offset validation and begin writing to the empty topic under the new epoch.
+
+6. **(Optional) Re-submit any lost transactions.**  
+   If you are aware of missing transactions, reissue them manually or via your application’s recovery layer.
+
+== Cluster-Wide Considerations
+
+* All nodes in the cluster **must** use the same `epoch` value. Mismatches will cause startup failures.
+* It is strongly recommended to apply the epoch change atomically:
+1. Shut down all nodes
+2. Update configuration
+3. Restart nodes together
+
+== Notes & Warnings
+
+* Always take a backup of storage before making epoch changes.
+* The new epoch marks a clean slate for the log but does **not** delete existing data in the object store.
+* Ensure the log backend (e.g. Kafka) is writable and healthy before restarting.
+* Lost log messages are non recoverable unless previously exported or replicated elsewhere.
