@@ -27,37 +27,28 @@ Currently the auctionmark dataset is committed to the codebase so you can skip s
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 
-== Running from a standalone JAR
+== Running from Docker
 
-. Create the standalone JAR: `../../gradlew shadowJar`
-. Running it remotely:
-+
---
-. SCP it somewhere: `scp build/libs/bench-standalone.jar <someone>@<somewhere>`
-. SSH in
-. `screen` / `tmux` etc if you want to leave it running
---
-. Choose your adventure (values given are defaults):
+. From the root of the repo:
+.. Create the standalone JAR: `./gradlew shadowJar`
+.. Create the Docker image: `docker buildx bake bench`
+.. Push it (optional): `docker push ghcr.io/xtdb/xtdb-bench`
+. Running it: `docker run --rm ghcr.io/xtdb/xtdb-bench <benchmark-type> <opts...>`.
 +
 --
 TPC-H::
 [source,bash]
 ----
-java -Dclojure.main.report=stderr \
-     --add-opens=java.base/java.nio=ALL-UNNAMED \
-     -Dio.netty.tryReflectionSetAccessible=true \
-     -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench tpch --scale-factor 0.01
+docker run --rm ghcr.io/xtdb/xtdb-bench tpch \
+  --scale-factor 0.01
 ----
 AuctionMark::
 [source,bash]
 ----
-java -Dclojure.main.report=stderr \
-     --add-opens=java.base/java.nio=ALL-UNNAMED \
-     -Dio.netty.tryReflectionSetAccessible=true \
-     -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench auctionmark \
-     --duration PT30S --scale-factor 0.1 --threads 8
+docker run --rm ghcr.io/xtdb/xtdb-bench auctionmark \
+  --duration PT30S \
+  --scale-factor 0.1 \
+  --threads 8
 ----
 Products::
 [source,bash]
@@ -66,11 +57,7 @@ Products::
 # from S3 to datasets/products.transit.msgpack.gz,
 # or your process has permissions to do so
 
-java -Dclojure.main.report=stderr \
-     --add-opens=java.base/java.nio=ALL-UNNAMED \
-     -Dio.netty.tryReflectionSetAccessible=true \
-     -cp bench-standalone.jar \
-     clojure.main -m xtdb.bench products
+docker run --rm ghcr.io/xtdb/xtdb-bench products
 ----
 --
 

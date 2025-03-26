@@ -1,12 +1,13 @@
-FROM clojure:openjdk-11-lein-2.9.3
+FROM eclipse-temurin:21
 
 WORKDIR /opt/xtdb
 ENTRYPOINT [ \
     "java","-cp","xtdb-bench.jar", \
     "-Dclojure.main.report=stderr", \
     "-Xms3g", "-Xmx3g", \
-    "clojure.main", "-m"]
+    "--add-opens=java.base/java.nio=ALL-UNNAMED", \
+    "-Dio.netty.tryReflectionSetAccessible=true", \
+    "-Darrow.memory.debug.allocator=false", \
+    "clojure.main", "-m", "xtdb.bench"]
 
-CMD ["xtdb.bench"]
-
-ADD target/xtdb-bench.jar .
+ADD build/libs/bench-standalone.jar xtdb-bench.jar
