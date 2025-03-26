@@ -55,3 +55,45 @@ A multi-node persistent log implementation that uses a remote service to store t
 We currently offer the following remote log implementations, available in their own modules:
 
 * link:log/kafka[Kafka]: a log implementation that uses a Apache Kafka topic to store the log.
+
+[#epochs]
+== Epochs
+
+An *epoch* is a manually assigned, monotonically increasing integer used to identify the generation of the log in XTDB:
+
+* Epochs allow a cluster to safely reset its log state following partial log loss, corruption, or intentional recovery operations, without requiring full reindexing of storage data.
+* If not explicitly configured, nodes assume `epoch = 0`.
+
+[#epoch-configuration]
+=== Configuration
+
+To configure an epoch, specify the `epoch` field inside the node's log configuration:
+
+[source,yaml]
+----
+log: !<LogType>
+  epoch: <new-epoch>
+----
+
+Where:
+
+* `<LogType>` is the chosen log implementation (e.g., `!Kafka`, `!Local`).
+* `<new-epoch>` is a positive integer greater than the previous epoch.
+
+All nodes within the same cluster **must** use an identical epoch value at startup.
+
+[#epoch-change-process]
+==== Bumping an Epoch
+
+WARNING: Beginning a new epoch will make the recovery of unindexed transactions from any previous epoch nearly impossible. 
+Therefore, it is recommended to only increment the epoch after you are confident that the original log is irrecoverable and you understand the potential consequences.
+
+When applying a new epoch:
+
+* Shut down all XTDB nodes to prevent divergence.
+* Update each node's configuration with the new `epoch` value.
+* (Optional) Prepare a clean log backend if required (e.g., create a new Kafka topic or clear the local log directory).
+* Restart all nodes simultaneously with the updated configuration.
+
+Once restarted, nodes will begin writing to the new log generation, and prior log history will be disregarded.
+
