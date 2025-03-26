@@ -1,9 +1,11 @@
 (ns xtdb.bench.readings
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.bench :as bench]
             [xtdb.bench.xtdb2 :as bxt]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.util :as util])
   (:import (java.time Duration Instant)
            (java.util AbstractMap)))
 
@@ -21,10 +23,12 @@
                        {:xt/id i :value (random-float -100 100)})))))))
 
 (defn batch->largest-valid-time [batch]
-  (-> batch second :valid-to))
+  (:valid-to (second batch)))
 
-(def max-valid-time-q "SELECT max(_valid_from) AS max_valid_time FROM readings FOR ALL VALID_TIME
-                       WHERE _id = 0")
+(def max-valid-time-q
+  "SELECT max(_valid_from) AS max_valid_time
+   FROM readings FOR ALL VALID_TIME
+   WHERE _id = 0")
 
 (defn- subtract-period
   ([inst-like period] (subtract-period inst-like period 1))
@@ -38,8 +42,6 @@
        :month (.minusSeconds inst (* 60 60 24 30 len))
        :quarter (.minusSeconds inst (* 60 60 24 30 3 len))
        :year (.minusSeconds inst (* 60 60 24 30 12 len))))))
-
-(comment (subtract-period (Instant/now) :week))
 
 (defn aggregate-query
   ([sut start end] (aggregate-query sut start end {}))
@@ -76,7 +78,7 @@
 
 (defn ->ingestion-stage
   ([size devices] (->ingestion-stage size devices {}))
-  ([size devices {:keys [backfill?] :or {backfill? true}}]
+  ([size devices {:keys [backfill?], :or {backfill? true}}]
    [{:t :do
      :stage :ingest
      :tasks [{:t :call :f (fn [{:keys [sut]}]
@@ -121,51 +123,15 @@
                   (for [interval [:now :day :week :month :quarter :year]]
                     (->query-stage interval :year)))})
 
+;; not intended to be run as a test - more for ease of REPL dev
+(t/deftest ^:benchmark run-benchmark
+  (let [path (util/->path "/tmp/readings-bench")
+        reload? false]
+    (when reload?
+      (util/delete-dir path))
 
-(defn overwritten-readings [{:keys [size devices seed load-phase] :or {seed 0}}]
-  {:title "Degenerative backfill case"
-   :seed seed
-   :tasks
-   (concat (if load-phase
-             (concat (->ingestion-stage size devices) (->ingestion-stage size devices {:backfill? true}))
-             [])
-           [{:t :call :f (fn [{:keys [sut ^AbstractMap custom-state]}]
-                           (let [{:keys [latest-completed-tx]} (xt/status sut)
-                                 max-valid-time (-> (xt/q sut max-valid-time-q)
-                                                    first
-                                                    :max-valid-time)]
-                             (.putAll custom-state {:latest-completed-tx latest-completed-tx
-                                                    :max-valid-time max-valid-time})))}
-            ;; a year and one device is sufficient to show the issue
-            (->query-stage :year)])})
+    (let [f (bench/compile-benchmark (benchmark {:size 100000, :devices 10000, :load-phase reload?})
+                                     @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
 
-(comment
-  (require '[clojure.java.io :as io]
-           '[xtdb.bench :as bench]
-           '[xtdb.util :as util]
-           '[clojure.test :as t])
-
-  (def node-dir (.toPath (io/file "dev/readings")))
-  (def node (tu/->local-node {:node-dir node-dir}))
-  (.close node)
-  (def latest-completed-tx (:latest-completed-tx (xt/status node)))
-  (def max-valid-time (time (-> (xt/q node max-valid-time-q) first :max-valid-time)))
-
-  (time (aggregate-query node (subtract-period max-valid-time :now) max-valid-time
-                         {:current-time (:system-time latest-completed-tx)}))
-
-
-  (t/deftest run-benchmark
-    (let [path (util/->path "/tmp/readings-bench")
-          reload? false]
-      (when reload?
-        (util/delete-dir path))
-
-      (let [f (bench/compile-benchmark (benchmark {:size 100000, :devices 10000, :load-phase reload?})
-                                       @(requiring-resolve `xtdb.bench.measurement/wrap-task))]
-
-        (with-open [node (tu/->local-node {:node-dir path})]
-          (f node))
-
-        #_
-        (f dev/node)))))
+      (with-open [node (tu/->local-node {:node-dir path})]
+        (f node)))))
