@@ -370,6 +370,21 @@
                         (println summary)
                         (System/exit 0))
 
-      :else (run-benchmark (->benchmark benchmark-type options) options)))
+      :else (let [main-thread (Thread/currentThread)]
+              (-> (Runtime/getRuntime)
+                  (.addShutdownHook (Thread. (fn []
+                                               (let [shutdown-ms 10000]
+                                                 (.interrupt main-thread)
+                                                 (.join main-thread shutdown-ms)
+                                                 (if (.isAlive main-thread)
+                                                   (do
+                                                     (log/warn "could not stop benchmark cleanly after" shutdown-ms "ms, forcing exit")
+                                                     (-> (Runtime/getRuntime) (.halt 1)))
+
+                                                   (log/info "Benchmark stopped."))))
+
+                                             "xtdb.shutdown-hook-thread")))
+
+              (run-benchmark (->benchmark benchmark-type options) options))))
 
   (shutdown-agents))
