@@ -44,18 +44,18 @@ tasks.javadoc {
 }
 
 tasks.compileJava {
-    sourceCompatibility = "11"
-    targetCompatibility = "11"
+    sourceCompatibility = "21"
+    targetCompatibility = "21"
 }
 
 tasks.compileTestJava {
-    sourceCompatibility = "11"
-    targetCompatibility = "11"
+    sourceCompatibility = "21"
+    targetCompatibility = "21"
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_11)
+        jvmTarget.set(JvmTarget.JVM_21)
 
         java {
             freeCompilerArgs.add("-Xjvm-default=all")

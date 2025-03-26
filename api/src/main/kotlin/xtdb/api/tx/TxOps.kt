@@ -8,7 +8,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.AnySerde
 import xtdb.InstantSerde
 
-sealed interface TxOp {
+interface TxOp {
     @Serializable
     data class Sql(
         @JvmField @SerialName("sql") val sql: String,

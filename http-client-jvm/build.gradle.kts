@@ -33,12 +33,12 @@ dependencies {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 tasks.compileJava {
-    sourceCompatibility = "11"
-    targetCompatibility = "11"
+    sourceCompatibility = "21"
+    targetCompatibility = "21"
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_11)
+        jvmTarget.set(JvmTarget.JVM_21)
     }
 }
