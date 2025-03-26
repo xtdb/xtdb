@@ -12,9 +12,9 @@
 
 (def run-duration (or (System/getenv "AUCTIONMARK_DURATION") "PT24H"))
 (def scale-factor (or (some-> (System/getenv "AUCTIONMARK_SCALE_FACTOR") (Float/parseFloat)) 0.1))
-(def load-phase (if-let [lp (System/getenv "AUCTIONMARK_LOAD_PHASE")]
-                  (Boolean/parseBoolean lp)
-                  true))
+(def no-load? (if-let [lp (System/getenv "AUCTIONMARK_NO_LOAD")]
+                (Boolean/parseBoolean lp)
+                true))
 (def load-phase-only? (if-let [lp (System/getenv "AUCTIONMARK_LOAD_PHASE_ONLY")]
                         (Boolean/parseBoolean lp)
                         false))
@@ -65,7 +65,7 @@
         load-phase-fn (b/compile-benchmark load-phase-bench)]
     (log/info "Running Load Phase with the following config... \n" am-config)
     (try
-      (binding [bm/*registry* (util/component node :xtdb.metrics/registry)]
+      (binding [b/*registry* (util/component node :xtdb.metrics/registry)]
         (load-phase-fn node))
       (send-message-to-slack
        (format ":white_check_mark: (%s) Auctionmark Load Phase successfully ran for *Scale Factor*: `%s`"  platform scale-factor))
@@ -80,14 +80,14 @@
                    :threads 8
                    :duration run-duration
                    :scale-factor scale-factor
-                   :load-phase load-phase
+                   :no-load? no-load?
                    ;; May as well sync data after running the threads prior to closing the node to check for oddities
                    :sync true}
-        benchmark (am/benchmark am-config)
+        benchmark (b/->benchmark :auctionmark am-config)
         benchmark-fn (b/compile-benchmark benchmark)]
     (log/info "Running Auctionmark Benchmark with the following config... \n" am-config)
     (try
-      (binding [bm/*registry* (util/component node :xtdb.metrics/registry)]
+      (binding [b/*registry* (util/component node :xtdb.metrics/registry)]
         (benchmark-fn node))
       (send-message-to-slack
        (format

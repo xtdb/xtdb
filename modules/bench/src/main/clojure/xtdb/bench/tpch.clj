@@ -43,27 +43,27 @@
 
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :tpch [_ {:keys [scale-factor seed load-phase],
-                                   :or {scale-factor 0.01, seed 0, load-phase true}}]
+(defmethod b/->benchmark :tpch [_ {:keys [scale-factor seed no-load?],
+                                   :or {scale-factor 0.01, seed 0}}]
   (log/info {:scale-factor scale-factor})
 
   {:title "TPC-H (OLAP)", :seed seed
    :tasks [{:t :do
             :stage :ingest
-            :tasks (into (if load-phase
+            :tasks (concat (when-not no-load?
+                             [{:t :call
+                               :stage :submit-docs
+                               :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}])
+
                            [{:t :do
-                             :stage :submit-docs
-                             :tasks [{:t :call :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}]}]
-                           [])
-                         [{:t :do
-                           :stage :sync
-                           :tasks [{:t :call :f (fn [{:keys [sut]}] (b/sync-node sut (Duration/ofHours 5)))}]}
-                          {:t :do
-                           :stage :finish-block
-                           :tasks [{:t :call :f (fn [{:keys [sut]}] (b/finish-block! sut))}]}
-                          {:t :do
-                           :stage :compact
-                           :tasks [{:t :call :f (fn [{:keys [sut]}] (b/compact! sut))}]}])}
+                             :stage :sync
+                             :tasks [{:t :call :f (fn [{:keys [sut]}] (b/sync-node sut (Duration/ofHours 5)))}]}
+                            {:t :do
+                             :stage :finish-block
+                             :tasks [{:t :call :f (fn [{:keys [sut]}] (b/finish-block! sut))}]}
+                            {:t :do
+                             :stage :compact
+                             :tasks [{:t :call :f (fn [{:keys [sut]}] (b/compact! sut))}]}])}
 
            (queries-stage :cold-queries)
 

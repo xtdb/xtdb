@@ -47,33 +47,32 @@
 
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :products [_ {:keys [load-phase limit], :or {load-phase true}}]
+(defmethod b/->benchmark :products [_ {:keys [no-load? limit]}]
   {:title "Products"
    :tasks [{:t :call, :stage :download
             :f (fn [_]
                  (download-dataset))}
 
            {:t :do, :stage :ingest
-            :tasks (into (if load-phase
-                           [{:t :do
-                             :stage :submit-docs
-                             :tasks [{:t :call
-                                      :f (fn [{:keys [sut]}]
-                                           (with-open [is (-> products-file
-                                                              io/input-stream
-                                                              (GZIPInputStream.))]
-                                             (store-documents! sut (cond->> (transit-seq (transit/reader is :msgpack))
-                                                                     limit (take limit)))))}]}]
-                           [])
+            :tasks (concat (when-not no-load?
+                             [{:t :do
+                               :stage :submit-docs
+                               :tasks [{:t :call
+                                        :f (fn [{:keys [sut]}]
+                                             (with-open [is (-> products-file
+                                                                io/input-stream
+                                                                (GZIPInputStream.))]
+                                               (store-documents! sut (cond->> (transit-seq (transit/reader is :msgpack))
+                                                                       limit (take limit)))))}]}])
 
-                         [{:t :call, :stage :sync
-                           :f (fn [{:keys [sut]}]
-                                (b/sync-node sut (Duration/ofHours 5)))}
+                           [{:t :call, :stage :sync
+                             :f (fn [{:keys [sut]}]
+                                  (b/sync-node sut (Duration/ofHours 5)))}
 
-                          {:t :call, :stage :finish-block
-                           :f (fn [{:keys [sut]}]
-                                (b/finish-block! sut))}
+                            {:t :call, :stage :finish-block
+                             :f (fn [{:keys [sut]}]
+                                  (b/finish-block! sut))}
 
-                          {:t :call, :stage :compact
-                           :f (fn [{:keys [sut]}]
-                                (b/compact! sut))}])}]})
+                            {:t :call, :stage :compact
+                             :f (fn [{:keys [sut]}]
+                                  (b/compact! sut))}])}]})

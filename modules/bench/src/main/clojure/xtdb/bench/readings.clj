@@ -105,12 +105,11 @@
 
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :readings [_ {:keys [readings devices seed load-phase] :or {seed 0, load-phase true}}]
+(defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load?] :or {seed 0}}]
   {:title "Readings benchmarks"
    :seed seed
-   :tasks (concat (if load-phase
-                    (->ingestion-stage devices readings)
-                    [])
+   :tasks (concat (when-not no-load?
+                    (->ingestion-stage devices readings))
 
                   [{:t :call
                     :f (fn [{:keys [sut ^AbstractMap custom-state]}]
@@ -132,9 +131,7 @@
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-readings
   (let [path (util/->path "/home/james/tmp/readings-bench")
-        reload? false]
-    (when reload?
-      (util/delete-dir path))
+        no-load? true]
 
-    (-> (b/->benchmark :readings {:readings 100000, :devices 100000, :load-phase reload?})
-        (b/run-benchmark {:node-dir path}))))
+    (-> (b/->benchmark :readings {:readings 100000, :devices 10000, :no-load? no-load?})
+        (b/run-benchmark {:node-dir path, :no-load? no-load?}))))

@@ -324,16 +324,32 @@
     benchmark-type)
   :default ::default)
 
-(defn run-benchmark [benchmark node-opts]
+(defn run-benchmark [benchmark {:keys [node-dir no-load?]}]
   (let [benchmark-fn (compile-benchmark benchmark)]
-    (with-open [node (tu/->local-node node-opts)]
-      (binding [tu/*allocator* (util/component node :xtdb/allocator)
-                *registry* (util/component node :xtdb.metrics/registry)]
-        (benchmark-fn node)))))
+    (letfn [(run [node-dir]
+              (with-open [node (tu/->local-node {:node-dir node-dir
+                                                 :instant-src (InstantSource/system)})]
+                (binding [tu/*allocator* (util/component node :xtdb/allocator)
+                          *registry* (util/component node :xtdb.metrics/registry)]
+                  (benchmark-fn node))))]
+      (if node-dir
+        (do
+          (log/info "Using node dir:" (str node-dir))
+          (when-not no-load?
+            (util/delete-dir node-dir))
+          (run node-dir))
+
+        (util/with-tmp-dirs #{node-tmp-dir}
+          (log/info "Using temporary dir: " node-tmp-dir)
+          (run node-tmp-dir))))))
 
 (def ^:private default-cli-flags
   [[nil "--node-dir NODE_DIR"
-    "Directory to run the node in - will clear before running the benchmark."]])
+    "Directory to run the node in - will clear before running the benchmark unless `--no-load` is provided."
+    :parse-fn util/->path]
+
+   [nil "--no-load" "don't run any load phases (use with an existing directory)"
+    :id :no-load?]])
 
 (defn -main [benchmark-type & args]
   (util/install-uncaught-exception-handler!)
@@ -354,25 +370,6 @@
                         (println summary)
                         (System/exit 0))
 
-      :else (letfn [(run [node-dir]
-                      (run-benchmark (->benchmark benchmark-type options)
-                                     {:node-dir node-dir
-                                      :instant-src (InstantSource/system)}))]
-              (try
-                (if-let [node-dir (some-> (:node-dir options)
-                                          util/->path)]
-                  (do
-                    (log/info "Using node dir:" (str node-dir))
-                    (util/delete-dir node-dir)
-                    (run node-dir))
-
-                  (util/with-tmp-dirs #{node-tmp-dir}
-                    (log/info "Using temporary dir: " node-tmp-dir)
-                    (run node-tmp-dir)))
-
-                (System/exit 0)
-                (catch Throwable t
-                  (log/error t "Error running benchmark")
-                  (System/exit 1))))))
+      :else (run-benchmark (->benchmark benchmark-type options) options)))
 
   (shutdown-agents))
