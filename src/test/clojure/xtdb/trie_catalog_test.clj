@@ -64,6 +64,14 @@
         (cat/filter-tries query-bounds)
         (->> (into #{} (map :trie-key))))))
 
+(t/deftest earilier-recency-files-can-effect-splitting-in-later-buckets-4097
+  (let [query-bounds (tu/->temporal-bounds 20220101 20220102)]
+    (t/is (= #{"l0-recency-2019-block-00" "l0-current-block-00"}
+             (filter-tries [["l0-recency-2019-block-00" nil [20190101 20210101]]
+                            ["l0-current-block-00" nil [20200101 Long/MAX_VALUE 20190101]]]
+                           query-bounds))
+          "earlier pages that contain data with later system time need to be taken")))
+
 (t/deftest test-filter-tries
   (let [current-time 20200101]
     (t/testing "recency filtering (temporal metadata always overlaps the query)"

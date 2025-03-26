@@ -117,16 +117,6 @@
 
 (def ^:private inst->micros (comp time/instant->micros time/->instant))
 
-(deftest earilier-recency-buckets-can-effect-splitting-in-later-buckets-4097
-  (let [[system-from1 system-from2] [20200101 20200103]
-        [valid-from1 valid-from2] [20200101 20200103]
-        [valid-to1 valid-to2] [20200105 20200104]]
-    (t/is (= [1 0] (->> (trie/filter-meta-objects
-                         [(->mock-merge-plan-page 0 false valid-from1 valid-to1 system-from1)
-                          (->mock-merge-plan-page 1 true  valid-from2 valid-to2 system-from2)])
-                        (map :page)))
-          "earlier pages that contain data with later system time need to be taken")))
-
 (deftest test-to-merge-task
   (let [[sf1 sf2 sf3] [20200 20210 20220]
         [vt0 vt1 vt2 vt3] [20200 20210 20220 20230]
