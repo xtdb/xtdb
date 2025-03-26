@@ -1,0 +1,30 @@
+{:row-count 2,
+ :fields
+ {"os_name"
+  #xt.arrow/field ["os_name" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "model"
+  #xt.arrow/field ["model" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "api_version"
+  #xt.arrow/field ["api_version" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "manufacturer"
+  #xt.arrow/field ["manufacturer" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 2894,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :row-count 2,
+    :iid-bloom [1750770614 6]}}],
+ :hlls
+ {"os_name" [773324098 1.0004885993744506],
+  "model" [-2035140706 2.001955671862574],
+  "_id" [-154699583 2.001955671862574],
+  "api_version" [-1916457921 1.0004885993744506],
+  "manufacturer" [-1608669090 1.0004885993744506]}}

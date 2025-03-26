@@ -1,0 +1,21 @@
+{:row-count 3,
+ :fields
+ {"b"
+  #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :uuid false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 2494,
+   :trie-metadata
+   {:min-valid-from #xt/instant "-290308-12-21T19:59:05.224192Z",
+    :max-valid-from #xt/instant "2023-01-01T00:00:00Z",
+    :min-valid-to #xt/instant "2024-01-01T00:00:00Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-03T00:00:00Z",
+    :row-count 3,
+    :iid-bloom [1217182333 3]}}],
+ :hlls
+ {"b" [1303663723 3.004403133222472],
+  "_id" [1516853451 2.001955671862574]}}

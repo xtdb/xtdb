@@ -1,0 +1,4 @@
+{:block-idx 0,
+ :latest-completed-tx
+ {:tx-id 11261, :system-time #xt/instant "2020-01-06T00:00:00Z"},
+ :table-names #{"xt/txs" "public/foo" "public/world" "public/hello"}}

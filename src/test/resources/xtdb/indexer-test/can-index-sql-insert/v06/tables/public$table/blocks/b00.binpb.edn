@@ -1,0 +1,27 @@
+{:row-count 2,
+ :fields
+ {"bar"
+  #xt.arrow/field ["bar" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "foo"
+  #xt.arrow/field ["foo" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
+  "baz"
+  #xt.arrow/field ["baz" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["f64" #xt.arrow/field-type [#xt.arrow/type :f64 false]]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 2910,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :row-count 2,
+    :iid-bloom [774915489 6]}}],
+ :hlls
+ {"bar" [335826584 2.001955671862574],
+  "foo" [1419808417 2.001955671862574],
+  "baz" [-1108809083 2.001955671862574],
+  "_id" [1296991841 2.001955671862574]}}

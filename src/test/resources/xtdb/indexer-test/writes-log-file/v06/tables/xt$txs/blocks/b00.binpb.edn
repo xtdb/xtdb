@@ -1,0 +1,27 @@
+{:row-count 3,
+ :fields
+ {"system_time"
+  #xt.arrow/field ["system_time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "committed"
+  #xt.arrow/field ["committed" #xt.arrow/field-type [#xt.arrow/type :bool false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
+  "error"
+  #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 3134,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-03T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-03T00:00:00Z",
+    :row-count 3,
+    :iid-bloom [-420547808 9]}}],
+ :hlls
+ {"system_time" [-1057312615 3.004403133222472],
+  "committed" [2102963294 2.001955671862574],
+  "_id" [-659732293 3.004403133222472],
+  "error" [1278917647 2.001955671862574]}}

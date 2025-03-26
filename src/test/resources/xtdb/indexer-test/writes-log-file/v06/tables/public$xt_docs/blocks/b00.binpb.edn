@@ -1,0 +1,21 @@
+{:row-count 4,
+ :fields
+ {"month"
+  #xt.arrow/field ["month" #xt.arrow/field-type [#xt.arrow/type :utf8 true]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 2310,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-04-01T00:00:00Z",
+    :min-valid-to #xt/instant "2020-05-01T00:00:00Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-03T00:00:00Z",
+    :row-count 4,
+    :iid-bloom [-653307580 6]}}],
+ :hlls
+ {"_id" [718184646 3.004403133222472],
+  "month" [-616121842 2.001955671862574]}}

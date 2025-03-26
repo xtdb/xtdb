@@ -1,0 +1,43 @@
+{:row-count 4,
+ :fields
+ {"a"
+  #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 2214,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :row-count 2,
+    :iid-bloom [162137049 6]}}
+  {:trie-key "l00-rc-b01",
+   :data-file-size 2206,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :row-count 2,
+    :iid-bloom [801231505 6]}}
+  {:trie-key "l01-rc-b00",
+   :data-file-size 2214,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :row-count 2,
+    :iid-bloom [162137049 6]}}],
+ :hlls
+ {"a" [52678228 4.007832904843586],
+  "_id" [1310912960 4.007832904843586]}}

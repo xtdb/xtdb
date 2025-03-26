@@ -1,0 +1,24 @@
+{:row-count 5,
+ :fields
+ {"toto"
+  #xt.arrow/field ["toto" #xt.arrow/field-type [#xt.arrow/type :utf8 true]],
+  "bar"
+  #xt.arrow/field ["bar" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 2558,
+   :trie-metadata
+   {:min-valid-from #xt/instant "-290308-12-21T19:59:05.224192Z",
+    :max-valid-from #xt/instant "2020-01-04T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-04T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-05T00:00:00Z",
+    :row-count 5,
+    :iid-bloom [162137049 6]}}],
+ :hlls
+ {"toto" [-669603739 2.001955671862574],
+  "bar" [-698863702 3.004403133222472],
+  "_id" [-698863702 3.004403133222472]}}

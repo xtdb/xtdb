@@ -104,8 +104,8 @@
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
                          (.resolve node-dir "objects"))
 
-          (cpb/check-pbuf  (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
-                           (.resolve node-dir "objects")))))))
+          (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
+                          (.resolve node-dir "objects")))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
   (let [tx (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
@@ -178,6 +178,26 @@
         (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
                         (.resolve node-dir "objects"))))))
 
+(t/deftest test-compacted-trie-details
+  (binding [c/*ignore-signal-block?* true]
+    (let [expected-path (.toPath (io/as-file (io/resource "xtdb/indexer-test/compacted-trie-details")))
+          node-dir (util/->path "target/compacted-trie-details")]
+      (util/delete-dir node-dir)
+
+      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]])
+        (tu/finish-block! node)
+        (c/compact-all! node)
+
+        (cpb/check-pbuf expected-path (.resolve node-dir "objects") {:file-pattern #"^b00.binpb.*"})
+
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]])
+        (tu/finish-block! node)
+        (c/compact-all! node)
+
+        (cpb/check-pbuf expected-path (.resolve node-dir "objects"))))))
+
+;; TODO misnomer: this should be multi-page-metadata
 (t/deftest test-multi-block-metadata
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/multi-block-metadata")
@@ -194,7 +214,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-page 3})]
-        (xt/submit-tx node tx0)
+        (xt/execute-tx node tx0)
 
         (-> (xt/submit-tx node tx1)
             (tu/then-await-tx node (Duration/ofMillis 200)))
@@ -454,8 +474,7 @@
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
       (let [tc1 (cat/<-node node1)]
 
-        (-> (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 0, :v "foo"}]])
-            (tu/then-await-tx node1 (Duration/ofSeconds 1)))
+        (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 0, :v "foo"}]])
 
         (tu/finish-block! node1)
 

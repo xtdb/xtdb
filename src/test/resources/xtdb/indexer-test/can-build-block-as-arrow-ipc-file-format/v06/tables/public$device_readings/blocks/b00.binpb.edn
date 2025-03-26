@@ -1,0 +1,57 @@
+{:row-count 2,
+ :fields
+ {"cpu_avg_1min"
+  #xt.arrow/field ["cpu_avg_1min" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "cpu_avg_15min"
+  #xt.arrow/field ["cpu_avg_15min" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "device_id"
+  #xt.arrow/field ["device_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "battery_level"
+  #xt.arrow/field ["battery_level" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "mem_used"
+  #xt.arrow/field ["mem_used" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "battery_status"
+  #xt.arrow/field ["battery_status" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "mem_free"
+  #xt.arrow/field ["mem_free" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "time"
+  #xt.arrow/field ["time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "ssid"
+  #xt.arrow/field ["ssid" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "rssi"
+  #xt.arrow/field ["rssi" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
+  "cpu_avg_5min"
+  #xt.arrow/field ["cpu_avg_5min" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "battery_temperature"
+  #xt.arrow/field ["battery_temperature" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
+  "bssid"
+  #xt.arrow/field ["bssid" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 4750,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :row-count 2,
+    :iid-bloom [-309433381 6]}}],
+ :hlls
+ {"cpu_avg_1min" [-1373117434 2.001955671862574],
+  "cpu_avg_15min" [-1391903747 2.001955671862574],
+  "device_id" [-154699583 2.001955671862574],
+  "battery_level" [-1391207877 2.001955671862574],
+  "mem_used" [2075730368 2.001955671862574],
+  "battery_status" [-1964939232 1.0004885993744506],
+  "mem_free" [554663069 2.001955671862574],
+  "time" [1666770592 1.0004885993744506],
+  "ssid" [448864607 2.001955671862574],
+  "rssi" [-456638973 2.001955671862574],
+  "_id" [624935165 2.001955671862574],
+  "cpu_avg_5min" [-1956251579 2.001955671862574],
+  "battery_temperature" [1017708385 2.001955671862574],
+  "bssid" [-633346816 2.001955671862574]}}
