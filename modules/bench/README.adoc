@@ -13,20 +13,6 @@ AuctionMark::
 Products::
 `./gradlew products`
 
-== Auctionmark (WIP)
-
-Auctionmark runs in some capacity currently - this guide describes the requirements and steps to use the get-user query as a performance benchmark.
-Full auctionmark benchmark may or may not be working.
-Currently the auctionmark dataset is committed to the codebase so you can skip straight to the instructions in `xtdb/bench/xtdb2.clj`
-
-- Set up AWS CLI credentials (skip)
-- Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
-- See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
-
-
-
-Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
-
 == Running from Docker
 
 . From the root of the repo:
@@ -70,3 +56,18 @@ If the metrics are not exposed under `localhost:8080` you need to tweak the `.co
 Under `localhost:3001` you are able to access the Grafana UI (`admin` for user and password).
 The XTDB node datasource should be setup, and there should be a dashboard available with some basic metrics.
 If you tweak the dashboard or add a new one, save the changes in the corresponding file in `.config/dashboards/dashboard_name.json`.
+
+== Auctionmark (WIP)
+
+Auctionmark runs in some capacity currently - this guide describes the requirements and steps to use the get-user query as a performance benchmark.
+Full auctionmark benchmark may or may not be working.
+Currently the auctionmark dataset is committed to the codebase so you can skip straight to the instructions in `xtdb/bench/xtdb2.clj`
+
+- Set up AWS CLI credentials (skip)
+- Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
+- See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
+
+
+
+Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
+
