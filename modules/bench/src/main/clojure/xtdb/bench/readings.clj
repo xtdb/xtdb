@@ -1,28 +1,24 @@
 (ns xtdb.bench.readings
   (:require [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import (java.time Duration)
+  (:import (java.time Duration Instant LocalTime)
            (java.util AbstractMap)))
 
 (defn random-float [min max] (+ min (* (rand) (- max min))))
 
-(defn docs
-  ([n] (docs n 10000))
-  ([n devices]
-   (->> (tu/->instants :minute 30 #inst "2020-01-01")
-        (partition 2 1)
-        (take n)
-        (map (fn [[start end]]
-               (into [:put-docs {:into :readings :valid-from start :valid-to end}]
-                     (for [i (range 0 devices)]
-                       {:xt/id i :value (random-float -100 100)})))))))
-
-(defn batch->largest-valid-time ^java.time.Instant [batch]
-  (:valid-to (second batch)))
+(defn docs [devices readings]
+  (->> (tu/->instants :minute 5 #inst "2020-01-01")
+       (partition 2 1)
+       (take readings)
+       (map (fn [[start end]]
+              (into [:put-docs {:into :readings :valid-from start :valid-to end}]
+                    (for [i (range 0 devices)]
+                      {:xt/id i :value (random-float -100 100)}))))))
 
 (def max-valid-time-q
   "SELECT max(_valid_from) AS max_valid_time
@@ -76,28 +72,44 @@
                                               {:current-time (:system-time latest-completed-tx)})))}]}))
 
 (defn ->ingestion-stage
-  ([size devices] (->ingestion-stage size devices {}))
-  ([size devices {:keys [backfill?], :or {backfill? true}}]
+  ([devices readings] (->ingestion-stage devices readings {}))
+  ([devices readings {:keys [backfill?], :or {backfill? true}}]
    [{:t :call, :stage :ingest
      :f (fn [{:keys [sut]}]
-          (doseq [[idx batch] (map vector (range) (docs size devices))]
+          (log/infof "Inserting %d readings for %d devices" readings devices)
+
+          (doseq [[idx batch] (map vector (range) (docs devices readings))
+                  :let [[_put-docs {:keys [^Instant valid-from, ^Instant valid-to]}] batch]]
+            (when (zero? (mod idx 1000))
+              (log/debugf "Submitting readings from %s (batch %d)" (str valid-from) idx))
+
             (xt/submit-tx sut [batch]
                           (when backfill?
-                            {:system-time (.plus (batch->largest-valid-time batch)
-                                                 (Duration/ofNanos (* idx 1000)))}))))}
+                            {:system-time (.plus valid-to (Duration/ofNanos (* idx 1000)))}))))}
     {:t :call, :stage :sync
      :f (fn [{:keys [sut]}]
           (b/sync-node sut (Duration/ofMinutes 5)))}
 
     {:t :call, :stage :compact
      :f (fn [{:keys [sut]}]
+          (b/finish-block! sut)
           (b/compact! sut))}]))
 
-(defmethod b/->benchmark :readings [_ {:keys [size devices seed load-phase] :or {seed 0}}]
+(defmethod b/cli-flags :readings [_]
+  [[nil "--devices devices" "device count"
+    :parse-fn parse-long
+    :default 10000]
+   [nil "--readings READINGS" "reading count per device"
+    :parse-fn parse-long
+    :default 10000]
+
+   ["-h" "--help"]])
+
+(defmethod b/->benchmark :readings [_ {:keys [readings devices seed load-phase] :or {seed 0, load-phase true}}]
   {:title "Readings benchmarks"
    :seed seed
    :tasks (concat (if load-phase
-                    (->ingestion-stage size devices)
+                    (->ingestion-stage devices readings)
                     [])
 
                   [{:t :call
@@ -119,10 +131,10 @@
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-readings
-  (let [path (util/->path "/tmp/readings-bench")
+  (let [path (util/->path "/home/james/tmp/readings-bench")
         reload? false]
     (when reload?
       (util/delete-dir path))
 
-    (-> (b/->benchmark :readings {:size 100000, :devices 100000, :load-phase reload?})
+    (-> (b/->benchmark :readings {:readings 100000, :devices 100000, :load-phase reload?})
         (b/run-benchmark {:node-dir path}))))

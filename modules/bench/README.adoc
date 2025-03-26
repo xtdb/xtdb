@@ -10,8 +10,13 @@ TPC-H::
 AuctionMark::
 `./gradlew auctionmark -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
 
+Readings::
+`./gradlew readings -PdeviceCount=10000 -PreadingCount=10000`
+
 Products::
 `./gradlew products`
+
+Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 
 == Running from Docker
 
@@ -35,6 +40,13 @@ docker run --rm ghcr.io/xtdb/xtdb-bench auctionmark \
   --duration PT30S \
   --scale-factor 0.1 \
   --threads 8
+----
+Readings::
+[source,bash]
+----
+docker run --rm ghcr.io/xtdb/xtdb-bench readings \
+  --devices 10000
+  --readings 10000
 ----
 Products::
 [source,bash]
@@ -66,8 +78,3 @@ Currently the auctionmark dataset is committed to the codebase so you can skip s
 - Set up AWS CLI credentials (skip)
 - Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
 - See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
-
-
-
-Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
-

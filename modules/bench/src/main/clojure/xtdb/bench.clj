@@ -7,6 +7,7 @@
             [xtdb.compactor :as c]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
+            [xtdb.logging :as logging]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -330,11 +331,19 @@
                 *registry* (util/component node :xtdb.metrics/registry)]
         (benchmark-fn node)))))
 
+(def ^:private default-cli-flags
+  [[nil "--node-dir NODE_DIR"
+    "Directory to run the node in - will clear before running the benchmark."]])
+
 (defn -main [benchmark-type & args]
+  (util/install-uncaught-exception-handler!)
+  (logging/set-from-env! (System/getenv))
+
   (require (symbol (str "xtdb.bench." benchmark-type)))
 
   (let [benchmark-type (keyword benchmark-type)
-        {:keys [options errors summary]} (cli/parse-opts args (cli-flags benchmark-type))]
+        {:keys [options errors summary]} (cli/parse-opts args (concat (cli-flags benchmark-type)
+                                                                      default-cli-flags))]
     (cond
       (seq errors) (binding [*out* *err*]
                      (doseq [error errors]
@@ -345,14 +354,25 @@
                         (println summary)
                         (System/exit 0))
 
-      :else (try
-              (util/with-tmp-dirs #{node-tmp-dir}
-                (run-benchmark (->benchmark benchmark-type options)
-                               {:node-dir node-tmp-dir
-                                :instant-src (InstantSource/system)}))
-              (System/exit 0)
-              (catch Throwable t
-                (log/error t "Error running benchmark")
-                (System/exit 1)))))
+      :else (letfn [(run [node-dir]
+                      (run-benchmark (->benchmark benchmark-type options)
+                                     {:node-dir node-dir
+                                      :instant-src (InstantSource/system)}))]
+              (try
+                (if-let [node-dir (some-> (:node-dir options)
+                                          util/->path)]
+                  (do
+                    (log/info "Using node dir:" (str node-dir))
+                    (util/delete-dir node-dir)
+                    (run node-dir))
+
+                  (util/with-tmp-dirs #{node-tmp-dir}
+                    (log/info "Using temporary dir: " node-tmp-dir)
+                    (run node-tmp-dir)))
+
+                (System/exit 0)
+                (catch Throwable t
+                  (log/error t "Error running benchmark")
+                  (System/exit 1))))))
 
   (shutdown-agents))

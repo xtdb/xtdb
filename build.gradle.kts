@@ -429,13 +429,14 @@ createSltTask(
 
 fun createBench(benchName: String, properties: Map<String, String>) {
     tasks.register(benchName, JavaExec::class) {
+        dependsOn(":modules:bench:assemble")
         classpath = sourceSets.dev.get().runtimeClasspath
         mainClass.set("clojure.main")
         jvmArgs(defaultJvmArgs + sixGBJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
         val args = mutableListOf("-m", "xtdb.bench", benchName)
 
-        properties.forEach { (k, v) ->
-            if (project.hasProperty(v)) {
+        (properties + ("dir" to "--node-dir")).forEach { (k, v) ->
+            if (project.hasProperty(k)) {
                 args.add(v)
                 args.add(project.properties[k] as String)
             }
@@ -460,6 +461,9 @@ createBench(
 )
 
 createBench("products", mapOf("limit" to "--limit"))
+
+// can't seem to have an arg with the same name as a task
+createBench("readings", mapOf("readingCount" to "--readings", "deviceCount" to "--devices"))
 
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
