@@ -17,7 +17,7 @@
        (take readings)
        (map (fn [[start end]]
               (into [:put-docs {:into :readings :valid-from start :valid-to end}]
-                    (for [i (range 0 devices)]
+                    (for [i (range devices)]
                       {:xt/id i :value (random-float -100 100)}))))))
 
 (def max-valid-time-q

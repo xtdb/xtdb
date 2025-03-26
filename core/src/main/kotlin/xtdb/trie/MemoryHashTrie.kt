@@ -10,7 +10,7 @@ private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
-data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
 
@@ -29,15 +29,15 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
         fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
     }
 
-    operator fun plus(idx: Int) = copy(rootNode = rootNode.add(this, idx))
+    operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader)
 
     @Suppress("unused")
-    fun withIidReader(iidReader: IVectorReader) = copy(iidReader = iidReader)
+    fun withIidReader(iidReader: IVectorReader) = MemoryHashTrie(rootNode, iidReader)
 
-    fun compactLogs() = copy(rootNode = rootNode.compactLogs(this))
+    fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
 
-    private fun bucketFor(idx: Int, level: Int): Int =
-        bucketFor(iidReader.getPointer(idx, BUCKET_BUF_PTR.get()), level).toInt()
+    private fun bucketFor(idx: Int, level: Int, reusePtr: ArrowBufPointer): Int =
+        bucketFor(iidReader.getPointer(idx, reusePtr), level).toInt()
 
     private fun compare(leftIdx: Int, rightIdx: Int, leftPtr: ArrowBufPointer, rightPtr: ArrowBufPointer): Int {
         val cmp =
@@ -53,8 +53,10 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
         override val path: ByteArray,
         override val iidChildren: Array<Node?>,
     ) : Node {
+        private val addPtr = ArrowBufPointer()
+
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
-            val bucket = trie.bucketFor(newIdx, path.size)
+            val bucket = trie.bucketFor(newIdx, path.size, addPtr)
 
             val newChildren = iidChildren.indices
                 .map { childIdx ->
@@ -136,9 +138,10 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
 
         private fun idxBuckets(trie: MemoryHashTrie, idxs: IntArray, path: ByteArray): Array<IntArray?> {
             val entryGroups = arrayOfNulls<IntArrayList>(LEVEL_WIDTH)
+            val ptr = ArrowBufPointer()
 
             for (i in idxs) {
-                val groupIdx = trie.bucketFor(i, path.size)
+                val groupIdx = trie.bucketFor(i, path.size, ptr)
                 val group = entryGroups[groupIdx] ?: IntArrayList().also { entryGroups[groupIdx] = it }
                 group.add(i)
             }
@@ -184,8 +187,6 @@ data class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorRea
         @JvmStatic
         @Suppress("unused")
         fun emptyTrie(iidReader: IVectorReader) = builder(iidReader).build()
-
-        private val BUCKET_BUF_PTR: ThreadLocal<ArrowBufPointer> = ThreadLocal.withInitial(::ArrowBufPointer)
 
         private fun conjPath(path: ByteArray, idx: Byte): ByteArray {
             val currentPathLength = path.size
