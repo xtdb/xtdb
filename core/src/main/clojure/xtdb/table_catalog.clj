@@ -30,7 +30,7 @@
   (-> (trie/table-name->table-path table-name)
       (.resolve block-table-metadata-path)))
 
-(defn ->table-block-metadata-obj-key [^Path table-path block-idx]
+(defn ->table-block-metadata-obj-key ^java.nio.file.Path [^Path table-path block-idx]
   (.resolve (.resolve table-path block-table-metadata-path)
             (format "b%s.binpb" (util/->lex-hex-string block-idx))))
 

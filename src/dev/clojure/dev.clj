@@ -6,8 +6,10 @@
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
+            [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
+            [xtdb.trie :as trie]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -16,7 +18,10 @@
            [java.util List]
            [org.apache.arrow.memory BaseAllocator RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb.arrow Relation StructVector Vector)
+           (xtdb.block.proto TableBlock)
+           (xtdb.log.proto TrieDetails)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)))
 
 #_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
@@ -155,3 +160,23 @@
 (comment
   (->> (util/->path "target/compactor/lose-data-on-compaction/objects/v02/tables/docs/meta/log-l01-nr121-rs16.arrow")
        (read-meta-file)))
+
+(defn read-table-block-file [store-path table-name block-idx]
+  (with-open [in (io/input-stream (.toFile (-> (util/->path store-path)
+                                               (.resolve (trie/table-name->table-path table-name))
+                                               (table-cat/->table-block-metadata-obj-key block-idx))))]
+    (-> (TableBlock/parseFrom in)
+        (table-cat/<-table-block)
+        (update :current-tries
+                (fn [tries]
+                  (->> tries
+                       (mapv (fn [^TrieDetails td]
+                               {:trie-key (.getTrieKey td)
+                                :trie-meta (some-> (.getTrieMetadata td)
+                                                   (trie-cat/<-trie-metadata)
+                                                   (update :iid-bloom
+                                                           (fn [^ImmutableRoaringBitmap bloom]
+                                                             (some-> bloom .serializedSizeInBytes))))}))))))))
+
+(comment
+  (read-table-block-file "/home/james/tmp/readings-bench/objects/v06" "public/readings" 0x213))

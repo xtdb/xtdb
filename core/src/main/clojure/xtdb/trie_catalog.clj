@@ -1,17 +1,18 @@
 (ns xtdb.trie-catalog
   (:require [integrant.core :as ig]
-            [xtdb.trie :as trie]
-            [xtdb.util :as util]
+            [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
-            [xtdb.table-catalog :as table-cat])
-  (:import org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           [java.nio ByteBuffer]
+            [xtdb.trie :as trie]
+            [xtdb.util :as util])
+  (:import [java.nio ByteBuffer]
+           (java.time LocalDate)
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
-           (java.time LocalDate)
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           (xtdb.log.proto TrieDetails TrieMetadata TemporalMetadata)))
+           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
