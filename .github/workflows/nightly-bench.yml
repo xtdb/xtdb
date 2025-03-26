@@ -1,0 +1,54 @@
+name: Readings Benchmark
+
+on:
+  schedule:
+    - cron: "0 1 * * *"  # nightly at 1am UTC
+  workflow_dispatch:      # manual run option
+
+env:
+  DEVICE_COUNT: 10000
+  READING_COUNT: 1000
+
+jobs:
+  nightly-benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Run Readings benchmark
+        run: |
+          ./gradlew readings -PdeviceCount=${DEVICE_COUNT} -PreadingCount=${READING_COUNT} > benchmark.log
+
+      - name: Output Markdown summary
+        run: |
+          echo "### 📊 Readings Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Device Count: ${DEVICE_COUNT}" >> $GITHUB_STEP_SUMMARY
+          echo "- Reading Count: ${READING_COUNT}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Time (ms) |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-----------|" >> $GITHUB_STEP_SUMMARY
+
+          grep '^{.*"stage":' benchmark.log \
+            | jq -r '"| \(.stage) | \(.["time-taken-ms"]) |"' \
+            >> $GITHUB_STEP_SUMMARY
+      
+      - name: Post Slack Notification      
+        uses: ravsamhq/notify-slack-action@v2
+        if: always()
+        with:
+          status: ${{ job.status }}
+          icon_success: ":hourglass:"
+          notification_title: "*Readings Benchmark*"
+          message_format: "{emoji} Readings Benchmark has {status_message}!"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
