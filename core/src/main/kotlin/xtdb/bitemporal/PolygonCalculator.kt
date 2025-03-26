@@ -11,7 +11,7 @@ class PolygonCalculator(private val temporalBounds: TemporalBounds? = null) {
 
     private val skipIidPtr = ArrowBufPointer()
     private val prevIidPtr = ArrowBufPointer()
-    private val currentIidPtr = ArrowBufPointer()
+    val currentIidPtr = ArrowBufPointer()
 
     private val ceiling = Ceiling()
     private val polygon = Polygon()

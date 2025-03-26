@@ -92,12 +92,15 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         }
 
         var seenErase = false
+        val iidPtr = ArrowBufPointer()
 
         val polygonCalculator = PolygonCalculator()
 
         while (true) {
             val elem = mergeQueue.poll() ?: break
             val (evPtr, rowCopier) = elem
+
+            if (polygonCalculator.currentIidPtr != evPtr.getIidPointer(iidPtr)) seenErase = false
 
             when (val polygon = polygonCalculator.calculate(evPtr)) {
                 null -> {

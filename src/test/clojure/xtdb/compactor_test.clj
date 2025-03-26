@@ -616,3 +616,17 @@
                  (->> (cat/trie-state tc "public/docs")
                       (cat/current-tries)
                       (into #{} (map :trie-key)))))))))
+
+(t/deftest dont-lose-erases-during-compaction
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :xt/valid-to #inst "2050"} {:xt/id 2 :xt/valid-to #inst "2050"}]])
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
+
+  (xt/submit-tx tu/*node* [[:erase-docs :foo 1 2]])
+
+  (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo")))
+
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node*)
+
+  (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))
