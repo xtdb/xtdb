@@ -76,31 +76,12 @@ internal interface OutWriter : AutoCloseable {
     }
 
     class OutWriters(private val al: BufferAllocator) {
+
         private class CopierFactory(private val dataRel: Relation) {
-            private val iidWtr = dataRel["_iid"]
-            private val sfWtr = dataRel["_system_from"]
-            private val vfWtr = dataRel["_valid_from"]
-            private val vtWtr = dataRel["_valid_to"]
-            private val opWtr = dataRel["op"]
-
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
-                private val iidCopier = dataReader["_iid"].rowCopier(iidWtr)
-                private val sfCopier = dataReader["_system_from"].rowCopier(sfWtr)
-                private val vfCopier = dataReader["_valid_from"].rowCopier(vfWtr)
-                private val vtCopier = dataReader["_valid_to"].rowCopier(vtWtr)
-                private val opCopier = dataReader["op"].rowCopier(opWtr)
+                private val copier = dataRel.rowCopier(dataReader)
 
-                override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int {
-                    val pos = iidCopier.copyRow(sourceIndex)
-
-                    sfCopier.copyRow(sourceIndex)
-                    vfCopier.copyRow(sourceIndex)
-                    vtCopier.copyRow(sourceIndex)
-                    opCopier.copyRow(sourceIndex)
-                    dataRel.endRow()
-
-                    return pos
-                }
+                override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int = copier.copyRow(sourceIndex)
             }
         }
 
