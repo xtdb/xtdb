@@ -64,14 +64,14 @@
             leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-rc-b00.arrow"))]
         (util/with-open [trie-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap trie-ba)))
                          trie-rel (Relation. allocator (.getSchema trie-loader))
-                         leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)) allocator)]
-          (let [iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "_iid")]
+                         leaf-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)))
+                         leaf-rel (Relation. allocator (.getSchema leaf-loader))]
+          (let [iid-vec (.vectorFor leaf-rel "_iid")]
             (.loadPage trie-loader 0 trie-rel)
             (t/is (= iid-bytes
                      (->> (.getLeaves (ArrowHashTrie. (.get trie-rel "nodes")))
                           (mapcat (fn [^ArrowHashTrie$Leaf leaf]
-                                    ;; would be good if ArrowFileReader accepted a page-idx...
-                                    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
+                                    (.loadPage leaf-loader (.getDataPageIndex leaf) leaf-rel)
 
                                     (->> (range 0 (.getValueCount iid-vec))
                                          (mapv #(vec (.getObject iid-vec %)))))))))))))))
