@@ -621,7 +621,7 @@
                              {:xt/id 1, :xt/valid-from #inst "2020-01-04", :xt/valid-to #inst "2020-01-05"}]])
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:schema-name "public", :table-name "foo", :trie-key "l00-rc-b00",
              :level 0, :trie-state "garbage", :data-file-size 2446,}

@@ -140,5 +140,7 @@
   (.signalBlock compactor))
 
 (defn compact-all!
-  ([node] (compact-all! node nil))
-  ([node timeout] (.compactAll ^Compactor (util/component node :xtdb/compactor) timeout)))
+  "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
+  [node timeout]
+
+  (.compactAll ^Compactor (util/component node :xtdb/compactor) timeout))

@@ -1080,7 +1080,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                          "INSERT INTO bar (_id, foo) VALUES ('bar1', 'foo1')"])
     (tu/finish-block! node)
 
-    (c/compact-all! node)
+    (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= [{:foo "foo1", :bar "bar1"}]
              (tu/query-ra '[:project [{bar _id} {foo foo/_id}]

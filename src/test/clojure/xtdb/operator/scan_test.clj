@@ -51,7 +51,7 @@
       (xt/execute-tx node
                      (for [i batch]
                        [:put-docs :xt_docs {:xt/id i}]))
-      (c/compact-all! node))
+      (c/compact-all! node #xt/duration "PT1S"))
 
     (t/is (= (set (for [i (range 110)] {:xt/id i}))
              (set (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
@@ -548,7 +548,7 @@
                             [:put-docs :xt_docs {:xt/id uuid}]))
       (tu/finish-block! node)
 
-      (c/compact-all! node)
+      (c/compact-all! node #xt/duration "PT1S")
 
       (t/is (= [{:xt/id search-uuid}]
                (tu/query-ra [:scan '{:table public/xt_docs} [{'_id (list '= '_id search-uuid)}]]
@@ -569,7 +569,7 @@
   (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
   (tu/finish-block! tu/*node*)
 
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (let [!page-idxs-cnt (atom 0)
         old-filter-trie-match scan/filter-pushdown-bloom-page-idx-pred]
@@ -855,11 +855,11 @@
       (xt/execute-tx n1 tx1)
       (xt/execute-tx n2 tx1)
       (tu/finish-block! n2)
-      (c/compact-all! n2)
+      (c/compact-all! n2 #xt/duration "PT2S")
       (xt/execute-tx n1 tx2)
       (xt/execute-tx n2 tx2)
       (tu/finish-block! n2)
-      (c/compact-all! n2)
+      (c/compact-all! n2 #xt/duration "PT2S")
 
       (doseq [[idx {:keys [interval dir range1 range2]}] (map vector (range) intervals)]
         (t/testing (format "%s interval: '%s'" (name dir) interval)

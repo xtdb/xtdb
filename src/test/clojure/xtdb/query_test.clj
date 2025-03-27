@@ -28,7 +28,7 @@
         (tu/then-await-tx node))
 
     (tu/finish-block! node)
-    (c/compact-all! node)
+    (c/compact-all! node #xt/duration "PT1S")
 
     (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan}]
                         [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
@@ -38,7 +38,7 @@
         (tu/then-await-tx node))
 
     (tu/finish-block! node)
-    (c/compact-all! node)
+    (c/compact-all! node #xt/duration "PT1S")
 
     (let [block-cat (block-cat/<-node node)]
       (letfn [(test-query-ivan [expected]
@@ -96,14 +96,15 @@
         (tu/then-await-tx node))
 
     (tu/finish-block! node)
-    (c/compact-all! node)
+    (c/compact-all! node #xt/duration "PT1S")
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
 
                             [:put-docs :xt_docs {:name "James", :xt/id :jms}]])
         (tu/then-await-tx node))
 
     (tu/finish-block! node)
-    (c/compact-all! node)
+    (c/compact-all! node #xt/duration "PT1S")
+
     (let [block-cat (block-cat/<-node node)]
       (t/is (= 1 (.getCurrentBlockIndex block-cat)))
 

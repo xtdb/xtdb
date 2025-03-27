@@ -479,7 +479,7 @@
         (dotimes [v 12]
           (xt/execute-tx node [[:put-docs :docs {:xt/id 0, :v v} {:xt/id 1, :v v}]]))
 
-        (c/compact-all! node)
+        (c/compact-all! node #xt/duration "PT2S")
 
         (t/is (= #{{:xt/id 0, :count 12} {:xt/id 1, :count 12}}
                  (set (xt/q node "SELECT _id, count(*) count
@@ -564,7 +564,7 @@
                               {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (c/compact-all! node)
+        (c/compact-all! node #xt/duration "PT5S")
         ;; to artifically create a new table block
         (tu/finish-block! node)
 
@@ -610,7 +610,7 @@
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 2}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 3}]])
         (tu/finish-block! node)
-        (c/compact-all! node)
+        (c/compact-all! node #xt/duration "PT1S")
 
         (t/is (= #{"l01-r20210101-b00" "l01-r20220101-b00" "l01-rc-b00"}
                  (->> (cat/trie-state tc "public/docs")
@@ -620,13 +620,13 @@
 (t/deftest dont-lose-erases-during-compaction
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :xt/valid-to #inst "2050"} {:xt/id 2 :xt/valid-to #inst "2050"}]])
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (xt/submit-tx tu/*node* [[:erase-docs :foo 1 2]])
 
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo")))
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))

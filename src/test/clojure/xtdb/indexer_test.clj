@@ -187,13 +187,13 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]])
         (tu/finish-block! node)
-        (c/compact-all! node)
+        (c/compact-all! node #xt/duration "PT1S")
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects") {:file-pattern #"^b00.binpb.*"})
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]])
         (tu/finish-block! node)
-        (c/compact-all! node)
+        (c/compact-all! node #xt/duration "PT1S")
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects"))))))
 
