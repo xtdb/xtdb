@@ -43,9 +43,7 @@
                                    (seq (set/intersection types/date-time-types base-col-types)))
 
                               (contains? base-col-types value-type))
-                      {:op :test-metadata,
-                       :f f
-                       :meta-value meta-value
+                      {:op :test-bloom,
                        :col-type value-type
                        :field field,
                        :value-expr value-expr
@@ -89,8 +87,8 @@
                 [:variable :param] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
                                                    (:param-type y-arg) y-arg)
 
-                [:literal :variable] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
-                                                     (vw/value->col-type (:literal y-arg)) y-arg)
+                [:literal :variable] (var-value-expr var-value-f var-value-meta-fn (:variable y-arg)
+                                                     (vw/value->col-type (:literal x-arg)) x-arg)
 
                 [:param :variable] (var-value-expr value-var-f value-var-meta-fn (:variable y-arg)
                                                    (:param-type x-arg) x-arg)
@@ -149,47 +147,45 @@
 
 (def ^:private content-metadata-present-sym (gensym "content-metadata-present?"))
 
-(defmethod expr/codegen-expr :test-metadata [{:keys [f meta-value field value-expr col-type bloom-hash-sym]} opts]
+(defmethod expr/codegen-expr :test-bloom [{:keys [field bloom-hash-sym]} _opts]
+  {:return-type :bool
+   :continue (fn [cont]
+               (cont :bool
+                     `(boolean
+                       (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str field) ~page-idx-sym)]
+                         (if (>= ~expr/idx-sym 0)
+                           (BloomUtils/bloomContains ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)
+                           (not ~content-metadata-present-sym))))))})
+
+(defmethod expr/codegen-expr :test-metadata [{:keys [f meta-value field value-expr col-type]} opts]
   (let [field-name (str field)
 
-        idx-code `(.rowIndex ~table-metadata-sym ~field-name ~page-idx-sym)]
+        col-sym (gensym 'meta_col)
+        col-field (types/col-type->field col-type)
 
-    (if (= meta-value :bloom-filter)
-      {:return-type :bool
-       :continue (fn [cont]
-                   (cont :bool
-                         `(boolean
-                           (let [~expr/idx-sym ~idx-code]
-                             (if (>= ~expr/idx-sym 0)
-                               (BloomUtils/bloomContains ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)
-                               (not ~content-metadata-present-sym))))))}
+        val-sym (gensym 'val)
 
-      (let [col-sym (gensym 'meta_col)
-            col-field (types/col-type->field col-type)
-
-            val-sym (gensym 'val)
-
-            {:keys [continue] :as emitted-expr}
-            (expr/codegen-expr {:op :call, :f :boolean
-                                :args [{:op :if-some, :local val-sym, :expr {:op :variable, :variable col-sym}
-                                        :then {:op :call, :f f
-                                               :args [{:op :local, :local val-sym}, value-expr]}
-                                        :else {:op :literal, :literal false}}]}
-                               (-> opts
-                                   (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
-        {:return-type :bool
-         :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
-                           `(some-> (.vectorForOrNull ~types-rdr-sym ~(.getName col-field))
-                                    (.vectorForOrNull ~(name meta-value)))]]
-         :children [emitted-expr]
-         :continue (fn [cont]
-                     (cont :bool
-                           `(if (and ~col-sym ~content-metadata-present-sym)
-                              (let [~expr/idx-sym ~idx-code]
-                                (when (>= ~expr/idx-sym 0)
-                                  ~(continue (fn [_ code] code))))
-                              ;; no content-metadata, we can't filter the pages
-                              true)))}))))
+        {:keys [continue] :as emitted-expr}
+        (expr/codegen-expr {:op :call, :f :boolean
+                            :args [{:op :if-some, :local val-sym, :expr {:op :variable, :variable col-sym}
+                                    :then {:op :call, :f f
+                                           :args [{:op :local, :local val-sym}, value-expr]}
+                                    :else {:op :literal, :literal false}}]}
+                           (-> opts
+                               (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
+    {:return-type :bool
+     :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
+                       `(some-> (.vectorForOrNull ~types-rdr-sym ~(.getName col-field))
+                                (.vectorForOrNull ~(name meta-value)))]]
+     :children [emitted-expr]
+     :continue (fn [cont]
+                 (cont :bool
+                       `(if (and ~col-sym ~content-metadata-present-sym)
+                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~field-name ~page-idx-sym)]
+                            (when (>= ~expr/idx-sym 0)
+                              ~(continue (fn [_ code] code))))
+                          ;; no content-metadata, we can't filter the pages
+                          true)))}))
 
 (defmethod ewalk/walk-expr :test-metadata [inner outer expr]
   (outer (-> expr (update :value-expr inner))))
