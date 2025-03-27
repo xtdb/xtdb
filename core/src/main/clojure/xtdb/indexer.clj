@@ -128,7 +128,7 @@
                                                                 {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
                                                                  :table-name table-name
                                                                  :forbidden-cols forbidden-cols})))
-                                      (let [^RelationReader table-rel-rdr (vr/rel-reader (for [sk ks]
+                                      (let [^RelationReader table-rel-rdr (vr/rel-reader (for [sk ks, :when (not (contains? #{"_valid_from" "_valid_to"} sk))]
                                                                                            (.structKeyReader doc-rdr sk))
                                                                                          (.getValueCount doc-rdr))
                                             live-table-tx (.liveTable live-idx-tx table-name)]
