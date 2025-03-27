@@ -339,6 +339,7 @@ dependencies {
 if (hasProperty("fin")) {
     dependencies {
         devImplementation("vvvvalvalval", "scope-capture", "0.3.3")
+        devImplementation("lambdaisland", "deep-diff2", "2.12.219")
     }
 }
 
