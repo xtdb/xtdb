@@ -64,7 +64,9 @@ abstract class ObjectStoreTest {
             tempDir.deleteRecursively()
         }
 
-        objectStore.deleteObject("alice".asPath).await()
+        objectStore.deleteIfExists("alice".asPath).await()
+        objectStore.deleteIfExists("alice".asPath).await()
+        objectStore.deleteIfExists("missing".asPath).await()
 
         assertFailsWith(IllegalStateException::class) { objectStore.getString("alice") }
     }

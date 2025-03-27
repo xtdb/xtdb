@@ -61,7 +61,7 @@
          (take-while #(-> ^Path (key %) (.startsWith prefix)))
          (map key)))
   
-  (deleteObject [_this k]
+  (deleteIfExists [_this k]
     (.remove os k)
     (CompletableFuture/completedFuture nil))
 
@@ -93,7 +93,7 @@
                                    Files/delete))]
       (t/is (= alice (read-string (Files/readString temp-path)))))
 
-    @(.deleteObject obj-store alice-key)
+    @(.deleteIfExists obj-store alice-key)
 
     (t/is (thrown? IllegalStateException (get-edn obj-store alice-key)))))
 

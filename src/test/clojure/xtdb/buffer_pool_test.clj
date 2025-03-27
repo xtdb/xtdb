@@ -144,7 +144,7 @@
         (putObject [_ _k _v] (throw (UnsupportedOperationException. "foo")))
         (listAllObjects [_] (throw (UnsupportedOperationException. "foo")))
         (listAllObjects [_ _] (throw (UnsupportedOperationException. "foo")))
-        (deleteObject [_ _k] (throw (UnsupportedOperationException. "foo")))))))
+        (deleteIfExists [_ _k] (throw (UnsupportedOperationException. "foo")))))))
 
 (t/deftest local-disk-cache-with-previous-values
   (let [obj-store-factory (simulated-obj-store-factory)

@@ -53,8 +53,10 @@ class SimulatedObjectStore(
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    override fun deleteObject(k: Path): CompletableFuture<Unit> =
-        TODO("Not yet implemented")
+    override fun deleteIfExists(k: Path): CompletableFuture<Unit> {
+        buffers.remove(k)
+        return completedFuture(Unit)
+    }
 
     override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> {
         val upload = object : IMultipartUpload<ByteBuffer> {

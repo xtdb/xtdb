@@ -241,7 +241,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
             .asIterable()
     }
 
-    override fun deleteObject(k: Path) = scope.future<Unit> {
+    override fun deleteIfExists(k: Path): CompletableFuture<Unit> = scope.future<Unit> {
         val prefixedKey = prefix.resolve(k).toString()
 
         runInterruptible {

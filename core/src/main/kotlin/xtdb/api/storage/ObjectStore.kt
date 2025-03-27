@@ -60,7 +60,7 @@ interface ObjectStore : AutoCloseable {
     /**
      * Deletes the object with the given path from the object store.
      */
-    fun deleteObject(k: Path): CompletableFuture<Unit>
+    fun deleteIfExists(k: Path): CompletableFuture<Unit>
 
     override fun close() {
     }

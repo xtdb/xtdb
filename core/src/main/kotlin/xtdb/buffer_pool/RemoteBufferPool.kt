@@ -12,7 +12,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore
@@ -69,12 +68,10 @@ class RemoteBufferPool(
         internal var minMultipartPartSize = 5 * 1024 * 1024
         private const val MAX_CONCURRENT_PART_UPLOADS = 4
 
-        private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
+        private val LOGGER = RemoteBufferPool::class.logger
 
         private val Path.totalSpace
-            get() = Files.getFileStore(this).totalSpace.also {
-                LOGGER.debug("Total disk space for $this: ${Files.getFileStore(this).totalSpace}")
-            }
+            get() = Files.getFileStore(this).totalSpace
 
         private val multipartUploadDispatcher =
             IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
@@ -96,7 +93,7 @@ class RemoteBufferPool(
                     LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
                     upload.abort().get()
                 } catch (abortError: Throwable) {
-                    LOGGER.warn("Throwable caught when aborting uploadMultipartBuffers", abortError)
+                    LOGGER.warn(abortError, "Throwable caught when aborting uploadMultipartBuffers")
                     e.addSuppressed(abortError)
                 }
                 throw e
@@ -198,9 +195,11 @@ class RemoteBufferPool(
     override fun deleteAllObjects() {
         runBlocking(IO.limitedParallelism(8, "xtdb-delete-all-objects")) {
             for (obj in listAllObjects())
-                future { objectStore.deleteObject(obj.key) }
+                future { objectStore.deleteIfExists(obj.key) }
         }
     }
+
+    override fun deleteIfExists(key: Path): Unit = runBlocking { objectStore.deleteIfExists(key).await() }
 
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val tmpPath = diskCache.createTempPath()

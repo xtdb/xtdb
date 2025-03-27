@@ -82,6 +82,11 @@ class MemoryBufferPool(
         }
     }
 
+    override fun deleteIfExists(key: Path): Unit =
+        synchronized(memoryStore) {
+            memoryStore.remove(key)?.also { it.close() }
+        }
+
     override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
         val baos = ByteArrayOutputStream()
         return newChannel(baos).closeOnCatch { writeChannel ->

@@ -48,6 +48,8 @@ interface BufferPool : AutoCloseable {
 
     fun deleteAllObjects()
 
+    fun deleteIfExists(key: Path)
+
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
 
     companion object {
@@ -61,6 +63,7 @@ interface BufferPool : AutoCloseable {
             override fun listAllObjects() = unsupported("listAllObjects")
             override fun listAllObjects(dir: Path) = unsupported("listAllObjects")
             override fun deleteAllObjects() = unsupported("deleteObject")
+            override fun deleteIfExists(key: Path) = unsupported("deleteIfExists")
             override fun openArrowWriter(key: Path, rel: Relation) = unsupported("openArrowWriter")
 
             override fun close() = Unit
