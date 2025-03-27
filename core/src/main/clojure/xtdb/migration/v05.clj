@@ -73,21 +73,26 @@
                          (when (Thread/interrupted) (throw (InterruptedException.)))
 
                          (let [{obj-key :key} (os/<-StoredObject obj)
-                               {:keys [tables latest-completed-tx]} (-> (.getByteArray src obj-key)
-                                                                        (serde/read-transit :json))
-                               table-res (->> (for [[table-name {:keys [trie-key]}] tables
-                                                    :let [table-path (trie/table-name->table-path table-name)
+                               [_ chunk-idx-hex] (re-matches #"chunk-metadata/(\p{XDigit}+)\.transit\.json" (str obj-key))
+                               {:keys [tables latest-completed-tx next-chunk-idx]} (-> (.getByteArray src obj-key)
+                                                                                       (serde/read-transit :json))
+                               table-res (->> (for [[table-name {:keys [row-count]}] tables
+                                                    :let [old-trie-key (format "log-l00-fr%s-nr%s-rs%s"
+                                                                               chunk-idx-hex
+                                                                               (util/->lex-hex-string next-chunk-idx)
+                                                                               (Long/toString row-count 16))
+                                                          table-path (trie/table-name->table-path table-name)
                                                           data-path (.resolve table-path "data")
                                                           meta-path (.resolve table-path "meta")
                                                           new-trie-key (trie/->l0-trie-key block-idx)]]
                                                 (do
-                                                  (log/debugf "Copying '%s' '%s' -> '%s'" table-name trie-key new-trie-key)
+                                                  (log/debugf "Copying '%s' '%s' -> '%s'" table-name old-trie-key new-trie-key)
                                                   (copy-file! system
-                                                              (.resolve meta-path (str trie-key ".arrow"))
+                                                              (.resolve meta-path (str old-trie-key ".arrow"))
                                                               (.resolve meta-path (str new-trie-key ".arrow")))
 
                                                   (let [buf (copy-file! system
-                                                                        (.resolve data-path (str trie-key ".arrow"))
+                                                                        (.resolve data-path (str old-trie-key ".arrow"))
                                                                         (.resolve data-path (str new-trie-key ".arrow")))]
                                                     [table-name (into {:trie-key new-trie-key} (trie-details system buf))])))
                                               (into {}))]
