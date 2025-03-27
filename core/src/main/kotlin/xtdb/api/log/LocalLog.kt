@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 
-class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
+class LocalLog(rootPath: Path, private val instantSource: InstantSource, override val currentEpoch: Int) : Log {
     companion object {
         private val Path.logFilePath get() = resolve("LOG")
 
@@ -198,8 +198,8 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
             onCommit.await().logOffset
         }
 
-    override fun subscribe(subscriber: Subscriber): Subscription {
-        var latestCompletedOffset = subscriber.latestProcessedMsgId
+    override fun subscribe(subscriber: Subscriber, offset: LogOffset): Subscription {
+        var latestCompletedOffset = offset
 
         val ch = Channel<Record>(100)
 
@@ -212,7 +212,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
 
                         runInterruptible {
                             FileChannel.open(logFilePath).use { ch ->
-                                val latestCompleted = subscriber.latestProcessedMsgId
+                                val latestCompleted = latestCompletedOffset
                                 if (latestCompleted >= 0) {
                                     ch.position(latestCompleted)
                                     ch.readMessage()
@@ -268,11 +268,13 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource) : Log {
     data class Factory @JvmOverloads constructor(
         val path: Path,
         @Transient var instantSource: InstantSource = InstantSource.system(),
+        var currentEpoch: Int = 0
     ) : Log.Factory {
 
         @Suppress("unused")
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
+        fun currentEpoch(currentEpoch: Int) = apply { this.currentEpoch = currentEpoch }
 
-        override fun openLog() = LocalLog(path, instantSource)
+        override fun openLog() = LocalLog(path, instantSource, currentEpoch)
     }
 }
