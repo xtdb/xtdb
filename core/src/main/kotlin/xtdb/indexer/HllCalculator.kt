@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
 import xtdb.util.HLL
 import xtdb.util.add
@@ -11,15 +10,17 @@ class HllCalculator {
 
     private val hlls = mutableMapOf<ColumnName, HLL>()
 
-    fun update(putRdr: IVectorReader, startPos: Int, endPos: Int) {
+    fun update(opRdr: IVectorReader, startPos: Int, endPos: Int) {
+        val putRdr = opRdr.legReader("put")!!
         val columns = putRdr.keyNames.orEmpty()
-        val keyRdrs = columns.map { it to VectorReader.from(putRdr.structKeyReader(it)!!) }
+        val keyRdrs = columns.map { it to putRdr.structKeyReader(it)!! }
 
         for ((col, rdr) in keyRdrs) {
             hlls.compute(col) { _, hll ->
                 (hll ?: createHLL()).also {
                     for (i in startPos..<endPos)
-                        it.add(rdr, i)
+                        if (opRdr.getLeg(i) == "put")
+                            it.add(rdr, i)
                 }
             }
         }

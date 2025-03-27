@@ -126,7 +126,7 @@ constructor(
         fun commit(): LiveTable {
             val pos = liveRelation.rowCount
             trieMetadataCalculator.update(startPos, pos)
-            hllCalculator.update(putWtr.asReader, startPos, pos)
+            hllCalculator.update(opWtr.asReader, startPos, pos)
 
             liveTrie = transientTrie
 

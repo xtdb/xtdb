@@ -48,9 +48,7 @@
         (let [row-count (.getRowCount root)]
           (vswap! !row-count + row-count)
           (.update tm-calc 0 row-count)
-          (.update hll-calc
-                   (-> (.vectorForOrNull rdr "op") (.legReader "put"))
-                   0 row-count)))
+          (.update hll-calc (.vectorForOrNull rdr "op") 0 row-count)))
 
       {:trie-metadata (.build tm-calc)
        :hlls (.build hll-calc)
