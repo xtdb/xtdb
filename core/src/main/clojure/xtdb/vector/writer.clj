@@ -9,7 +9,7 @@
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date List Map Set UUID)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
+           (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
            (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth ZonedDateTimeRange)
@@ -91,10 +91,7 @@
   (value->col-type [_] [:interval :month-day-micro])
 
   ZonedDateTimeRange
-  (value->col-type [_] :tstz-range)
-
-  PeriodDuration ;;TODO Is there any need to expose this?
-  (value->col-type [_] [:interval :month-day-micro]))
+  (value->col-type [_] :tstz-range))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
