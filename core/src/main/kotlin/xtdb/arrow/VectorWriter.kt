@@ -24,6 +24,7 @@ interface VectorWriter : VectorReader, ValueWriter, AutoCloseable {
     override fun vectorForOrNull(name: String): VectorWriter? = unsupported("vectorFor")
 
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    override fun get(name: String) = vectorFor(name)
 
     /**
      * @return a vector with the given name, creating/promoting if necessary
