@@ -27,8 +27,8 @@ sealed class FixedWidthVector : Vector() {
     final override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
     final override fun writeUndefined() {
-        if (byteWidth == 0) dataBuffer.writeBit(valueCount, 0) else dataBuffer.writeZero(byteWidth)
         validityBuffer.writeBit(valueCount++, 0)
+        dataBuffer.writeZero(byteWidth)
     }
 
     final override fun writeNull() {
@@ -37,15 +37,6 @@ sealed class FixedWidthVector : Vector() {
     }
 
     private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
-
-    protected fun getBoolean0(idx: Int) =
-        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
-        else dataBuffer.getBit(idx)
-
-    protected fun writeBoolean0(value: Boolean) {
-        dataBuffer.writeBit(valueCount, if (value) 1 else 0)
-        writeNotNull()
-    }
 
     protected fun getByte0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
@@ -108,8 +99,8 @@ sealed class FixedWidthVector : Vector() {
         return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
     }
 
-    override fun writeBytes(buf: ByteBuffer) {
-        dataBuffer.writeBytes(buf)
+    override fun writeBytes(v: ByteBuffer) {
+        dataBuffer.writeBytes(v)
         writeNotNull()
     }
 
