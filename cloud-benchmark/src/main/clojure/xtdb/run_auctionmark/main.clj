@@ -91,7 +91,7 @@
         (benchmark-fn node))
       (send-message-to-slack
        (format
-        ":white_check_mark: (%s) Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`" platform run-duration scale-factor load-phase))
+        ":white_check_mark: (%s) Auctionmark successfully ran for *%s*! \n\n*Scale Factor*: `%s` \n*Load-Phase*: `%s`" platform run-duration scale-factor (not no-load?)))
 
       (catch Exception e
         (log/error "Error running Auctionmark: " (.getMessage e))
