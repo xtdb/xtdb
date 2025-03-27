@@ -1,19 +1,14 @@
 package xtdb.trie
 
-import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Schema
-import org.roaringbitmap.RoaringBitmap
 import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.arrow.Relation
-import xtdb.arrow.Vector
 import xtdb.arrow.VectorReader
-import xtdb.bloom.bloomHashes
-import xtdb.bloom.toByteBuffer
 import xtdb.compactor.PageTree
-import xtdb.log.proto.TemporalMetadata
+import xtdb.indexer.TrieMetadataCalculator
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadataWriter
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
@@ -21,7 +16,6 @@ import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.Trie.metaRelSchema
 import xtdb.util.requiringResolve
-import xtdb.util.toByteArray
 
 private typealias Selection = IntArray
 
@@ -35,7 +29,7 @@ class TrieWriter(
         private val tableName: TableName,
         private val trieKey: TrieKey,
         dataSchema: Schema,
-        private val writeTrieMetadata: Boolean = true
+        writeTrieMetadata: Boolean = true
     ) : AutoCloseable {
         val dataRel: Relation = Relation(allocator, dataSchema)
 
@@ -50,24 +44,31 @@ class TrieWriter(
                 .getOrThrow()
 
         private val nodeWtr = metaRel["nodes"]
-        private val nullBranchWtr = nodeWtr.vectorFor("nil")
+        private val nullBranchWtr = nodeWtr["nil"]
 
-        private val iidBranchWtr = nodeWtr.vectorFor("branch-iid")
+        private val iidBranchWtr = nodeWtr["branch-iid"]
         private val iidBranchElWtr = iidBranchWtr.listElements
 
-        private val leafWtr = nodeWtr.vectorFor("leaf")
-        private val pageIdxWtr = leafWtr.vectorFor("data-page-idx")
+        private val leafWtr = nodeWtr["leaf"]
+        private val pageIdxWtr = leafWtr["data-page-idx"]
 
         private val pageMetaWriter =
             requiringResolve("xtdb.metadata/->page-meta-wtr")
-                .invoke(leafWtr.vectorFor("columns"))
+                .invoke(leafWtr["columns"])
                 .let { it as PageMetadataWriter }
 
         private var pageIdx = 0
 
-        private val temporalMetadataBuilder = TemporalMetadata.newBuilder()
-        private val trieMetadataBuilder = TrieMetadata.newBuilder()
-        private val iidBloom = RoaringBitmap()
+        private val iidVec = dataRel["_iid"]
+        private val validFromVec = dataRel["_valid_from"]
+        private val validToVec = dataRel["_valid_to"]
+        private val systemFromVec = dataRel["_system_from"]
+
+        private val opReader = dataRel["op"]
+        private val putReader = opReader.vectorForOrNull("put")
+
+        private val trieMetaCalc =
+            if (writeTrieMetadata) TrieMetadataCalculator(iidVec, validFromVec, validToVec, systemFromVec) else null
 
         fun writeNull(): RowIndex {
             val pos = nodeWtr.valueCount
@@ -75,59 +76,12 @@ class TrieWriter(
             return pos
         }
 
-        private fun getMinMax(col: Vector, initMin: Long, initMax: Long): Pair<Long, Long> {
-            var min = initMin
-            var max = initMax
-            repeat(col.valueCount) { i ->
-                val v = col.getLong(i)
-                min = minOf(min, v)
-                max = maxOf(max, v)
-            }
-            return min to max
-        }
-
         fun writeLeaf(): RowIndex {
-            val putReader = dataRel["op"].vectorForOrNull("put")
             val metaPos = nodeWtr.valueCount
 
-            val systemFrom = dataRel["_system_from"]
-            val validFrom = dataRel["_valid_from"]
-            val validTo = dataRel["_valid_to"]
-            val iidVec = dataRel["_iid"]
+            val temporalCols = listOf(systemFromVec, validFromVec, validToVec, iidVec)
 
-            val temporalCols = listOf(systemFrom, validFrom, validTo, iidVec)
-
-            if (writeTrieMetadata) {
-                val (minValidFrom, maxValidFrom) = getMinMax(
-                    validFrom,
-                    temporalMetadataBuilder.minValidFrom,
-                    temporalMetadataBuilder.maxValidFrom
-                )
-                temporalMetadataBuilder.minValidFrom = minValidFrom
-                temporalMetadataBuilder.maxValidFrom = maxValidFrom
-
-                val (minValidTo, maxValidTo) = getMinMax(
-                    validTo,
-                    temporalMetadataBuilder.minValidTo,
-                    temporalMetadataBuilder.maxValidTo
-                )
-                temporalMetadataBuilder.minValidTo = minValidTo
-                temporalMetadataBuilder.maxValidTo = maxValidTo
-
-                val (minSystemFrom, maxSystemFrom) = getMinMax(
-                    systemFrom,
-                    temporalMetadataBuilder.minSystemFrom,
-                    temporalMetadataBuilder.maxSystemFrom
-                )
-                temporalMetadataBuilder.minSystemFrom = minSystemFrom
-                temporalMetadataBuilder.maxSystemFrom = maxSystemFrom
-
-                trieMetadataBuilder.rowCount = iidVec.valueCount.toLong()
-
-                for (i in 0 until iidVec.valueCount) {
-                    iidBloom.add(*bloomHashes(iidVec, i))
-                }
-            }
+            trieMetaCalc?.update(0, dataRel.rowCount)
 
             val contentCols = writeContentMetadata.takeIf { it }
                 ?.let { putReader?.keyNames?.mapNotNull { putReader.vectorForOrNull(it) } }
@@ -170,12 +124,7 @@ class TrieWriter(
                 metaFileWriter.end()
             }
 
-            if (writeTrieMetadata && trieMetadataBuilder.rowCount > 0) {
-                trieMetadataBuilder.temporalMetadata = temporalMetadataBuilder.build()
-                trieMetadataBuilder.iidBloom = ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray())
-            }
-
-            return Pair(dataFileSize, trieMetadataBuilder.build())
+            return Pair(dataFileSize, trieMetaCalc?.build()?.takeIf { it.rowCount > 0 } ?: TrieMetadata.newBuilder().build())
         }
 
         override fun close() {
@@ -272,7 +221,7 @@ class TrieWriter(
         tableName: TableName, trieKey: TrieKey,
         loader: Relation.Loader, pageTree: PageTree?,
         pageSize: Int
-    ): Pair<FileSize, TrieMetadata> =
+    ): Pair<FileSize, TrieMetadata?> =
         OpenWriter(tableName, trieKey, loader.schema).use { writer ->
             Relation(allocator, loader.schema).use { inRel ->
                 fun PageTree?.writeSubtree(depth: Int): RowIndex {

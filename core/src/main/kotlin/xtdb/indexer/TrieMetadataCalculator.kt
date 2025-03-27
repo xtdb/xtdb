@@ -8,13 +8,12 @@ import xtdb.bloom.toByteBuffer
 import xtdb.log.proto.TemporalMetadata
 import xtdb.log.proto.TrieMetadata
 import xtdb.util.toByteArray
-import xtdb.vector.IVectorReader
 
 class TrieMetadataCalculator(
     private val iidRdr: VectorReader,
-    private val validFromRdr: IVectorReader,
-    private val validToRdr: IVectorReader,
-    private val systemFromRdr: IVectorReader
+    private val validFromRdr: VectorReader,
+    private val validToRdr: VectorReader,
+    private val systemFromRdr: VectorReader
 ) {
 
     private var rowCount = 0L
@@ -25,14 +24,19 @@ class TrieMetadataCalculator(
         rowCount += endPos - startPos
 
         for (i in startPos..<endPos) {
-            temporalBuilder.minValidFrom = minOf(temporalBuilder.minValidFrom, validFromRdr.getLong(i))
-            temporalBuilder.maxValidFrom = maxOf(temporalBuilder.maxValidFrom, validFromRdr.getLong(i))
+            temporalBuilder.apply {
+                val validFrom = validFromRdr.getLong(i)
+                minValidFrom = minOf(minValidFrom, validFrom)
+                maxValidFrom = maxOf(maxValidFrom, validFrom)
 
-            temporalBuilder.minValidTo = minOf(temporalBuilder.minValidTo, validToRdr.getLong(i))
-            temporalBuilder.maxValidTo = maxOf(temporalBuilder.maxValidTo, validToRdr.getLong(i))
+                val validTo = validToRdr.getLong(i)
+                minValidTo = minOf(minValidTo, validTo)
+                maxValidTo = maxOf(maxValidTo, validTo)
 
-            temporalBuilder.minSystemFrom = minOf(temporalBuilder.minSystemFrom, systemFromRdr.getLong(i))
-            temporalBuilder.maxSystemFrom = maxOf(temporalBuilder.maxSystemFrom, systemFromRdr.getLong(i))
+                val systemFrom = systemFromRdr.getLong(i)
+                minSystemFrom = minOf(minSystemFrom, systemFrom)
+                maxSystemFrom = maxOf(maxSystemFrom, systemFrom)
+            }
 
             iidBloom.add(*bloomHashes(iidRdr, i))
         }

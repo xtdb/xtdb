@@ -63,7 +63,7 @@ interface Compactor : AutoCloseable {
 
         }
 
-        private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata) =
+        private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata?) =
             TrieDetails.newBuilder()
                 .setTableName(tableName).setTrieKey(trieKey)
                 .setDataFileSize(dataFileSize)
