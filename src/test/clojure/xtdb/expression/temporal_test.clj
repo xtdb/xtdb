@@ -1174,9 +1174,9 @@
       true '(>= (multi-field-interval "2-2" "YEAR" 2 "MONTH" 2) (single-field-interval 2 "YEAR" 2 0))
       false '(>= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))))
 
-  (t/testing "can't compare month-day-nano intervals if months > 0"
+  (t/testing "can't compare month-day-micro intervals if months > 0"
     (let [test-doc {:_id :foo,
-                    :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H"))}]
+                    :interval (IntervalMonthDayMicro. (Period/of 0 4 8) (Duration/parse "PT1H"))}]
       (t/is (thrown-with-msg?
              RuntimeException
              #"Cannot compare month-day-micro/nano intervals when month component is non-zero."

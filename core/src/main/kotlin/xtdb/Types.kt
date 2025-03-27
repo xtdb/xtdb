@@ -145,7 +145,7 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is IntervalYearMonth -> MinorType.INTERVALYEAR.type
     is IntervalDayTime -> MinorType.INTERVALDAY.type
     is IntervalMonthDayNano -> MinorType.INTERVALMONTHDAYNANO.type
-    is IntervalMonthDayMicro , is PeriodDuration -> IntervalMDMType
+    is IntervalMonthDayMicro -> IntervalMDMType
 
     is ZonedDateTimeRange -> TsTzRangeType
 

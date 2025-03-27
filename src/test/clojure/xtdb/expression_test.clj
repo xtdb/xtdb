@@ -14,10 +14,11 @@
   (:import (java.nio ByteBuffer)
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
-           (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
+           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
            xtdb.arrow.RelationReader
+           (xtdb.types IntervalMonthDayMicro)
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
 
@@ -203,9 +204,8 @@
 
 (t/deftest test-date-trunc-interval
   (let [test-doc {:_id :foo,
-                  :year-interval (PeriodDuration. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S"))
-                  ;;TODO this shouldn't be a pd
-                  :interval (PeriodDuration. (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
+                  :year-interval (IntervalMonthDayMicro. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S"))
+                  :interval (IntervalMonthDayMicro. (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
 
     (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'interval) test-doc))]
       (t/is (= #xt/interval-mdm ["P4M8D" "PT1H1M1.111111S"] (trunc "MICROSECOND")))
@@ -276,7 +276,7 @@
 
 (t/deftest test-interval-extract
   (letfn [(extract [part interval-val] (project1 (list 'extract part 'interval) {:interval interval-val}))]
-    (let [itvl (PeriodDuration. (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
+    (let [itvl (IntervalMonthDayMicro. (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
       (t/is (= 12 (extract "SECOND" itvl)))
       (t/is (= 10 (extract "MINUTE" itvl)))
       (t/is (= 3 (extract "HOUR" itvl)))
