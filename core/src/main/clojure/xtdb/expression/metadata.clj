@@ -1,6 +1,5 @@
 (ns xtdb.expression.metadata
   (:require [clojure.set :as set]
-            [xtdb.bloom :as bloom]
             [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
             [xtdb.metadata :as meta]
@@ -8,9 +7,9 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import java.util.function.IntPredicate
-           (xtdb.arrow RelationReader VectorReader)
-           (xtdb.metadata MetadataPredicate PageMetadata)
-           (xtdb.bloom BloomUtils)))
+           (xtdb.arrow RelationReader Vector VectorReader)
+           (xtdb.bloom BloomUtils)
+           (xtdb.metadata MetadataPredicate PageMetadata)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -131,11 +130,16 @@
             simplify-and-or-expr)
     :call (call-meta-expr expr opts)))
 
-(defn- ->bloom-hashes [expr ^RelationReader params]
+(defn- ->bloom-hashes [allocator expr ^RelationReader params]
   (vec
-    (for [{:keys [value-expr col-type]} (->> (ewalk/expr-seq expr)
-                                             (filter :bloom-hash-sym))]
-      (bloom/literal-hashes params value-expr col-type))))
+   (for [{:keys [value-expr col-type]} (->> (ewalk/expr-seq expr)
+                                            (filter :bloom-hash-sym))]
+     (case (:op value-expr)
+       :literal (with-open [tmp-vec (Vector/fromField allocator (types/col-type->field col-type))]
+                  (.writeObject tmp-vec (:literal value-expr))
+                  (BloomUtils/bloomHashes tmp-vec 0))
+
+       :param (BloomUtils/bloomHashes (.vectorFor params (str (:param value-expr))) 0)))))
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-rdr-sym (gensym "metadata-rdr"))
@@ -217,7 +221,7 @@
 
       (util/lru-memoize)))
 
-(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [form col-types params]
+(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [allocator form col-types params]
   (let [params (RelationReader/from params)
         param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
@@ -225,7 +229,7 @@
                                             {:param-types            param-types
                                              :col-types col-types
                                              :extract-vecs-from-rel? false})
-        bloom-hashes (->bloom-hashes expr params)]
+        bloom-hashes (->bloom-hashes allocator expr params)]
     (reify MetadataPredicate
       (build [_ table-metadata]
         (f table-metadata params bloom-hashes)))))

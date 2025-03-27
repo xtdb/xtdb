@@ -54,8 +54,8 @@
 
         (util/with-open [args (tu/open-args {:name "Ivan"})]
           (t/testing "only needs to scan block 1, page 1"
-            (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} vw/empty-args)
-                  param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} args)]
+            (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(> name "Ivan") '{name :utf8} vw/empty-args)
+                  param-sel (expr.meta/->metadata-selector tu/*allocator* '(> name ?name) '{name :utf8} args)]
               (t/testing "L0 files don't have content metadata, so we have to match them"
                 (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
                   (fn [^PageMetadata page-metadata]
@@ -110,8 +110,8 @@
 
       (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]
-          (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} vw/empty-args)
-                param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} args)]
+          (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(= name "Ivan") '{name :utf8} vw/empty-args)
+                param-sel (expr.meta/->metadata-selector tu/*allocator* '(= name ?name) '{name :utf8} args)]
             (t/testing "L0 has no content metadata -> always match"
               (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
                 (fn [^PageMetadata page-metadata]

@@ -134,7 +134,7 @@
                                 (map (comp bucket->page-idx first)))
 
             metadata-mgr (meta/<-node node)
-            literal-selector (expr.meta/->metadata-selector '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
+            literal-selector (expr.meta/->metadata-selector tu/*allocator* '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
 
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
@@ -177,7 +177,7 @@
   (tu/finish-block! tu/*node*)
 
   (let [metadata-mgr (meta/<-node tu/*node*)
-        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
+        true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
 
     (t/testing "L0"
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]

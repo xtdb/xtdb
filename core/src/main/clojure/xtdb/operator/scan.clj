@@ -221,7 +221,7 @@
                                iid-bb (selects->iid-byte-buffer selects args)
                                col-preds (cond-> col-preds
                                            iid-bb (assoc "_iid" (IidSelector. iid-bb)))
-                               metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
+                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
                                scan-opts (-> scan-opts
                                              (update :for-valid-time
                                                      (fn [fvt]
