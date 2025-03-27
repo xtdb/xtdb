@@ -143,12 +143,12 @@ class KafkaLog internal constructor(
                 .also { offset -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(offset) } }
         }
 
-    override fun subscribe(subscriber: Subscriber): Subscription {
+    override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
         val job = scope.launch {
             kafkaConfigMap.openConsumer().use { c ->
                 TopicPartition(topic, 0).also { tp ->
                     c.assign(listOf(tp))
-                    c.seek(tp, subscriber.latestProcessedMsgId + 1)
+                    c.seek(tp, latestProcessedOffset + 1)
                 }
 
                 runInterruptible(Dispatchers.IO) {
