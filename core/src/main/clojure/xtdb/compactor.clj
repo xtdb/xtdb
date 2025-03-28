@@ -15,7 +15,7 @@
 (defrecord Job [table-name trie-keys part out-trie-key partitioned-by-recency?]
   Compactor$Job
   (getTableName [_] table-name)
-  (getTrieKeys [_] (set trie-keys))
+  (getTrieKeys [_] trie-keys)
   (getPart [_] part)
   (getOutputTrieKey [_] out-trie-key)
   (getPartitionedByRecency [_] partitioned-by-recency?))
