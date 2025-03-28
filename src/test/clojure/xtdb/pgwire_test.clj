@@ -2285,13 +2285,14 @@ ORDER BY t.oid DESC LIMIT 1"
              (jdbc/execute! conn ["SELECT _id, foo FROM docs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))
 
-    (psql-session
-     (fn [send read]
-       (send "SELECT _id, foo FROM docs ORDER BY _id;\n")
-       (t/is (= [["_id" "foo"]
-                 ["1" "2023-03-15 12:00:00+01:00"]
-                 ["2" "2023-03-15 12:00:00+03:00"]]
-                (read)))))))
+    (when (psql-available?)
+      (psql-session
+       (fn [send read]
+         (send "SELECT _id, foo FROM docs ORDER BY _id;\n")
+         (t/is (= [["_id" "foo"]
+                   ["1" "2023-03-15 12:00:00+01:00"]
+                   ["2" "2023-03-15 12:00:00+03:00"]]
+                  (read))))))))
 
 (deftest test-max-rows-3902
   (with-open [conn (jdbc-conn)
@@ -2412,22 +2413,23 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (= [{:standard-conforming-strings true}] (q conn ["SHOW STANDARD_CONFORMING_STRINGS"])))
     (t/is (= [{:world "hello"}] (q conn ["SELECT 'hello' AS world"])))))
 
-(t/deftest psql-queries-shouldnt-create-txs-4024
-  (psql-session
-   (fn [send read]
-     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
-     (t/is (= [["tx_count"] ["0"]] (read)))
-     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
-     (t/is (= [["tx_count"] ["0"]] (read)))
+(when (psql-available?)
+  (t/deftest psql-queries-shouldnt-create-txs-4024
+    (psql-session
+     (fn [send read]
+       (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+       (t/is (= [["tx_count"] ["0"]] (read)))
+       (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+       (t/is (= [["tx_count"] ["0"]] (read)))
 
-     (send "INSERT INTO foo RECORDS {_id: 1};\n")
+       (send "INSERT INTO foo RECORDS {_id: 1};\n")
 
-     (read)
+       (read)
 
-     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
-     (t/is (= [["tx_count"] ["1"]] (read)))
-     (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
-     (t/is (= [["tx_count"] ["1"]] (read))))))
+       (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+       (t/is (= [["tx_count"] ["1"]] (read)))
+       (send "SELECT COUNT(*) tx_count FROM xt.txs;\n")
+       (t/is (= [["tx_count"] ["1"]] (read)))))))
 
 (t/deftest date-error-propagating-to-client-4021
   (with-open [conn (jdbc-conn)]
