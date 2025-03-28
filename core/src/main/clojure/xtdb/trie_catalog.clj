@@ -5,14 +5,15 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           (java.time LocalDate)
-           [java.util Map]
+           [java.time LocalDate ZoneOffset]
+           [java.util ArrayList Map]
            [java.util.concurrent ConcurrentHashMap]
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
-           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)))
+           (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
+           xtdb.operator.scan.Metadata
+           (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -210,6 +211,20 @@
   (->> (into [] (mapcat val) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
+
+(defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
+  Metadata
+  (testMetadata [_]
+    (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
+      (if-let [^long recency (and recency (time/instant->micros (time/->instant recency {:default-tz ZoneOffset/UTC})))]
+        ;; the recency of a trie is exclusive, no row in that file has a recency equal to it
+        (< min-query-recency recency)
+        true)))
+  (getTemporalMetadata [_] (.getTemporalMetadata trie-metadata)))
+
+(defn filter-tries [tries query-bounds]
+  (-> (map (comp map->CatalogEntry #(assoc % :query-bounds query-bounds)) tries)
+      (trie/filter-meta-objects query-bounds)))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
   (when (and trie-metadata (.hasTemporalMetadata trie-metadata))

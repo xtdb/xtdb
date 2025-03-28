@@ -2,9 +2,11 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
+            [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
-            [xtdb.util :as util]
-            [xtdb.trie :as trie]))
+            [xtdb.util :as util])
+  (:import (xtdb.operator.scan Metadata)
+           (xtdb.util TemporalBounds)))
 
 (defn- apply-msgs [& trie-keys]
   (-> trie-keys
@@ -38,6 +40,124 @@
       (t/is (false? (stale? l1 "l01-r20190101-b02")))
       (t/is (false? (stale? l1 "l01-rc-b01")))
       (t/is (false? (stale? l1 "l01-rc-b02"))))))
+
+(defrecord MockCatalogEntry [recency temporal-metadata ^TemporalBounds query-bounds]
+  Metadata
+  (testMetadata [_]
+    ;; copied from the actual implementation
+    (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
+      (if recency
+        (< min-query-recency recency)
+        true)) )
+  (getTemporalMetadata [_] temporal-metadata))
+
+(defn apply-filter-msgs [& trie-keys]
+  (map (fn [[trie-key recency temporal-metadata]]
+         (map->MockCatalogEntry {:trie-key trie-key
+                                 :recency recency
+                                 :temporal-metadata (apply tu/->temporal-metadata temporal-metadata)}))
+       trie-keys))
+
+(defn- filter-tries [trie-keys query-bounds]
+  (with-redefs [cat/map->CatalogEntry map->MockCatalogEntry]
+    (-> (apply apply-filter-msgs trie-keys)
+        (cat/filter-tries query-bounds)
+        (->> (into #{} (map :trie-key))))))
+
+(t/deftest earilier-recency-files-can-effect-splitting-in-later-buckets-4097
+  (let [query-bounds (tu/->temporal-bounds 20220101 20220102)]
+    (t/is (= #{"l0-recency-2019-block-00" "l0-current-block-00"}
+             (filter-tries [["l0-recency-2019-block-00" nil [20190101 20210101]]
+                            ["l0-current-block-00" nil [20200101 Long/MAX_VALUE 20190101]]]
+                           query-bounds))
+          "earlier pages that contain data with later system time need to be taken")))
+
+(t/deftest test-filter-tries
+  (let [current-time 20200101]
+    (t/testing "recency filtering (temporal metadata always overlaps the query)"
+      (let [query-bounds (tu/->temporal-bounds current-time (inc current-time))]
+        (t/is (empty? (filter-tries [] query-bounds)))
+
+
+        (t/is (= #{"l0-current-block-02" "l0-current-block-01" "l0-current-block-00"}
+                 (filter-tries [["l0-current-block-00" nil [20200101 Long/MAX_VALUE]]
+                                ["l0-current-block-01" nil [20200101 Long/MAX_VALUE]]
+                                ["l0-current-block-02" nil [20200101 Long/MAX_VALUE]]]
+                               query-bounds)))
+
+        (t/is (= #{"l01-current-block-00" "l01-current-block-01"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 20190101]]
+                                ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2020-block-01" 20200101 [20190101 20200101]]]
+                               query-bounds))
+              "older recency files get filtered (even at boundary)")
+
+        (t/is (= #{"l01-current-block-00" "l01-current-block-01" "l01-recency-2022-block-01"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2022-block-01" 20220101 [20210101 20220101] ]
+                                ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]]
+                               query-bounds))
+              "newer recency files get taken"))
+
+      (let [all-st-query (tu/->temporal-bounds current-time (inc current-time) Long/MIN_VALUE Long/MAX_VALUE)
+            all-vt-query (tu/->temporal-bounds Long/MIN_VALUE Long/MAX_VALUE current-time (inc current-time))
+            st-range-query (tu/->temporal-bounds current-time (inc current-time) current-time Long/MAX_VALUE)
+            vt-range-query (tu/->temporal-bounds current-time Long/MAX_VALUE current-time (inc current-time))]
+
+        (t/is (= #{"l01-current-block-00" "l01-recency-2019-block-01" "l01-current-block-01" "l01-recency-2021-block-01"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 Long/MAX_VALUE]]
+                                ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2021-block-01" 20210101 [20200101 Long/MAX_VALUE]]]
+                               all-st-query)
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20200101 Long/MAX_VALUE]]
+                                ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2021-block-01" 20210101 [20200101 Long/MAX_VALUE]]]
+                               all-vt-query))
+              "all system-time or valid-time means bringing in older recency pages")
+
+        (t/is (= #{"l01-current-block-00" "l01-current-block-01" "l01-recency-2021-block-01"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 20190101]]
+                                ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2021-block-01" 20210101 [20200101 20210101]]]
+                               st-range-query)
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-01" 20190101 [20180101 20190101]]
+                                ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2021-block-01" 20210101 [20200101 20210101]]]
+                               vt-range-query))
+              "system-time range or valid-time range can filter certain pages")))
+
+    (t/testing "filtering via temporal metadata"
+      (let [query-bounds (tu/->temporal-bounds current-time Long/MAX_VALUE)]
+
+        (t/is (= #{"l0-current-block-00" "l0-current-block-01"}
+                 (filter-tries [["l0-recency-2021-block-00" 20210101 [20180101 20190101]]
+                                ["l0-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l0-recency-2021-block-01" 20210101 [20190101 20200101]]
+                                ["l0-current-block-01"      nil [20200101 Long/MAX_VALUE]]]
+                               query-bounds))
+              "recency doesn't filter, temporal metadata does filter"))
+
+      (let [query-bounds (tu/->temporal-bounds current-time 20210101)]
+
+        (t/is (= #{"l0-current-block-01" "l0-current-block-02"}
+                 (filter-tries [["l0-current-block-00" nil [20100101 20190101]]
+                                ["l0-current-block-01" nil [20190101 20250101]]
+                                ["l0-current-block-02" nil [20220101 Long/MAX_VALUE]]
+                                ["l0-current-block-03" nil [20250101 Long/MAX_VALUE]]]
+                               query-bounds))
+              "recency doesn't filter, temporal metadata does filter, files that can bound items in the query files set need to get taken")
+
+        (t/is (= #{"l0-current-block-01"}
+                 (filter-tries [["l0-current-block-00" nil [20100101 20190101 20100101]]
+                                ["l0-current-block-01" nil [20190101 20250101 20200101]]
+                                ["l0-current-block-02" nil [20220101 Long/MAX_VALUE 20190101]]]
+                               query-bounds))
+              "recency doesn't filter, temporal metadata does filter, if valid-time bounding files come earlier in system time they don't need to get taken")))))
 
 (t/deftest test-l0-l1-tries
   (t/is (= #{} (curr-tries)))

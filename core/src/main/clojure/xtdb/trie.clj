@@ -6,10 +6,9 @@
            java.time.LocalDate
            (java.util ArrayList)
            (xtdb.log.proto TrieDetails TrieMetadata)
-           xtdb.operator.scan.MergePlanPage
+           (xtdb.operator.scan Metadata)
            (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.util Temporal)))
+           (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
   ([table-name, trie-key, ^long data-file-size] (->trie-details table-name trie-key data-file-size nil))
@@ -63,47 +62,47 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defn ->merge-task
-  ([mp-pages] (->merge-task mp-pages (TemporalBounds.)))
-  ([mp-pages ^TemporalBounds query-bounds]
+(defn filter-meta-objects
+  ([meta-objects] (filter-meta-objects meta-objects (TemporalBounds.)))
+  ([meta-objects ^TemporalBounds query-bounds]
    (let [leaves (ArrayList.)]
-     (loop [[^MergePlanPage mp-page & more-mp-pages] mp-pages
+     (loop [[^Metadata meta-obj & more-meta-objs] meta-objects
             smallest-valid-from Long/MAX_VALUE
             largest-valid-to Long/MIN_VALUE
             smallest-system-from Long/MAX_VALUE
-            non-taken-pages []]
-       (if mp-page
-         (let [page-temp-meta (.getTemporalMetadata mp-page)
-               take-node? (and (Temporal/intersects page-temp-meta query-bounds)
-                               (.testMetadata mp-page))]
+            non-taken-meta-objects []]
+       (if meta-obj
+         (let [temporal-metadata (.getTemporalMetadata meta-obj)
+               take-node? (and (Temporal/intersects temporal-metadata query-bounds)
+                               (.testMetadata meta-obj))]
 
            (if take-node?
              (do
-               (.add leaves mp-page)
-               (recur more-mp-pages
-                      (min smallest-valid-from (.getMinValidFrom page-temp-meta))
-                      (max largest-valid-to (.getMaxValidTo page-temp-meta))
-                      (min smallest-system-from (.getMinSystemFrom page-temp-meta))
-                      non-taken-pages))
+               (.add leaves meta-obj)
+               (recur more-meta-objs
+                      (min smallest-valid-from (.getMinValidFrom temporal-metadata))
+                      (max largest-valid-to (.getMaxValidTo temporal-metadata))
+                      (min smallest-system-from (.getMinSystemFrom temporal-metadata))
+                      non-taken-meta-objects))
 
-             (recur more-mp-pages
+             (recur more-meta-objs
                     smallest-valid-from
                     largest-valid-to
                     smallest-system-from
-                    (cond-> non-taken-pages
-                      (Temporal/intersectsSystemTime page-temp-meta query-bounds)
-                      (conj mp-page)))))
+                    (cond-> non-taken-meta-objects
+                      (Temporal/intersectsSystemTime temporal-metadata query-bounds)
+                      (conj meta-obj)))))
 
          (when (seq leaves)
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
-             (loop [[^MergePlanPage page & more-pages] non-taken-pages]
-               (when page
-                 (let [page-temp-meta (.getTemporalMetadata page)
-                       page-largest-system-from (.getMaxSystemFrom page-temp-meta)]
-                   (when (and (<= smallest-system-from page-largest-system-from)
-                              (.intersects (TemporalDimension. (.getMinValidFrom page-temp-meta)
-                                                               (.getMaxValidTo page-temp-meta))
+             (loop [[^Metadata meta-obj & meta-objects] non-taken-meta-objects]
+               (when meta-obj
+                 (let [temporal-metadata (.getTemporalMetadata meta-obj)
+                       obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]
+                   (when (and (<= smallest-system-from obj-largest-system-from)
+                              (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
+                                                               (.getMaxValidTo temporal-metadata))
                                            valid-time))
-                     (.add leaves page))
-                   (recur more-pages)))))
+                     (.add leaves meta-obj))
+                   (recur meta-objects)))))
            (vec leaves)))))))

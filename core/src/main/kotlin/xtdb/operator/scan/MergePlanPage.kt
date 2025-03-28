@@ -5,6 +5,7 @@ import xtdb.BufferPool
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.trie.MemoryHashTrie
+import xtdb.util.TemporalBounds
 import xtdb.vector.RelationReader
 import java.nio.file.Path
 import java.util.function.IntPredicate
@@ -21,10 +22,13 @@ private val UNBOUND_TEMPORAL_METADATA =
         .setMaxSystemFrom(MAX_LONG)
         .build()
 
-interface MergePlanPage {
-    fun loadPage(rootCache: RootCache): RelationReader
+interface Metadata {
     fun testMetadata(): Boolean
     val temporalMetadata: TemporalMetadata
+}
+
+interface MergePlanPage : Metadata {
+    fun loadPage(rootCache: RootCache): RelationReader
 
     class Arrow(
         private val bp: BufferPool,
