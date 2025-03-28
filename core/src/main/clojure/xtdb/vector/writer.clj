@@ -9,10 +9,10 @@
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date List Map Set UUID)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector PeriodDuration ValueVector VectorSchemaRoot)
+           (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth ZonedDateTimeRange)
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth ZonedDateTimeRange)
            (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -87,11 +87,11 @@
   IntervalMonthDayNano
   (value->col-type [_] [:interval :month-day-nano])
 
-  ZonedDateTimeRange
-  (value->col-type [_] :tstz-range)
+  IntervalMonthDayMicro
+  (value->col-type [_] [:interval :month-day-micro])
 
-  PeriodDuration
-  (value->col-type [_] [:interval :month-day-nano]))
+  ZonedDateTimeRange
+  (value->col-type [_] :tstz-range))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")

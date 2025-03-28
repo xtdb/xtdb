@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.types.IntervalDayTime
+import xtdb.types.IntervalMonthDayMicro
 import xtdb.types.IntervalMonthDayNano
 import java.time.Duration
 import java.time.Period
@@ -34,6 +35,19 @@ class IntervalVectorTest {
             assertEquals(2, iv.valueCount)
             assertEquals(IntervalMonthDayNano(Period.ofMonths(0), Duration.ofHours(1)), iv.getObject(0))
             assertEquals(IntervalMonthDayNano(Period.ofMonths(1), Duration.ofHours(0)), iv.getObject(1))
+        }
+    }
+
+    @Test
+    fun testIntervalMonthDayMicroReadWrite() {
+        IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(allocator, "imdmv", false)).use {
+                iv ->
+            iv.writeObject(IntervalMonthDayMicro(Period.ofMonths(0), Duration.ofHours(1)))
+            iv.writeObject(IntervalMonthDayMicro(Period.ofMonths(1), Duration.ofHours(0)))
+
+            assertEquals(2, iv.valueCount)
+            assertEquals(IntervalMonthDayMicro(Period.ofMonths(0), Duration.ofHours(1)), iv.getObject(0))
+            assertEquals(IntervalMonthDayMicro(Period.ofMonths(1), Duration.ofHours(0)), iv.getObject(1))
         }
     }
 
