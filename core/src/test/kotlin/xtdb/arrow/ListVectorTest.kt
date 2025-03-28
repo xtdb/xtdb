@@ -32,12 +32,12 @@ class ListVectorTest {
 
             assertEquals(
                 Field(
-                    "list", FieldType(false, LIST_TYPE, null),
+                    "list", FieldType(false, LIST, null),
                     listOf(
                         Field(
                             "\$data\$", FieldType(false, UNION_TYPE, null),
                             listOf(
-                                Field("i32", FieldType(false, I32_TYPE, null), null),
+                                Field("i32", FieldType(false, I32, null), null),
                                 Field("utf8", FieldType(false, UTF8_TYPE, null), null)
                             )
                         )

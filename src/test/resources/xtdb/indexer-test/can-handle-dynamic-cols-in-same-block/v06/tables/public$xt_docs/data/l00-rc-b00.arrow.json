@@ -65,7 +65,7 @@
             },
             "children" : [{
               "name" : "i64",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "int",
                 "bitWidth" : 64,

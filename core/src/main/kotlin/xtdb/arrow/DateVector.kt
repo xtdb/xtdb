@@ -5,14 +5,20 @@ import org.apache.arrow.vector.types.DateUnit.DAY
 import org.apache.arrow.vector.types.DateUnit.MILLISECOND
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.arrow.metadata.MetadataFlavour.Numeric
+import xtdb.time.MILLI_HZ
 import xtdb.util.Hasher
 import java.time.Duration
 import java.time.LocalDate
 
+private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
+private val SECONDS_PER_DAY = Duration.ofDays(1).toSeconds()
+
 class DateDayVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector() {
+) : FixedWidthVector(), MetadataFlavour.DateTime {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
             : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
@@ -21,7 +27,7 @@ class DateDayVector private constructor(
     override val type = ArrowType.Date(DAY)
 
     override fun getInt(idx: Int) = getInt0(idx)
-    override fun writeInt(value: Int) = writeInt0(value)
+    override fun writeInt(v: Int) = writeInt0(v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getInt(idx).toLong())
 
@@ -30,18 +36,18 @@ class DateDayVector private constructor(
         else throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx) * MILLIS_PER_DAY * 1_000_000L)
+    override fun getMetaDouble(idx: Int) = (getInt(idx) * SECONDS_PER_DAY).toDouble()
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
         DateDayVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
 }
 
-private val MILLIS_PER_DAY = Duration.ofDays(1).toMillis()
-
 class DateMilliVector internal constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector() {
+) : FixedWidthVector(), MetadataFlavour.DateTime {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
             : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
@@ -50,7 +56,7 @@ class DateMilliVector internal constructor(
     override val type = ArrowType.Date(MILLISECOND)
 
     override fun getLong(idx: Int) = getLong0(idx)
-    override fun writeLong(value: Long) = writeLong0(value)
+    override fun writeLong(v: Long) = writeLong0(v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = LocalDate.ofEpochDay(getLong(idx) / MILLIS_PER_DAY)!!
 
@@ -59,7 +65,9 @@ class DateMilliVector internal constructor(
         else throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx) * 1_000_000L)
+    override fun getMetaDouble(idx: Int) = getLong(idx) / (MILLI_HZ.toDouble())
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
         DateMilliVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))

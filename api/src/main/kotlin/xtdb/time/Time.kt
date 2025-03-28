@@ -12,15 +12,13 @@ import java.time.temporal.ChronoUnit.MICROS
 import java.time.temporal.TemporalAccessor
 import java.time.temporal.TemporalQueries
 
-internal const val MILLI_HZ = 1_000
-internal const val MICRO_HZ = 1_000_000
-internal const val NANO_HZ = 1_000_000_000
+const val MILLI_HZ = 1_000
+const val MICRO_HZ = 1_000_000
+const val NANO_HZ = 1_000_000_000
 
 internal val Long.secondsToMillis get() = multiplyExact(this, MILLI_HZ)
 internal val Long.secondsToMicros get() = multiplyExact(this, MICRO_HZ)
 val Long.secondsToNanos get() = multiplyExact(this, NANO_HZ)
-val Long.millisToNanos get() = multiplyExact(this, (NANO_HZ / MILLI_HZ))
-val Long.microsToNanos get() = multiplyExact(this, (NANO_HZ / MICRO_HZ))
 
 val Long.microsAsInstant get(): Instant = Instant.EPOCH.plus(this, MICROS)
 

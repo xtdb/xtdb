@@ -24,6 +24,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defn col-type-head [col-type]
+  (if (vector? col-type)
+    (first col-type)
+    col-type))
+
 ;;;; fields
 
 (defn arrow-type->leg ^String [^ArrowType arrow-type]
@@ -122,7 +127,6 @@
   UriType (<-arrow-type [_] :uri)
   TransitType (<-arrow-type [_] :transit))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/type reader macro
 (defn ->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [col-type]
   (case col-type
     :null ArrowType$Null/INSTANCE
@@ -155,7 +159,7 @@
     :union (.getType Types$MinorType/DENSEUNION)
     :sparse-union (.getType Types$MinorType/UNION)
 
-    (case (first col-type)
+    (case (col-type-head col-type)
       :struct ArrowType$Struct/INSTANCE
       :list ArrowType$List/INSTANCE
       :set SetType/INSTANCE
@@ -266,11 +270,6 @@
   (if (.isNullable field) field (apply ->field (.getName field) (.getType field) true (.getChildren field))))
 
 ;;;; col-types
-
-(defn col-type-head [col-type]
-  (if (vector? col-type)
-    (first col-type)
-    col-type))
 
 (defn union? [col-type]
   (= :union (col-type-head col-type)))

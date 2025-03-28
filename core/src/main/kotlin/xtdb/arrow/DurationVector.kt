@@ -5,6 +5,10 @@ import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.time.MICRO_HZ
+import xtdb.time.MILLI_HZ
+import xtdb.time.NANO_HZ
 import xtdb.util.Hasher
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -20,7 +24,7 @@ class DurationVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     val unit: TimeUnit = MICROSECOND,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector() {
+) : FixedWidthVector(), MetadataFlavour.Duration {
 
     override val byteWidth = Long.SIZE_BYTES
     override val type = ArrowType.Duration(unit)
@@ -30,7 +34,7 @@ class DurationVector private constructor(
     ) : this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
-    override fun writeLong(value: Long) = writeLong0(value)
+    override fun writeLong(v: Long) = writeLong0(v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = unit.toDuration(getLong(idx))
 
@@ -39,7 +43,15 @@ class DurationVector private constructor(
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getLong(idx))
+    override fun getMetaDouble(idx: Int) =
+        when (unit) {
+            SECOND -> getLong(idx).toDouble()
+            MILLISECOND -> getLong(idx) / MILLI_HZ.toDouble()
+            MICROSECOND -> getLong(idx) / MICRO_HZ.toDouble()
+            NANOSECOND -> getLong(idx) / NANO_HZ.toDouble()
+        }
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
         DurationVector(name, nullable, valueCount, unit, validityBuffer.openSlice(al), dataBuffer.openSlice(al))

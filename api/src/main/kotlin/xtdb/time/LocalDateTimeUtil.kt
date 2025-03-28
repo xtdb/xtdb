@@ -19,7 +19,8 @@ object LocalDateTimeUtil {
     @JvmStatic
     val LocalDateTime.asNanos get() = addExact(epochSecond.secondsToNanos, nano.toLong())
 
-    private fun ldt(seconds: Long, nanos: Long) = LocalDateTime.ofEpochSecond(seconds, nanos.toInt(), UTC)
+    private fun ldt(seconds: Long, nanos: Long): LocalDateTime =
+        LocalDateTime.ofEpochSecond(seconds, nanos.toInt(), UTC)
 
     @JvmStatic
     fun fromSeconds(seconds: Long) = ldt(seconds, 0)

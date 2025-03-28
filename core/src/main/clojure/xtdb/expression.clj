@@ -1736,8 +1736,8 @@
 
 (defn batch-bindings [emitted-expr]
   (letfn [(child-seq [{:keys [children] :as expr}]
-            (lazy-seq
-             (cons expr (mapcat child-seq children))))]
+            (-> (into [] (mapcat child-seq) children)
+                (conj expr)))]
     (->> (for [{:keys [batch-bindings]} (child-seq emitted-expr)
                batch-binding batch-bindings]
            batch-binding)

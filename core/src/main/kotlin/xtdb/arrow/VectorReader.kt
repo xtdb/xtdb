@@ -8,6 +8,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.vector.IVectorReader
 import xtdb.vector.IVectorWriter
@@ -95,6 +96,8 @@ interface VectorReader : ILookup, AutoCloseable {
 
     fun toList() = List(valueCount) { getObject(it) }
     fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }
+
+    val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")
 
     fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)

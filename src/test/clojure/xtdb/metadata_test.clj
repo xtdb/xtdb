@@ -141,7 +141,7 @@
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (let [page-idx-pred (.build literal-selector page-metadata)]
 
-                (t/is (= #{"_iid" "_valid_to" "_valid_from" "_system_from"}
+                (t/is (= #{"_iid" "_valid_to" "_valid_from" "_system_from" "_id"}
                          (.getColumnNames page-metadata)))
 
                 (doseq [page-idx relevant-pages]
@@ -177,13 +177,13 @@
   (tu/finish-block! tu/*node*)
 
   (let [metadata-mgr (meta/<-node tu/*node*)
-        true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean-or-int true) '{boolean-or-int :bool} vw/empty-args)]
+        true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean_or_int true) '{boolean_or_int :bool} vw/empty-args)]
 
     (t/testing "L0"
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
+            (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to" "_id" "boolean_or_int"}
                      (.getColumnNames page-metadata)))
 
             (t/is (true? (.test page-idx-pred 0)))))))
@@ -217,7 +217,8 @@
 
                              (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
 
-              (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"}
+              (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"
+                         "_id" "$data$" "colours"}
                        (.getColumnNames page-metadata))))))
 
         (t/testing "L1"

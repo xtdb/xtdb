@@ -30,11 +30,11 @@
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
-    (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan}]
-                        [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
+    (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan, :ordinal 0}]
+                        [:put-docs :xt_docs {:name "Ivan", :xt/id :iva, :ordinal 1}]])
 
-    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms}]
-                            [:put-docs :xt_docs {:name "Jon", :xt/id :jon}]])
+    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms, :ordinal 2}]
+                            [:put-docs :xt_docs {:name "Jon", :xt/id :jon, :ordinal 3}]])
         (tu/then-await-tx node))
 
     (tu/finish-block! node)
@@ -43,24 +43,24 @@
     (let [block-cat (block-cat/<-node node)]
       (letfn [(test-query-ivan [expected]
                 (t/is (= expected
-                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name "Ivan")}]]
+                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id name {ordinal (> ordinal 1)}]]
                                            {:node node}))))
 
                 (t/is (= expected
-                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id {name (> name ?name)}]]
-                                           {:node node, :args {:name "Ivan"}})))))]
+                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id name {ordinal (> ordinal ?ordinal)}]]
+                                           {:node node, :args {:ordinal 1}})))))]
 
         (t/is (= 1 (.getCurrentBlockIndex block-cat)))
 
-        (util/with-open [args (tu/open-args {:name "Ivan"})]
+        (util/with-open [args (tu/open-args {:ordinal 1})]
           (t/testing "only needs to scan block 1, page 1"
-            (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(> name "Ivan") '{name :utf8} vw/empty-args)
-                  param-sel (expr.meta/->metadata-selector tu/*allocator* '(> name ?name) '{name :utf8} args)]
-              (t/testing "L0 files don't have content metadata, so we have to match them"
+            (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal 1) '{ordinal :i64} vw/empty-args)
+                  param-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal ?ordinal) '{ordinal :i64} args)]
+              (t/testing "L0 files have min-max metadata, so we have to match them"
                 (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
                   (fn [^PageMetadata page-metadata]
-                    (t/is (true? (.test (.build lit-sel page-metadata) 0)))
-                    (t/is (true? (.test (.build param-sel page-metadata) 0)))))
+                    (t/is (false? (.test (.build lit-sel page-metadata) 0)))
+                    (t/is (false? (.test (.build param-sel page-metadata) 0)))))
 
                 (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 1))
                   (fn [^PageMetadata page-metadata]
@@ -79,14 +79,14 @@
                     (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))
 
-        (test-query-ivan #{{:xt/id :jms, :name "James"}
-                           {:xt/id :jon, :name "Jon"}})
+        (test-query-ivan #{{:xt/id :jms, :name "James", :ordinal 2}
+                           {:xt/id :jon, :name "Jon", :ordinal 3}})
 
-        (xt/submit-tx node [[:put-docs :xt_docs {:name "Jeremy", :xt/id :jdt}]])
+        (xt/submit-tx node [[:put-docs :xt_docs {:name "Jeremy", :xt/id :jdt, :ordinal 4}]])
 
-        (test-query-ivan #{{:xt/id :jms, :name "James"}
-                           {:xt/id :jon, :name "Jon"}
-                           {:xt/id :jdt, :name "Jeremy"}})))))
+        (test-query-ivan #{{:xt/id :jms, :name "James", :ordinal 2}
+                           {:xt/id :jon, :name "Jon", :ordinal 3}
+                           {:xt/id :jdt, :name "Jeremy", :ordinal 4}})))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
@@ -112,7 +112,7 @@
         (util/with-open [args (tu/open-args {:name "Ivan"})]
           (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(= name "Ivan") '{name :utf8} vw/empty-args)
                 param-sel (expr.meta/->metadata-selector tu/*allocator* '(= name ?name) '{name :utf8} args)]
-            (t/testing "L0 has no content metadata -> always match"
+            (t/testing "L0 has no bloom filter metadata -> always match"
               (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))

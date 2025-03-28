@@ -10,7 +10,7 @@ import java.nio.ByteBuffer
 
 abstract class VariableWidthVector : Vector() {
 
-    override val children = emptyList<Vector>()
+    override val vectors: Iterable<Vector> = emptyList<Vector>()
 
     internal abstract val validityBuffer: ExtensibleBuffer
     internal abstract val offsetBuffer: ExtensibleBuffer

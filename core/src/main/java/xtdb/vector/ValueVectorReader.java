@@ -3,6 +3,7 @@ package xtdb.vector;
 import clojure.lang.*;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.ByteFunctionHelpers;
+import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.BitVector;
 import org.apache.arrow.vector.DateDayVector;
 import org.apache.arrow.vector.DateMilliVector;
@@ -11,13 +12,12 @@ import org.apache.arrow.vector.FixedSizeBinaryVector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.IntervalMonthDayNanoVector;
 import org.apache.arrow.vector.VarBinaryVector;
-import org.apache.arrow.vector.*;
+import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.complex.DenseUnionVector;
 import org.apache.arrow.vector.complex.FixedSizeListVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.MapVector;
 import org.apache.arrow.vector.complex.StructVector;
-import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.TimeUnit;
@@ -32,19 +32,22 @@ import xtdb.types.IntervalMonthDayMicro;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
 import xtdb.util.Hasher;
+import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.IntervalMonthDayMicroVector;
 import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
 import xtdb.vector.extensions.TransitVector;
 import xtdb.vector.extensions.TsTzRangeVector;
 import xtdb.vector.extensions.UuidVector;
-import xtdb.vector.extensions.*;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -317,7 +320,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             protected int hashCode0(int idx, Hasher hasher) {
-               return hasher.hash(getBoolean(idx) ? 1 : 0);
+                return hasher.hash(getBoolean(idx) ? 1 : 0);
             }
         };
     }
@@ -328,21 +331,25 @@ public class ValueVectorReader implements IVectorReader {
             public byte getByte(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public short getShort(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int getInt(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash((double)v.get(idx));
+                return hasher.hash((double) v.get(idx));
             }
         };
     }
@@ -353,17 +360,20 @@ public class ValueVectorReader implements IVectorReader {
             public short getShort(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int getInt(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash((double)v.get(idx));
+                return hasher.hash((double) v.get(idx));
             }
         };
     }
@@ -374,13 +384,15 @@ public class ValueVectorReader implements IVectorReader {
             public int getInt(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash((double)v.get(idx));
+                return hasher.hash((double) v.get(idx));
             }
         };
     }
@@ -391,9 +403,10 @@ public class ValueVectorReader implements IVectorReader {
             public long getLong(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash((double)v.get(idx));
+                return hasher.hash((double) v.get(idx));
             }
         };
     }
@@ -404,10 +417,12 @@ public class ValueVectorReader implements IVectorReader {
             public float getFloat(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public double getDouble(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
                 return hasher.hash(v.get(idx));
@@ -421,6 +436,7 @@ public class ValueVectorReader implements IVectorReader {
             public double getDouble(int idx) {
                 return v.get(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
                 return hasher.hash(v.get(idx));
@@ -557,7 +573,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash(getInt(idx) * 86_400_000L * 1_000_000L);
+                return hasher.hash(getInt(idx) * 86_400.0);
             }
         };
     }
@@ -576,7 +592,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash(getInt(idx) * 1_000_000L);
+                return hasher.hash(getInt(idx) / 1_000.0);
             }
         };
     }
@@ -603,11 +619,10 @@ public class ValueVectorReader implements IVectorReader {
             public int hashCode0(int idx, Hasher hasher) {
                 return hasher.hash(
                         switch (unit) {
-                            case SECOND -> getLong(idx) * NANO_HZ;
-                            case MILLISECOND -> getLong(idx) * MICRO_HZ;
-                            case MICROSECOND -> getLong(idx) * MILLI_HZ;
-                            case NANOSECOND -> getLong(idx);
-                            default -> throw new IllegalStateException("Unexpected time unit: " + unit);
+                            case SECOND -> (double) getLong(idx);
+                            case MILLISECOND -> getLong(idx) / (double) MILLI_HZ;
+                            case MICROSECOND -> getLong(idx) / (double) MICRO_HZ;
+                            case NANOSECOND -> getLong(idx) / (double) NANO_HZ;
                         });
             }
         };
@@ -627,7 +642,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash(getLong(idx) * 1_000_000_000L);
+                return hasher.hash((double) getLong(idx));
             }
         };
     }
@@ -646,7 +661,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash(getLong(idx) * 1_000_000L);
+                return hasher.hash(getLong(idx) / (double) MILLI_HZ);
             }
         };
     }
@@ -665,7 +680,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash(getLong(idx) * 1_000L);
+                return hasher.hash(getLong(idx) / (double) MICRO_HZ);
             }
         };
     }
@@ -684,7 +699,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public int hashCode0(int idx, Hasher hasher) {
-                return hasher.hash(getLong(idx));
+                return hasher.hash(getLong(idx) / (double) NANO_HZ);
             }
         };
     }

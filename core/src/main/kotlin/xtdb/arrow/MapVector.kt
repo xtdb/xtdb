@@ -25,7 +25,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
             listVector.nullable = value
         }
 
-    override val children get() = listVector.children
+    override val vectors: Iterable<Vector> get() = listVector.vectors
 
     override var valueCount: Int
         get() = listVector.valueCount

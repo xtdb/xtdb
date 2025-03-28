@@ -129,14 +129,15 @@
     (let [metadata-rdr (.getMetadataLeafReader page-metadata)
           bloom-rdr (-> (.vectorForOrNull metadata-rdr "columns")
                         (.getListElements)
-                        (.vectorForOrNull "bloom"))]
+                        (.vectorFor "bytes")
+                        (.vectorFor "bloom"))]
       (reify IntPredicate
         (test [_ page-idx]
           (boolean
             (let [bloom-vec-idx (.rowIndex page-metadata col-name page-idx)]
               (and (>= bloom-vec-idx 0)
-                   (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
-                   (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx))))))))))
+                   (or (.isNull bloom-rdr bloom-vec-idx)
+                       (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx)))))))))))
 
 (defn ->path-pred [^ArrowBuf iid-arrow-buf]
   (when iid-arrow-buf

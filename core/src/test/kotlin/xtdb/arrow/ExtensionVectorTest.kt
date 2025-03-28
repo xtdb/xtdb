@@ -6,19 +6,22 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.types.ClojureForm
 import xtdb.types.ZonedDateTimeRange
 import xtdb.util.Hasher
 import xtdb.vector.ValueVectorReader.from
-import xtdb.vector.extensions.*
-import xtdb.vector.extensions.TsTzRangeVector
+import xtdb.vector.extensions.KeywordType
+import xtdb.vector.extensions.SetType
+import xtdb.vector.extensions.TransitType
+import xtdb.vector.extensions.TsTzRangeVector.Companion.tsTzRangeField
+import xtdb.vector.extensions.UuidType
 import xtdb.vector.writerFor
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.temporal.ChronoUnit.*
+import java.time.temporal.ChronoUnit.MICROS
 import java.util.*
 
 class ExtensionVectorTest {
@@ -62,7 +65,7 @@ class ExtensionVectorTest {
         testEqualHashcode(Field("set", FieldType.nullable(SetType), listOf(Field("intChild", FieldType.nullable(MinorType.INT.type), null))), setOf(1, 2, 3))
         
         val zdt = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(MICROS)
-        testEqualHashcode(TsTzRangeVector.Companion.tsTzRangeField, ZonedDateTimeRange(zdt, zdt))
+        testEqualHashcode(tsTzRangeField, ZonedDateTimeRange(zdt, zdt))
 
         testEqualHashcode("uuid", FieldType.nullable(UuidType), UUID.randomUUID())
     }

@@ -13,12 +13,12 @@ private typealias Selection = IntArray
 
 class TrieWriter(
     private val al: BufferAllocator, private val bp: BufferPool,
-    private val writeContentMetadata: Boolean
+    private val calculateBlooms: Boolean
 ) {
 
     fun writeLiveTrie(tableName: TableName, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: Relation): FileSize =
         DataFileWriter(al, bp, tableName, trieKey, dataRel.schema).use { dataFileWriter ->
-            MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, writeContentMetadata, false)
+            MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, calculateBlooms, false)
                 .use { metaFileWriter ->
                     val copier = dataFileWriter.dataRel.rowCopier(dataRel)
 
@@ -86,7 +86,7 @@ class TrieWriter(
             val startPtr = ArrowBufPointer()
             val endPtr = ArrowBufPointer()
 
-            MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, writeContentMetadata, true)
+            MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, calculateBlooms, true)
                 .use { metaFileWriter ->
                     Relation(al, loader.schema).use { inRel ->
                         val iidReader = inRel["_iid"]

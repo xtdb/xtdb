@@ -1,6 +1,5 @@
 (ns xtdb.expression.metadata
-  (:require [clojure.set :as set]
-            [xtdb.expression :as expr]
+  (:require [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
             [xtdb.metadata :as meta]
             [xtdb.types :as types]
@@ -8,116 +7,120 @@
             [xtdb.vector.writer :as vw])
   (:import java.util.function.IntPredicate
            (xtdb.arrow RelationReader Vector VectorReader)
+           (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Numeric MetadataFlavour$Presence)
            (xtdb.bloom BloomUtils)
            (xtdb.metadata MetadataPredicate PageMetadata)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- simplify-and-or-expr [{:keys [f args] :as expr}]
-  (let [args (filterv some? args)]
-    (case (count args)
-      0 {:op :literal, :literal (case f :and true, :or false)}
-      1 (first args)
-      (-> expr (assoc :args args)))))
+(defn- simplify-and-or-expr [{:keys [op f args] :as expr}]
+  (or (when (= op :call)
+        (case f
+          (:and :or) (let [args (->> args
+                                     (into [] (comp (filter some?)
+                                                    (remove (fn [{:keys [op] :as expr}]
+                                                              (when (= :literal op)
+                                                                (case f
+                                                                  :and (true? (:literal expr))
+                                                                  :or (false? (:literal expr))
+                                                                  false)))))))]
+                       (case (count args)
+                         0 {:op :literal, :literal (case f :and true, :or false)}
+                         1 (first args)
+                         (-> expr (assoc :args (mapv simplify-and-or-expr args)))))
+          nil))
+      expr))
+
+(defn- normalise-bool-args [[{x-op :op, :as x-expr} {y-op :op, :as y-expr}]]
+  (case [x-op y-op]
+    ([:param :param] [:literal :literal] [:literal :param] [:param :literal]) [:constant]
+    ([:variable :literal] [:variable :param]) [:col-val x-expr y-expr]
+    ([:literal :variable] [:param :variable]) [:val-col y-expr x-expr]
+
+    nil))
+
+(defn- minmax-expr [f min-or-max {col :variable} value-expr]
+  (-> {:op :call, :f :or
+       :args (for [value-type (-> (case (:op value-expr)
+                                    :literal (vw/value->col-type (:literal value-expr))
+                                    :param (:param-type value-expr))
+                                  types/flatten-union-types)
+                   :let [flavour-class (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type))]
+                   :when (.isAssignableFrom MetadataFlavour$Numeric flavour-class)]
+               {:op :test-minmax, :f f, :min-or-max min-or-max, :col col
+                :flavour-col (MetadataFlavour/getMetaColName flavour-class)
+
+                :value-expr value-expr
+                :double-sym (gensym 'meta-double)})}
+      simplify-and-or-expr))
+
+(defn- bloom-expr [{col :variable} value-expr]
+  (-> {:op :call, :f :or
+       :args (for [value-type (-> (case (:op value-expr)
+                                    :literal (vw/value->col-type (:literal value-expr))
+                                    :param (:param-type value-expr))
+                                  types/flatten-union-types)
+                   :when (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type)))]
+               {:op :test-bloom,
+                :col col,
+                :value-expr value-expr
+                :bloom-hash-sym (gensym 'bloom-hashes)})}
+
+      simplify-and-or-expr))
+
+(defn- presence-expr [{col :variable} value-expr]
+  (-> {:op :call, :f :or
+       :args (for [col-type (-> (case (:op value-expr)
+                                    :literal (vw/value->col-type (:literal value-expr))
+                                    :param (:param-type value-expr))
+                                  types/flatten-union-types)
+                   :let [value-type (types/->arrow-type col-type)]
+                   :when (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour value-type))]
+               {:op :test-presence,
+                :col col,
+                :value-type value-type})}
+      simplify-and-or-expr))
 
 (declare meta-expr)
 
-(def ^:private bool-metadata-types #{:null :bool :fixed-size-binary :transit})
+(defn call-meta-expr [{:keys [f args] :as expr} opts]
+  (-> (or (case f
+            :and {:op :call, :f :and, :args (map #(meta-expr % opts) args)}
+            :or {:op :call, :f :or, :args (map #(meta-expr % opts) args)}
 
-(defn call-meta-expr [{:keys [f args] :as expr} {:keys [col-types] :as opts}]
-  (letfn [(var-value-expr [f meta-value field value-type value-expr]
-            ;; TODO adapt for boolean metadata writer
-            (when-not (contains? bool-metadata-types value-type)
-              (let [base-col-types (->> (get col-types field)
-                                        types/flatten-union-types)]
+            (:< :<= :> :>= :=)
+            (when-let [[field-val-tag col-expr val-expr] (normalise-bool-args args)]
+              (case field-val-tag
+                :constant expr
+                :col-val (case f
+                           :< (minmax-expr :< :min col-expr val-expr)
+                           :<= (minmax-expr :<= :min col-expr val-expr)
+                           :> (minmax-expr :> :max col-expr val-expr)
+                           :>= (minmax-expr :>= :max col-expr val-expr)
+                           := {:op :call, :f :or
+                               :args [{:op :call, :f :and
+                                       :args [(minmax-expr :<= :min col-expr val-expr)
+                                              (minmax-expr :>= :max col-expr val-expr)]}
 
-                (if (= meta-value :bloom-filter)
-                  (let [base-col-types (->> (map types/col-type-head base-col-types) set)]
-                    ;; values that are equal according to the EE should hash to the same value
-                    ;; TODO add missing col-type hierarchy bits
-                    (when (or (and (isa? types/col-type-hierarchy value-type :num)
-                                   (seq (set/intersection types/num-types base-col-types)))
+                                      (bloom-expr col-expr val-expr)
+                                      (presence-expr col-expr val-expr)]})
 
-                              (and (vector? value-type) (isa? types/col-type-hierarchy (first value-type) :date-time)
-                                   (seq (set/intersection types/date-time-types base-col-types)))
+                :val-col (case f
+                           :< (minmax-expr :> :max col-expr val-expr)
+                           :<= (minmax-expr :>= :max col-expr val-expr)
+                           :> (minmax-expr :< :min col-expr val-expr)
+                           :>= (minmax-expr :<= :min col-expr val-expr)
+                           := {:op :call, :f :and
+                               :args [(minmax-expr :<= :min col-expr val-expr)
+                                      (minmax-expr :>= :max col-expr val-expr)
+                                      (bloom-expr col-expr val-expr)]})))
 
-                              (contains? base-col-types value-type))
-                      {:op :test-bloom,
-                       :col-type value-type
-                       :field field,
-                       :value-expr value-expr
-                       :bloom-hash-sym (gensym 'bloom-hashes)}))
+            nil)
 
-                  (simplify-and-or-expr
-                   {:op :call
-                    :f :or
-                    ;; TODO this seems like it could make better use
-                    ;; of the polymorphic expr patterns?
-                    :args (vec
-                           (for [col-type (cond
-                                            (isa? types/col-type-hierarchy value-type :num)
-                                            (filterv types/num-types base-col-types)
+          ;; we can't check this call at the metadata level, have to pull the block and look.
+          {:op :literal, :literal true})
 
-                                            (and (vector? value-type) (isa? types/col-type-hierarchy (first value-type) :date-time))
-                                            (filterv (comp types/date-time-types types/col-type-head) base-col-types)
-
-                                            (contains? base-col-types value-type)
-                                            [value-type])]
-
-                             {:op :test-metadata,
-                              :f f
-                              :meta-value meta-value
-                              :col-type col-type
-                              :field field,
-                              :value-expr value-expr}))})))))
-
-          (bool-expr [var-value-f var-value-meta-fn
-                      value-var-f value-var-meta-fn]
-            (let [[{x-op :op, :as x-arg} {y-op :op, :as y-arg}] args]
-              (case [x-op y-op]
-                ([:param :param]
-                 [:literal :literal]
-                 [:literal :param]
-                 [:param :literal]) expr
-
-                [:variable :literal] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
-                                                     (vw/value->col-type (:literal y-arg)) y-arg)
-
-                [:variable :param] (var-value-expr var-value-f var-value-meta-fn (:variable x-arg)
-                                                   (:param-type y-arg) y-arg)
-
-                [:literal :variable] (var-value-expr var-value-f var-value-meta-fn (:variable y-arg)
-                                                     (vw/value->col-type (:literal x-arg)) x-arg)
-
-                [:param :variable] (var-value-expr value-var-f value-var-meta-fn (:variable y-arg)
-                                                   (:param-type x-arg) x-arg)
-
-                nil)))]
-
-    (or (case f
-          :and (-> {:op :call, :f :and, :args (map #(meta-expr % opts) args)}
-                   simplify-and-or-expr)
-          :or (-> {:op :call, :f :or, :args (map #(meta-expr % opts) args)}
-                  simplify-and-or-expr)
-          :< (bool-expr :< :min, :> :max)
-          :<= (bool-expr :<= :min, :>= :max)
-          :> (bool-expr :> :max, :< :min)
-          :>= (bool-expr :>= :max, :<= :min)
-          := (-> {:op :call
-                  :f :and
-                  :args (->> [(meta-expr {:op :call,
-                                          :f :and,
-                                          :args [{:op :call, :f :<=, :args args}
-                                                 {:op :call, :f :>=, :args args}]}
-                                         opts)
-
-                              (bool-expr nil :bloom-filter, nil :bloom-filter)]
-                             (filterv some?))}
-                 simplify-and-or-expr)
-          nil)
-
-        ;; we can't check this call at the metadata level, have to pull the block and look.
-        {:op :literal, :literal true})))
+      simplify-and-or-expr))
 
 (defn meta-expr [{:keys [op] :as expr} opts]
   (case op
@@ -132,69 +135,91 @@
 
 (defn- ->bloom-hashes [allocator expr ^RelationReader params]
   (vec
-   (for [{:keys [value-expr col-type]} (->> (ewalk/expr-seq expr)
-                                            (filter :bloom-hash-sym))]
+   (for [{:keys [value-expr]} (->> (ewalk/expr-seq expr) (filter :bloom-hash-sym))]
      (case (:op value-expr)
-       :literal (with-open [tmp-vec (Vector/fromField allocator (types/col-type->field col-type))]
-                  (.writeObject tmp-vec (:literal value-expr))
-                  (BloomUtils/bloomHashes tmp-vec 0))
+       :literal (let [lit (:literal value-expr)]
+                  (with-open [tmp-vec (Vector/fromField allocator (-> (vw/value->col-type lit) (types/col-type->field)))]
+                    (.writeObject tmp-vec lit)
+                    (BloomUtils/bloomHashes tmp-vec 0)))
 
        :param (BloomUtils/bloomHashes (.vectorFor params (str (:param value-expr))) 0)))))
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-rdr-sym (gensym "metadata-rdr"))
-(def ^:private cols-rdr-sym (gensym "cols-rdr"))
 (def ^:private col-rdr-sym (gensym "col-rdr"))
 (def ^:private page-idx-sym (gensym "page-idx"))
-(def ^:private types-rdr-sym (gensym "types-rdr"))
-(def ^:private bloom-rdr-sym (gensym "bloom-rdr"))
 
-(def ^:private content-metadata-present-sym (gensym "content-metadata-present?"))
-
-(defmethod expr/codegen-expr :test-bloom [{:keys [field bloom-hash-sym]} _opts]
-  {:return-type :bool
-   :continue (fn [cont]
-               (cont :bool
-                     `(boolean
-                       (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str field) ~page-idx-sym)]
-                         (if (>= ~expr/idx-sym 0)
-                           (BloomUtils/bloomContains ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)
-                           (not ~content-metadata-present-sym))))))})
-
-(defmethod expr/codegen-expr :test-metadata [{:keys [f meta-value field value-expr col-type]} opts]
-  (let [field-name (str field)
-
-        col-sym (gensym 'meta_col)
-        col-field (types/col-type->field col-type)
-
-        val-sym (gensym 'val)
-
-        {:keys [continue] :as emitted-expr}
-        (expr/codegen-expr {:op :call, :f :boolean
-                            :args [{:op :if-some, :local val-sym, :expr {:op :variable, :variable col-sym}
-                                    :then {:op :call, :f f
-                                           :args [{:op :local, :local val-sym}, value-expr]}
-                                    :else {:op :literal, :literal false}}]}
-                           (-> opts
-                               (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
+(defmethod expr/codegen-expr :test-bloom [{:keys [col bloom-hash-sym]} _opts]
+  (let [bloom-vec-sym (gensym "bloom-vec")]
     {:return-type :bool
-     :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
-                       `(some-> (.vectorForOrNull ~types-rdr-sym ~(.getName col-field))
-                                (.vectorForOrNull ~(name meta-value)))]]
-     :children [emitted-expr]
+     :batch-bindings [[bloom-vec-sym `(some-> (.vectorForOrNull ~col-rdr-sym "bytes")
+                                              (.vectorForOrNull "bloom"))]]
      :continue (fn [cont]
                  (cont :bool
-                       `(if (and ~col-sym ~content-metadata-present-sym)
-                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~field-name ~page-idx-sym)]
-                            (when (>= ~expr/idx-sym 0)
-                              ~(continue (fn [_ code] code))))
-                          ;; no content-metadata, we can't filter the pages
-                          true)))}))
+                       `(boolean
+                         (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str col) ~page-idx-sym)]
+                           (if (neg? ~expr/idx-sym)
+                             false
 
-(defmethod ewalk/walk-expr :test-metadata [inner outer expr]
+                             ;; if this col is present but we haven't built blooms, we have to scan
+                             (or (nil? ~bloom-vec-sym)
+                                 (.isNull ~bloom-vec-sym ~expr/idx-sym)
+                                 (BloomUtils/bloomContains ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)))))))}))
+
+(defmethod expr/codegen-expr :test-presence [{:keys [col value-type]} _opts]
+  (let [presence-vec (gensym 'presence)]
+    {:return-type :bool
+     :batch-bindings [[presence-vec `(.vectorForOrNull ~col-rdr-sym ~(types/arrow-type->leg value-type))]]
+     :continue (fn [cont]
+                 (cont :bool
+                       `(boolean
+                         (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str col) ~page-idx-sym)]
+                           (and (not (neg? ~expr/idx-sym))
+                                ~presence-vec
+                                (not (.isNull ~presence-vec ~expr/idx-sym))
+                                (.getBoolean ~presence-vec ~expr/idx-sym))))))}))
+
+(defmethod expr/codegen-call [:_meta_double :num] [_expr]
+  {:return-type :f64, :->call-code #(do `(double ~@%))})
+
+(defmethod expr/codegen-call [:_meta_double :timestamp-tz] [{[[_ts-tz ts-unit _zone]] :arg-types}]
+  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+
+(defmethod expr/codegen-call [:_meta_double :timestamp-local] [{[[_ts-local ts-unit]] :arg-types}]
+  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+
+(defmethod expr/codegen-call [:_meta_double :date] [_]
+  {:return-type :f64, :->call-code #(do `(* ~@% 86400.0))})
+
+(defmethod expr/codegen-call [:_meta_double :time-local] [{[[_time-local ts-unit]] :arg-types}]
+  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+
+(defmethod expr/codegen-call [:_meta_double :duration] [{[[_duration ts-unit]] :arg-types}]
+  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+
+(defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col flavour-col value-expr]} opts]
+  (let [col-name (str col)
+        col-sym (gensym 'meta_col)
+        val-sym (gensym 'val)
+
+        md-expr (expr/codegen-expr {:op :call, :f :_meta_double, :args [value-expr]} opts)]
+    {:return-type :bool
+     :children [md-expr]
+     :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
+                       `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
+                                (.vectorForOrNull ~(name min-or-max)))
+                       val-sym ((:continue md-expr) (fn [_type code] code))]]
+     :continue (fn [cont]
+                 (cont :bool
+                       `(boolean
+                         (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~col-name ~page-idx-sym)]
+                           (when (and ~col-sym (>= ~expr/idx-sym 0))
+                             (~(symbol f) (.getDouble ~col-sym ~expr/idx-sym) ~val-sym))))))}))
+
+(defmethod ewalk/walk-expr :test-minmax [inner outer expr]
   (outer (-> expr (update :value-expr inner))))
 
-(defmethod ewalk/direct-child-exprs :test-metadata [{:keys [value-expr]}] #{value-expr})
+(defmethod ewalk/direct-child-exprs :test-minmax [{:keys [value-expr]}] #{value-expr})
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
@@ -206,11 +231,8 @@
                         ~(-> expr/args-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~metadata-rdr-sym (.getMetadataLeafReader ~table-metadata-sym)
-                           ~cols-rdr-sym (.vectorForOrNull ~metadata-rdr-sym "columns")
-                           ~col-rdr-sym (.getListElements ~cols-rdr-sym)
-                           ~types-rdr-sym (.vectorForOrNull ~col-rdr-sym "types")
-                           ~bloom-rdr-sym (.vectorForOrNull ~col-rdr-sym "bloom")
-                           ~content-metadata-present-sym (contains? (.getColumnNames ~table-metadata-sym) "_id")
+                           ~col-rdr-sym (-> (.vectorFor ~metadata-rdr-sym "columns")
+                                            (.getListElements))
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
@@ -225,10 +247,9 @@
   (let [params (RelationReader/from params)
         param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
-                                                                   :col-types   col-types})
-                                            {:param-types            param-types
-                                             :col-types col-types
-                                             :extract-vecs-from-rel? false})
+                                                                   :col-types col-types})
+                                            {:param-types param-types
+                                             :col-types col-types})
         bloom-hashes (->bloom-hashes allocator expr params)]
     (reify MetadataPredicate
       (build [_ table-metadata]

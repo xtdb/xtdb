@@ -15,7 +15,6 @@
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
-           xtdb.arrow.VectorPosition
            xtdb.BufferPool
            xtdb.compactor.Compactor
            (xtdb.indexer LiveIndex LiveTable LiveTable$Watermark)

@@ -48,7 +48,7 @@
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.trie Trie)
+           (xtdb.trie MetadataFileWriter Trie)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
            (xtdb.vector IVectorReader RelationReader)))
@@ -384,7 +384,7 @@
         (throw (IllegalStateException. (str "No bounds found for page " page-idx "!")))))))
 
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
-  (util/with-close-on-catch [meta-rel (Relation. al (Trie/getMetaRelSchema))]
+  (util/with-close-on-catch [meta-rel (Relation. al MetadataFileWriter/metaRelSchema)]
     (let [nodes-wtr (.vectorFor meta-rel "nodes")
           nil-wtr (.vectorFor nodes-wtr "nil")
           iid-branch-wtr (.vectorFor nodes-wtr "branch-iid")

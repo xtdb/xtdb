@@ -5,11 +5,12 @@ import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.types.ZonedDateTimeRange
 import xtdb.vector.extensions.TsTzRangeType
 import java.time.ZonedDateTime
 
-class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector() {
+class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector(), MetadataFlavour.Presence {
     override val type = TsTzRangeType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
@@ -31,6 +32,8 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
 
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = TsTzRangeVector(inner.openSlice(al))
 }

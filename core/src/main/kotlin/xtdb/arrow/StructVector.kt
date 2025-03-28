@@ -12,24 +12,25 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.asKeyword
 import xtdb.toFieldType
 import xtdb.util.Hasher
 import xtdb.util.normalForm
 import java.util.*
 
-internal val STRUCT_TYPE = ArrowType.Struct.INSTANCE
+internal val STRUCT = ArrowType.Struct.INSTANCE
 
 class StructVector(
     private val allocator: BufferAllocator,
     override var name: String, override var nullable: Boolean,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
     override var valueCount: Int = 0,
-) : Vector() {
+) : Vector(), MetadataFlavour.Struct {
 
-    override val type: ArrowType = STRUCT_TYPE
+    override val type: ArrowType = STRUCT
 
-    override val children: Iterable<Vector> get() = childWriters.sequencedValues()
+    override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 
@@ -50,7 +51,7 @@ class StructVector(
         childWriters.compute(name) { _, v ->
             if (v == null) {
                 fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
-                    repeat(valueCount) { newVec.writeNull() }
+                    repeat(valueCount) { if(isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
                 }
             } else {
                 val existingFieldType = v.fieldType
@@ -76,6 +77,8 @@ class StructVector(
         childWriters.sequencedEntrySet()
             .associateBy({ keyFn.denormalize(it.key) }, { it.value.getObject(idx, keyFn) })
             .filterValues { it != null }
+
+    override val metadataFlavours get() = listOf(this)
 
     private fun keyString(key: Any?): String = when (key) {
         is String -> key
