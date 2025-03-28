@@ -34,18 +34,18 @@
   (.resolve (.resolve table-path block-table-metadata-path)
             (format "b%s.binpb" (util/->lex-hex-string block-idx))))
 
-(defn- byte-buf->nio-buf ^ByteBuffer [^ByteBuf byte-buf]
-  (.nioBuffer byte-buf 0 (.capacity byte-buf)))
-
 (defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count
                                                    current-tries hlls]
-  (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
-                         (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
-                         (.setRowCount row-count)
-                         (.addAllCurrentTries current-tries)
-                         (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom (byte-buf->nio-buf %)))))
-                       (.build)
-                       (.toByteArray))))
+  (let [res (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
+                                   (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
+                                   (.setRowCount row-count)
+                                   (.addAllCurrentTries current-tries)
+                                   (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom ^ByteBuffer %))))
+                                 (.build)
+                                 (.toByteArray)))]
+    ;; ByteString/copyFrom is messing with the position
+    (update-vals hlls #(doto ^ByteBuffer % (.position 0)))
+    res))
 
 (defn <-table-block [^TableBlock table-block]
   (let [schema (Schema/deserializeMessage (ByteBuffer/wrap (.toByteArray (.getArrowSchema table-block))))]

@@ -29,4 +29,4 @@
     :row-count 1,
     :iid-bloom [643688428 3]}}
   {:trie-key "l01-rc-b01", :data-file-size 1382, :trie-metadata nil}],
- :hlls {"_id" [1419808417 2.001955671862574]}}
+ :hlls {"_id" [-179776705 2.001955671862574]}}

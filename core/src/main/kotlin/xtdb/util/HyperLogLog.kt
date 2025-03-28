@@ -4,18 +4,19 @@ package xtdb.util
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import xtdb.arrow.VectorReader
+import java.nio.ByteBuffer
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
 
-typealias HLL = ByteBuf
+typealias HLL = ByteBuffer
 
 // http://dimacs.rutgers.edu/~graham/pubs/papers/cacm-sketch.pdf
 // http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
 
 const val DEFAULT_BUFFER_SIZE: Int = Integer.BYTES * 1024
 
-operator fun HLL.plus(hash: Int): ByteBuf {
+operator fun HLL.plus(hash: Int): HLL {
     val m = this.capacity() / Integer.BYTES
     val b = Integer.numberOfTrailingZeros(m)
 
@@ -27,7 +28,7 @@ operator fun HLL.plus(hash: Int): ByteBuf {
     val currentValue = this.getInt(position)
     val newValue = max(currentValue, (Integer.numberOfLeadingZeros(w) + 1) - b)
 
-    this.setInt(position, newValue)
+    this.putInt(position, newValue)
 
     return this
 }
@@ -75,9 +76,9 @@ fun HLL.estimate(): Double {
 fun HLL.combine(hll: HLL): HLL {
     require(this.capacity() == hll.capacity()) { "HyperLogLog buffers must have the same capacity" }
 
-    val result = Unpooled.buffer(hll.capacity())
+    val result = ByteBuffer.allocate(this.capacity())
     for (i in 0 until hll.capacity() step Integer.BYTES) {
-        result.setInt(i, max(this.getInt(i), hll.getInt(i)))
+        result.putInt(i, max(this.getInt(i), hll.getInt(i)))
     }
     return result
 }
@@ -88,6 +89,6 @@ fun HLL.estimateIntersection(hll: HLL): Double = estimate() + hll.estimate() - e
 
 fun HLL.estimateDifference(hll: HLL): Double = estimate() - estimateIntersection(hll)
 
-fun createHLL(bufferSize: Int = DEFAULT_BUFFER_SIZE): HLL = Unpooled.buffer(bufferSize)
+fun createHLL(bufferSize: Int = DEFAULT_BUFFER_SIZE): HLL = ByteBuffer.allocate(bufferSize)
 
-fun toHLL(bytes: ByteArray): HLL = Unpooled.wrappedBuffer(bytes)
+fun toHLL(bytes: ByteArray): HLL = ByteBuffer.wrap(bytes)
