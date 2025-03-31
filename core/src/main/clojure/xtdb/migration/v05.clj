@@ -52,8 +52,9 @@
 
       {:trie-metadata (.build tm-calc)
        :hlls (.build hll-calc)
-       :fields (->> (.getFields (.getSchema root))
-                    (into {} (map (juxt #(.getName ^Field %) identity))))
+       :fields (-> (.vectorFor rdr "op") (.legReader "put")
+                   (.getField) (.getChildren)
+                   (->> (into {} (map (juxt #(.getName ^Field %) identity)))))
        :row-count @!row-count
        :data-file-size (.capacity data-buf)})))
 

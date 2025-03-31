@@ -1,15 +1,9 @@
 {:row-count 164,
  :fields
- {"_iid"
-  #xt.arrow/field ["_iid" #xt.arrow/field-type [#xt.arrow/type [:fixed-size-binary 16] false]],
-  "_system_from"
-  #xt.arrow/field ["_system_from" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "_valid_from"
-  #xt.arrow/field ["_valid_from" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "_valid_to"
-  #xt.arrow/field ["_valid_to" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "op"
-  #xt.arrow/field ["op" #xt.arrow/field-type [#xt.arrow/type :struct true] #xt.arrow/field ["price" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]},
+ {"price"
+  #xt.arrow/field ["price" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
  :current-tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 5982,

@@ -1,15 +1,13 @@
 {:row-count 1,
  :fields
- {"_iid"
-  #xt.arrow/field ["_iid" #xt.arrow/field-type [#xt.arrow/type [:fixed-size-binary 16] false]],
-  "_system_from"
-  #xt.arrow/field ["_system_from" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "_valid_from"
-  #xt.arrow/field ["_valid_from" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "_valid_to"
-  #xt.arrow/field ["_valid_to" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "op"
-  #xt.arrow/field ["op" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["put" #xt.arrow/field-type [#xt.arrow/type :struct false] #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["system_time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]] #xt.arrow/field ["committed" #xt.arrow/field-type [#xt.arrow/type :bool false]] #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]]] #xt.arrow/field ["delete" #xt.arrow/field-type [#xt.arrow/type :null true]] #xt.arrow/field ["erase" #xt.arrow/field-type [#xt.arrow/type :null true]]]},
+ {"_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
+  "system_time"
+  #xt.arrow/field ["system_time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "committed"
+  #xt.arrow/field ["committed" #xt.arrow/field-type [#xt.arrow/type :bool false]],
+  "error"
+  #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]]},
  :current-tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2806,
