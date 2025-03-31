@@ -53,7 +53,7 @@
             "name" : "list"
           },
           "children" : [{
-            "name" : "struct",
+            "name" : "col",
             "nullable" : false,
             "type" : {
               "name" : "struct"
@@ -82,88 +82,77 @@
               },
               "children" : [ ]
             },{
-              "name" : "types",
-              "nullable" : false,
+              "name" : "bytes",
+              "nullable" : true,
               "type" : {
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "timestamp-tz-micro-utc",
+                "name" : "bloom",
                 "nullable" : true,
                 "type" : {
-                  "name" : "struct"
-                },
-                "children" : [{
-                  "name" : "min",
-                  "nullable" : true,
-                  "type" : {
-                    "name" : "timestamp",
-                    "unit" : "MICROSECOND",
-                    "timezone" : "UTC"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "max",
-                  "nullable" : true,
-                  "type" : {
-                    "name" : "timestamp",
-                    "unit" : "MICROSECOND",
-                    "timezone" : "UTC"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "fixed-size-binary",
-                "nullable" : true,
-                "type" : {
-                  "name" : "bool"
-                },
-                "children" : [ ]
-              },{
-                "name" : "i64",
-                "nullable" : true,
-                "type" : {
-                  "name" : "struct"
-                },
-                "children" : [{
-                  "name" : "min",
-                  "nullable" : true,
-                  "type" : {
-                    "name" : "int",
-                    "bitWidth" : 64,
-                    "isSigned" : true
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "max",
-                  "nullable" : true,
-                  "type" : {
-                    "name" : "int",
-                    "bitWidth" : 64,
-                    "isSigned" : true
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "bool",
-                "nullable" : true,
-                "type" : {
-                  "name" : "bool"
-                },
-                "children" : [ ]
-              },{
-                "name" : "transit",
-                "nullable" : true,
-                "type" : {
-                  "name" : "bool"
+                  "name" : "binary"
                 },
                 "children" : [ ]
               }]
             },{
-              "name" : "bloom",
+              "name" : "date-times",
               "nullable" : true,
               "type" : {
-                "name" : "binary"
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "min",
+                "nullable" : false,
+                "type" : {
+                  "name" : "floatingpoint",
+                  "precision" : "DOUBLE"
+                },
+                "children" : [ ]
+              },{
+                "name" : "max",
+                "nullable" : false,
+                "type" : {
+                  "name" : "floatingpoint",
+                  "precision" : "DOUBLE"
+                },
+                "children" : [ ]
+              }]
+            },{
+              "name" : "numbers",
+              "nullable" : true,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "min",
+                "nullable" : false,
+                "type" : {
+                  "name" : "floatingpoint",
+                  "precision" : "DOUBLE"
+                },
+                "children" : [ ]
+              },{
+                "name" : "max",
+                "nullable" : false,
+                "type" : {
+                  "name" : "floatingpoint",
+                  "precision" : "DOUBLE"
+                },
+                "children" : [ ]
+              }]
+            },{
+              "name" : "bool",
+              "nullable" : true,
+              "type" : {
+                "name" : "bool"
+              },
+              "children" : [ ]
+            },{
+              "name" : "transit",
+              "nullable" : true,
+              "type" : {
+                "name" : "bool"
               },
               "children" : [ ]
             }]
@@ -208,15 +197,15 @@
           "VALIDITY" : [1],
           "OFFSET" : [0,8],
           "children" : [{
-            "name" : "struct",
+            "name" : "col",
             "count" : 8,
             "VALIDITY" : [1,1,1,1,1,1,1,1],
             "children" : [{
               "name" : "col-name",
               "count" : 8,
               "VALIDITY" : [1,1,1,1,1,1,1,1],
-              "OFFSET" : [0,12,23,32,36,39,50,59,64],
-              "DATA" : ["_system_from","_valid_from","_valid_to","_iid","_id","system_time","committed","error"]
+              "OFFSET" : [0,4,15,24,36,39,50,59,64],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","system_time","committed","error"]
             },{
               "name" : "root-col?",
               "count" : 8,
@@ -228,61 +217,56 @@
               "VALIDITY" : [1,1,1,1,1,1,1,1],
               "DATA" : ["5","5","5","5","5","5","5","0"]
             },{
-              "name" : "types",
+              "name" : "bytes",
               "count" : 8,
-              "VALIDITY" : [1,1,1,1,1,1,1,1],
+              "VALIDITY" : [1,0,0,0,0,0,0,0],
               "children" : [{
-                "name" : "timestamp-tz-micro-utc",
+                "name" : "bloom",
                 "count" : 8,
-                "VALIDITY" : [1,1,1,0,0,1,0,0],
-                "children" : [{
-                  "name" : "min",
-                  "count" : 8,
-                  "VALIDITY" : [1,1,1,0,0,1,0,0],
-                  "DATA" : [1577836800000000,1577836800000000,9223372036854775807,0,0,1577836800000000,0,0]
-                },{
-                  "name" : "max",
-                  "count" : 8,
-                  "VALIDITY" : [1,1,1,0,0,1,0,0],
-                  "DATA" : [1577923200000000,1577923200000000,9223372036854775807,0,0,1577923200000000,0,0]
-                }]
-              },{
-                "name" : "fixed-size-binary",
-                "count" : 8,
-                "VALIDITY" : [0,0,0,1,0,0,0,0],
-                "DATA" : [0,0,0,1,0,0,0,0]
-              },{
-                "name" : "i64",
-                "count" : 8,
-                "VALIDITY" : [0,0,0,0,1,0,0,0],
-                "children" : [{
-                  "name" : "min",
-                  "count" : 8,
-                  "VALIDITY" : [0,0,0,0,1,0,0,0],
-                  "DATA" : ["0","0","0","0","0","0","0","0"]
-                },{
-                  "name" : "max",
-                  "count" : 8,
-                  "VALIDITY" : [0,0,0,0,1,0,0,0],
-                  "DATA" : ["0","0","0","0","23278","0","0","0"]
-                }]
-              },{
-                "name" : "bool",
-                "count" : 8,
-                "VALIDITY" : [0,0,0,0,0,0,1,0],
-                "DATA" : [0,0,0,0,0,0,1,0]
-              },{
-                "name" : "transit",
-                "count" : 8,
-                "VALIDITY" : [0,0,0,0,0,0,0,1],
-                "DATA" : [0,0,0,0,0,0,0,1]
+                "VALIDITY" : [1,0,0,0,0,0,0,0],
+                "OFFSET" : [0,150,150,150,150,150,150,150,150],
+                "DATA" : ["3a3000000e0000000a00000011000000180001002200000031000000380000004800000066000000790000007a0000009d000000c2000000e8000000eb000000780000007a0000007c00000080000000820000008400000086000000880000008a0000008c0000008e0000009000000092000000940000006e069dfea407c5293ee7b5bf7f0164e6440403a3619f71771a0209e0bbfb","","","","","","",""]
               }]
             },{
-              "name" : "bloom",
+              "name" : "date-times",
               "count" : 8,
-              "VALIDITY" : [1,1,1,1,1,1,1,1],
-              "OFFSET" : [0,98,196,234,384,542,640,662,670],
-              "DATA" : ["3a3000000900000024000000320000008000000095000000c7000000d0000000e0000000ee000000fc00000050000000520000005400000056000000580000005a0000005c0000005e00000060000000a93226fdd6addf917cb76d6875c7cd772528","3a3000000900000024000000320000008000000095000000c7000000d0000000e0000000ee000000fc00000050000000520000005400000056000000580000005a0000005c0000005e00000060000000a93226fdd6addf917cb76d6875c7cd772528","3a300000030000003200000077000000ed0000002000000022000000240000002338d440722f","3a3000000e0000000a00000011000000180001002200000031000000380000004800000066000000790000007a0000009d000000c2000000e8000000eb000000780000007a0000007c00000080000000820000008400000086000000880000008a0000008c0000008e0000009000000092000000940000006e069dfea407c5293ee7b5bf7f0164e6440403a3619f71771a0209e0bbfb","3a3000000f0000003100000038000000480000005300000058000000690000009a000000b3000000b9000000bd000000c6000000d5000000e4000000f5000000f600000080000000820000008400000086000000880000008a0000008c0000008e00000090000000920000009400000096000000980000009a0000009c000000ed9e0fc066bdd4ab79ec8c1bbe2813957fe50bebec772dae6ee436c249ea","3a3000000900000024000000320000008000000095000000c7000000d0000000e0000000ee000000fc00000050000000520000005400000056000000580000005a0000005c0000005e00000060000000a93226fdd6addf917cb76d6875c7cd772528","3a300000010000000000020010000000110022003300","3a30000000000000"]
+              "VALIDITY" : [0,1,1,1,0,1,0,0],
+              "children" : [{
+                "name" : "min",
+                "count" : 8,
+                "VALIDITY" : [0,1,1,1,0,1,0,0],
+                "DATA" : [0.0,1.5778368E9,9.223372036854775E12,1.5778368E9,0.0,1.5778368E9,0.0,0.0]
+              },{
+                "name" : "max",
+                "count" : 8,
+                "VALIDITY" : [0,1,1,1,0,1,0,0],
+                "DATA" : [0.0,1.5779232E9,9.223372036854775E12,1.5779232E9,0.0,1.5779232E9,0.0,0.0]
+              }]
+            },{
+              "name" : "numbers",
+              "count" : 8,
+              "VALIDITY" : [0,0,0,0,1,0,0,0],
+              "children" : [{
+                "name" : "min",
+                "count" : 8,
+                "VALIDITY" : [0,0,0,0,1,0,0,0],
+                "DATA" : [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
+              },{
+                "name" : "max",
+                "count" : 8,
+                "VALIDITY" : [0,0,0,0,1,0,0,0],
+                "DATA" : [0.0,0.0,0.0,0.0,23278.0,0.0,0.0,0.0]
+              }]
+            },{
+              "name" : "bool",
+              "count" : 8,
+              "VALIDITY" : [0,0,0,0,0,0,1,0],
+              "DATA" : [0,0,0,0,0,0,1,0]
+            },{
+              "name" : "transit",
+              "count" : 8,
+              "VALIDITY" : [0,0,0,0,0,0,0,1],
+              "DATA" : [0,0,0,0,0,0,0,1]
             }]
           }]
         }]
