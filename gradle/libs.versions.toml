@@ -53,7 +53,7 @@ pgjdbc={ group="org.postgresql", name="postgresql", version="42.7.5" }
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlin-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
 kotlinx-serialization-json={ group="org.jetbrains.kotlinx", name="kotlinx-serialization-json", version="1.8.0" }
-mockk={ group="io.mockk", name="mockk", version="1.13.9" }
+mockk={ group="io.mockk", name="mockk", version="1.13.17" }
 kaml={ group="com.charleskorn.kaml", name="kaml", version="0.56.0" }
 
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
