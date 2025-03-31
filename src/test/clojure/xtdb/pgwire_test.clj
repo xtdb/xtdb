@@ -273,6 +273,7 @@
 
      {:sql "INTERVAL '1' YEAR", :clj "P12M"}
      {:sql "INTERVAL '1' MONTH", :clj "P1M"}
+     {:sql "INTERVAL 'P1DT1H1M1.123456S'" :clj "P1DT1H1M1.123456S"}
 
      {:sql "DATE '2021-12-24' - DATE '2021-12-23'", :clj 1}
 
