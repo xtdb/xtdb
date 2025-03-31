@@ -258,15 +258,28 @@ class DenseUnionVector(
         }
 
     override fun rowCopier(dest: VectorWriter) =
-        if (dest is DenseUnionVector)
-            dest.rowCopier0(this).let { copier ->
+        when {
+
+            dest is DenseUnionVector -> dest.rowCopier0(this).let { copier ->
                 RowCopier { srcIdx ->
                     if (getTypeId(srcIdx) < 0) valueCount.also { dest.writeUndefined() } else copier.copyRow(srcIdx)
                 }
             }
-        else {
-            require(legVectors.size == 1)
-            LegWriter(0, legVectors.first()).rowCopier(dest)
+
+            legVectors.size == 2 -> {
+                require(legVectors.filter { it.fieldType.type == NULL_TYPE }.size == 1)
+                val copier = legVectors.mapIndexed {i, v -> Pair(i, v)}. filter { it.second.fieldType.type != NULL_TYPE }.first().let { (i, v) ->
+                    LegWriter(i.toByte(), v).rowCopier(dest)
+                }
+                RowCopier { srcIdx ->
+                    if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+                }
+            }
+
+            else -> {
+                require(legVectors.size == 1)
+                LegWriter(0, legVectors.first()).rowCopier(dest)
+            }
         }
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

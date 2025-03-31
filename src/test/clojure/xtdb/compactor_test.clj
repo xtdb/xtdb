@@ -516,3 +516,12 @@
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
                      (.resolve node-dir (tables-key "public$foo")) #"log-l01-(.+)\.arrow"))))
+
+(t/deftest null-duv-issue-4231
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]] )
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2 :l []}]])
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node* nil)
+
+  (t/is (= [{:xt/id 2, :l []} {:xt/id 1, :l [{:foo 1}]}]
+           (xt/q tu/*node* ["SELECT * FROM docs" ]))))
