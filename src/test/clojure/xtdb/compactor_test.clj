@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
@@ -568,9 +569,8 @@
         ;; to artifically create a new table block
         (tu/finish-block! node)
 
-
-        (t/is (= (os/->StoredObject "tables/public$foo/blocks/b02.binpb" 4656)
-                 (last (.listAllObjects bp (table-cat/->table-block-dir "public/foo")))))
+        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/compactor-test/compactor-metadata-test")))
+                        (.resolve node-dir "objects"))
 
         (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
                                  TableBlock/parseFrom
