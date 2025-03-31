@@ -2048,7 +2048,11 @@ ORDER BY t.oid DESC LIMIT 1"
              (jdbc/execute! conn ["SELECT INTERVAL 'P12MT0S' AS i"])))
 
     (t/is (= [{:i (PGInterval. "P-22MT0S")}]
-             (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"])))))
+             (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"])))
+
+    (t/testing "mdn implicitly truncated and returned with micro precision"
+      (t/is (= [{:i (PGInterval. "PT10M10.123456S")}]
+               (jdbc/execute! conn ["SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(9) i"]))))))
 
 (deftest test-playground
   (with-open [srv (pgwire/open-playground)]
