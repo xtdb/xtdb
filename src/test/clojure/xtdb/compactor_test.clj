@@ -558,12 +558,14 @@
                                          :valid-to #xt/instant "2011-01-01T00:00:00Z"}
                               {:xt/id 1}]])
         (tu/finish-block! node)
+        ;; to have consistent block files
+        (c/compact-all! node #xt/duration "PT5S")
 
         (xt/execute-tx node [[:put-docs {:into :foo
                                          :valid-from #xt/instant "2015-01-01T00:00:00Z"
                                          :valid-to #xt/instant "2016-01-01T00:00:00Z"}
                               {:xt/id 2}]])
-        (tu/finish-block! node)
+        (tu/finish-block! node )
 
         (c/compact-all! node #xt/duration "PT5S")
         ;; to artifically create a new table block
