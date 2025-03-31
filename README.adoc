@@ -1,6 +1,6 @@
 image::img/xtdb-logo-banner.svg[XTDB Logo]
 
-https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel. XTDB has been built to simplify application development and address complex data compliance requirements. XTDB can be used via SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL].
+https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel. XTDB has been built to simplify application development and address complex data compliance requirements. XTDB can be used via SQL and https://docs.xtdb.com/xtql/tutorials/introducing-xtql.html[XTQL].
 
 XTDB 2.x is in 'beta' whilst we collaborate closely with our https://forms.gle/K2bMsPxkbreKSKqs9[Design Partners] ahead of General Availability; if you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb/tree/1.x.
 
@@ -9,7 +9,7 @@ Major features:
 * Immutable - XTDB is optimised for current-time queries, but you can audit the full history of your database at any point, without needing snapshots or accessing backups.
 * 'Bitemporal' - all data is accurately versioned as updates are made ('system' time), but it also allows you to separately record and query when that data is, was, or will become valid in your business domain ('valid' time).
 * Dynamic - you don't need to specify schema up-front before documents (rows with arbitrarily nested data) can be inserted.
-* Speaks both SQL and https://docs.xtdb.com/tutorials/introducing-xtql.html[XTQL] - a full SQL dialect that implements the bitemporal functionality as specified in the SQL:2011 standard, available over both HTTP and the Postgres wire protocol for compatibility with existing experience and Postgres-related tooling.
+* Speaks both SQL and https://docs.xtdb.com/xtql/tutorials/introducing-xtql.html[XTQL] - a full SQL dialect that implements the bitemporal functionality as specified in the SQL:2011 standard, available over both HTTP and the Postgres wire protocol for compatibility with existing experience and Postgres-related tooling.
 * Cloud native - the ACID, columnar engine is built on Apache Arrow and designed for object storage
 * It is written and supported by https://juxt.pro[JUXT^].
 
