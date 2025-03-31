@@ -1,0 +1,171 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "_system_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_to",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "op",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "put",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "system_time",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "committed",
+          "nullable" : false,
+          "type" : {
+            "name" : "bool"
+          },
+          "children" : [ ]
+        },{
+          "name" : "error",
+          "nullable" : true,
+          "type" : {
+            "name" : "TransitType"
+          },
+          "children" : [ ],
+          "metadata" : [{
+            "value" : "xt/transit+msgpack",
+            "key" : "ARROW:extension:name"
+          },{
+            "value" : "",
+            "key" : "ARROW:extension:metadata"
+          }]
+        }]
+      },{
+        "name" : "delete",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "erase",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["74e5bd3b216bd545ac5e35cad48308db","bbad49fc1660dd9268c9768dbdba0339"]
+    },{
+      "name" : "_system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1578787200000000,1578830400000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1578787200000000,1578830400000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["262993","267838"]
+        },{
+          "name" : "system_time",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : [1578787200000000,1578830400000000]
+        },{
+          "name" : "committed",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : [1,1]
+        },{
+          "name" : "error",
+          "count" : 2,
+          "VALIDITY" : [0,0],
+          "OFFSET" : [0,0,0],
+          "DATA" : ["",""]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  }]
+}

@@ -1,0 +1,171 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "_system_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_to",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "op",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "put",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "system_time",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "committed",
+          "nullable" : false,
+          "type" : {
+            "name" : "bool"
+          },
+          "children" : [ ]
+        },{
+          "name" : "error",
+          "nullable" : true,
+          "type" : {
+            "name" : "TransitType"
+          },
+          "children" : [ ],
+          "metadata" : [{
+            "value" : "xt/transit+msgpack",
+            "key" : "ARROW:extension:name"
+          },{
+            "value" : "",
+            "key" : "ARROW:extension:metadata"
+          }]
+        }]
+      },{
+        "name" : "delete",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "erase",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 7,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : ["244dd48cc935f85b9d3a33e300dc3417","311915ece6af8ab6f3a6105c41b2bbee","4ab5b789e167193a72f3f3550113dcb0","62252e23ef7fd783317793d03f022d30","86a6593478575a1410dfa28f5329a4f7","a4e167a76a05add8a8654c169b07b044","db1a7905a19d41c9bdad3bc2732ef2f8"]
+    },{
+      "name" : "_system_from",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : [1577923200000000,1577880000000000,1577966400000000,1577880000000000,1577923200000000,1577836800000000,1577836800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : [1577923200000000,1577880000000000,1577966400000000,1577880000000000,1577923200000000,1577836800000000,1577836800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 7,
+      "VALIDITY" : [1,1,1,1,1,1,1],
+      "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 7,
+      "TYPE_ID" : [0,0,0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4,5,6],
+      "children" : [{
+        "name" : "put",
+        "count" : 7,
+        "VALIDITY" : [1,1,1,1,1,1,1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 7,
+          "VALIDITY" : [1,1,1,1,1,1,1],
+          "DATA" : ["30078","11636","34923","18433","23278","0","6791"]
+        },{
+          "name" : "system_time",
+          "count" : 7,
+          "VALIDITY" : [1,1,1,1,1,1,1],
+          "DATA" : [1577923200000000,1577880000000000,1577966400000000,1577880000000000,1577923200000000,1577836800000000,1577836800000000]
+        },{
+          "name" : "committed",
+          "count" : 7,
+          "VALIDITY" : [1,1,1,1,1,1,1],
+          "DATA" : [1,1,1,1,1,1,1]
+        },{
+          "name" : "error",
+          "count" : 7,
+          "VALIDITY" : [0,0,0,0,0,0,0],
+          "OFFSET" : [0,0,0,0,0,0,0,0],
+          "DATA" : ["","","","","","",""]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  }]
+}

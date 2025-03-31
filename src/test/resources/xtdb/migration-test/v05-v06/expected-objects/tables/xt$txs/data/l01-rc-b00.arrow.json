@@ -1,0 +1,171 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "_system_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "_valid_to",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "op",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "put",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "system_time",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "committed",
+          "nullable" : false,
+          "type" : {
+            "name" : "bool"
+          },
+          "children" : [ ]
+        },{
+          "name" : "error",
+          "nullable" : true,
+          "type" : {
+            "name" : "TransitType"
+          },
+          "children" : [ ],
+          "metadata" : [{
+            "value" : "xt/transit+msgpack",
+            "key" : "ARROW:extension:name"
+          },{
+            "value" : "",
+            "key" : "ARROW:extension:metadata"
+          }]
+        }]
+      },{
+        "name" : "delete",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "erase",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "_iid",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["a4e167a76a05add8a8654c169b07b044"]
+    },{
+      "name" : "_system_from",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1577836800000000]
+    },{
+      "name" : "_valid_from",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1577836800000000]
+    },{
+      "name" : "_valid_to",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [9223372036854775807]
+    },{
+      "name" : "op",
+      "count" : 1,
+      "TYPE_ID" : [0],
+      "OFFSET" : [0],
+      "children" : [{
+        "name" : "put",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "children" : [{
+          "name" : "_id",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "system_time",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [1577836800000000]
+        },{
+          "name" : "committed",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [1]
+        },{
+          "name" : "error",
+          "count" : 1,
+          "VALIDITY" : [0],
+          "OFFSET" : [0,0],
+          "DATA" : [""]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      }]
+    }]
+  }]
+}

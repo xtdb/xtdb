@@ -1,0 +1,27 @@
+{:row-count 64,
+ :fields
+ {"_iid"
+  #xt.arrow/field ["_iid" #xt.arrow/field-type [#xt.arrow/type [:fixed-size-binary 16] false]],
+  "_system_from"
+  #xt.arrow/field ["_system_from" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "_valid_from"
+  #xt.arrow/field ["_valid_from" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "_valid_to"
+  #xt.arrow/field ["_valid_to" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "op"
+  #xt.arrow/field ["op" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["put" #xt.arrow/field-type [#xt.arrow/type :struct false] #xt.arrow/field ["reading" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]] #xt.arrow/field ["delete" #xt.arrow/field-type [#xt.arrow/type :null true]] #xt.arrow/field ["erase" #xt.arrow/field-type [#xt.arrow/type :null true]]]},
+ :current-tries
+ [{:trie-key "l00-rc-b00",
+   :data-file-size 5982,
+   :trie-metadata
+   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
+    :min-valid-to #xt/instant "2020-01-01T12:00:00Z",
+    :max-valid-to #xt/instant "2020-01-01T12:00:00Z",
+    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :row-count 64,
+    :iid-bloom [1169551147 192]}}],
+ :hlls
+ {"reading" [75145568 1.0004885993744506],
+  "_id" [907057289 65.02133414826055]}}
