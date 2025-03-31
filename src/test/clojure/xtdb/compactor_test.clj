@@ -630,3 +630,12 @@
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))
+
+(t/deftest null-duv-issue-4231
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]] )
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2 :l []}]])
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node* nil)
+
+  (t/is (= [{:xt/id 2, :l []} {:xt/id 1, :l [{:foo 1}]}]
+           (xt/q tu/*node* ["SELECT * FROM docs" ]))))
