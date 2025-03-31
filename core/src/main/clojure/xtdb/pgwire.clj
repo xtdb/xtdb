@@ -40,7 +40,7 @@
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.query BoundQuery PreparedQuery)
-           [xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth]
+           [xtdb.types IntervalDayTime IntervalMonthDayMicro IntervalMonthDayNano IntervalYearMonth]
            [xtdb.vector IVectorReader RelationReader]))
 
 ;; references
@@ -652,6 +652,7 @@
     (instance? IntervalYearMonth obj) (str obj)
     (instance? IntervalDayTime obj) (str obj)
     (instance? IntervalMonthDayNano obj) (str obj)
+    (instance? IntervalMonthDayMicro obj) (str obj)
 
     ;; represent period duration as an iso8601 duration string (includes period components)
     (instance? PeriodDuration obj)
