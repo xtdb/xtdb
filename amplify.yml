@@ -7,11 +7,11 @@ applications:
             - yarn install
             # activate swap to avoid OOM https://github.com/aws-amplify/amplify-hosting/issues/654
             - export NODE_OPTIONS=--max-old-space-size=16384
-            - sudo dd if=/dev/zero of=swapfile bs=1K count=6M
-            - sudo chmod 600 swapfile
-            - sudo mkswap swapfile
-            - sudo swapon swapfile
-            - sudo swapon -s
+            - dd if=/dev/zero of=swapfile bs=1K count=6M
+            - chmod 600 swapfile
+            - mkswap swapfile
+            - swapon swapfile
+            - swapon -s
         build:
           commands:
             - yarn run build-api-docs
