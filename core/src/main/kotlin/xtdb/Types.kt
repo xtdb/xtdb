@@ -20,6 +20,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.types.*
 import xtdb.vector.extensions.*
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.net.URI
 import java.nio.ByteBuffer
 import java.time.*
@@ -68,7 +69,7 @@ fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
     override fun visit(type: ArrowType.FixedSizeBinary) = "fixed-size-binary-${type.byteWidth}"
     override fun visit(type: ArrowType.BinaryView) = throw UnsupportedOperationException()
     override fun visit(type: ArrowType.Bool) = "bool"
-    override fun visit(type: ArrowType.Decimal) = "decimal"
+    override fun visit(type: ArrowType.Decimal) = "decimal-${type.precision}-${type.scale}-${type.bitWidth}"
     override fun visit(type: ArrowType.Date) = "date-${type.unit.toLegPart()}"
     override fun visit(type: ArrowType.Time) = "time-local-${type.unit.toLegPart()}"
 
@@ -112,8 +113,15 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     is Float -> MinorType.FLOAT4.type
     is Double -> MinorType.FLOAT8.type
 
-    // HACK we should support parameterised decimals here
-    is BigDecimal -> ArrowType.Decimal(38, 19, 128)
+    is BigDecimal -> {
+        val precision = when (obj.precision()) {
+            // Java Arrow only supports 128 and 256 bit widths
+            in 0..32 -> 32
+            in 33..64 -> 64
+            else -> throw IllegalArgumentException("unsupported precision: ${obj.precision()}")
+        }
+        ArrowType.Decimal(precision, obj.scale(), precision * 4)
+    }
 
     is ZonedDateTime -> ArrowType.Timestamp(MICROSECOND, obj.zone.toString())
     is OffsetDateTime -> ArrowType.Timestamp(MICROSECOND, obj.offset.toString())

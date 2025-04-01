@@ -16,6 +16,9 @@ object VecToReader : VectorVisitor<IVectorReader, Any?> {
         is Float4Vector -> float4Vector(v)
         is Float8Vector -> float8Vector(v)
 
+        is DecimalVector -> decimalVector(v)
+        is Decimal256Vector -> decimal256Vector(v)
+
         is DateDayVector -> dateDayVector(v)
         is DateMilliVector -> dateMilliVector(v)
 
