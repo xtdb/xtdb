@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.toFieldType
 import xtdb.toLeg
 import xtdb.util.Hasher
@@ -51,7 +52,7 @@ class DenseUnionVector(
 
     private val legVectors = legVectors.toMutableList()
 
-    override val children: Iterable<Vector> get() = legVectors
+    override val vectors: Iterable<Vector> get() = legVectors
 
     private inner class LegVector(
         private val typeId: Byte, private val inner: VectorWriter, private val nested: Boolean = false
@@ -88,6 +89,8 @@ class DenseUnionVector(
 
         override val mapKeys get() = inner.mapKeys
         override val mapValues get() = inner.mapValues
+
+        override val metadataFlavours get() = inner.metadataFlavours
 
         private fun writeValueThen(): VectorWriter {
             if (!nested) {
@@ -221,6 +224,10 @@ class DenseUnionVector(
             override fun readObject() = legReader?.readObject()
         }
     }
+
+    @Suppress("CANDIDATE_CHOSEN_USING_OVERLOAD_RESOLUTION_BY_LAMBDA_ANNOTATION")
+    override val metadataFlavours: Collection<MetadataFlavour>
+        get() = legVectors.flatMap { it.metadataFlavours }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 

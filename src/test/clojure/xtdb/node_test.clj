@@ -1104,3 +1104,18 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (doseq [batch (partition-all 1000 (range 400000))]
     (xt/submit-tx tu/*node* [(into [:put-docs :docs] (map (fn [idx] {:xt/id idx})) batch)]))
   (t/is (= [{:v 1 }] (xt/q tu/*node* "SELECT 1 AS v"))))
+
+(deftest pushdown-blooms-not-working-for-l0
+  (binding [c/*ignore-signal-block?* true]
+    (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col 1}]
+                              [:put-docs :xt-docs {:xt/id :bar, :col 2}]])
+    (tu/finish-block! tu/*node*)
+    (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col 3}]])
+    (tu/finish-block! tu/*node*))
+
+  (t/is (= [{:xt/id :toto, :col 3}]
+           (tu/query-ra
+            '[:join [{col col}]
+              [:scan {:table public/xt_docs} [_id {col (= col 3)}]]
+              [:scan {:table public/xt_docs} [_id col]]]
+            {:node tu/*node*}))))

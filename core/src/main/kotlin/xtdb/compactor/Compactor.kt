@@ -55,7 +55,7 @@ interface Compactor : AutoCloseable {
         private val al = al.openChildAllocator("compactor")
             .also { meterRegistry?.register(it) }
 
-        private val trieWriter = TrieWriter(al, bp, true)
+        private val trieWriter = TrieWriter(al, bp, calculateBlooms = true)
         private val segMerge = SegmentMerge(al)
 
         companion object {

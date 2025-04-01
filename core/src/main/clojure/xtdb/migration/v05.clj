@@ -14,24 +14,51 @@
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector.ipc ArrowFileReader)
            (org.apache.arrow.vector.types.pojo Field)
-           xtdb.arrow.VectorReader
+           (xtdb.arrow VectorReader Relation)
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
            (xtdb.indexer HllCalculator TrieMetadataCalculator)
-           xtdb.trie.TrieCatalog))
+           (xtdb.trie MetadataFileWriter TrieCatalog)))
 
-(defn copy-file! [{^BufferPool src :xtdb.migration/source
-                   ^BufferPool target :xtdb/buffer-pool}
-                  ^Path src-path, ^Path target-path]
+(defn- migrate-trie! [{^BufferPool src :xtdb.migration/source
+                       ^BufferPool target :xtdb/buffer-pool
+                       ^BufferAllocator al :xtdb/allocator}
+                      table-name old-trie-key new-trie-key]
   (try
-    (let [buf (ByteBuffer/wrap (.getByteArray src src-path))]
-      (.putObject target target-path (.duplicate buf))
-      buf)
+    (let [table-path (trie/table-name->table-path table-name)
+          data-dir (.resolve table-path "data")
+          meta-dir (.resolve table-path "meta")
+          data-buf (ByteBuffer/wrap (.getByteArray src (.resolve data-dir (str old-trie-key ".arrow"))))]
+      (.putObject target (.resolve data-dir (str new-trie-key ".arrow"))
+                  (.duplicate data-buf))
+
+      (let [src-meta-path (.resolve meta-dir (str old-trie-key ".arrow"))]
+        (util/with-open [data-arrow-buf (util/->arrow-buf-view al (.duplicate data-buf))
+                         data-loader (Relation/loader data-arrow-buf)
+                         data-rel (Relation. al (.getSchema data-loader))
+                         rb (.getRecordBatch src src-meta-path 0)
+                         meta-rel (Relation/fromRecordBatch al (.getSchema (.getFooter src src-meta-path)) rb)
+                         meta-file-wtr (MetadataFileWriter. al target table-name new-trie-key data-rel false false)]
+          (let [nodes-vec (.vectorFor meta-rel "nodes")
+                iid-leg (.vectorFor nodes-vec "branch-iid")
+                leaf-leg (.vectorFor nodes-vec "leaf")
+                data-page-idx-vec (.vectorFor leaf-leg "data-page-idx")]
+            (dotimes [idx (.getRowCount meta-rel)]
+              (case (.getLeg nodes-vec idx)
+                "nil" (.writeNull meta-file-wtr)
+                "branch-iid" (.writeIidBranch meta-file-wtr (int-array (mapv #(or % -1) (.getObject iid-leg idx))))
+                "leaf" (do
+                         (.loadPage data-loader (.getInt data-page-idx-vec idx) data-rel)
+                         (.writeLeaf meta-file-wtr))))
+            (.end meta-file-wtr))))
+
+      data-buf)
 
     (catch InterruptedException e (throw e))
     (catch ClosedByInterruptException _ (throw (InterruptedException.)))
     (catch Throwable e
-      (log/errorf e "error copying file: '%s' -> '%s" src-path target-path))))
+      (log/errorf e "error migrating trie in %s: '%s' -> '%s" table-name old-trie-key new-trie-key)
+      (throw e))))
 
 (defn trie-details [{^BufferAllocator al :xtdb/allocator}, ^ByteBuffer data-buf]
   (with-open [file-reader (ArrowFileReader. (util/->seekable-byte-channel data-buf) al)
@@ -64,7 +91,7 @@
                       ^TrieCatalog trie-cat :xtdb/trie-catalog
                       :as system}]
   (let [chunk-meta-objs (.listAllObjects src (util/->path "chunk-metadata"))]
-    #_(log/infof "%d blocks to migrate..." (count chunk-meta-objs))
+    (log/infof "%d blocks to migrate..." (count (seq chunk-meta-objs)))
     (dorun
      (->> chunk-meta-objs
           (map-indexed (fn [block-idx obj]
@@ -80,20 +107,12 @@
                                                                                chunk-idx-hex
                                                                                (util/->lex-hex-string next-chunk-idx)
                                                                                (Long/toString row-count 16))
-                                                          table-path (trie/table-name->table-path table-name)
-                                                          data-path (.resolve table-path "data")
-                                                          meta-path (.resolve table-path "meta")
                                                           new-trie-key (trie/->l0-trie-key block-idx)]]
                                                 (do
                                                   (log/debugf "Copying '%s' '%s' -> '%s'" table-name old-trie-key new-trie-key)
-                                                  (copy-file! system
-                                                              (.resolve meta-path (str old-trie-key ".arrow"))
-                                                              (.resolve meta-path (str new-trie-key ".arrow")))
-
-                                                  (let [buf (copy-file! system
-                                                                        (.resolve data-path (str old-trie-key ".arrow"))
-                                                                        (.resolve data-path (str new-trie-key ".arrow")))]
-                                                    [table-name (into {:trie-key new-trie-key} (trie-details system buf))])))
+                                                  (let [data-buf (migrate-trie! system table-name old-trie-key new-trie-key)]
+                                                    (assert data-buf)
+                                                    [table-name (into {:trie-key new-trie-key} (trie-details system data-buf))])))
                                               (into {}))]
 
                            (.addTries trie-cat (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-res]

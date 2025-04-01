@@ -23,7 +23,7 @@ abstract class ExtensionVector : Vector() {
             inner.nullable = value
         }
 
-    final override val children get() = inner.children
+    final override val vectors: Iterable<Vector> get() = inner.vectors
 
     override var valueCount: Int
         get() = inner.valueCount

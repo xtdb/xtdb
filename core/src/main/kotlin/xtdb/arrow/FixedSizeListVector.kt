@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
@@ -17,11 +18,11 @@ class FixedSizeListVector(
     override var name: String, override var nullable: Boolean, private val listSize: Int,
     private var elVector: Vector,
     override var valueCount: Int = 0
-) : Vector() {
+) : Vector(), MetadataFlavour.List {
 
     override val type = ArrowType.FixedSizeList(listSize)
 
-    override val children get() = listOf(elVector)
+    override val vectors: Iterable<Vector> get() = listOf(elVector)
 
     private val validityBuffer = ExtensibleBuffer(allocator)
 
@@ -71,6 +72,8 @@ class FixedSizeListVector(
     override fun endList() {
         writeNotNull()
     }
+
+    override val metadataFlavours get() = listOf(this)
 
     override fun hashCode0(idx: Int, hasher: Hasher) =
         (0 until listSize).fold(0) { hash, elIdx ->

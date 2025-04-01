@@ -6,21 +6,24 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.BitVector as ArrowBitVector
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
+internal val BOOL_TYPE: ArrowType = ArrowType.Bool.INSTANCE
+
 class BitVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     private val validityBuffer: ExtensibleBuffer, private val dataBuffer: ExtensibleBuffer
-) : Vector() {
+) : Vector(), MetadataFlavour.Presence {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
     ) : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val type: ArrowType = BIT_TYPE
-    override val children: Iterable<Vector> = emptyList()
+    override val vectors: Iterable<Vector> = emptyList()
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
@@ -47,6 +50,8 @@ class BitVector private constructor(
     override fun writeObject0(value: Any) {
         if (value is Boolean) writeBoolean(value) else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override val metadataFlavours get() = listOf(this)
 
     override fun hashCode0(idx: Int, hasher: Hasher) = if (getBoolean(idx)) 17 else 19
 

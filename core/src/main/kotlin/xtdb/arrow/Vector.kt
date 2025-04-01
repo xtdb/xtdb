@@ -19,6 +19,7 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId
@@ -33,16 +34,15 @@ fun FieldType.copy(
     dictionary: DictionaryEncoding? = this.dictionary
 ) = FieldType(nullable, type, dictionary)
 
-@Suppress("UNCHECKED_CAST")
 sealed class Vector : VectorReader, VectorWriter {
 
     abstract override var name: String
     abstract override var nullable: Boolean
     abstract val type: ArrowType
-    abstract val children: Iterable<Vector>
+    abstract val vectors: Iterable<Vector>
 
     final override val fieldType: FieldType get() = FieldType(nullable, type, null)
-    final override val field: Field get() = Field(name, fieldType, children.map { it.field })
+    final override val field: Field get() = Field(name, fieldType, vectors.map { it.field })
 
     abstract override var valueCount: Int; internal set
 
@@ -56,8 +56,8 @@ sealed class Vector : VectorReader, VectorWriter {
 
     protected abstract fun writeObject0(value: Any)
 
-    override fun writeObject(value: Any?) =
-        if (value == null) writeNull() else writeObject0(value)
+    override fun writeObject(obj: Any?) =
+        if (obj == null) writeNull() else writeObject0(obj)
 
     abstract fun hashCode0(idx: Int, hasher: Hasher): Int
     final override fun hashCode(idx: Int, hasher: Hasher) =
@@ -72,12 +72,6 @@ sealed class Vector : VectorReader, VectorWriter {
     override fun toList() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)
-
-    fun <T, S> fold(init: T, op: (T, S) -> T): T {
-        var acc: T =  init
-        for (i in 0 until valueCount) acc = op(acc, getObject(i) as S)
-        return acc
-    }
 
     companion object {
         @JvmStatic
@@ -122,7 +116,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
                 override fun visit(type: Bool) = BitVector(al, name, isNullable)
 
-                override fun visit(type: ArrowType.Int) = when (type.bitWidth) {
+                override fun visit(type: ArrowType.Int): Vector = when (type.bitWidth) {
                     8 -> ByteVector(al, name, isNullable)
                     16 -> ShortVector(al, name, isNullable)
                     32 -> IntVector(al, name, isNullable)
@@ -130,7 +124,7 @@ sealed class Vector : VectorReader, VectorWriter {
                     else -> error("invalid bit-width: ${type.bitWidth}")
                 }
 
-                override fun visit(type: FloatingPoint) = when (type.precision!!) {
+                override fun visit(type: FloatingPoint): Vector = when (type.precision!!) {
                     HALF -> error("half precision not supported")
                     SINGLE -> FloatVector(al, name, isNullable)
                     DOUBLE -> DoubleVector(al, name, isNullable)
@@ -147,21 +141,21 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: LargeBinary) = TODO("Not yet implemented")
                 override fun visit(type: FixedSizeBinary) = FixedSizeBinaryVector(al, name, isNullable, type.byteWidth)
 
-                override fun visit(type: Date) = when (type.unit!!) {
+                override fun visit(type: Date): Vector = when (type.unit!!) {
                     DAY -> DateDayVector(al, name, isNullable)
                     DateUnit.MILLISECOND -> DateMilliVector(al, name, isNullable)
                 }
 
-                override fun visit(type: Time) = when (type.unit!!) {
+                override fun visit(type: Time): Vector = when (type.unit!!) {
                     SECOND, MILLISECOND -> Time32Vector(al, name, isNullable, type.unit)
                     MICROSECOND, NANOSECOND -> Time64Vector(al, name, isNullable, type.unit)
                 }
 
-                override fun visit(type: Timestamp) =
+                override fun visit(type: Timestamp): Vector =
                     if (type.timezone == null) TimestampLocalVector(al, name, isNullable, type.unit)
                     else TimestampTzVector(al, name, isNullable, type.unit, ZoneId.of(type.timezone))
 
-                override fun visit(type: Interval) = when (type.unit!!) {
+                override fun visit(type: Interval): Vector = when (type.unit!!) {
                     YEAR_MONTH -> IntervalYearMonthVector(al, name, isNullable)
                     DAY_TIME -> IntervalDayTimeVector(al, name, isNullable)
                     MONTH_DAY_NANO -> IntervalMonthDayNanoVector(al, name, isNullable)
@@ -171,7 +165,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
                 override fun visit(p0: RunEndEncoded?) = TODO("Not yet implemented")
 
-                override fun visit(type: ExtensionType) = when (type) {
+                override fun visit(type: ExtensionType): Vector = when (type) {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
                     UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
                     TransitType -> TransitVector(VarBinaryVector(al, name, isNullable))

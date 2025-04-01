@@ -3,13 +3,14 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import java.nio.ByteBuffer
 
 class FixedSizeBinaryVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val byteWidth: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector() {
+) : FixedWidthVector(), MetadataFlavour.Bytes {
 
     override val type = ArrowType.FixedSizeBinary(byteWidth)
 
@@ -25,6 +26,8 @@ class FixedSizeBinaryVector private constructor(
         is ByteArray -> writeBytes(ByteBuffer.wrap(value))
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
         FixedSizeBinaryVector(name, nullable, valueCount, byteWidth, validityBuffer.openSlice(al), dataBuffer.openSlice(al))

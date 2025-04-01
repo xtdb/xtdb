@@ -4,6 +4,7 @@ import com.carrotsearch.hppc.ObjectIntHashMap
 import com.carrotsearch.hppc.ObjectIntMap
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
+import com.google.protobuf.Mixin
 import org.apache.arrow.memory.BufferAllocator
 import org.roaringbitmap.buffer.ImmutableRoaringBitmap
 import xtdb.BufferPool
@@ -11,12 +12,15 @@ import xtdb.TEMPORAL_COL_TYPE
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.log.proto.TemporalMetadata
+import xtdb.time.MICRO_HZ
 import xtdb.toLeg
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.ColumnName
 import xtdb.util.closeOnCatch
 import xtdb.util.openChildAllocator
 import java.nio.file.Path
+import kotlin.math.ceil
+import kotlin.math.floor
 
 private typealias PageIdxsMap = ObjectIntMap<PageMetadata.PageIndexKey>
 
@@ -36,8 +40,6 @@ class PageMetadata private constructor(
     companion object {
         @JvmStatic
         fun factory(al: BufferAllocator, bp: BufferPool, cacheSize: Long = 128) = Factory(al, bp, cacheSize)
-
-        private val TEMPORAL_COL_TYPE_LEG_NAME: String = TEMPORAL_COL_TYPE.toLeg()
     }
 
     val metadataLeafReader: VectorReader = rel["nodes"]["leaf"]
@@ -50,8 +52,7 @@ class PageMetadata private constructor(
             metadataLeafReader
                 .vectorForOrNull("columns")
                 ?.listElements
-                ?.vectorForOrNull("types")
-                ?.vectorForOrNull(TEMPORAL_COL_TYPE_LEG_NAME)
+                ?.vectorForOrNull("date-times")
 
         minReader = temporalColTypesReader?.vectorForOrNull("min")
         maxReader = temporalColTypesReader?.vectorForOrNull("max")
@@ -82,12 +83,12 @@ class PageMetadata private constructor(
         val validToIdx = pageIdxs[PageIndexKey("_valid_to", pageIdx)]
 
         return TemporalMetadata.newBuilder()
-            .setMinValidFrom(minReader.getLong(validFromIdx))
-            .setMaxValidFrom(maxReader.getLong(validFromIdx))
-            .setMinValidTo(minReader.getLong(validToIdx))
-            .setMaxValidTo(maxReader.getLong(validToIdx))
-            .setMinSystemFrom(minReader.getLong(systemFromIdx))
-            .setMaxSystemFrom(maxReader.getLong(systemFromIdx))
+            .setMinValidFrom(floor(minReader.getDouble(validFromIdx) * MICRO_HZ).toLong())
+            .setMaxValidFrom(ceil(maxReader.getDouble(validFromIdx) * MICRO_HZ).toLong())
+            .setMinValidTo(floor(minReader.getDouble(validToIdx) * MICRO_HZ).toLong())
+            .setMaxValidTo(ceil(maxReader.getDouble(validToIdx) * MICRO_HZ).toLong())
+            .setMinSystemFrom(floor(minReader.getDouble(systemFromIdx) * MICRO_HZ).toLong())
+            .setMaxSystemFrom(ceil(maxReader.getDouble(systemFromIdx) * MICRO_HZ).toLong())
             .build()
     }
 
@@ -103,10 +104,10 @@ class PageMetadata private constructor(
                 val pageIdxs: PageIdxsMap = ObjectIntHashMap()
                 val dataPageIdxReader = metadataReader["data-page-idx"]
 
-                val columnsReader = metadataReader["columns"]!!
+                val columnsReader = metadataReader["columns"]
                 val columnReader = columnsReader.listElements
-                val colNameReader = columnReader["col-name"]!!
-                val rootColReader = columnReader["root-col?"]!!
+                val colNameReader = columnReader["col-name"]
+                val rootColReader = columnReader["root-col?"]
 
                 val colNames = HashSet<ColumnName>()
 

@@ -16,7 +16,7 @@ import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remoteStorage
 import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
-import xtdb.arrow.I32_TYPE
+import xtdb.arrow.I32
 import xtdb.arrow.Relation
 import java.nio.file.Files.createTempDirectory
 import java.nio.file.Path
@@ -53,7 +53,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
     @Test
     fun arrowIpcTest() {
         val path = Path.of("aw")
-        val schema = Schema(listOf(Field("a", FieldType(false, I32_TYPE, null), null)))
+        val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
         Relation(allocator, schema).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]!!
@@ -75,7 +75,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
     fun bufferPoolClearsUpArrowWriterTempFiles() {
         val rootPath = remoteBufferPool.diskCache.rootPath
         val tmpDir = rootPath.resolve(".tmp")
-        val schema = Schema(listOf(Field("a", FieldType(false, I32_TYPE, null), null)))
+        val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
         Relation(allocator, schema).use { relation ->
             remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
                 val v = relation["a"]!!

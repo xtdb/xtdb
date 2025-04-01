@@ -6,13 +6,14 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 internal val NULL_TYPE = ArrowType.Null.INSTANCE
 
 class NullVector(override var name: String, override var valueCount: Int = 0) : Vector() {
-    override val children = emptyList<Vector>()
+    override val vectors = emptyList<Vector>()
 
     override var nullable: Boolean
         get() = true
@@ -33,6 +34,8 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = error("NullVector getObject0")
 
     override fun writeObject0(value: Any) = throw InvalidWriteObjectException(fieldType, value)
+
+    override val metadataFlavours get() = emptyList<MetadataFlavour>()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
 

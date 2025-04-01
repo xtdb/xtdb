@@ -5,7 +5,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.arrow.Relation
 import xtdb.types.Fields
 import xtdb.types.NamelessField
 import xtdb.types.NamelessField.Companion.nullable
@@ -86,29 +85,6 @@ object Trie {
     @JvmStatic
     fun TableName.metaFilePath(trieKey: TrieKey): Path =
         metaFileDir().resolve("$trieKey.arrow")
-
-    private val metadataField = Fields.List(
-        Fields.Struct(
-            "col-name" to Fields.UTF8,
-            "root-col?" to Fields.BOOL,
-            "count" to Fields.I64,
-            "types" to Fields.Struct(),
-            "bloom" to Fields.VAR_BINARY.nullable
-        ),
-        elName = "struct"
-    )
-
-    @JvmStatic
-    val metaRelSchema = Schema(
-        "nodes" to Fields.Union(
-            "nil" to Fields.NULL,
-            "branch-iid" to Fields.List(nullable(Fields.I32)),
-            "leaf" to Fields.Struct(
-                "data-page-idx" to Fields.I32,
-                "columns" to metadataField
-            )
-        )
-    )
 
     @JvmStatic
     fun dataRelSchema(putDocField: Field): Schema =

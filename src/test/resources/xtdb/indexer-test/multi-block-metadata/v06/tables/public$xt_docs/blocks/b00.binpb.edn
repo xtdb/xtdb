@@ -1,14 +1,14 @@
 {:row-count 6,
  :fields
  {"struct"
-  #xt.arrow/field ["struct" #xt.arrow/field-type [#xt.arrow/type :struct true] #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 true]] #xt.arrow/field ["bool" #xt.arrow/field-type [#xt.arrow/type :bool true]]] #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 true]] #xt.arrow/field ["struct" #xt.arrow/field-type [#xt.arrow/type :struct true] #xt.arrow/field ["c" #xt.arrow/field-type [#xt.arrow/type :utf8 true]] #xt.arrow/field ["d" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]]]],
+  #xt.arrow/field ["struct" #xt.arrow/field-type [#xt.arrow/type :struct true] #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["bool" #xt.arrow/field-type [#xt.arrow/type :bool false]]] #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["struct" #xt.arrow/field-type [#xt.arrow/type :struct false] #xt.arrow/field ["c" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["d" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]]]],
   "_id"
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["keyword" #xt.arrow/field-type [#xt.arrow/type :keyword false]] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]],
   "list"
   #xt.arrow/field ["list" #xt.arrow/field-type [#xt.arrow/type :list true] #xt.arrow/field ["$data$" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["f64" #xt.arrow/field-type [#xt.arrow/type :f64 false]] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["timestamp-tz-micro-utc" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]] #xt.arrow/field ["bool" #xt.arrow/field-type [#xt.arrow/type :bool false]]]]},
  :current-tries
  [{:trie-key "l00-rc-b00",
-   :data-file-size 5726,
+   :data-file-size 5734,
    :trie-metadata
    {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
     :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
@@ -21,4 +21,4 @@
  :hlls
  {"struct" [-1218887806 3.004403133222472],
   "_id" [1598563825 6.01764709272061],
-  "list" [2009768838 3.004403133222472]}}
+  "list" [2058620104 3.004403133222472]}}

@@ -10,22 +10,30 @@ abstract class Hasher {
 
     fun hash(value: Double): Int {
         doubleByteBuf.putDouble(0, value)
-        return hash(doubleByteBuf.array())
+        return hash(doubleByteBuf)
     }
 
     private val longByteBuf = ByteBuffer.allocate(Long.SIZE_BYTES)
 
     fun hash(value: Long): Int {
         longByteBuf.putLong(0, value)
-        return hash(longByteBuf.array())
+        return hash(longByteBuf)
     }
 
-    fun hash(value: ByteBuffer) = hash(value.toByteArray())
+    open fun hash(value: ByteBuffer) = hash(value.toByteArray())
 
     abstract fun hash(value: ByteArray): Int
 
     class Xx: Hasher() {
         private val hasher = XXHash32()
+
+        override fun hash(value: ByteBuffer): Int {
+            val buf = value.duplicate()
+            hasher.update(buf)
+            val res = hasher.value
+            hasher.reset()
+            return (res ushr 32).toInt() xor res.toInt()
+        }
 
         override fun hash(value: ByteArray): Int {
             hasher.update(value)

@@ -3,10 +3,11 @@ package xtdb.arrow
 import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.vector.extensions.KeywordType
 
-class KeywordVector(override val inner: Utf8Vector): ExtensionVector() {
+class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), MetadataFlavour.Bytes {
 
     override val type = KeywordType
 
@@ -18,6 +19,8 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector() {
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher) + HASH_CODE
+
+    override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = KeywordVector(inner.openSlice(al))
 

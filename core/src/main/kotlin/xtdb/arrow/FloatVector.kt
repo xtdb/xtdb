@@ -4,12 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 
 class FloatVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector() {
+) : FixedWidthVector(), MetadataFlavour.Number {
 
     override val byteWidth = Float.SIZE_BYTES
     override val type: ArrowType = MinorType.FLOAT4.type
@@ -18,13 +19,15 @@ class FloatVector private constructor(
             : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override fun getFloat(idx: Int) = getFloat0(idx)
-    override fun writeFloat(value: Float) = writeFloat0(value)
+    override fun writeFloat(v: Float) = writeFloat0(v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)
 
     override fun writeObject0(value: Any) {
         if (value is Float) writeFloat(value) else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun getMetaDouble(idx: Int) = getFloat(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())
 

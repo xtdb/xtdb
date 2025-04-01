@@ -37,7 +37,7 @@ class MapVectorTest {
         val m2 = mapOf(12 to "world")
         val m3 = mapOf(3 to "!")
 
-        val children = linkedMapOf(
+        val children = linkedMapOf<String, Vector>(
             "key" to IntVector(allocator, "key", false),
             "value" to Utf8Vector(allocator, "value", true)
         )
@@ -59,7 +59,7 @@ class MapVectorTest {
         val m2 = mapOf(12 to "world")
         val m3 = mapOf(3 to "!")
 
-        val children = linkedMapOf(
+        val children = linkedMapOf<String, Vector>(
             "key" to IntVector(allocator, "key", false),
             "value" to Utf8Vector(allocator, "value", true)
         )

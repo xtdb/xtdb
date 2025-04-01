@@ -9,22 +9,23 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.toFieldType
 import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 
-internal val LIST_TYPE = ArrowType.List.INSTANCE
+internal val LIST: ArrowType.List = ArrowType.List.INSTANCE
 
 class ListVector(
     private val allocator: BufferAllocator,
     override var name: String, override var nullable: Boolean,
     private var elVector: Vector,
     override var valueCount: Int = 0
-) : Vector() {
+) : Vector(), MetadataFlavour.List {
 
-    override val type: ArrowType = LIST_TYPE
+    override val type: ArrowType = LIST
 
-    override val children: Iterable<Vector> get() = listOf(elVector)
+    override val vectors: Iterable<Vector> get() = listOf(elVector)
 
     private val validityBuffer = ExtensibleBuffer(allocator)
     private val offsetBuffer = ExtensibleBuffer(allocator)
@@ -90,6 +91,8 @@ class ListVector(
     override fun getListCount(idx: Int) = getListEndIndex(idx) - getListStartIndex(idx)
     override fun getListStartIndex(idx: Int) = offsetBuffer.getInt(idx)
     internal fun getListEndIndex(idx: Int) = offsetBuffer.getInt(idx + 1)
+
+    override val metadataFlavours get() = listOf(this)
 
     override fun hashCode0(idx: Int, hasher: Hasher) =
         (getListStartIndex(idx) until getListEndIndex(idx)).fold(0) { hash, elIdx ->

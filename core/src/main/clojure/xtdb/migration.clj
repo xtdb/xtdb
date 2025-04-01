@@ -5,7 +5,6 @@
             [xtdb.migration.v05 :as v05]
             [xtdb.node :as xtn]
             xtdb.node.impl
-            [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            [xtdb.api.storage Storage Storage$Factory]
