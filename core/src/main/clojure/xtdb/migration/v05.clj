@@ -15,6 +15,7 @@
            (org.apache.arrow.vector.ipc ArrowFileReader)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow VectorReader Relation)
+           xtdb.api.query.IKeyFn
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
            (xtdb.indexer HllCalculator TrieMetadataCalculator)
@@ -90,7 +91,17 @@
                       table-cat :xtdb/table-catalog
                       ^TrieCatalog trie-cat :xtdb/trie-catalog
                       :as system}]
-  (let [chunk-meta-objs (.listAllObjects src (util/->path "chunk-metadata"))]
+  (let [chunk-meta-objs (.listAllObjects src (util/->path "chunk-metadata"))
+        tables-by-chunk (->> (.listAllObjects src (util/->path "tables"))
+                             (sequence (comp (map (comp :key os/<-StoredObject))
+                                             (filter (fn [^Path key]
+                                                       (= "data" (str (.getName key 2)))))
+                                             (keep (fn [^Path key]
+                                                     (when-let [[_ chunk-idx] (re-find #"^log-l00-fr(\p{XDigit}*)-" (str (.getFileName key)))]
+                                                       {:table-name (str (symbol (.denormalize (serde/read-key-fn :snake-case-keyword) (str (second key)))))
+                                                        :trie-key (second (re-matches #"(.+)\.arrow" (str (.getFileName key))))
+                                                        :chunk-idx chunk-idx})))))
+                             (group-by :chunk-idx))]
     (log/infof "%d blocks to migrate..." (count (seq chunk-meta-objs)))
     (dorun
      (->> chunk-meta-objs
@@ -100,18 +111,13 @@
 
                          (let [{obj-key :key} (os/<-StoredObject obj)
                                [_ chunk-idx-hex] (re-matches #"chunk-metadata/(\p{XDigit}+)\.transit\.json" (str obj-key))
-                               {:keys [tables latest-completed-tx next-chunk-idx]} (-> (.getByteArray src obj-key)
-                                                                                       (serde/read-transit :json))
-                               table-res (->> (for [[table-name {:keys [row-count]}] tables
-                                                    :let [old-trie-key (format "log-l00-fr%s-nr%s-rs%s"
-                                                                               chunk-idx-hex
-                                                                               (util/->lex-hex-string next-chunk-idx)
-                                                                               (Long/toString row-count 16))
-                                                          new-trie-key (trie/->l0-trie-key block-idx)]]
+                               {:keys [latest-completed-tx]} (-> (.getByteArray src obj-key)
+                                                                 (serde/read-transit :json))
+                               table-res (->> (for [{:keys [table-name], old-trie-key :trie-key} (get tables-by-chunk chunk-idx-hex)
+                                                    :let [new-trie-key (trie/->l0-trie-key block-idx)]]
                                                 (do
                                                   (log/debugf "Copying '%s' '%s' -> '%s'" table-name old-trie-key new-trie-key)
                                                   (let [data-buf (migrate-trie! system table-name old-trie-key new-trie-key)]
-                                                    (assert data-buf)
                                                     [table-name (into {:trie-key new-trie-key} (trie-details system data-buf))])))
                                               (into {}))]
 
