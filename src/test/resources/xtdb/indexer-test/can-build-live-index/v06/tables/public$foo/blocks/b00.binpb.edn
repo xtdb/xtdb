@@ -17,7 +17,7 @@
     :min-system-from #xt/instant "2020-01-04T00:00:00Z",
     :max-system-from #xt/instant "2020-01-05T00:00:00Z",
     :row-count 5,
-    :iid-bloom [162137049 6]}}],
+    :iid-bloom [1320799995 10]}}],
  :hlls
  {"toto" [1434733157 2.001955671862574],
   "bar" [-179776705 2.001955671862574],

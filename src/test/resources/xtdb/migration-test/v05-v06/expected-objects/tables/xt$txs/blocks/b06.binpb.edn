@@ -19,7 +19,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 1,
-    :iid-bloom [1389084985 3]}}
+    :iid-bloom [341758827 5]}}
   {:trie-key "l00-rc-b01",
    :data-file-size 2870,
    :trie-metadata
@@ -30,7 +30,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T12:00:00Z",
     :row-count 2,
-    :iid-bloom [-826872034 6]}}
+    :iid-bloom [-796895869 10]}}
   {:trie-key "l00-rc-b02",
    :data-file-size 2870,
    :trie-metadata
@@ -41,7 +41,7 @@
     :min-system-from #xt/instant "2020-01-01T12:00:00Z",
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
     :row-count 2,
-    :iid-bloom [803609918 6]}}
+    :iid-bloom [-813235581 10]}}
   {:trie-key "l00-rc-b03",
    :data-file-size 2870,
    :trie-metadata
@@ -52,7 +52,7 @@
     :min-system-from #xt/instant "2020-01-02T00:00:00Z",
     :max-system-from #xt/instant "2020-01-02T12:00:00Z",
     :row-count 2,
-    :iid-bloom [436797735 6]}}
+    :iid-bloom [1259882244 10]}}
   {:trie-key "l00-rc-b04",
    :data-file-size 2870,
    :trie-metadata
@@ -63,7 +63,7 @@
     :min-system-from #xt/instant "2020-01-02T12:00:00Z",
     :max-system-from #xt/instant "2020-01-03T00:00:00Z",
     :row-count 2,
-    :iid-bloom [517318581 6]}}
+    :iid-bloom [1124042869 10]}}
   {:trie-key "l00-rc-b05",
    :data-file-size 2870,
    :trie-metadata
@@ -74,7 +74,7 @@
     :min-system-from #xt/instant "2020-01-03T00:00:00Z",
     :max-system-from #xt/instant "2020-01-03T12:00:00Z",
     :row-count 2,
-    :iid-bloom [2064749606 6]}}
+    :iid-bloom [-1106918501 10]}}
   {:trie-key "l00-rc-b06",
    :data-file-size 2870,
    :trie-metadata
@@ -85,7 +85,7 @@
     :min-system-from #xt/instant "2020-01-03T12:00:00Z",
     :max-system-from #xt/instant "2020-01-04T00:00:00Z",
     :row-count 2,
-    :iid-bloom [-1865929513 6]}}],
+    :iid-bloom [383058445 10]}}],
  :hlls
  {"system_time" [-1065983606 7.024035380114639],
   "committed" [554809535 1.0004885993744506],

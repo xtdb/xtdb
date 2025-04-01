@@ -15,7 +15,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 64,
-    :iid-bloom [1169551147 192]}}],
+    :iid-bloom [-1915643088 320]}}],
  :hlls
  {"price" [75145568 1.0004885993744506],
   "_id" [907057289 65.02133414826055]}}

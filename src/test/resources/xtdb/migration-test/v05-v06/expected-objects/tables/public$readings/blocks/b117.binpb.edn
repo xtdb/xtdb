@@ -15,7 +15,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 64,
-    :iid-bloom [1169551147 192]}}
+    :iid-bloom [-1915643088 320]}}
   {:trie-key "l00-rc-b01",
    :data-file-size 8238,
    :trie-metadata
@@ -26,7 +26,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b02",
    :data-file-size 8238,
    :trie-metadata
@@ -37,7 +37,7 @@
     :min-system-from #xt/instant "2020-01-01T12:00:00Z",
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b03",
    :data-file-size 8238,
    :trie-metadata
@@ -48,7 +48,7 @@
     :min-system-from #xt/instant "2020-01-02T00:00:00Z",
     :max-system-from #xt/instant "2020-01-02T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b04",
    :data-file-size 8238,
    :trie-metadata
@@ -59,7 +59,7 @@
     :min-system-from #xt/instant "2020-01-02T12:00:00Z",
     :max-system-from #xt/instant "2020-01-03T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b05",
    :data-file-size 8238,
    :trie-metadata
@@ -70,7 +70,7 @@
     :min-system-from #xt/instant "2020-01-03T00:00:00Z",
     :max-system-from #xt/instant "2020-01-03T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b06",
    :data-file-size 8238,
    :trie-metadata
@@ -81,7 +81,7 @@
     :min-system-from #xt/instant "2020-01-03T12:00:00Z",
     :max-system-from #xt/instant "2020-01-04T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b07",
    :data-file-size 8238,
    :trie-metadata
@@ -92,7 +92,7 @@
     :min-system-from #xt/instant "2020-01-04T00:00:00Z",
     :max-system-from #xt/instant "2020-01-04T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b08",
    :data-file-size 8238,
    :trie-metadata
@@ -103,7 +103,7 @@
     :min-system-from #xt/instant "2020-01-04T12:00:00Z",
     :max-system-from #xt/instant "2020-01-05T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b09",
    :data-file-size 8238,
    :trie-metadata
@@ -114,7 +114,7 @@
     :min-system-from #xt/instant "2020-01-05T00:00:00Z",
     :max-system-from #xt/instant "2020-01-05T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b0a",
    :data-file-size 8238,
    :trie-metadata
@@ -125,7 +125,7 @@
     :min-system-from #xt/instant "2020-01-05T12:00:00Z",
     :max-system-from #xt/instant "2020-01-06T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b0b",
    :data-file-size 8238,
    :trie-metadata
@@ -136,7 +136,7 @@
     :min-system-from #xt/instant "2020-01-06T00:00:00Z",
     :max-system-from #xt/instant "2020-01-06T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b0c",
    :data-file-size 8238,
    :trie-metadata
@@ -147,7 +147,7 @@
     :min-system-from #xt/instant "2020-01-06T12:00:00Z",
     :max-system-from #xt/instant "2020-01-07T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b0d",
    :data-file-size 8238,
    :trie-metadata
@@ -158,7 +158,7 @@
     :min-system-from #xt/instant "2020-01-07T00:00:00Z",
     :max-system-from #xt/instant "2020-01-07T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b0e",
    :data-file-size 8238,
    :trie-metadata
@@ -169,7 +169,7 @@
     :min-system-from #xt/instant "2020-01-07T12:00:00Z",
     :max-system-from #xt/instant "2020-01-08T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b0f",
    :data-file-size 8238,
    :trie-metadata
@@ -180,7 +180,7 @@
     :min-system-from #xt/instant "2020-01-08T00:00:00Z",
     :max-system-from #xt/instant "2020-01-08T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b110",
    :data-file-size 8238,
    :trie-metadata
@@ -191,7 +191,7 @@
     :min-system-from #xt/instant "2020-01-08T12:00:00Z",
     :max-system-from #xt/instant "2020-01-09T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b111",
    :data-file-size 8238,
    :trie-metadata
@@ -202,7 +202,7 @@
     :min-system-from #xt/instant "2020-01-09T00:00:00Z",
     :max-system-from #xt/instant "2020-01-09T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b112",
    :data-file-size 8238,
    :trie-metadata
@@ -213,7 +213,7 @@
     :min-system-from #xt/instant "2020-01-09T12:00:00Z",
     :max-system-from #xt/instant "2020-01-10T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b113",
    :data-file-size 8238,
    :trie-metadata
@@ -224,7 +224,7 @@
     :min-system-from #xt/instant "2020-01-10T00:00:00Z",
     :max-system-from #xt/instant "2020-01-10T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b114",
    :data-file-size 8238,
    :trie-metadata
@@ -235,7 +235,7 @@
     :min-system-from #xt/instant "2020-01-10T12:00:00Z",
     :max-system-from #xt/instant "2020-01-11T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b115",
    :data-file-size 8238,
    :trie-metadata
@@ -246,7 +246,7 @@
     :min-system-from #xt/instant "2020-01-11T00:00:00Z",
     :max-system-from #xt/instant "2020-01-11T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b116",
    :data-file-size 8238,
    :trie-metadata
@@ -257,7 +257,7 @@
     :min-system-from #xt/instant "2020-01-11T12:00:00Z",
     :max-system-from #xt/instant "2020-01-12T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b117",
    :data-file-size 8238,
    :trie-metadata
@@ -268,7 +268,7 @@
     :min-system-from #xt/instant "2020-01-12T00:00:00Z",
     :max-system-from #xt/instant "2020-01-12T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}],
+    :iid-bloom [1761496765 500]}}],
  :hlls
  {"reading" [831086491 24.28572325613165],
   "_id" [399599247 104.11834172111658]}}

@@ -11,8 +11,8 @@ import xtdb.util.Hasher
 import java.nio.ByteBuffer
 import java.nio.ByteOrder.LITTLE_ENDIAN
 
-const val BLOOM_BITS = 24
-const val BLOOM_K = 3
+const val BLOOM_BITS = 22
+const val BLOOM_K = 5
 
 typealias BloomFilter = ImmutableBitmapDataProvider
 

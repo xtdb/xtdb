@@ -15,7 +15,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-03T00:00:00Z",
     :row-count 4,
-    :iid-bloom [-653307580 6]}}],
+    :iid-bloom [-1757454886 10]}}],
  :hlls
  {"_id" [212234365 2.001955671862574],
   "month" [-382446723 1.0004885993744506]}}

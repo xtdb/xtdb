@@ -15,7 +15,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 64,
-    :iid-bloom [1169551147 192]}}
+    :iid-bloom [-1915643088 320]}}
   {:trie-key "l00-rc-b01",
    :data-file-size 8238,
    :trie-metadata
@@ -26,7 +26,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b02",
    :data-file-size 8238,
    :trie-metadata
@@ -37,7 +37,7 @@
     :min-system-from #xt/instant "2020-01-01T12:00:00Z",
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b03",
    :data-file-size 8238,
    :trie-metadata
@@ -48,7 +48,7 @@
     :min-system-from #xt/instant "2020-01-02T00:00:00Z",
     :max-system-from #xt/instant "2020-01-02T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b04",
    :data-file-size 8238,
    :trie-metadata
@@ -59,7 +59,7 @@
     :min-system-from #xt/instant "2020-01-02T12:00:00Z",
     :max-system-from #xt/instant "2020-01-03T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b05",
    :data-file-size 8238,
    :trie-metadata
@@ -70,7 +70,7 @@
     :min-system-from #xt/instant "2020-01-03T00:00:00Z",
     :max-system-from #xt/instant "2020-01-03T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b06",
    :data-file-size 8238,
    :trie-metadata
@@ -81,7 +81,7 @@
     :min-system-from #xt/instant "2020-01-03T12:00:00Z",
     :max-system-from #xt/instant "2020-01-04T00:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}
+    :iid-bloom [1761496765 500]}}
   {:trie-key "l00-rc-b07",
    :data-file-size 8238,
    :trie-metadata
@@ -92,7 +92,7 @@
     :min-system-from #xt/instant "2020-01-04T00:00:00Z",
     :max-system-from #xt/instant "2020-01-04T12:00:00Z",
     :row-count 100,
-    :iid-bloom [786095972 300]}}],
+    :iid-bloom [1761496765 500]}}],
  :hlls
  {"reading" [1630254453 8.0314137200905],
   "_id" [399599247 104.11834172111658]}}

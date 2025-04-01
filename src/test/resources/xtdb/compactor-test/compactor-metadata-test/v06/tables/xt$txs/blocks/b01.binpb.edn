@@ -20,7 +20,7 @@
     :min-system-from #xt/instant "2020-01-02T00:00:00Z",
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
     :row-count 1,
-    :iid-bloom [1654233367 3]}}
+    :iid-bloom [-1571953816 5]}}
   {:trie-key "l01-rc-b00",
    :data-file-size 2806,
    :trie-metadata
@@ -31,9 +31,9 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 1,
-    :iid-bloom [1389084985 3]}}],
+    :iid-bloom [341758827 5]}}],
  :hlls
  {"system_time" [2144534777 2.001955671862574],
   "committed" [554809535 1.0004885993744506],
-  "_id" [-12027457 2.001955671862574],
+  "_id" [-1796981540 2.001955671862574],
   "error" [1743287434 1.0004885993744506]}}

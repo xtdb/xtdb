@@ -19,7 +19,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-03T00:00:00Z",
     :row-count 3,
-    :iid-bloom [-420547808 9]}}],
+    :iid-bloom [152176458 15]}}],
  :hlls
  {"system_time" [-1544051178 3.004403133222472],
   "committed" [-1112647138 2.001955671862574],

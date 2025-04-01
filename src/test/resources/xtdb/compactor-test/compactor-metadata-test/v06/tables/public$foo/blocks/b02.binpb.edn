@@ -15,7 +15,7 @@
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 1,
-    :iid-bloom [-1917926025 3]}}
+    :iid-bloom [-2050569905 5]}}
   {:trie-key "l01-rc-b00", :data-file-size 1382, :trie-metadata nil}
   {:trie-key "l01-r20160104-b01",
    :data-file-size 1966,
@@ -27,6 +27,6 @@
     :min-system-from #xt/instant "2020-01-02T00:00:00Z",
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
     :row-count 1,
-    :iid-bloom [643688428 3]}}
+    :iid-bloom [314116840 5]}}
   {:trie-key "l01-rc-b01", :data-file-size 1382, :trie-metadata nil}],
  :hlls {"_id" [-179776705 2.001955671862574]}}
