@@ -7,6 +7,7 @@ import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.BitVector;
 import org.apache.arrow.vector.DateDayVector;
 import org.apache.arrow.vector.DateMilliVector;
+import org.apache.arrow.vector.DecimalVector;
 import org.apache.arrow.vector.DurationVector;
 import org.apache.arrow.vector.FixedSizeBinaryVector;
 import org.apache.arrow.vector.IntVector;
@@ -40,6 +41,7 @@ import xtdb.vector.extensions.TransitVector;
 import xtdb.vector.extensions.TsTzRangeVector;
 import xtdb.vector.extensions.UuidVector;
 
+import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -440,6 +442,32 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             public int hashCode0(int idx, Hasher hasher) {
                 return hasher.hash(v.get(idx));
+            }
+        };
+    }
+
+    public static IVectorReader decimalVector(DecimalVector v) {
+        return new ValueVectorReader(v) {
+            @Override
+            public BigDecimal getObject(int idx) {
+                return v.getObject(idx);
+            }
+            @Override
+            public int hashCode0(int idx, Hasher hasher) {
+                return hasher.hash(v.getObject(idx).doubleValue());
+            }
+        };
+    }
+
+    public static IVectorReader decimal256Vector(Decimal256Vector v) {
+        return new ValueVectorReader(v) {
+            @Override
+            public BigDecimal getObject(int idx) {
+                return v.getObject(idx);
+            }
+            @Override
+            public int hashCode0(int idx, Hasher hasher) {
+                return hasher.hash(v.getObject(idx).doubleValue());
             }
         };
     }

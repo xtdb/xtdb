@@ -5,6 +5,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.BitVectorHelper
+import org.apache.arrow.vector.util.DecimalUtility
+import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
 
@@ -125,6 +127,15 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
         buf.setBytes(writerIndex, src.buf, start, len)
         buf.writerIndex(writerIndex + len)
     }
+
+    fun writeBigDecimal(value: BigDecimal, byteWidth: Int) {
+        ensureWritable(byteWidth.toLong())
+        DecimalUtility.writeBigDecimalToArrowBuf(value, buf, (buf.writerIndex() / byteWidth).toInt(), byteWidth)
+        buf.writerIndex(buf.writerIndex() + byteWidth)
+    }
+
+    fun readBigDecimal(idx: Int, scale: Int, byteWidth: Int) =
+        DecimalUtility.getBigDecimalFromArrowBuf(buf, idx, scale, byteWidth)
 
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
         (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }

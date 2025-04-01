@@ -29,7 +29,7 @@
                                        #xt.arrow/type :i64
                                        ;; #xt.arrow/type :f32
                                        #xt.arrow/type :f64
-                                       #xt.arrow/type :decimal
+                                       #xt.arrow/type [:decimal 32 1 128]
                                        #xt.arrow/type :utf8
                                        #xt.arrow/type :varbinary
                                        #xt.arrow/type :keyword
@@ -104,7 +104,7 @@
                   #xt.arrow/type :i64 i62-gen
                   ;; #xt.arrow/type :f32 (throw (UnsupportedOperationException.))
                   #xt.arrow/type :f64 (gen/double* {:NaN? false})
-                  #xt.arrow/type :decimal decimal-gen
+                  #xt.arrow/type [:decimal 32 1 128] decimal-gen
                   #xt.arrow/type :utf8 gen/string
                   #xt.arrow/type :varbinary (gen/let [bs gen/bytes] (ByteBuffer/wrap bs))
                   #xt.arrow/type :keyword (gen/one-of [gen/keyword gen/keyword-ns])

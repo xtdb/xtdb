@@ -1,6 +1,5 @@
 package xtdb.arrow
 
-import com.google.protobuf.struct
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -8,7 +7,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.SequencedMap
 
 class DenseUnionVectorTest {
     private lateinit var allocator: BufferAllocator

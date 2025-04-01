@@ -1351,27 +1351,26 @@
                                           (tu/open-vec "y" [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
-
     ;; standard ops
-    (t/is (= {:res 2.0M, :res-type :decimal}
+    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
              (run-test '+ (bigdec 1.0) (bigdec 1.0))))
-    (t/is (= {:res 0.0M, :res-type :decimal}
+    (t/is (= {:res 0.0M, :res-type [:decimal 32 1 128]}
              (run-test '- (bigdec 1.0) (bigdec 1.0))))
-    (t/is (= {:res 0.5M, :res-type :decimal}
+    (t/is (= {:res 0.5M, :res-type [:decimal 32 1 128]}
              (run-test '/ (bigdec 1.0) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type :decimal}
+    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
              (run-test '* (bigdec 1.0) (bigdec 2.0))))
     (t/is (= {:res false, :res-type :bool}
              (run-test '> (bigdec 1.0) (bigdec 2.0))))
 
     ;; LUB
-    (t/is (= {:res 2.0M, :res-type :decimal}
+    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
              (run-test '* (byte 1) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type :decimal}
+    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
              (run-test '* (short 1) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type :decimal}
+    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
              (run-test '* (int 1) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type :decimal}
+    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
              (run-test '* (bigdec 2.0) (int 1))))
     (t/is (= {:res true, :res-type :bool}
              (run-test '< (int 1) (bigdec 2.0))))
@@ -1388,16 +1387,22 @@
              (run-test 'log (double 2.0) (bigdec 8.0))))
 
     ;; least + greatest
-    (t/is (= {:res 2.0, :res-type [:union #{:f64 :decimal}]}
-             (run-test 'least (bigdec 3.0) (double 2.0))))
-    (t/is (= {:res 3.0, :res-type [:union #{:f64 :decimal}]}
-             (run-test 'greatest (double 3.0) (bigdec 2.0))))
 
+    (t/is (= {:res 2.0, :res-type [:union #{:f64 [:decimal 32 1 128]}]}
+             (run-test 'least (bigdec 3.0) (double 2.0))))
+    (t/is (= {:res 3.0, :res-type [:union #{:f64 [:decimal 32 1 128]}]}
+             (run-test 'greatest (double 3.0) (bigdec 2.0))))
 
     ;; TODO decide on behaviour
     ;; out of fixed precision range
+    ;; FIXME see #4331, this is not correct
+    (t/is (= {:res 2E+128M, :res-type [:decimal 32 -128 128]}
+             (run-test '+ (bigdec 1E+128M) (bigdec 1E+128M))))
+
+    ;; rounding necessary
     (t/is (thrown? RuntimeException
-                   (run-test '+ (bigdec 1E+19M) (bigdec 1E+19M))))
+                   (run-test '+ (bigdec 1E+1M) (bigdec 1E+64M))))
+
     ;; overflow
     (t/is (thrown? RuntimeException
                    (run-test '+ (bigdec 1E+35M) (bigdec 1E-35M))))

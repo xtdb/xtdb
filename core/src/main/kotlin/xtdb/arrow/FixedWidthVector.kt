@@ -37,7 +37,7 @@ sealed class FixedWidthVector : Vector() {
         writeUndefined()
     }
 
-    private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
+    protected fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
 
     protected fun getByte0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")

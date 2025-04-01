@@ -909,11 +909,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
               (reset! !skiptxid tx-id))
             (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]]))
-          
+
           (t/testing "Can query three back out"
             (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs")))))))
-      
+
       (t/testing "node with txs to skip"
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                           :storage [:local {:path (str path "/storage")}]
@@ -921,10 +921,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (t/testing "Can query two back out - skipped one"
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs")))))
-          
+
           ;; Call finish-block! to write files
           (tu/finish-block! node)))
-      
+
       (t/testing "node can remove 'txs to skip' after block finished"
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                           :storage [:local {:path (str path "/storage")}]})]
@@ -954,8 +954,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                           :compactor {:threads 0}})]
           (t/testing "Can query one back out - skipped one"
             (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
-          
-          (t/testing "Latest submitted tx id should be the one that was skipped" 
+
+          (t/testing "Latest submitted tx id should be the one that was skipped"
             (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node))))))
 
           ;; Call finish-block! to write files
@@ -965,10 +965,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                           :storage [:local {:path (str path "/storage")}]
                                           :compactor {:threads 0}})]
-          
-          (t/testing "Latest submitted tx id should still be the one that was skipped" 
+
+          (t/testing "Latest submitted tx id should still be the one that was skipped"
             (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node))))))
-          
+
           (t/testing "Can send a new transaction after skipping one"
             (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
@@ -1119,3 +1119,27 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               [:scan {:table public/xt_docs} [_id {col (= col 3)}]]
               [:scan {:table public/xt_docs} [_id col]]]
             {:node tu/*node*}))))
+
+(deftest test-decimal-support
+  ;; different precisions same transactions
+  (xt/execute-tx tu/*node* [[:put-docs :table
+                             {:xt/id 1 :data 0.1M}
+                             {:xt/id 2 :data 24580955505371094.000001M}]])
+  (xt/execute-tx tu/*node* [[:put-docs :table {:xt/id 3 :data 1000000000000000000000000000000000000000000000000M}]])
+  ;; different bitwidth
+  (xt/execute-tx tu/*node* [[:put-docs :table
+                             {:xt/id 4 :data (/ 1.0 1000000000000000000000000000000000000M)}
+                             {:xt/id 5 :data 61954235709850086879078532699846656405640394575840079131296.39935M}]])
+
+  (let [res [{:xt/id 1, :data 0.1M}
+             {:xt/id 2, :data 24580955505371094.000001M}
+             {:xt/id 3 :data 1000000000000000000000000000000000000000000000000M}
+             {:xt/id 4 :data (/ 1.0 1000000000000000000000000000000000000M)}
+             {:xt/id 5 :data 61954235709850086879078532699846656405640394575840079131296.39935M}]]
+
+    (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))
+
+    (tu/finish-block! tu/*node*)
+    (c/compact-all! tu/*node* nil)
+
+    (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))))

@@ -130,7 +130,7 @@ sealed class Vector : VectorReader, VectorWriter {
                     DOUBLE -> DoubleVector(al, name, isNullable)
                 }
 
-                override fun visit(type: Decimal) = TODO("Not yet implemented")
+                override fun visit(type: Decimal) = DecimalVector(al, name, isNullable, type)
 
                 override fun visit(type: Utf8) = Utf8Vector(al, name, isNullable)
                 override fun visit(type: Utf8View) = TODO("Not yet implemented")
