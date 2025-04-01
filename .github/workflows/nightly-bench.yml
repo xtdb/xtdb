@@ -11,6 +11,7 @@ env:
 
 jobs:
   nightly-benchmark:
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'xtdb/xtdb'
     runs-on: ubuntu-latest
 
     steps:
