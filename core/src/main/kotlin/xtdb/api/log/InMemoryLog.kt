@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.future
+import kotlinx.coroutines.selects.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -25,6 +26,7 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
     }
 
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val subscriberScope = scope + SupervisorJob(scope.coroutineContext.job)
 
     internal data class NewMessage(
         val message: Message,
@@ -32,25 +34,21 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
     )
 
     private val appendCh: Channel<NewMessage> = Channel(100)
-    private val committedCh = MutableSharedFlow<Record>(extraBufferCapacity = 100)
+    private val committedCh = appendCh.receiveAsFlow()
+        .map { (message, onCommit) ->
+            // we only use the instantSource for Tx messages so that the tests
+            // that check files can be deterministic
+            val ts = if (message is Message.Tx) instantSource.instant() else Instant.now()
+
+            val record = Record(++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
+            onCommit.complete(record.logOffset)
+            record
+        }
+        .shareIn(scope, SharingStarted.Eagerly)
 
     @Volatile
     override var latestSubmittedOffset: LogOffset = -1
         private set
-
-    init {
-        scope.launch {
-            for ((message, onCommit) in appendCh) {
-                // we only use the instantSource for Tx messages so that the tests
-                // that check files can be deterministic
-                val ts = if (message is Message.Tx) instantSource.instant() else Instant.now()
-
-                val record = Record(++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
-                onCommit.complete(record.logOffset)
-                committedCh.emit(record)
-            }
-        }
-    }
 
     override fun appendMessage(message: Message) =
         scope.future {
@@ -60,28 +58,28 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
         }
 
     override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
-        val job = scope.launch(SupervisorJob()) {
+        val job = subscriberScope.launch {
             var latestCompletedOffset = latestProcessedOffset
-
-            val ch = Channel<Record>(100)
-
-            committedCh
-                .onEach {
+            val ch = committedCh
+                .filter {
                     val logOffset = it.logOffset
                     check(logOffset <= latestCompletedOffset + 1) {
                         "InMemoryLog emitted out-of-order record (expected ${latestCompletedOffset + 1}, got $logOffset)"
                     }
-                    if (logOffset > latestCompletedOffset) {
-                        latestCompletedOffset = logOffset
-                        ch.send(it)
-                    }
+                    logOffset > latestCompletedOffset
                 }
-                .onCompletion { ch.close() }
-                .launchIn(this)
+                .onEach { latestCompletedOffset = it.logOffset }
+                .buffer(100)
+                .produceIn(this)
 
-            while (true) {
-                val msg = withTimeoutOrNull(1.minutes) { ch.receive() }
-                runInterruptible { subscriber.processRecords(listOfNotNull(msg)) }
+            while (isActive) {
+                val records: List<Record> = select {
+                    ch.onReceiveCatching { if (it.isClosed) null else listOf(it.getOrThrow()) }
+
+                    @OptIn(ExperimentalCoroutinesApi::class)
+                    onTimeout(1.minutes) { emptyList() }
+                } ?: break
+                runInterruptible { subscriber.processRecords(records) }
             }
         }
 
