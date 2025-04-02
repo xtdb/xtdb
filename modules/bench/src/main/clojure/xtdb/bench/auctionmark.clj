@@ -54,7 +54,7 @@
 
   The benchmark randomly selects id from a pool of region ids as an input for u_r_id parameter using flat distribution."
   [worker]
-  (xt/execute-tx (:sut worker) [[:put-docs :user (generate-user worker)]]))
+  (xt/execute-tx (:node worker) [[:put-docs :user (generate-user worker)]]))
 
 (defn- sample-category-id [worker]
   (if-some [weighting (::category-weighting (:custom-state worker))]
@@ -74,7 +74,7 @@
   After these records are inserted, the transaction then updates the USER record to add the listing fee to the seller’s balance.
 
   The benchmark randomly selects id from a pool of users as an input for u_id parameter using Gaussian distribution. A c_id parameter is randomly selected using a flat histogram from the real auction site’s item category statistic."
-  [{:keys [sut] :as worker}]
+  [{:keys [node] :as worker}]
   (let [^UUID u_id (b/sample-gaussian worker user-id)
         i_id-raw (b/increment worker item-id)
         i_id_high_bits (.getMostSignificantBits u_id)
@@ -96,13 +96,13 @@
                res []]
           (if (and gag-id gav-id)
             (let [{:keys [gag_name gav_name]}
-                  (first (xt/q sut
+                  (first (xt/q node
                                "SELECT gag.gag_name, gav.gav_name, gag.gag_c_id FROM gag, gav
                                    WHERE gav._id = ? AND gag._id = ? AND gav.gav_gag_id = gag._id"
                                {:args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
               (recur gag-ids gav-ids (into res [gag_name gav_name])))
             (str description " " (str/join " " res))))]
-    (xt/execute-tx sut (concat
+    (xt/execute-tx node (concat
                         [[:put-docs :item
                           {:xt/id i_id
                            :i_id i_id
@@ -148,20 +148,20 @@
        :new_bid_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-bid-id))
        :now (b/current-timestamp worker)})))
 
-(defn proc-new-bid [{:keys [sut] :as worker}]
+(defn proc-new-bid [{:keys [node] :as worker}]
   (let [{:keys [^UUID i_id u_id i_buyer_id bid max_bid ^UUID new_bid_id now]} (generate-new-bid-params worker)]
     (when (and i_id u_id)
       (let [{:keys [imb, imb_ib_id] :as _res} (first
-                                               (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ?"
+                                               (xt/q node "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ?"
                                                      {:args [i_id], :key-fn :snake-case-keyword}))
             {:keys [curr_bid, curr_max]} (first
-                                          (xt/q sut "SELECT ib.ib_bid AS curr_bid, ib.ib_max_bid AS curr_max FROM item_bid AS ib WHERE ib._id = ?"
+                                          (xt/q node "SELECT ib.ib_bid AS curr_bid, ib.ib_max_bid AS curr_max FROM item_bid AS ib WHERE ib._id = ?"
                                                 {:args [imb_ib_id], :key-fn :snake-case-keyword}))
             new_bid_win (or (nil? imb_ib_id) (< curr_max max_bid))
             new_bid (if (and new_bid_win curr_max (< bid curr_max)) curr_max bid)
             upd_curr_bid (and curr_bid (not new_bid_win) (< curr_bid bid))]
 
-        (xt/execute-tx sut
+        (xt/execute-tx node
                        ;; increment number of bids on item
                        (cond-> [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item._id = ?" [i_id]]]
 
@@ -206,7 +206,7 @@
 (defn random-custom-state [worker keyspace]
   (b/random-nth worker (-> worker :custom-state keyspace)))
 
-(defn proc-new-comment [{:keys [sut] :as worker}]
+(defn proc-new-comment [{:keys [node] :as worker}]
   ;; TODO this is normally queried from closed items
   (let [{:keys [^UUID i_id] seller_id :i_u_id} (random-item worker :status :open)
         buyer_id (b/sample-flat worker user-id)
@@ -214,51 +214,51 @@
         question (b/random-str worker)
         ic_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-comment-id))
         ;; TODO move into INSERT STATEMENT see #3325
-        #_#_new-item-comment-id (-> (xt/q sut "SELECT COALESCE(MAX(ic.ic_id) + 1, 0) AS new_item_comment_id FROM item_comment AS ic"
+        #_#_new-item-comment-id (-> (xt/q node "SELECT COALESCE(MAX(ic.ic_id) + 1, 0) AS new_item_comment_id FROM item_comment AS ic"
                                           {:key-fn :snake-case-keyword})
                                     first
                                     :new_item_comment_id
                                     item-comment-id)]
     (conj-custom-state! worker :item-comment-ids ic_id)
-    (xt/execute-tx sut [[:sql "INSERT INTO item_comment (_id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
+    (xt/execute-tx node [[:sql "INSERT INTO item_comment (_id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
                                VALUES (?, ?, ?, ?, ?, ?, ?)"
                          [ic_id ic_id i_id seller_id buyer_id now question]]])))
 
-(defn proc-new-comment-response [{:keys [sut] :as worker}]
+(defn proc-new-comment-response [{:keys [node] :as worker}]
   ;; TODO the sampling with UUID parent -> child key space partitioning is a mess
   (let [ic_id (random-custom-state worker :item-comment-ids) #_(b/sample-flat worker item-comment-id)
         comment (b/random-str worker)
         ;; TODO should probably be moved to the sampling logic
-        {item_id :ic_i_id seller_id :ic_u_id} (first (xt/q sut "SELECT * FROM item_comment AS ic WHERE ic._id = ?"
+        {item_id :ic_i_id seller_id :ic_u_id} (first (xt/q node "SELECT * FROM item_comment AS ic WHERE ic._id = ?"
                                                            {:args [ic_id]
                                                             :key-fn :snake-case-keyword}))]
     (when ic_id
-      (xt/execute-tx sut [[:sql "UPDATE item_comment AS ic SET ic_response = ?
+      (xt/execute-tx node [[:sql "UPDATE item_comment AS ic SET ic_response = ?
                                WHERE ic._id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
                            [comment ic_id item_id seller_id]]]))))
 
-(defn proc-new-purchase [{:keys [sut] :as worker}]
+(defn proc-new-purchase [{:keys [node] :as worker}]
   (let [{:keys [^UUID i_id i_u_id]} (random-item worker :status :waiting-for-purchase)
         ;; TODO buyer_id should be used for validation
         {buyer_id :imb_ib_u_id, bid_id :imb_ib_id} (first
-                                                    (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
+                                                    (xt/q node "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
                                                           {:args [i_id i_u_id] :key-fn :snake-case-keyword}))
         ip_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-purchase-id))
         now (b/current-timestamp worker)]
     ;; TODO properly test with imb
     (when (and i_id i_u_id #_ buyer_id)
-      (xt/execute-tx sut [[:sql "INSERT INTO item_purchase (_id, ip_id, ip_ib_id, ip_ib_i_id, ip_ib_u_id, ip_date)
+      (xt/execute-tx node [[:sql "INSERT INTO item_purchase (_id, ip_id, ip_ib_id, ip_ib_i_id, ip_ib_u_id, ip_date)
                                  VALUES(?, ?, ?, ?, ?, ?)"
                            [ip_id ip_id bid_id i_id i_u_id now]]
                           [:sql "UPDATE item SET i_status = ?
                                  WHERE item._id = ?"
                            [:closed i_id]]]))))
 
-(defn proc-new-feedback [{:keys [sut] :as worker}]
+(defn proc-new-feedback [{:keys [node] :as worker}]
   (let [{:keys [^UUID i_id i_u_id] :as _item} (random-item worker :status :closed)
         if_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-feedback-id))
         {buyer_id :imb_ib_u_id}
-        (-> (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
+        (-> (xt/q node "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
                   {:args [i_id i_u_id], :key-fn :snake-case-keyword})
             first)
 
@@ -267,29 +267,29 @@
         now (b/current-timestamp worker)]
     ;; TODO properly test with imb
     (when (and i_id i_u_id #_buyer_id)
-      (xt/execute-tx sut [[:sql "INSERT INTO item_feedback (_id, if_id, if_i_id, if_u_id, if_buyer_id, if_rating, if_date, if_comment)
+      (xt/execute-tx node [[:sql "INSERT INTO item_feedback (_id, if_id, if_i_id, if_u_id, if_buyer_id, if_rating, if_date, if_comment)
                                 VALUES(?, ?, ?, ?, ?, ?, ?, ?)"
                            [if_id if_id i_id i_u_id buyer_id rating now comment]]]))))
 
-(defn proc-get-item [{:keys [sut] :as worker}]
+(defn proc-get-item [{:keys [node] :as worker}]
   (let [{:keys [i_id]} (random-item worker :status :open)]
-    (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price, item.i_num_bids,
+    (xt/q node "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price, item.i_num_bids,
                       item.i_end_date, item.i_status
                FROM item WHERE item._id = ?"
           {:args [i_id] :key-fn :snake-case-keyword})))
 
 ;; TODO aborted transactions
-(defn proc-update-item [{:keys [sut] :as worker}]
+(defn proc-update-item [{:keys [node] :as worker}]
   (let [{:keys [i_id]} (random-item worker :status :open)
         description (b/random-str worker)]
-    (xt/execute-tx sut [[:sql "UPDATE item SET i_description = ? WHERE item._id = ?" [description i_id]]])))
+    (xt/execute-tx node [[:sql "UPDATE item SET i_description = ? WHERE item._id = ?" [description i_id]]])))
 
 (defrecord UserItem [item_id user_id item_status max_bid_id buyer_id])
 
-(defn proc-post-auction [{:keys [sut] :as worker} due-items]
+(defn proc-post-auction [{:keys [node] :as worker} due-items]
   (let [[items-with-bid items-without-bid] ((juxt filter remove) :max_bid_id due-items)
         now (b/current-timestamp worker)]
-    (xt/execute-tx sut
+    (xt/execute-tx node
                    (cond-> []
                      (seq items-without-bid)
                      (conj (into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
@@ -305,10 +305,10 @@
                                           buyer_id item_id user_id now])
                                        items-with-bid))])))))
 
-(defn proc-check-winning-bids [{:keys [sut] :as worker}]
+(defn proc-check-winning-bids [{:keys [node] :as worker}]
   (let [now (b/current-timestamp worker)
         now-minus-60s (.minusSeconds now 60)]
-    (->> (xt/q sut "SELECT item.i_id AS item_id, item.i_u_id AS user_id, item.i_name, item.i_current_price, item.i_num_bids,
+    (->> (xt/q node "SELECT item.i_id AS item_id, item.i_u_id AS user_id, item.i_name, item.i_current_price, item.i_num_bids,
                            item.i_end_date, item.i_status AS item_status
                     FROM item WHERE (item.i_start_date BETWEEN ? AND ?) AND item.i_status = ? ORDER BY item.i_id ASC LIMIT 100"
                {:args [now-minus-60s now :open]
@@ -317,7 +317,7 @@
          (mapv (comp map->UserItem
                      (fn [{:keys [item_id user_id] :as due-item}]
                        (if-let [{:keys [max_bid_id buyer_id]}
-                                (first (xt/q sut "SELECT imb.imb_ib_id AS max_bid_id, ib.ib_buyer_id AS buyer_id
+                                (first (xt/q node "SELECT imb.imb_ib_id AS max_bid_id, ib.ib_buyer_id AS buyer_id
                                            FROM item_max_bid AS imb, item_bid AS ib
                                            WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?
                                            AND ib._id = imb.imb_ib_id AND ib.ib_i_id = imb.imb_i_id AND ib.ib_u_id = imb.imb_u_id"
@@ -327,21 +327,21 @@
                          due-item))))
          (proc-post-auction worker))))
 
-(defn proc-get-comment [{:keys [sut] :as worker}]
+(defn proc-get-comment [{:keys [node] :as worker}]
   (let [{:keys [i_u_id]} (random-item worker :status :open)]
-    (xt/q sut "SELECT * FROM item_comment AS ic
+    (xt/q node "SELECT * FROM item_comment AS ic
                WHERE ic.ic_u_id = ? AND ic.ic_response IS NULL"
           {:args [i_u_id]})))
 
-(defn get-user-info [sut u_id {:keys [seller-items? buyer-items? feedback?]}]
-  [(xt/q sut "SELECT user.u_id, user.u_rating, user.u_created, user.u_balance, user.u_sattr0,
+(defn get-user-info [node u_id {:keys [seller-items? buyer-items? feedback?]}]
+  [(xt/q node "SELECT user.u_id, user.u_rating, user.u_created, user.u_balance, user.u_sattr0,
                                        user.u_sattr1, user.u_sattr2, user.u_sattr3, user.u_sattr4, region.r_name FROM user, region
                                 WHERE user._id = ? AND user.u_r_id = region._id"
          {:args [u_id], :key-fn :snake-case-keyword})
 
    #_
    (cond seller-items?
-         (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
+         (xt/q node "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM item WHERE item.i_u_id = ?
                                       ORDER BY item.i_end_date DESC
@@ -349,7 +349,7 @@
                {:args [u_id] :key-fn :snake-case-keyword})
 
          (and buyer-items? (not seller-items?))
-         (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
+         (xt/q node "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM user_item AS ui, item
                                       WHERE ui.ui_u_id = ? AND ui.ui_i_id = item._id AND ui.ui_i_u_id = item.i_u_id
@@ -359,7 +359,7 @@
 
    #_
    (when feedback?
-     (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
+     (xt/q node "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
                                              item.i_name, item.i_end_date, item.i_status, user.u_id,
                                              user.u_rating, user.u_sattr0, user.u_sattr1
                                       FROM item_feedback AS if, item, user
@@ -369,8 +369,8 @@
                                       LIMIT 10"
            {:after-tx-id last-tx-id, :args [u_id], :key-fn :snake-case-keyword}))])
 
-(defn proc-get-user-info [{:keys [sut] :as worker}]
-  (get-user-info sut (b/sample-flat worker user-id)
+(defn proc-get-user-info [{:keys [node] :as worker}]
+  (get-user-info node (b/sample-flat worker user-id)
                  {:seller-items? (b/random-bool worker)
                   :buyer-items? (b/random-bool worker)
                   :feedback? (b/random-bool worker)}))
@@ -412,8 +412,8 @@
 
 ;; do every now and again to provide inputs for item-dependent computations
 (defn index-item-status-groups [worker]
-  (let [{:keys [sut, ^ConcurrentHashMap custom-state]} worker
-        node sut
+  (let [{:keys [node, ^ConcurrentHashMap custom-state]} worker
+        node node
         res (item-status-groups node)]
     (.putAll custom-state {:item-status-groups res})))
 
@@ -534,20 +534,20 @@
       first
       :count))
 
-(defn load-stats-into-worker [{:keys [sut] :as worker}]
+(defn load-stats-into-worker [{:keys [node] :as worker}]
   (log/info "querying stats for sampling")
   (index-item-status-groups worker)
-  (b/set-domain worker region-id (largest-id sut :region))
-  (b/set-domain worker gag-id (largest-id sut :gag))
-  (b/set-domain worker gav-id (largest-id sut :gav))
-  (b/set-domain worker category-id (largest-id sut :category))
-  (b/set-domain worker user-id (largest-id sut :user))
-  (b/set-domain worker user-attribute-id (largest-id sut :user-attribute))
-  (b/set-domain worker item-id (largest-id sut :item))
-  (b/set-domain worker item-comment-id (largest-id sut :item-comment))
-  (b/set-domain worker item-feedback-id (largest-id sut :item-feedback))
-  (b/set-domain worker item-bid-id (largest-id sut :item-bid))
-  (b/set-domain worker item-purchase-id (largest-id sut :item-purchase)))
+  (b/set-domain worker region-id (largest-id node :region))
+  (b/set-domain worker gag-id (largest-id node :gag))
+  (b/set-domain worker gav-id (largest-id node :gav))
+  (b/set-domain worker category-id (largest-id node :category))
+  (b/set-domain worker user-id (largest-id node :user))
+  (b/set-domain worker user-attribute-id (largest-id node :user-attribute))
+  (b/set-domain worker item-id (largest-id node :item))
+  (b/set-domain worker item-comment-id (largest-id node :item-comment))
+  (b/set-domain worker item-feedback-id (largest-id node :item-feedback))
+  (b/set-domain worker item-bid-id (largest-id node :item-bid))
+  (b/set-domain worker item-purchase-id (largest-id node :item-purchase)))
 
 (defn log-stats [worker]
   (log/info "#region " (.get (b/counter worker region-id)))
@@ -585,7 +585,7 @@
    {:t :call, :f [b/generate :gav generate-global-attribute-value 1000]}
    {:t :call, :f (fn [_] (log/info "finished submitting load stage"))}
    {:t :call, :f (fn [_] (log/info "start awaiting load stage"))}
-   {:t :call, :f #(then-await-tx (:sut %))}
+   {:t :call, :f #(then-await-tx (:node %))}
    {:t :call, :f (fn [_] (log/info "finished awaiting load stage"))}])
 
 ;; Ensure we always await the submitted docs when only doing the load phase
@@ -630,7 +630,7 @@
                               {:t :call, :f #(when no-load?
                                                ;; otherwise nothing has come through the log yet
                                                (Thread/sleep 1000)
-                                               (catchup (:sut %)))}
+                                               (catchup (:node %)))}
                               {:t :call, :f load-stats-into-worker}
                               {:t :call, :f log-stats}
                               {:t :call, :f (fn [_] (log/info "finished setting up worker with stats"))}]}
@@ -665,4 +665,4 @@
                                       :duration duration
                                       :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
                                       :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups)}}]}
-                     (when sync {:t :call, :f #(then-await-tx (:sut %))})])}))
+                     (when sync {:t :call, :f #(then-await-tx (:node %))})])}))

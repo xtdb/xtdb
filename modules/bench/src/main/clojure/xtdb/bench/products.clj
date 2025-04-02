@@ -58,21 +58,21 @@
                              [{:t :do
                                :stage :submit-docs
                                :tasks [{:t :call
-                                        :f (fn [{:keys [sut]}]
+                                        :f (fn [{:keys [node]}]
                                              (with-open [is (-> products-file
                                                                 io/input-stream
                                                                 (GZIPInputStream.))]
-                                               (store-documents! sut (cond->> (transit-seq (transit/reader is :msgpack))
-                                                                       limit (take limit)))))}]}])
+                                               (store-documents! node (cond->> (transit-seq (transit/reader is :msgpack))
+                                                                        limit (take limit)))))}]}])
 
                            [{:t :call, :stage :sync
-                             :f (fn [{:keys [sut]}]
-                                  (b/sync-node sut (Duration/ofHours 5)))}
+                             :f (fn [{:keys [node]}]
+                                  (b/sync-node node (Duration/ofHours 5)))}
 
                             {:t :call, :stage :finish-block
-                             :f (fn [{:keys [sut]}]
-                                  (b/finish-block! sut))}
+                             :f (fn [{:keys [node]}]
+                                  (b/finish-block! node))}
 
                             {:t :call, :stage :compact
-                             :f (fn [{:keys [sut]}]
-                                  (b/compact! sut))}])}]})
+                             :f (fn [{:keys [node]}]
+                                  (b/compact! node))}])}]})

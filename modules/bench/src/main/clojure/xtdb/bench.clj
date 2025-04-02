@@ -30,7 +30,7 @@
         (log/error t (str "Error while executing " f))
         (throw t)))))
 
-(defrecord Worker [sut random domain-state custom-state clock bench-id jvm-id])
+(defrecord Worker [node random domain-state custom-state clock bench-id jvm-id])
 
 (defn current-timestamp ^Instant [worker]
   (.instant ^Clock (:clock worker)))
@@ -280,12 +280,12 @@
 
 (defn compile-benchmark [{:keys [title seed], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
-    (fn run-benchmark [sut]
+    (fn run-benchmark [node]
       (let [clock (Clock/systemUTC)
             domain-state (ConcurrentHashMap.)
             custom-state (ConcurrentHashMap.)
             root-random (Random. seed)
-            worker (->Worker sut root-random domain-state custom-state clock (random-uuid) (System/getProperty "user.name"))
+            worker (->Worker node root-random domain-state custom-state clock (random-uuid) (System/getProperty "user.name"))
             start-ms (System/currentTimeMillis)]
         (doseq [f fns]
           (f worker))
@@ -311,7 +311,7 @@
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
          partition-count 512]
      (doseq [batch (partition-all partition-count doc-seq)]
-       (xt/submit-tx (:sut worker) [(into [:put-docs table] batch)])))))
+       (xt/submit-tx (:node worker) [(into [:put-docs table] batch)])))))
 
 (defmulti cli-flags identity
   :default ::default)

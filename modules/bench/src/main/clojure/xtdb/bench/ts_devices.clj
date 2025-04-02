@@ -31,16 +31,16 @@
 
                     {:t :call
                      :stage :submit-docs
-                     :f (fn [{:keys [sut custom-state]}]
-                          (tsd/submit-ts-devices sut {:device-info-file (get custom-state :device-info-file)
+                     :f (fn [{:keys [node custom-state]}]
+                          (tsd/submit-ts-devices node {:device-info-file (get custom-state :device-info-file)
                                                       :readings-file (get custom-state :readings-file)}))}
                     {:t :call
                      :stage :sync
-                     :f (fn [{:keys [sut]}] (b/sync-node sut (Duration/ofHours 5)))}
+                     :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
 
                     {:t :call
                      :stage :finish-block
-                     :f (fn [{:keys [sut]}] (b/finish-block! sut))}]}]})
+                     :f (fn [{:keys [node]}] (b/finish-block! node))}]}]})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-ts-devices

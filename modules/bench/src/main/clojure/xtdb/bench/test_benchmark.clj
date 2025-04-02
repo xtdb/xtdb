@@ -17,12 +17,12 @@
                        :job-task {:t :call,
                                   :transaction :insert-documents,
                                   :f (bench/wrap-in-catch
-                                      (fn [{:keys [sut] :as worker}]
-                                        (xt/submit-tx sut [(->>
-                                                            (fn [] {:xt/id (rand-int 1000000)
-                                                                    :foo (bench/random-str worker)})
-                                                            (repeatedly 10)
-                                                            (into [:put-docs :docs]))])))}}
+                                      (fn [{:keys [node] :as worker}]
+                                        (xt/submit-tx node [(->>
+                                                             (fn [] {:xt/id (rand-int 1000000)
+                                                                     :foo (bench/random-str worker)})
+                                                             (repeatedly 10)
+                                                             (into [:put-docs :docs]))])))}}
 
                       {:t :freq-job
                        :duration duration
@@ -30,5 +30,5 @@
                        :job-task {:t :call,
                                   :transaction :query-documents,
                                   :f (bench/wrap-in-catch
-                                      (fn [{:keys [sut]}]
-                                        (xt/q sut '(from :docs [xt/id foo]))))}}]}]}))
+                                      (fn [{:keys [node]}]
+                                        (xt/q node '(from :docs [xt/id foo]))))}}]}]}))

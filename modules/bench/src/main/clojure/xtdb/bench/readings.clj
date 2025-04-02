@@ -39,18 +39,18 @@
        :year (.minusSeconds inst (* 60 60 24 30 12 len))))))
 
 (defn aggregate-query
-  ([sut start end] (aggregate-query sut start end {}))
-  ([sut start end opts]
-   (xt/q sut "SELECT AVG(value) AS avg, MIN(VALUE) AS min, MAX(VALUE) AS max
+  ([node start end] (aggregate-query node start end {}))
+  ([node start end opts]
+   (xt/q node "SELECT AVG(value) AS avg, MIN(VALUE) AS min, MAX(VALUE) AS max
               FROM readings FOR VALID_TIME BETWEEN ? AND ?
               GROUP BY _id"
          (assoc opts :args [start end]))))
 
 (defn check-query
   "A query that returns the number 5 min intervals in the range. Good for sanity checking."
-  ([sut start end] (aggregate-query sut start end {}))
-  ([sut start end opts]
-   (xt/q sut "SELECT COUNT(*) AS cnt, _id AS id
+  ([node start end] (aggregate-query node start end {}))
+  ([node start end opts]
+   (xt/q node "SELECT COUNT(*) AS cnt, _id AS id
               FROM readings FOR VALID_TIME BETWEEN ? AND ?
               GROUP BY _id"
          (assoc opts :args [start end]))))
@@ -64,18 +64,18 @@
     :stage (if offset
              (keyword (str "query-offset-" len "-" (name offset) "-interval-" (name interval)))
              (keyword (str "query-recent-interval-" (name interval))))
-    :tasks [{:t :call :f (fn [{:keys [sut custom-state]}]
+    :tasks [{:t :call :f (fn [{:keys [node custom-state]}]
                            (let [{:keys [latest-completed-tx max-valid-time]} custom-state
                                  max-valid-time (cond-> max-valid-time
                                                   offset (subtract-period offset len))]
-                             (aggregate-query sut (subtract-period max-valid-time interval) max-valid-time
+                             (aggregate-query node (subtract-period max-valid-time interval) max-valid-time
                                               {:current-time (:system-time latest-completed-tx)})))}]}))
 
 (defn ->ingestion-stage
   ([devices readings] (->ingestion-stage devices readings {}))
   ([devices readings {:keys [backfill?], :or {backfill? true}}]
    [{:t :call, :stage :ingest
-     :f (fn [{:keys [sut]}]
+     :f (fn [{:keys [node]}]
           (log/infof "Inserting %d readings for %d devices" readings devices)
 
           (doseq [[idx batch] (map vector (range) (docs devices readings))
@@ -83,17 +83,17 @@
             (when (zero? (mod idx 1000))
               (log/debugf "Submitting readings from %s (batch %d)" (str valid-from) idx))
 
-            (xt/submit-tx sut [batch]
+            (xt/submit-tx node [batch]
                           (when backfill?
                             {:system-time (.plus valid-to (Duration/ofNanos (* idx 1000)))}))))}
     {:t :call, :stage :sync
-     :f (fn [{:keys [sut]}]
-          (b/sync-node sut (Duration/ofMinutes 5)))}
+     :f (fn [{:keys [node]}]
+          (b/sync-node node (Duration/ofMinutes 5)))}
 
     {:t :call, :stage :compact
-     :f (fn [{:keys [sut]}]
-          (b/finish-block! sut)
-          (b/compact! sut))}]))
+     :f (fn [{:keys [node]}]
+          (b/finish-block! node)
+          (b/compact! node))}]))
 
 (defmethod b/cli-flags :readings [_]
   [[nil "--devices devices" "device count"
@@ -112,9 +112,9 @@
                     (->ingestion-stage devices readings))
 
                   [{:t :call
-                    :f (fn [{:keys [sut ^AbstractMap custom-state]}]
-                         (let [{:keys [latest-completed-tx]} (xt/status sut)
-                               max-valid-time (-> (xt/q sut max-valid-time-q)
+                    :f (fn [{:keys [node ^AbstractMap custom-state]}]
+                         (let [{:keys [latest-completed-tx]} (xt/status node)
+                               max-valid-time (-> (xt/q node max-valid-time-q)
                                                   first
                                                   :max-valid-time)]
                            (.putAll custom-state {:latest-completed-tx latest-completed-tx
