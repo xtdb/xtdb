@@ -32,16 +32,6 @@
   (.compute custom-state keyspace (fn [_keyspace v]
                                     (conj (or v []) item))))
 
-(defn update-custom-state! [{:keys [^ConcurrentHashMap custom-state]} keyspace f & args]
-  (.compute custom-state keyspace (fn [_keyspace v]
-                                    (apply f v args))))
-
-(defn set-worker-last-tx-id [{:keys [thread-name] :as worker} tx-id]
-  (update-custom-state! worker :last-tx-ids assoc thread-name tx-id))
-
-(defn get-last-tx-id [{:keys [^ConcurrentHashMap custom-state thread-name] :as _worker}]
-  (get-in custom-state [:last-tx-ids thread-name]))
-
 (defn generate-user [worker]
   (let [u_id (b/increment worker user-id)]
     {:xt/id u_id
@@ -64,8 +54,7 @@
 
   The benchmark randomly selects id from a pool of region ids as an input for u_r_id parameter using flat distribution."
   [worker]
-  (->> (xt/submit-tx (:sut worker) [[:put-docs :user (generate-user worker)]])
-       (set-worker-last-tx-id worker)))
+  (xt/execute-tx (:sut worker) [[:put-docs :user (generate-user worker)]]))
 
 (defn- sample-category-id [worker]
   (if-some [weighting (::category-weighting (:custom-state worker))]
@@ -86,8 +75,7 @@
 
   The benchmark randomly selects id from a pool of users as an input for u_id parameter using Gaussian distribution. A c_id parameter is randomly selected using a flat histogram from the real auction site’s item category statistic."
   [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        ^UUID u_id (b/sample-gaussian worker user-id)
+  (let [^UUID u_id (b/sample-gaussian worker user-id)
         i_id-raw (b/increment worker item-id)
         i_id_high_bits (.getMostSignificantBits u_id)
         i_id (UUID. i_id_high_bits i_id-raw)
@@ -111,37 +99,36 @@
                   (first (xt/q sut
                                "SELECT gag.gag_name, gav.gav_name, gag.gag_c_id FROM gag, gav
                                    WHERE gav._id = ? AND gag._id = ? AND gav.gav_gag_id = gag._id"
-                               {:after-tx-id last-tx-id, :args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
+                               {:args [gav-id gag-id] , :key-fn :snake-case-keyword}))]
               (recur gag-ids gav-ids (into res [gag_name gav_name])))
             (str description " " (str/join " " res))))]
-    (->> (concat
-          [[:put-docs :item
-            {:xt/id i_id
-             :i_id i_id
-             :i_u_id u_id
-             :i_c_id c_id
-             :i_name name
-             :i_description description-with-attributes
-             :i_user_attributes attributes
-             :i_initial_price initial-price
-             :i_num_bids 0
-             :i_num_images (count images)
-             :i_num_global_attrs (count gav-ids)
-             :i_start_date start-date
-             :i_end_date end-date
-             :i_status :open}]]
-          (for [[i image] (map-indexed vector images)
-                :let [ii_id (UUID. i_id_high_bits i)]]
-            [:put-docs :item-image
-             {:xt/id ii_id
-              :ii_id ii_id
-              :ii_i_id i_id
-              :ii_u_id u_id
-              :ii_path image}])
-          (when u_id [[:sql "UPDATE user SET u_balance = user.u_balance - 1 WHERE user._id = ? "
-                       [u_id]]]))
-         (xt/submit-tx sut)
-         (set-worker-last-tx-id worker))))
+    (xt/execute-tx sut (concat
+                        [[:put-docs :item
+                          {:xt/id i_id
+                           :i_id i_id
+                           :i_u_id u_id
+                           :i_c_id c_id
+                           :i_name name
+                           :i_description description-with-attributes
+                           :i_user_attributes attributes
+                           :i_initial_price initial-price
+                           :i_num_bids 0
+                           :i_num_images (count images)
+                           :i_num_global_attrs (count gav-ids)
+                           :i_start_date start-date
+                           :i_end_date end-date
+                           :i_status :open}]]
+                        (for [[i image] (map-indexed vector images)
+                              :let [ii_id (UUID. i_id_high_bits i)]]
+                          [:put-docs :item-image
+                           {:xt/id ii_id
+                            :ii_id ii_id
+                            :ii_i_id i_id
+                            :ii_u_id u_id
+                            :ii_path image}])
+                        (when u_id
+                          [[:sql "UPDATE user SET u_balance = user.u_balance - 1 WHERE user._id = ? "
+                            [u_id]]])))))
 
 (defn random-item [worker & {:keys [status] :or {status :all}}]
   (let [isg (-> worker :custom-state :item-status-groups (get status) vec)
@@ -162,70 +149,62 @@
        :now (b/current-timestamp worker)})))
 
 (defn proc-new-bid [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        {:keys [^UUID i_id u_id i_buyer_id bid max_bid ^UUID new_bid_id now]} (generate-new-bid-params worker)]
+  (let [{:keys [^UUID i_id u_id i_buyer_id bid max_bid ^UUID new_bid_id now]} (generate-new-bid-params worker)]
     (when (and i_id u_id)
-      (let [{:keys [imb, imb_ib_id] :as _res}
-            (-> (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ?"
-                      {:after-tx-id last-tx-id, :args [i_id], :key-fn :snake-case-keyword})
-                first)
-            {:keys [curr_bid, curr_max]}
-            (-> (xt/q sut "SELECT ib.ib_bid AS curr_bid, ib.ib_max_bid AS curr_max FROM item_bid AS ib
-                           WHERE ib._id = ?"
-                      {:after-tx-id last-tx-id, :args [imb_ib_id], :key-fn :snake-case-keyword})
-                first)
+      (let [{:keys [imb, imb_ib_id] :as _res} (first
+                                               (xt/q sut "SELECT imb._id AS imb , imb.imb_ib_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ?"
+                                                     {:args [i_id], :key-fn :snake-case-keyword}))
+            {:keys [curr_bid, curr_max]} (first
+                                          (xt/q sut "SELECT ib.ib_bid AS curr_bid, ib.ib_max_bid AS curr_max FROM item_bid AS ib WHERE ib._id = ?"
+                                                {:args [imb_ib_id], :key-fn :snake-case-keyword}))
             new_bid_win (or (nil? imb_ib_id) (< curr_max max_bid))
             new_bid (if (and new_bid_win curr_max (< bid curr_max)) curr_max bid)
             upd_curr_bid (and curr_bid (not new_bid_win) (< curr_bid bid))]
 
-        (->> (xt/submit-tx sut
-                           ;; increment number of bids on item
-                           (cond->
-                               [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item._id = ?" [i_id]]]
+        (xt/execute-tx sut
+                       ;; increment number of bids on item
+                       (cond-> [[:sql "UPDATE item SET i_num_bids = item.i_num_bids + 1 WHERE item._id = ?" [i_id]]]
 
-                             ;; if new bid exceeds old, bump it
-                             upd_curr_bid
-                             (conj [:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid._id = ?" [bid imb]])
+                         ;; if new bid exceeds old, bump it
+                         upd_curr_bid (conj [:sql "UPDATE item_max_bid SET bid = ? WHERE item_max_bid._id = ?" [bid imb]])
 
-                             ;; we exceed the old max, win the bid.
-                             (and curr_bid new_bid_win)
-                             (conj [:sql "UPDATE item_max_bid
+                         ;; we exceed the old max, win the bid.
+                         (and curr_bid new_bid_win)
+                         (conj [:sql "UPDATE item_max_bid
                                       SET imb_ib_id = ?,
                                       imb_ib_i_id = ?,
                                       imb_ib_u_id = ?,
                                       imb_updated = ?
                                       WHERE item_max_bid._id = ?"
 
-                                    [new_bid_id i_id u_id now imb]])
-                             ;; no previous max bid, insert new max bid
-                             (nil? imb_ib_id)
-                             (conj [:put-docs :item-max-bid {:xt/id (UUID. (.getMostSignificantBits i_id)
-                                                                           (.getMostSignificantBits new_bid_id))
-                                                             :imb_i_id i_id
-                                                             :imb_u_id u_id
-                                                             :imb_ib_id new_bid_id
-                                                             :imb_ib_i_id i_id
-                                                             :imb_ib_u_id u_id
-                                                             :imb_created now
-                                                             :imb_updated now}])
+                                [new_bid_id i_id u_id now imb]])
 
-                             ;; add new bid
-                             :always
-                             (conj [:put-docs :item-bid {:xt/id new_bid_id
-                                                         :ib_id new_bid_id
-                                                         :ib_i_id i_id
-                                                         :ib_u_id u_id
-                                                         :ib_buyer_id i_buyer_id
-                                                         :ib_bid new_bid
-                                                         :ib_max_bid max_bid
-                                                         :ib_created_at now
-                                                         :ib_updated now}])))
-             (set-worker-last-tx-id worker))))))
+                         ;; no previous max bid, insert new max bid
+                         (nil? imb_ib_id)
+                         (conj [:put-docs :item-max-bid {:xt/id (UUID. (.getMostSignificantBits i_id)
+                                                                       (.getMostSignificantBits new_bid_id))
+                                                         :imb_i_id i_id
+                                                         :imb_u_id u_id
+                                                         :imb_ib_id new_bid_id
+                                                         :imb_ib_i_id i_id
+                                                         :imb_ib_u_id u_id
+                                                         :imb_created now
+                                                         :imb_updated now}])
+
+                         ;; add new bid
+                         :always
+                         (conj [:put-docs :item-bid {:xt/id new_bid_id
+                                                     :ib_id new_bid_id
+                                                     :ib_i_id i_id
+                                                     :ib_u_id u_id
+                                                     :ib_buyer_id i_buyer_id
+                                                     :ib_bid new_bid
+                                                     :ib_max_bid max_bid
+                                                     :ib_created_at now
+                                                     :ib_updated now}])))))))
 
 (defn random-custom-state [worker keyspace]
-  (let [vs (-> worker :custom-state keyspace)
-        item (b/random-nth worker vs)]
-    item))
+  (b/random-nth worker (-> worker :custom-state keyspace)))
 
 (defn proc-new-comment [{:keys [sut] :as worker}]
   ;; TODO this is normally queried from closed items
@@ -241,10 +220,9 @@
                                     :new_item_comment_id
                                     item-comment-id)]
     (conj-custom-state! worker :item-comment-ids ic_id)
-    (->> (xt/submit-tx sut [[:sql "INSERT INTO item_comment (_id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
+    (xt/execute-tx sut [[:sql "INSERT INTO item_comment (_id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
                                VALUES (?, ?, ?, ?, ?, ?, ?)"
-                             [ic_id ic_id i_id seller_id buyer_id now question]]])
-         (set-worker-last-tx-id worker))))
+                         [ic_id ic_id i_id seller_id buyer_id now question]]])))
 
 (defn proc-new-comment-response [{:keys [sut] :as worker}]
   ;; TODO the sampling with UUID parent -> child key space partitioning is a mess
@@ -255,37 +233,33 @@
                                                            {:args [ic_id]
                                                             :key-fn :snake-case-keyword}))]
     (when ic_id
-      (->> (xt/submit-tx sut [[:sql "UPDATE item_comment AS ic SET ic_response = ?
+      (xt/execute-tx sut [[:sql "UPDATE item_comment AS ic SET ic_response = ?
                                WHERE ic._id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
-                               [comment ic_id item_id seller_id]]])
-           (set-worker-last-tx-id worker)))))
+                           [comment ic_id item_id seller_id]]]))))
 
 (defn proc-new-purchase [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        {:keys [^UUID i_id i_u_id]} (random-item worker :status :waiting-for-purchase)
+  (let [{:keys [^UUID i_id i_u_id]} (random-item worker :status :waiting-for-purchase)
         ;; TODO buyer_id should be used for validation
-        {buyer_id :imb_ib_u_id, bid_id :imb_ib_id} (-> (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
-                                                             {:after-tx-id last-tx-id, :args [i_id i_u_id] :key-fn :snake-case-keyword})
-                                                       first)
+        {buyer_id :imb_ib_u_id, bid_id :imb_ib_id} (first
+                                                    (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
+                                                          {:args [i_id i_u_id] :key-fn :snake-case-keyword}))
         ip_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-purchase-id))
         now (b/current-timestamp worker)]
     ;; TODO properly test with imb
     (when (and i_id i_u_id #_ buyer_id)
-      (->> (xt/submit-tx sut [[:sql "INSERT INTO item_purchase (_id, ip_id, ip_ib_id, ip_ib_i_id, ip_ib_u_id, ip_date)
-                                VALUES(?, ?, ?, ?, ?, ?)"
-                               [ip_id ip_id bid_id i_id i_u_id now]]
-                              [:sql "UPDATE item SET i_status = ?
-                                WHERE item._id = ?"
-                               [:closed i_id]]])
-           (set-worker-last-tx-id worker)))))
+      (xt/execute-tx sut [[:sql "INSERT INTO item_purchase (_id, ip_id, ip_ib_id, ip_ib_i_id, ip_ib_u_id, ip_date)
+                                 VALUES(?, ?, ?, ?, ?, ?)"
+                           [ip_id ip_id bid_id i_id i_u_id now]]
+                          [:sql "UPDATE item SET i_status = ?
+                                 WHERE item._id = ?"
+                           [:closed i_id]]]))))
 
 (defn proc-new-feedback [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        {:keys [^UUID i_id i_u_id] :as _item} (random-item worker :status :closed)
+  (let [{:keys [^UUID i_id i_u_id] :as _item} (random-item worker :status :closed)
         if_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-feedback-id))
         {buyer_id :imb_ib_u_id}
         (-> (xt/q sut "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
-                  {:after-tx-id last-tx-id, :args [i_id i_u_id], :key-fn :snake-case-keyword})
+                  {:args [i_id i_u_id], :key-fn :snake-case-keyword})
             first)
 
         rating (b/random-nth worker [-1 0 1])
@@ -293,64 +267,51 @@
         now (b/current-timestamp worker)]
     ;; TODO properly test with imb
     (when (and i_id i_u_id #_buyer_id)
-      (->> (xt/submit-tx sut [[:sql "INSERT INTO item_feedback (_id, if_id, if_i_id, if_u_id, if_buyer_id, if_rating, if_date, if_comment)
+      (xt/execute-tx sut [[:sql "INSERT INTO item_feedback (_id, if_id, if_i_id, if_u_id, if_buyer_id, if_rating, if_date, if_comment)
                                 VALUES(?, ?, ?, ?, ?, ?, ?, ?)"
-                               [if_id if_id i_id i_u_id buyer_id rating now comment]]])
-           (set-worker-last-tx-id worker)))))
+                           [if_id if_id i_id i_u_id buyer_id rating now comment]]]))))
 
 (defn proc-get-item [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        ;; TODO
-        ;; the benchbase project uses a profile that keeps item pairs around
-        ;; selects only closed items for a particular user profile (they are sampled together)
-        ;; right now this is a totally random sample with one less join than we need.
-        {:keys [i_id]} (random-item worker :status :open)]
+  (let [{:keys [i_id]} (random-item worker :status :open)]
     (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price, item.i_num_bids,
                       item.i_end_date, item.i_status
                FROM item WHERE item._id = ?"
-          {:last-tx-id last-tx-id, :args [i_id] :key-fn :snake-case-keyword})))
+          {:args [i_id] :key-fn :snake-case-keyword})))
 
 ;; TODO aborted transactions
 (defn proc-update-item [{:keys [sut] :as worker}]
   (let [{:keys [i_id]} (random-item worker :status :open)
         description (b/random-str worker)]
-    (->> (xt/submit-tx sut [[:sql "UPDATE item
-                              SET i_description = ?
-                              WHERE item._id = ?"
-                             [description i_id]]])
-         (set-worker-last-tx-id worker))))
+    (xt/execute-tx sut [[:sql "UPDATE item SET i_description = ? WHERE item._id = ?" [description i_id]]])))
 
 (defrecord UserItem [item_id user_id item_status max_bid_id buyer_id])
 
 (defn proc-post-auction [{:keys [sut] :as worker} due-items]
   (let [[items-with-bid items-without-bid] ((juxt filter remove) :max_bid_id due-items)
         now (b/current-timestamp worker)]
-    (->> (xt/submit-tx sut
-                       (cond-> []
-                         (seq items-without-bid)
-                         (conj (into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
-                                     (map #(vector :closed (:item_id %)) items-without-bid)))
+    (xt/execute-tx sut
+                   (cond-> []
+                     (seq items-without-bid)
+                     (conj (into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
+                                 (map #(vector :closed (:item_id %)) items-without-bid)))
 
-                         (seq items-with-bid)
-                         (into [(into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
-                                      (map #(vector :waiting-for-purchase (:item_id %)) items-with-bid))
-                                (into [:sql "INSERT INTO user_item(_id, ui_u_id, ui_i_id, ui_i_u_id, ui_created)
-                                        VALUES(?, ?, ?, ?, ?)"]
-                                      (map (fn [{:keys [buyer_id item_id ^UUID user_id]}]
-                                             [(UUID. (.getMostSignificantBits user_id) (b/increment worker user-item-id))
-                                              buyer_id item_id user_id now])
-                                           items-with-bid))])))
-         (set-worker-last-tx-id worker))))
+                     (seq items-with-bid)
+                     (into [(into [:sql "UPDATE item SET i_status = ? WHERE item._id = ?"]
+                                  (map #(vector :waiting-for-purchase (:item_id %)) items-with-bid))
+                            (into [:sql "INSERT INTO user_item(_id, ui_u_id, ui_i_id, ui_i_u_id, ui_created)
+                                         VALUES(?, ?, ?, ?, ?)"]
+                                  (map (fn [{:keys [buyer_id item_id ^UUID user_id]}]
+                                         [(UUID. (.getMostSignificantBits user_id) (b/increment worker user-item-id))
+                                          buyer_id item_id user_id now])
+                                       items-with-bid))])))))
 
 (defn proc-check-winning-bids [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        now (b/current-timestamp worker)
+  (let [now (b/current-timestamp worker)
         now-minus-60s (.minusSeconds now 60)]
     (->> (xt/q sut "SELECT item.i_id AS item_id, item.i_u_id AS user_id, item.i_name, item.i_current_price, item.i_num_bids,
                            item.i_end_date, item.i_status AS item_status
                     FROM item WHERE (item.i_start_date BETWEEN ? AND ?) AND item.i_status = ? ORDER BY item.i_id ASC LIMIT 100"
-               {:after-tx-id last-tx-id
-                :args [now-minus-60s now :open]
+               {:args [now-minus-60s now :open]
                 :key-fn :snake-case-keyword})
 
          (mapv (comp map->UserItem
@@ -367,35 +328,38 @@
          (proc-post-auction worker))))
 
 (defn proc-get-comment [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        {:keys [i_u_id]} (random-item worker :status :open)]
+  (let [{:keys [i_u_id]} (random-item worker :status :open)]
     (xt/q sut "SELECT * FROM item_comment AS ic
                WHERE ic.ic_u_id = ? AND ic.ic_response IS NULL"
-          {:after-tx-id last-tx-id, :args [i_u_id]})))
+          {:args [i_u_id]})))
 
-(defn get-user-info [sut u_id seller-items? buyer-items? feedback? last-tx-id]
-  (let [user-results (xt/q sut "SELECT user.u_id, user.u_rating, user.u_created, user.u_balance, user.u_sattr0,
+(defn get-user-info [sut u_id {:keys [seller-items? buyer-items? feedback?]}]
+  [(xt/q sut "SELECT user.u_id, user.u_rating, user.u_created, user.u_balance, user.u_sattr0,
                                        user.u_sattr1, user.u_sattr2, user.u_sattr3, user.u_sattr4, region.r_name FROM user, region
                                 WHERE user._id = ? AND user.u_r_id = region._id"
-                           {:after-tx-id last-tx-id, :args [u_id] :key-fn :snake-case-keyword})
-        item-results nil #_(cond seller-items?
-                                 (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
+         {:args [u_id], :key-fn :snake-case-keyword})
+
+   #_
+   (cond seller-items?
+         (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM item WHERE item.i_u_id = ?
                                       ORDER BY item.i_end_date DESC
                                       LIMIT 20"
-                                       {:args [u_id] :key-fn :snake-case-keyword})
+               {:args [u_id] :key-fn :snake-case-keyword})
 
-                                 (and buyer-items? (not seller-items?))
-                                 (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
+         (and buyer-items? (not seller-items?))
+         (xt/q sut "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price,
                                              item.i_num_bids, item.i_end_date, item.i_status
                                       FROM user_item AS ui, item
                                       WHERE ui.ui_u_id = ? AND ui.ui_i_id = item._id AND ui.ui_i_u_id = item.i_u_id
                                       ORDER BY item.i_end_date DESC
                                       LIMIT 20"
-                                       {:after-tx-id last-tx-id, :args [u_id], :key-fn :snake-case-keyword}))
-        feedback-results nil #_(when feedback?
-                                 (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
+               {:after-tx-id last-tx-id, :args [u_id], :key-fn :snake-case-keyword}))
+
+   #_
+   (when feedback?
+     (xt/q sut "SELECT if.if_rating, if.if_comment, if.if_date, item.i_id, item.i_u_id,
                                              item.i_name, item.i_end_date, item.i_status, user.u_id,
                                              user.u_rating, user.u_sattr0, user.u_sattr1
                                       FROM item_feedback AS if, item, user
@@ -403,16 +367,13 @@
                                       AND if.if_u_id = item.i_u_id AND if.if_u_id = user._id
                                       ORDER BY if.if_date DESC
                                       LIMIT 10"
-                                       {:after-tx-id last-tx-id, :args [u_id], :key-fn :snake-case-keyword}))]
-    [user-results item-results feedback-results]))
+           {:after-tx-id last-tx-id, :args [u_id], :key-fn :snake-case-keyword}))])
 
 (defn proc-get-user-info [{:keys [sut] :as worker}]
-  (let [last-tx-id (get-last-tx-id worker)
-        u_id (b/sample-flat worker user-id)
-        seller-items? (b/random-bool worker)
-        buyer-items? (b/random-bool worker)
-        feedback? (b/random-bool worker)]
-    (get-user-info sut u_id seller-items? buyer-items? feedback? last-tx-id)))
+  (get-user-info sut (b/sample-flat worker user-id)
+                 {:seller-items? (b/random-bool worker)
+                  :buyer-items? (b/random-bool worker)
+                  :feedback? (b/random-bool worker)}))
 
 ;; represents a probable state of an item that can be sampled randomly
 (defrecord ItemSample [i_id, i_u_id, i_status, i_end_date, i_num_bids])

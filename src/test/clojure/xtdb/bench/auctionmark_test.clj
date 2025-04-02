@@ -213,7 +213,7 @@
 
         (t/is (= [{:ic_id ic_id}]
                  (xt/q *node* '(from :item-comment [ic_id])
-                       {:after-tx-id (am/get-last-tx-id worker), :key-fn :snake-case-keyword})))
+                       {:key-fn :snake-case-keyword})))
 
         (t/is (false? (-> (xt/q *node* '(from :item-comment [{:xt/id "ic_0"} ic_response])
                                 {:key-fn :snake-case-keyword})
@@ -317,16 +317,12 @@
         (am/proc-new-feedback worker)
 
         ;; user 0 is a seller
-        (let [[user-results item-results feedback-results] (am/get-user-info *node* (am/user-id 0) true true true
-                                                                             (am/get-last-tx-id worker))]
-
+        (let [[user-results _item-results _feedback-results] (am/get-user-info *node* (am/user-id 0) {:seller-items? true, :buyer-items? true, :feedback? true})]
           (t/is (= 1 (count user-results)))
           #_(t/is (= 1 (count item-results)))
           #_(t/is (= 1 (count feedback-results))))
 
         ;; user 1 is a buyer
-        (let [[user-results item-results _] (am/get-user-info *node* (am/user-id 1) false true true
-                                                              (am/get-last-tx-id worker))]
-
+        (let [[user-results _item-results _feedback] (am/get-user-info *node* (am/user-id 1) {:seller-items? false, :buyer-items? true, :feedback? true})]
           (t/is (= 1 (count user-results)))
           #_(t/is (= 1 (count item-results))))))))
