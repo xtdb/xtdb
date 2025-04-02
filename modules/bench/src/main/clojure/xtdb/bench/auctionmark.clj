@@ -3,11 +3,9 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.bench :as b]
-            [xtdb.log :as xt-log])
+            [xtdb.bench :as b])
   (:import (java.time Duration Instant)
-           (java.util ArrayList Random UUID)
-           (java.util.concurrent ConcurrentHashMap)))
+           (java.util ArrayList Random UUID)))
 
 (defn random-price [worker] (.nextDouble (b/rng worker)))
 
@@ -27,10 +25,6 @@
 (def gav-id global-attribute-value-id)
 (defn user-attribute-id [id] id)
 (defn user-item-id [id] id)
-
-(defn conj-custom-state! [{:keys [^ConcurrentHashMap custom-state]} keyspace item]
-  (.compute custom-state keyspace (fn [_keyspace v]
-                                    (conj (or v []) item))))
 
 (defn generate-user [worker]
   (let [u_id (b/increment worker user-id)]
@@ -56,9 +50,9 @@
   [worker]
   (xt/execute-tx (:node worker) [[:put-docs :user (generate-user worker)]]))
 
-(defn- sample-category-id [worker]
-  (if-some [weighting (::category-weighting (:custom-state worker))]
-    (weighting (b/rng worker))
+(defn- sample-category-id [{::keys [category-weighting] :as worker}]
+  (if category-weighting
+    (category-weighting (b/rng worker))
     (b/sample-gaussian worker category-id)))
 
 (defn sample-status [worker]
@@ -130,13 +124,14 @@
                           [[:sql "UPDATE user SET u_balance = user.u_balance - 1 WHERE user._id = ? "
                             [u_id]]])))))
 
-(defn random-item [worker & {:keys [status] :or {status :all}}]
-  (let [isg (-> worker :custom-state :item-status-groups (get status) vec)
-        item (b/random-nth worker isg)]
-    item))
+(defn random-item
+  ([worker] (random-item worker {}))
+
+  ([{:keys [!items-by-status] :as worker} {:keys [status] :or {status :all}}]
+   (b/random-nth worker (vec (get @!items-by-status status)))))
 
 (defn generate-new-bid-params [worker]
-  (let [{:keys [^UUID i_id, i_u_id]} (random-item worker :status :open)
+  (let [{:keys [^UUID i_id, i_u_id]} (random-item worker {:status :open})
         i_buyer_id (b/sample-gaussian worker user-id)]
     (if (and i_buyer_id (= i_buyer_id i_u_id))
       (generate-new-bid-params worker)
@@ -204,11 +199,11 @@
                                                      :ib_updated now}])))))))
 
 (defn random-custom-state [worker keyspace]
-  (b/random-nth worker (-> worker :custom-state keyspace)))
+  )
 
-(defn proc-new-comment [{:keys [node] :as worker}]
+(defn proc-new-comment [{:keys [node !item-comment-ids] :as worker}]
   ;; TODO this is normally queried from closed items
-  (let [{:keys [^UUID i_id] seller_id :i_u_id} (random-item worker :status :open)
+  (let [{:keys [^UUID i_id] seller_id :i_u_id} (random-item worker {:status :open})
         buyer_id (b/sample-flat worker user-id)
         now (b/current-timestamp worker)
         question (b/random-str worker)
@@ -219,14 +214,14 @@
                                     first
                                     :new_item_comment_id
                                     item-comment-id)]
-    (conj-custom-state! worker :item-comment-ids ic_id)
+    (swap! !item-comment-ids (fnil conj []) ic_id)
     (xt/execute-tx node [[:sql "INSERT INTO item_comment (_id, ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_date, ic_question)
                                VALUES (?, ?, ?, ?, ?, ?, ?)"
                          [ic_id ic_id i_id seller_id buyer_id now question]]])))
 
-(defn proc-new-comment-response [{:keys [node] :as worker}]
+(defn proc-new-comment-response [{:keys [node !item-comment-ids] :as worker}]
   ;; TODO the sampling with UUID parent -> child key space partitioning is a mess
-  (let [ic_id (random-custom-state worker :item-comment-ids) #_(b/sample-flat worker item-comment-id)
+  (let [ic_id (b/random-nth worker (vec @!item-comment-ids)) #_(b/sample-flat worker item-comment-id)
         comment (b/random-str worker)
         ;; TODO should probably be moved to the sampling logic
         {item_id :ic_i_id seller_id :ic_u_id} (first (xt/q node "SELECT * FROM item_comment AS ic WHERE ic._id = ?"
@@ -234,11 +229,11 @@
                                                             :key-fn :snake-case-keyword}))]
     (when ic_id
       (xt/execute-tx node [[:sql "UPDATE item_comment AS ic SET ic_response = ?
-                               WHERE ic._id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
+                                  WHERE ic._id = ? AND ic.ic_i_id = ? AND ic.ic_u_id = ?"
                            [comment ic_id item_id seller_id]]]))))
 
 (defn proc-new-purchase [{:keys [node] :as worker}]
-  (let [{:keys [^UUID i_id i_u_id]} (random-item worker :status :waiting-for-purchase)
+  (let [{:keys [^UUID i_id i_u_id]} (random-item worker {:status :waiting-for-purchase})
         ;; TODO buyer_id should be used for validation
         {buyer_id :imb_ib_u_id, bid_id :imb_ib_id} (first
                                                     (xt/q node "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
@@ -255,7 +250,7 @@
                            [:closed i_id]]]))))
 
 (defn proc-new-feedback [{:keys [node] :as worker}]
-  (let [{:keys [^UUID i_id i_u_id] :as _item} (random-item worker :status :closed)
+  (let [{:keys [^UUID i_id i_u_id] :as _item} (random-item worker {:status :closed})
         if_id (UUID. (.getMostSignificantBits i_id) (b/increment worker item-feedback-id))
         {buyer_id :imb_ib_u_id}
         (-> (xt/q node "SELECT imb.imb_ib_id, imb.imb_ib_u_id FROM item_max_bid AS imb WHERE imb.imb_i_id = ? AND imb.imb_u_id = ?"
@@ -272,7 +267,7 @@
                            [if_id if_id i_id i_u_id buyer_id rating now comment]]]))))
 
 (defn proc-get-item [{:keys [node] :as worker}]
-  (let [{:keys [i_id]} (random-item worker :status :open)]
+  (let [{:keys [i_id]} (random-item worker {:status :open})]
     (xt/q node "SELECT item.i_id, item.i_u_id, item.i_name, item.i_current_price, item.i_num_bids,
                       item.i_end_date, item.i_status
                FROM item WHERE item._id = ?"
@@ -280,7 +275,7 @@
 
 ;; TODO aborted transactions
 (defn proc-update-item [{:keys [node] :as worker}]
-  (let [{:keys [i_id]} (random-item worker :status :open)
+  (let [{:keys [i_id]} (random-item worker {:status :open})
         description (b/random-str worker)]
     (xt/execute-tx node [[:sql "UPDATE item SET i_description = ? WHERE item._id = ?" [description i_id]]])))
 
@@ -328,7 +323,7 @@
          (proc-post-auction worker))))
 
 (defn proc-get-comment [{:keys [node] :as worker}]
-  (let [{:keys [i_u_id]} (random-item worker :status :open)]
+  (let [{:keys [i_u_id]} (random-item worker {:status :open})]
     (xt/q node "SELECT * FROM item_comment AS ic
                WHERE ic.ic_u_id = ? AND ic.ic_response IS NULL"
           {:args [i_u_id]})))
@@ -378,7 +373,7 @@
 ;; represents a probable state of an item that can be sampled randomly
 (defrecord ItemSample [i_id, i_u_id, i_status, i_end_date, i_num_bids])
 
-(defn item-status-groups [node]
+(defn items-by-status [node]
   (let [all (ArrayList.)
         open (ArrayList.)
         waiting-for-purchase (ArrayList.)
@@ -402,35 +397,27 @@
      :waiting-for-purchase (vec waiting-for-purchase)
      :closed (vec closed)}))
 
-(defn add-item-status [{:keys [^ConcurrentHashMap custom-state]}
+(defn add-item-status [{:keys [!items-by-status]}
                        {:keys [i_status] :as item-sample}]
-  (.putAll custom-state {:item-status-groups (-> custom-state :item-status-groups
-                                                 (update :all (fnil conj []) item-sample)
-                                                 (update i_status (fnil conj []) item-sample))}))
-
-
+  (swap! !items-by-status
+         (fn [items]
+           (-> items
+               (update :all (fnil conj []) item-sample)
+               (update i_status (fnil conj []) item-sample)))))
 
 ;; do every now and again to provide inputs for item-dependent computations
-(defn index-item-status-groups [worker]
-  (let [{:keys [node, ^ConcurrentHashMap custom-state]} worker
-        node node
-        res (item-status-groups node)]
-    (.putAll custom-state {:item-status-groups res})))
+(defn index-item-status-groups [{:keys [node !items-by-status]}]
+  (reset! !items-by-status (items-by-status node)))
 
 (defn read-category-tsv []
-  (let [cat-tsv-rows
-        (with-open [rdr (io/reader (io/resource "data/auctionmark/auctionmark-categories.tsv"))]
-          (vec (for [line (line-seq rdr)
-                     :let [split (str/split line #"\t")
-                           cat-parts (butlast split)
-                           item-count (last split)
-                           parts (remove str/blank? cat-parts)]]
-                 {:parts (vec parts)
-                  :item-count (parse-long item-count)})))
-        extract-cats
-        (fn extract-cats [parts]
-          (when (seq parts)
-            (cons parts (extract-cats (pop parts)))))
+  (let [cat-tsv-rows (with-open [rdr (io/reader (io/resource "data/auctionmark/auctionmark-categories.tsv"))]
+                       (vec (for [line (line-seq rdr)
+                                  :let [split (str/split line #"\t")]]
+                              {:parts (->> (butlast split) (into [] (remove str/blank?)))
+                               :item-count (parse-long (last split))})))
+        extract-cats (fn extract-cats [parts]
+                       (when (seq parts)
+                         (cons parts (extract-cats (pop parts)))))
         all-paths (into #{} (comp (map :parts) (mapcat extract-cats)) cat-tsv-rows)
         path-i (into {} (map-indexed (fn [i x] [x i])) all-paths)
         trie (reduce #(assoc-in %1 (:parts %2) (:item-count %2)) {} cat-tsv-rows)
@@ -447,13 +434,6 @@
              :parent (category-id (path-i i))
              :item-count (trie-node-item-count path)}])
          (into {}))))
-
-(defn load-categories-tsv [worker]
-  (let [cats (read-category-tsv)
-        {:keys [^ConcurrentHashMap custom-state]} worker]
-    ;; squirrel these data-structures away for later (see category-generator, sample-category-id)
-    (.putAll custom-state {::categories cats
-                           ::category-weighting (b/weighted-sample-fn (map (juxt :xt/id :item-count) (vals cats)))})))
 
 (defn generate-region [worker]
   (let [r-id (b/increment worker region-id)]
@@ -475,9 +455,8 @@
      :gav_gag_id gag-id
      :gav_name (b/random-str worker 6 32)}))
 
-(defn generate-category [worker]
-  (let [{::keys [categories]} (:custom-state worker)
-        c-id (b/increment worker category-id)
+(defn generate-category [{::keys [categories] :as worker}]
+  (let [c-id (b/increment worker category-id)
         {:keys [category-name, parent]} (categories c-id)]
     {:xt/id c-id
      :c_id c-id
@@ -570,23 +549,15 @@
         (when-not (= last-tx latest-completed-tx)
           (recur latest-completed-tx))))))
 
-(defn then-await-tx [node]
-  (xt-log/await-tx node))
-
 (defn load-phase-submit-tasks [sf]
-  [{:t :call, :f (fn [_] (log/info "start submitting load stage"))}
-   {:t :call, :f load-categories-tsv}
-   {:t :call, :f [b/generate :region generate-region 75]}
+  [{:t :call, :f [b/generate :region generate-region 75]}
    {:t :call, :f [b/generate :category generate-category 16908]}
    {:t :call, :f [b/generate :user generate-user (* sf 1e6)]}
    {:t :call, :f [b/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
    {:t :call, :f [b/generate :item generate-item (* sf 1e6 10)]}
    {:t :call, :f [b/generate :gag generate-global-attribute-group 100]}
    {:t :call, :f [b/generate :gav generate-global-attribute-value 1000]}
-   {:t :call, :f (fn [_] (log/info "finished submitting load stage"))}
-   {:t :call, :f (fn [_] (log/info "start awaiting load stage"))}
-   {:t :call, :f #(then-await-tx (:node %))}
-   {:t :call, :f (fn [_] (log/info "finished awaiting load stage"))}])
+   {:t :call, :f (comp b/sync-node :node)}])
 
 ;; Ensure we always await the submitted docs when only doing the load phase
 (defn load-phase-only [{:keys [seed scale-factor] :or {seed 0 scale-factor 0.1}}]
@@ -612,6 +583,13 @@
 
    ["-h" "--help"]])
 
+(defn ->initial-state []
+  (let [cats (read-category-tsv)]
+    {::categories cats
+     ::category-weighting (b/weighted-sample-fn (map (juxt :xt/id :item-count) (vals cats)))
+     :!item-comment-ids (atom [])
+     :!items-by-status (atom {})}))
+
 (defmethod b/->benchmark :auctionmark [_ {:keys [seed threads duration scale-factor no-load? sync]
                                           :or {seed 0, threads 8, sync false
                                                duration "PT30S", scale-factor 0.1}}]
@@ -619,21 +597,20 @@
     (log/trace {:scale-factor scale-factor})
     {:title "Auction Mark OLTP"
      :seed seed
+     :->state ->initial-state
      :tasks (concat (when-not no-load?
                       [{:t :do
                         :stage :load
                         :tasks (load-phase-submit-tasks scale-factor)}])
                     [{:t :do
                       :stage :setup-worker
-                      :tasks [{:t :call, :f (fn [_] (log/info "setting up worker with stats"))}
-                              ;; wait for node to catch up
+                      :tasks [;; wait for node to catch up
                               {:t :call, :f #(when no-load?
                                                ;; otherwise nothing has come through the log yet
                                                (Thread/sleep 1000)
                                                (catchup (:node %)))}
                               {:t :call, :f load-stats-into-worker}
-                              {:t :call, :f log-stats}
-                              {:t :call, :f (fn [_] (log/info "finished setting up worker with stats"))}]}
+                              {:t :call, :f log-stats}]}
 
                      {:t :concurrently
                       :stage :oltp

@@ -30,7 +30,7 @@
         (log/error t (str "Error while executing " f))
         (throw t)))))
 
-(defrecord Worker [node random domain-state custom-state clock bench-id jvm-id])
+(defrecord Worker [node random domain-state clock bench-id jvm-id])
 
 (defn current-timestamp ^Instant [worker]
   (.instant ^Clock (:clock worker)))
@@ -278,14 +278,16 @@
 
       (wrap-task task)))
 
-(defn compile-benchmark [{:keys [title seed], :or {seed 0}, :as benchmark}]
+(defn compile-benchmark [{:keys [title seed ->state], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
     (fn run-benchmark [node]
       (let [clock (Clock/systemUTC)
             domain-state (ConcurrentHashMap.)
-            custom-state (ConcurrentHashMap.)
             root-random (Random. seed)
-            worker (->Worker node root-random domain-state custom-state clock (random-uuid) (System/getProperty "user.name"))
+            worker (into (->Worker node root-random domain-state clock (random-uuid) (System/getProperty "user.name"))
+                         (cond
+                           (vector? ->state) (apply (first ->state) (rest ->state))
+                           (fn? ->state) (->state)))
             start-ms (System/currentTimeMillis)]
         (doseq [f fns]
           (f worker))

@@ -4,8 +4,7 @@
             [xtdb.bench.util :as bu]
             [xtdb.ts-devices :as tsd]
             [xtdb.util :as util])
-  (:import (java.time Duration)
-           (java.util AbstractMap)))
+  (:import (java.time Duration)))
 
 (defn download-file [size file-name]
   (let [tmp-file (bu/tmp-file-path (str "ts-devices." file-name) ".csv.gz")]
@@ -21,19 +20,21 @@
 (defmethod b/->benchmark :ts-devices [_ {:keys [size seed] :or {seed 0}}]
   {:title "TS Devices Ingest"
    :seed seed,
+   :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
             :tasks [{:t :call
                      :stage :download-files
-                     :f (fn [{:keys [^AbstractMap custom-state]}]
-                          (.put custom-state :device-info-file (download-file size "device_info"))
-                          (.put custom-state :readings-file (download-file size "readings")))}
+                     :f (fn [{:keys [!state]}]
+                          (swap! !state assoc
+                                 :device-info-file (download-file size "device_info")
+                                 :readings-file (download-file size "readings")))}
 
                     {:t :call
                      :stage :submit-docs
-                     :f (fn [{:keys [node custom-state]}]
-                          (tsd/submit-ts-devices node {:device-info-file (get custom-state :device-info-file)
-                                                      :readings-file (get custom-state :readings-file)}))}
+                     :f (fn [{:keys [node !state]}]
+                          (tsd/submit-ts-devices node {:device-info-file (get @!state :device-info-file)
+                                                      :readings-file (get @!state :readings-file)}))}
                     {:t :call
                      :stage :sync
                      :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}

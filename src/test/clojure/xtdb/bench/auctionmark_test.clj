@@ -11,12 +11,8 @@
 (t/use-fixtures :each tu/with-node)
 
 (defn- ->worker [node]
-  (let [clock (Clock/systemUTC)
-        domain-state (ConcurrentHashMap.)
-        custom-state (ConcurrentHashMap.)
-        root-random (Random. 112)
-        worker (b/->Worker node root-random domain-state custom-state clock (random-uuid) (System/getProperty "user.name"))]
-    worker))
+  (into (b/->Worker node (Random. 112) (ConcurrentHashMap.) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name"))
+        (am/->initial-state)))
 
 (deftest generate-user-test
   (let [worker (->worker *node*)]
@@ -28,7 +24,6 @@
 
 (deftest generate-categories-test
   (let [worker (->worker *node*)]
-    (am/load-categories-tsv worker)
     (b/generate worker :category am/generate-category 1)
 
     (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :category [])
@@ -45,7 +40,6 @@
 
 (deftest generate-global-attribute-group-test
   (let [worker (->worker *node*)]
-    (am/load-categories-tsv worker)
     (b/generate worker :category am/generate-category 1)
     (b/generate worker :gag am/generate-global-attribute-group 1)
 
@@ -55,7 +49,6 @@
 
 (deftest generate-global-attribute-value-test
   (let [worker (->worker *node*)]
-    (am/load-categories-tsv worker)
     (b/generate worker :category am/generate-category 1)
     (b/generate worker :gag am/generate-global-attribute-group 1)
     (b/generate worker :gav am/generate-global-attribute-value 1)
@@ -76,15 +69,14 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (b/generate worker :user am/generate-user 1)
-      (am/load-categories-tsv worker)
       (b/generate worker :category am/generate-category 1)
       (b/generate worker :item am/generate-item 1)
 
       (t/is (= {:count-id 1} (first (xt/q *node* '(-> (from :item [])
                                                       (aggregate {:count-id (row-count)}))))))
       (t/is (= (UUID. (.getMostSignificantBits ^UUID (am/user-id 0)) (am/item-id 0))
-               (:i_id (am/random-item worker :status :open))))
-      (t/is (= (am/user-id 0) (:i_u_id (am/random-item worker :status :open))))
+               (:i_id (am/random-item worker {:status :open}))))
+      (t/is (= (am/user-id 0) (:i_u_id (am/random-item worker {:status :open}))))
 
       (t/testing "item update"
         (let [{old-description :i-description} (first (xt/q *node* '(from :item [i-description])))
@@ -96,7 +88,6 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (b/generate worker :user am/generate-user 1)
-      (am/load-categories-tsv worker)
       (b/generate worker :category am/generate-category 1)
       (b/generate worker :item am/generate-item 1)
       ;; to wait for indexing
@@ -106,7 +97,6 @@
 (deftest proc-new-user-test
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
-      (am/load-categories-tsv worker)
       (b/generate worker :category am/generate-category 1)
       (am/proc-new-user worker)
 
@@ -124,7 +114,6 @@
       (let [worker (->worker *node*)]
         (t/testing "new bid"
           (b/generate worker :user am/generate-user 2)
-          (am/load-categories-tsv worker)
           (b/generate worker :category am/generate-category 1)
           (b/generate worker :item am/generate-item 1)
 
@@ -180,7 +169,6 @@
     (let [worker (->worker *node*)]
       (t/testing "new item"
         (b/generate worker :user am/generate-user 1)
-        (am/load-categories-tsv worker)
         (b/generate worker :category am/generate-category 10)
         (b/generate worker :gag am/generate-global-attribute-group 10)
         (b/generate worker :gav am/generate-global-attribute-value 100)
@@ -203,7 +191,6 @@
           ic_id #uuid "d526fcdf-9b10-329b-0000-000000000000"]
       (t/testing "new comment"
         (b/generate worker :user am/generate-user 1)
-        (am/load-categories-tsv worker)
         (b/generate worker :category am/generate-category 10)
         (b/generate worker :gag am/generate-global-attribute-group 10)
         (b/generate worker :gav am/generate-global-attribute-value 100)
@@ -232,7 +219,6 @@
     (let [worker (->worker *node*)]
       (t/testing "new purchase"
         (b/generate worker :user am/generate-user 1)
-        (am/load-categories-tsv worker)
         (b/generate worker :category am/generate-category 10)
         (b/generate worker :gag am/generate-global-attribute-group 10)
         (b/generate worker :gav am/generate-global-attribute-value 100)
@@ -253,7 +239,6 @@
     (let [worker (->worker *node*)]
       (t/testing "new feedback"
         (b/generate worker :user am/generate-user 1)
-        (am/load-categories-tsv worker)
         (b/generate worker :category am/generate-category 10)
         (b/generate worker :gag am/generate-global-attribute-group 10)
         (b/generate worker :gav am/generate-global-attribute-value 100)
@@ -268,7 +253,6 @@
   (with-redefs [am/sample-status (constantly :open)]
     (let [worker (->worker *node*)]
       (b/generate worker :user am/generate-user 2)
-      (am/load-categories-tsv worker)
       (b/generate worker :category am/generate-category 10)
       (b/generate worker :gag am/generate-global-attribute-group 10)
       (b/generate worker :gav am/generate-global-attribute-value 100)
@@ -286,7 +270,6 @@
     (let [worker (->worker *node*)]
       (t/testing "non-answered-comments"
         (b/generate worker :user am/generate-user 1)
-        (am/load-categories-tsv worker)
         (b/generate worker :category am/generate-category 10)
         (b/generate worker :gag am/generate-global-attribute-group 10)
         (b/generate worker :gav am/generate-global-attribute-value 100)
@@ -303,7 +286,6 @@
       (t/testing "non-answered-comments"
         (b/generate worker :region am/generate-region 1)
         (b/generate worker :user am/generate-user 2)
-        (am/load-categories-tsv worker)
         (b/generate worker :category am/generate-category 10)
         (b/generate worker :gag am/generate-global-attribute-group 10)
         (b/generate worker :gav am/generate-global-attribute-value 100)

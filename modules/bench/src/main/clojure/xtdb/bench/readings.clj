@@ -64,8 +64,8 @@
     :stage (if offset
              (keyword (str "query-offset-" len "-" (name offset) "-interval-" (name interval)))
              (keyword (str "query-recent-interval-" (name interval))))
-    :tasks [{:t :call :f (fn [{:keys [node custom-state]}]
-                           (let [{:keys [latest-completed-tx max-valid-time]} custom-state
+    :tasks [{:t :call :f (fn [{:keys [node !state]}]
+                           (let [{:keys [latest-completed-tx max-valid-time]} @!state
                                  max-valid-time (cond-> max-valid-time
                                                   offset (subtract-period offset len))]
                              (aggregate-query node (subtract-period max-valid-time interval) max-valid-time
@@ -108,17 +108,18 @@
 (defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load?] :or {seed 0}}]
   {:title "Readings benchmarks"
    :seed seed
+   :->state #(do {:!state (atom {})})
    :tasks (concat (when-not no-load?
                     (->ingestion-stage devices readings))
 
                   [{:t :call
-                    :f (fn [{:keys [node ^AbstractMap custom-state]}]
+                    :f (fn [{:keys [node !state]}]
                          (let [{:keys [latest-completed-tx]} (xt/status node)
                                max-valid-time (-> (xt/q node max-valid-time-q)
                                                   first
                                                   :max-valid-time)]
-                           (.putAll custom-state {:latest-completed-tx latest-completed-tx
-                                                  :max-valid-time max-valid-time})))}]
+                           (swap! !state into {:latest-completed-tx latest-completed-tx
+                                               :max-valid-time max-valid-time})))}]
 
                   ;; this accumulates over the most recent interval
                   (for [interval [:now :day :week :month :quarter :year]]

@@ -23,15 +23,15 @@
 
 (defn queries-stage [stage-name]
   {:t :do, :stage stage-name
-   :tasks (vec (concat [{:t :call :f (fn [{:keys [^AbstractMap custom-state]}]
-                                       (.put custom-state :bf-stats-start (System/currentTimeMillis)))}]
+   :tasks (vec (concat [{:t :call :f (fn [{:keys [!state]}]
+                                       (swap! !state assoc :bf-stats-start (System/currentTimeMillis)))}]
 
                        (for [i (range (count tpch-ra/queries))]
                          (query-tpch stage-name i))
 
-                       [{:t :call :f (fn [{:keys [custom-state] :as worker}]
+                       [{:t :call :f (fn [{:keys [!state] :as worker}]
                                        (let [report-name (str (name stage-name) " buffer pool stats")
-                                             start-ms (get custom-state :bf-stats-start)
+                                             start-ms (get @!state :bf-stats-start)
                                              end-ms (System/currentTimeMillis)]
                                          (b/log-report worker {:stage report-name
                                                                :time-taken-ms (- end-ms start-ms)})))}]))})
@@ -48,6 +48,7 @@
   (log/info {:scale-factor scale-factor})
 
   {:title "TPC-H (OLAP)", :seed seed
+   :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
             :tasks (concat (when-not no-load?
