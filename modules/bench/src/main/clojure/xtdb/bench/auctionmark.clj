@@ -651,9 +651,9 @@
 
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :auctionmark [{:keys [seed threads duration scale-factor no-load? sync]
-                                        :or {seed 0, threads 8, sync false
-                                             duration "PT30S", scale-factor 0.1}}]
+(defmethod b/->benchmark :auctionmark [_ {:keys [seed threads duration scale-factor no-load? sync]
+                                          :or {seed 0, threads 8, sync false
+                                               duration "PT30S", scale-factor 0.1}}]
   (let [^Duration duration (cond-> duration (string? duration) Duration/parse)]
     (log/trace {:scale-factor scale-factor})
     {:title "Auction Mark OLTP"
