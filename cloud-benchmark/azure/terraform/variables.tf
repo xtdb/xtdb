@@ -10,6 +10,12 @@ variable "kubernetes_service_account_name" {
   default     = "xtdb-service-account"
 }
 
+variable "kubernetes_node_count" {
+  description = "The number of Kubernetes nodes to deploy"
+  type        = number
+  default     = 3
+}
+
 variable "kubernetes_vm_size" {
   description = "The size of the Kubernetes VMs - update as necessary to scale"
   type        = string

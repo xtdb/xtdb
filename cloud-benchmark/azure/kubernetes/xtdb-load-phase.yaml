@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xtdb-load-phase
+  namespace: cloud-benchmark
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: xtdb-load-phase
+        azure.workload.identity/use: "true"
+    spec:
+      nodeSelector:
+        nodepool: "benchmark"
+      serviceAccountName: xtdb-service-account
+      restartPolicy: Never
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: xtdb-yaml-config
+          configMap:
+            name: xtdb-yaml-config
+        - name: local-disk-cache
+          emptyDir:
+            sizeLimit: 90Gi
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox
+          command: ['sh', '-c', 'until nc -z kafka.cloud-benchmark.svc.cluster.local 9092; do echo waiting for kafka; sleep 5; done;']
+      containers:
+        - name: load-phase
+          image: cloudbenchmarkregistry.azurecr.io/xtdb-azure-bench:latest
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: xtdb-yaml-config
+              mountPath: /var/lib/xtdb-config/xtdbconfig.yaml
+              subPath: xtdbconfig.yaml
+            - name: local-disk-cache
+              mountPath: /var/lib/xtdb/buffers/
+          resources:
+            requests:
+              memory: "8440Mi"
+              ephemeral-storage: "100Gi"
+            limits:
+              memory: "8440Mi"
+              ephemeral-storage: "100Gi"
+          envFrom:
+            - configMapRef:
+                name: xtdb-env-config
+          env:
+            - name: AUCTIONMARK_LOAD_PHASE_ONLY
+              value: "True"
+            - name: XTDB_NODE_ID
+              value: "bench-load-phase"
+            - name: CONFIG_FILE
+              value: "/var/lib/xtdb-config/xtdbconfig.yaml"
+          ports:
+            - name: metrics
+              containerPort: 8080

@@ -110,8 +110,8 @@ resource "azurerm_kubernetes_cluster_node_pool" "cloud_benchmark_nodes" {
   name                  = "benchmark"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.cloud_benchmark.id
   vm_size               = var.kubernetes_vm_size
-  node_count            = 1
-  node_labels           = {
+  node_count            = var.kubernetes_node_count
+  node_labels = {
     "nodepool" = "benchmark"
   }
 }
@@ -147,5 +147,5 @@ output "storage_account_container" {
 
 output "insights_connection_string" {
   sensitive = true
-  value = azurerm_application_insights.cloud_benchmark.connection_string
+  value     = azurerm_application_insights.cloud_benchmark.connection_string
 }

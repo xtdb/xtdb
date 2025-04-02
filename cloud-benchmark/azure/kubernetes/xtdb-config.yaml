@@ -1,0 +1,52 @@
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "xtdb-env-config"
+  namespace: "cloud-benchmark"
+data:
+  # Need to be set per run - not committed
+  XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "<user_managed_identity_client_id>"
+  XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING: "<insights_connection_string>"
+  # SLACK_WEBHOOK_URL: "<run_stability_channel_webhook>"
+
+  # (Generally) Fixed XTDB settings
+  XTDB_AZURE_STORAGE_ACCOUNT: "xtdbazurebenchmark"
+  XTDB_AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka.cloud-benchmark.svc.cluster.local:9092"
+  XTDB_LOG_TOPIC: "xtdb-log"
+  
+  # Auctionmark settings
+  CLOUD_PLATFORM_NAME: "Azure"
+  AUCTIONMARK_DURATION: "PT24H"
+  AUCTIONMARK_SCALE_FACTOR: "0.1"
+
+  # XTDB settings
+  JDK_JAVA_OPTIONS: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=3000m -XX:MaxMetaspaceSize=500m"
+  XTDB_LOGGING_LEVEL: "info"
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "xtdb-yaml-config"
+  namespace: "cloud-benchmark"
+data: 
+  xtdbconfig.yaml: |-
+    healthz:
+      port: 8080
+
+    log: !Kafka
+      bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+      topic: !Env XTDB_LOG_TOPIC
+
+    storage: !Remote
+      objectStore: !Azure
+        storageAccount: !Env XTDB_AZURE_STORAGE_ACCOUNT
+        container: !Env XTDB_AZURE_STORAGE_CONTAINER
+        prefix: "xtdb-object-store"
+        userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+      localDiskCache: /var/lib/xtdb/buffers/
+      maxDiskCachePercentage: 75
+
+    modules:
+      - !AzureMonitor
+        connectionString: !Env XTDB_AZURE_APP_INSIGHTS_CONNECTION_STRING

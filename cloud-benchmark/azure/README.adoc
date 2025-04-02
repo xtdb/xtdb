@@ -18,6 +18,7 @@ For local development, you will need the following:
 * `docker buildx` configured.
 * `terraform` available on your machine.
 * `kubectl` available on your machine.
+* `helm` available on your machine.
 
 === Authenticating with Azure
 
@@ -36,21 +37,11 @@ az account set --subscription "XTDB long-run reliability"
 All of the config for setting up the infrastructure on Azure is handled by Terraform - and the files are within the `terraform` directory. 
 
 * The `main.tf` file contains the main configuration for the Azure resources.
-* Can update the names of a few things within `terraform.tfvars` - though this is not expected to change so much from the default values. The only thing that may be expected to change is the `kubernetes_vm_size` if you wish to run more than one pod/multiple nodes.
+* Can update the names of a few things within `terraform.tfvars` - though this is not expected to change so much from the default values. 
 
 Prior to deploying any of the infra using terraform, you will need to initialize the terraform directory. From the `terraform` directory:
 ```bash
 terraform init
-```
-
-To ensure that the terraform config is properly formatted, you can run:
-```bash
-terraform fmt
-```
-
-To then validate the terraform config, you can run:
-```bash
-terraform validate
 ```
 
 To see what will will/change when running terraform, you can run:
@@ -84,13 +75,10 @@ This will:
 
 * Creates a Shadow JAR of the `cloud-benchmark:azure` project.
 ** This contains the compiled `cloud-benchmark` project, which has a main file that runs auctionmark & configures it with provided node config, and also any of the dependencies we require to run the Azure module.
-* Creates a docker image, copying in the Shadow JAR and the `azure-config.yaml` file with the node config.
-** If you want to set any JVM opts - do it by editing the Dockerfile's `ENTRYPOINT`.
 * Pushes the docker image to the Azure Container Registry.
 
 
-== Deploying the Benchmark Containers
-
+== Deploying the Benchmark
 
 Before trying to deploy the benchmark containers, you will need to ensure that you have the necessary permissions to deploy to the Kubernetes cluster. You can do this by running the following command:
 ```
@@ -99,12 +87,10 @@ az aks get-credentials --resource-group cloud-benchmark-resources --name cloud-b
 
 This will configure your `kubectl` to use the credentials for the Kubernetes cluster. 
 
-Before deploying anything, must ensure all of the necessary pieces of config are set within the ConfigMap/match the values/names of the terraform architecture, run the following in the terraform directory:
+Before deploying anything, must ensure all of the necessary pieces of config are set within the xtdb-config.yaml & match the values/names of the terraform architecture, run the following in the terraform directory:
 ```
-terraform outputs
+terraform output
 ```
-
-Ensure that the contents of the files under `kubernetes` match the values of the terraform outputs.
 
 We must also ensure that we have both a namespace and a service account for the benchmark to run under. To create these, you can run the following:
 ```
@@ -112,99 +98,122 @@ kubectl create namespace cloud-benchmark
 kubectl create serviceaccount xtdb-service-account --namespace cloud-benchmark 
 ```
 
-The config for the deployments/jobs live under `kubernetes` - within these, you can set/configure any of the necessary parameters for running the image on the cluster. When ready to run a single node auctionmark job, run the following command from the base of this directory:
+=== Running Kafka
+
+We require Kafka as the txLog for the multi-node benchmark. To use this, we need to setup the Kafka pods and the persistent volume claim for Kafka.
+
+For this purpose, we use helm:
 ```
-kubectl apply -f kubernetes/single-node-auctionmark.yaml
-```
-
-You can see the status of job creation using the following:
-```
-kubectl get jobs --namespace cloud-benchmark
-```
-
-Trail the logs of the single node run by running:
-```
-kubectl logs job.batch/xtdb-single-node-auctionmark --namespace cloud-benchmark -f
-```
-
-=== Multinode Benchmarking
-
-Running a multi-node benchmark is similar, though requires a few more steps.
-
-Firstly, update the terraform config to have the correct amount of memory/cpu for the nodes you wish to run. 
-
-* This can be altered with the `kubernetes_vm_size` variable in the `terraform.tfvars` file.
-* You will need to set a `temporary_name_for_rotation` when resizing the node pool.
-
-We will also need to update the node config and push a new image, as we are now using Kafka as the txLog and running multiple nodes - update the contents of the `azure-config.yaml` file:
-
-* Switch the txLog implementation to `kafka`, adding the relevant config/env vars.
-* Set a reasonable maxDiskCachePercentage size depending on number of nodes running.
-
-After this, push a new image to the Azure Container Registry. 
-
-To set up all the necessary kafka pods that will be used/shared by the nodes txLog, run the following:
-
-```
-kubectl apply -f kubernetes/kafka.yaml
+helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
+  --namespace cloud-benchmark \
+  --set listeners.client.protocol=PLAINTEXT \
+  --set listeners.controller.protocol=PLAINTEXT \
+  --set controller.resourcesPreset=medium \
+  --set controller.nodeSelector.nodepool=benchmark
 ```
 
-This will setup a kafka service the pods can connect to, alongside the persistent volume claim for kafka.
-
-When the kafka pods are ready, you can then deploy the multi-node benchmark by running the following:
+To clearup the Kafka deployment, you can run:
 ```
-kubectl apply -f kubernetes/multi-node-auctionmark.yaml
+helm uninstall kafka --namespace cloud-benchmark
 ```
 
+=== Setting up the config for XTDB
 
-== Clear up between runs
+The XTDB jobs rely on:
 
-If you want to totally clear up data between runs, you'll want to do the following:
+* A ConfigMap of environment variables for benchmark and platform settings
+* A YAML-based ConfigMap for the XTDB node configuration
 
-* Clear up the job/pods
-** Clear up the Kafka deployment (if running a multi-node benchmark)
-* Empty the Azure Storage Blobs Container
-* Delete the Persistent Storage volume used by the TxLog
-** Delete the Persistent Storage volume used by Kafka (if running a multi-node benchmark)
-* Delete the Persistent Storage volume containing the Local Disk Caches
+These must be present in the cloud-benchmark namespace before running any jobs:
 
-.Clear up the XTDB job
-
-To clear up the single node workload, you can run:
 ```bash
-kubectl delete jobs xtdb-single-node-auctionmark --namespace cloud-benchmark
+kubectl apply -f kubernetes/xtdb-config.yaml
 ```
 
-For the multi-node workload, you can run:
+To update or refresh the configuration:
+
+* Delete any existing jobs that are running, using the config.
+* Re-apply the config by re-running the above command.
+
+=== Running the loadphase:
+
+Run the loadphase job by running the following command:
 ```bash
-kubectl delete jobs xtdb-multi-node-auctionmark --namespace cloud-benchmark
+kubectl apply -f kubernetes/xtdb-load-phase.yaml
 ```
 
-.Clear up the Kafka deployment
-
-To clear up the Kafka deployment, you can run:
+To see the logs of the loadphase job, you can run:
 ```bash
-kubectl delete deployment kafka-app --namespace cloud-benchmark
+kubectl logs -f job/xtdb-load-phase --namespace cloud-benchmark
 ```
 
-.Command to empty the Azure Storage Blob Container:
+To delete the loadphase job, you can run:
+```bash
+kubectl delete job xtdb-load-phase --namespace cloud-benchmark
+```
+
+=== Running the multinode job:
+
+Run the multinode job by running the following command:
+```bash
+kubectl apply -f kubernetes/xtdb-cluster-nodes.yaml
+```
+
+Since this job runs 3 pods in parallel, you'll need to check logs per pod. To list the pod names:
+```bash
+kubectl get pods --selector=job-name=xtdb-cluster-nodes --namespace cloud-benchmark
+```
+
+To see the logs of a multinode job, you can run:
+```bash
+kubectl logs -f <pod-name> --namespace cloud-benchmark
+```
+
+To delete the multinode job, you can run:
+```bash
+kubectl delete job xtdb-cluster-nodes --namespace cloud-benchmark
+```
+
+=== Clearing up
+
+You can clearup the storage between runs by using the following:
 ```bash
 ./scripts/clear-azure-storage.sh
 ```
 
-.Deleting Persistent Storage Volumes:
-You can remove the Persistent Storage volumes within the google cloud UI, but will need to be careful to ensure they are both removed from GKE and deleted within Compute Engine's storage as well. You will need to ensure any pods are closed/deleted first, and then to delete them, you can do the following:
-```bash
-kubectl delete pvc xtdb-pvc-log --namespace cloud-benchmark
-kubectl delete pvc xtdb-pvc-local-caches --namespace cloud-benchmark
-# If running a multi-node benchmark with Kafka
-kubectl delete pvc kafka-pvc --namespace cloud-benchmark
-``` 
-
-There is a helper script to do _all_ of the above, which can be run by:
+If you wish to clear up everything on kubernetes, use the following:
 ```bash
 ./scripts/clear-azure-bench.sh
 ```
+
+== Monitoring with Grafana
+
+Within here are also some provided templates for setting up a Grafana-Otel deployment which shall scrape the pods from the XTDB benchmark Job.
+
+To deploy grafana, simply run:
+```
+kubectl apply -f kubernetes/grafana.yaml
+```
+
+To access the Grafana instance, you can use the external IP of the LoadBalancer service created for Grafana:
+```bash
+kubectl get svc grafana-service --namespace cloud-benchmark
+```
+
+The Grafana dashboard can be accessed via the external IP of the LoadBalancer service, on port `3001`. The default credentials are `admin`/`admin`.
+
+With this up and runing, you can then import the XTDB dashboards (the cluster monitoring dashboard and node debugging dashboard) from `monitoring/grafana/dashboards`, and use these to monitor the benchmark pods.
+
+=== Clearing up Grafana
+
+If using the `clear-azure-bench.sh` script, by default we retain the Grafana deployment. If you wish to clear this up, you can run:
+
+```bash
+./scripts/clear-azure-bench --clear-grafana
+```
+
+This will clear up the Grafana deployment, the Grafana persistent volume claim, and the Prometheus persistent volume claim.
 
 == Monitoring With Azure Monitor
 
@@ -247,49 +256,3 @@ To setup the dashboard itself, there's a few steps we must take:
 ** We can upload this from a template - you can use the template found within the `cloud-benchmark/azure` directory, `application-insights/dashboard.json`. 
 
 We already have a shared dashboard setup, under "Monitoring Dashboard"
-
-== Monitoring with Grafana
-
-Within here are also some provided templates for setting up a Grafana-Otel deployment which shall scrape the pods from the XTDB benchmark Job.
-
-To deploy grafana, simply run:
-```
-kubectl apply -f kubernetes/grafana.yaml
-```
-
-To access the Grafana instance, you can use the external IP of the LoadBalancer service created for Grafana:
-```bash
-kubectl get svc grafana-service --namespace cloud-benchmark
-```
-
-The Grafana dashboard can be accessed via the external IP of the LoadBalancer service, on port `3001`. The default credentials are `admin`/`admin`.
-
-With this up and runing, you can then import the XTDB dashboards (the cluster monitoring dashboard and node debugging dashboard) from `monitoring/grafana/dashboards`, and use these to monitor the benchmark pods.
-
-=== Clearing up Grafana
-
-If using the `clear-azure-bench.sh` script, by default we retain the Grafana deployment. If you wish to clear this up, you can run:
-
-```bash
-./scripts/clear-azure-bench --clear-grafana
-```
-
-This will clear up the Grafana deployment, the Grafana persistent volume claim, and the Prometheus persistent volume claim.
-
-== Trailing the Logs
-
-You can trail the logs of each node within the job by running:
-
-```
-kubectl logs job.batch/xtdb-multi-node-auctionmark --namespace cloud-benchmark -c <container-name> -f
-```
-
-For example, to see the logs from the load-phase, run:
-```
-kubectl logs job.batch/xtdb-multi-node-auctionmark --namespace cloud-benchmark -c load-phase -f
-```
-
-To see the logs of one of the nodes, run:
-```
-kubectl logs job.batch/xtdb-multi-node-auctionmark --namespace cloud-benchmark -c xtdb-bench-1 -f
-```

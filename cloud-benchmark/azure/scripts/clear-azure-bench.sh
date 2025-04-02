@@ -12,20 +12,21 @@ for arg in "$@"; do
 done
 
 (
-  kubectl delete jobs xtdb-single-node-auctionmark --namespace cloud-benchmark || true
-  kubectl delete jobs xtdb-multi-node-auctionmark --namespace cloud-benchmark || true
-  kubectl delete deployment kafka-app --namespace cloud-benchmark || true 
+  echo Deleting XTDB Jobs...
+  kubectl delete job xtdb-load-phase --namespace cloud-benchmark || true
+  kubectl delete job xtdb-cluster-nodes --namespace cloud-benchmark || true
+  echo Done
+
+  echo Clearing Kafka...
+  helm uninstall kafka --namespace cloud-benchmark || true
+  kubectl delete pvc data-kafka-controller-0 --namespace cloud-benchmark || true
+  kubectl delete pvc data-kafka-controller-1 --namespace cloud-benchmark || true
+  kubectl delete pvc data-kafka-controller-2 --namespace cloud-benchmark || true
+  echo Done
 
   echo Clearing Blob Store Container - xtdbazurebenchmarkcontainer ...
   az storage blob delete-batch --account-name xtdbazurebenchmark --source xtdbazurebenchmarkcontainer
   echo Done
-  
-  kubectl delete pvc xtdb-pvc-log --namespace cloud-benchmark || true
-  kubectl delete pvc xtdb-pvc-local-cache-lp --namespace cloud-benchmark || true
-  kubectl delete pvc xtdb-pvc-local-cache-1 --namespace cloud-benchmark || true
-  kubectl delete pvc xtdb-pvc-local-cache-2 --namespace cloud-benchmark || true
-  kubectl delete pvc xtdb-pvc-local-cache-3 --namespace cloud-benchmark || true
-  kubectl delete pvc kafka-pvc --namespace cloud-benchmark || true
 
   if [ "$CLEAR_GRAFANA" == "true" ]; then
     echo Clearing Grafana...
