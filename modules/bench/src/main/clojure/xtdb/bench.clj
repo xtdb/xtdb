@@ -255,7 +255,7 @@
                               (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))))
 
         :pick-weighted (let [{:keys [choices]} task
-                             sample-fn (weighted-sample-fn (mapv (fn [[task weight]] [(compile-task task) weight]) choices))]
+                             sample-fn (weighted-sample-fn (mapv (fn [[weight task]] [(compile-task task) weight]) choices))]
                          (if (empty? choices)
                            (constantly nil)
                            (fn run-pick-weighted [worker]

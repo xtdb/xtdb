@@ -684,24 +684,22 @@
                                       :thread-count threads
                                       :think Duration/ZERO
                                       :pooled-task {:t :pick-weighted
-                                                    :choices [[{:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)} 5.0]
-                                                              [{:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)} 10.0]
-                                                              [{:t :call, :transaction :new-bid,  :f (b/wrap-in-catch proc-new-bid)}  18.0]
-                                                              [{:t :call, :transaction :new-comment,
-                                                                :f (b/wrap-in-catch proc-new-comment)}  2.0]
-                                                              [{:t :call, :transaction :new-comment-response,
-                                                                :f (b/wrap-in-catch proc-new-comment-response)}  1.0]
-                                                              [{:t :call, :transaction :new-purchase,
-                                                                :f (b/wrap-in-catch proc-new-purchase)}  2.0]
-                                                              [{:t :call, :transaction :new-feedback,
-                                                                :f (b/wrap-in-catch proc-new-feedback)}  3.0]
-                                                              [{:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)} 45.0]
-                                                              [{:t :call, :transaction :update-item,
-                                                                :f (b/wrap-in-catch proc-update-item)} 2.0]
-                                                              [{:t :call, :transaction :get-comment,
-                                                                :f (b/wrap-in-catch proc-get-comment)} 2.0]
-                                                              [{:t :call, :transaction :get-user-info,
-                                                                :f (b/wrap-in-catch proc-get-user-info)} 10.0]]}}
+                                                    :choices [[5.0 {:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)}]
+                                                              [10.0 {:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)}]
+                                                              [18.0 {:t :call, :transaction :new-bid, :f (b/wrap-in-catch proc-new-bid)}]
+                                                              [2.0 {:t :call, :transaction :new-comment, :f (b/wrap-in-catch proc-new-comment)}]
+                                                              [1.0 {:t :call, :transaction :new-comment-response, :f (b/wrap-in-catch proc-new-comment-response)}]
+                                                              [2.0 {:t :call, :transaction :new-purchase,
+                                                                    :f (b/wrap-in-catch proc-new-purchase)}]
+                                                              [3.0 {:t :call, :transaction :new-feedback,
+                                                                    :f (b/wrap-in-catch proc-new-feedback)}]
+                                                              [45.0 {:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)}]
+                                                              [2.0 {:t :call, :transaction :update-item,
+                                                                    :f (b/wrap-in-catch proc-update-item)}]
+                                                              [2.0 {:t :call, :transaction :get-comment,
+                                                                    :f (b/wrap-in-catch proc-get-comment)}]
+                                                              [10.0 {:t :call, :transaction :get-user-info,
+                                                                     :f (b/wrap-in-catch proc-get-user-info)}]]}}
                                      {:t :freq-job
                                       :duration duration
                                       :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
