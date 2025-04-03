@@ -422,6 +422,9 @@
     :parse-fn parse-long
     :default (max 1 (/ (.availableProcessors (Runtime/getRuntime)) 2))]
 
+   [nil "--only-load" "Runs the load phase, then exits"
+    :id :only-load?]
+
    ["-h" "--help"]])
 
 (defn ->initial-state []
@@ -432,7 +435,7 @@
      :!item-comment-ids (atom [])
      :!items-by-status (atom {})}))
 
-(defmethod b/->benchmark :auctionmark [_ {:keys [seed threads duration scale-factor no-load? sync]
+(defmethod b/->benchmark :auctionmark [_ {:keys [seed threads duration scale-factor no-load? only-load? sync]
                                           :or {seed 0, threads 8, sync false
                                                duration "PT30S", scale-factor 0.1}}]
   (let [^Duration duration (cond-> duration (string? duration) Duration/parse)]
@@ -444,37 +447,39 @@
                       [{:t :do
                         :stage :load
                         :tasks (load-phase-submit-tasks scale-factor)}])
-                    [{:t :do
-                      :stage :setup-worker
-                      :tasks [;; wait for node to catch up
-                              {:t :call, :f (fn [{:keys [node] :as worker}]
-                                              (when no-load?
-                                                (b/sync-node node)
-                                                (load-stats-into-worker worker)))}]}
 
-                     {:t :concurrently
-                      :stage :oltp
-                      :duration duration
-                      :join-wait (Duration/ofMinutes 1)
-                      :thread-tasks [{:t :pool
-                                      :duration duration
-                                      :join-wait (Duration/ofMinutes 1)
-                                      :thread-count threads
-                                      :think Duration/ZERO
-                                      :pooled-task {:t :pick-weighted
-                                                    :choices [[5.0 {:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)}]
-                                                              [10.0 {:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)}]
-                                                              [18.0 {:t :call, :transaction :new-bid, :f (b/wrap-in-catch proc-new-bid)}]
-                                                              [2.0 {:t :call, :transaction :new-comment, :f (b/wrap-in-catch proc-new-comment)}]
-                                                              [1.0 {:t :call, :transaction :new-comment-response, :f (b/wrap-in-catch proc-new-comment-response)}]
-                                                              [2.0 {:t :call, :transaction :new-purchase, :f (b/wrap-in-catch proc-new-purchase)}]
-                                                              [3.0 {:t :call, :transaction :new-feedback, :f (b/wrap-in-catch proc-new-feedback)}]
-                                                              [45.0 {:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)}]
-                                                              [2.0 {:t :call, :transaction :update-item, :f (b/wrap-in-catch proc-update-item)}]
-                                                              [2.0 {:t :call, :transaction :get-comment, :f (b/wrap-in-catch proc-get-comment)}]
-                                                              [10.0 {:t :call, :transaction :get-user-info, :f (b/wrap-in-catch proc-get-user-info)}]]}}
-                                     {:t :freq-job
-                                      :duration duration
-                                      :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
-                                      :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups!)}}]}
-                     (when sync {:t :call, :f (comp b/sync-node :node)})])}))
+                    (when-not only-load?
+                      [{:t :do
+                        :stage :setup-worker
+                        :tasks [;; wait for node to catch up
+                                {:t :call, :f (fn [{:keys [node] :as worker}]
+                                                (when no-load?
+                                                  (b/sync-node node)
+                                                  (load-stats-into-worker worker)))}]}
+
+                       {:t :concurrently
+                        :stage :oltp
+                        :duration duration
+                        :join-wait (Duration/ofMinutes 1)
+                        :thread-tasks [{:t :pool
+                                        :duration duration
+                                        :join-wait (Duration/ofMinutes 1)
+                                        :thread-count threads
+                                        :think Duration/ZERO
+                                        :pooled-task {:t :pick-weighted
+                                                      :choices [[5.0 {:t :call, :transaction :new-user, :f (b/wrap-in-catch proc-new-user)}]
+                                                                [10.0 {:t :call, :transaction :new-item, :f (b/wrap-in-catch proc-new-item)}]
+                                                                [18.0 {:t :call, :transaction :new-bid, :f (b/wrap-in-catch proc-new-bid)}]
+                                                                [2.0 {:t :call, :transaction :new-comment, :f (b/wrap-in-catch proc-new-comment)}]
+                                                                [1.0 {:t :call, :transaction :new-comment-response, :f (b/wrap-in-catch proc-new-comment-response)}]
+                                                                [2.0 {:t :call, :transaction :new-purchase, :f (b/wrap-in-catch proc-new-purchase)}]
+                                                                [3.0 {:t :call, :transaction :new-feedback, :f (b/wrap-in-catch proc-new-feedback)}]
+                                                                [45.0 {:t :call, :transaction :get-item, :f (b/wrap-in-catch proc-get-item)}]
+                                                                [2.0 {:t :call, :transaction :update-item, :f (b/wrap-in-catch proc-update-item)}]
+                                                                [2.0 {:t :call, :transaction :get-comment, :f (b/wrap-in-catch proc-get-comment)}]
+                                                                [10.0 {:t :call, :transaction :get-user-info, :f (b/wrap-in-catch proc-get-user-info)}]]}}
+                                       {:t :freq-job
+                                        :duration duration
+                                        :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
+                                        :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups!)}}]}
+                       (when sync {:t :call, :f (comp b/sync-node :node)})]))}))

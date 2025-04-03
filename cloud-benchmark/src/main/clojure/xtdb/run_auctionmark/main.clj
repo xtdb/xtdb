@@ -5,7 +5,7 @@
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
             [xtdb.bench :as b]
-            [xtdb.bench.auctionmark :as am]
+            xtdb.bench.auctionmark
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import [clojure.lang ExceptionInfo]))
@@ -60,9 +60,9 @@
 
 (defn run-load-phase-only [node]
   (let [am-config {:seed 0
-                   :scale-factor scale-factor}
-        load-phase-bench (am/load-phase-only am-config)
-        load-phase-fn (b/compile-benchmark load-phase-bench)]
+                   :scale-factor scale-factor
+                   :only-load? true}
+        load-phase-fn (b/compile-benchmark (b/->benchmark :auctionmark am-config))]
     (log/info "Running Load Phase with the following config... \n" am-config)
     (try
       (binding [b/*registry* (util/component node :xtdb.metrics/registry)]
