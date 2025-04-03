@@ -20,7 +20,8 @@
            (xtdb JsonSerde Types)
            (xtdb.types IntervalMonthDayMicro IntervalMonthDayNano ZonedDateTimeRange)
            [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType IntervalMDMType)))
+           (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType IntervalMDMType)
+           (xtdb.pg.codec NumericBin)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1011,6 +1012,20 @@
                                 (.array bb)))
               :write-text (fn [_env ^IVectorReader rdr idx]
                             (utf8 (.getDouble rdr idx)))})
+
+   :numeric {:typname "numeric"
+             :col-type :decimal
+             :oid 1700
+             :typlen -1
+             :typsend "numeric_send"
+             :typreceive "numeric_recv"
+             :read-binary (fn [_env ba] (NumericBin/decode (ByteBuffer/wrap ba)))
+             :read-text (fn [_env ba] (-> ba read-utf8 bigdec))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (.array (NumericBin/encode (.getObject rdr idx))))
+             :write-text (fn [_env ^IVectorReader rdr idx]
+                           (utf8 (.getObject rdr idx)))}
+
    :uuid (let [typlen 16]
            {:typname "uuid"
             :col-type :uuid
@@ -1457,6 +1472,7 @@
    #_#_:i8 :bit
    :f64 :float8
    :f32 :float4
+   :decimal :numeric
    :uuid :uuid
    :bool :boolean
    :null :text
@@ -1482,7 +1498,9 @@
        (cond-> col-type
          ;; ignore TZ
          (= (col-type-head col-type) :timestamp-tz)
-         (subvec 0 2))
+         (subvec 0 2)
+         (= (col-type-head col-type) :decimal)
+         col-type-head)
 
        (or fallback-pg-type :json)))
 

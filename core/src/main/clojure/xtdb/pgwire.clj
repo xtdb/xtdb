@@ -627,6 +627,7 @@
     (nil? obj) nil
     (boolean? obj) obj
     (int? obj) obj
+    (decimal? obj) obj
 
     ;; I am allowing string pass through for now but be aware data.json escapes unicode and that may not be
     ;; what we want at some point (e.g pass plain utf8 unless prompted as a param).

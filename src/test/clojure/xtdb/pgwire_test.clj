@@ -2665,3 +2665,16 @@ ORDER BY 1,2;")
 (t/deftest test-sql-with-leading-whitespace
   (with-open [conn (pg-conn {})]
     (pg/execute conn "     INSERT INTO test RECORDS {_id: 0, value: 'hi'}")))
+
+(deftest test-pgwire-decimal-support
+  (doseq [binary? [false true]]
+    (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+                ps (jdbc/prepare conn ["INSERT INTO table RECORDS {_id: ?, data: ?}"])]
+      (jdbc/execute-batch! ps [[1 0.1M] [2 24580955505371094.000001M]])
+      (jdbc/execute! conn ["INSERT INTO table RECORDS {_id: ?, data: ?}"
+                           3 61954235709850086879078532699846656405640394575840079131296.39935M])
+
+      (t/is (= [{:_id 1, :data 0.1M}
+                {:_id 2, :data 24580955505371094.000001M}
+                {:_id 3, :data 61954235709850086879078532699846656405640394575840079131296.39935M}]
+               (jdbc/execute! conn ["SELECT * FROM table ORDER BY _id"]))))))
