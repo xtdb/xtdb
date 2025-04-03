@@ -14,24 +14,24 @@
         {::tpch-ra/keys [args]} (meta q)]
     {:t :do, :stage stage-name
      :tasks [{:t :call
-              :f (fn [{:keys [sut]}]
+              :f (fn [{:keys [node]}]
                    (try
-                     (count (tu/query-ra q {:node sut, :args args}))
+                     (count (tu/query-ra q {:node node, :args args}))
                      (catch Exception e
                        (.printStackTrace e))))}]}))
 
 
 (defn queries-stage [stage-name]
   {:t :do, :stage stage-name
-   :tasks (vec (concat [{:t :call :f (fn [{:keys [^AbstractMap custom-state]}]
-                                       (.put custom-state :bf-stats-start (System/currentTimeMillis)))}]
+   :tasks (vec (concat [{:t :call :f (fn [{:keys [!state]}]
+                                       (swap! !state assoc :bf-stats-start (System/currentTimeMillis)))}]
 
                        (for [i (range (count tpch-ra/queries))]
                          (query-tpch stage-name i))
 
-                       [{:t :call :f (fn [{:keys [custom-state] :as worker}]
+                       [{:t :call :f (fn [{:keys [!state] :as worker}]
                                        (let [report-name (str (name stage-name) " buffer pool stats")
-                                             start-ms (get custom-state :bf-stats-start)
+                                             start-ms (get @!state :bf-stats-start)
                                              end-ms (System/currentTimeMillis)]
                                          (b/log-report worker {:stage report-name
                                                                :time-taken-ms (- end-ms start-ms)})))}]))})
@@ -48,22 +48,23 @@
   (log/info {:scale-factor scale-factor})
 
   {:title "TPC-H (OLAP)", :seed seed
+   :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
             :tasks (concat (when-not no-load?
                              [{:t :call
                                :stage :submit-docs
-                               :f (fn [{:keys [sut]}] (tpch/submit-docs! sut scale-factor))}])
+                               :f (fn [{:keys [node]}] (tpch/submit-docs! node scale-factor))}])
 
                            [{:t :do
                              :stage :sync
-                             :tasks [{:t :call :f (fn [{:keys [sut]}] (b/sync-node sut (Duration/ofHours 5)))}]}
+                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}]}
                             {:t :do
                              :stage :finish-block
-                             :tasks [{:t :call :f (fn [{:keys [sut]}] (b/finish-block! sut))}]}
+                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/finish-block! node))}]}
                             {:t :do
                              :stage :compact
-                             :tasks [{:t :call :f (fn [{:keys [sut]}] (b/compact! sut))}]}])}
+                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}
 
            (queries-stage :cold-queries)
 

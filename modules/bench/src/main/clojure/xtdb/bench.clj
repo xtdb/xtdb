@@ -14,12 +14,11 @@
   (:import (com.google.common.collect MinMaxPriorityQueue)
            (io.micrometer.core.instrument Timer)
            (java.lang.management ManagementFactory)
-           (java.time Clock Duration Instant InstantSource)
+           (java.time Clock Duration InstantSource)
            java.time.Duration
            (java.util Comparator Random)
-           (java.util.concurrent ConcurrentHashMap Executors TimeUnit)
+           (java.util.concurrent Executors TimeUnit)
            (java.util.concurrent.atomic AtomicLong)
-           (java.util.function Function)
            (oshi SystemInfo)))
 
 (defn wrap-in-catch [f]
@@ -30,40 +29,31 @@
         (log/error t (str "Error while executing " f))
         (throw t)))))
 
-(defrecord Worker [sut random domain-state custom-state clock bench-id jvm-id])
+(defrecord Worker [node random clock bench-id jvm-id])
 
-(defn current-timestamp ^Instant [worker]
+(defn current-timestamp ^java.time.Instant [worker]
   (.instant ^Clock (:clock worker)))
 
-(defn counter ^AtomicLong [worker domain]
-  (.computeIfAbsent ^ConcurrentHashMap (:domain-state worker) domain (reify Function (apply [_ _] (AtomicLong.)))))
-
-(defn rng ^Random [worker] (:random worker))
+(defn rng ^java.util.Random [worker] (:random worker))
 
 (defn current-timestamp-ms ^long [worker] (.millis ^Clock (:clock worker)))
 
-(defn increment [worker domain] (domain (.getAndIncrement (counter worker domain))))
+(defn sample-gaussian ^long [worker ^AtomicLong !counter]
+  (let [v (.get !counter)]
+    (-> (long (.nextGaussian (rng worker) (* v 0.5) (/ v 6.0)))
+        (max 0)
+        (min (dec v)))))
 
-(defn set-domain [worker domain cnt] (.getAndAdd (counter worker domain) cnt))
+(defn sample-flat ^long [worker, ^AtomicLong !counter]
+  (let [v (.get !counter)]
+    (when (pos? v)
+      (.nextLong (rng worker) v))))
 
-(defn- nat-or-nil [n] (when (nat-int? n) n))
+(defn inc-count! [^AtomicLong !counter]
+  (.getAndIncrement !counter))
 
-(defn sample-gaussian [worker domain]
-  (let [random (rng worker)
-        long-counter (counter worker domain)]
-    ;; not a real gaussian, we cut of some bits at the tails
-    (some-> (min (dec (.get long-counter)) (max 0 (Math/round (* (.get long-counter) 0.5 (+ 1.0 (.nextGaussian random))))))
-            long
-            nat-or-nil
-            domain)))
-
-(defn sample-flat [worker domain]
-  (let [random (rng worker)
-        long-counter (counter worker domain)]
-    (some-> (min (dec (.get long-counter)) (Math/round (* (.get long-counter) (.nextDouble random))))
-            long
-            nat-or-nil
-            domain)))
+(defn set-count! [^AtomicLong !counter, ^long v]
+  (.set !counter (inc v)))
 
 (defn weighted-sample-fn
   "Aliased random sampler:
@@ -157,10 +147,12 @@
 
 (defn wrap-stage [f {:keys [stage]}]
   (fn instrumented-stage [worker]
+    (log/info "Starting stage:" stage)
     (let [start-ms (System/currentTimeMillis)]
       (f worker)
       (log-report worker {:stage stage,
-                          :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))
+                          :time-taken-ms (- (System/currentTimeMillis) start-ms)})
+      (log/info "Done stage:" stage))))
 
 (defn wrap-transaction [f {:keys [transaction labels]}]
   (let [timer-delay (delay
@@ -206,7 +198,7 @@
                     sleep (if (pos? think-ms) #(Thread/sleep think-ms) (constantly nil))
                     f (compile-task pooled-task)
 
-                    executor (Executors/newFixedThreadPool thread-count (util/->prefix-thread-factory "core2-benchmark"))
+                    executor (Executors/newFixedThreadPool thread-count (util/->prefix-thread-factory "xtdb-benchmark"))
 
                     thread-loop (fn run-pool-thread-loop [worker]
                                   (loop [wait-until (+ (current-timestamp-ms worker) (.toMillis duration))]
@@ -236,7 +228,7 @@
         :concurrently (let [{:keys [^Duration duration, ^Duration join-wait, thread-tasks]} task
                             thread-task-fns (mapv compile-task thread-tasks)
 
-                            executor (Executors/newFixedThreadPool (count thread-tasks) (util/->prefix-thread-factory "core2-benchmark"))
+                            executor (Executors/newFixedThreadPool (count thread-tasks) (util/->prefix-thread-factory "xtdb-benchmark"))
 
                             start-thread (fn [root-worker _i f]
                                            (let [bindings (get-thread-bindings)
@@ -255,7 +247,7 @@
                               (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))))
 
         :pick-weighted (let [{:keys [choices]} task
-                             sample-fn (weighted-sample-fn (mapv (fn [[task weight]] [(compile-task task) weight]) choices))]
+                             sample-fn (weighted-sample-fn (mapv (fn [[weight task]] [(compile-task task) weight]) choices))]
                          (if (empty? choices)
                            (constantly nil)
                            (fn run-pick-weighted [worker]
@@ -278,14 +270,13 @@
 
       (wrap-task task)))
 
-(defn compile-benchmark [{:keys [title seed], :or {seed 0}, :as benchmark}]
+(defn compile-benchmark [{:keys [title seed ->state], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
-    (fn run-benchmark [sut]
-      (let [clock (Clock/systemUTC)
-            domain-state (ConcurrentHashMap.)
-            custom-state (ConcurrentHashMap.)
-            root-random (Random. seed)
-            worker (->Worker sut root-random domain-state custom-state clock (random-uuid) (System/getProperty "user.name"))
+    (fn run-benchmark [node]
+      (let [worker (into (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name"))
+                         (cond
+                           (vector? ->state) (apply (first ->state) (rest ->state))
+                           (fn? ->state) (->state)))
             start-ms (System/currentTimeMillis)]
         (doseq [f fns]
           (f worker))
@@ -311,7 +302,7 @@
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
          partition-count 512]
      (doseq [batch (partition-all partition-count doc-seq)]
-       (xt/submit-tx (:sut worker) [(into [:put-docs table] batch)])))))
+       (xt/submit-tx (:node worker) [(into [:put-docs table] batch)])))))
 
 (defmulti cli-flags identity
   :default ::default)

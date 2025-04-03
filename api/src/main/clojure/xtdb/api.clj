@@ -182,7 +182,6 @@
   (^TransactionKey [node, tx-ops tx-opts]
    (xtp/execute-tx node (vec tx-ops) tx-opts)))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn status
   "Returns the status of this node as a map,
   including details of both the latest submitted and completed tx
@@ -194,7 +193,6 @@
   ([node] (xtp/status node))
   ([node opts] (xtp/status node opts)))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
 
