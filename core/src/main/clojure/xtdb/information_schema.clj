@@ -1,5 +1,6 @@
 (ns xtdb.information-schema
-  (:require [xtdb.authn :as authn]
+  (:require [xtdb.api :as xt]
+            [xtdb.authn :as authn]
             xtdb.metadata
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
@@ -78,7 +79,11 @@
 
   (def ^:private xt-derived-tables
     '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
-                     trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}})
+                     trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}
+
+      xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
+
+      xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables xt-derived-tables)
@@ -312,18 +317,37 @@
 (defn table->template-rel+tries [allocator]
   {'pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
+(defn- split-table-name [fq-table-name]
+  (let [fq-table (symbol fq-table-name)
+        table-name (name fq-table)
+        schema-name (namespace fq-table)]
+    {:schema-name schema-name
+     :table-name table-name}))
+
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [table-name (.getTableNames trie-catalog)
-        :let [trie-state (trie-cat/trie-state trie-catalog table-name)
-              fq-table (symbol table-name)
-              schema-name (namespace fq-table)
-              table-name (name fq-table)]
+        :let [trie-state (trie-cat/trie-state trie-catalog table-name)]
         [_ tries] (:tries trie-state)
         {:keys [trie-key level recency state data-file-size trie-metadata]} tries
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
-    {:schema-name schema-name, :table-name table-name,
-     :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
-     :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
+    (into (split-table-name table-name)
+          {:trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
+           :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))})))
+
+(defn live-tables [^Watermark wm]
+  (let [li-wm (.getLiveIndex wm)]
+    (for [table (.getLiveTables li-wm)
+          :let [live-table (.liveTable li-wm table)]]
+      (into (split-table-name table)
+            {:row-count (long (.getRowCount (.getLiveRelation live-table)))}))))
+
+(defn live-columns [^Watermark wm]
+  (let [li-wm (.getLiveIndex wm)]
+    (for [table (.getLiveTables li-wm)
+          [col-name col-field] (.getColumnFields (.liveTable li-wm table))]
+      (into (split-table-name table)
+            {:col-name col-name
+             :col-type (pr-str (types/field->col-type col-field))}))))
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
@@ -376,6 +400,8 @@
                                                         pg_catalog/pg_range (pg-range)
                                                         pg_catalog/pg_am (pg-am)
                                                         xt/trie_stats (trie-stats trie-catalog)
+                                                        xt/live_tables (live-tables wm)
+                                                        xt/live_columns (live-columns wm)
                                                         (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
                                                       (into-array java.util.Map)))
                                      (.syncRowCount)))]

@@ -651,3 +651,24 @@
                                  :max-system-from (time/->zdt #inst "2020-01-01")}}]
 
            (xt/q tu/*node* "SELECT * FROM xt.trie_stats ORDER BY table_name, trie_key"))))
+
+(t/deftest test-live-tables
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a 1} {:xt/id 2, :b 2}]
+                            [:put-docs :bar {:xt/id 1, :a 1} {:xt/id 2, :b 2}]])
+
+  (tu/finish-block! tu/*node*)
+
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3, :a "hello"} {:xt/id 4, :a "world"}]])
+
+  (t/is (= [["public" "foo" 2] ["xt" "txs" 1]]
+           (->> (xt/q tu/*node* "SELECT * FROM xt.live_tables ORDER BY schema_name, table_name")
+                (mapv (juxt :schema-name :table-name :row-count)))))
+
+  (t/is (= [["public" "foo" "_id" :i64]
+            ["public" "foo" "a" :utf8]
+            ["xt" "txs" "_id" :i64]
+            ["xt" "txs" "committed" :bool]
+            ["xt" "txs" "error" [:union #{:null :transit}]]
+            ["xt" "txs" "system_time" [:timestamp-tz :micro "UTC"]]]
+           (->> (xt/q tu/*node* "SELECT * FROM xt.live_columns ORDER BY schema_name, table_name, col_name")
+                (mapv (juxt :schema-name :table-name :col-name (comp read-string :col-type)))))))
