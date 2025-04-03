@@ -443,7 +443,15 @@
               :typnotnull false,
               :typname "_text",
               :typnamespace 2125819141,
-              :typbasetype 0}}
+              :typbasetype 0}
+             {:typtypmod -1,
+              :typnotnull false,
+              :typtype "b",
+              :typbasetype 0,
+              :typnamespace 2125819141,
+              :typname "numeric",
+              :typowner 1376455703,
+              :oid 1700}}
            (set (tu/query-ra '[:scan {:table pg_catalog/pg_type}
                                [oid typname typnamespace typowner typtype typbasetype typnotnull typtypmod]]
                              {:node tu/*node*})))))
