@@ -1,0 +1,58 @@
+---
+title: Scenario - Empty Log & Intact Storage
+---
+
+This document outlines the recovery process when the log used by XTDB has been lost or reset to empty, but the backing object store remains intact.
+
+== Background
+
+XTDB nodes rely on a shared, ordered log to coordinate changes to the system, including database transactions and internal messaging between nodes.
+
+If the log is deemed to be empty/starting from zero, but the object store still contains a valid snapshot of the database, XTDB will refuse to start by default. This is a safety measure to prevent accidental divergence or corruption of the database state.
+
+When this mismatch is detected, a node may fail to start with an error such as:
+
+```
+Starting node with an empty Kafka log topic and previously indexed values (latest completed offset: 289).
+```
+
+== What Is Preserved
+
+If the object store (e.g. cloud storage or local disk) is still available, then all indexed data up to the last compaction is retained. This includes:
+
+* The complete history of data up to the most recently indexed Level-0 files.
+* All indexed data up to the last compaction - ie, Level-1+ files.
+
+== What Is Lost
+
+The contents of the previous log topic, which may include any recent transactions that had not yet been compacted.
+
+This means any transactions submitted after the last compaction will be lost unless separately backed up.
+
+== Resolving the Mismatch: Epochs
+
+XTDB supports the concept of a `epoch` value to intentionally reset the expected offset tracking.
+
+When set, this tells the node to treat the log as having been reset intentionally and to start writing new data based on the current object store snapshot.
+
+== Recovery Steps
+
+1. Identify the latest offset recorded in the compacted storage (e.g. from logs or metrics).
+2. Select a new, unused `currentEpoch` value. This must be strictly greater than any previously used value.
+3. Update your node configuration, e.g:
++
+[source,yaml]
+----
+log: !Kafka
+  topic: xtdb-log
+  currentEpoch: <new-epoch>
+----
+4. Restart the node. It will skip offset checks and begin publishing to the now-empty log topic, starting a new epoch.
+5. (Optional) If any lost transactions are known, re-submit them manually or via an application recovery process.
+
+== Important Considerations
+
+* The log topic must be writable and available to the node.
+* Any missing log messages, including recent transactions or system messages, cannot be recovered unless backed up.
+* All nodes in the cluster must use the updated `currentEpoch` - we would recommend applying this change atomically.
+Ie - spinning all nodes down, updating the config, and spinning them back up.

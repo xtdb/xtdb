@@ -17,10 +17,11 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api Xtdb$Config)
+           (xtdb.api Xtdb$Config TransactionKey)
            (xtdb.api.log Log Log$Factory Log$Message$Tx)
            (xtdb.api.tx TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
+           xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
            (xtdb.tx_ops Abort DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)))
 
@@ -229,15 +230,17 @@
 
       (.getAsArrowStream rel))))
 
-(defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src]}]
+(defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src current-epoch]}]
   (doto config
     (.setLog (cond-> (Log/getInMemoryLog)
-                   instant-src (.instantSource instant-src)))))
+               instant-src (.instantSource instant-src)
+               current-epoch (.currentEpoch current-epoch)))))
 
-(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src]}]
+(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src current-epoch]}]
   (doto config
     (.setLog (cond-> (Log/localLog (util/->path path))
-                   instant-src (.instantSource instant-src)))))
+               instant-src (.instantSource instant-src)
+               current-epoch (.currentEpoch current-epoch)))))
 
 (defmethod xtn/apply-config! :xtdb/log [config _ [tag opts]]
   (xtn/apply-config! config
@@ -247,8 +250,56 @@
                        :kafka :xtdb.kafka/log)
                      opts))
 
-(defmethod ig/init-key :xtdb/log [_ ^Log$Factory factory]
-  (.openLog factory))
+(defmethod ig/prep-key :xtdb/log [_ factory]
+  {:block-cat (ig/ref :xtdb/block-catalog)
+   :factory factory})
+
+(defn tx-id->offset [^long tx-id]
+  (bit-and tx-id (dec (bit-shift-left 1 48))))
+
+(defn tx-id->epoch [^long tx-id]
+  (bit-shift-right tx-id 48))
+
+(defn class->log-type [log]
+  (let [class-name (str (class log))]
+    (cond
+      (str/includes? class-name "MemoryLog") :memory-log
+      (str/includes? class-name "LocalLog")  :local-directory-log
+      (str/includes? class-name "KafkaLog")  :kafka-log)))
+
+(def log-error-messages
+  {:memory-log
+   {:empty-log
+    "Starting node with a memory log and previously indexed values (latest completed offset: %s).\n\nIf this is intended and you wish to start from indexed data on storage, set the following in your config:\n\nlog: !InMemory\n  currentEpoch: %s\n"}
+
+   :local-directory-log
+   {:empty-log
+    "Starting node with an empty local directory log and previously indexed values (latest completed offset: %s).\n\nIf this is intended and you wish to start from indexed data on storage, set the following in your config to start a new epoch:\n\nlog: !Local\n  currentEpoch: %s\n"} 
+   
+   :kafka-log
+   {:empty-log
+    "Starting node with an empty Kafka log topic and previously indexed values (latest completed offset: %s).\n\nIf this is intended and you wish to start from indexed data on storage, set the following in your config to start a new epoch:\n\nlog: !Kafka\n  currentEpoch: %s\n"}})
+
+(defn ->empty-log-exception [log-type latest-offset current-epoch]
+  (let [template (get-in log-error-messages [log-type :empty-log])]
+    (IllegalStateException.
+     (format template latest-offset (inc current-epoch)))))
+
+(defn validate-offsets [^Log log ^TransactionKey latest-completed-tx]
+  (when latest-completed-tx
+    (let [log-type (class->log-type log)
+          latest-completed-tx-id (.getTxId latest-completed-tx)
+          latest-offset (tx-id->offset latest-completed-tx-id)
+          latest-epoch (tx-id->epoch latest-completed-tx-id)
+          current-epoch (.getCurrentEpoch log)]
+      (when (= latest-epoch current-epoch)
+        (cond
+          (= -1 (.getLatestSubmittedOffset log))
+          (throw (->empty-log-exception log-type latest-offset latest-epoch)))))))
+
+(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat ^Log$Factory factory]}]
+  (doto (.openLog factory)
+    (validate-offsets (.getLatestCompletedTx block-cat))))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
