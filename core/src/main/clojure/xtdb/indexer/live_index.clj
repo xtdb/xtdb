@@ -38,6 +38,8 @@
 
       (liveTable [_ table-name] (.get wms table-name))
 
+      (getLiveTables [_] (keys wms))
+
       AutoCloseable
       (close [_] (util/close wms)))))
 
@@ -126,6 +128,7 @@
             (reify LiveIndex$Watermark
               (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
               (liveTable [_ table-name] (.get wms table-name))
+              (getLiveTables [_] (keys wms))
 
               AutoCloseable
               (close [_] (util/close wms)))))
