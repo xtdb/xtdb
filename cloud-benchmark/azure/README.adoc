@@ -110,12 +110,20 @@ helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
   --set listeners.client.protocol=PLAINTEXT \
   --set listeners.controller.protocol=PLAINTEXT \
   --set controller.resourcesPreset=medium \
-  --set controller.nodeSelector.nodepool=benchmark
+  --set controller.nodeSelector.nodepool=benchmark \
+  --set controller.persistence.size=50Gi
 ```
 
 To clearup the Kafka deployment, you can run:
 ```
 helm uninstall kafka --namespace cloud-benchmark
+```
+
+To clearup the PVCs created by the Kafka deployment, you can run:
+```
+kubectl delete pvc data-kafka-controller-0 --namespace cloud-benchmark
+kubectl delete pvc data-kafka-controller-1 --namespace cloud-benchmark
+kubectl delete pvc data-kafka-controller-2 --namespace cloud-benchmark
 ```
 
 === Setting up the config for XTDB

@@ -12,7 +12,7 @@ data:
   # (Generally) Fixed XTDB settings
   XTDB_AZURE_STORAGE_ACCOUNT: "xtdbazurebenchmark"
   XTDB_AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
-  KAFKA_BOOTSTRAP_SERVERS: "kafka.cloud-benchmark.svc.cluster.local:9092"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-controller-0.kafka-controller-headless.cloud-benchmark.svc.cluster.local:9092,kafka-controller-1.kafka-controller-headless.cloud-benchmark.svc.cluster.local:9092,kafka-controller-2.kafka-controller-headless.cloud-benchmark.svc.cluster.local:9092"
   XTDB_LOG_TOPIC: "xtdb-log"
   
   # Auctionmark settings
