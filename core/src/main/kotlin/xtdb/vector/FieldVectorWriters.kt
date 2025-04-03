@@ -214,13 +214,10 @@ private class TimeNanoVectorWriter(override val vector: TimeNanoVector) : TimeVe
 private val DECIMAL_ERROR_KEY = Keyword.intern("xtdb.error", "decimal-error")
 
 private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVectorWriter(vector) {
-    @Throws(RuntimeException::class)
     override fun writeObject0(obj: Any) {
         if (obj !is BigDecimal) throw InvalidWriteObjectException(field.fieldType, obj)
         try {
             vector.setSafe(valueCount++, obj.setScale(vector.scale))
-        } catch (e: Exception) {
-            throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
         } catch (e: ArithmeticException) {
             throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
         }
