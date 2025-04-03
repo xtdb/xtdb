@@ -1,5 +1,7 @@
 (ns xtdb.operator.unnest-test
   (:require [clojure.test :as t]
+            [xtdb.api :as xt]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -108,3 +110,12 @@
                             [:table ?x]]]]
              {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
         "group by ordinality"))
+
+(t/deftest test-vector-not-found-4343
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:put-docs :f
+                               {:xt/id 1, :type "foo", :pid 1, :fields [{:value "v1"} {:value "v2"}]}
+                               {:xt/id 2, :type "foo", :pid 2, :fields []}]])
+
+    (t/is (= [{:xt/id 1, :field {:value "v1"}} {:xt/id 1, :field {:value "v2"}}]
+             (xt/q node ["SELECT f._id, field FROM f, UNNEST(f.fields) fields_table (field) WHERE f.type IN (?)" "foo"])))))
