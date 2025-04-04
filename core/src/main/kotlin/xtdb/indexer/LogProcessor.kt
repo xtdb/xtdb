@@ -133,6 +133,11 @@ class LogProcessor(
                         msg.tries.forEach(trieCatalog::addTrie)
                         null
                     }
+
+                    Message.Ignore -> {
+                        LOGGER.trace("Message ignored: $offset")
+                        null
+                    }
                 }
                 latestCompletedOffset = offset
                 watchers.notify(offset, res)
