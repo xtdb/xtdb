@@ -68,7 +68,14 @@ interface Log : AutoCloseable {
                         .let {
                             when (val msgCase = it.messageCase) {
                                 MessageCase.FLUSH_BLOCK -> FlushBlock(it.flushBlock.expectedBlockTxId)
-                                MessageCase.TRIES_ADDED -> TriesAdded(it.triesAdded.triesList)
+                                MessageCase.TRIES_ADDED -> {
+                                    // We are getting a TriesAdded version of storage version 6 or above here. Ignore it.
+                                    if (it.triesAdded.unknownFields.hasField(2)) {
+                                        Ignore
+                                    } else {
+                                        TriesAdded(it.triesAdded.triesList)
+                                    }
+                                }
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
@@ -83,8 +90,14 @@ interface Log : AutoCloseable {
 
         data class TriesAdded(val tries: List<AddedTrie>) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
-                triesAdded = triesAdded { tries.addAll(this@TriesAdded.tries) }
+                triesAdded = triesAdded {
+                    tries.addAll(this@TriesAdded.tries)
+                }
             }
+        }
+
+        data object Ignore : ProtobufMessage() {
+            override fun toLogMessage() = throw IllegalArgumentException("Ignore message cannot be serialized")
         }
     }
 
