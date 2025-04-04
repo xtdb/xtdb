@@ -25,8 +25,7 @@
     (util/delete-dir node-dir)
 
     (binding [c/*page-size* 32
-              c/*ignore-signal-block?* true
-              c/*l1-file-size-rows* 250]
+              c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 120})]
         (doseq [tick (range 25)
                 batch (->> (range 100)
