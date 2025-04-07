@@ -1,12 +1,15 @@
 package xtdb.arrow
 
+import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal
+import xtdb.RuntimeException
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
+import xtdb.vector.DECIMAL_ERROR_KEY
 import java.math.BigDecimal
 
 class DecimalVector private constructor(
@@ -39,7 +42,12 @@ class DecimalVector private constructor(
             if (value.precision() > precision || value.scale() != scale) {
                 throw InvalidWriteObjectException(fieldType, value)
             }
+            // HACK, we throw a RuntimeError here, but it should likely be dealt with in the EE if a object doesn't fit
+            try {
             dataBuffer.writeBigDecimal(value, byteWidth)
+            } catch (e: UnsupportedOperationException) {
+                throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
+            }
             writeNotNull()
         } else throw InvalidWriteObjectException(fieldType, value)
     }

@@ -470,7 +470,7 @@
     (->field col-name (.getType minor-type) (or nullable? (= col-type :null)))))
 
 (defmethod col-type->field* :decimal [col-name nullable? [_ precision scale bit-width]]
-  (->field col-name (ArrowType$Decimal/createDecimal precision scale bit-width) nullable?))
+  (->field col-name (ArrowType$Decimal/createDecimal precision scale (int bit-width)) nullable?))
 
 (defmethod col-type->field-name :decimal [[type-head precision scale bit-width :as v]]
   (str (name type-head) "-" precision "-" scale "-" bit-width))
