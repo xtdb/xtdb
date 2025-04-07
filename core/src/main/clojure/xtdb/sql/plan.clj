@@ -919,6 +919,10 @@
        :leading-precision 2
        :fractional-precision (or fp 6)})))
 
+(defrecord UnsupportedPrecision[precision]
+  PlanError
+  (error-string [_] (format "Unsupported precision: %s" precision)))
+
 (defrecord CastArgsVisitor [env]
   SqlVisitor
   (visitBooleanType [_ _] {:cast-type :bool})
@@ -988,9 +992,19 @@
   (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
   (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
 
-  (visitCharacterStringType [_ _] {:cast-type :utf8}))
+  (visitCharacterStringType [_ _] {:cast-type :utf8})
 
-(defn handle-cast-expr [ve {:keys [cast-type cast-opts ->cast-fn]}] 
+  (visitDecimalType [_ ctx]
+    (let [precision (some-> (.precision ctx) (.getText) (parse-long) )
+          scale (some-> (.scale ctx) (.getText) (parse-long))]
+      (if (and precision (> precision 64))
+        (add-err! env (->UnsupportedPrecision precision))
+        {:cast-type :decimal
+         :cast-opts (cond-> {}
+                      precision (assoc :precision precision)
+                      scale (assoc :scale scale))}))))
+
+(defn handle-cast-expr [ve {:keys [cast-type cast-opts ->cast-fn]}]
   (if ->cast-fn
     (->cast-fn ve)
     (cond-> (list 'cast ve cast-type)

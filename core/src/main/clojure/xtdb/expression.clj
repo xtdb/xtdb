@@ -11,6 +11,7 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
+           (java.math RoundingMode)
            [java.net URI]
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
@@ -240,6 +241,33 @@
 (defmethod codegen-cast [:num :num] [{:keys [target-type]}]
   {:return-type target-type
    :->call-code #(do `(~(type->cast target-type) ~@%))})
+
+(defn- precision->bit-width [^long p]
+  (cond (<= p 32) (int 128)
+        (<= p 64) (int 256)
+        :else (throw (err/illegal-arg :xtdb.expression/unsupported-precision
+                                      {::err/message (format "Unsupported precision: %d" p)}))))
+
+(defmethod codegen-cast [:num :decimal] [{{:keys [precision scale]} :cast-opts}]
+  (let [scale (if precision (or scale 0) 9)
+        precision (or precision 64)]
+    {:return-type [:decimal precision scale (precision->bit-width precision)]
+     :->call-code #(do `(.setScale (bigdec ~@%) ~scale RoundingMode/HALF_EVEN))}))
+
+;; We don't apply the default cast (i.e. [:decimal 64 9 256]) to decimals themselves.
+;; This is to mainly preserve decimal scales passed via pgwire parameters with type annotations.
+(defmethod codegen-cast [:decimal :decimal] [{:keys [source-type] {:keys [precision scale]} :cast-opts}]
+  (if precision
+    {:return-type [:decimal precision (or scale 0) (precision->bit-width precision)]
+     :->call-code #(do `(.setScale (bigdec ~@%) ~scale RoundingMode/HALF_EVEN))}
+    {:return-type source-type
+     :->call-code first}))
+
+(defmethod codegen-cast [:utf8 :decimal] [{{:keys [precision scale]} :cast-opts}]
+  (let [scale (if precision (or scale 0) 9)
+        precision (or precision 64)]
+    {:return-type [:decimal precision scale (precision->bit-width precision)]
+     :->call-code #(do `(.setScale (bigdec (buf->str ~@%)) ~scale RoundingMode/HALF_EVEN))}))
 
 (defmethod codegen-cast [:num :utf8] [_]
   {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str ~@%)))})
@@ -793,6 +821,34 @@
 (defmethod codegen-call [:* :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(* ~@%))})
+
+;; decimal
+
+(defn- combine-precision [^long p1 ^long p2]
+  (if (and (<= p1 32) (<= p2 32)) 32 64))
+
+(defmethod codegen-call [:+ :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-types}]
+  (let [precision (combine-precision p1 p2)]
+    {:return-type [:decimal precision (max s1 s2) (precision->bit-width precision)]
+     :->call-code #(do `(.add ^BigDecimal ~@%))}))
+
+(defmethod codegen-call [:- :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-types}]
+  (let [precision (combine-precision p1 p2)]
+    {:return-type [:decimal precision (max s1 s2) (precision->bit-width precision)]
+     :->call-code #(do `(.subtract ^BigDecimal ~@%))}))
+
+(defmethod codegen-call [:* :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-types}]
+  (let [precision (combine-precision p1 p2)]
+    {:return-type [:decimal precision (+ s1 s2) (precision->bit-width precision)]
+     :->call-code #(do `(.multiply ^BigDecimal ~@%))}))
+
+(defmethod codegen-call [:/ :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-types}]
+  (let [scale (max 6 (+ s1 s2 1))
+        precision (combine-precision p1 p2)]
+    {:return-type [:decimal precision scale (precision->bit-width precision)]
+     :->call-code #(do `(.divide ^BigDecimal ~@% ~scale RoundingMode/HALF_EVEN))}))
+
+;; least, greatest for decimals currently work by extension to `<` and `>`, see `expression/macro.clj`
 
 (defmethod codegen-call [:bit_not :int] [{[x-type] :arg-types}]
   {:return-type x-type

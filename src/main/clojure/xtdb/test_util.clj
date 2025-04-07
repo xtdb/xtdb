@@ -8,6 +8,7 @@
             [next.jdbc.optional :as jdbc.optional]
             [next.jdbc.prepare :as jdbc.prep]
             [next.jdbc.result-set :as jdbc.rs]
+            [xtdb.api :as xt]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -15,6 +16,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
+            [xtdb.node.impl :as node.impl]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
@@ -541,3 +543,11 @@
   (let [name (str (.getFileName path))]
     (when-let [idx (str/last-index-of name ".")]
       (subs name (inc idx)))))
+
+(defn q-sql
+  "Like xtdb.api/q, but also returns the result type."
+  ([node query] (q-sql node query {}))
+  ([node query opts]
+   (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
+     {:res (xt/q node query opts)
+      :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.columnFields prepared-q))})))

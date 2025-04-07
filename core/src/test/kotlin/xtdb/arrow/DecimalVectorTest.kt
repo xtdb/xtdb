@@ -64,4 +64,22 @@ class DecimalVectorTest {
             assertEquals(listOf(BigDecimal("0.01"), BigDecimal("24580955505371094.01")), dec.toList())
         }
     }
+
+    @Test
+    fun `test negative scales`() {
+        DecimalVector(
+            allocator, "dec",
+            true, ArrowType.Decimal(32, -2, 128)
+        ).use { dec ->
+
+            dec.writeObject(BigDecimal("1E+2"))
+            dec.writeObject(BigDecimal("2E+2"))
+
+            assertEquals(2, dec.valueCount)
+            assertEquals(-2, (dec.getObject(0) as BigDecimal).scale())
+            assertEquals(listOf(BigDecimal("1E+2"), BigDecimal("2E+2")), dec.toList())
+        }
+    }
+
+
 }

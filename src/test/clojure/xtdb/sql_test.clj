@@ -2837,3 +2837,46 @@ UNION ALL
              :mdm-literal #xt/interval-mdm ["P1D" "PT1.123456S"]}]
            (xt/q tu/*node* "SELECT ? mdm, ? mdn, INTERVAL 'P1DT1.123456S' mdm_literal"
                  {:args [#xt/interval-mdm ["P1D" "PT1.123456S"] [#xt/interval-mdn ["P1D" "PT1.123456789S"]]]}))))
+
+(defn- compare-decimals [^BigDecimal d1 ^BigDecimal d2]
+  (and (= (.scale d1) (.scale d2))
+       (= (.unscaledValue d1) (.unscaledValue d2))))
+
+(t/deftest decimal-casting
+  (letfn [(q [sql]
+            (let [{:keys [res res-type]} (tu/q-sql tu/*node* sql)]
+              {:res (:v (first res))
+               :res-types (second (first res-type))}))]
+
+    (t/is (= {:res 301.02M, :res-types [:decimal 5 2 128]} (q "SELECT 301.02::DECIMAL(5, 2) AS V")))
+    (t/is (= {:res 301.0M, :res-types [:decimal 5 1 128]} (q "SELECT 301.02::DECIMAL(5, 1) AS V")))
+    (t/is (= {:res 301.020M, :res-types [:decimal 6 3 128]} (q "SELECT 301.02::DECIMAL(6, 3) AS V")))
+    (t/is (= {:res 301M, :res-types [:decimal 5 0 128]} (q "SELECT 301.02::DECIMAL(5) AS V")))
+    (t/is (= {:res 301.020000000M, :res-types [:decimal 64 9 256]} (q "SELECT 301.02::DECIMAL AS V")))
+    (t/is (= {:res 301.020000000M, :res-types [:decimal 64 9 256]} (q "SELECT '301.02'::DECIMAL AS V")))
+    (t/is (thrown? IllegalArgumentException (q "SELECT '301.02'::DECIMAL(65) AS V"))))
+
+  (t/testing "correct EE behaviour"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :d 1.1M} {:xt/id 2 :d 1.02M}]])
+
+    (let [expected-res [2.02M 2.1M]
+          {:keys [res res-type]} (tu/q-sql tu/*node* "SELECT d + 1 AS v FROM docs")
+          res (map :v res)]
+
+      (t/is (= [["v" [:union #{[:decimal 32 2 128] [:decimal 32 1 128]}]]]
+               res-type))
+
+      (doseq [[expected result] (map vector expected-res res)]
+        (t/is (compare-decimals expected result)
+              (str "Expected: " expected ", but got: " result))))
+
+    (let [expected-res [2.02M 2.1M]
+          {:keys [res res-type]} (tu/q-sql tu/*node* "SELECT d + 1::decimal(64,1) AS v FROM docs")
+          res (map :v res)]
+
+      (t/is (= [["v" [:union #{[:decimal 64 2 256] [:decimal 64 1 256]}]]]
+               res-type) )
+
+      (doseq [[expected result] (map vector expected-res res)]
+        (t/is (compare-decimals expected result)
+              (str "Expected: " expected ", but got: " result))))))

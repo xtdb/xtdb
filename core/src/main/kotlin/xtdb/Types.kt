@@ -4,7 +4,6 @@ package xtdb
 
 import clojure.lang.Keyword
 import com.github.benmanes.caffeine.cache.Caffeine
-import org.apache.arrow.vector.PeriodDuration
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.DateUnit.DAY
 import org.apache.arrow.vector.types.FloatingPointPrecision
@@ -20,7 +19,6 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.types.*
 import xtdb.vector.extensions.*
 import java.math.BigDecimal
-import java.math.BigInteger
 import java.net.URI
 import java.nio.ByteBuffer
 import java.time.*
@@ -118,7 +116,7 @@ fun valueToArrowType(obj: Any?) = when (obj) {
             // Java Arrow only supports 128 and 256 bit widths
             in 0..32 -> 32
             in 33..64 -> 64
-            else -> throw IllegalArgumentException("unsupported precision: ${obj.precision()}")
+            else -> throw IllegalArgumentException.createNoKey("Unsupported precision: ${obj.precision()}", emptyMap<String, String>())
         }
         ArrowType.Decimal(precision, obj.scale(), precision * 4)
     }

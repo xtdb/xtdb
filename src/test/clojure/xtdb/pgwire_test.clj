@@ -2666,6 +2666,10 @@ ORDER BY 1,2;")
   (with-open [conn (pg-conn {})]
     (pg/execute conn "     INSERT INTO test RECORDS {_id: 0, value: 'hi'}")))
 
+(defn- compare-decimals-with-scale [^BigDecimal d1 ^BigDecimal d2]
+  (and (= (.scale d1) (.scale d2))
+       (= (.unscaledValue d1) (.unscaledValue d2))))
+
 (deftest test-pgwire-decimal-support
   (doseq [binary? [false true]]
     (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
@@ -2674,7 +2678,29 @@ ORDER BY 1,2;")
       (jdbc/execute! conn ["INSERT INTO table RECORDS {_id: ?, data: ?}"
                            3 61954235709850086879078532699846656405640394575840079131296.39935M])
 
-      (t/is (= [{:_id 1, :data 0.1M}
-                {:_id 2, :data 24580955505371094.000001M}
-                {:_id 3, :data 61954235709850086879078532699846656405640394575840079131296.39935M}]
-               (jdbc/execute! conn ["SELECT * FROM table ORDER BY _id"]))))))
+      (let [expected-res [{:_id 1, :data 0.1M}
+                          {:_id 2, :data 24580955505371094.000001M}
+                          {:_id 3, :data 61954235709850086879078532699846656405640394575840079131296.39935M}]
+            res (jdbc/execute! conn ["SELECT * FROM table ORDER BY _id"])]
+        (t/is (= expected-res res))
+        (t/is (true? (->>
+                      (map vector expected-res res)
+                      (every? #(compare-decimals-with-scale (:data (first %)) (:data (second %))))))
+              "correct scale")))))
+
+(deftest test-pgwire-numeric-type-annotation
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO table RECORDS {_id: 1, data: ?::decimal}" 1.111111111111M])
+    (jdbc/execute! conn ["INSERT INTO table RECORDS {_id: 2, data: ?::decimal}" 1.1M])
+    ;; but explicit precision and scale overrides the default
+    (jdbc/execute! conn ["INSERT INTO table RECORDS {_id: 3, data: ?::decimal(3,2)}" 1.11111M])
+
+    (let [expected-res [{:_id 1, :data 1.111111111111M}
+                        {:_id 2, :data 1.1M}
+                        {:_id 3, :data 1.11M}]
+          res (jdbc/execute! conn ["SELECT * FROM table ORDER BY _id"])]
+      (t/is (= expected-res res))
+      (t/is (true? (->>
+                    (map vector expected-res res)
+                    (every? #(compare-decimals-with-scale (:data (first %)) (:data (second %))))))
+            "correct scale"))))
