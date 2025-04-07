@@ -44,7 +44,7 @@ class InMemoryLog(private val instantSource: InstantSource) : Log {
             onCommit.complete(record.logOffset)
             record
         }
-        .shareIn(scope, SharingStarted.Eagerly)
+        .shareIn(scope, SharingStarted.Eagerly, 100)
 
     @Volatile
     override var latestSubmittedOffset: LogOffset = -1
