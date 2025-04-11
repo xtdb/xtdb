@@ -1093,12 +1093,16 @@
 
 (defn- close-portal
   [{:keys [conn-state, cid]} portal-name]
-  (log/trace "Closing portal" {:cid cid, :portal portal-name})
+  (log/trace "Closing portal if exists" {:cid cid, :portal portal-name})
   (when-some [portal (get-in @conn-state [:portals portal-name])]
-
+    (log/trace "Closing portal" {:cid cid, :portal portal-name})
     (util/close (:bound-query portal))
     (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj portal-name)
     (swap! conn-state update :portals dissoc portal-name)))
+
+(defn- close-all-portals [{:keys [conn-state] :as conn}]
+  (doseq [portal-name (keys (:portals @conn-state))]
+    (close-portal conn portal-name)))
 
 (defmethod handle-msg* :msg-close [{:keys [conn-state, cid] :as conn} {:keys [close-type, close-name]}]
   ;; Closes a prepared statement or portal that was opened with bind / parse.
@@ -1120,7 +1124,8 @@
 
   (cmd-write-msg conn msg-close-complete))
 
-(defmethod handle-msg* :msg-terminate [{:keys [!closing?]} _]
+(defmethod handle-msg* :msg-terminate [{:keys [!closing?] :as conn} _]
+  (close-all-portals conn)
   (reset! !closing? true))
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
@@ -1423,7 +1428,7 @@
                                  (into tx-opts))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{:keys [transaction session]} @conn-state
+  (let [{:keys [transaction session portals]} @conn-state
         {:keys [failed dml-buf system-time access-mode]} transaction
         {:keys [^Clock clock, parameters]} session]
 
@@ -1445,7 +1450,9 @@
         (catch InterruptedException e (throw e))
         (catch Exception e
           (swap! conn-state #(dissoc % :transaction))
-          (throw e))))))
+          (throw e))
+        (finally
+          (close-all-portals conn))))))
 
 (defn cmd-rollback [{:keys [conn-state]}]
   (swap! conn-state dissoc :transaction))
@@ -1520,8 +1527,7 @@
   (when-not (:transaction @conn-state)
     ;;if outside an explicit transaction/transaction block (BEGIN/COMMIT) close any portals
     ;;as these are implicitly closed/cleaned up at the end of the transcation
-    (doseq [portal-name (keys (:portals @conn-state))]
-      (close-portal conn portal-name)))
+    (close-all-portals conn))
 
   (cmd-send-ready conn)
   (swap! conn-state dissoc :skip-until-sync, :protocol))
@@ -1706,14 +1712,26 @@
 
         stmt))))
 
+(defn unamed-portal? [portal-name]
+  (= "" portal-name))
+
 (defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
   (let [stmt (into (or (get-in @conn-state [:prepared-statements stmt-name])
                        (throw (client-err "no prepared statement")))
                    bind-msg)
-        portal (bind-stmt conn stmt)]
-    (swap! conn-state assoc-in [:portals portal-name] portal)
-    (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
-    (cmd-write-msg conn msg-bind-complete)))
+        {:keys [portals]} @conn-state]
+    (letfn [(create-portal []
+              (swap! conn-state assoc-in [:portals portal-name] (bind-stmt conn stmt))
+              (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)
+              (cmd-write-msg conn msg-bind-complete))]
+      (if (get portals portal-name)
+        ;;portal with this name already exists
+        (if (unamed-portal? portal-name)
+          (do (close-portal conn portal-name)
+              (create-portal))
+          (cmd-send-error conn (-> (err-protocol-violation "Named portals must be explicit closed before they can be redefined")
+                                   (assoc :error-type :invalid-operation))))
+        (create-portal)))))
 
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (when-let [err (permissibility-err conn portal)]
@@ -1768,6 +1786,8 @@
 
 (defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)
+
+  (close-portal conn "")
 
   (try
     (when-not (boolean (:transaction @conn-state))
