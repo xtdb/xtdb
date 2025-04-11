@@ -5,7 +5,14 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import org.apache.kafka.common.KafkaException
+  (:import [java.nio ByteBuffer]
+           [java.time Duration]
+           [java.util Map]
+           [org.apache.kafka.clients.admin AdminClient NewTopic]
+           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
+           [org.apache.kafka.clients.producer KafkaProducer ProducerRecord]
+           [org.apache.kafka.common TopicPartition]
+           org.apache.kafka.common.KafkaException
            org.testcontainers.containers.GenericContainer
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName
@@ -181,3 +188,115 @@
                          {:xt/id :new3}])
                    (set (xt/q node "SELECT _id FROM xt_docs")))))))))
 
+(defn copy-first-n-messages!
+  [^String bootstrap-servers ^String source-topic ^String dest-topic ^long n]
+  ;; 1. Create the destination topic (always, no check)
+  (with-open [admin (AdminClient/create {"bootstrap.servers" bootstrap-servers})]
+    (.createTopics admin
+                   [(doto (NewTopic. dest-topic 1 (short 1))
+                      (.configs {"message.timestamp.type" "LogAppendTime"}))])
+    (Thread/sleep 500)) ;; allow for topic propagation
+
+  ;; 2. Use ByteBuffer serializers, Unit keys, and read_committed
+  (let [consumer (KafkaConsumer.
+                  ^Map {"bootstrap.servers" bootstrap-servers
+                        "enable.auto.commit" "false"
+                        "isolation.level" "read_committed"
+                        "auto.offset.reset" "earliest"
+                        "key.deserializer" "org.apache.kafka.common.serialization.ByteArrayDeserializer"
+                        "key.serializer" "org.apache.kafka.common.serialization.ByteBufferSerializer"
+                        "value.deserializer" "org.apache.kafka.common.serialization.ByteArrayDeserializer"})
+
+        producer (KafkaProducer.
+                  ^Map {"bootstrap.servers" bootstrap-servers
+                        "enable.idempotence" "true"
+                        "acks" "all"
+                        "compression.type" "snappy"
+                        "key.deserializer" "org.apache.kafka.common.serialization.ByteArrayDeserializer"
+                        "key.serializer" "org.apache.kafka.common.serialization.ByteBufferSerializer"
+                        "value.serializer" "org.apache.kafka.common.serialization.ByteBufferSerializer"})]
+
+    ;; 3. Begin copying first N messages
+    (try
+      (let [tp (TopicPartition. source-topic 0)]
+        (.assign consumer [tp])
+        (.seek consumer tp 0)
+
+        (loop [remaining n]
+          (when (pos? remaining)
+            (let [records (.poll consumer (Duration/ofSeconds 1))
+                  recs (iterator-seq (.iterator records))]
+              (doseq [^ConsumerRecord r (take remaining recs)]
+                (.send producer (ProducerRecord. dest-topic (.key r) (ByteBuffer/wrap (.value r)))))
+              (when (< (count recs) remaining)
+                (recur (- remaining (count recs)))))))
+        (.flush producer))
+      (finally
+        (.close consumer)
+        (.close producer)))))
+
+  (t/deftest ^:integration test-stale-log-recovery
+    (let [original-topic (str "xtdb.kafka-test." (random-uuid))
+          stale-topic (str "xtdb.kafka-test." (random-uuid)) 
+          empty-topic (str "xtdb.kafka-test." (random-uuid))]
+
+      (util/with-tmp-dirs #{local-disk-path}
+        ;; Start a node, write a few transactions to the original topic
+        (with-open [node (xtn/start-node {:log [:kafka {:topic original-topic
+                                                        :bootstrap-servers *bootstrap-servers*
+                                                        :create-topic? true
+                                                        :poll-duration "PT2S"}]
+                                          :storage [:local {:path local-disk-path}]})]
+          (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+          (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
+          (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
+          (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
+                   (set (xt/q node "SELECT _id FROM xt_docs"))))
+
+          ;; Finish the block
+          (t/is (nil? (tu/finish-block! node)))
+
+          ;; Submit a few more transactions
+          (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :willbelost}]])
+          (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz} {:xt/id :willbelost}])
+                   (set (xt/q node "SELECT _id FROM xt_docs")))))
+
+        ;; Copy the first 2 messages from the original topic to the stale topic
+        (copy-first-n-messages! *bootstrap-servers* original-topic stale-topic 2)
+
+        ;; Attempt to restart the node with intact storage and the stale topic + original epoch
+        (t/is
+         (thrown-with-msg?
+          IllegalStateException
+          #"Node failed to start due to an invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest indexed transaction \(epoch=0 and offset=2\)"
+          (xtn/start-node {:log [:kafka {:topic stale-topic
+                                         :bootstrap-servers *bootstrap-servers*
+                                         :create-topic? false
+                                         :poll-duration "PT2S"}]
+                           :storage [:local {:path local-disk-path}]})))
+
+        ;; Attempt to restart the node with intact storage, a new topic + new epoch
+        (with-open [node (xtn/start-node {:log [:kafka {:topic empty-topic
+                                                        :bootstrap-servers *bootstrap-servers*
+                                                        :create-topic? true
+                                                        :poll-duration "PT2S"
+                                                        :properties-map {}
+                                                        :properties-file nil
+                                                        :current-epoch 1}]
+                                          :storage [:local {:path local-disk-path}]})]
+          (t/testing "can query previous indexed values, unindexed values will be lost"
+            (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
+                     (set (xt/q node "SELECT _id FROM xt_docs")))))
+
+          (t/testing "can index/query new transactions"
+            (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new}]]))
+            (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new2}]]))
+            (t/is (= (set [{:xt/id :foo}
+                           {:xt/id :bar}
+                           {:xt/id :baz}
+                           {:xt/id :new}
+                           {:xt/id :new2}])
+                     (set (xt/q node "SELECT _id FROM xt_docs")))))
+
+          (t/testing "can finish the block"
+            (t/is (nil? (tu/finish-block! node))))))))
