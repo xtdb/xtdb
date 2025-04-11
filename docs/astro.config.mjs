@@ -150,6 +150,14 @@ export default defineConfig({
                         { label: 'AWS', link: '/ops/aws' },
                         { label: 'Azure', link: '/ops/azure' },
                         { label: 'Google Cloud', link: '/ops/google-cloud' },
+                        { 
+                            label: 'Backup and Restore',
+                            items: [
+                                { label: 'Overview', link: '/ops/backup-and-restore/overview' },
+                                { label: 'Empty Log & Intact Storage', link: '/ops/backup-and-restore/empty-log' },
+                                { label: 'Stale Log & Intact Storage', link: '/ops/backup-and-restore/stale-log' },
+                            ]
+                        },
                         { label: 'Troubleshooting', link: '/ops/troubleshooting' },
 
                     ]

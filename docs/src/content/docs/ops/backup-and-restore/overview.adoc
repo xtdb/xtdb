@@ -1,0 +1,58 @@
+---
+title: Backup and Restore
+---
+
+This document provides a high-level overview of XTDB’s stateful architecture and outlines what data is stored where, what typical backups include, and how to think about restoring XTDB in different failure scenarios.
+
+== Overview of Stateful Components
+
+XTDB consists of two primary stateful components:
+
+=== Log
+
+A totally ordered, append-only log.
+
+* This contains all transactions (representing one or more record-level operations) and their metadata, and inter-node messages. 
+* Guarantees ACID-compliant serial execution of all writes.
+* Pluggable implementations include:
+** *In-memory* (ephemeral - any unindexed data is lost on restart)
+** *Local disk* (durable on a single node)
+** *Remote/Kafka* (distributed, durable across nodes)
+* Every transaction is recorded immutably and linked to a durable log offset.
+
+=== Storage Module
+
+A immutable store containing the data and indexes that make up the database.
+
+* Structured as https://arrow.apache.org[Apache Arrow^] columnar files for performance and flexibility.
+* Data is periodically compacted into increasingly efficient layers.
+** *Level-0* files contain full snapshots of each table.
+** *Higher levels* are derived, optimized representations and can be reconstructed from lower levels if needed.
+* Pluggable implementations include:
+** *In-memory* (ephemeral - any data is lost on restart)
+** *Local disk* (durable, single-node persistence)
+** *Remote object stores* (e.g., S3, Azure Blob Storage) with optional local disk caching
+* The storage layout is predictable and ideal for incremental or full backups.
+
+== What Data Is at Risk?
+
+[cols="1,3", options="header"]
+|===
+| Component | Risk if Lost
+
+| Transaction Log
+| All transactions on the log since the last indexed offset would be lost.
+
+| Storage Module
+| Without a backup or infinite retention on the log, all indexed data would be lost.
+
+| Local Caches (disk/in-memory)
+| No lasting risk- these are ephemeral and automatically regenerated.
+|===
+
+== Failure and Recovery Scenarios
+
+The following are common failure scenarios and links to detailed guidance for each:
+
+* link:empty-log[**Transaction log is lost or empty, but storage is intact.**]
+* link:stale-log[**Transaction log is stale/out of sync, but storage is intact.**]
