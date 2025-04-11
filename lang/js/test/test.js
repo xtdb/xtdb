@@ -150,3 +150,26 @@ describe("connects to XT", function() {
     }
   })
 })
+
+describe("XT cleans up portals correctly", function() {
+
+  it("closes unamed portal when its rebound", async () => {
+    const sql2 = await sql.reserve();
+    await sql2`BEGIN TRANSACTION READ ONLY`;
+    await sql2`SELECT ${2}`;
+    await sql2`COMMIT`;
+    // lib uses extended flow by default, commit therefore was being bound as unamed portal
+    // ref to previous portal was being lost and therefore never closed
+    sql2.release();
+    sql.end();
+  })
+
+  it("implcitly closes unamed portal at start of simple query", async () => {
+    const sql2 = await sql.reserve();
+    await sql2`BEGIN TRANSACTION READ ONLY`;
+    await sql2`SELECT ${2}`;
+    await sql2`SELECT 3`.simple();
+    sql2.release();
+    sql.end();
+  })
+})
