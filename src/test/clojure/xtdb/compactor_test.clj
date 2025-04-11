@@ -574,13 +574,13 @@
         (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/compactor-test/compactor-metadata-test")))
                         (.resolve node-dir "objects"))
 
-        (let [current-tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
-                                 TableBlock/parseFrom
-                                 table-cat/<-table-block
-                                 :current-tries
-                                 (into #{} (map table-test/trie-details->edn)))]
+        (let [tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
+                         TableBlock/parseFrom
+                         table-cat/<-table-block
+                         :tries
+                         (into #{} (map table-test/trie-details->edn)))]
           (t/is (= #{"l00-rc-b00" "l01-r20110103-b00" "l01-rc-b00" "l00-rc-b01" "l01-r20160104-b01" "l01-rc-b01"}
-                   (into #{} (map :trie-key) current-tries)))
+                   (into #{} (map :trie-key) tries)))
 
           (t/is (= {"l01-rc-b00" nil,
                     "l01-r20110103-b00" {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
@@ -598,7 +598,7 @@
                                          :min-system-from #xt/instant "2020-01-02T00:00:00Z",
                                          :max-system-from #xt/instant "2020-01-02T00:00:00Z",
                                          :row-count 1}}
-                   (->> current-tries
+                   (->> tries
                         (filter #(str/starts-with? (:trie-key %) "l01"))
                         (into {} (map (juxt :trie-key
                                             (fn [{:keys [trie-metadata]}]

@@ -10,7 +10,7 @@
   #xt.arrow/field ["api_version" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
   "manufacturer"
   #xt.arrow/field ["manufacturer" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2894,
    :trie-metadata

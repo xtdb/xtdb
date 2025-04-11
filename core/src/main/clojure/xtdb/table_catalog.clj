@@ -35,11 +35,11 @@
             (format "b%s.binpb" (util/->lex-hex-string block-idx))))
 
 (defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count
-                                                   current-tries hlls]
+                                                   table-tries hlls]
   (let [res (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
                                    (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
                                    (.setRowCount row-count)
-                                   (.addAllCurrentTries current-tries)
+                                   (.addAllTries table-tries)
                                    (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom ^ByteBuffer %))))
                                  (.build)
                                  (.toByteArray)))]
@@ -53,7 +53,7 @@
      :fields (->> (for [^Field field (.getFields schema)]
                     (MapEntry/create (.getName field) field))
                   (into {}))
-     :current-tries (into [] (.getCurrentTriesList table-block))
+     :tries (into [] (.getTriesList table-block))
      :hlls (-> (.getColumnNameToHllMap table-block)
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))}))
 
@@ -94,12 +94,12 @@
                        ^:volatile-mutable ^long block-idx
                        ^:volatile-mutable table->metadata]
   PTableCatalog
-  (finish-block! [this block-idx delta-table->metadata table->current-tries]
+  (finish-block! [this block-idx delta-table->metadata table->tries]
     (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
       (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
             table-names (ArrayList.)]
         (doseq [[table-name {:keys [row-count fields hlls]}] new-table->metadata]
-          (let [current-tries (get table->current-tries table-name)
+          (let [table-tries (get table->tries table-name)
                 fields (for [[col-name field] fields]
                          (types/field-with-name field col-name))
                 table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)]
@@ -108,7 +108,7 @@
                         (write-table-block-data (Schema. fields) row-count
                                                 (map (fn [{:keys [trie-key data-file-size trie-metadata]}]
                                                        (trie/->trie-details table-name trie-key data-file-size trie-metadata))
-                                                     current-tries)
+                                                     table-tries)
                                                 hlls))))
         (set! (.block-idx this) block-idx)
         (set! (.table->metadata this) new-table->metadata)
@@ -130,7 +130,7 @@
 (defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
   (let [[block-idx table->table-block] (load-tables-to-metadata buffer-pool block-cat)]
     (TableCatalog. buffer-pool (or block-idx -1)
-                   (update-vals table->table-block #(dissoc % :current-tries)))))
+                   (update-vals table->table-block #(dissoc % :tries)))))
 
 (defn <-node [node]
   (util/component node :xtdb/table-catalog))

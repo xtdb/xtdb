@@ -6,7 +6,7 @@
   #xt.arrow/field ["bar" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
   "_id"
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2558,
    :trie-metadata

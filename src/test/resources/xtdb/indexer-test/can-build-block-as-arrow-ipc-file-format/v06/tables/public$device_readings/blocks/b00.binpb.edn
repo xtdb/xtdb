@@ -28,7 +28,7 @@
   #xt.arrow/field ["battery_temperature" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
   "bssid"
   #xt.arrow/field ["bssid" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 4750,
    :trie-metadata

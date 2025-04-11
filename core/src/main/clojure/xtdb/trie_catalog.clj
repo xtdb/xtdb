@@ -269,9 +269,9 @@
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
   (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)]
     (doto (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
-      (.addTries (for [[_ {:keys [current-tries]}] table->table-block
-                       current-trie current-tries]
-                   current-trie)))))
+      (.addTries (for [[_ {:keys [tries]}] table->table-block
+                       trie tries]
+                   trie)))))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
   (util/component node :xtdb/trie-catalog))

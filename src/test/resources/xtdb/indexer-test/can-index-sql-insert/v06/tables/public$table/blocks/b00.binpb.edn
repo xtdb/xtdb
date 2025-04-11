@@ -8,7 +8,7 @@
   #xt.arrow/field ["baz" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["f64" #xt.arrow/field-type [#xt.arrow/type :f64 false]]],
   "_id"
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2910,
    :trie-metadata

@@ -9,7 +9,7 @@ option java_multiple_files = true;
 message TableBlock {
   bytes arrow_schema = 1;
   int64 row_count = 2;
-  repeated xtdb.log.proto.TrieDetails current_tries = 3;
+  repeated xtdb.log.proto.TrieDetails tries = 3;
   map<string, bytes> column_name_to_hll = 4;
 }
 

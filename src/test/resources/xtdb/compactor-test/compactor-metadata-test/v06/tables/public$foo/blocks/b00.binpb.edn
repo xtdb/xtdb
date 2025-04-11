@@ -2,7 +2,7 @@
  :fields
  {"_id"
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 1966,
    :trie-metadata

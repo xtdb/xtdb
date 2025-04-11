@@ -54,7 +54,7 @@
                                                   table-cat/<-table-block)
 
               current-tries (->> table-block2
-                                 :current-tries
+                                 :tries
                                  (mapv trie-details->edn))
               trie-metas (map :trie-metadata current-tries)
               [trie1-bloom _trie2-bloom] (map :iid-bloom trie-metas)]
@@ -103,7 +103,7 @@
                    (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
                         TableBlock/parseFrom
                         table-cat/<-table-block
-                        :current-tries
+                        :tries
                         (mapv (comp :trie-key trie-details->edn))))))))))
 
 
@@ -143,5 +143,5 @@
                  (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
                       TableBlock/parseFrom
                       table-cat/<-table-block
-                      :current-tries
+                      :tries
                       (mapv (comp :trie-key trie-details->edn))) ))))))

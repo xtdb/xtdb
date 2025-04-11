@@ -8,7 +8,7 @@
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
   "error"
   #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2870,
    :trie-metadata

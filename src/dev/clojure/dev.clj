@@ -167,7 +167,7 @@
                                                (table-cat/->table-block-metadata-obj-key block-idx))))]
     (-> (TableBlock/parseFrom in)
         (table-cat/<-table-block)
-        (update :current-tries
+        (update :tries
                 (fn [tries]
                   (->> tries
                        (mapv (fn [^TrieDetails td]

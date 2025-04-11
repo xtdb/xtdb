@@ -6,7 +6,7 @@
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["keyword" #xt.arrow/field-type [#xt.arrow/type :keyword false]] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]]],
   "list"
   #xt.arrow/field ["list" #xt.arrow/field-type [#xt.arrow/type :list true] #xt.arrow/field ["$data$" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["f64" #xt.arrow/field-type [#xt.arrow/type :f64 false]] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["timestamp-tz-micro-utc" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]] #xt.arrow/field ["bool" #xt.arrow/field-type [#xt.arrow/type :bool false]]]]},
- :current-tries
+ :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 5734,
    :trie-metadata

@@ -38,12 +38,12 @@
 (defn- <-TableBlock [^TableBlock block]
   (-> (table-cat/<-table-block block)
       (update :hlls update-vals (juxt hash HyperLogLog/estimate))
-      (update :current-tries (partial mapv
-                                      (fn [^TrieDetails trie-details]
-                                        {:trie-key (.getTrieKey trie-details)
-                                         :data-file-size (.getDataFileSize trie-details)
-                                         :trie-metadata (some-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
-                                                                (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))
+      (update :tries (partial mapv
+                              (fn [^TrieDetails trie-details]
+                                {:trie-key (.getTrieKey trie-details)
+                                 :data-file-size (.getDataFileSize trie-details)
+                                 :trie-metadata (some-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
+                                                        (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))
 
 (defn- write-pbuf-edn-file [^Path path parse-fn]
   (let [edn-file (.resolveSibling path (str (.getFileName path) ".edn"))]
