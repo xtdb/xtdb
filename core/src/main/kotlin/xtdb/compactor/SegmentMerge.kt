@@ -20,6 +20,8 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.util.*
 import java.util.function.Predicate
+import kotlin.Long.Companion.MAX_VALUE
+import kotlin.Long.Companion.MIN_VALUE
 import kotlin.io.path.deleteExisting
 import kotlin.math.min
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
@@ -37,6 +39,67 @@ private fun ByteArray.toPathPredicate() =
 
 private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
     segment.dataRel?.loadPage(node)
+
+/**
+ * A function to do bitemporal resolution for events with the same system-time (same transaction). See #4303
+ */
+fun resolveSameSystemTimeEvents(al: BufferAllocator, dataReader: RelationReader, path: ByteArray = byteArrayOf()) : Relation {
+    val isValidPtr = ArrowBufPointer()
+    val startIidPtr = ArrowBufPointer()
+    val curIidPtr = ArrowBufPointer()
+    var curSystemFrom : Long
+
+    val relWriter = Relation(al, dataReader.schema)
+    val iidVec = dataReader["_iid"].rowCopier(relWriter["_iid"])
+    val sysFromVec= dataReader["_system_from"].rowCopier(relWriter["_system_from"])
+    val validFromVec = relWriter["_valid_from"]
+    val validToVec = relWriter["_valid_to"]
+    val opCopier = dataReader["op"].rowCopier(relWriter["op"])
+
+    val evPtr = EventRowPointer(dataReader, path)
+    val polygonCalculator = PolygonCalculator()
+
+    var seenErase = false
+
+    while (evPtr.isValid(isValidPtr, path)) {
+        evPtr.getIidPointer(startIidPtr)
+        curSystemFrom = evPtr.systemFrom
+
+        while(evPtr.isValid(isValidPtr, path) && evPtr.systemFrom == curSystemFrom && startIidPtr == evPtr.getIidPointer(curIidPtr)) {
+
+            when (val polygon = polygonCalculator.calculate(evPtr)) {
+                // here we are only taking care of an erase that happens within the same transaction
+                null -> {
+                    if (!seenErase) {
+                        iidVec.copyRow(evPtr.index)
+                        sysFromVec.copyRow(evPtr.index)
+                        validFromVec.writeLong(MIN_VALUE)
+                        validToVec.writeLong(MAX_VALUE)
+                        opCopier.copyRow(evPtr.index)
+                        relWriter.endRow()
+                    }
+                    seenErase = true
+                }
+                else -> {
+                    repeat(polygon.validTimeRangeCount) { i ->
+                        if (polygon.getSystemTo(i) > curSystemFrom) {
+                            iidVec.copyRow(evPtr.index)
+                            sysFromVec.copyRow(evPtr.index)
+                            validFromVec.writeLong(polygon.getValidFrom(i))
+                            validToVec.writeLong(polygon.getValidTo(i))
+                            opCopier.copyRow(evPtr.index)
+                            relWriter.endRow()
+                        }
+                    }
+                }
+            }
+            evPtr.nextIndex()
+        }
+        polygonCalculator.reset()
+        seenErase = false
+    }
+    return relWriter
+}
 
 internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 

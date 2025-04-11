@@ -16,6 +16,8 @@ class PolygonCalculator(private val temporalBounds: TemporalBounds? = null) {
     private val ceiling = Ceiling()
     private val polygon = Polygon()
 
+    fun reset() = ceiling.reset()
+
     fun calculate(erp: EventRowPointer): Polygon? {
         if (skipIidPtr == erp.getIidPointer(currentIidPtr)) return null
 
