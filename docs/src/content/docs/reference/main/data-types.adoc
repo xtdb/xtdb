@@ -12,6 +12,59 @@ The following types are available within XTDB:
 `FLOAT` | `REAL`:: 32-bit (IEEE single-precision) floating-point number
 `DOUBLE`:: 64-bit (IEEE double-precision) floating-point number
 
+=== Decimal type
+
+`NUMERIC` | `DECIMAL`:: fixed-point numeric type with user-defined precision and scale.
+
+We recommend to store decimals with an explicit 32 precision or 64 precision as other precisions still
+have a bitwidth of 128 and 256 respectively once stored.
+
+Decimal operations follow consistent rules for precision and scale:
+
+Precision Rules::
+* If both operands have precision ≤ 32 → result precision = 32
+* Otherwise → result precision = 64 (assuming the result fits a precision 64 decimal)
+
+Scale Rules::
+* Addition (`+`) → scale = max(s1, s2)
+* Subtraction (`-`) → scale = max(s1, s2)
+* Multiplication (`*`) → scale = s1 + s2
+* Division (`/`) → scale = max(6, s1 + s2 + 1)
+
+Comparison Operations::
+Standard comparison operators are supported for decimals:
++
+`<`, `<=`, `=`, `>=`, `>`, `<>`
++
+
+Functions like `MAX` and `MIN` return results based on the input operand types.
+
+Type Widening::
+Operations between `DECIMAL` and non-`DECIMAL` types uses the following rules:
+* Integer operand types get converted to decimal before the operation.
+* Floating operand types results in the decimal part being converted to a floating point before the operation.
+
+Casting::
+Explicit casts to `DECIMAL` types are honoured in storage and computation:
++
+* `::DECIMAL(p, s)` → Precision = `p`, Scale = `s`
+* `::DECIMAL(p)` → Precision = `p`, Scale = `0`
+* `::DECIMAL` (unspecified) → Defaults to `DECIMAL(64, 9)`
+
+Cast Behaviour::
+* Casting from a non-decimal to `::DECIMAL` uses the default precision and scale unless specified.
+* Casting from an existing decimal with `::DECIMAL` (unspecified) is a no-op — the original precision and scale are preserved.
+
+Examples::
+* `CAST(123.45 AS DECIMAL(5,2))` → `DECIMAL(5,2)`
+* `CAST(123 AS DECIMAL(5))` → `DECIMAL(5,0)`
+* `CAST(123.456 AS DECIMAL)` → `DECIMAL(64,9)` (unless already `DECIMAL`)
+
+Edge Case Limitation::
+Addition of large `DECIMAL` values near the 32-precision boundary may require a precision-64 result.
++
+* If an operation would overflow a precision-32 result, an exception is raised, even though precision-64 types are generally supported. The reasoning here is that we try to preserve the original precision. If a larger precision is needed use an explicit cast.
+
 == Date/time types
 
 `DATE`:: date without time.
