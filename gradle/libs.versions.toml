@@ -36,7 +36,7 @@ antlr-runtime={ group="org.antlr", name="antlr4-runtime", version.ref="antlr" }
 clojure={ group="org.clojure", name="clojure", version.ref="clojure" }
 clojure-test-check={ group="org.clojure", name="test.check", version="1.1.1" }
 clojure-tools-logging={ group="org.clojure", name="tools.logging", version="1.3.0" }
-clojure-spec={ group="org.clojure", name="spec.alpha", version="0.3.218" }
+clojure-spec={ group="org.clojure", name="spec.alpha", version="0.5.238" }
 clojure-data-json={ group="org.clojure", name="data.json", version="2.5.1" }
 clojure-data-csv={ group="org.clojure", name="data.csv", version="1.1.0" }
 clojure-tools-cli={ group="org.clojure", name="tools.cli", version="1.0.206" }
