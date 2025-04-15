@@ -827,6 +827,21 @@
     (when (not-empty (expr-correlated-symbols predicate))
       [:select predicate [:left-outer-join join-map lhs rhs]])
 
+    [:rename prefix-or-columns
+     [:select predicate
+      relation]]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      (when-let [columns (cond
+                           (map? prefix-or-columns) (set/map-invert prefix-or-columns)
+                           (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
+                                                         (->> (for [c (relation-columns relation)]
+                                                                [c (symbol prefix (name c))])
+                                                              (into {}))))]
+        [:select (w/postwalk-replace columns predicate)
+         [:rename prefix-or-columns
+          relation]]))
+
     [:group-by group-by-columns
      [:select predicate
       relation]]
