@@ -40,7 +40,7 @@
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.query BoundQuery PreparedQuery)
-           [xtdb.types Interval Interval$DayTime Interval$Month Interval$MonthDayMicro Interval$MonthDayNano]
+           [xtdb.time Interval]
            [xtdb.vector IVectorReader RelationReader]))
 
 ;; references
@@ -649,27 +649,7 @@
     (instance? Instant obj) (recur (.atZone ^Instant obj #xt/zone "UTC"))
     (instance? Duration obj) (str obj)
     (instance? Period obj) (str obj)
-
     (instance? Interval obj) (str obj)
-
-    ;; represent period duration as an iso8601 duration string (includes period components)
-    (instance? PeriodDuration obj)
-    (let [^PeriodDuration obj obj
-          period (.getPeriod obj)
-          duration (.getDuration obj)]
-      (cond
-        ;; if either component is zero (likely in sql), we can just print the objects
-        ;; not normalizing the period here, should we be?
-        (.isZero period) (str duration)
-        (.isZero duration) (str period)
-
-        :else
-        ;; otherwise the duration needs to be append to the period, with a T on front.
-        ;; e.g P1DT3S - unfortunately, durations are printed with the ISO8601 PT header
-        ;; Right now doesn't matter - so just string munging.
-        (let [pstr (str period)
-              dstr (str duration)]
-          (str pstr (subs dstr 1)))))
 
     ;; returned to handle big utf8 bufs, right now we do not handle this well, later we will be writing json with less
     ;; copies and we may encode the quoted json string straight out of the buffer

@@ -12,9 +12,10 @@
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType FieldType)
-           (xtdb.types Interval$DayTime Interval$Month RegClass RegProc)
+           xtdb.time.Interval
+           (xtdb.types RegClass RegProc)
            (xtdb.vector IVectorWriter)
-           (xtdb.vector.extensions KeywordVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
+           (xtdb.vector.extensions KeywordVector IntervalMonthDayMicroVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -136,21 +137,26 @@
 
 (t/deftest interval-vector-test
   ;; for years/months we lose the years as a separate component, it has to be folded into months.
-  (let [iym #xt/interval-month "P35M"]
+  (let [iym #xt/interval "P35M"]
     (t/is (= [iym]
              (:vs (test-read (constantly #xt.arrow/type [:interval :year-month])
-                             (fn [^IVectorWriter w, ^Interval$Month v]
+                             (fn [^IVectorWriter w, ^Interval v]
                                (.writeObject w v))
                              [iym])))))
 
-  (let [idt #xt/interval-day-time ["P1434D" "PT0.023S"]]
+  (let [idt #xt/interval "P1434DT0.023S"]
     (t/is (= [idt]
              (:vs (test-read (constantly #xt.arrow/type [:interval :day-time])
-                             (fn [^IVectorWriter w, ^Interval$DayTime v]
+                             (fn [^IVectorWriter w, ^Interval v]
                                (.writeObject w v))
                              [idt])))))
 
-  (let [imdn #xt/interval-nano ["P33M244D" "PT0.003444443S"]]
+  (let [imdm #xt/interval "P33M244DT0.003443S"]
+    (t/is (= {:vs [imdm]
+              :vec-types [IntervalMonthDayMicroVector]}
+             (test-round-trip [imdm]))))
+
+  (let [imdn #xt/interval "P33M244DT0.003444443S"]
     (t/is (= {:vs [imdn]
               :vec-types [IntervalMonthDayNanoVector]}
              (test-round-trip [imdn])))))

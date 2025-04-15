@@ -19,7 +19,8 @@
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
            (xtdb.pg.codec NumericBin)
-           (xtdb.types Interval Interval$MonthDayMicro Interval$MonthDayNano ZonedDateTimeRange)
+           (xtdb.time Interval)
+           (xtdb.types ZonedDateTimeRange)
            (xtdb.vector IVectorReader)
            (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
@@ -904,14 +905,12 @@
 (defn interval-rdr->iso-micro-interval-str-bytes ^bytes [^IVectorReader rdr idx]
   (let [itvl (.getObject rdr idx)]
     (-> (cond
-          (instance? Interval$MonthDayMicro itvl) itvl
-
-          (instance? Interval$MonthDayNano itvl)
+          (instance? Interval itvl)
           ;; Postgres only has month-day-micro intervals so we truncate the nanos
-          ;; placing back in MDM to ensure correctness
           (let [^Interval itvl itvl]
-            (Interval/ofMicros (.getPeriod itvl)
-                               (trunc-duration-to-micros  (.getDuration itvl))))
+            (Interval. (.getMonths itvl)
+                       (.getDays itvl)
+                       (-> (.getNanos itvl) (quot 1000) (* 1000))))
 
           :else (throw (IllegalArgumentException. (format "Unsupported interval type: %s" itvl))))
 
@@ -1488,6 +1487,7 @@
    [:timestamp-local :nano] :timestamp
    [:timestamp-tz :nano] :timestamptz
    :tstz-range :tstz-range
+   [:interval :year-month] :interval
    [:interval :month-day-nano] :interval
    [:interval :month-day-micro] :interval
    [:list :i32] :_int4

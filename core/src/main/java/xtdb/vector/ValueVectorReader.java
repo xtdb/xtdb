@@ -28,7 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
-import xtdb.types.Interval;
+import xtdb.time.Interval;
 import xtdb.util.Hasher;
 import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.IntervalMonthDayMicroVector;
@@ -847,7 +847,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-                return new Interval.Month(getInt(idx));
+                return new Interval(getInt(idx), 0, 0);
             }
 
             @Override
@@ -875,7 +875,7 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             protected Interval getObject0(int idx, IKeyFn<?> keyFn) {
                 v.get(idx, holder);
-                return new Interval.DayTime(holder.days, holder.milliseconds);
+                return new Interval(0, holder.days, (long) holder.milliseconds * (NANO_HZ / MILLI_HZ));
             }
 
             @Override
@@ -905,7 +905,7 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             protected Interval getObject0(int idx, IKeyFn<?> keyFn) {
                 v.get(idx, holder);
-                return new Interval.MonthDayNano(holder.months, holder.days, holder.nanoseconds);
+                return new Interval(holder.months, holder.days, holder.nanoseconds);
             }
 
             @Override
@@ -934,8 +934,7 @@ public class ValueVectorReader implements IVectorReader {
         return new ValueVectorReader(v) {
             @Override
             protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-                var mdn = (Interval.MonthDayNano) underlyingVec.getObject(idx, keyFn);
-                return new Interval.MonthDayMicro(mdn.getMonths(), mdn.getDays(), mdn.getNanos());
+                return underlyingVec.getObject(idx, keyFn);
             }
 
             @Override

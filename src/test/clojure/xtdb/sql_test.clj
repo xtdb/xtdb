@@ -2687,8 +2687,8 @@ UNION ALL
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'PT1H'};"])
 
   (t/is (= [{:xt/id 1,
-             :tx-interval #xt/interval-micro ["P0D" "PT1H"],
-             :q-interval #xt/interval-micro ["P0D" "PT1H"]}]
+             :tx-interval #xt/interval "PT1H",
+             :q-interval #xt/interval "PT1H"}]
            (xt/q tu/*node* "FROM docs SELECT *, INTERVAL 'PT1H' AS q_interval"))))
 
 (t/deftest test-push-selection-down-past-unnest
@@ -2853,17 +2853,17 @@ UNION ALL
 
 (t/deftest interval-mdm
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'P1DT1.123456S'}"])
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 2, tx_interval: ?}" [#xt/interval-micro ["P1D" "PT1.123456S"]]]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 2, tx_interval: ?}" [#xt/interval "P1DT1.123456S"]]])
 
-  (t/is (= [{:xt/id 2, :tx-interval #xt/interval-micro ["P1D" "PT1.123456S"]}
-            {:xt/id 1, :tx-interval #xt/interval-micro ["P1D" "PT1.123456S"]}]
+  (t/is (= [{:xt/id 2, :tx-interval #xt/interval "P1DT1.123456S"}
+            {:xt/id 1, :tx-interval #xt/interval "P1DT1.123456S"}]
            (xt/q tu/*node* "FROM docs SELECT *")))
 
-  (t/is (= [{:mdm #xt/interval-micro ["P1D" "PT1.123456S"],
-             :mdn [#xt/interval-nano ["P1D" "PT1.123456789S"]],
-             :mdm-literal #xt/interval-micro ["P1D" "PT1.123456S"]}]
+  (t/is (= [{:mdm #xt/interval "P1DT1.123456S",
+             :mdn [#xt/interval "P1DT1.123456789S"],
+             :mdm-literal #xt/interval "P1DT1.123456S"}]
            (xt/q tu/*node* "SELECT ? mdm, ? mdn, INTERVAL 'P1DT1.123456S' mdm_literal"
-                 {:args [#xt/interval-micro ["P1D" "PT1.123456S"] [#xt/interval-nano ["P1D" "PT1.123456789S"]]]}))))
+                 {:args [#xt/interval "P1DT1.123456S" [#xt/interval "P1DT1.123456789S"]]}))))
 
 (defn- compare-decimals [^BigDecimal d1 ^BigDecimal d2]
   (and (= (.scale d1) (.scale d2))

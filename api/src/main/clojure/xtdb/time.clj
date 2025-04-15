@@ -1,12 +1,12 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err])
-  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime)
            [java.time.format DateTimeParseException]
            java.time.temporal.ChronoUnit
            (java.util Date)
            (org.apache.arrow.vector PeriodDuration)
-           xtdb.time.Time))
+           (xtdb.time Interval Time)))
 
 (defn ->duration [d]
   (cond
@@ -131,6 +131,15 @@
     (.withNanos duration (let [nanos (.getNano duration)
                                factor (Math/pow 10 (- 9 precision))]
                            (* (Math/floor (/ nanos factor)) factor)))))
+
+(defn <-iso-interval-str [i-str]
+  (when-let [[_ neg p-str d-str] (re-matches #"(-)?P([-\dYMWD]+)?(?:T([-\dHMS\.]+)?)?" i-str)]
+    (Interval. (if p-str
+                 (Period/parse (str neg "P" p-str))
+                 Period/ZERO)
+               (if d-str
+                 (Duration/parse (str neg "PT" d-str))
+                 Duration/ZERO))))
 
 (defn alter-md*-interval-precision ^PeriodDuration [^long precision ^PeriodDuration pd]
   (PeriodDuration.

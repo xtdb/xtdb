@@ -1,8 +1,7 @@
 (ns xtdb.sql.generate-series-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu])
-  (:import [java.time LocalDate]))
+            [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -58,13 +57,13 @@
              (xt/q tu/*node* "SELECT generate_series(DATE '2020-01-01', DATE '2020-04-01', INTERVAL '1' MONTH) dates"))
           "monthly interval")
 
-    (t/is (= [{:dates [#xt/date-time "2020-01-01T00:00"
-                       #xt/date-time "2020-02-01T00:00"
-                       #xt/date-time "2020-03-01T00:00"]}]
+    (t/is (= [{:dates [#xt/date "2020-01-01"
+                       #xt/date "2020-02-01"
+                       #xt/date "2020-03-01"]}]
              (xt/q tu/*node* "SELECT generate_series(DATE '2020-01-01', DATE '2020-04-01', INTERVAL 'P1M') dates"))
           "monthly interval")
 
-    (t/is (= [{:date #xt/date-time "2020-01-01T00:00"} {:date #xt/date-time "2021-01-01T00:00"}]
+    (t/is (= [{:date #xt/date "2020-01-01"} {:date #xt/date "2021-01-01"}]
              (xt/q tu/*node* "FROM generate_series(DATE '2020-01-01', DATE '2022-01-01', INTERVAL 'P1Y') dates (`date`)"))
           "yearly interval")
 

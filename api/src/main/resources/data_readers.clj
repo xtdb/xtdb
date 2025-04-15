@@ -12,10 +12,7 @@
  xt/key-fn xtdb.serde/read-key-fn
 
  xt/period-duration xtdb.serde/period-duration-reader
- xt/interval-month xtdb.serde/interval-month-reader
- xt/interval-day-time xtdb.serde/interval-day-time-reader
- xt/interval-micro xtdb.serde/interval-micro-reader
- xt/interval-nano xtdb.serde/interval-nano-reader
+ xt/interval xtdb.serde/interval-reader
  xt/tstz-range xtdb.serde/tstz-range-reader
  xt/uri xtdb.serde/uri-reader
 

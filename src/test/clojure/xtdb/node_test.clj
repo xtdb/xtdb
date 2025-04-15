@@ -170,7 +170,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
            (xt/q tu/*node* "SELECT foo._id, foo.arr, foo.arr[1] AS fst, foo.arr[2] AS snd, foo.arr[4] AS lst FROM foo"))))
 
 (t/deftest test-interval-literal-cce-271
-  (t/is (= [{:a #xt/interval-month "P12M"}]
+  (t/is (= [{:a #xt/interval "P1Y"}]
            (xt/q tu/*node* "select a.a from (values (INTERVAL '1' YEAR)) a (a)"))))
 
 (t/deftest test-overrides-range

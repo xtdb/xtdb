@@ -22,7 +22,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
-           (xtdb.types Interval)
+           (xtdb.time Interval)
            xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]
@@ -834,18 +834,11 @@
   (error-string [_] (format "Cannot parse interval: %s - failed with message %s" i-str msg)))
 
 (defn parse-iso-interval-literal [i-str env]
-  (if-let [[_ p-str d-str] (re-matches #"P([-\dYMWD]+)?(?:T([-\dHMS\.]+)?)?" i-str)]
-    (try
-      (Interval/ofMicros (if p-str
-                           (Period/parse (str "P" p-str))
-                           Period/ZERO)
-                         (if d-str
-                           (Duration/parse (str "PT" d-str))
-                           Duration/ZERO))
-      (catch Exception e
-        (add-err! env (->CannotParseInterval i-str (.getMessage e)))))
-
-    (add-err! env (->CannotParseInterval i-str nil))))
+  (try
+    (or (time/<-iso-interval-str i-str)
+        (add-err! env (->CannotParseInterval i-str nil)))
+    (catch Exception e
+      (add-err! env (->CannotParseInterval i-str (.getMessage e))))))
 
 (defrecord CannotParseDuration [d-str msg]
   PlanError

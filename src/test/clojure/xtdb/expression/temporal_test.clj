@@ -7,10 +7,11 @@
             [xtdb.expression :as expr]
             [xtdb.expression-test :as et]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.vector.writer :as vw])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
-           (xtdb.types Interval Interval$DayTime Interval$Month Interval$MonthDayMicro Interval$MonthDayNano)))
+           (xtdb.time Interval)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -279,32 +280,27 @@
     (t/testing "cannot cast year-month interval to duration"
       (t/is (thrown-with-msg? UnsupportedOperationException
                               #"Cannot cast a year-month interval to a duration"
-                              (test-cast #xt/interval-month "P12M" [:duration :micro]))))
-
-    (t/testing "cannot cast day-time interval to duration"
-      (t/is (thrown-with-msg? UnsupportedOperationException
-                              #"Cannot cast a day-time interval to a duration"
-                              (test-cast #xt/interval-day-time ["P1D" "PT0S"] [:duration :micro]))))
+                              (test-cast #xt/interval "P12M" [:duration :micro]))))
 
     (t/testing "cannot cast month-day-nano interval to duration when months > 0"
       (t/is (thrown-with-msg? RuntimeException
                               #"Cannot cast month-day-micro/nano intervals when month component is non-zero."
-                              (test-cast #xt/interval-nano ["P4M8D" "PT0S"] [:duration :micro]))))
+                              (test-cast #xt/interval "P4M8D" [:duration :micro]))))
 
     (t/testing "casting month-day-nano intervals -> duration"
-      (t/is (= #xt/duration "PT25H1S" (test-cast #xt/interval-nano ["P1D" "PT1H1S"] [:duration :second])))
-      (t/is (= #xt/duration "PT3H1M1S" (test-cast #xt/interval-nano ["P0D" "PT3H1M1S"] [:duration :second])))
-      (t/is (= #xt/duration "PT25H1.111111S" (test-cast #xt/interval-nano ["P1D" "PT1H1.111111111S"] [:duration :micro]))))
+      (t/is (= #xt/duration "PT25H1S" (test-cast #xt/interval "P1DT1H1S" [:duration :second])))
+      (t/is (= #xt/duration "PT3H1M1S" (test-cast #xt/interval "PT3H1M1S" [:duration :second])))
+      (t/is (= #xt/duration "PT25H1.111111S" (test-cast #xt/interval "P1DT1H1.111111111S" [:duration :micro]))))
 
     (t/testing "casting month-day-nano intervals -> duration with precision"
-      (t/is (= #xt/duration "PT25H1.11S" (test-cast #xt/interval-nano ["P1D" "PT1H1.111111111S"] [:duration :milli] {:precision 2})))
-      (t/is (= #xt/duration "PT25H1.1111111S" (test-cast #xt/interval-nano ["P1D" "PT1H1.111111111S"] [:duration :nano] {:precision 7})))
+      (t/is (= #xt/duration "PT25H1.11S" (test-cast #xt/interval "P1DT1H1.111111111S" [:duration :milli] {:precision 2})))
+      (t/is (= #xt/duration "PT25H1.1111111S" (test-cast #xt/interval "P1DT1H1.111111111S" [:duration :nano] {:precision 7})))
       (t/is (thrown-with-msg? IllegalArgumentException
                               #"The maximum fractional seconds precision is 9."
-                              (test-cast #xt/interval-nano ["P4M8D" "PT0S"] [:duration :nano] {:precision 10})))
+                              (test-cast #xt/interval "P4M8D" [:duration :nano] {:precision 10})))
       (t/is (thrown-with-msg? IllegalArgumentException
                               #"The minimum fractional seconds precision is 0."
-                              (test-cast #xt/interval-nano ["P4M8D" "PT0S"] [:duration :nano] {:precision -1}))))))
+                              (test-cast #xt/interval "P4M8D" [:duration :nano] {:precision -1}))))))
 
 
 (t/deftest cast-duration-to-interval
@@ -315,12 +311,12 @@
                                 [:table [{}]]])
                   first :res))]
 
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1.11S"] (test-cast #xt/duration "PT3H1.11S" :interval)))
-      (t/is (= #xt/interval-micro ["P0D" "PT25H1.11S"] (test-cast #xt/duration "PT25H1.11S" :interval)))
-      (t/is (= #xt/interval-micro ["P0D" "PT842H1.11S"] (test-cast #xt/duration "P35DT2H1.11S" :interval)))
-      (t/is (= #xt/interval-micro ["P0D" "PT1M1.111111S"] (test-cast #xt/duration "PT1M1.111111S" :interval)))
+      (t/is (= #xt/interval "PT3H1.11S" (test-cast #xt/duration "PT3H1.11S" :interval)))
+      (t/is (= #xt/interval "PT25H1.11S" (test-cast #xt/duration "PT25H1.11S" :interval)))
+      (t/is (= #xt/interval "PT842H1.11S" (test-cast #xt/duration "P35DT2H1.11S" :interval)))
+      (t/is (= #xt/interval "PT1M1.111111S" (test-cast #xt/duration "PT1M1.111111S" :interval)))
 
-      (t/is (= #xt/interval-nano ["P0D" "PT1M1.123456789S"] (test-cast '(cast "PT1M1.123456789S" [:duration :nano]) :interval)))))
+      (t/is (= #xt/interval "PT1M1.123456789S" (test-cast '(cast "PT1M1.123456789S" [:duration :nano]) :interval)))))
 
   (t/testing "with interval qualifier"
     (letfn [(test-cast
@@ -329,26 +325,26 @@
                                 [:table [{}]]])
                   first :res))]
 
-      (t/is (= #xt/interval-micro ["P0D" "PT36H"] (test-cast #xt/duration "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT0S"] (test-cast #xt/duration "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H"] (test-cast #xt/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H10M"] (test-cast #xt/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H10M10S"] (test-cast #xt/duration "PT36H10M10.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H10M10.1111S"] (test-cast #xt/duration "PT36H10M10.111111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H"] (test-cast #xt/duration "PT3H1M1S" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M"] (test-cast #xt/duration "PT3H1M1S" :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1S"] (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111111S"] (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111S"] (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M"] (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1S"] (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111S"] (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1S"] (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111S"] (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT36H" (test-cast #xt/duration "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1D" (test-cast #xt/duration "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H" (test-cast #xt/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H10M" (test-cast #xt/duration "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H10M10S" (test-cast #xt/duration "PT36H10M10.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H10M10.1111S" (test-cast #xt/duration "PT36H10M10.111111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
+      (t/is (= #xt/interval "PT3H" (test-cast #xt/duration "PT3H1M1S" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M" (test-cast #xt/duration "PT3H1M1S" :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1S" (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1.111111S" (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
+      (t/is (= #xt/interval "PT3H1M1.111S" (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT3H1M" (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1S" (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1.111S" (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT3H1M1S" (test-cast #xt/duration "PT3H1M1.111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1.111S" (test-cast #xt/duration "PT3H1M1.111111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))
 
       (t/testing "dur -> mdn"
-        (t/is (= #xt/interval-nano ["P0D" "PT1.123456S"] (test-cast #xt/duration "PT1.123456S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 9})))
-        (t/is (= #xt/interval-nano ["P0D" "PT1.12345678S"] (test-cast '(cast "PT1.123456789S" [:duration :nano]) :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 8}))))))
+        (t/is (= #xt/interval "PT1.123456S" (test-cast #xt/duration "PT1.123456S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 9})))
+        (t/is (= #xt/interval "PT1.12345678S" (test-cast '(cast "PT1.123456789S" [:duration :nano]) :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 8}))))))
 
   (t/testing "with invalid interval qualifier"
     (t/is (thrown-with-msg?
@@ -371,12 +367,12 @@
 
                 first :res))]
 
-    (t/is (= #xt/interval-month "P12M" (test-cast 1 :interval {:start-field "YEAR"})))
-    (t/is (= #xt/interval-month "P10M" (test-cast 10 :interval {:start-field "MONTH"})))
-    (t/is (= #xt/interval-micro ["P10D" "PT0S"] (test-cast 10 :interval {:start-field "DAY"})))
-    (t/is (= #xt/interval-micro ["P0D" "PT10H"] (test-cast 10 :interval {:start-field "HOUR"})))
-    (t/is (= #xt/interval-micro ["P0D" "PT10M"] (test-cast 10 :interval {:start-field "MINUTE"})))
-    (t/is (= #xt/interval-micro ["P0D" "PT10S"] (test-cast 10 :interval {:start-field "SECOND"})))
+    (t/is (= #xt/interval "P12M" (test-cast 1 :interval {:start-field "YEAR"})))
+    (t/is (= #xt/interval "P10M" (test-cast 10 :interval {:start-field "MONTH"})))
+    (t/is (= #xt/interval "P10D" (test-cast 10 :interval {:start-field "DAY"})))
+    (t/is (= #xt/interval "PT10H" (test-cast 10 :interval {:start-field "HOUR"})))
+    (t/is (= #xt/interval "PT10M" (test-cast 10 :interval {:start-field "MINUTE"})))
+    (t/is (= #xt/interval "PT10S" (test-cast 10 :interval {:start-field "SECOND"})))
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"Cannot cast integer to a multi field interval"
@@ -391,14 +387,14 @@
                 first :res))]
 
     (t/are [expected src-value] (= expected (test-cast src-value :interval))
-      #xt/interval-micro ["P12M" "PT0S"] "P12M"
-      #xt/interval-micro ["P14M" "PT0S"] "P1Y2M"
-      #xt/interval-micro ["P1D" "PT0S"] "P1D"
-      #xt/interval-micro ["P-1D" "PT0S"] "P-1D"
-      #xt/interval-micro ["P1D" "PT1H1M"] "P1DT1H1M"
-      #xt/interval-micro ["P1M2D" "PT1H"] "P1M2DT1H"
-      #xt/interval-micro ["P0D" "PT10H10M10.111111S"] "PT10H10M10.111111S"
-      #xt/interval-micro ["P0D" "PT-10H-10M-10.111111S"] "PT-10H-10M-10.111111S")))
+      #xt/interval "P12M" "P12M"
+      #xt/interval "P14M" "P1Y2M"
+      #xt/interval "P1D" "P1D"
+      #xt/interval "P-1D" "P-1D"
+      #xt/interval "P1DT1H1M" "P1DT1H1M"
+      #xt/interval "P1M2DT1H" "P1M2DT1H"
+      #xt/interval "PT10H10M10.111111S" "PT10H10M10.111111S"
+      #xt/interval "PT-10H-10M-10.111111S" "PT-10H-10M-10.111111S")))
 
 (t/deftest cast-utf8-to-interval-with-qualifier
   (letfn [(test-cast
@@ -407,35 +403,35 @@
                               [:table [{}]]])
                 first :res))]
 
-    (t/is (= #xt/interval-month "P12M"
+    (t/is (= #xt/interval "P12M"
              (test-cast "1" :interval {:start-field "YEAR", :end-field nil, :leading-precision 2 :fractional-precision 0})))
 
-    (t/is (= #xt/interval-day-time ["P10D" "PT0S"]
+    (t/is (= #xt/interval "P10D"
              (test-cast "10" :interval {:start-field "DAY", :end-field nil, :leading-precision 2 :fractional-precision 0})))
 
-    (t/is (= #xt/interval-month "P22M"
+    (t/is (= #xt/interval "P22M"
              (test-cast "1-10" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2 :fractional-precision 0})))
 
-    (t/is (= #xt/interval-micro ["P1D" "PT10H"]
+    (t/is (= #xt/interval "P1DT10H"
              (test-cast "1 10" :interval {:start-field "DAY", :end-field "HOUR", :leading-precision 2 :fractional-precision 0})))
 
-    (t/is (= #xt/interval-micro ["P1D" "PT10H10M10S"]
+    (t/is (= #xt/interval "P1DT10H10M10S"
              (test-cast "1 10:10:10" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 6})))
 
-    (t/is (= #xt/interval-micro ["P1D" "PT10H10M10.111111S"]
+    (t/is (= #xt/interval "P1DT10H10M10.111111S"
              (test-cast "1 10:10:10.111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 6})))
 
-    (t/is (= #xt/interval-micro ["P1D" "PT10H10M10.111111S"]
+    (t/is (= #xt/interval "P1DT10H10M10.111111S"
              (test-cast "1 10:10:10.111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 6})))
 
     (t/testing "mdn"
-      (t/is (= #xt/interval-nano ["P1D" "PT10H10M10.111111S"]
+      (t/is (= #xt/interval "P1DT10H10M10.111111S"
                (test-cast "1 10:10:10.111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 9})))
 
-      (t/is (= #xt/interval-nano ["P1D" "PT10H10M10.1111111S"]
+      (t/is (= #xt/interval "P1DT10H10M10.1111111S"
                (test-cast "1 10:10:10.111111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 7})))
 
-      (t/is (= #xt/interval-nano ["P1D" "PT10H10M10.111111111S"]
+      (t/is (= #xt/interval "P1DT10H10M10.111111111S"
                (test-cast "1 10:10:10.111111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 9}))))
 
     (t/is (thrown-with-msg?
@@ -451,50 +447,28 @@
                 first :res))]
     (t/testing "year-month interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value :utf8))
-        "P12MT0S" #xt/interval-month "P12M"
-        "P-12MT0S" #xt/interval-month "-P12M"
-        "P22MT0S" #xt/interval-month "P22M"
-        "P-22MT0S" #xt/interval-month "-P22M"
-        "P6MT0S" #xt/interval-month "P6M"))
+        "P12M" #xt/interval "P12M"
+        "P-12M" #xt/interval "-P12M"
+        "P22M" #xt/interval "P22M"
+        "P-22M" #xt/interval "-P22M"
+        "P6M" #xt/interval "P6M"))
 
-    (t/testing "month-day-micro interval -> string"
+    (t/testing "month-day-* interval -> string"
       (t/are [expected src-value] (= expected (test-cast src-value :utf8))
-        "P1DT0S" #xt/interval-micro ["P1D" "PT0S"]
-        "P0DT1H" #xt/interval-micro ["P0D" "PT1H"]
-        "P0DT1M" #xt/interval-micro ["P0D" "PT1M"]
-        "P0DT1S" #xt/interval-micro ["P0D" "PT1S"]
-        "P1DT1H" #xt/interval-micro ["P1D" "PT1H"]
-        "P1DT1H1M" #xt/interval-micro ["P1D" "PT1H1M"]
-        "P1DT1H1S" #xt/interval-micro ["P1D" "PT1H1S"]
-        "P1DT1H1M1.111111S" #xt/interval-micro ["P1D" "PT1H1M1.111111S"]
-        "P-1DT0S" #xt/interval-micro ["-P1D" "PT0S"]
-        "P0DT-10H" #xt/interval-micro ["P0D" "PT-10H"]
-        "P-1DT-10H-10M-10.111111S" #xt/interval-micro ["-P1D" "PT-10H-10M-10.111111S"]
-        "P0DT-10H-10M" #xt/interval-micro ["P0D" "PT-10H-10M"]))
-
-    (t/testing "month-day-nano interval -> string"
-      (t/are [expected src-value] (= expected (test-cast src-value :utf8))
-        "P1DT0S" #xt/interval-nano ["P1D" "PT0S"]
-        "P0DT1H" #xt/interval-nano ["P0D" "PT1H"]
-        "P0DT1M" #xt/interval-nano ["P0D" "PT1M"]
-        "P0DT1S" #xt/interval-nano ["P0D" "PT1S"]
-        "P1DT1H" #xt/interval-nano ["P1D" "PT1H"]
-        "P1DT1H1M" #xt/interval-nano ["P1D" "PT1H1M"]
-        "P1DT1H1S" #xt/interval-nano ["P1D" "PT1H1S"]
-        "P1DT1H1M1.111111111S" #xt/interval-nano ["P1D" "PT1H1M1.111111111S"]
-        "P-1DT0S" #xt/interval-nano ["-P1D" "PT0S"]
-        "P0DT-10H" #xt/interval-nano ["P0D" "PT-10H"]
-        "P-1DT-10H-10M-10.111111111S" #xt/interval-nano ["-P1D" "PT-10H-10M-10.111111111S"]
-        "P0DT-10H-10M" #xt/interval-nano ["P0D" "PT-10H-10M"]))
-    
-    (t/testing "day-time interval -> string"
-      (t/are [expected src-value] (= expected (test-cast src-value :utf8))
-        "P1DT0S" #xt/interval-day-time ["P1D" "PT0S"]
-        "P0DT1H" #xt/interval-day-time ["P0D" "PT1H"]
-        "P0DT1M" #xt/interval-day-time ["P0D" "PT1M"]
-        "P0DT1S" #xt/interval-day-time ["P0D" "PT1S"]
-        "P0DT1.111S" #xt/interval-day-time ["P0D" "PT1.111S"]
-        "P1DT1H1S" #xt/interval-day-time ["P1D" "PT1H1S"]))))
+        "P1D" #xt/interval "P1D"
+        "PT1H" #xt/interval "PT1H"
+        "PT1M" #xt/interval "PT1M"
+        "PT1S" #xt/interval "PT1S"
+        "P1DT1H" #xt/interval "P1DT1H"
+        "P1DT1H1M" #xt/interval "P1DT1H1M"
+        "P1DT1H1S" #xt/interval "P1DT1H1S"
+        "P1DT1H1M1.111111S" #xt/interval "P1DT1H1M1.111111S"
+        "P1DT1H1M1.111111111S" #xt/interval "P1DT1H1M1.111111111S"
+        "P-1D" #xt/interval "-P1D"
+        "PT-10H" #xt/interval "PT-10H"
+        "P-1DT10H10M10.111111S" #xt/interval "-P1DT-10H-10M-10.111111S"
+        "P-1DT10H10M10.111111111S" #xt/interval "-P1DT-10H-10M-10.111111111S"
+        "PT-10H-10M" #xt/interval "PT-10H-10M"))))
 
 (t/deftest cast-interval-to-interval
   (letfn [(test-cast
@@ -503,71 +477,71 @@
                               [:table [{}]]])
                 first :res))]
     (t/testing "casting interval to interval without qualifier is a no-op"
-      (t/is (= #xt/interval-month "P12M" (test-cast #xt/interval-month "P12M" :interval {})))
-      (t/is (= #xt/interval-nano ["P0D" "PT1H"] (test-cast #xt/interval-nano ["P0D" "PT1H"] :interval {})))
-      (t/is (= #xt/interval-day-time ["P0D" "PT1H"] (test-cast #xt/interval-day-time ["P0D" "PT1H"] :interval {}))))
+      (t/is (= #xt/interval "P12M" (test-cast #xt/interval "P12M" :interval {})))
+      (t/is (= #xt/interval "PT1H" (test-cast #xt/interval "PT1H" :interval {})))
+      (t/is (= #xt/interval "PT1H" (test-cast #xt/interval "PT1H" :interval {}))))
 
     (t/testing "casting YM interval to non YM interval should fail"
       (t/is (thrown-with-msg?
              UnsupportedOperationException
              #"Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
-             (test-cast #xt/interval-month "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
+             (test-cast #xt/interval "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "casting non YM interval to YM interval should fail"
       (t/is (thrown-with-msg?
              UnsupportedOperationException
              #"Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
-             (test-cast #xt/interval-nano ["P1M1D" "PT1H"] :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
+             (test-cast #xt/interval "P1M1DT1H" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "invlaid fractional precision throws exception"
       (t/is (thrown-with-msg?
              IllegalArgumentException
              #"The maximum fractional seconds precision is 9."
-             (test-cast #xt/interval-nano ["P1D" "PT1H"] :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2, :fractional-precision 11}))))
+             (test-cast #xt/interval "P1DT1H" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2, :fractional-precision 11}))))
 
     (t/testing "casting between interval year month"
-      (t/is (= #xt/interval-month "P12M" (test-cast #xt/interval-month "P13M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
-      (t/is (= #xt/interval-month "P0D" (test-cast #xt/interval-month "P11M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
-      (t/is (= #xt/interval-month "P23M" (test-cast #xt/interval-month "P1Y11M" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0})))
-      (t/is (= #xt/interval-month "P12M" (test-cast #xt/interval-month "P1Y" :interval {:start-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
+      (t/is (= #xt/interval "P12M" (test-cast #xt/interval "P13M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
+      (t/is (= #xt/interval "P0D" (test-cast #xt/interval "P11M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
+      (t/is (= #xt/interval "P23M" (test-cast #xt/interval "P1Y11M" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0})))
+      (t/is (= #xt/interval "P12M" (test-cast #xt/interval "P1Y" :interval {:start-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "casting between interval month-day-micro"
-      (t/is (= #xt/interval-micro ["P0D" "PT36H"] (test-cast #xt/interval-micro ["P0D" "PT36H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT0S"] (test-cast #xt/interval-micro ["P0D" "PT36H"]  :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H"] (test-cast #xt/interval-micro ["P0D" "PT36H10M10S"] :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H10M"] (test-cast #xt/interval-micro ["P0D" "PT36H10M10S"] :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H10M10S"] (test-cast #xt/interval-micro ["P0D" "PT36H10M10.111S"] :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P1D" "PT12H10M10.1111S"] (test-cast #xt/interval-micro ["P0D" "PT36H10M10.111111S"] :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1S"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1S"] :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111111S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111111S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111111S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111111S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111S"] :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111S"] :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111S"] :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111S"] :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT3H1M1.111S"] (test-cast #xt/interval-micro ["P0D" "PT3H1M1.111111S"] :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-micro ["P0D" "PT36H"] (test-cast #xt/interval-micro ["P1D" "PT12H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0}))))
+      (t/is (= #xt/interval "PT36H" (test-cast #xt/interval "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1D" (test-cast #xt/interval "PT36H"  :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H" (test-cast #xt/interval "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H10M" (test-cast #xt/interval "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H10M10S" (test-cast #xt/interval "PT36H10M10.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H10M10.1111S" (test-cast #xt/interval "PT36H10M10.111111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 4})))
+      (t/is (= #xt/interval "PT3H" (test-cast #xt/interval "PT3H1M1S" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M" (test-cast #xt/interval "PT3H1M1S" :interval {:start-field "HOUR" :end-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1S" (test-cast #xt/interval "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1.111111S" (test-cast #xt/interval "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
+      (t/is (= #xt/interval "PT3H1M1.111S" (test-cast #xt/interval "PT3H1M1.111111S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT3H1M" (test-cast #xt/interval "PT3H1M1.111S" :interval {:start-field "MINUTE" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1S" (test-cast #xt/interval "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1.111S" (test-cast #xt/interval "PT3H1M1.111S" :interval {:start-field "MINUTE" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT3H1M1S" (test-cast #xt/interval "PT3H1M1.111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT3H1M1.111S" (test-cast #xt/interval "PT3H1M1.111111S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT36H" (test-cast #xt/interval "P1DT12H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0}))))
 
     (t/testing "casting between interval month-day-nano"
-      (t/is (= #xt/interval-nano ["P0D" "PT36H"] (test-cast #xt/interval-nano ["P0D" "PT36H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 9})))
-      (t/is (= #xt/interval-nano ["P1D" "PT0S"] (test-cast #xt/interval-nano ["P0D" "PT36H"]  :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 9})))
-      (t/is (= #xt/interval-nano ["P1D" "PT12H"] (test-cast #xt/interval-nano ["P0D" "PT36H10M10S"] :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 9})))
-      (t/is (= #xt/interval-nano ["P1D" "PT12H10M"] (test-cast #xt/interval-nano ["P0D" "PT36H10M10S"] :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 9})))
-      (t/is (= #xt/interval-nano ["P0D" "PT3H1M1.1234567S"] (test-cast #xt/interval-nano ["P0D" "PT3H1M1.123456789S"] :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 7}))))
+      (t/is (= #xt/interval "PT36H" (test-cast #xt/interval "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 9})))
+      (t/is (= #xt/interval "P1D" (test-cast #xt/interval "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 9})))
+      (t/is (= #xt/interval "P1DT12H" (test-cast #xt/interval "PT36H10M10S" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 9})))
+      (t/is (= #xt/interval "P1DT12H10M" (test-cast #xt/interval "PT36H10M10S" :interval {:start-field "DAY" :end-field "MINUTE" :leading-precision 2 :fractional-precision 9})))
+      (t/is (= #xt/interval "PT3H1M1.1234567S" (test-cast #xt/interval "PT3H1M1.123456789S" :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 7}))))
 
     (t/testing "casting between mdn and mdm with no months"
 
-      (t/is (= #xt/interval-micro ["P0D" "PT1S"] (test-cast #xt/interval-nano ["P0D" "PT1.123456789S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-micro ["P0D" "PT1.123S"] (test-cast #xt/interval-nano ["P0D" "PT1.123456789S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
-      (t/is (= #xt/interval-micro ["P0D" "PT1.123456S"] (test-cast #xt/interval-nano ["P0D" "PT1.123456789S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
-      (t/is (= #xt/interval-nano ["P0D" "PT1.123456S"] (test-cast #xt/interval-micro ["P0D" "PT1.123456S"] :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 7}))))
+      (t/is (= #xt/interval "PT1S" (test-cast #xt/interval "PT1.123456789S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "PT1.123S" (test-cast #xt/interval "PT1.123456789S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 3})))
+      (t/is (= #xt/interval "PT1.123456S" (test-cast #xt/interval "PT1.123456789S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 6})))
+      (t/is (= #xt/interval "PT1.123456S" (test-cast #xt/interval "PT1.123456S" :interval {:start-field "HOUR" :end-field "SECOND" :leading-precision 2 :fractional-precision 7}))))
 
     (t/testing "casting between interval day-time"
-      (t/is (= #xt/interval-day-time ["P0D" "PT36H"] (test-cast #xt/interval-day-time ["P0D" "PT36H"] :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-day-time ["P1D" "PT12H"] (test-cast #xt/interval-day-time ["P0D" "PT36H"] :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
-      (t/is (= #xt/interval-day-time ["P1D" "PT0H"] (test-cast #xt/interval-day-time ["P0D" "PT36H"] :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0}))))))
+      (t/is (= #xt/interval "PT36H" (test-cast #xt/interval "PT36H" :interval {:start-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT12H" (test-cast #xt/interval "PT36H" :interval {:start-field "DAY" :end-field "HOUR" :leading-precision 2 :fractional-precision 0})))
+      (t/is (= #xt/interval "P1DT0H" (test-cast #xt/interval "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0}))))))
 
 (defn age [dt1 dt2]
   (-> (tu/query-ra [:project [{'res `(~'age ~dt1 ~dt2)}]
@@ -578,114 +552,114 @@
 ;; As such, we refer to start time / end time, where age(end time, start time)
 (t/deftest test-age-edge-cases
   ;; Same day, different times
-  (t/is (= #xt/interval-micro ["P0D" "PT23H"] (age #xt/date-time "2021-10-31T23:00" #xt/date-time "2021-10-31T00:00")))
+  (t/is (= #xt/interval "PT23H" (age #xt/date-time "2021-10-31T23:00" #xt/date-time "2021-10-31T00:00")))
   ;; End of month to next month (with and without time differences)
-  (t/is (= #xt/interval-micro ["P0D" "PT2H"] (age #xt/date-time "2021-11-01T01:00" #xt/date-time "2021-10-31T23:00")))
+  (t/is (= #xt/interval "PT2H" (age #xt/date-time "2021-11-01T01:00" #xt/date-time "2021-10-31T23:00")))
   ;; Leap year
-  (t/is (= #xt/interval-micro ["P2D" "PT0S"] (age #xt/date-time "2020-03-01T12:00" #xt/date-time "2020-02-28T12:00")))
+  (t/is (= #xt/interval "P2D" (age #xt/date-time "2020-03-01T12:00" #xt/date-time "2020-02-28T12:00")))
   ;; Different years
-  (t/is (= #xt/interval-micro ["P0D" "PT2H"] (age #xt/date-time "2021-01-01T01:00" #xt/date-time "2020-12-31T23:00")))
+  (t/is (= #xt/interval "PT2H" (age #xt/date-time "2021-01-01T01:00" #xt/date-time "2020-12-31T23:00")))
   ;; More than a month
-  (t/is (= #xt/interval-micro ["P1M1D" "PT0S"] (age #xt/date-time "2021-02-02T00:00" #xt/date-time "2021-01-01T00:00")))
+  (t/is (= #xt/interval "P1M1D" (age #xt/date-time "2021-02-02T00:00" #xt/date-time "2021-01-01T00:00")))
   ;; More than a year
-  (t/is (= #xt/interval-micro ["P24M" "PT0S"] (age #xt/date-time "2021-01-01T00:00" #xt/date-time "2019-01-01T00:00")))
+  (t/is (= #xt/interval "P24M" (age #xt/date-time "2021-01-01T00:00" #xt/date-time "2019-01-01T00:00")))
   ;; Start time after end time (dt1 - dt2)
-  (t/is (= #xt/interval-micro ["P-12M" "PT0S"] (age #xt/date-time "2020-01-01T00:00" #xt/date-time "2021-01-01T00:00")))
+  (t/is (= #xt/interval "P-12M" (age #xt/date-time "2020-01-01T00:00" #xt/date-time "2021-01-01T00:00")))
   ;; Time within the same day but with start time after end time
-  (t/is (= #xt/interval-micro ["P0D" "PT-1H"] (age #xt/date-time "2021-01-01T11:00" #xt/date-time "2021-01-01T12:00")))
+  (t/is (= #xt/interval "PT-1H" (age #xt/date-time "2021-01-01T11:00" #xt/date-time "2021-01-01T12:00")))
   ;; Exactly the same start and end time
-  (t/is (= #xt/interval-micro ["P0D" "PT0S"] (age #xt/date-time "2021-01-01T00:00" #xt/date-time "2021-01-01T00:00"))))
+  (t/is (= #xt/interval "P0D" (age #xt/date-time "2021-01-01T00:00" #xt/date-time "2021-01-01T00:00"))))
 
 (t/deftest test-age-fn
   (binding [expr/*default-tz* #xt/zone "UTC"]
     (t/testing "testing with local date times"
       (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-        #xt/interval-micro ["P0D" "PT2H"] #xt/date-time "2022-05-02T01:00" #xt/date-time "2022-05-01T23:00"
-        #xt/interval-micro ["P6M" "PT0S"] #xt/date-time "2022-11-01T00:00" #xt/date-time "2022-05-01T00:00"
-        #xt/interval-micro ["P-6M" "PT0S"] #xt/date-time "2022-05-01T00:00" #xt/date-time "2022-11-01T00:00"
-        #xt/interval-micro ["P0D" "PT0S"] #xt/date-time "2023-01-01T00:00" #xt/date-time "2023-01-01T00:00"
-        #xt/interval-micro ["P30D" "PT12H"] #xt/date-time "2023-02-01T12:00" #xt/date-time "2023-01-02T00:00"
-        #xt/interval-micro ["P-12M" "PT0S"] #xt/date-time "2022-01-01T00:00" #xt/date-time "2023-01-01T00:00"
-        #xt/interval-micro ["P0D" "PT1H"] #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-01T00:00"
-        #xt/interval-micro ["P24M" "PT3H"] #xt/date-time "2025-01-01T03:00" #xt/date-time "2023-01-01T00:00"
-        #xt/interval-micro ["P0D" "PT-23H"] #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-02T00:00"
-        #xt/interval-micro ["P48M" "PT6M"] #xt/date-time "2027-01-01T00:06" #xt/date-time "2023-01-01T00:00"
-        #xt/interval-micro ["P-48M" "PT-6M"] #xt/date-time "2023-01-01T00:00" #xt/date-time "2027-01-01T00:06"
-        #xt/interval-micro ["P29D" "PT23H"] #xt/date-time "2023-02-28T23:00" #xt/date-time "2023-01-30T00:00"
-        #xt/interval-micro ["P28D" "PT23H"] #xt/date-time "2023-03-29T23:00" #xt/date-time "2023-03-01T00:00"
-        #xt/interval-micro ["P0D" "PT-1M"] #xt/date-time "2023-04-01T00:00" #xt/date-time "2023-04-01T00:01"
-        #xt/interval-micro ["P0D" "PT0.001S"] #xt/date-time "2023-07-01T12:00:30.501" #xt/date-time "2023-07-01T12:00:30.500"
-        #xt/interval-micro ["P0D" "PT-0.001S"] #xt/date-time "2023-07-01T12:00:30.499" #xt/date-time "2023-07-01T12:00:30.500"
-        #xt/interval-micro ["P25M3D" "PT4H5M6.007S"] #xt/date-time "2025-02-04T18:06:07.007" #xt/date-time "2023-01-01T14:01:01.000"))
+        #xt/interval "PT2H" #xt/date-time "2022-05-02T01:00" #xt/date-time "2022-05-01T23:00"
+        #xt/interval "P6M" #xt/date-time "2022-11-01T00:00" #xt/date-time "2022-05-01T00:00"
+        #xt/interval "P-6M" #xt/date-time "2022-05-01T00:00" #xt/date-time "2022-11-01T00:00"
+        #xt/interval "P0D" #xt/date-time "2023-01-01T00:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval "P30DT12H" #xt/date-time "2023-02-01T12:00" #xt/date-time "2023-01-02T00:00"
+        #xt/interval "P-12M" #xt/date-time "2022-01-01T00:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval "PT1H" #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval "P24MT3H" #xt/date-time "2025-01-01T03:00" #xt/date-time "2023-01-01T00:00"
+        #xt/interval "PT-23H" #xt/date-time "2023-01-01T01:00" #xt/date-time "2023-01-02T00:00"
+        #xt/interval "P48MT6M" #xt/date-time "2027-01-01T00:06" #xt/date-time "2023-01-01T00:00"
+        #xt/interval "P-48MT-6M" #xt/date-time "2023-01-01T00:00" #xt/date-time "2027-01-01T00:06"
+        #xt/interval "P29DT23H" #xt/date-time "2023-02-28T23:00" #xt/date-time "2023-01-30T00:00"
+        #xt/interval "P28DT23H" #xt/date-time "2023-03-29T23:00" #xt/date-time "2023-03-01T00:00"
+        #xt/interval "PT-1M" #xt/date-time "2023-04-01T00:00" #xt/date-time "2023-04-01T00:01"
+        #xt/interval "PT0.001S" #xt/date-time "2023-07-01T12:00:30.501" #xt/date-time "2023-07-01T12:00:30.500"
+        #xt/interval "PT-0.001S" #xt/date-time "2023-07-01T12:00:30.499" #xt/date-time "2023-07-01T12:00:30.500"
+        #xt/interval "P25M3DT4H5M6.007S" #xt/date-time "2025-02-04T18:06:07.007" #xt/date-time "2023-01-01T14:01:01.000"))
 
     (t/testing "testing with zoned date times"
       (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-        #xt/interval-micro ["P0D" "PT1H"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT0H"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT0S"] #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT1M"] #xt/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT-1H-59M"] #xt/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
-        #xt/interval-micro ["P-1D" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
-        #xt/interval-micro ["P1D" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
-        #xt/interval-micro ["P0D" "PT0S"] #xt/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #xt/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
-        #xt/interval-micro ["P12M" "PT0S"] #xt/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT3H"] #xt/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P1D" "PT2H"] #xt/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT3H"] #xt/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
-        #xt/interval-micro ["P0D" "PT0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT-0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P25M3D" "PT3H5M6.007S"] #xt/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #xt/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
+        #xt/interval "PT1H" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T11:00+02:00[Europe/Berlin]"
+        #xt/interval "PT0H" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+        #xt/interval "P0D" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]" #xt/zoned-date-time "2023-06-01T12:00+02:00[Europe/Berlin]"
+        #xt/interval "PT1M" #xt/zoned-date-time "2023-03-26T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-26T01:59+01:00[Europe/Berlin]"
+        #xt/interval "PT-1H-59M" #xt/zoned-date-time "2023-10-29T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-10-29T02:59+01:00[Europe/Berlin]"
+        #xt/interval "P-1D" #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]" #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]"
+        #xt/interval "P1D" #xt/zoned-date-time "2023-01-01T00:00-10:00[Pacific/Honolulu]" #xt/zoned-date-time "2023-01-01T00:00+14:00[Pacific/Kiritimati]"
+        #xt/interval "P0D" #xt/zoned-date-time "2023-01-01T12:00-05:00[America/New_York]" #xt/zoned-date-time "2023-01-01T18:00+01:00[Europe/Paris]"
+        #xt/interval "P12M" #xt/zoned-date-time "2024-03-30T01:00+01:00[Europe/Berlin]" #xt/zoned-date-time "2023-03-30T01:00+01:00[Europe/Berlin]"
+        #xt/interval "PT3H" #xt/zoned-date-time "2023-05-15T15:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T12:00+02:00[Europe/Berlin]"
+        #xt/interval "P1DT2H" #xt/zoned-date-time "2023-05-16T02:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-14T22:00+00:00[Europe/Berlin]"
+        #xt/interval "PT3H" #xt/zoned-date-time "2023-05-16T03:00+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-05-15T22:00+00:00[Europe/London]"
+        #xt/interval "PT0.001S" #xt/zoned-date-time "2023-07-01T12:00:30.501+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+        #xt/interval "PT-0.001S" #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+        #xt/interval "P25M3DT3H5M6.007S" #xt/zoned-date-time "2025-02-04T18:06:07.007+01:00[Europe/Paris]" #xt/zoned-date-time "2023-01-01T14:01:01.000+00:00[Europe/Paris]"))
 
     (t/testing "testing with dates"
       (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-        #xt/interval-micro ["P1D" "PT0S"] #xt/date "2023-01-02" #xt/date "2023-01-01"
-        #xt/interval-micro ["P-1D" "PT0S"] #xt/date "2023-01-01" #xt/date "2023-01-02"
-        #xt/interval-micro ["P30D" "PT0S"] #xt/date "2023-01-31" #xt/date "2023-01-01"
-        #xt/interval-micro ["P2D" "PT0S"] #xt/date "2020-03-01" #xt/date "2020-02-28"
-        #xt/interval-micro ["P1D" "PT0S"] #xt/date "2021-03-01" #xt/date "2021-02-28"
-        #xt/interval-micro ["P12M" "PT0S"] #xt/date "2024-01-01" #xt/date "2023-01-01"
-        #xt/interval-micro ["P-12M" "PT0S"] #xt/date "2023-01-01" #xt/date "2024-01-01"
-        #xt/interval-micro ["P13M" "PT0S"] #xt/date "2024-02-01" #xt/date "2023-01-01"
-        #xt/interval-micro ["P-13M" "PT0S"] #xt/date "2023-01-01" #xt/date "2024-02-01"
-        #xt/interval-micro ["P0D" "PT0S"] #xt/date "2023-01-01" #xt/date "2023-01-01"))
+        #xt/interval "P1D" #xt/date "2023-01-02" #xt/date "2023-01-01"
+        #xt/interval "P-1D" #xt/date "2023-01-01" #xt/date "2023-01-02"
+        #xt/interval "P30D" #xt/date "2023-01-31" #xt/date "2023-01-01"
+        #xt/interval "P2D" #xt/date "2020-03-01" #xt/date "2020-02-28"
+        #xt/interval "P1D" #xt/date "2021-03-01" #xt/date "2021-02-28"
+        #xt/interval "P12M" #xt/date "2024-01-01" #xt/date "2023-01-01"
+        #xt/interval "P-12M" #xt/date "2023-01-01" #xt/date "2024-01-01"
+        #xt/interval "P13M" #xt/date "2024-02-01" #xt/date "2023-01-01"
+        #xt/interval "P-13M" #xt/date "2023-01-01" #xt/date "2024-02-01"
+        #xt/interval "P0D" #xt/date "2023-01-01" #xt/date "2023-01-01"))
 
     (t/testing "test with mixed types"
       (t/are [expected dt1 dt2] (= expected (age dt1 dt2))
-        #xt/interval-micro ["P1D" "PT0S"] #xt/date "2023-01-02" #xt/date-time "2023-01-01T00:00"
-        #xt/interval-micro ["P-1D" "PT0S"] #xt/date-time "2023-01-01T00:00" #xt/date "2023-01-02"
-        #xt/interval-micro ["P12M" "PT0S"] #xt/date "2024-01-01" #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
-        #xt/interval-micro ["P-12M" "PT0S"] #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #xt/date "2024-01-01"
-        #xt/interval-micro ["P0D" "PT2H"] #xt/date-time "2023-06-01T12:00" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
-        #xt/interval-micro ["P0D" "PT2H"] #xt/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #xt/date-time "2023-06-01T12:00"
-        #xt/interval-micro ["P6M" "PT0S"] #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #xt/date "2022-05-01"
-        #xt/interval-micro ["P5M30D" "PT23H"] #xt/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #xt/date "2022-05-01"
-        #xt/interval-micro ["P-6M" "PT0S"] #xt/date "2022-05-01" #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
-        #xt/interval-micro ["P0D" "PT2H0.001S"] #xt/date-time "2023-07-01T12:00:30.501" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
-        #xt/interval-micro ["P0D" "PT-2H-0.001S"] #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/date-time "2023-07-01T12:00:30.500"))))
+        #xt/interval "P1D" #xt/date "2023-01-02" #xt/date-time "2023-01-01T00:00"
+        #xt/interval "P-1D" #xt/date-time "2023-01-01T00:00" #xt/date "2023-01-02"
+        #xt/interval "P12M" #xt/date "2024-01-01" #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]"
+        #xt/interval "P-12M" #xt/zoned-date-time "2023-01-01T00:00+00:00[UTC]" #xt/date "2024-01-01"
+        #xt/interval "PT2H" #xt/date-time "2023-06-01T12:00" #xt/zoned-date-time "2023-06-01T11:00+01:00[Europe/London]"
+        #xt/interval "PT2H" #xt/zoned-date-time "2023-06-01T09:00-05:00[America/Chicago]" #xt/date-time "2023-06-01T12:00"
+        #xt/interval "P6M" #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]" #xt/date "2022-05-01"
+        #xt/interval "P5M30DT23H" #xt/zoned-date-time "2022-11-01T00:00+01:00[Europe/Paris]" #xt/date "2022-05-01"
+        #xt/interval "P-6M" #xt/date "2022-05-01" #xt/zoned-date-time "2022-11-01T00:00+00:00[Europe/London]"
+        #xt/interval "PT2H0.001S" #xt/date-time "2023-07-01T12:00:30.501" #xt/zoned-date-time "2023-07-01T12:00:30.500+02:00[Europe/Berlin]"
+        #xt/interval "PT-2H-0.001S" #xt/zoned-date-time "2023-07-01T12:00:30.499+02:00[Europe/Berlin]" #xt/date-time "2023-07-01T12:00:30.500"))))
 
 (t/deftest test-age-with-nano-ts
 
-  (t/is (= [{:res #xt/interval-nano ["P0D" "PT0.023456789S"]}]
+  (t/is (= [{:res #xt/interval "PT0.023456789S"}]
            (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9})
                                                (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 9}))}]
                          [:table [{}]]])))
 
-  (t/is (= [{:res #xt/interval-nano ["P0D" "PT0.0234567S"]}]
+  (t/is (= [{:res #xt/interval "PT0.0234567S"}]
            (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456700" [:timestamp-local :nano] {:precision 9})
                                                (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 9}))}]
                          [:table [{}]]])))
 
-  (t/is (= [ {:res #xt/interval-nano ["P0D" "PT0.023S"]}]
+  (t/is (= [ {:res #xt/interval "PT0.023S"}]
            (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 3})
                                                (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 3}))}]
                          [:table [{}]]])))
 
-  (t/is (= [{:res #xt/interval-nano ["P0D" "PT0.023456789S"]}]
+  (t/is (= [{:res #xt/interval "PT0.023456789S"}]
            (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9})
                                                (cast "2000-01-01T00:00:00.100000" [:timestamp-local :micro] {:precision 6}))}]
                          [:table [{}]]])))
 
-  (t/is (= [{:res #xt/interval-nano ["P0D" "PT-0.023456789S"]}]
+  (t/is (= [{:res #xt/interval "PT-0.023456789S"}]
            (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.100000" [:timestamp-local :micro] {:precision 6})
                                                (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9}))}]
                          [:table [{}]]]))))
@@ -823,22 +797,22 @@
 
     (t/testing "(+ datetime interval)"
       (t/is (= #xt/date "2023-08-01"
-               (test-arithmetic '+ #xt/date "2022-08-01" #xt/interval-month "P1Y")))
+               (test-arithmetic '+ #xt/date "2022-08-01" #xt/interval "P1Y")))
 
       (t/is (= #xt/date-time "2022-08-04T01:15:43.342"
-               (test-arithmetic '+ #xt/date "2022-08-01" #xt/interval-day-time ["P3D" "PT1H15M43.342S"])))
+               (test-arithmetic '+ #xt/date "2022-08-01" #xt/interval "P3DT1H15M43.342S")))
 
       (t/is (= #xt/date-time "2022-09-04T02:31:26.684"
-               (test-arithmetic '+ #xt/date-time "2022-08-01T01:15:43.342" #xt/interval-nano ["P1M3D" "PT1H15M43.342S"])))
+               (test-arithmetic '+ #xt/date-time "2022-08-01T01:15:43.342" #xt/interval "P1M3DT1H15M43.342S")))
 
       (t/is (= #xt/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
-               (test-arithmetic '+ #xt/interval-nano ["P0D" "PT1H15M43.342S"] #xt/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+               (test-arithmetic '+ #xt/interval "PT1H15M43.342S" #xt/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
 
       (t/is (= #xt/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]"
-               (test-arithmetic '+ #xt/interval-nano ["P2D" "PT1H"] #xt/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
+               (test-arithmetic '+ #xt/interval "P2DT1H" #xt/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '+ #xt/interval-nano ["P2D" "PT1H"] nil))))
+      (t/is (nil? (test-arithmetic '+ #xt/interval "P2DT1H" nil))))
 
     (t/testing "(- datetime duration)"
       (t/is (= #xt/date-time "2022-07-31T22:44:16.658"
@@ -858,22 +832,22 @@
 
     (t/testing "(- datetime interval)"
       (t/is (= #xt/date "2021-05-01"
-               (test-arithmetic '- #xt/date "2022-08-01" #xt/interval-month "P1Y3M")))
+               (test-arithmetic '- #xt/date "2022-08-01" #xt/interval "P1Y3M")))
 
       (t/is (= #xt/date-time "2022-07-28T22:44:16.658"
-               (test-arithmetic '- #xt/date "2022-08-01" #xt/interval-day-time ["P3D" "PT1H15M43.342S"])))
+               (test-arithmetic '- #xt/date "2022-08-01" #xt/interval "P3DT1H15M43.342S")))
 
       (t/is (= #xt/date-time "2022-07-29T01:15:43.342"
-               (test-arithmetic '- #xt/date-time "2022-08-01T02:31:26.684" #xt/interval-nano ["P3D" "PT1H15M43.342S"])))
+               (test-arithmetic '- #xt/date-time "2022-08-01T02:31:26.684" #xt/interval "P3DT1H15M43.342S")))
 
       (t/is (= #xt/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
-               (test-arithmetic '- #xt/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt/interval-nano ["P0D" "PT1H15M43.342S"])))
+               (test-arithmetic '- #xt/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #xt/interval "PT1H15M43.342S")))
 
       (t/is (= #xt/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"
-               (test-arithmetic '- #xt/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval-nano ["P2D" "PT1H"]))
+               (test-arithmetic '- #xt/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #xt/interval "P2DT1H"))
             "clock change")
 
-      (t/is (nil? (test-arithmetic '- nil #xt/interval-nano ["P0D" "PT1H15M43.342S"]))))
+      (t/is (nil? (test-arithmetic '- nil #xt/interval "PT1H15M43.342S"))))
 
     (t/testing "(- date date)"
       (t/is (= 1 (test-arithmetic '- #xt/date "2022-08-01" #xt/date "2022-07-31")))
@@ -1004,79 +978,79 @@
     nil '(single-field-interval nil "MINUTE" 2 0) {}
     nil '(single-field-interval nil "SECOND" 2 6) {}
 
-    #xt/interval-month "P0D" '(single-field-interval 0 "YEAR" 2 0) {}
-    #xt/interval-month "P0D" '(single-field-interval 0 "MONTH" 2 0) {}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval 0 "DAY" 2 0) {}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval 0 "HOUR" 2 0) {}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval 0 "MINUTE" 2 0) {}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval 0 "SECOND" 2 0) {}
+    #xt/interval "P0D" '(single-field-interval 0 "YEAR" 2 0) {}
+    #xt/interval "P0D" '(single-field-interval 0 "MONTH" 2 0) {}
+    #xt/interval "P0D" '(single-field-interval 0 "DAY" 2 0) {}
+    #xt/interval "P0D" '(single-field-interval 0 "HOUR" 2 0) {}
+    #xt/interval "P0D" '(single-field-interval 0 "MINUTE" 2 0) {}
+    #xt/interval "P0D" '(single-field-interval 0 "SECOND" 2 0) {}
 
-    #xt/interval-month "P0D" '(single-field-interval a "YEAR" 2 0) {:a 0}
-    #xt/interval-month "P0D" '(single-field-interval a "MONTH" 2 0) {:a 0}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval a "DAY" 2 0) {:a 0}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval a "HOUR" 2 0) {:a 0}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval a "MINUTE" 2 0) {:a 0}
-    #xt/interval-day-time ["P0D" "PT0S"] '(single-field-interval a "SECOND" 2 0) {:a 0}
+    #xt/interval "P0D" '(single-field-interval a "YEAR" 2 0) {:a 0}
+    #xt/interval "P0D" '(single-field-interval a "MONTH" 2 0) {:a 0}
+    #xt/interval "P0D" '(single-field-interval a "DAY" 2 0) {:a 0}
+    #xt/interval "P0D" '(single-field-interval a "HOUR" 2 0) {:a 0}
+    #xt/interval "P0D" '(single-field-interval a "MINUTE" 2 0) {:a 0}
+    #xt/interval "P0D" '(single-field-interval a "SECOND" 2 0) {:a 0}
 
     ;; Y / M distinction is lost when writing to IntervalYear vectors
-    #xt/interval-month "P12M" '(single-field-interval 1 "YEAR" 2 0) {}
-    #xt/interval-month "P-24M" '(single-field-interval -2 "YEAR" 2 0) {}
+    #xt/interval "P12M" '(single-field-interval 1 "YEAR" 2 0) {}
+    #xt/interval "P-24M" '(single-field-interval -2 "YEAR" 2 0) {}
 
-    #xt/interval-month "P1M" '(single-field-interval 1 "MONTH" 2 0) {}
-    #xt/interval-month "P-2M" '(single-field-interval -2 "MONTH" 2 0) {}
+    #xt/interval "P1M" '(single-field-interval 1 "MONTH" 2 0) {}
+    #xt/interval "P-2M" '(single-field-interval -2 "MONTH" 2 0) {}
 
-    #xt/interval-day-time ["P1D" "PT0S"] '(single-field-interval 1 "DAY" 2 0) {}
-    #xt/interval-day-time ["P-2D" "PT0S"] '(single-field-interval -2 "DAY" 2 0) {}
+    #xt/interval "P1D" '(single-field-interval 1 "DAY" 2 0) {}
+    #xt/interval "P-2D" '(single-field-interval -2 "DAY" 2 0) {}
 
-    #xt/interval-day-time ["P0D" "PT1H"] '(single-field-interval 1 "HOUR" 2 0) {}
-    #xt/interval-day-time ["P0D" "PT-2H"] '(single-field-interval -2 "HOUR" 2 0) {}
+    #xt/interval "PT1H" '(single-field-interval 1 "HOUR" 2 0) {}
+    #xt/interval "PT-2H" '(single-field-interval -2 "HOUR" 2 0) {}
 
-    #xt/interval-day-time ["P0D" "PT1M"] '(single-field-interval 1 "MINUTE" 2 0) {}
-    #xt/interval-day-time ["P0D" "PT-2M"] '(single-field-interval -2 "MINUTE" 2 0) {}
+    #xt/interval "PT1M" '(single-field-interval 1 "MINUTE" 2 0) {}
+    #xt/interval "PT-2M" '(single-field-interval -2 "MINUTE" 2 0) {}
 
-    #xt/interval-day-time ["P0D" "PT1S"] '(single-field-interval 1 "SECOND" 2 6) {}
-    #xt/interval-day-time ["P0D" "PT-2S"] '(single-field-interval -2 "SECOND" 2 6) {}
+    #xt/interval "PT1S" '(single-field-interval 1 "SECOND" 2 6) {}
+    #xt/interval "PT-2S" '(single-field-interval -2 "SECOND" 2 6) {}
 
     ;; fractional seconds
-    #xt/interval-day-time ["P0D" "PT1.34S"] '(single-field-interval "1.34" "SECOND" 2 6) {}
+    #xt/interval "PT1.34S" '(single-field-interval "1.34" "SECOND" 2 6) {}
 
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
 
-    #xt/interval-month "P0D" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
-    #xt/interval-month "P12M" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
-    #xt/interval-month "P12M" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
-    #xt/interval-month "P-12M" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
-    #xt/interval-month "P13M" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
+    #xt/interval "P0D" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
+    #xt/interval "P12M" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
+    #xt/interval "P12M" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
+    #xt/interval "P-12M" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
+    #xt/interval "P13M" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
 
-    #xt/interval-micro ["P11D" "PT12H"] '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
-    #xt/interval-micro ["P-1D" "PT-1S"] '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P1D" "PT2M"] '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
-    #xt/interval-micro ["P1D" "PT23H"] '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
+    #xt/interval "P11DT12H" '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
+    #xt/interval "P-1DT-1S" '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
+    #xt/interval "P1DT2M" '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
+    #xt/interval "P1DT23H" '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
 
-    #xt/interval-micro ["P0D" "PT-3H-4M-1S"] '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT23H2M"] '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
+    #xt/interval "PT-3H-4M-1S" '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
+    #xt/interval "PT23H2M" '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
 
-    #xt/interval-micro ["P0D" "PT44M34S"] '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT44M34.123456S"] '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
+    #xt/interval "PT44M34S" '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
+    #xt/interval "PT44M34.123456S" '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
 
-    #xt/interval-micro ["P1D" "PT1.334S"] '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT3H4M1.334S"] '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT44M34.12345S"] '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 5) {}
-    #xt/interval-micro ["P0D" "PT44M34.123456S"] '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT44M34.123456S"] '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
+    #xt/interval "P1DT1.334S" '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
+    #xt/interval "PT3H4M1.334S" '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
+    #xt/interval "PT44M34.12345S" '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 5) {}
+    #xt/interval "PT44M34.123456S" '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
+    #xt/interval "PT44M34.123456S" '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
 
     ;;testing mdn
-    #xt/interval-nano ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 9) {}
-    #xt/interval-nano ["P0D" "PT44M34.12345678S"] '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 8) {}
-    #xt/interval-nano ["P0D" "PT44M34.1234567S"] '(multi-field-interval "44:34.1234567" "MINUTE" 2 "SECOND" 8) {}
+    #xt/interval "PT44M34.123456789S" '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 9) {}
+    #xt/interval "PT44M34.12345678S" '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 8) {}
+    #xt/interval "PT44M34.1234567S" '(multi-field-interval "44:34.1234567" "MINUTE" 2 "SECOND" 8) {}
 
     ;; truncates when we can no longer represent the number
-    #xt/interval-nano ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 9) {}
+    #xt/interval "PT44M34.123456789S" '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 9) {}
 
-    #xt/interval-micro ["P0D" "PT0.123S"] '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT0.123S"] '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
-    #xt/interval-micro ["P0D" "PT-0.123S"] '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
+    #xt/interval "PT0.123S" '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    #xt/interval "PT0.123S" '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    #xt/interval "PT-0.123S" '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (et/project1 (list 'multi-field-interval "0-0" unit1 2 unit2 2) {}))]
@@ -1111,34 +1085,36 @@
     nil '(* (single-field-interval 1 "YEAR" 2 0) nil)
     nil '(* nil (single-field-interval 1 "YEAR" 2 0))
 
-    #xt/interval-month "P24M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
-    #xt/interval-month "P13M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    #xt/interval-month "P11M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
+    #xt/interval "P24M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    #xt/interval "P13M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    #xt/interval "P11M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    #xt/interval-micro ["P12M-1D" "PT0S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
-    #xt/interval-micro ["P12M" "PT-1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
-    #xt/interval-micro ["P12M" "PT1H1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
+    #xt/interval "P12M-1D" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    #xt/interval "P12MT-1S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    #xt/interval "P12MT1H1S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    #xt/interval-month "P0D" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
-    #xt/interval-month "P11M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    #xt/interval-month "P13M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
+    #xt/interval "P0D" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    #xt/interval "P11M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    #xt/interval "P13M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    #xt/interval-micro ["P12M1D" "PT0S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
-    #xt/interval-micro ["P12M" "PT1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
-    #xt/interval-micro ["P12M" "PT-1H-1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
+    #xt/interval "P12M1D" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    #xt/interval "P12MT1S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    #xt/interval "P12MT-1H-1S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    #xt/interval-month "P36M" '(* (single-field-interval 1 "YEAR" 2 0) 3)
+    #xt/interval "P36M" '(* (single-field-interval 1 "YEAR" 2 0) 3)
 
-    #xt/interval-month "P6M" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
-    #xt/interval-month "P2M" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
+    #xt/interval "P6M" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
+    #xt/interval "P2M" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
 
-    #xt/interval-month "P12M" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
+    #xt/interval "P12M" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
 
-    #xt/interval-month "P0M" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
-    #xt/interval-month "P1M" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
+    #xt/interval "P0M" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
+    #xt/interval "P1M" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
 
-    #xt/interval-day-time ["P0M" "PT0S"] '(/ (single-field-interval 1 "DAY" 2 0) 2)
-    #xt/interval-day-time ["P1D" "PT0S"] '(/ (single-field-interval 6 "DAY" 2 0) 5)))
+    #xt/interval "P0M" '(/ (single-field-interval 1 "DAY" 2 0) 2)
+    #xt/interval "P1D" '(/ (single-field-interval 6 "DAY" 2 0) 5)
+
+    #xt/interval "PT15M" '(/ (single-field-interval 1 "HOUR" 2 0) 4)))
 
 (t/deftest test-interval-comparison
   (t/testing "comparing intervals with different types"
@@ -1174,17 +1150,11 @@
 
   (t/testing "can't compare month-day-micro intervals if months > 0"
     (let [test-doc {:_id :foo,
-                    :interval (Interval/ofMicros #xt/period "P4M8D" (Duration/parse "PT1H"))}]
+                    :interval #xt/interval "P4M8DT1H"}]
       (t/is (thrown-with-msg?
              RuntimeException
              #"Cannot compare month-day-micro/nano intervals when month component is non-zero."
              (et/project1 '(= interval interval) test-doc)))))
-
-  (t/testing "can't comapre day-time intervals"
-    (t/is (thrown-with-msg?
-           RuntimeException
-           #"Cannot compare day-time intervals"
-           (et/project1 '(= (single-field-interval 1 "DAY" 2 0) (single-field-interval 1 "DAY" 2 0)) {}))))
 
   (t/testing "comparing month-day-nano intervals"
     (t/are [expected expr] (= expected (et/project1 expr {}))
@@ -1235,57 +1205,41 @@
 
 (def interval-ym-gen
   (->> tcg/small-integer
-       (tcg/fmap #(Interval/ofMonths ^long %))))
-
-(def interval-dt-gen
-  (->> (tcg/tuple tcg/small-integer (tcg/choose -86399999 86399999))
-       (tcg/fmap #(Interval/ofDayTime (Period/ofDays (first %))
-                                      (Duration/ofMillis (second %))))))
+       (tcg/fmap #(Interval. % 0 0))))
 
 (def interval-mdm-gen
   (->> (tcg/tuple period-gen small-micro-duration-gen)
-       (tcg/fmap #(Interval/ofMicros (first %) (second %)))))
+       (tcg/fmap #(Interval. (first %) (second %)))))
 
 (def interval-mdn-gen
   (->> (tcg/tuple period-gen small-duration-gen)
-       (tcg/fmap #(Interval/ofNanos (first %) (second %)))))
+       (tcg/fmap #(Interval. (first %) (second %)))))
 
 ;; some basic interval algebraic properties
 
-(defn pd-zero [i]
-  (cond
-    (instance? Interval$Month i) (Interval/ofMonths 0)
-    (instance? Interval$DayTime i) (Interval/ofDayTime 0 0)
-    (instance? Interval$MonthDayMicro i) (Interval/ofMicros 0 0 0)
-    (instance? Interval$MonthDayNano i) (Interval/ofNanos 0 0 0)))
-
-(tct/defspec interval-add-identity-prop
-  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen interval-mdm-gen])]
-    (= i (et/project1 '(+ a b) {:a i, :b (pd-zero i)}))))
-
-(deftest bug-interval-day-time-normalization-738
-  (let [i #xt/interval-day-time ["P0D" "PT-23H-59M-59.001S"]]
+(deftest bug-interval-day-normalization-738
+  (let [i #xt/interval "PT-23H-59M-59.001S"]
     (t/is (=  i
-              (et/project1 '(+ a b) {:a i, :b (pd-zero i)}))))
-  (let [i #xt/interval-nano ["P33M244D" "PT48H0.003444443S"]]
+              (et/project1 '(+ a b) {:a i, :b #xt/interval "P0D"}))))
+  (let [i #xt/interval "P33M244DT48H0.003444443S"]
     (t/is (=  i
-              (et/project1 '(+ a b) {:a i, :b (pd-zero i)})))))
+              (et/project1 '(+ a b) {:a i, :b #xt/interval "P0D"})))))
 
 (tct/defspec interval-sub-identity-prop
-  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen interval-mdm-gen])]
-    (= i (et/project1 '(- a b) {:a i, :b (pd-zero i)}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-mdn-gen interval-mdm-gen])]
+    (= i (et/project1 '(- a b) {:a i, :b #xt/interval "P0D"}))))
 
 (tct/defspec interval-mul-factor-identity-prop
-  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen interval-mdm-gen])]
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-mdn-gen interval-mdm-gen])]
     (= i (et/project1 '(* a 1) {:a i}))))
 
 (tct/defspec interval-mul-by-zero-prop
-  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen interval-mdm-gen])]
-    (= (pd-zero i) (et/project1 '(* a 0) {:a i}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-mdn-gen interval-mdm-gen])]
+    (= #xt/interval "P0D" (et/project1 '(* a 0) {:a i}))))
 
 (tct/defspec interval-add-sub-round-trip-prop
-  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen interval-mdm-gen])]
-    (= i (et/project1 '(- (+ a a) a) {:a i, :b (pd-zero i)}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-mdn-gen interval-mdm-gen])]
+    (= i (et/project1 '(- (+ a a) a) {:a i}))))
 
 #_
 (tct/defspec interval-mul-by-2-is-equiv-to-sum-self-prop
@@ -1302,12 +1256,14 @@
 (t/deftest test-interval-abs
   (t/are [expected expr] (= expected (et/project1 expr {}))
 
-    #xt/interval-month "P0D" '(abs (single-field-interval 0 "YEAR" 2 0))
-    #xt/interval-month "P12M" '(abs (single-field-interval 1 "YEAR" 2 0))
-    #xt/interval-month "P12M" '(abs (single-field-interval -1 "YEAR" 2 0))
+    #xt/interval "P0D" '(abs (single-field-interval 0 "YEAR" 2 0))
+    #xt/interval "P12M" '(abs (single-field-interval 1 "YEAR" 2 0))
+    #xt/interval "P12M" '(abs (single-field-interval -1 "YEAR" 2 0))
 
-    #xt/interval-month "P11M" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
-    #xt/interval-day-time ["P1D" "PT-1S"] '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
+    #xt/interval "P11M" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
+    #xt/interval "P1D" '(abs (single-field-interval -1 "DAY" 2 0))
+
+    #xt/interval "PT2H-3M" '(abs #xt/interval "PT-2H3M")))
 
 (def single-interval-constructor-gen
   (->> (tcg/hash-map
@@ -1440,10 +1396,7 @@
   1000
   (tcp/for-all [form interval-constructor-gen]
     (let [res (et/project1 form {})]
-      (or (instance? Interval$Month res)
-          (instance? Interval$DayTime res)
-          (instance? Interval$MonthDayMicro res)
-          (instance? Interval$MonthDayNano res)))))
+      (instance? Interval res))))
 
 (deftest test-period-constructor
   (letfn [(f [from to]
@@ -1767,24 +1720,24 @@
 (deftest test-date-bin
   (t/is (= (time/->zdt #inst "2020")
            (et/project1 '(date-bin i src)
-                        {:i #xt/interval-nano ["P0D" "PT15M"]
+                        {:i #xt/interval "PT15M"
                          :src #inst "2020"})))
 
   (t/is (= (time/->zdt #inst "2020")
            (et/project1 '(date-bin i src)
-                        {:i #xt/interval-nano ["P0D" "PT15M"]
+                        {:i #xt/interval "PT15M"
                          :src #inst "2020-01-01T00:10:10Z"})))
 
   (t/is (= (time/->zdt #inst "2020-01-01T00:15Z")
            (et/project1 '(date-bin i src)
-                        {:i #xt/interval-nano ["P0D" "PT15M"]
+                        {:i #xt/interval "PT15M"
                          :src #inst "2020-01-01T00:20:10Z"}))))
 
 (deftest test-date-bin-with-origin
   (t/is (= #xt/zoned-date-time "2024-03-06T12:00Z"
            (et/project1
             '(date-bin stride src origin)
-            {:stride #xt/interval-nano ["P0D" "PT3H"]
+            {:stride #xt/interval "PT3H"
              :src #xt/zoned-date-time "2024-03-06T14:23:45Z"
              :origin #xt/zoned-date-time "2000-01-01T00:00:00Z"}))))
 
@@ -1794,14 +1747,14 @@
   (t/is (= #xt/zoned-date-time "2020-01-03T06:00Z"
            (et/project1
             '(+ #xt/zoned-date-time "2020-01-01T00:00:00Z"
-                (* #xt/interval-nano ["P1D" "PT3H"] 2))
+                (* #xt/interval "P1DT3H" 2))
             {}))))
 
 (deftest test-range-bins
   (let [base (time/->zdt #inst "2020-01-01")]
     (letfn [(f [start end]
               (for [{:keys [xt/from xt/to xt/weight]} (et/project1 '(range-bins i from to)
-                                                                   {:i #xt/interval-nano ["P0D" "PT15M"]
+                                                                   {:i #xt/interval "PT15M"
                                                                     :from (.plusMinutes base start)
                                                                     :to (.plusMinutes base end)})]
                 [(.between ChronoUnit/MINUTES base from)
