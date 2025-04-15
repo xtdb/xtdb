@@ -24,7 +24,8 @@
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
-           (xtdb.tx_ops Abort DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)))
+           (xtdb.tx_ops Abort DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
+           (xtdb.util TxIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -255,12 +256,6 @@
   {:block-cat (ig/ref :xtdb/block-catalog)
    :factory factory})
 
-(defn tx-id->offset [^long tx-id]
-  (bit-and tx-id (dec (bit-shift-left 1 48))))
-
-(defn tx-id->epoch [^long tx-id]
-  (bit-shift-right tx-id 48))
-
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
 Please check your log configuration and make sure the log's underlying storage/state has not been modified.
@@ -285,8 +280,8 @@ See the XTDB documentation for more guidance and recovery information.")
 (defn validate-offsets [^Log log ^TransactionKey latest-completed-tx]
   (when latest-completed-tx
     (let [latest-completed-tx-id (.getTxId latest-completed-tx)
-          latest-completed-offset (tx-id->offset latest-completed-tx-id)
-          latest-completed-epoch (tx-id->epoch latest-completed-tx-id)
+          latest-completed-offset (TxIdUtil/txIdToOffset latest-completed-tx-id)
+          latest-completed-epoch (TxIdUtil/txIdToEpoch latest-completed-tx-id)
           epoch (.getEpoch log)
           latest-submitted-offset (.getLatestSubmittedOffset log)]
       (if (= latest-completed-epoch epoch)
