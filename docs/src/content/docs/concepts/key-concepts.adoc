@@ -64,7 +64,7 @@ The columns are not visible unless explicitly queried. The values of these colum
 
 The combination of these columns is called 'bitemporality' and can be visualized in 2 dimensions. For example:
 
-image::/images/docs/bitemp-viz.webp["Bitemporal Visualizer", align="center", width=400px, link="https://bitemporal-visualizer.github.io/"]
+image::/images/docs/bitemp-viz.webp["Bitemporal Visualizer", align="center", width=600px, link="https://bitemporal-visualizer.github.io/"]
 
 This definition of the bitemporal model was first defined by Richard Snodgrass and Christian Jensen as the "Bitemporal Conceptual Data Model" in 1994 and was (much) later adopted as the basis of the ISO SQL:2011 standard.
 
@@ -80,7 +80,7 @@ Bitemporal modeling is commonly used across areas like data warehousing, stream 
 
 XTDB uses a single-writer architecture that ensures ACID consistency of updates regardless of the number of replica nodes used to scale read-only queries. The single-writer provides strong consistency guarantees needed for auditing and bitemporal timestamp generation. XTDB does not offer a sharded multi-writer architecture, meaning write latencies and availability are geographically sensitive.
 
-Transaction logic is processed fully serially, deterministically and atomically on each node. This means each transaction has exclusive access to the latest database state. Beyond the basic record-oriented operations (i.e put & delete), complex transactions can be expressed either using Clojure code or more declaratively via SQL transactions. SQL transactions are non-interactive and mid-transaction writes are not queryable.
+Transaction logic is processed fully serially, deterministically and atomically on each node. This means each transaction has exclusive access to the latest database state. Beyond basic record-oriented operations (i.e. via INSERT & DELETE `RECORDS`), many complex transactions can be expressed declaratively via SQL transactions. SQL transactions are non-interactive and mid-transaction writes are not queryable.
 
 == Foreign keys? Uniqueness constraints? Views? Indexes? etc.
 
@@ -89,4 +89,4 @@ Referential integrity can still be achieved atomically, with ACID guarantees, ei
 
 XTDB has no concept of uniqueness beyond the ID. If you want something to be unique then you can and probably should model it with an ID.
 
-Similarly, any other features of a SQL database that intuitively require a schema are not available within XTDB currently. It is however intended that XTDB will introduce "gradual schema" capabilities in the future to enable new usage patterns.
+Similarly, any other features of a SQL database that intuitively require a schema are not available within XTDB currently. It is however intended that XTDB will introduce "gradual schema" capabilities in the future to enable new usage patterns that includes using XTDB like a traditional SQL database (e.g. "just treat XTDB as if it were Postgres, and model your data the same way").

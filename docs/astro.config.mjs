@@ -179,8 +179,8 @@ export default defineConfig({
                     items: [
                         { label: 'Mission', link: '/intro/why-xtdb' },
                         { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
-                        { label: 'How XTDB works', link: '/intro/data-model' },
-                        // { label: 'Architecture', link: '/intro/architecture' },
+                        { label: 'Key Concepts', link: '/concepts/key-concepts' },
+			{ label: 'How XTDB works', link: '/intro/data-model' },
                         // { label: 'Bitemporality', link: '/intro/bitemporality' }
 
                         { label: 'Community', link: '/intro/community' },
