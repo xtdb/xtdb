@@ -166,7 +166,7 @@ export default defineConfig({
                             label: 'Reference',
                             collapsed: true,
                             items: [
-                                { label: 'Transactions/DML', link: '/reference/main/xtql/txs' },
+                                { label: 'Transactions', link: '/reference/main/xtql/txs' },
                                 { label: 'Queries', link: '/reference/main/xtql/queries' },
                                 { label: 'Standard library', link: '/reference/main/xtql/stdlib' },
                             ]
