@@ -15,14 +15,18 @@ import java.time.temporal.ChronoUnit.MICROS
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-class InMemoryLog(private val instantSource: InstantSource) : Log {
+class InMemoryLog(private val instantSource: InstantSource, override val epoch: Int) : Log {
 
     @SerialName("!InMemory")
     @Serializable
-    data class Factory(@Transient var instantSource: InstantSource = InstantSource.system()) : Log.Factory {
+    data class Factory(
+        @Transient var instantSource: InstantSource = InstantSource.system(),
+        var epoch: Int = 0
+    ) : Log.Factory {
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
+        fun epoch(epoch: Int) = apply { this.epoch = epoch }
 
-        override fun openLog() = InMemoryLog(instantSource)
+        override fun openLog() = InMemoryLog(instantSource, epoch)
     }
 
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
