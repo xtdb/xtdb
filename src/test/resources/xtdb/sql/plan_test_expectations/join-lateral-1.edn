@@ -1,0 +1,10 @@
+[:project
+ [{y x.1/y} {z y.4/z}]
+ [:mega-join
+  [(= y.4/z x.1/y)]
+  [[:rename x.1 [:scan {:table public/x} [y]]]
+   [:rename
+    y.4
+    [:project
+     [{z z.2/z}]
+     [:rename z.2 [:scan {:table public/z} [z]]]]]]]]

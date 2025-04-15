@@ -482,18 +482,6 @@
                      {:table-info {"public/x" #{"y" "z"}
                                    "public/y" #{"z"}}}))))
 
-  (t/testing "LATERAL derived table"
-    (t/is (=plan-file
-           "lateral-derived-table-1"
-           (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
-                     {:table-info {"public/x" #{"y"}
-                                   "public/z" #{"z"}}})))
-
-    (t/is (=plan-file
-           "lateral-derived-table-2"
-           (plan-sql "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"
-                     {:table-info {"public/z" #{"z"}}}))))
-
   (t/testing "decorrelation"
     ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
     (t/is (=plan-file
@@ -574,6 +562,45 @@
                   (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)"
                             {:table-info {"public/foo" #{"a" "b"}
                                           "public/bar" #{"b" "c"}}})))))))
+
+(t/deftest lateral-derived-table
+  (t/is (=plan-file
+         "lateral-derived-table-1"
+         (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
+                   {:table-info {"public/x" #{"y"}
+                                 "public/z" #{"z"}}})))
+
+  (t/is (=plan-file
+         "lateral-derived-table-2"
+         (plan-sql "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"
+                   {:table-info {"public/z" #{"z"}}}))))
+
+(t/deftest join-lateral
+  (t/is (=plan-file
+         "join-lateral-1"
+         (plan-sql "SELECT x.y, y.z FROM x CROSS JOIN LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
+                   {:table-info {"public/x" #{"y"}
+                                 "public/z" #{"z"}}})))
+
+  (t/is (=plan-file
+         "join-lateral-2"
+         (plan-sql "SELECT x.y, y.z FROM x LEFT JOIN LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y ON TRUE"
+                   {:table-info {"public/x" #{"y"}
+                                 "public/z" #{"z"}}})))
+
+  (t/is (=plan-file
+         "join-lateral-3"
+         (plan-sql "SELECT x, x.y, y.z FROM x NATURAL JOIN LATERAL (SELECT x, z.z FROM z WHERE z.z = x.y) AS y"
+                   {:table-info {"public/x" #{"x" "y"}
+                                 "public/z" #{"x" "z"}}})))
+
+  (xt/submit-tx tu/*node* [[:put-docs :nested-table {:xt/id 1}]])
+  (xt/submit-tx tu/*node* [[:put-docs :other-table {:xt/id 1} {:xt/id 2} {:xt/id 3}]])
+
+  (t/is (= [{:nid 1, :oid 1}]
+           (xt/q tu/*node* "SELECT nt._id nid, o._id oid
+                            FROM nested_table nt
+                              CROSS JOIN LATERAL (SELECT * FROM other_table o WHERE o._id = nt._id) o"))))
 
 (t/deftest test-qc-array-expr-3539
   (t/is (=plan-file "test-qc-array-expr"

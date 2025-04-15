@@ -347,7 +347,7 @@
     (->> [l r]
          (mapcat #(find-cols % chain excl-cols)))))
 
-(defrecord JoinTable [env l r
+(defrecord JoinTable [env !sq-refs l r
                       ^Sql$JoinTypeContext join-type-ctx
                       ^Sql$JoinSpecificationContext join-spec-ctx
                       common-cols]
@@ -376,43 +376,38 @@
 
           [join-type l r] (if (= join-type :right-outer-join)
                             [:left-outer-join r l]
-                            [join-type l r])]
+                            [join-type l r])
 
-      (if common-cols
-        [join-type (vec (for [col-name common-cols]
-                          {(find-col l [col-name])
-                           (find-col r [col-name])}))
+          !join-cond-subqs (HashMap.)
+          !lhs-refs (HashMap.)
+          l-sq-scope (->SubqueryScope env l !lhs-refs)
+          join-cond-visitor (map->ExprPlanVisitor {:env env,
+                                                   :scope (->JoinConditionScope env l-sq-scope r)
+                                                   :!subqs !join-cond-subqs})
+          join-pred (if common-cols
+                      (list* 'and (vec (for [col-name common-cols]
+                                         (list '= (find-col l-sq-scope [col-name]) (find-col r [col-name])))))
+                      (.accept join-spec-ctx
+                               (reify SqlVisitor
+                                 (visitJoinCondition [_ ctx]
+                                   (.accept (.expr ctx) join-cond-visitor)))))]
+
+      (if (= join-type :full-outer-join)
+        (if (.isEmpty !join-cond-subqs)
+          [:full-outer-join
+           [(w/postwalk-replace (set/map-invert !lhs-refs) join-pred)]
+           (plan-rel l)
+           (plan-rel r)]
+          (add-err! env (->SubqueryDisallowed)))
+
+        [:apply (if (= join-type :join)
+                  :cross-join
+                  join-type)
+         (into (into {} !lhs-refs) !sq-refs)
          (plan-rel l)
-         (plan-rel r)]
-
-        (some-> join-spec-ctx
-                (.accept
-                 (reify SqlVisitor
-                   (visitJoinCondition [_ ctx]
-                     (let [!join-cond-subqs (HashMap.)
-                           !lhs-refs (HashMap.)
-                           join-pred (-> (.expr ctx)
-                                         (.accept (map->ExprPlanVisitor {:env env,
-                                                                         :scope (->JoinConditionScope env (->SubqueryScope env l !lhs-refs) r)
-                                                                         :!subqs !join-cond-subqs})))]
-
-                       (if (= join-type :full-outer-join)
-
-                         (if (.isEmpty !join-cond-subqs)
-                           [:full-outer-join
-                            [(w/postwalk-replace (set/map-invert !lhs-refs) join-pred)]
-                            (plan-rel l)
-                            (plan-rel r)]
-                           (add-err! env (->SubqueryDisallowed)))
-
-                         [:apply (if (= join-type :join)
-                                   :cross-join
-                                   join-type)
-                          (into {} !lhs-refs)
-                          (plan-rel l)
-                          [:select join-pred
-                           (-> (plan-rel r)
-                               (apply-sqs !join-cond-subqs))]]))))))))))
+         [:select join-pred
+          (-> (plan-rel r)
+              (apply-sqs !join-cond-subqs))]]))))
 
 (defrecord CrossJoinTable [env !sq-refs l r]
   Scope
@@ -600,7 +595,8 @@
 
   (visitJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
-          r (-> (.tableReference ctx 1) (.accept this))
+          !sq-refs (HashMap.)
+          r (.accept (.tableReference ctx 1) (->TableRefVisitor env scope (->SubqueryScope env l !sq-refs)))
           common-cols (.accept (.joinSpecification ctx)
                                (reify SqlVisitor
                                  (visitJoinCondition [_ _] nil)
@@ -608,20 +604,21 @@
                                    (->> (.columnNameList ctx) (.columnName)
                                         (into #{} (map (comp ->col-sym identifier-sym)))))))]
 
-      (->JoinTable env l r (.joinType ctx) (.joinSpecification ctx) common-cols)))
+      (->JoinTable env !sq-refs l r (.joinType ctx) (.joinSpecification ctx) common-cols)))
 
   (visitCrossJoinTable [this ctx]
-    (->CrossJoinTable env
-                      {}
-                      (-> (.tableReference ctx 0) (.accept this))
-                      (-> (.tableReference ctx 1) (.accept this))))
+    (let [!sq-refs (HashMap.)
+          l (-> (.tableReference ctx 0) (.accept this))
+          r (-> (.tableReference ctx 1) (.accept (->TableRefVisitor env scope (->SubqueryScope env l !sq-refs))))]
+      (->CrossJoinTable env (into {} !sq-refs) l r)))
 
   (visitNaturalJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
-          r (-> (.tableReference ctx 1) (.accept this))
+          !sq-refs (HashMap.)
+          r (-> (.tableReference ctx 1) (.accept (->TableRefVisitor env scope (->SubqueryScope env l !sq-refs))))
           common-cols (set/intersection (set (available-cols l)) (set (available-cols r)))]
 
-      (->JoinTable env l r (.joinType ctx) nil common-cols)))
+      (->JoinTable env (into {} !sq-refs) l r (.joinType ctx) nil common-cols)))
 
   (visitDerivedTable [{{:keys [!id-count]} :env} ctx]
     (let [{:keys [plan col-syms]} (-> (.subquery ctx) (.queryExpression)
@@ -2121,9 +2118,9 @@
   (->QuerySpecificationScope scope
                              (reduce (fn [left-table-ref ^ParserRuleContext table-ref]
                                        (let [!sq-refs (HashMap.)
-                                             left-sq-scope (->SubqueryScope env left-table-ref !sq-refs)
-                                             right-table-ref (.accept table-ref (->TableRefVisitor env scope (when left-table-ref
-                                                                                                               left-sq-scope)))]
+                                             right-table-ref (.accept table-ref (->TableRefVisitor env scope
+                                                                                                   (when left-table-ref
+                                                                                                     (->SubqueryScope env left-table-ref !sq-refs))))]
                                          (if left-table-ref
                                            (->CrossJoinTable env !sq-refs left-table-ref right-table-ref)
                                            right-table-ref)))
