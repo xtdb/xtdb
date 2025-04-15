@@ -15,10 +15,10 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            xtdb.arrow.RelationReader
-           (xtdb.types IntervalMonthDayMicro)
+           (xtdb.types Interval)
            (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
 
@@ -204,25 +204,25 @@
 
 (t/deftest test-date-trunc-interval
   (let [test-doc {:_id :foo,
-                  :year-interval (IntervalMonthDayMicro. (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S"))
-                  :interval (IntervalMonthDayMicro. (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
+                  :year-interval (Interval/ofMicros (Period/of 1111 4 8) (Duration/parse "PT1H1M1.111111S"))
+                  :interval (Interval/ofMicros (Period/of 0 4 8) (Duration/parse "PT1H1M1.111111S"))}]
 
     (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'interval) test-doc))]
-      (t/is (= #xt/interval-mdm ["P4M8D" "PT1H1M1.111111S"] (trunc "MICROSECOND")))
-      (t/is (= #xt/interval-mdm ["P4M8D" "PT1H1M1.111S"] (trunc "MILLISECOND")))
-      (t/is (= #xt/interval-mdm ["P4M8D" "PT1H1M1S"] (trunc "SECOND")))
-      (t/is (= #xt/interval-mdm ["P4M8D" "PT1H1M"] (trunc "MINUTE")))
-      (t/is (= #xt/interval-mdm ["P4M8D" "PT1H"] (trunc "HOUR")))
-      (t/is (= #xt/interval-mdm ["P4M8D" "PT0S"] (trunc "DAY")))
-      (t/is (= #xt/interval-mdm ["P4M7D" "PT0S"] (trunc "WEEK")))
-      (t/is (= #xt/interval-mdm ["P4M" "PT0S"] (trunc "MONTH")))
-      (t/is (= #xt/interval-mdm ["P3M" "PT0S"] (trunc "QUARTER"))))
+      (t/is (= #xt/interval-micro ["P4M8D" "PT1H1M1.111111S"] (trunc "MICROSECOND")))
+      (t/is (= #xt/interval-micro ["P4M8D" "PT1H1M1.111S"] (trunc "MILLISECOND")))
+      (t/is (= #xt/interval-micro ["P4M8D" "PT1H1M1S"] (trunc "SECOND")))
+      (t/is (= #xt/interval-micro ["P4M8D" "PT1H1M"] (trunc "MINUTE")))
+      (t/is (= #xt/interval-micro ["P4M8D" "PT1H"] (trunc "HOUR")))
+      (t/is (= #xt/interval-micro ["P4M8D" "PT0S"] (trunc "DAY")))
+      (t/is (= #xt/interval-micro ["P4M7D" "PT0S"] (trunc "WEEK")))
+      (t/is (= #xt/interval-micro ["P4M" "PT0S"] (trunc "MONTH")))
+      (t/is (= #xt/interval-micro ["P3M" "PT0S"] (trunc "QUARTER"))))
     
     (letfn [(trunc [time-unit] (project1 (list 'date-trunc time-unit 'year-interval) test-doc))] 
-      (t/is (= #xt/interval-mdm ["P13332M" "PT0S"] (trunc "YEAR")))
-      (t/is (= #xt/interval-mdm ["P13320M" "PT0S"] (trunc "DECADE")))
-      (t/is (= #xt/interval-mdm ["P13200M" "PT0S"] (trunc "CENTURY")))
-      (t/is (= #xt/interval-mdm ["P12000M" "PT0S"] (trunc "MILLENNIUM"))))))
+      (t/is (= #xt/interval-micro ["P13332M" "PT0S"] (trunc "YEAR")))
+      (t/is (= #xt/interval-micro ["P13320M" "PT0S"] (trunc "DECADE")))
+      (t/is (= #xt/interval-micro ["P13200M" "PT0S"] (trunc "CENTURY")))
+      (t/is (= #xt/interval-micro ["P12000M" "PT0S"] (trunc "MILLENNIUM"))))))
 
 (t/deftest test-date-extract
   (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
@@ -276,7 +276,7 @@
 
 (t/deftest test-interval-extract
   (letfn [(extract [part interval-val] (project1 (list 'extract part 'interval) {:interval interval-val}))]
-    (let [itvl (IntervalMonthDayMicro. (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
+    (let [itvl (Interval/ofMicros (Period/of 1 4 8) (Duration/parse "PT3H10M12.1S"))]
       (t/is (= 12 (extract "SECOND" itvl)))
       (t/is (= 10 (extract "MINUTE" itvl)))
       (t/is (= 3 (extract "HOUR" itvl)))

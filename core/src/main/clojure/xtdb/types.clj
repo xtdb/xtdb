@@ -1,27 +1,27 @@
 (ns xtdb.types
   (:require [clojure.set :as set]
             [clojure.string :as str]
-            xtdb.api
+            [clojure.tools.logging :as log]
+            [xtdb.api]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util]
-            [clojure.tools.logging :as log])
+            [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           [java.io ByteArrayInputStream Writer]
-           [java.nio ByteBuffer]
-           [java.nio.charset StandardCharsets]
-           [java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime]
-           [java.time.format DateTimeFormatter DateTimeFormatterBuilder]
-           [java.time.temporal ChronoField]
-           [java.util Arrays UUID]
+           (java.io ByteArrayInputStream Writer)
+           (java.nio ByteBuffer)
+           (java.nio.charset StandardCharsets)
+           (java.time Duration LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
+           (java.time.format DateTimeFormatter DateTimeFormatterBuilder)
+           (java.time.temporal ChronoField)
+           (java.util Arrays UUID)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb JsonSerde Types)
-           (xtdb.types IntervalMonthDayMicro IntervalMonthDayNano ZonedDateTimeRange)
-           [xtdb.vector IVectorReader]
-           (xtdb.vector.extensions KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType IntervalMDMType)
-           (xtdb.pg.codec NumericBin)))
+           (xtdb.pg.codec NumericBin)
+           (xtdb.types Interval Interval$MonthDayMicro Interval$MonthDayNano ZonedDateTimeRange)
+           (xtdb.vector IVectorReader)
+           (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -113,14 +113,16 @@
   ArrowType$Time (<-arrow-type [arrow-type] [:time-local (time-unit->kw (.getUnit arrow-type))])
   ArrowType$Duration (<-arrow-type [arrow-type] [:duration (time-unit->kw (.getUnit arrow-type))])
   ArrowType$Interval (<-arrow-type [arrow-type] [:interval (interval-unit->kw (.getUnit arrow-type))])
-  IntervalMDMType (<-arrow-type [arrow-type] [:interval :month-day-micro])
+  IntervalMDMType (<-arrow-type [_arrow-type] [:interval :month-day-micro])
 
   ArrowType$Struct (<-arrow-type [_] :struct)
   ArrowType$List (<-arrow-type [_] :list)
   SetType (<-arrow-type [_] :set)
   ArrowType$Map (<-arrow-type [arrow-type] [:map {:sorted? (.getKeysSorted arrow-type)}])
-  ArrowType$Union (<-arrow-type [^ArrowType$Union arrow-type]
-                    (if (= UnionMode/Dense (.getMode arrow-type)) :union :sparse-union))
+
+  ArrowType$Union
+  (<-arrow-type [^ArrowType$Union arrow-type]
+    (if (= UnionMode/Dense (.getMode arrow-type)) :union :sparse-union))
 
   TsTzRangeType (<-arrow-type [_] :tstz-range)
   KeywordType (<-arrow-type [_] :keyword)
@@ -901,16 +903,18 @@
 
 (defn interval-rdr->iso-micro-interval-str-bytes ^bytes [^IVectorReader rdr idx]
   (let [itvl (.getObject rdr idx)]
-    (-> (cond (instance? IntervalMonthDayMicro itvl)
-              itvl
-              (instance? IntervalMonthDayNano itvl)
-              (let [^IntervalMonthDayNano itvl itvl
-                    p (.period itvl)
-                    d (trunc-duration-to-micros  (.duration itvl))]
-                ;; Postgres only has month-day-micro intervals so we truncate the nanos
-                ;; placing back in MDM to ensure correctness
-                (IntervalMonthDayMicro. p d))
-              :else (throw (IllegalArgumentException. (format "Unsupported interval type: %s" itvl))))
+    (-> (cond
+          (instance? Interval$MonthDayMicro itvl) itvl
+
+          (instance? Interval$MonthDayNano itvl)
+          ;; Postgres only has month-day-micro intervals so we truncate the nanos
+          ;; placing back in MDM to ensure correctness
+          (let [^Interval itvl itvl]
+            (Interval/ofMicros (.getPeriod itvl)
+                               (trunc-duration-to-micros  (.getDuration itvl))))
+
+          :else (throw (IllegalArgumentException. (format "Unsupported interval type: %s" itvl))))
+
         ;; we use the standard toString for encoding
         (utf8))))
 

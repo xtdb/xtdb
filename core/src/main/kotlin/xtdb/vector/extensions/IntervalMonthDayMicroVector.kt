@@ -2,8 +2,9 @@ package xtdb.vector.extensions
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.IntervalMonthDayNanoVector
+import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.types.IntervalMonthDayMicro
+import xtdb.types.Interval
 
 class IntervalMonthDayMicroVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<IntervalMonthDayNanoVector>(name, allocator, fieldType, IntervalMonthDayNanoVector(name, allocator)) {
@@ -12,8 +13,9 @@ class IntervalMonthDayMicroVector(name: String, allocator: BufferAllocator, fiel
         require(fieldType.type == IntervalMDMType)
     }
 
-    override fun getObject0(index: Int): IntervalMonthDayMicro {
-        val inner = underlyingVector.getObject(index)
-        return IntervalMonthDayMicro(inner.period, inner.duration)
+    override fun getObject0(index: Int): Interval.MonthDayMicro {
+        val holder = NullableIntervalMonthDayNanoHolder()
+        underlyingVector.get(index, holder)
+        return Interval.MonthDayMicro(holder.months, holder.days, holder.nanoseconds)
     }
 }

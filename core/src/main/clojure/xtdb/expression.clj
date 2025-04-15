@@ -12,7 +12,7 @@
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
            (java.math RoundingMode)
-           [java.net URI]
+           (java.net URI)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
@@ -24,7 +24,7 @@
            (xtdb.arrow ListValueReader RelationReader ValueReader VectorPosition VectorReader)
            xtdb.arrow.ValueBox
            (xtdb.operator ProjectionSpec SelectionSpec)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth)
+           (xtdb.types Interval$DayTime Interval$Month Interval$MonthDayMicro Interval$MonthDayNano)
            (xtdb.util StringUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -411,20 +411,20 @@
     `(.toEpochDay ~code)))
 
 ;; we emit these to PDs until the EE uses these types directly
-(defmethod emit-value IntervalYearMonth [_ code]
-  `(PeriodDuration. (.-period ~code) Duration/ZERO))
+(defmethod emit-value Interval$Month [_ code]
+  `(PeriodDuration. (.getPeriod ~code) Duration/ZERO))
 
-(defmethod emit-value IntervalDayTime [_ code]
+(defmethod emit-value Interval$DayTime [_ code]
   `(let [idt# ~code]
-     (PeriodDuration. (.-period idt#) (.-duration idt#))))
+     (PeriodDuration. (.getPeriod idt#) (.getDuration idt#))))
 
-(defmethod emit-value IntervalMonthDayNano [_ code]
+(defmethod emit-value Interval$MonthDayNano [_ code]
   `(let [imdn# ~code]
-     (PeriodDuration. (.-period imdn#) (.-duration imdn#))))
+     (PeriodDuration. (.getPeriod imdn#) (.getDuration imdn#))))
 
-(defmethod emit-value IntervalMonthDayMicro [_ code]
+(defmethod emit-value Interval$MonthDayMicro [_ code]
   `(let [imdm# ~code]
-     (PeriodDuration. (.-period imdm#) (.-duration imdm#))))
+     (PeriodDuration. (.getPeriod imdm#) (.getDuration imdm#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (vw/value->col-type literal)

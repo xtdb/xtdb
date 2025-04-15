@@ -1,8 +1,7 @@
 (ns xtdb.tx-ops
   (:require [clojure.string :as str]
             [xtdb.error :as err]
-            [xtdb.time :as time]
-            [xtdb.xtql :as xtql])
+            [xtdb.time :as time])
   (:import [java.io Writer]
            [java.nio ByteBuffer]
            [java.util List]

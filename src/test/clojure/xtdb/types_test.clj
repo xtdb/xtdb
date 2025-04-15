@@ -12,7 +12,7 @@
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType FieldType)
-           (xtdb.types IntervalDayTime IntervalYearMonth RegClass RegProc)
+           (xtdb.types Interval$DayTime Interval$Month RegClass RegProc)
            (xtdb.vector IVectorWriter)
            (xtdb.vector.extensions KeywordVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
 
@@ -136,21 +136,21 @@
 
 (t/deftest interval-vector-test
   ;; for years/months we lose the years as a separate component, it has to be folded into months.
-  (let [iym #xt/interval-ym "P35M"]
+  (let [iym #xt/interval-month "P35M"]
     (t/is (= [iym]
              (:vs (test-read (constantly #xt.arrow/type [:interval :year-month])
-                             (fn [^IVectorWriter w, ^IntervalYearMonth v]
+                             (fn [^IVectorWriter w, ^Interval$Month v]
                                (.writeObject w v))
                              [iym])))))
 
-  (let [idt #xt/interval-dt ["P1434D" "PT0.023S"]]
+  (let [idt #xt/interval-day-time ["P1434D" "PT0.023S"]]
     (t/is (= [idt]
              (:vs (test-read (constantly #xt.arrow/type [:interval :day-time])
-                             (fn [^IVectorWriter w, ^IntervalDayTime v]
+                             (fn [^IVectorWriter w, ^Interval$DayTime v]
                                (.writeObject w v))
                              [idt])))))
 
-  (let [imdn #xt/interval-mdn ["P33M244D" "PT0.003444443S"]]
+  (let [imdn #xt/interval-nano ["P33M244D" "PT0.003444443S"]]
     (t/is (= {:vs [imdn]
               :vec-types [IntervalMonthDayNanoVector]}
              (test-round-trip [imdn])))))

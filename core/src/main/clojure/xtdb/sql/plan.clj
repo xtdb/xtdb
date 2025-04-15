@@ -14,15 +14,15 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
-           [java.net URI]
+           (java.net URI)
            (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
-           [org.apache.commons.codec.binary Hex]
+           (org.apache.commons.codec.binary Hex)
            (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
-           (xtdb.types IntervalMonthDayMicro)
+           (xtdb.types Interval)
            xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]
@@ -836,12 +836,12 @@
 (defn parse-iso-interval-literal [i-str env]
   (if-let [[_ p-str d-str] (re-matches #"P([-\dYMWD]+)?(?:T([-\dHMS\.]+)?)?" i-str)]
     (try
-      (IntervalMonthDayMicro. (if p-str
-                                 (Period/parse (str "P" p-str))
-                                 Period/ZERO)
-                               (if d-str
-                                 (Duration/parse (str "PT" d-str))
-                                 Duration/ZERO))
+      (Interval/ofMicros (if p-str
+                           (Period/parse (str "P" p-str))
+                           Period/ZERO)
+                         (if d-str
+                           (Duration/parse (str "PT" d-str))
+                           Duration/ZERO))
       (catch Exception e
         (add-err! env (->CannotParseInterval i-str (.getMessage e)))))
 

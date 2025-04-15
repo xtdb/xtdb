@@ -148,10 +148,10 @@ fun valueToArrowType(obj: Any?) = when (obj) {
     // TODO support for Arrow maps
     is Map<*, *> -> MinorType.STRUCT.type
 
-    is IntervalYearMonth -> MinorType.INTERVALYEAR.type
-    is IntervalDayTime -> MinorType.INTERVALDAY.type
-    is IntervalMonthDayNano -> MinorType.INTERVALMONTHDAYNANO.type
-    is IntervalMonthDayMicro -> IntervalMDMType
+    is Interval.Month -> MinorType.INTERVALYEAR.type
+    is Interval.DayTime -> MinorType.INTERVALDAY.type
+    is Interval.MonthDayNano -> MinorType.INTERVALMONTHDAYNANO.type
+    is Interval.MonthDayMicro -> IntervalMDMType
 
     is ZonedDateTimeRange -> TsTzRangeType
 

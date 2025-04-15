@@ -1,7 +1,6 @@
 (ns xtdb.information-schema
-  (:require [xtdb.api :as xt]
-            [xtdb.authn :as authn]
-            xtdb.metadata
+  (:require [xtdb.authn :as authn]
+            [xtdb.metadata]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]

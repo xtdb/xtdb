@@ -12,7 +12,7 @@
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth ZonedDateTimeRange)
+           (xtdb.types ClojureForm Interval$DayTime Interval$Month Interval$MonthDayMicro Interval$MonthDayNano ZonedDateTimeRange)
            (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -78,16 +78,16 @@
   LocalTime
   (value->col-type [_] [:time-local :nano])
 
-  IntervalYearMonth
+  Interval$Month
   (value->col-type [_] [:interval :year-month])
 
-  IntervalDayTime
+  Interval$DayTime
   (value->col-type [_] [:interval :day-time])
 
-  IntervalMonthDayNano
+  Interval$MonthDayNano
   (value->col-type [_] [:interval :month-day-nano])
 
-  IntervalMonthDayMicro
+  Interval$MonthDayMicro
   (value->col-type [_] [:interval :month-day-micro])
 
   ZonedDateTimeRange

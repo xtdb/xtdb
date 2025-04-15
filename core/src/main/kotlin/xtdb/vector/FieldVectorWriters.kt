@@ -28,7 +28,9 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.RuntimeException
 import xtdb.arrow.*
-import xtdb.types.*
+import xtdb.types.ClojureForm
+import xtdb.types.Interval
+import xtdb.types.ZonedDateTimeRange
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.*
 import xtdb.vector.extensions.IntervalMonthDayMicroVector
@@ -260,7 +262,7 @@ private class IntervalYearVectorWriter(override val vector: IntervalYearVector) 
 
     override fun writeObject0(obj: Any): Unit = when (obj) {
         is PeriodDuration -> writeInt(obj.period.toTotalMonths().toInt())
-        is IntervalYearMonth -> writeObject(PeriodDuration(obj.period, Duration.ZERO))
+        is Interval.Month -> writeInt(obj.months)
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
     }
 
@@ -280,7 +282,7 @@ private class IntervalDayVectorWriter(override val vector: IntervalDayVector) : 
             )
         }
 
-        is IntervalDayTime -> writeObject0(PeriodDuration(obj.period, obj.duration))
+        is Interval.DayTime -> vector.setSafe(valueCount++, obj.days, obj.millis)
 
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
     }
@@ -301,7 +303,8 @@ private class IntervalMdnVectorWriter(override val vector: IntervalMonthDayNanoV
             )
         }
 
-        is IntervalMonthDayNano -> writeObject0(PeriodDuration(obj.period, obj.duration))
+        is Interval.MonthDayMicro -> vector.setSafe(valueCount++, obj.months, obj.days, obj.nanos)
+        is Interval.MonthDayNano -> vector.setSafe(valueCount++, obj.months, obj.days, obj.nanos)
 
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
     }
@@ -438,7 +441,7 @@ internal class UuidVectorWriter(vector: UuidVector) : ExtensionVectorWriter(vect
 
 internal class IntervalMonthDayMicroVectorWriter(vector: IntervalMonthDayMicroVector) : ExtensionVectorWriter(vector, null) {
     override fun writeObject0(obj: Any) = when (obj) {
-        is IntervalMonthDayMicro -> super.writeObject0(IntervalMonthDayNano(obj.period, obj.duration))
+        is Interval.MonthDayMicro -> super.writeObject0(obj)
         is PeriodDuration -> super.writeObject0(obj)
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
     }

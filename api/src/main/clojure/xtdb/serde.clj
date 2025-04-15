@@ -19,7 +19,7 @@
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
            (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
-           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalMonthDayMicro IntervalYearMonth ZonedDateTimeRange)
+           (xtdb.types ClojureForm Interval Interval$DayTime Interval$MonthDayNano Interval$MonthDayMicro Interval$Month ZonedDateTimeRange)
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
 
 (defrecord TxKey [tx-id system-time]
@@ -59,40 +59,36 @@
 (defmethod print-method PeriodDuration [c ^Writer w]
   (print-dup c w))
 
-(defn interval-ym-reader [p]
-  (IntervalYearMonth. (Period/parse p)))
+(defn- interval->period-str [^Interval i] (str (.getPeriod i)))
+(defn- interval->duration-str [^Interval i] (str (.getDuration i)))
 
-(defmethod print-dup IntervalYearMonth [^IntervalYearMonth i, ^Writer w]
-  (.write w (format "#xt/interval-ym %s" (pr-str (str (.period i))))))
+(defn interval-month-reader [^String p] (Interval/ofMonths (Period/parse p)))
 
-(defmethod print-method IntervalYearMonth [i ^Writer w]
+(defmethod print-dup Interval$Month [i, ^Writer w]
+  (.write w (format "#xt/interval-month %s" (pr-str (interval->period-str i)))))
+
+(defn interval-day-time-reader [[p d]]
+  (Interval/ofDayTime (Period/parse p) (Duration/parse d)))
+
+(defmethod print-dup Interval$DayTime [i, ^Writer w]
+  (.write w (format "#xt/interval-day-time %s" (pr-str [(interval->period-str i) (interval->duration-str i)]))))
+
+(defn interval-nano-reader [[p d]]
+  (Interval/ofNanos (Period/parse p) (Duration/parse d)))
+
+(defmethod print-dup Interval$MonthDayNano [i, ^Writer w]
+  (.write w (format "#xt/interval-nano %s" (pr-str [(interval->period-str i) (interval->duration-str i)]))))
+
+(defmethod print-method Interval$MonthDayNano [i ^Writer w]
   (print-dup i w))
 
-(defn interval-dt-reader [[p d]]
-  (IntervalDayTime. (Period/parse p) (Duration/parse d)))
+(defn interval-micro-reader [[p d]]
+  (Interval/ofMicros (Period/parse p) (Duration/parse d)))
 
-(defmethod print-dup IntervalDayTime [^IntervalDayTime i, ^Writer w]
-  (.write w (format "#xt/interval-dt %s" (pr-str [(str (.period i)) (str (.duration i))]))))
+(defmethod print-dup Interval$MonthDayMicro [i, ^Writer w]
+  (.write w (format "#xt/interval-micro %s" (pr-str [(interval->period-str i) (interval->duration-str i)]))))
 
-(defmethod print-method IntervalDayTime [i ^Writer w]
-  (print-dup i w))
-
-(defn interval-mdn-reader [[p d]]
-  (IntervalMonthDayNano. (Period/parse p) (Duration/parse d)))
-
-(defmethod print-dup IntervalMonthDayNano [^IntervalMonthDayNano i, ^Writer w]
-  (.write w (format "#xt/interval-mdn %s" (pr-str [(str (.period i)) (str (.duration i))]))))
-
-(defmethod print-method IntervalMonthDayNano [i ^Writer w]
-  (print-dup i w))
-
-(defn interval-mdm-reader [[p d]]
-  (IntervalMonthDayMicro. (Period/parse p) (Duration/parse d)))
-
-(defmethod print-dup IntervalMonthDayMicro [^IntervalMonthDayMicro i, ^Writer w]
-  (.write w (format "#xt/interval-mdm %s" (pr-str [(str (.period i)) (str (.duration i))]))))
-
-(defmethod print-method IntervalMonthDayMicro [i ^Writer w]
+(defmethod print-method Interval [i ^Writer w]
   (print-dup i w))
 
 (defn- render-tstz-range [^ZonedDateTimeRange range]
@@ -234,10 +230,10 @@
             "xtdb/runtime-err" (transit/read-handler runex-reader)
             "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
             "xtdb/period-duration" period-duration-reader
-            "xtdb.interval/year-month" interval-ym-reader
-            "xtdb.interval/day-time" interval-dt-reader
-            "xtdb.interval/month-day-nano" interval-mdn-reader
-            "xtdb.interval/month-day-micro" interval-mdm-reader
+            "xtdb/interval-month" interval-month-reader
+            "xtdb/interval-day-time" interval-day-time-reader
+            "xtdb/interval-micro" interval-micro-reader
+            "xtdb/interval-nano" interval-nano-reader
             "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
             "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
             "xtdb.tx/sql" (transit/read-handler sql-op-reader)
@@ -280,24 +276,14 @@
 
           ClojureForm (transit/write-handler "xtdb/clj-form" #(.form ^ClojureForm %))
 
-          IntervalYearMonth (transit/write-handler "xtdb.interval/year-month" #(str (.period ^IntervalYearMonth %)))
-
-          IntervalDayTime (transit/write-handler "xtdb.interval/day-time"
-                                                 #(vector (str (.period ^IntervalDayTime %))
-                                                          (str (.duration ^IntervalDayTime %))))
-
-          IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
-                                                      #(vector (str (.period ^IntervalMonthDayNano %))
-                                                               (str (.duration ^IntervalMonthDayNano %))))
-
-          IntervalMonthDayMicro (transit/write-handler "xtdb.interval/month-day-micro"
-                                                       #(vector (str (.period ^IntervalMonthDayMicro %))
-                                                                (str (.duration ^IntervalMonthDayMicro %))))
+          Interval$Month (transit/write-handler "xtdb/interval-month" interval->period-str)
+          Interval$DayTime (transit/write-handler "xtdb/interval-day-time" (juxt interval->period-str interval->duration-str))
+          Interval$MonthDayMicro (transit/write-handler "xtdb/interval-micro" (juxt interval->period-str interval->duration-str))
+          Interval$MonthDayNano (transit/write-handler "xtdb/interval-nano" (juxt interval->period-str interval->duration-str))
 
           ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
           ByteBuffer (transit/write-handler "xtdb/byte-array" #(str "0x" (Hex/encodeHexString (bb->ba %))))
           Path (transit/write-handler "xtdb/path" #(str %))
-
 
           Binding (transit/write-handler "xtdb.query/binding" render-binding)
           XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)

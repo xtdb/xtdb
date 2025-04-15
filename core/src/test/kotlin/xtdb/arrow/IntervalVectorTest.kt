@@ -6,11 +6,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.types.IntervalDayTime
-import xtdb.types.IntervalMonthDayMicro
-import xtdb.types.IntervalMonthDayNano
-import java.time.Duration
-import java.time.Period
+import xtdb.types.Interval
+import xtdb.types.Interval.*
+import kotlin.time.Duration.Companion.hours
 
 class IntervalVectorTest {
     private lateinit var allocator: BufferAllocator
@@ -27,40 +25,37 @@ class IntervalVectorTest {
 
     @Test
     fun testIntervalMonthDayNanoReadWrite() {
-        IntervalMonthDayNanoVector(allocator, "imdnv", false).use {
-            iv ->
-            iv.writeObject(IntervalMonthDayNano(Period.ofMonths(0), Duration.ofHours(1)))
-            iv.writeObject(IntervalMonthDayNano(Period.ofMonths(1), Duration.ofHours(0)))
+        IntervalMonthDayNanoVector(allocator, "imdnv", false).use { iv ->
+            iv.writeObject(MonthDayNano(0, 0, 1.hours.inWholeNanoseconds))
+            iv.writeObject(MonthDayNano(1, 0, 0))
 
             assertEquals(2, iv.valueCount)
-            assertEquals(IntervalMonthDayNano(Period.ofMonths(0), Duration.ofHours(1)), iv.getObject(0))
-            assertEquals(IntervalMonthDayNano(Period.ofMonths(1), Duration.ofHours(0)), iv.getObject(1))
+            assertEquals(MonthDayNano(0, 0, 1.hours.inWholeNanoseconds), iv.getObject(0))
+            assertEquals(MonthDayNano(1, 0, 0), iv.getObject(1))
         }
     }
 
     @Test
     fun testIntervalMonthDayMicroReadWrite() {
-        IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(allocator, "imdmv", false)).use {
-                iv ->
-            iv.writeObject(IntervalMonthDayMicro(Period.ofMonths(0), Duration.ofHours(1)))
-            iv.writeObject(IntervalMonthDayMicro(Period.ofMonths(1), Duration.ofHours(0)))
+        IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(allocator, "imdmv", false)).use { iv ->
+            iv.writeObject(MonthDayMicro(0, 0, 1.hours.inWholeNanoseconds))
+            iv.writeObject(MonthDayMicro(1, 0, 0))
 
             assertEquals(2, iv.valueCount)
-            assertEquals(IntervalMonthDayMicro(Period.ofMonths(0), Duration.ofHours(1)), iv.getObject(0))
-            assertEquals(IntervalMonthDayMicro(Period.ofMonths(1), Duration.ofHours(0)), iv.getObject(1))
+            assertEquals(MonthDayMicro(0, 0, 1.hours.inWholeNanoseconds), iv.getObject(0))
+            assertEquals(MonthDayMicro(1, 0, 0), iv.getObject(1))
         }
     }
 
     @Test
     fun testIntervalDayTimeReadWrite() {
-        IntervalDayTimeVector(allocator, "idtv", false).use {
-                iv ->
-            iv.writeObject(IntervalDayTime(Period.ofDays(0), Duration.ofHours(1)))
-            iv.writeObject(IntervalDayTime(Period.ofDays(1), Duration.ofHours(0)))
+        IntervalDayTimeVector(allocator, "idtv", false).use { iv ->
+            iv.writeObject(DayTime(0, 1.hours.inWholeMilliseconds.toInt()))
+            iv.writeObject(DayTime(1, 0))
 
             assertEquals(2, iv.valueCount)
-            assertEquals(IntervalDayTime(Period.ofDays(0), Duration.ofHours(1)), iv.getObject(0))
-            assertEquals(IntervalDayTime(Period.ofDays(1), Duration.ofHours(0)), iv.getObject(1))
+            assertEquals(DayTime(0, 1.hours.inWholeMilliseconds.toInt()), iv.getObject(0))
+            assertEquals(DayTime(1, 0), iv.getObject(1))
         }
     }
 }

@@ -19,6 +19,7 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
+           io.micrometer.core.instrument.Counter
            [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
            [java.lang AutoCloseable Thread$State]
            [java.net ServerSocket Socket SocketException URI]
@@ -30,7 +31,6 @@
            [java.util List Map Set UUID]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
-           io.micrometer.core.instrument.Counter
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector PeriodDuration]
@@ -40,7 +40,7 @@
            (xtdb.api Authenticator ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.query BoundQuery PreparedQuery)
-           [xtdb.types IntervalDayTime IntervalMonthDayMicro IntervalMonthDayNano IntervalYearMonth]
+           [xtdb.types Interval Interval$DayTime Interval$Month Interval$MonthDayMicro Interval$MonthDayNano]
            [xtdb.vector IVectorReader RelationReader]))
 
 ;; references
@@ -650,10 +650,7 @@
     (instance? Duration obj) (str obj)
     (instance? Period obj) (str obj)
 
-    (instance? IntervalYearMonth obj) (str obj)
-    (instance? IntervalDayTime obj) (str obj)
-    (instance? IntervalMonthDayNano obj) (str obj)
-    (instance? IntervalMonthDayMicro obj) (str obj)
+    (instance? Interval obj) (str obj)
 
     ;; represent period duration as an iso8601 duration string (includes period components)
     (instance? PeriodDuration obj)

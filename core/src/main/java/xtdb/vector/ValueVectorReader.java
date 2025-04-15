@@ -28,10 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
-import xtdb.types.IntervalDayTime;
-import xtdb.types.IntervalMonthDayMicro;
-import xtdb.types.IntervalMonthDayNano;
-import xtdb.types.IntervalYearMonth;
+import xtdb.types.Interval;
 import xtdb.util.Hasher;
 import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.IntervalMonthDayMicroVector;
@@ -452,6 +449,7 @@ public class ValueVectorReader implements IVectorReader {
             public BigDecimal getObject(int idx) {
                 return v.getObject(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
                 return hasher.hash(v.getObject(idx).doubleValue());
@@ -465,6 +463,7 @@ public class ValueVectorReader implements IVectorReader {
             public BigDecimal getObject(int idx) {
                 return v.getObject(idx);
             }
+
             @Override
             public int hashCode0(int idx, Hasher hasher) {
                 return hasher.hash(v.getObject(idx).doubleValue());
@@ -848,7 +847,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-                return new IntervalYearMonth(Period.ofMonths(getInt(idx)));
+                return new Interval.Month(getInt(idx));
             }
 
             @Override
@@ -874,9 +873,9 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            protected IntervalDayTime getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Interval getObject0(int idx, IKeyFn<?> keyFn) {
                 v.get(idx, holder);
-                return new IntervalDayTime(Period.ofDays(holder.days), Duration.ofMillis(holder.milliseconds));
+                return new Interval.DayTime(holder.days, holder.milliseconds);
             }
 
             @Override
@@ -885,8 +884,8 @@ public class ValueVectorReader implements IVectorReader {
                     @Override
                     public PeriodDuration readObject() {
                         // return PeriodDuration as it's still required by the EE
-                        IntervalDayTime idt = getObject0(pos.getPosition(), (k) -> k);
-                        return new PeriodDuration(idt.period, idt.duration);
+                        Interval i = getObject0(pos.getPosition(), (k) -> k);
+                        return new PeriodDuration(i.getPeriod(), i.getDuration());
                     }
                 };
             }
@@ -904,9 +903,9 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
+            protected Interval getObject0(int idx, IKeyFn<?> keyFn) {
                 v.get(idx, holder);
-                return new IntervalMonthDayNano(Period.of(0, holder.months, holder.days), Duration.ofNanos(holder.nanoseconds));
+                return new Interval.MonthDayNano(holder.months, holder.days, holder.nanoseconds);
             }
 
             @Override
@@ -915,7 +914,8 @@ public class ValueVectorReader implements IVectorReader {
                     @Override
                     public PeriodDuration readObject() {
                         // return PeriodDuration as it's still required by the EE
-                        return v.getObject(pos.getPosition());
+                        var i = getObject0(pos.getPosition(), null);
+                        return new PeriodDuration(i.getPeriod(), i.getDuration());
                     }
                 };
             }
@@ -934,8 +934,8 @@ public class ValueVectorReader implements IVectorReader {
         return new ValueVectorReader(v) {
             @Override
             protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-                IntervalMonthDayNano inner = (IntervalMonthDayNano) underlyingVec.getObject(idx, keyFn);
-                return new IntervalMonthDayMicro(inner.period, inner.duration);
+                var mdn = (Interval.MonthDayNano) underlyingVec.getObject(idx, keyFn);
+                return new Interval.MonthDayMicro(mdn.getMonths(), mdn.getDays(), mdn.getNanos());
             }
 
             @Override
