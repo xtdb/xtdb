@@ -10,7 +10,7 @@ Additionally XTDB allows for INSERTs into tables that don't exist until the mome
 
 The only hard requirement in XTDB is that all INSERTs to any table must specify a value for the `_id` column. This is a mandatory, user-provided primary key that is unique per table (i.e. the same `_id` can be safely used in isolation across multiple tables).
 
-Due to internal optimizations within the primary index structure, UUIDv7 values are the default recommendation for `_id` in XTDB databases.
+UUIDv4 values are the default recommendation for `_id` in XTDB databases, due to the HAMT-based design of the primary index.
 
 For details about the exact range of supported data types, see link:/reference/main/data-types[XTDB Data Types].
 
