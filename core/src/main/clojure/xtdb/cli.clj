@@ -125,7 +125,7 @@
                                                          (pgw/open-playground {:port playground-port}))
                                        compactor-only? (do
                                                          (log/info "Starting in compact-only mode...")
-                                                         (xtn/start-compactor (xtn/->config node-opts)))
+                                                         (xtn/start-compactor node-opts))
                                        :else (xtn/start-node node-opts))]
                 (log/info "Node started")
                 ;; NOTE: This isn't registered until the node manages to start up
