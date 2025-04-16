@@ -23,6 +23,7 @@ interface LiveIndex : Watermark.Source, AutoCloseable {
 
     val latestCompletedTx: TransactionKey?
     val latestCompletedBlockTx: TransactionKey?
+    val latestBlockIndex: Long
 
     fun liveTable(name: String): LiveTable
     val liveTables: Iterable<String>

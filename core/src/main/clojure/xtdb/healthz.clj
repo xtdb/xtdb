@@ -13,13 +13,19 @@
            (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
            [java.lang AutoCloseable]
            org.eclipse.jetty.server.Server
+           xtdb.BufferPoolKt
            (xtdb.api Xtdb$Config) 
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
-           xtdb.indexer.LogProcessor))
+           (xtdb.indexer LiveIndex LogProcessor)))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
   (.getIngestionError log-processor))
+
+(defn- ->block-lag [{:keys [buffer-pool ^LiveIndex live-index]}]
+  ;; we could add a gauge for this too
+  (max 0 (- (BufferPoolKt/getLatestAvailableBlockIndex buffer-pool)
+            (.getLatestBlockIndex live-index))))
 
 (def router
   (http/router [["/metrics" {:name :metrics
@@ -41,10 +47,17 @@
                                                        :body "Started."}))))}]
 
                 ["/healthz/alive" {:name :alive
-                                   :get (fn [{:keys [log-processor]}]
-                                          (if-let [ingestion-error (get-ingestion-error log-processor)]
-                                            {:status 503, :body (str "Ingestion error - " ingestion-error)}
-                                            {:status 200, :body "Alive."}))}]
+                                   :get (fn [{:keys [log-processor] :as ctx}]
+                                          (or (when-let [ingestion-error (get-ingestion-error log-processor)]
+                                                {:status 503, :body (str "Ingestion error - " ingestion-error)})
+
+                                              (let [block-lag (->block-lag ctx)
+                                                    block-lag-healthy? (<= block-lag 5)]
+                                                (-> (if block-lag-healthy?
+                                                      {:status 200, :body "Alive."}
+                                                      {:status 503, :body "Unhealthy - see headers for more info."})
+                                                    (assoc :headers {"X-XTDB-Block-Lag" (str block-lag)
+                                                                     "X-XTDB-Block-Lag-Healthy" (str block-lag-healthy?)})))))}]
 
                 ["/healthz/ready" {:name :ready
                                    :get (fn [_] {:status 200, :body "Ready."})}]]
@@ -72,12 +85,16 @@
   {:port (.getPort config) 
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :log-processor (ig/ref :xtdb.log/processor)
+   :buffer-pool (ig/ref :xtdb/buffer-pool)
+   :live-index (ig/ref :xtdb.indexer/live-index)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, ^LogProcessor log-processor]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, ^LogProcessor log-processor, buffer-pool live-index]}]
   (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
         ^Server server (-> (handler {:prometheus-registry prometheus-registry
                                      :log-processor log-processor
+                                     :buffer-pool buffer-pool
+                                     :live-index live-index
                                      :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
                                      :node node})
                            (j/run-jetty {:port port, :async? true, :join? false}))]

@@ -51,7 +51,6 @@
                                    (.getAllColumnFields))
                            (comp set keys))))
 
-
 (deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log, compactor
                     ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
 
@@ -70,6 +69,7 @@
   xtdb.indexer.LiveIndex
   (getLatestCompletedTx [_] latest-completed-tx)
   (getLatestCompletedBlockTx [_] latest-completed-block-tx)
+  (getLatestBlockIndex [_] (.getBlockIdx row-counter))
 
   (liveTable [_ table-name] (.get tables table-name))
 

@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.healthz :as healthz]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
 
@@ -89,3 +90,21 @@
             (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
               (t/is (= 500 (:status resp)))
               (t/is (re-find #"Exception when calling endpoint - java.lang.Exception: Some server error." (:body resp))))))))))
+
+(t/deftest test-block-lag-healthy-4364
+  (let [port (tu/free-port)]
+    (with-open [_node (xtn/start-node {:healthz {:port port}})]
+      (t/testing "server thrown error responds with reasonable message"
+        (letfn [(alive-resp []
+                  (let [{:keys [status headers]} (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+                    [status (select-keys headers ["X-XTDB-Block-Lag" "X-XTDB-Block-Lag-Healthy"])]))]
+          (t/is (= [200 {"X-XTDB-Block-Lag" "0", "X-XTDB-Block-Lag-Healthy" "true"}]
+                   (alive-resp)))
+
+          (with-redefs [healthz/->block-lag (fn [_] 5)]
+            (t/is (= [200 {"X-XTDB-Block-Lag" "5", "X-XTDB-Block-Lag-Healthy" "true"}]
+                   (alive-resp))))
+
+          (with-redefs [healthz/->block-lag (fn [_] 6)]
+            (t/is (= [503 {"X-XTDB-Block-Lag" "6", "X-XTDB-Block-Lag-Healthy" "false"}]
+                     (alive-resp)))))))))
