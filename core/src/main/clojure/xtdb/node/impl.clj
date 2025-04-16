@@ -313,9 +313,9 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-compactor ^xtdb.api.Xtdb$CompactorNode [opts]
-  (try
-    (->CompactorNode (-> (compactor-system opts) ig/prep ig/init)
-                     (atom false))
-    (catch clojure.lang.ExceptionInfo e
-      (ig/halt! (:system (ex-data e)))
-      (throw (ex-cause e)))))
+  (let [system (-> (compactor-system opts) ig/prep ig/init)]
+    (try
+      (->CompactorNode system (atom false))
+      (catch clojure.lang.ExceptionInfo e
+        (ig/halt! system)
+        (throw (ex-cause e))))))
