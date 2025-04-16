@@ -296,24 +296,9 @@
     (when (compare-and-set! !closing? false true)
       (ig/halt! system))))
 
-(defn- compactor-system [^Xtdb$Config opts]
-  (let [healthz (.getHealthz opts)]
-    (-> {:xtdb/config opts
-         :xtdb/allocator {}
-         :xtdb/block-catalog {}
-         :xtdb/table-catalog {}
-         :xtdb/trie-catalog {}
-         :xtdb.metadata/metadata-manager {}
-         :xtdb/compactor (.getCompactor opts)
-         :xtdb.metrics/registry {}
-         :xtdb/log (.getLog opts)
-         :xtdb/buffer-pool (.getStorage opts)}
-        (cond-> healthz (assoc :xtdb/healthz healthz))
-        (doto ig/load-namespaces))))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-compactor ^xtdb.api.Xtdb$CompactorNode [opts]
-  (let [system (-> (compactor-system opts) ig/prep ig/init)]
+  (let [system (-> (node-system opts) ig/prep (ig/init [:xtdb/compactor]))]
     (try
       (->CompactorNode system (atom false))
       (catch clojure.lang.ExceptionInfo e
