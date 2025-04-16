@@ -1,12 +1,17 @@
 package xtdb
 
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.Relation
 import xtdb.arrow.unsupported
+import xtdb.util.StringUtil.fromLexHex
+import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.toJavaDuration
 
 interface BufferPool : AutoCloseable {
     /**
@@ -21,7 +26,7 @@ interface BufferPool : AutoCloseable {
      *
      * Throws if not an arrow file.
      */
-    fun getFooter (key: Path): ArrowFooter
+    fun getFooter(key: Path): ArrowFooter
 
     /**
      * Returns a record batch of the given arrow file.
@@ -69,4 +74,23 @@ interface BufferPool : AutoCloseable {
             override fun close() = Unit
         }
     }
+
 }
+
+private fun Path.parseBlockIndex(): Long? =
+    Regex("b(\\p{XDigit}+)\\.binpb")
+        .matchEntire(toString())
+        ?.groups?.get(1)
+        ?.value?.fromLexHex
+
+private val latestAvailableBlockCache =
+    Caffeine.newBuilder().expireAfterWrite(1.minutes.toJavaDuration()).build<BufferPool, Long>()
+
+val BufferPool.latestAvailableBlockIndex0: Long
+    get() =
+        listAllObjects("blocks".asPath)
+            .lastOrNull()?.key?.fileName?.parseBlockIndex()
+            ?: -1
+
+val BufferPool.latestAvailableBlockIndex: Long
+    get() = latestAvailableBlockCache.get(this) { it.latestAvailableBlockIndex0 }

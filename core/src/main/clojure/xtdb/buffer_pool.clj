@@ -2,9 +2,7 @@
   (:require [integrant.core :as ig]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import [java.nio.file Path]
-           (org.apache.arrow.vector VectorSchemaRoot)
-           (xtdb BufferPool)
+  (:import (xtdb BufferPool)
            (xtdb.api.storage Storage Storage$Factory)
            xtdb.api.Xtdb$Config))
 
@@ -60,3 +58,6 @@
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))
+
+(defn <-node ^xtdb.BufferPool [node]
+  (util/component node :xtdb/buffer-pool))

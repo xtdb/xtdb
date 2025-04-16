@@ -7,7 +7,8 @@
             [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.buffer-pool :as bp])
   (:import (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (java.io File)
            (java.nio ByteBuffer)
@@ -19,7 +20,7 @@
            (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
            (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
-           xtdb.BufferPool
+           (xtdb BufferPool BufferPoolKt)
            xtdb.cache.DiskCache))
 
 (defonce tmp-dirs (atom []))
@@ -232,3 +233,32 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/VERSION tu/*allocator* (SimpleMeterRegistry.))]
       (test-list-objects bp))))
+
+(t/deftest test-latest-available-block
+  (tu/with-tmp-dirs #{tmp-dir}
+    (with-open [node1 (xtn/start-node {:storage [:local {:path tmp-dir}]
+                                       :compactor {:threads 0}})
+                node2 (xtn/start-node {:storage [:local {:path tmp-dir}]
+                                       :compactor {:threads 0}})]
+      (let [bp1 (bp/<-node node1)
+            bp2 (bp/<-node node2)]
+        (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
+        (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2)))
+
+        (xt/execute-tx node1 [[:put-docs :foo {:xt/id :foo}]])
+        (tu/finish-block! node1)
+
+        (t/testing "cached"
+          (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
+          (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2))))
+
+        (t/testing "live"
+          (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
+          (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))
+
+        (xt/execute-tx node1 [[:put-docs :foo {:xt/id :bar}]])
+        (tu/finish-block! node1)
+
+        (t/testing "live"
+          (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
+          (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))))))
