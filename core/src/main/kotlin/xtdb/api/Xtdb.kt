@@ -26,6 +26,8 @@ interface Xtdb : AutoCloseable {
     val serverPort: Int
     val serverReadOnlyPort: Int
 
+    interface CompactorNode : AutoCloseable
+
     fun <T : XtdbModule> module(type: Class<T>): T?
 
     fun addMeterRegistry(meterRegistry: MeterRegistry)
@@ -74,6 +76,8 @@ interface Xtdb : AutoCloseable {
         fun modules(modules: List<XtdbModule.Factory>) = apply { this.modules += modules }
 
         fun open(): Xtdb = requiringResolve("xtdb.node.impl/open-node").invoke(this) as Xtdb
+
+        fun openCompactor() = requiringResolve("xtdb.node.impl/open-compactor").invoke(this) as CompactorNode
     }
 
     companion object {

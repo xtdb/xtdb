@@ -22,7 +22,7 @@
            java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api TransactionKey TransactionResult Xtdb Xtdb$Config)
+           (xtdb.api TransactionKey TransactionResult Xtdb Xtdb$Config Xtdb$CompactorNode)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
@@ -286,6 +286,36 @@
                  :close-fn #(when (compare-and-set! !closing false true)
                               (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system)))))))
+    (catch clojure.lang.ExceptionInfo e
+      (ig/halt! (:system (ex-data e)))
+      (throw (ex-cause e)))))
+
+(defrecord CompactorNode [system !closing?]
+  Xtdb$CompactorNode
+  (close [_]
+    (when (compare-and-set! !closing? false true)
+      (ig/halt! system))))
+
+(defn- compactor-system [^Xtdb$Config opts]
+  (let [healthz (.getHealthz opts)]
+    (-> {:xtdb/config opts
+         :xtdb/allocator {}
+         :xtdb/block-catalog {}
+         :xtdb/table-catalog {}
+         :xtdb/trie-catalog {}
+         :xtdb.metadata/metadata-manager {}
+         :xtdb/compactor (.getCompactor opts)
+         :xtdb.metrics/registry {}
+         :xtdb/log (.getLog opts)
+         :xtdb/buffer-pool (.getStorage opts)}
+        (cond-> healthz (assoc :xtdb/healthz healthz))
+        (doto ig/load-namespaces))))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn open-compactor ^xtdb.api.Xtdb$CompactorNode [opts]
+  (try
+    (->CompactorNode (-> (compactor-system opts) ig/prep ig/init)
+                     (atom false))
     (catch clojure.lang.ExceptionInfo e
       (ig/halt! (:system (ex-data e)))
       (throw (ex-cause e)))))

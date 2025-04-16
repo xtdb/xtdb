@@ -96,3 +96,18 @@
 
   (^xtdb.api.Xtdb [opts]
    (Xtdb/openNode (->config opts))))
+
+(defn start-compactor
+  "Starts an in-process compactor-only node with the given configuration.
+
+  Accepts various parameter types:
+  - An 'edn' map containing configuration options for the node.
+  - An instance of 'xtdb.api.Xtdb$Config'.
+  - An instance of 'java.io.File' pointing to an existing '.yaml' configuration file.
+  - An instance of 'java.nio.file.Path' pointing to an existing '.yaml' configuration file.
+
+  This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources.
+
+  For more information on the configuration options, see the relevant module pages in the [Clojure docs](https://docs.xtdb.com/drivers/clojure/codox/index.html)"
+  ^xtdb.api.Xtdb$CompactorNode [opts]
+  (.openCompactor (->config opts)))

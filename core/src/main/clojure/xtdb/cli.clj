@@ -27,6 +27,9 @@
     :validate [if-it-exists "Config file doesn't exist"
                #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]]
 
+   [nil "--compactor-only" "Starts a node that only runs the compactor"
+    :id :compactor-only?]
+
    [nil "--migrate-from VERSION" "Migrates the database from the given version to the latest schema version"
     :id :migrate-from-version 
     :parse-fn parse-long]
@@ -58,7 +61,7 @@
 
       (:help options) {::help summary}
 
-      :else (let [{:keys [file playground-port migrate-from-version]} options]
+      :else (let [{:keys [file playground-port migrate-from-version compactor-only?]} options]
               (cond
                 (and file playground-port)
                 {::errors ["Cannot specify both a config file and the playground option"]}
@@ -76,7 +79,8 @@
                                                                    file (or (some-> (io/file "xtdb.edn") if-it-exists)
                                                                             (some-> (io/resource "xtdb.edn") (io/file))))
                                                                  edn-file->config-opts)]
-                                     (or yaml-file edn-file-config {}))})))))
+                                     (or yaml-file edn-file-config {}))
+                       ::compactor-only? (boolean compactor-only?)})))))
 
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
@@ -102,7 +106,7 @@
   (logging/set-from-env! (System/getenv))
 
   (try
-    (let [{::keys [errors help migrate-from-version playground-port node-opts force?]} (parse-args args)]
+    (let [{::keys [errors help compactor-only? migrate-from-version playground-port node-opts force?]} (parse-args args)]
       (cond
         errors (binding [*out* *err*]
                  (doseq [error errors]
@@ -115,9 +119,14 @@
 
         migrate-from-version (System/exit (mig/migrate-from migrate-from-version node-opts {:force? force?}))
 
-        :else (util/with-open [_node (if playground-port
-                                       (pgw/open-playground {:port playground-port})
-                                       (xtn/start-node node-opts))]
+        :else (util/with-open [_node (cond
+                                       playground-port (do
+                                                         (log/info "Starting in playground mode...")
+                                                         (pgw/open-playground {:port playground-port}))
+                                       compactor-only? (do
+                                                         (log/info "Starting in compact-only mode...")
+                                                         (xtn/start-compactor node-opts))
+                                       :else (xtn/start-node node-opts))]
                 (log/info "Node started")
                 ;; NOTE: This isn't registered until the node manages to start up
                 ;; cleanly, so ctrl-c keeps working as expected in case the node

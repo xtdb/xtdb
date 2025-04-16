@@ -72,3 +72,9 @@ compactor:
   # Set to 0 to disable the compactor.
   threads: 4
 ----
+
+=== CLI flags
+
+The following flags can be passed, either directly to the CLI or via Docker's arguments:
+
+* `--compactor-only`: runs a compactor-only node.
