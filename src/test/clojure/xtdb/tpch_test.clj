@@ -7,7 +7,7 @@
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.datasets.tpch.xtql :as tpch-xtql]
             xtdb.sql-test
-            [xtdb.sql.plan :as plan]
+            [xtdb.sql :as sql]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.nio.file Path)
@@ -158,11 +158,9 @@
   (dotimes [n 22]
     (let [n (inc n)]
       (when (contains? *qs* n)
-        (t/is (=plan-file
-               (format "tpch/q%02d" n)
-               (-> (plan/plan-statement (slurp-sql-query n)
-                                        {:table-info tpch-table-info})
-                   plan/->logical-plan))
+        (t/is (=plan-file (format "tpch/q%02d" n)
+                          (sql/plan (slurp-sql-query n)
+                                    {:table-info tpch-table-info}))
               (format "Q%02d" n))))))
 
 (defn test-sql-query

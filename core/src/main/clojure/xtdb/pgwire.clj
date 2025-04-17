@@ -13,7 +13,7 @@
             [xtdb.node.impl]
             [xtdb.protocols :as xtp]
             [xtdb.query]
-            [xtdb.sql.plan :as plan]
+            [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -33,7 +33,6 @@
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           [org.apache.arrow.vector PeriodDuration]
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.commons.codec.binary Hex]
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
@@ -419,12 +418,12 @@
 (defn date-time-visitor [^ZoneId default-tz]
   (reify SqlVisitor
     (visitDateLiteral [_ ctx]
-      (-> (LocalDate/parse (.accept (.characterString ctx) plan/string-literal-visitor))
+      (-> (LocalDate/parse (.accept (.characterString ctx) sql/string-literal-visitor))
           (.atStartOfDay)
           (.atZone default-tz)))
 
     (visitTimestampLiteral [_ ctx]
-      (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) plan/string-literal-visitor))]
+      (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) sql/string-literal-visitor))]
         (cond
           (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts default-tz)
           (instance? ZonedDateTime ts) ts)))))
@@ -442,13 +441,13 @@
           (letfn [(subsql [^ParserRuleContext ctx]
                     (subs sql (.getStartIndex (.getStart ctx)) (inc (.getStopIndex (.getStop ctx)))))]
             (->> (antlr/parse-multi-statement sql)
-                 (mapv (partial plan/accept-visitor
+                 (mapv (partial sql/accept-visitor
                                 (reify SqlVisitor
                                   (visitSetSessionVariableStatement [_ ctx]
                                     {:statement-type :set-session-parameter
                                      :parameter (session-param-name (.identifier ctx))
                                      :value (-> (.literal ctx)
-                                                (plan/plan-expr {:default-tz default-tz}))})
+                                                (sql/plan-expr {:default-tz default-tz}))})
 
                                   (visitSetSessionCharacteristicsStatement [this ctx]
                                     {:statement-type :set-session-characteristics
@@ -477,11 +476,11 @@
 
                                   (visitReadWriteTransaction [this ctx]
                                     (into {:access-mode :read-write}
-                                          (mapcat (partial plan/accept-visitor this) (.readWriteTxOption ctx))))
+                                          (mapcat (partial sql/accept-visitor this) (.readWriteTxOption ctx))))
 
                                   (visitReadOnlyTransaction [this ctx]
                                     (into {:access-mode :read-only}
-                                          (mapcat (partial plan/accept-visitor this) (.readOnlyTxOption ctx))))
+                                          (mapcat (partial sql/accept-visitor this) (.readOnlyTxOption ctx))))
 
                                   (visitReadWriteSession [_ _] {:access-mode :read-write})
 
@@ -538,7 +537,7 @@
                                     (let [q {:statement-type :query, :explain? (boolean (.EXPLAIN ctx))
                                              :query (subsql ctx), :parsed-query ctx}]
                                       (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
-                                           (transduce (keep (partial plan/accept-visitor this)) conj q))))
+                                           (transduce (keep (partial sql/accept-visitor this)) conj q))))
 
                                   ;; could do pre-submit validation here
                                   (visitCreateUserStatement [_ ctx]
@@ -551,12 +550,12 @@
                                   (visitPrepareStatement [this ctx]
                                     (let [inner-ctx (.directlyExecutableStatement ctx)]
                                       {:statement-type :prepare
-                                       :statement-name (str (plan/identifier-sym (.statementName ctx)))
+                                       :statement-name (str (sql/identifier-sym (.statementName ctx)))
                                        :inner (.accept inner-ctx this)}))
 
                                   (visitExecuteStmt [_ ctx]
                                     {:statement-type :execute,
-                                     :statement-name (str (plan/identifier-sym (.statementName (.executeStatement ctx)))),
+                                     :statement-name (str (sql/identifier-sym (.statementName (.executeStatement ctx)))),
                                      :query (subsql ctx)
                                      :parsed-query ctx})
 
@@ -566,18 +565,18 @@
 
                                   (visitSettingClockTime [_ ctx]
                                     [:current-time (-> (.clockTime ctx)
-                                                       (plan/plan-expr {:default-tz default-tz})
+                                                       (sql/plan-expr {:default-tz default-tz})
                                                        (time/->instant))])
 
                                   (visitSettingSnapshotTime [_ ctx]
-                                    [:snapshot-time (-> (plan/plan-expr (.snapshotTime ctx) {:default-tz default-tz})
+                                    [:snapshot-time (-> (sql/plan-expr (.snapshotTime ctx) {:default-tz default-tz})
                                                         (time/->instant {:default-tz default-tz}))])
 
                                   (visitShowVariableStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})
 
                                   (visitSetWatermarkStatement [_ ctx]
-                                    (let [wm-tx-id (plan/plan-expr (.literal ctx))]
+                                    (let [wm-tx-id (sql/plan-expr (.literal ctx))]
                                       (if (number? wm-tx-id)
                                         {:statement-type :set-watermark, :watermark-tx-id wm-tx-id}
                                         (throw (client-err "invalid watermark - expecting number")))))
@@ -1565,7 +1564,7 @@
 
             (when-let [warnings (.warnings pq)]
               (doseq [warning warnings]
-                (cmd-send-notice conn (notice-warning (plan/error-string warning)))))
+                (cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
             (assoc stmt
                    :prepared-query pq

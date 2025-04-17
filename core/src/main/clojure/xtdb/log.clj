@@ -5,7 +5,7 @@
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             xtdb.protocols
-            [xtdb.sql.plan :as plan]
+            [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -62,8 +62,8 @@
 
         (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count arg-rows)))]
           (util/build-arrow-ipc-byte-buffer root :stream
-                                            (fn [write-page!]
-                                              (write-page!))))
+            (fn [write-page!]
+              (write-page!))))
 
         (finally
           (run! util/try-close vecs))))))
@@ -191,7 +191,7 @@
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
         TxOp$Sql (let [^TxOp$Sql tx-op tx-op]
-                   (if-let [put-docs-ops (plan/sql->static-ops (.sql tx-op) (.argRows tx-op) {:default-tz default-tz})]
+                   (if-let [put-docs-ops (sql/sql->static-ops (.sql tx-op) (.argRows tx-op) {:default-tz default-tz})]
                      (doseq [op put-docs-ops]
                        (@!write-put! op))
 
@@ -232,12 +232,12 @@
 (defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src]}]
   (doto config
     (.setLog (cond-> (Log/getInMemoryLog)
-                   instant-src (.instantSource instant-src)))))
+               instant-src (.instantSource instant-src)))))
 
 (defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src]}]
   (doto config
     (.setLog (cond-> (Log/localLog (util/->path path))
-                   instant-src (.instantSource instant-src)))))
+               instant-src (.instantSource instant-src)))))
 
 (defmethod xtn/apply-config! :xtdb/log [config _ [tag opts]]
   (xtn/apply-config! config

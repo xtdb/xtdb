@@ -15,7 +15,6 @@
             [xtdb.rewrite :as r :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
-            [xtdb.sql.plan :as plan]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -349,8 +348,8 @@
               {:live-table-tx live-idx-tx, :query-rel in-rel}
 
             (let [iid (.getBytes iid-rdr idx)]
-            (-> (.liveTable live-idx-tx table)
-                (.logErase iid)))))))))
+              (-> (.liveTable live-idx-tx table)
+                  (.logErase iid)))))))))
 
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, query, tx-opts]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
@@ -459,13 +458,13 @@
                                                   {:valid-from valid-from
                                                    :valid-to valid-to})))
 
-                        (let [pq (.prepareRaQuery q-src (-> (plan/plan-patch {:table-info (plan/xform-table-info (scan/tables-with-cols wm-src))}
-                                                                             {:table (symbol table-name)
-                                                                              :valid-from valid-from
-                                                                              :valid-to valid-to
-                                                                              :patch-rel (plan/->QueryExpr '[:table [_iid doc]
-                                                                                                             ?patch_docs]
-                                                                                                           '[_iid doc])})
+                        (let [pq (.prepareRaQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols wm-src))}
+                                                                            {:table (symbol table-name)
+                                                                             :valid-from valid-from
+                                                                             :valid-to valid-to
+                                                                             :patch-rel (sql/->QueryExpr '[:table [_iid doc]
+                                                                                                           ?patch_docs]
+                                                                                                         '[_iid doc])})
                                                             (lp/rewrite-plan))
                                                   wm-src tx-opts)
                               args (vr/rel-reader [(SingletonListReader.
@@ -552,11 +551,7 @@
       (indexOp [_ tx-op-idx]
         (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
           (let [query-str (.getObject query-rdr tx-op-idx)
-                compiled-query (sql/compile-query query-str {:table-info (scan/tables-with-cols wm-src)
-                                                             :arg-fields (some-> args-arrow-rdr
-                                                                                 .getVectorSchemaRoot
-                                                                                 .getSchema
-                                                                                 (.getFields))})
+                compiled-query (.planQuery q-src query-str wm-src {})
                 param-count (:param-count (meta compiled-query))]
 
             (zmatch (r/vector-zip compiled-query)

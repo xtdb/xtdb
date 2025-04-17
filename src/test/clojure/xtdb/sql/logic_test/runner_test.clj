@@ -48,8 +48,6 @@ SELECT t1.a FROM t1
 104
 ")]
 
-
-
     (t/is (= 3 (count records)))
     (t/is (= {:t1 '[a b c d e]} (:tables (:db-engine (slt/execute-records tu/*node* records)))))))
 

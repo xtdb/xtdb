@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.expression]
-            [xtdb.sql.plan :as plan]
+            [xtdb.sql :as sql]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import java.time.ZonedDateTime
@@ -12,19 +12,17 @@
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (def foo-scope
-  (plan/map->BaseTable (-> '{:table-name foo
-                             :table-alias foo
-                             :unique-table-alias f
-                             :cols #{a b}}
-                           (assoc :!reqd-cols (HashMap.)))))
+  (sql/map->BaseTable (-> '{:table-name foo
+                            :table-alias foo
+                            :unique-table-alias f
+                            :cols #{a b}}
+                          (assoc :!reqd-cols (HashMap.)))))
 
 (defn plan-expr-with-foo [expr]
-  (plan/plan-expr expr {:scope foo-scope}))
+  (sql/plan-expr expr {:scope foo-scope}))
 
 (t/deftest test-trim-expr
-  (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
-
+  (t/are [sql expected] (= expected (plan-expr-with-foo sql))
     "TRIM(foo.a)" '(trim f/a " ")
 
     "TRIM(LEADING FROM foo.a)" '(trim-leading f/a " ")
@@ -44,9 +42,7 @@
     "TRIM('$' FROM foo.a)" '(trim f/a "$")))
 
 (t/deftest test-like-expr
-  (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
-
+  (t/are [sql expected] (= expected (plan-expr-with-foo sql))
     "foo.a LIKE ''" '(like f/a "")
     "foo.a LIKE foo.b" '(like f/a f/b)
     "foo.a LIKE 'foo%'" '(like f/a "foo%")
@@ -59,9 +55,7 @@
     ))
 
 (t/deftest test-like-regex-expr
-  (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
-
+  (t/are [sql expected] (= expected (plan-expr-with-foo sql))
     "foo.a LIKE_REGEX foo.b" '(like-regex f/a f/b "")
     "foo.a LIKE_REGEX foo.b FLAG 'i'" '(like-regex f/a f/b "i")
 
@@ -182,7 +176,7 @@
 
 (t/deftest test-numerical-fn-exprs
   (t/are [expr expected]
-         (= expected (plan-expr-with-foo expr))
+      (= expected (plan-expr-with-foo expr))
     "CARDINALITY(foo.a)" '(cardinality f/a)
     "ABS(foo.a)" '(abs f/a)
     "MOD(foo.a, foo.b)" '(mod f/a f/b)
@@ -202,12 +196,12 @@
 
 (t/deftest test-interval-abs
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql)) 
+      (= expected (plan-expr-with-foo sql)) 
     "ABS(INTERVAL '1' YEAR)" '(abs (single-field-interval "1" "YEAR" 2 6))))
 
 (t/deftest test-boolean-predicate-exprs
   (t/are [expr expected]
-         (= expected (plan-expr-with-foo expr))
+      (= expected (plan-expr-with-foo expr))
     "1 > 2" '(> 1 2)
     "1 >= 2" '(>= 1 2)
     "1 < 2" '(< 1 2)
@@ -222,7 +216,7 @@
 
 (t/deftest test-overlay-expr
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
     "OVERLAY(foo.a PLACING foo.b FROM 1 for 4)" '(overlay f/a f/b 1 4)
     "OVERLAY(foo.a PLACING foo.b FROM 1)" '(overlay f/a f/b 1 (default-overlay-length f/b))))
 
@@ -235,7 +229,7 @@
 
 (t/deftest test-bool-test-expr
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "foo.a IS true" '(true? f/a)
     "foo.a IS NOT true" '(not (true? f/a))
@@ -251,7 +245,7 @@
 
 (t/deftest test-interval-exprs
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
     "INTERVAL '1' YEAR + INTERVAL '3' MONTH + INTERVAL '4' DAY" '(+ (+ (single-field-interval "1" "YEAR" 2 6)
                                                                        (single-field-interval "3" "MONTH" 2 6))
                                                                     (single-field-interval "4" "DAY" 2 6))
@@ -332,7 +326,7 @@
 
 (t/deftest test-array-construction
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "ARRAY []" []
 
@@ -360,7 +354,7 @@
 
 (t/deftest test-object-construction
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "OBJECT ()" {}
     "OBJECT (foo: 2)" {:foo 2}
@@ -376,7 +370,7 @@
 
 (t/deftest test-object-field-access
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "OBJECT(foo: 2).foo" '(. {:foo 2} :foo)
     "{foo: 2}.foo" '(. {:foo 2} :foo)
@@ -389,7 +383,7 @@
 
 (t/deftest test-array-expressions
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "[1,2]" [1 2]
     "[1,2] || foo.a" '(concat [1 2] f/a)
@@ -397,7 +391,7 @@
 
 (t/deftest test-array-trim
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "TRIM_ARRAY(NULL, 2)" '(trim-array nil 2)
     "TRIM_ARRAY(foo.a, 2)" '(trim-array f/a 2)
@@ -406,7 +400,7 @@
 
 (t/deftest test-cast
   (t/are [sql expected]
-         (= expected (plan-expr-with-foo sql))
+      (= expected (plan-expr-with-foo sql))
 
     "CAST(NULL AS INT)" '(cast nil :i32)
     "CAST(NULL AS INTEGER)" '(cast nil :i32)
@@ -421,7 +415,7 @@
 (t/deftest test-postgres-cast-syntax
   (t/testing "planning"
     (t/are [sql expected]
-           (= expected (plan-expr-with-foo sql))
+        (= expected (plan-expr-with-foo sql))
 
       "NULL::INT" '(cast nil :i32)
       "foo.a::INT" '(cast f/a :i32)
@@ -496,7 +490,7 @@
   ;;
   ;;TODO add interval(9) syntax?
   #_(t/is (= [{:duration #xt/duration "PT13M56.123456789S"}]
-           (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as \"duration\""))))
+             (xt/q tu/*node* "SELECT CAST(INTERVAL '13:56.123456789' MINUTE TO SECOND AS DURATION(9)) as \"duration\""))))
 
 (t/deftest test-cast-duration-to-interval
 
@@ -636,8 +630,8 @@
 
 (t/deftest test-timestamp-literal
   (t/are
-   [sql expected]
-   (= expected (plan-expr-with-foo sql))
+      [sql expected]
+      (= expected (plan-expr-with-foo sql))
     "TIMESTAMP '3000-03-15 20:40:31'" #xt/date-time "3000-03-15T20:40:31"
     "TIMESTAMP '3000-03-15 20:40:31.11'" #xt/date-time "3000-03-15T20:40:31.11"
     "TIMESTAMP '3000-03-15 20:40:31.2222'" #xt/date-time "3000-03-15T20:40:31.2222"
@@ -659,8 +653,8 @@
 
 (t/deftest test-time-literal
   (t/are
-   [sql expected]
-   (= expected (plan-expr-with-foo sql))
+      [sql expected]
+      (= expected (plan-expr-with-foo sql))
     "TIME '20:40:31'" #xt/time "20:40:31"
     "TIME '20:40:31.467'" #xt/time "20:40:31.467"
     "TIME '20:40:31.932254'" #xt/time "20:40:31.932254"
@@ -670,8 +664,8 @@
 
 (t/deftest date-literal
   (t/are
-   [sql expected]
-   (= expected (plan-expr-with-foo sql))
+      [sql expected]
+      (= expected (plan-expr-with-foo sql))
     "DATE '3000-03-15'" #xt/date "3000-03-15"))
 
 (t/deftest interval-literal
@@ -725,8 +719,8 @@
 (t/deftest test-date-trunc-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are
-     [sql expected]
-     (= expected (plan-expr-with-foo sql))
+        [sql expected]
+        (= expected (plan-expr-with-foo sql))
       "DATE_TRUNC(MICROSECOND, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MICROSECOND" #xt/date-time "2021-10-21T12:34:56")
       "DATE_TRUNC(MILLISECOND, TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MILLISECOND" #xt/date-time "2021-10-21T12:34:56")
       "date_trunc(second, timestamp '2021-10-21T12:34:56')" '(date_trunc "SECOND" #xt/date-time "2021-10-21T12:34:56")
@@ -743,8 +737,8 @@
 
   (t/testing "INTERVAL behaviour"
     (t/are
-     [sql expected]
-     (= expected (plan-expr-with-foo sql))
+        [sql expected]
+        (= expected (plan-expr-with-foo sql))
       "DATE_TRUNC(DAY, INTERVAL '5' DAY)" '(date_trunc "DAY" (single-field-interval "5" "DAY" 2 6))
       "date_trunc(hour, interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6)))))
 
@@ -857,23 +851,23 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
 
   (let [bins [#:xt{:from #xt/zoned-date-time "2023-12-19T00:00Z[UTC]",
-                  :to #xt/zoned-date-time "2024-01-18T00:00Z[UTC]",
-                  :weight 0.1118421052631579}
-             #:xt{:from #xt/zoned-date-time "2024-01-18T00:00Z[UTC]",
-                  :to #xt/zoned-date-time "2024-02-17T00:00Z[UTC]",
-                  :weight 0.19736842105263158}
-             #:xt{:from #xt/zoned-date-time "2024-02-17T00:00Z[UTC]",
-                  :to #xt/zoned-date-time "2024-03-18T00:00Z[UTC]",
-                  :weight 0.19736842105263158}
-             #:xt{:from #xt/zoned-date-time "2024-03-18T00:00Z[UTC]",
-                  :to #xt/zoned-date-time "2024-04-17T00:00Z[UTC]",
-                  :weight 0.19736842105263158}
-             #:xt{:from #xt/zoned-date-time "2024-04-17T00:00Z[UTC]",
-                  :to #xt/zoned-date-time "2024-05-17T00:00Z[UTC]",
-                  :weight 0.19736842105263158}
-             #:xt{:from #xt/zoned-date-time "2024-05-17T00:00Z[UTC]",
-                  :to #xt/zoned-date-time "2024-06-16T00:00Z[UTC]",
-                  :weight 0.09868421052631579}]]
+                   :to #xt/zoned-date-time "2024-01-18T00:00Z[UTC]",
+                   :weight 0.1118421052631579}
+              #:xt{:from #xt/zoned-date-time "2024-01-18T00:00Z[UTC]",
+                   :to #xt/zoned-date-time "2024-02-17T00:00Z[UTC]",
+                   :weight 0.19736842105263158}
+              #:xt{:from #xt/zoned-date-time "2024-02-17T00:00Z[UTC]",
+                   :to #xt/zoned-date-time "2024-03-18T00:00Z[UTC]",
+                   :weight 0.19736842105263158}
+              #:xt{:from #xt/zoned-date-time "2024-03-18T00:00Z[UTC]",
+                   :to #xt/zoned-date-time "2024-04-17T00:00Z[UTC]",
+                   :weight 0.19736842105263158}
+              #:xt{:from #xt/zoned-date-time "2024-04-17T00:00Z[UTC]",
+                   :to #xt/zoned-date-time "2024-05-17T00:00Z[UTC]",
+                   :weight 0.19736842105263158}
+              #:xt{:from #xt/zoned-date-time "2024-05-17T00:00Z[UTC]",
+                   :to #xt/zoned-date-time "2024-06-16T00:00Z[UTC]",
+                   :weight 0.09868421052631579}]]
     (t/is (= bins
              (xt/q tu/*node* "SELECT (bins.p)._from, (bins.p)._to, (bins.p)._weight
                               FROM UNNEST(RANGE_BINS(INTERVAL 'P30D', PERIOD(TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-06-01T00:00:00Z'))) AS bins(p)"))
@@ -886,8 +880,8 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 (t/deftest test-extract-plan
   (t/testing "TIMESTAMP behaviour"
     (t/are
-     [sql expected]
-     (= expected (plan-expr-with-foo sql))
+        [sql expected]
+        (= expected (plan-expr-with-foo sql))
       "extract(second from timestamp '2021-10-21T12:34:56')" '(extract "SECOND" #xt/date-time "2021-10-21T12:34:56")
       "EXTRACT(MINUTE FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "MINUTE" #xt/date-time "2021-10-21T12:34:56")
       "EXTRACT(HOUR FROM TIMESTAMP '2021-10-21T12:34:56')" '(extract "HOUR" #xt/date-time "2021-10-21T12:34:56")
@@ -899,15 +893,15 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
   (t/testing "INTERVAL behaviour"
     (t/are
-     [sql expected]
-     (= expected (plan-expr-with-foo sql))
+        [sql expected]
+        (= expected (plan-expr-with-foo sql))
       "EXTRACT(second from interval '3 02:47:33' day to second)" '(extract "SECOND" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6))
       "EXTRACT(MINUTE FROM INTERVAL '5' DAY)" '(extract "MINUTE" (single-field-interval "5" "DAY" 2 6))))
 
   (t/testing "TIME behaviour"
     (t/are
-     [sql expected]
-     (= expected (plan-expr-with-foo sql))
+        [sql expected]
+        (= expected (plan-expr-with-foo sql))
       "EXTRACT(second from time '11:11:11')" '(extract "SECOND" #xt/time "11:11:11")
       "EXTRACT(MINUTE FROM TIME '11:11:11')" '(extract "MINUTE" #xt/time "11:11:11"))))
 
@@ -1181,7 +1175,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
       [{}] "SELECT NULLIF(NULL, docs.x) FROM docs")))
 
 (t/deftest test-min-long-value-275
-  (t/is (= Long/MIN_VALUE (plan/plan-expr "-9223372036854775808"))))
+  (t/is (= Long/MIN_VALUE (sql/plan-expr "-9223372036854775808"))))
 
 (t/deftest test-postgres-session-information-functions
   ;; These currently return hard-coded values.
@@ -1206,7 +1200,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
 (t/deftest test-postgres-access-control-functions
   ;; These current functions should always should return true
-  (t/are [sql expected] (= expected (plan/plan-expr sql))
+  (t/are [sql expected] (= expected (sql/plan-expr sql))
     "has_any_column_privilege('xtdb','docs', 'select')" true
     "has_any_column_privilege('docs', 'select')" true
     "pg_catalog.has_any_column_privilege('docs', 'select')" true
@@ -1230,8 +1224,8 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
-  (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))
-  (t/is (= true (-> (xt/q tu/*node* "SELECT random() < 1.0 AS smaller ") first :smaller))))
+    (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))
+    (t/is (= true (-> (xt/q tu/*node* "SELECT random() < 1.0 AS smaller ") first :smaller))))
 
 (t/deftest test-arithmetic-precedence-slt
   (t/is (= [{:col2 -102}]
@@ -1402,33 +1396,33 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
                             WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)"))))
 
 (t/deftest test-dollar-quoted-strings
-  (t/is (= "" (plan/plan-expr "$$$$")))
-  (t/is (= "" (plan/plan-expr "$tag$$tag$")))
+  (t/is (= "" (sql/plan-expr "$$$$")))
+  (t/is (= "" (sql/plan-expr "$tag$$tag$")))
 
-  (t/is (= "foo" (plan/plan-expr "$$foo$$")))
-  (t/is (= "inner" (plan/plan-expr "$tagged$inner$tagged$")))
-  (t/is (= "with$ dollars $ " (plan/plan-expr "$$with$ dollars $ $$")))
-  (t/is (= "foo $$" (plan/plan-expr "$in$foo $$$in$"))
+  (t/is (= "foo" (sql/plan-expr "$$foo$$")))
+  (t/is (= "inner" (sql/plan-expr "$tagged$inner$tagged$")))
+  (t/is (= "with$ dollars $ " (sql/plan-expr "$$with$ dollars $ $$")))
+  (t/is (= "foo $$" (sql/plan-expr "$in$foo $$$in$"))
         "inner $$")
 
-  (t/is (= "foo\nbar" (plan/plan-expr "$$foo\nbar$$")))
+  (t/is (= "foo\nbar" (sql/plan-expr "$$foo\nbar$$")))
 
   (t/testing "no matching end tag"
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"no viable alternative"
-                            (plan/plan-expr "$$foo")))
+                            (sql/plan-expr "$$foo")))
 
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"no viable alternative"
-                            (plan/plan-expr "$tag$foo")))
+                            (sql/plan-expr "$tag$foo")))
 
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"no viable alternative"
-                            (plan/plan-expr "$tag$foo$tagg$")))))
+                            (sql/plan-expr "$tag$foo$tagg$")))))
 
 (t/deftest test-where-commas
   (letfn [(plan-expr [expr]
-            (plan/plan-expr expr {:ast-type :where, :scope foo-scope}))]
+            (sql/plan-expr expr {:ast-type :where, :scope foo-scope}))]
     (t/is (= '(and) (plan-expr "WHERE")))
 
     (t/is (= '(and) (plan-expr "WHERE , ,")))

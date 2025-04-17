@@ -5,9 +5,8 @@
             [xtdb.error :as err]
             xtdb.node.impl
             [xtdb.operator.scan :as scan]
-            [xtdb.sql.logic-test.runner :as slt]
-            [xtdb.sql.plan :as plan]
-            [xtdb.util :as util])
+            [xtdb.sql :as sql]
+            [xtdb.sql.logic-test.runner :as slt])
   (:import [java.time Instant]
            (org.antlr.v4.runtime ParserRuleContext)
            (xtdb.antlr SqlVisitor SqlVisitor)
@@ -40,16 +39,16 @@
 
 (defn- execute-sql-query [{:keys [live-idx] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
   (let [!cache (atom {})
-        plan-stmt plan/plan-statement]
+        plan-stmt sql/plan]
 
     ;; we remove _id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
-    (with-redefs [plan/plan-statement (fn self
-                                        ([sql] (self sql {}))
-                                        ([sql opts]
-                                         (let [plan (plan-stmt sql (cond-> opts
-                                                                     (not direct-sql) (update :table-info update-vals #(disj % "_id"))))]
-                                           (swap! !cache assoc sql plan)
-                                           plan)))]
+    (with-redefs [sql/plan (fn self
+                             ([sql] (self sql {}))
+                             ([sql opts]
+                              (let [plan (plan-stmt sql (cond-> opts
+                                                          (not direct-sql) (update :table-info update-vals #(disj % "_id"))))]
+                                (swap! !cache assoc sql plan)
+                                plan)))]
       (let [res (xt/q node sql-statement
                       (-> opts
                           (assoc :key-fn :snake-case-string)
@@ -57,8 +56,9 @@
 
             ;; we grab the projection afterwards so that xt/q has awaited the tx
             ;; TODO hoping that there'll be a better means of getting hold of this soon
-            projection (->> (:col-syms (or (get @!cache sql-statement)
-                                           (plan/plan-statement sql-statement {:table-info (scan/tables-with-cols live-idx)})))
+            projection (->> (or (get @!cache sql-statement)
+                                (sql/plan sql-statement {:table-info (scan/tables-with-cols live-idx)}))
+                            meta :ordered-outer-projection
                             (mapv (comp #(.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) %) str)))]
         (vec
          (for [row res]
@@ -85,12 +85,12 @@
 
   (visitInsertStatement [this ctx]
     (-> (.insertColumnsAndSource ctx)
-        (.accept (assoc this :insert-table (keyword (plan/identifier-sym (.tableName ctx)))))))
+        (.accept (assoc this :insert-table (keyword (sql/identifier-sym (.tableName ctx)))))))
 
   (visitInsertValues [{{:keys [tables]} :node, :keys [insert-table] :as this} ctx]
     (let [this (-> this
                    (assoc :insert-cols (->> (if-let [col-list (.columnNameList ctx)]
-                                              (mapv plan/identifier-sym (.columnName col-list))
+                                              (mapv sql/identifier-sym (.columnName col-list))
                                               (get tables insert-table))
                                             (mapv keyword))))]
       [(into [:put-docs insert-table]
@@ -101,12 +101,12 @@
 
   (visitSingleExprRowConstructor [{:keys [insert-cols]} ctx]
     (assert (= 1 (count insert-cols)))
-    (let [expr-visitor (plan/->ExprPlanVisitor nil nil)]
+    (let [expr-visitor (sql/->ExprPlanVisitor nil nil)]
       (merge {:xt/id (random-uuid)}
              {(first insert-cols) (.accept (.expr ctx) expr-visitor)})))
 
   (visitMultiExprRowConstructor [{:keys [insert-cols]} ctx]
-    (let [expr-visitor (plan/->ExprPlanVisitor nil nil)]
+    (let [expr-visitor (sql/->ExprPlanVisitor nil nil)]
       (merge {:xt/id (random-uuid)}
              (zipmap insert-cols (for [^ParserRuleContext expr (.expr ctx)]
                                    (.accept expr expr-visitor))))))

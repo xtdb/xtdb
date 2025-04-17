@@ -2,19 +2,19 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
-            [xtdb.sql.plan :as plan]
-            [xtdb.sql-test]
+            [xtdb.sql :as sql]
+            xtdb.sql-test
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (t/deftest test-count-star-rule-9
   (t/testing "count-star should be rewritten to count(dep-col) where dep col is a projected inner col of value 1")
-    (xt/execute-tx tu/*node* [[:put-docs :t1 {:xt/id 1 :x 1}]
-                              [:put-docs :t2 {:xt/id 2 :y 2}]])
+  (xt/execute-tx tu/*node* [[:put-docs :t1 {:xt/id 1 :x 1}]
+                            [:put-docs :t2 {:xt/id 2 :y 2}]])
 
-    (t/is (= [{:t1-count 10, :y 2}]
-             (xt/q tu/*node* "SELECT (SELECT (10 + count(*) + count(*)) FROM t1 WHERE t1.x = t2.y ) AS t1_count, t2.y FROM t2"))))
+  (t/is (= [{:t1-count 10, :y 2}]
+           (xt/q tu/*node* "SELECT (SELECT (10 + count(*) + count(*)) FROM t1 WHERE t1.x = t2.y ) AS t1_count, t2.y FROM t2"))))
 
 (t/deftest test-not-equal
   (xt/execute-tx tu/*node* [[:put-docs :t {:xt/id 1 :x 1}]
@@ -32,13 +32,13 @@
       [:select
        (and
         (<=
-         (lower ~(plan/->col-sym '_valid_time))
+         (lower ~(sql/->col-sym '_valid_time))
          (lower
           (period
            #xt/zoned-date-time "2000-01-01T00:00Z"
            #xt/zoned-date-time "2001-01-01T00:00Z")))
         (>=
-         (coalesce (upper ~(plan/->col-sym '_valid_time)) xtdb/end-of-time)
+         (coalesce (upper ~(sql/->col-sym '_valid_time)) xtdb/end-of-time)
          (coalesce
           (upper
            (period
@@ -46,11 +46,11 @@
             #xt/zoned-date-time "2001-01-01T00:00Z"))
           xtdb/end-of-time)))
        [:project
-        [{~(plan/->col-sym '_valid_time)
-          (period ~(plan/->col-sym '_valid_from)
-                  ~(plan/->col-sym '_valid_to))}]
+        [{~(sql/->col-sym '_valid_time)
+          (period ~(sql/->col-sym '_valid_from)
+                  ~(sql/->col-sym '_valid_to))}]
         [:scan {:table public/docs}
-         [~(plan/->col-sym '_valid_from) ~(plan/->col-sym '_valid_to)]]]]))))
+         [~(sql/->col-sym '_valid_from) ~(sql/->col-sym '_valid_to)]]]]))))
 
   (t/testing "only pushes past period constructors"
     (t/is
@@ -61,13 +61,13 @@
           [:select
            (and
             (<=
-             (lower ~(plan/->col-sym '_valid_time))
+             (lower ~(sql/->col-sym '_valid_time))
              (lower
               (period
                #xt/zoned-date-time "2000-01-01T00:00Z"
                #xt/zoned-date-time "2001-01-01T00:00Z")))
             (>=
-             (coalesce (upper ~(plan/->col-sym '_valid_time)) xtdb/end-of-time)
+             (coalesce (upper ~(sql/->col-sym '_valid_time)) xtdb/end-of-time)
              (coalesce
               (upper
                (period
@@ -75,9 +75,9 @@
                 #xt/zoned-date-time "2001-01-01T00:00Z"))
               xtdb/end-of-time)))
            [:project
-            [{~(plan/->col-sym '_valid_time) (+ 1 ~(plan/->col-sym '_valid_from))}]
+            [{~(sql/->col-sym '_valid_time) (+ 1 ~(sql/->col-sym '_valid_from))}]
             [:scan {:table public/docs}
-             [~(plan/->col-sym '_valid_from) ~(plan/->col-sym '_valid_to)]]]])))))
+             [~(sql/->col-sym '_valid_from) ~(sql/->col-sym '_valid_to)]]]])))))
 
   (t/testing "scalar extends expressions are handled"
     (t/is
@@ -87,13 +87,13 @@
        true
        (xt/template
         [:select
-         '(= ~(plan/->col-sym '_valid_time) 1)
+         '(= ~(sql/->col-sym '_valid_time) 1)
          [:project
-          [{~(plan/->col-sym '_foo) 4}
-           {~(plan/->col-sym '_valid_time)
-            (period ~(plan/->col-sym '_valid_from)
-                    ~(plan/->col-sym '_valid_to))}]
-          [:scan {:table public/docs} [~(plan/->col-sym '_bar)]]]])))))
+          [{~(sql/->col-sym '_foo) 4}
+           {~(sql/->col-sym '_valid_time)
+            (period ~(sql/->col-sym '_valid_from)
+                    ~(sql/->col-sym '_valid_to))}]
+          [:scan {:table public/docs} [~(sql/->col-sym '_bar)]]]])))))
 
   (t/testing "only push predicate if all columns referenced (aside from the new period) present in inner rel"
     (t/is
@@ -102,13 +102,13 @@
        true
        (xt/template
         [:select
-         '(= ~(plan/->col-sym '_valid_time) ~(plan/->col-sym '_foo))
+         '(= ~(sql/->col-sym '_valid_time) ~(sql/->col-sym '_foo))
          [:project
-          [{~(plan/->col-sym '_foo) 4}
-           {~(plan/->col-sym '_valid_time)
-            (period ~(plan/->col-sym '_valid_from)
-                    ~(plan/->col-sym '_valid_to))}]
-          [:scan {:table public/docs} [~(plan/->col-sym '_bar)]]]]))))))
+          [{~(sql/->col-sym '_foo) 4}
+           {~(sql/->col-sym '_valid_time)
+            (period ~(sql/->col-sym '_valid_from)
+                    ~(sql/->col-sym '_valid_to))}]
+          [:scan {:table public/docs} [~(sql/->col-sym '_bar)]]]]))))))
 
 (t/deftest test-remove-redundant-period-constructors
   (t/is
@@ -168,5 +168,5 @@
               (xt/template
                (contains?
                 (period ~f1 ~t1)
-                ~(plan/->col-sym 'col1)))))
+                ~(sql/->col-sym 'col1)))))
        "not possible to tell if col1 is a period or a scalar temporal value (timestamp etc.)"))))

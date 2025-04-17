@@ -262,19 +262,21 @@
       IQuerySource
       (prepareRaQuery [this query query-opts]
         (.prepareRaQuery this query live-idx query-opts))
+
       (prepareRaQuery [_ query wm-src query-opts]
         (let [prepared-query (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
           (when (seq (.warnings prepared-query))
             (.increment query-warning-counter))
           prepared-query))
+
       (planQuery [this query query-opts]
         (.planQuery this query live-idx query-opts))
+
       (planQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src)
               plan-query-opts
               (-> query-opts
-                  (select-keys
-                   [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan?])
+                  (select-keys [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan?])
                   (update :decorrelate? #(if (nil? %) true false))
                   (assoc :table-info table-info))]
 
@@ -284,7 +286,7 @@
                 (fn [_cache-key]
                   (let [plan (cond
                                (or (string? query) (instance? Sql$DirectlyExecutableStatementContext query))
-                               (sql/compile-query query plan-query-opts)
+                               (sql/plan query plan-query-opts)
 
                                (seq? query) (-> (xtql/parse-query query)
                                                 (xtql.plan/compile-query plan-query-opts))
