@@ -11,6 +11,7 @@ import xtdb.time.microsAsInstant
 import xtdb.trie.BlockIndex
 import xtdb.trie.TableName
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -55,8 +56,17 @@ class BlockCatalog(private val bp: BufferPool) {
             ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
 
     val allTableNames: List<TableName> get() = latestBlock?.tableNamesList.orEmpty()
-    
+
+    private fun Path.parseBlockIndex(): Long? =
+        Regex("b(\\p{XDigit}+)\\.binpb")
+            .matchEntire(toString())
+            ?.groups?.get(1)
+            ?.value?.fromLexHex
+
     private fun deleteBlock(blockPath: Path) {
+        check(blockPath.parseBlockIndex() != currentBlockIndex) {
+            "Cannot delete current block $blockPath - aborting"
+        }
         LOGGER.debug("Deleting block file $blockPath")
         bp.deleteIfExists(blockPath)
     }
