@@ -56,6 +56,7 @@ dependencies {
     // healthz server
     api(libs.ring.core)
     api(libs.ring.jetty9.adapter)
+    api(libs.ring.jetty9.adapter.http2)
     api(libs.jetty.alpn.server)
 
     api(libs.muuntaja)

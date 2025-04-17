@@ -69,7 +69,8 @@ reitit-swagger={ group="metosin", name="reitit-swagger", version.ref="reitit" }
 reitit-spec={ group="metosin", name="reitit-spec", version.ref="reitit" }
 
 ring-core={ group="ring", name="ring-core", version="1.14.1" }
-ring-jetty9-adapter={ group="info.sunng", name="ring-jetty9-adapter", version="0.22.4" }
+ring-jetty9-adapter={ group="info.sunng", name="ring-jetty9-adapter", version="0.37.3" }
+ring-jetty9-adapter-http2={ group="info.sunng", name="ring-jetty9-adapter-http2", version="0.1.6" }
 jetty-alpn-server={ group="org.eclipse.jetty", name="jetty-alpn-server", version="10.0.15" }
 
 testcontainers={ group="org.testcontainers", name="testcontainers", version.ref="testcontainers" }
