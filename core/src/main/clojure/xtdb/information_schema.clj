@@ -1,5 +1,6 @@
 (ns xtdb.information-schema
-  (:require [xtdb.authn :as authn]
+  (:require [clojure.string :as str]
+            [xtdb.authn :as authn]
             [xtdb.metadata]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
@@ -24,16 +25,22 @@
 
 (defn schema-info->col-rows [schema-info]
   (for [table-entry schema-info
-        [idx col] (map-indexed #(vector %1 %2) (into {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
-                                                      "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
-                                                      "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
-                                                      "_system_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_system_to"))}
-                                                     (val table-entry)))
         :let [table (key table-entry)
-              name (key col)
+              cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (namespace table))
+                                        (not= 'xt/txs table))
+                           {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
+                            "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
+                            "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
+                            "_system_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_system_to"))})
+                         (val table-entry))
+              {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
+              cols (concat (sort-by key xt-cols)
+                           (sort-by key user-cols))]
+        [idx col] (map-indexed #(vector %1 %2) cols)
+        :let [name (key col)
               col-field (val col)]]
 
-    {:idx (inc idx) ;; no guarentee of order/stability of idx for a given col
+    {:idx (inc idx) ;; no guarentee of stability of idx for a given col
      :table table
      :name name
      :field col-field

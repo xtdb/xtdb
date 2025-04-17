@@ -65,15 +65,29 @@
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[127091884 "_id" 5 114 -1]
+  (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[127091884 "_id" 1 114 -1]
+                                                                  [127091884 "_system_from" 2 1184 8]
+                                                                  [127091884 "_system_to" 3 1184 8]
+                                                                  [127091884 "_valid_from" 4 1184 8]
+                                                                  [127091884 "_valid_to" 5 1184 8]
                                                                   [127091884 "col1" 6 114 -1]
-                                                                  [732573471 "_id" 5 114 -1]
-                                                                  [732573471 "col1" 7 20 8]
-                                                                  [732573471 "col2" 6 20 8]
-                                                                  [598393539 "_id" 7 20 8]
-                                                                  [598393539 "error" 8 114 -1]
-                                                                  [598393539 "system_time" 5 1184 8]
-                                                                  [598393539 "committed" 6 16 1]]]
+
+                                                                  [732573471 "_id" 1 114 -1]
+                                                                  [732573471 "_system_from" 2 1184 8]
+                                                                  [732573471 "_system_to" 3 1184 8]
+                                                                  [732573471 "_valid_from" 4 1184 8]
+                                                                  [732573471 "_valid_to" 5 1184 8]
+                                                                  [732573471 "col1" 6 20 8]
+                                                                  [732573471 "col2" 7 20 8]
+
+                                                                  [598393539 "_id" 1 20 8]
+                                                                  [598393539 "_system_from" 2 1184 8]
+                                                                  [598393539 "_system_to" 3 1184 8]
+                                                                  [598393539 "_valid_from" 4 1184 8]
+                                                                  [598393539 "_valid_to" 5 1184 8]
+                                                                  [598393539 "committed" 6 16 1]
+                                                                  [598393539 "error" 7 114 -1]
+                                                                  [598393539 "system_time" 8 1184 8]]]
                   {:atttypmod -1,
                    :attrelid attrelid,
                    :attidentity "",
@@ -85,7 +99,8 @@
                    :attname attname,
                    :attisdropped false}))
 
-           (set (tu/query-ra '[:select (or (= attname "_id") (= attname "col1") (= attname "col2")
+           (set (tu/query-ra '[:select (or (= attname "_id") (= attname "_valid_from")(= attname "_valid_to") (= attname "_system_from") (= attname "_system_to")
+                                           (= attname "col1") (= attname "col2")
                                            (= attname "error") (= attname "system_time") (= attname "committed"))
                                [:scan
                                 {:table pg_catalog/pg_attribute}
