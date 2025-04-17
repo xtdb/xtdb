@@ -65,6 +65,7 @@ object Fields {
     val UTF8 = MinorType.VARCHAR.asField
     val VAR_BINARY = MinorType.VARBINARY.asField
 
+    @JvmField
     val TEMPORAL = ArrowType.Timestamp(MICROSECOND, "UTC").asField
     val IID = ArrowType.FixedSizeBinary(16).asField
 

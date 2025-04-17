@@ -19,7 +19,6 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId

@@ -16,15 +16,19 @@
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
+           xtdb.types.Fields
            (xtdb.vector RelationReader)))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
 
-;;TODO add temporal cols
 (defn schema-info->col-rows [schema-info]
   (for [table-entry schema-info
-        [idx col] (map-indexed #(vector %1 %2) (val table-entry))
+        [idx col] (map-indexed #(vector %1 %2) (into {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
+                                                      "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
+                                                      "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
+                                                      "_system_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_system_to"))}
+                                                     (val table-entry)))
         :let [table (key table-entry)
               name (key col)
               col-field (val col)]]

@@ -16,57 +16,32 @@
 (deftest test-info-schema-columns
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "beanie",
-              :column-name "col1",
-              :data-type "[:union #{:utf8 :i64}]"}
-             {:table-catalog "xtdb",
-              :table-schema "xt",
-              :table-name "txs",
-              :column-name "system_time",
-              :data-type "[:timestamp-tz :micro \"UTC\"]"}
-             {:table-catalog "xtdb",
-              :table-schema "xt",
-              :table-name "txs",
-              :column-name "_id",
-              :data-type ":i64"}
-             {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "beanie",
-              :column-name "_id",
-              :data-type ":keyword"}
-             {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "baseball",
-              :column-name "col2",
-              :data-type ":i64"}
-             {:table-catalog "xtdb",
-              :table-schema "xt",
-              :table-name "txs",
-              :column-name "error",
-              :data-type "[:union #{:null :transit}]"}
-             {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "baseball",
-              :column-name "col1",
-              :data-type ":i64"}
-             {:table-catalog "xtdb",
-              :table-schema "public",
-              :table-name "baseball",
-              :column-name "_id",
-              :data-type ":keyword"}
-             {:table-catalog "xtdb",
-              :table-schema "xt",
-              :table-name "txs",
-              :column-name "committed",
-              :data-type ":bool"}}
-           (set (tu/query-ra
-                 '[:select (or (= table_schema "public") (= table_schema "xt"))
-                   [:scan
-                    {:table information_schema/columns}
-                    [table_catalog table_schema table_name column_name data_type]]]
-                 {:node tu/*node*})))))
+  (t/is (= (into '#{[xtdb public/baseball _id :keyword]
+                    [xtdb public/baseball col1 :i64]
+                    [xtdb public/baseball col2 :i64]
+                    [xtdb public/beanie _id :keyword]
+                    [xtdb public/beanie col1 [:union #{:utf8 :i64}]]
+                    [xtdb xt/txs _id :i64]
+                    [xtdb xt/txs committed :bool]
+                    [xtdb xt/txs error [:union #{:null :transit}]]
+                    [xtdb xt/txs system_time [:timestamp-tz :micro "UTC"]]}
+                 (for [table '[public/baseball public/beanie xt/txs]
+                       [col data-type] '[[_system_from [:timestamp-tz :micro "UTC"]]
+                                         [_system_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
+                                         [_valid_from [:timestamp-tz :micro "UTC"]]
+                                         [_valid_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]]]
+                   ['xtdb table col data-type]))
+           (into #{} (map (juxt (comp symbol :table-catalog)
+                                (fn [{:keys [table-schema table-name]}]
+                                  (symbol table-schema table-name))
+                                (comp symbol :column-name)
+                                (comp read-string :data-type)))
+                 (tu/query-ra
+                  '[:select (or (= table_schema "public") (= table_schema "xt"))
+                    [:scan
+                     {:table information_schema/columns}
+                     [table_catalog table_schema table_name column_name data_type]]]
+                  {:node tu/*node*})))))
 
 (deftest test-info-schema-tables
   (xt/submit-tx tu/*node* test-data)
@@ -90,96 +65,26 @@
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:atttypmod -1,
-              :attrelid 127091884,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen -1,
-              :atttypid 114,
-              :attnum 1,
-              :attname "_id",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 732573471,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen -1,
-              :atttypid 114,
-              :attnum 1,
-              :attname "_id",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 127091884,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen -1,
-              :atttypid 114,
-              :attnum 2,
-              :attname "col1",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 732573471,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen 8,
-              :atttypid 20,
-              :attnum 2,
-              :attname "col2",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 732573471,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen 8,
-              :atttypid 20,
-              :attnum 3,
-              :attname "col1",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 598393539,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen -1,
-              :atttypid 114,
-              :attnum 4,
-              :attname "error",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 598393539,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen 8,
-              :atttypid 20,
-              :attnum 3,
-              :attname "_id",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 598393539,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen 8,
-              :atttypid 1184,
-              :attnum 1,
-              :attname "system_time",
-              :attisdropped false}
-             {:atttypmod -1,
-              :attrelid 598393539,
-              :attidentity "",
-              :attgenerated "",
-              :attnotnull false,
-              :attlen 1,
-              :atttypid 16,
-              :attnum 2,
-              :attname "committed",
-              :attisdropped false}}
+  (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[127091884 "_id" 5 114 -1]
+                                                                  [127091884 "col1" 6 114 -1]
+                                                                  [732573471 "_id" 5 114 -1]
+                                                                  [732573471 "col1" 7 20 8]
+                                                                  [732573471 "col2" 6 20 8]
+                                                                  [598393539 "_id" 7 20 8]
+                                                                  [598393539 "error" 8 114 -1]
+                                                                  [598393539 "system_time" 5 1184 8]
+                                                                  [598393539 "committed" 6 16 1]]]
+                  {:atttypmod -1,
+                   :attrelid attrelid,
+                   :attidentity "",
+                   :attgenerated "",
+                   :attnotnull false,
+                   :attlen attlen,
+                   :atttypid atttypeid,
+                   :attnum attnum,
+                   :attname attname,
+                   :attisdropped false}))
+
            (set (tu/query-ra '[:select (or (= attname "_id") (= attname "col1") (= attname "col2")
                                            (= attname "error") (= attname "system_time") (= attname "committed"))
                                [:scan
@@ -268,190 +173,25 @@
 
 (deftest test-pg-type
   (xt/submit-tx tu/*node* test-data)
-  (t/is (= #{{:typtypmod -1,
-              :oid 700,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "float4",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 114,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "json",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 3802,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "jsonb",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 16384,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "transit",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 701,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "float8",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 21,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "int2",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 2950,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "uuid",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1043,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "varchar",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 25,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "text",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 20,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "int8",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 23,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "int4",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 16,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "boolean",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1082,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "date",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1114,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "timestamp",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1184,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "timestamptz",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 3910,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "tstz-range",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 2205,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "regclass",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1186,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "interval",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1007,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "_int4",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :oid 1016,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "_int8",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :typnotnull false,
-              :typtype "b",
-              :typbasetype 0,
-              :typnamespace 2125819141,
-              :typname "bytea",
-              :typowner 1376455703,
-              :oid 17}
-             {:typtypmod -1,
-              :oid 1009,
-              :typtype "b",
-              :typowner 1376455703,
-              :typnotnull false,
-              :typname "_text",
-              :typnamespace 2125819141,
-              :typbasetype 0}
-             {:typtypmod -1,
-              :typnotnull false,
-              :typtype "b",
-              :typbasetype 0,
-              :typnamespace 2125819141,
-              :typname "numeric",
-              :typowner 1376455703,
-              :oid 1700}}
+  (t/is (= (set (for [[oid typname] [
+                                     [114 "json"] [3802 "jsonb"] [16384 "transit"]
+                                     [2950 "uuid"]
+                                     [1043 "varchar"] [25 "text"]
+                                     [16 "boolean"] [21 "int2"] [23 "int4"] [20 "int8"]
+                                     [700 "float4"] [701 "float8"] [1700 "numeric"]
+                                     [1082 "date"] [1114 "timestamp"] [1184 "timestamptz"] [3910 "tstz-range"] [1186 "interval"]
+                                     [2205 "regclass"]
+                                     [1007 "_int4"] [1016 "_int8"]
+                                     [17 "bytea"]
+                                     [1009 "_text"]]]
+                  {:typtypmod -1,
+                   :oid oid,
+                   :typtype "b",
+                   :typowner 1376455703,
+                   :typnotnull false,
+                   :typname typname,
+                   :typnamespace 2125819141,
+                   :typbasetype 0}))
            (set (tu/query-ra '[:scan {:table pg_catalog/pg_type}
                                [oid typname typnamespace typowner typtype typbasetype typnotnull typtypmod]]
                              {:node tu/*node*})))))
@@ -489,7 +229,7 @@
              :column-name "_id",
              :table-catalog "xtdb",
              :table-schema "public"}]
-           (xt/q tu/*node* "FROM information_schema.columns ORDER BY table_name LIMIT 1"))))
+           (xt/q tu/*node* "FROM information_schema.columns ORDER BY table_name, column_name LIMIT 1"))))
 
 (deftest test-selection-and-projection
   (xt/submit-tx tu/*node* [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]

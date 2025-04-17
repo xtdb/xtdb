@@ -2110,13 +2110,11 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
 
 (t/deftest info-schema-case-insensitivity-3511
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
-  (t/is (= [{:column-name "_id",
-             :data-type ":i64",
-             :table-catalog "xtdb",
-             :table-name "foo",
-             :table-schema "public"}]
-           (xt/q tu/*node* "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = 'foo'")
-           (xt/q tu/*node* "SELECT * FROM information_schema.columns WHERE table_name = 'foo'"))))
+  (t/is (= '[_id _system_from _system_to _valid_from _valid_to]
+           (->> (xt/q tu/*node* "SELECT column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = 'foo' ORDER BY column_name")
+                (mapv (comp symbol :column-name)))
+           (->> (xt/q tu/*node* "SELECT column_name FROM information_schema.columns WHERE table_name = 'foo' ORDER BY column_name")
+                (mapv (comp symbol :column-name))))))
 
 (t/deftest test-sql->static-ops-3484
   (let [opts {:table-info {"public/foo" #{"bar"}}}]
@@ -2206,17 +2204,9 @@ JOIN docs2 FOR VALID_TIME ALL AS d2
              (xt/q tu/*node* "SELECT 999999::regclass::varchar v"))
           "returns a stringified oid/int"))
 
-  (t/is (= [{:atttypmod -1,
-             :attrelid 357712798,
-             :attidentity "",
-             :attgenerated "",
-             :attnotnull false,
-             :attlen 8,
-             :atttypid 20,
-             :attnum 1,
-             :attname "_id",
-             :attisdropped false}]
-           (xt/q tu/*node* "SELECT * FROM pg_attribute WHERE attrelid = 'public.foo'::regclass")))
+  (t/is (= '[_id _system_from _system_to _valid_from _valid_to]
+           (->> (xt/q tu/*node* "SELECT attname FROM pg_attribute WHERE attrelid = 'public.foo'::regclass ORDER BY attname")
+                (mapv (comp symbol :attname)))))
 
   (t/is (= [{:v true}]
            (xt/q tu/*node* "SELECT 357712798::regclass = 'foo'::regclass v"))
@@ -2359,14 +2349,21 @@ UNION ALL
 (t/deftest star-goes-at-end-too-3706
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"]])
 
-  (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo",
-             :column-name "x", :data-type ":utf8"}
-            {:table-catalog "xtdb", :table-schema "public", :table-name "foo",
-             :column-name "_id", :data-type ":i64"}]
+  (t/is (= '#{[xtdb public/foo _id :i64]
+              [xtdb public/foo _system_from [:timestamp-tz :micro "UTC"]]
+              [xtdb public/foo _system_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
+              [xtdb public/foo _valid_from [:timestamp-tz :micro "UTC"]]
+              [xtdb public/foo _valid_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
+              [xtdb public/foo x :utf8]}
 
-           (jdbc/execute! tu/*conn*
-                          ["SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo';"]
-                          tu/jdbc-qopts))))
+           (->> (jdbc/execute! tu/*conn*
+                               ["SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo' ORDER BY column_name;"]
+                               tu/jdbc-qopts)
+                (into #{} (map (juxt (comp symbol :table-catalog)
+                                     (fn [{:keys [table-schema table-name]}]
+                                       (symbol table-schema table-name))
+                                     (comp symbol :column-name)
+                                     (comp read-string :data-type))))))))
 
 (t/deftest missing-values-in-insert-shouldnt-stop-ingestion-3721
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 3 AS _id"]])
