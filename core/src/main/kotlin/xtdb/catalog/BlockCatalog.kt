@@ -1,5 +1,6 @@
 package xtdb.catalog
 
+import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.block.proto.Block
@@ -12,6 +13,9 @@ import xtdb.trie.TableName
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
+import java.nio.file.Path
+
+private val LOGGER = LoggerFactory.getLogger(BlockCatalog::class.java)
 
 class BlockCatalog(private val bp: BufferPool) {
 
@@ -51,4 +55,26 @@ class BlockCatalog(private val bp: BufferPool) {
             ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
 
     val allTableNames: List<TableName> get() = latestBlock?.tableNamesList.orEmpty()
+    
+    private fun deleteBlock(blockPath: Path) {
+        LOGGER.debug("Deleting block file $blockPath")
+        bp.deleteIfExists(blockPath)
+    }
+
+    private fun deleteOldestBlocks(path: Path, blocksToKeep: Int) {
+        val blocks = bp.listAllObjects(path).toList().dropLast(blocksToKeep)
+        LOGGER.debug("Deleting oldest ${blocks.size} block files")
+        blocks.forEach { block -> deleteBlock(block.key) }
+    }
+
+    fun garbageCollectBlocks(blocksToKeep: Int) {
+        LOGGER.debug("Garbage collecting blocks, keeping $blocksToKeep blocks")
+        deleteOldestBlocks(blocksPath, blocksToKeep)
+
+        allTableNames.shuffled().take(100).forEach { tableName ->
+            LOGGER.debug("Garbage collecting blocks for table $tableName, keeping $blocksToKeep blocks")
+            val tableBlockPath = tableName.asPath.resolve(blocksPath)
+            deleteOldestBlocks(tableBlockPath, blocksToKeep)
+        }
+    }
 }
