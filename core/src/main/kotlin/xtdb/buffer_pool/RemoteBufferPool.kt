@@ -61,7 +61,7 @@ class RemoteBufferPool(
         ).apply { meterRegistry?.registerDiskCache("disk-cache") }
 
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
-    private val memCacheMisses: Counter? = meterRegistry?.counter("mem-cache-misses")
+    private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
     private val diskCacheMisses: Counter? = meterRegistry?.counter("disk-cache-misses")
 
     companion object {

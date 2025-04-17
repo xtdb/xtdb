@@ -48,7 +48,7 @@ class LocalBufferPool(
 
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
-    private val memCacheMisses: Counter? = meterRegistry?.counter("mem-cache-misses")
+    private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
 
     companion object {
         private fun Path.createTempUploadFile(): Path {
