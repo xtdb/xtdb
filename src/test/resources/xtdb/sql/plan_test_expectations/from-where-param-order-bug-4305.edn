@@ -1,0 +1,7 @@
+[:project
+ [{_id foo.1/_id}]
+ [:rename
+  foo.1
+  [:scan
+   {:table public/foo, :for-valid-time [:at ?_0]}
+   [{_id (= _id ?_1)}]]]]

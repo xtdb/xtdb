@@ -726,6 +726,12 @@
          (sql/plan "UPDATE users FOR VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"
                    {:table-info {"public/users" #{"first_name" "id"}}}))))
 
+(t/deftest from-where-param-order-bug-4305
+  (t/is (=plan-file
+         "from-where-param-order-bug-4305"
+         (sql/plan "SELECT _id FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"
+                   {:table-info {"public/foo" #{"_id"}}}))))
+
 (t/deftest test-dynamic-temporal-filters-3068
   (t/testing "AS OF"
     (t/is

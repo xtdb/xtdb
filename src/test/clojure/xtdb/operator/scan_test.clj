@@ -880,9 +880,8 @@
                                "SELECT *, _valid_from, _valid_to, _system_from, _system_to
                                 FROM foo FOR VALID_TIME AS OF ? FOR SYSTEM_TIME ALL WHERE _id = ?"]]
                       (t/testing (format "query: '%s'" q)
-                        ;; params the wrong way around - see #4305
-                        (t/is (= (xt/q n1 [q idx date])
-                                 (xt/q n2 [q idx date])))))))
+                        (t/is (= (xt/q n1 [q date idx])
+                                 (xt/q n2 [q date idx])))))))
 
                 (doseq [to-i (range (count dates))
                         from-i (range to-i)
@@ -892,6 +891,5 @@
                            FROM foo FOR VALID_TIME BETWEEN ? AND ? FOR SYSTEM_TIME BETWEEN ? AND ?
                            WHERE _id = ?"]
                     (t/testing (format "query: '%s', vt-" q)
-                      ;; params the wrong way around - see #4305
-                      (t/is (= (xt/q n1 [q idx from-date to-date from-date to-date])
-                               (xt/q n2 [q idx from-date to-date from-date to-date]))))))))))))))
+                      (t/is (= (xt/q n1 [q from-date to-date from-date to-date idx])
+                               (xt/q n2 [q from-date to-date from-date to-date idx]))))))))))))))

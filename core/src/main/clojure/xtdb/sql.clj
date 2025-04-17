@@ -289,7 +289,9 @@
    plan])
 
 (defrecord BaseTable [env, ^Sql$BaseTableContext ctx
-                      schema-name table-name table-alias unique-table-alias cols
+                      schema-name table-name
+                      for-valid-time for-system-time
+                      table-alias unique-table-alias cols
                       ^Map !reqd-cols]
   Scope
   (available-cols [_] cols)
@@ -314,27 +316,19 @@
           sys-time-col? (contains? reqd-cols '_system_time)
           scan-cols (cond-> (vec (disj reqd-cols '_valid_time '_system_time))
                       valid-time-col? (into ['_valid_from '_valid_to])
-                      sys-time-col? (into ['_system_from '_system_to]))
-          expr-visitor (->ExprPlanVisitor env this)]
-      (letfn [(<-table-time-period-specification [specs]
-                (case (count specs)
-                  0 nil
-                  1 (.accept ^ParserRuleContext (first specs) (->TableTimePeriodSpecificationVisitor expr-visitor))
-                  :else (add-err! env (->MultipleTimePeriodSpecifications))))]
-        (let [for-vt (or (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))
-                         valid-time-default)
-              for-st (or (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
-                         sys-time-default)]
+                      sys-time-col? (into ['_system_from '_system_to]))]
+      (let [for-vt (or for-valid-time valid-time-default)
+            for-st (or for-system-time sys-time-default)]
 
-          [:rename unique-table-alias
-           (cond-> [:scan (cond-> {:table (symbol (if schema-name
-                                                    (str schema-name)
-                                                    "public")
-                                                  (str table-name))}
-                            for-vt (assoc :for-valid-time for-vt)
-                            for-st (assoc :for-system-time for-st))
-                    scan-cols]
-             (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))])))))
+        [:rename unique-table-alias
+         (cond-> [:scan (cond-> {:table (symbol (if schema-name
+                                                  (str schema-name)
+                                                  "public")
+                                                (str table-name))}
+                          for-vt (assoc :for-valid-time for-vt)
+                          for-st (assoc :for-system-time for-st))
+                  scan-cols]
+           (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))]))))
 
 (defrecord JoinConditionScope [env l r]
   Scope
@@ -588,10 +582,19 @@
                                       (when-let [table-cols (get info-schema/unq-pg-catalog tn)]
                                         ['pg_catalog table-cols]))
 
-                                    (add-warning! env (->BaseTableNotFound sn tn)))]
-            (->BaseTable env ctx sn tn table-alias unique-table-alias
-                         (->insertion-ordered-set (or cols table-cols))
-                         (HashMap.))))))
+                                    (add-warning! env (->BaseTableNotFound sn tn)))
+                expr-visitor (->ExprPlanVisitor env scope)]
+            (letfn [(<-table-time-period-specification [specs]
+                      (case (count specs)
+                        0 nil
+                        1 (.accept ^ParserRuleContext (first specs) (->TableTimePeriodSpecificationVisitor expr-visitor))
+                        :else (add-err! env (->MultipleTimePeriodSpecifications))))]
+              (->BaseTable env ctx sn tn
+                           (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))
+                           (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
+                           table-alias unique-table-alias
+                           (->insertion-ordered-set (or cols table-cols))
+                           (HashMap.)))))))
 
   (visitJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
