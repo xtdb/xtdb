@@ -481,7 +481,7 @@ internal class UriVectorWriter(vector: UriVector) : ExtensionVectorWriter(vector
 internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWriter(vector, null) {
     override fun writeObject0(obj: Any) =
         when (obj) {
-            is ClojureForm, is RuntimeException, is xtdb.IllegalArgumentException,
+            is ClojureForm, is RuntimeException, is IllegalArgumentException,
                 -> super.writeObject0(requiringResolve("xtdb.serde/write-transit")(obj) as ByteArray)
 
             else -> throw InvalidWriteObjectException(field.fieldType, obj)

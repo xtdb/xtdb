@@ -30,7 +30,7 @@
            xtdb.indexer.LiveIndex))
 
 (t/use-fixtures :once tu/with-allocator)
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (def txs
   [[[:put-docs :device-info
@@ -632,3 +632,21 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                          :op {:xt/id 2}}]
                        (->> (.toMaps rel)
                             (mapv #(dissoc % :xt/iid))))))))))))
+
+(t/deftest list-concat-doesnt-halt-ingestion-3326
+  ;; will likely have to remove this once we actually implement list concat
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :list [1 2]}]])
+
+  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* ["UPDATE docs SET list = list || [3]"])]
+    (t/is (false? committed?))
+    (t/is (instance? IllegalArgumentException error))
+    (t/is (= "No matching clause: [:list :i64]" (ex-message error))))
+
+  (t/is (= [{:xt/id 1, :list [1 2]}]
+           (xt/q tu/*node* "SELECT * FROM docs")))
+
+  (t/is (= [{:xt/id 1,
+             :committed false,
+             :error #xt/illegal-arg [nil "No matching clause: [:list :i64]" {}],
+             :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))

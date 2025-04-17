@@ -158,17 +158,20 @@
 (defmethod print-method TxAborted [tx-result ^Writer w]
   (print-dup tx-result w))
 
-(defn- render-iae [^xtdb.IllegalArgumentException e]
+(defn- render-iae [^IllegalArgumentException e]
+  [nil (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
+
+(defn- render-xt-iae [^xtdb.IllegalArgumentException e]
   [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
 
 (defmethod print-dup xtdb.IllegalArgumentException [e, ^Writer w]
-  (.write w (str "#xt/illegal-arg " (render-iae e))))
+  (.write w (str "#xt/illegal-arg " (render-xt-iae e))))
 
 (defmethod print-method xtdb.IllegalArgumentException [e, ^Writer w]
   (print-dup e w))
 
 (defn iae-reader [[k message data]]
-  (xtdb.IllegalArgumentException. k message data nil))
+  (xtdb.IllegalArgumentException. k message (or data {}) nil))
 
 (defn- render-runex [^xtdb.RuntimeException e]
   [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
@@ -243,7 +246,8 @@
          {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
           TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
           TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))
-          xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
+          IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
+          xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-xt-iae)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" (juxt ex-message ex-data))
           IKeyFn$KeyFn (transit/write-handler "xtdb/key-fn" write-key-fn)

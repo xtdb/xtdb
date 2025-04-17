@@ -368,7 +368,7 @@
 (defn err-pg-exception
   "Returns a pg specific error for an XTDB exception"
   [^Throwable ex generic-msg]
-  (if (or (instance? xtdb.IllegalArgumentException ex)
+  (if (or (instance? IllegalArgumentException ex)
           (instance? xtdb.RuntimeException ex))
     (err-protocol-violation (.getMessage ex))
     (err-internal generic-msg)))

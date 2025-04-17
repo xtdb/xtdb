@@ -384,19 +384,19 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
     (.close node)))
 
 (t/deftest test-query-with-errors
-  (t/is (thrown-with-msg? xtdb.IllegalArgumentException
+  (t/is (thrown-with-msg? IllegalArgumentException
                           #"Illegal argument: 'xtql/malformed-table'"
                           #_{:clj-kondo/ignore [:xtql/type-mismatch]}
                           (xt/q tu/*node* '(from docs [name]))))
 
-  (t/is (thrown-with-msg? xtdb.RuntimeException
+  (t/is (thrown-with-msg? RuntimeException
                           #"data exception - division by zero"
                           (xt/q tu/*node* '(-> (rel [{}] [])
                                                (with {:foo (/ 1 0)})))))
 
   ;; Might need to get updated if this kind of error gets handled differently.
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
-  (t/is (thrown-with-msg? xtdb.IllegalArgumentException
+  (t/is (thrown-with-msg? IllegalArgumentException
                           #"upper not applicable to types i64"
                           (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
 

@@ -1758,7 +1758,7 @@
                                  (xt/q tu/*node*)))))
 
   (t/testing "multiple column error"
-    (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Scalar subquery must only return a single column"
+    (t/is (thrown-with-msg? IllegalArgumentException #"Scalar subquery must only return a single column"
                             (->> '(unify
                                    (with
                                     {n-customers

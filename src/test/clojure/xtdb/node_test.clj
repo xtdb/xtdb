@@ -627,11 +627,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 ;; TODO move this to api-test once #2937 is in
 (t/deftest throw-on-unknown-query-type
-  (t/is (thrown-with-msg?
-         xtdb.IllegalArgumentException
-         #"Illegal argument: 'unknown-query-type'"
-         (xt/q tu/*node* (Object.)))))
-
+  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'unknown-query-type'"
+                          (xt/q tu/*node* (Object.)))))
 
 (t/deftest test-array-agg-2946
   (xt/submit-tx tu/*node*

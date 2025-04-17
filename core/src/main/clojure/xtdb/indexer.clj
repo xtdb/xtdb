@@ -19,8 +19,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.xtql.plan :as xtql])
+            [xtdb.vector.reader :as vr])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Counter Timer)
            (java.io ByteArrayInputStream Closeable)
@@ -38,7 +37,6 @@
            xtdb.BufferPool
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)
-           xtdb.types.ClojureForm
            (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -77,7 +75,7 @@
   `(try
      ~@body
      (catch xtdb.RuntimeException e# (throw e#))
-     (catch xtdb.IllegalArgumentException e# (throw e#))
+     (catch IllegalArgumentException e# (throw e#))
      (catch InterruptedException e# (throw e#))
      (catch ClosedByInterruptException e# (throw e#))
      (catch Exception e#
@@ -300,7 +298,7 @@
                       (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))
 
                   (catch xtdb.RuntimeException e (throw e))
-                  (catch xtdb.IllegalArgumentException e (throw e))
+                  (catch IllegalArgumentException e (throw e))
                   (catch InterruptedException e (throw e))
                   (catch ClosedByInterruptException e (throw e))
                   (catch Throwable t
@@ -728,7 +726,7 @@
                                                                                                             "see the release notes for more information."])}))
                                                    "abort" (throw abort-exn))))
                              (catch xtdb.RuntimeException e e)
-                             (catch xtdb.IllegalArgumentException e e))]
+                             (catch IllegalArgumentException e e))]
 
                   (do
                     (when-not (= e abort-exn)
