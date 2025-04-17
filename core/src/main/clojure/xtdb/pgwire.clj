@@ -1689,7 +1689,7 @@
 
         stmt))))
 
-(defn unamed-portal? [portal-name]
+(defn unnamed-portal? [portal-name]
   (= "" portal-name))
 
 (defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
@@ -1703,7 +1703,7 @@
               (cmd-write-msg conn msg-bind-complete))]
       (if (get portals portal-name)
         ;;portal with this name already exists
-        (if (unamed-portal? portal-name)
+        (if (unnamed-portal? portal-name)
           (do (close-portal conn portal-name)
               (create-portal))
           (cmd-send-error conn (-> (err-protocol-violation "Named portals must be explicit closed before they can be redefined")

@@ -164,7 +164,7 @@ describe("XT cleans up portals correctly", function() {
     sql.end();
   })
 
-  it("implcitly closes unamed portal at start of simple query", async () => {
+  it("implictly closes unamed portal at start of simple query", async () => {
     const sql2 = await sql.reserve();
     await sql2`BEGIN TRANSACTION READ ONLY`;
     await sql2`SELECT ${2}`;

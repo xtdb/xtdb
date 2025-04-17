@@ -491,7 +491,7 @@
       (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" i))]
         (.executeQuery stmt)))
 
-    (testing "no portal should remain, they are closed by sync, explicit close or rebinding the unamed portal"
+    (testing "no portal should remain, they are closed by sync, explicit close or rebinding the unnamed portal"
       (is (empty? (:portals @(:conn-state (get-last-conn))))))
 
     (testing "the last statement should still exist as they last the duration of the session and are only closed by
