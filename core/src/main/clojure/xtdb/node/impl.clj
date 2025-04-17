@@ -4,6 +4,7 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
             [xtdb.error :as err]
+            [xtdb.garbage-collector]
             [xtdb.indexer :as idx]
             [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
@@ -268,6 +269,7 @@
          :xtdb/log (.getLog opts)
          :xtdb/buffer-pool (.getStorage opts)
          :xtdb.indexer/live-index indexer-cfg
+         :xtdb/garbage-collector (.getGarbageCollector opts)
          :xtdb/modules (.getModules opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
                 healthz (assoc :xtdb/healthz healthz))
