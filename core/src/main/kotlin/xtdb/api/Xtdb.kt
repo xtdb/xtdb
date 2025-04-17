@@ -42,6 +42,7 @@ interface Xtdb : AutoCloseable {
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig(),
         var authn: Authenticator.Factory = UserTable(),
+        var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
         var nodeId: String = System.getenv("XTDB_NODE_ID")?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
@@ -63,6 +64,12 @@ interface Xtdb : AutoCloseable {
         @JvmSynthetic
         fun healthz(configure: HealthzConfig.() -> Unit) =
             healthz(HealthzConfig().also(configure))
+
+        fun garbageCollector(garbageCollector: GarbageCollectorConfig) = apply { this.garbageCollector = garbageCollector }
+
+        @JvmSynthetic
+        fun garbageCollector(configure: GarbageCollectorConfig.() -> Unit) = 
+            garbageCollector(GarbageCollectorConfig().also(configure))
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
