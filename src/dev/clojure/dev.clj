@@ -47,13 +47,12 @@
                        :log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
                        :healthz {:port 8080}
-                       :http-server {}
                        :flight-sql-server {:port 52358}}}})
 
 (comment
   (do
     (halt)
-    (util/delete-dir (util/->path dev-node-dir))
+    #_(util/delete-dir (util/->path dev-node-dir))
     (go)))
 
 (def playground-config

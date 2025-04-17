@@ -913,66 +913,66 @@
     (xt/submit-tx tu/*node* [(into [:put-docs :docs ]
                                    (for [[id doc] (zipmap (range) docs)] (assoc doc :xt/id id)))])
 
-    (t/is (= #{{:a 1, :b 10, :rn 0}
-               {:a 1, :b 20, :rn 1}
-               {:a 1, :b 50, :rn 2}
-               {:a 1, :b 60, :rn 3}
-               {:a 2, :b 30, :rn 0}
-               {:a 2, :b 40, :rn 1}
-               {:a 2, :b 70, :rn 2}
-               {:a 3, :b 80, :rn 0}
-               {:a 3, :b 90, :rn 1}}
+    (t/is (= #{{:a 1, :b 10, :rn 1}
+               {:a 1, :b 20, :rn 2}
+               {:a 1, :b 50, :rn 3}
+               {:a 1, :b 60, :rn 4}
+               {:a 2, :b 30, :rn 1}
+               {:a 2, :b 40, :rn 2}
+               {:a 2, :b 70, :rn 3}
+               {:a 3, :b 80, :rn 1}
+               {:a 3, :b 90, :rn 2}}
              (->> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) AS rn FROM docs")
                   set)))
 
-    (t/is (= #{{:a 1, :b 60, :rn 0}
-               {:a 1, :b 10, :rn 1}
-               {:a 1, :b 50, :rn 2}
-               {:a 1, :b 20, :rn 3}
-               {:a 2, :b 70, :rn 0}
-               {:a 2, :b 30, :rn 1}
-               {:a 2, :b 40, :rn 2}
-               {:a 3, :b 90, :rn 0}
-               {:a 3, :b 80, :rn 1}}
+    (t/is (= #{{:a 1, :b 60, :rn 1}
+               {:a 1, :b 10, :rn 2}
+               {:a 1, :b 50, :rn 3}
+               {:a 1, :b 20, :rn 4}
+               {:a 2, :b 70, :rn 1}
+               {:a 2, :b 30, :rn 2}
+               {:a 2, :b 40, :rn 3}
+               {:a 3, :b 90, :rn 1}
+               {:a 3, :b 80, :rn 2}}
              (->> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY a) AS rn FROM docs")
                   set))
           "only partition by")
 
-    (t/is (= #{{:a 1, :b 10, :rn 0}
-               {:a 1, :b 20, :rn 1}
-               {:a 2, :b 30, :rn 2}
-               {:a 2, :b 40, :rn 3}
-               {:a 1, :b 50, :rn 4}
-               {:a 1, :b 60, :rn 5}
-               {:a 2, :b 70, :rn 6}
-               {:a 3, :b 80, :rn 7}
-               {:a 3, :b 90, :rn 8}}
+    (t/is (= #{{:a 1, :b 10, :rn 1}
+               {:a 1, :b 20, :rn 2}
+               {:a 2, :b 30, :rn 3}
+               {:a 2, :b 40, :rn 4}
+               {:a 1, :b 50, :rn 5}
+               {:a 1, :b 60, :rn 6}
+               {:a 2, :b 70, :rn 7}
+               {:a 3, :b 80, :rn 8}
+               {:a 3, :b 90, :rn 9}}
              (->> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (ORDER BY b) AS rn FROM docs")
                   set))
           "only order by")
 
-    (t/is (= #{{:a 1, :b 60, :rn 0}
-               {:a 2, :b 70, :rn 1}
-               {:a 2, :b 30, :rn 2}
-               {:a 3, :b 90, :rn 3}
-               {:a 1, :b 10, :rn 4}
-               {:a 3, :b 80, :rn 5}
-               {:a 1, :b 50, :rn 6}
-               {:a 2, :b 40, :rn 7}
-               {:a 1, :b 20, :rn 8}}
+    (t/is (= #{{:a 1, :b 60, :rn 1}
+               {:a 2, :b 70, :rn 2}
+               {:a 2, :b 30, :rn 3}
+               {:a 3, :b 90, :rn 4}
+               {:a 1, :b 10, :rn 5}
+               {:a 3, :b 80, :rn 6}
+               {:a 1, :b 50, :rn 7}
+               {:a 2, :b 40, :rn 8}
+               {:a 1, :b 20, :rn 9}}
              (-> (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER () AS rn FROM docs")
                  set))
           "nothing")
     #_
-    (t/is (= [{:a 1, :b 60, :rn 0}
-              {:a 2, :b 70, :rn 1}
-              {:a 2, :b 30, :rn 2}
-              {:a 3, :b 90, :rn 3}
-              {:a 1, :b 10, :rn 4}
-              {:a 3, :b 80, :rn 5}
-              {:a 1, :b 50, :rn 6}
-              {:a 2, :b 40, :rn 7}
-              {:a 1, :b 20, :rn 8}]
+    (t/is (= [{:a 1, :b 60, :rn 1}
+              {:a 2, :b 70, :rn 2}
+              {:a 2, :b 30, :rn 3}
+              {:a 3, :b 90, :rn 4}
+              {:a 1, :b 10, :rn 5}
+              {:a 3, :b 80, :rn 6}
+              {:a 1, :b 50, :rn 7}
+              {:a 2, :b 40, :rn 8}
+              {:a 1, :b 20, :rn 9}]
              (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) AS rn FROM docs"))
           "no existing columns")))
 
@@ -2594,7 +2594,7 @@ UNION ALL
   (t/is (= [{:xt/id 1} {:xt/id 3} {:xt/id 4} {:xt/id 5}]
            (xt/q tu/*node* "FROM foo
                             SELECT _id, ROW_NUMBER () OVER (PARTITION BY v ORDER BY _id) row_num
-                            WHERE row_num = 0
+                            WHERE row_num = 1
                             SELECT _id
                             ORDER BY _id"))
         "we can filter on window functions"))

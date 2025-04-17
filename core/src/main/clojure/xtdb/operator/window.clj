@@ -89,7 +89,7 @@
                   row-count (.getValueCount group-mapping)]
               (.setValueCount out-vec (+ offset row-count))
               (dotimes [idx row-count]
-                (.set out-vec (+ offset idx) (.putOrAdd group-to-cnt (.get group-mapping (aget sortMapping idx)) 0 1)))
+                (.set out-vec (+ offset idx) (.putOrAdd group-to-cnt (.get group-mapping (aget sortMapping idx)) 1 1)))
               (vr/vec->reader out-vec)))
 
           Closeable
