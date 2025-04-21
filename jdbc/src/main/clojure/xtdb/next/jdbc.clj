@@ -98,6 +98,9 @@
 (defmethod <-pg-obj "jsonb" [^PGobject obj]
   (JsonSerde/decode (.getValue obj)))
 
+(defmethod <-pg-obj "keyword" [^PGobject obj]
+  (keyword (.getValue obj)))
+
 (defmethod <-pg-obj :default [^PGobject obj]
   obj)
 
