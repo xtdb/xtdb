@@ -65,14 +65,14 @@
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[127091884 "_id" 1 114 -1]
+  (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[127091884 "_id" 1 11111 -1]
                                                                   [127091884 "_system_from" 2 1184 8]
                                                                   [127091884 "_system_to" 3 1184 8]
                                                                   [127091884 "_valid_from" 4 1184 8]
                                                                   [127091884 "_valid_to" 5 1184 8]
                                                                   [127091884 "col1" 6 114 -1]
 
-                                                                  [732573471 "_id" 1 114 -1]
+                                                                  [732573471 "_id" 1 11111 -1]
                                                                   [732573471 "_system_from" 2 1184 8]
                                                                   [732573471 "_system_to" 3 1184 8]
                                                                   [732573471 "_valid_from" 4 1184 8]
@@ -198,7 +198,8 @@
                                      [2205 "regclass"]
                                      [1007 "_int4"] [1016 "_int8"]
                                      [17 "bytea"]
-                                     [1009 "_text"]]]
+                                     [1009 "_text"]
+                                     [11111 "keyword"]]]
                   {:typtypmod -1,
                    :oid oid,
                    :typtype "b",
