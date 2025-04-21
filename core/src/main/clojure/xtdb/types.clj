@@ -1210,6 +1210,24 @@
                                (.get bb ba)
                                ba))}
 
+   :keyword {:typname "keyword"
+             :col-type :keyword
+             :oid 11111
+             :typsend "keywordsend"
+             :typreceive "keywordrecv"
+             :read-text (fn [_env ba] (read-utf8 ba))
+             :read-binary (fn [_env ba] (read-utf8 ba))
+             :write-text (fn [_env ^IVectorReader rdr idx]
+                           (let [bb (.getBytes rdr idx)
+                                 ba ^bytes (byte-array (.remaining bb))]
+                             (.get bb ba)
+                             ba))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (let [bb (.getBytes rdr idx)
+                                   ba ^bytes (byte-array (.remaining bb))]
+                               (.get bb ba)
+                               ba))}
+
    :bytea {:typname "bytea"
            :col-type :varbinary
            :oid 17
@@ -1481,6 +1499,7 @@
    :null :text
    :regclass :regclass
    :varbinary :bytea
+   :keyword :keyword
    [:date :day] :date
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz

@@ -2704,3 +2704,26 @@ ORDER BY 1,2;")
                     (map vector expected-res res)
                     (every? #(compare-decimals-with-scale (:data (first %)) (:data (second %))))))
             "correct scale"))))
+
+
+(deftest keyword-roundtripping-4237
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO docs RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 1, :foo :bar})])
+
+    (with-open [ps (jdbc/prepare conn ["FROM docs"])]
+
+      (t/is (= [{"_id" "int8"} {"foo" "keyword"}]
+               (result-metadata ps)))
+
+      (t/is (= [{:_id 1, :foo :bar}] (jdbc/execute! ps))))
+
+    (t/is (= [{:_id 1, :foo :bar}]
+             (jdbc/execute! conn ["FROM docs"])))
+
+    (t/is (= [{:xt/id 1, :foo :bar}]
+             (jdbc/execute! conn ["FROM docs"]
+                            {:builder-fn xt-jdbc/builder-fn}))))
+
+  (with-open [pg-conn (pg-conn {})]
+    (t/is (= [{:_id 1, :foo "bar"}] (pg/execute pg-conn "FROM docs"))
+          "if the driver doesn't know about keywords it might fall back to text")))
