@@ -1249,14 +1249,17 @@
           (read-binary session arg)
           (read-text session arg))))))
 
+(defn- ex->message [^Exception e]
+  (or (ex-message e) (str "invalid arg representation - " e)))
+
 (defn- xtify-args [{:keys [conn-state] :as _conn} args {:keys [arg-format] :as stmt}]
   (try
     (vec (map-indexed (->xtify-arg (:session @conn-state) stmt) args))
     (catch Exception e
       (throw (ex-info "invalid arg representation"
                       {::client-error (if (= arg-format :binary)
-                                        (invalid-binary-representation (ex-message e))
-                                        (invalid-text-representation (ex-message e)))}
+                                        (invalid-binary-representation (ex->message e))
+                                        (invalid-text-representation (ex->message e)))}
                       e)))))
 
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
