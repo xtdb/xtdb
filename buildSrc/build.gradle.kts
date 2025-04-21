@@ -12,7 +12,7 @@ dependencies {
     implementation("org.clojure", "clojure", "1.12.0")
     implementation(gradleApi())
     implementation("com.gradleup.shadow:shadow-gradle-plugin:8.3.5")
-    implementation("org.apache.ant:ant:1.10.13") // eugh. _all_ of Ant for the DataReaderTransformer?
+    implementation("org.apache.ant:ant:1.10.15") // eugh. _all_ of Ant for the DataReaderTransformer?
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
