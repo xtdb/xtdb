@@ -1,6 +1,7 @@
 package xtdb.catalog
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import kotlinx.coroutines.*
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
@@ -18,6 +19,7 @@ import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -103,4 +105,44 @@ class BlockCatalogTest {
         assertNotNull(latestTable1BlockFileAfterGC, "Expected latest table1 block file to exist after GC, but it was deleted")
         assertNotNull(latestTable2BlockFileAfterGC, "Expected latest table2 block file to exist after GC, but it was deleted")
     }
+
+    /*
+    TODO: Fix this test - race condition with ListAllObjects
+    @Test
+    fun `garbageCollectBlocks handles concurrent deletions gracefully`(@TempDir tempDir: Path) = runBlocking {
+        val bufferPool: BufferPool = LocalBufferPool(
+            Storage.localStorage(tempDir),
+            Storage.VERSION,
+            RootAllocator(),
+            SimpleMeterRegistry()
+        )
+
+        val blocksPath = "blocks".asPath
+        val tableBlockPath = "foo".tablePath.resolve(blocksPath)
+
+        (1L..50000L).forEach { index ->
+            writeBlock(bufferPool, index, listOf("foo"), listOf(blocksPath, tableBlockPath))
+        }
+
+        val allBlockKeys = bufferPool.listAllObjects(blocksPath).map { it.key }
+        val allTableBlockKeys = bufferPool.listAllObjects(tableBlockPath).map { it.key }
+
+        val catalog = BlockCatalog(bufferPool)
+
+        coroutineScope {
+            launch(Dispatchers.IO) {
+                catalog.garbageCollectBlocks(blocksToKeep = 3)
+            }
+
+            launch(Dispatchers.IO) {
+                delay(100) // Ensure GC starts first
+                (20000 .. 40000 step 2).forEach { index ->
+                    bufferPool.deleteIfExists(allBlockKeys[index])
+                    bufferPool.deleteIfExists(allTableBlockKeys[index])
+                }
+            }
+        }.join()
+
+        assertBlockCount(bufferPool, blocksPath, 3)
+    }*/
 }
