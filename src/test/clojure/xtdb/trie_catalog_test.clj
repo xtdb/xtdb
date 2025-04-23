@@ -317,3 +317,11 @@
   ;; (in practice, we always submit L1C after L1H - but this keeps the invariant definition simpler to understand)
   (t/is (= #{"l01-r20200101-b01" "l01-r20200102-b01" "l01-rc-b01"}
            (curr-tries ["l01-r20200101-b01" 5] ["l01-rc-b01" 15] ["l01-r20200102-b01" 5]))))
+
+(t/deftest stack-overflow-exception-creating-tries-4377
+  (t/is (= #{"l01-rc-b3270f"}
+           (apply curr-tries
+                  (concat (for [n (range 10000)]
+                            [(str "l00-rc-b" (util/->lex-hex-string n)) 1])
+                          (for [n (range 10000)]
+                            [(str "l01-rc-b" (util/->lex-hex-string n)) 1]))))))

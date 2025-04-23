@@ -6,14 +6,14 @@
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
            [java.time LocalDate ZoneOffset]
-           [java.util ArrayList Map]
+           [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            xtdb.operator.scan.Metadata
-           (xtdb.util Temporal TemporalBounds TemporalDimension)))
+           (xtdb.util TemporalBounds)))
 
 ;; table-tries data structure
 ;; values :: {:keys [level recency part block-idx state]}
@@ -62,15 +62,19 @@
 (def ^:dynamic ^{:tag 'long} *file-size-target* (* 100 1024 1024))
 
 (defn- map-while
-  "map f until it returns nil, then append the rest of the collection unaltered."
+  "map f until it returns nil, then append the rest of the collection unaltered.
+
+   eagerly realises coll until the function returns nil, to avoid stack-overflow later.
+   see #4377"
   [f coll]
 
-  (lazy-seq
-   (when-let [[x & xs] (seq coll)]
-     (let [v (f x)]
-       (if v
-         (cons v (map-while f xs))
-         (cons x xs))))))
+  (loop [res (transient [])
+         coll coll]
+    (if-let [[x & xs] (seq coll)]
+      (if-let [v (f x)]
+        (recur (conj! res v) xs)
+        (concat (persistent! res) coll))
+      (concat (persistent! res) coll))))
 
 (defn- stale-block-idx? [tries ^long block-idx]
   (when-let [{^long other-block-idx :block-idx} (first tries)]
