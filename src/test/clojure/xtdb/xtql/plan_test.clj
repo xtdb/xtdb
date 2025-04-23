@@ -1809,7 +1809,7 @@
 
   (t/is (thrown-with-msg?
          RuntimeException
-         #"From cannot be greater than to when constructing a period"
+         #"'from' must be earlier than 'to' when constructing a period"
          (xt/q
           tu/*node*
           '(unify (with {p1 (period #inst "2022" #inst "2020")}))))))

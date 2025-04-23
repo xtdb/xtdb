@@ -1412,7 +1412,7 @@
       (t/is
        (thrown-with-msg?
         RuntimeException
-        #"From cannot be greater than to when constructing a period"
+        #"'from' must be earlier than 'to' when constructing a period"
         (f from to))))
 
     (t/testing "other date-time types"

@@ -1633,7 +1633,7 @@
   (let [from (time/micros->instant from-µs)
         to (time/micros->instant to-µs)]
     (err/runtime-err :xtdb/invalid-period
-                     {::err/message (format "From cannot be greater than to when constructing a period - from: %s, to %s" from to)
+                     {::err/message (format "'from' must be earlier than 'to' when constructing a period - 'from': %s, 'to': %s" from to)
                       :from from
                       :to to})))
 
