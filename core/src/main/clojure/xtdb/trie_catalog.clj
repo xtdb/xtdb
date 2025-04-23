@@ -154,8 +154,8 @@
         ;; L1H files are nascent until we see the corresponding L1C file
         (-> table-cat
             (update-in [:tries [1 recency part]] conj-trie trie
-                       (let [{^long l1c-block-idx :block-idx} (get-in table-cat [:tries [1 nil part]])]
-                         (if (and l1c-block-idx (>= l1c-block-idx block-idx))
+                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part]])]
+                         (if (and l1c (>= l1c-block-idx block-idx))
                            :live :nascent)))
             (update-in [:l1h-recencies block-idx] (fnil conj #{}) recency))
 
