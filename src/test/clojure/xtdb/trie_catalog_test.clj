@@ -294,7 +294,7 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         (let [cat (cat/trie-catalog node)]
-          (.addTries cat
+          (.addTries cat "public/foo"
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]

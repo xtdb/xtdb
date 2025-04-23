@@ -158,7 +158,7 @@ interface Compactor : AutoCloseable {
 
                                     // add the trie to the catalog eagerly so that it's present
                                     // next time we run `availableJobs` (it's idempotent)
-                                    trieCatalog.addTries(addedTries)
+                                    trieCatalog.addTries(job.tableName, addedTries)
                                     log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
                                 }
 

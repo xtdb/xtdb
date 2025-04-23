@@ -1,5 +1,6 @@
 (ns xtdb.trie-catalog
-  (:require [integrant.core :as ig]
+  (:require [clojure.tools.logging :as log]
+            [integrant.core :as ig]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -244,20 +245,18 @@
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
-  (addTries [this added-tries]
-    (doseq [[table-name added-tries] (->> added-tries
-                                          (group-by #(.getTableName ^TrieDetails %)))]
-      (.compute !table-cats table-name
-                (fn [_table-name tries]
-                  (reduce (fn [table-cat ^TrieDetails added-trie]
-                            (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                              (apply-trie-notification this table-cat
-                                                       (-> parsed-key
-                                                           (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                  :trie-metadata (.getTrieMetadata added-trie))))
-                              table-cat))
-                          (or tries {})
-                          added-tries)))))
+  (addTries [this table-name added-tries]
+    (.compute !table-cats table-name
+              (fn [_table-name tries]
+                (reduce (fn [table-cat ^TrieDetails added-trie]
+                          (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
+                            (apply-trie-notification this table-cat
+                                                     (-> parsed-key
+                                                         (assoc :data-file-size (.getDataFileSize added-trie)
+                                                                :trie-metadata (.getTrieMetadata added-trie))))
+                            table-cat))
+                        (or tries {})
+                        added-tries))))
 
   (getTableNames [_] (set (keys !table-cats)))
 
@@ -271,11 +270,15 @@
         opts))
 
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
-  (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)]
-    (doto (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
-      (.addTries (for [[_ {:keys [tries]}] table->table-block
-                       trie tries]
-                   trie)))))
+  (log/debug "starting trie catalog...")
+  (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)
+        cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)]
+    (doseq [[table-name {:keys [tries]}] table->table-block]
+      (.addTries cat table-name tries))
+
+    (log/debug "trie catalog started")
+
+    cat))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
   (util/component node :xtdb/trie-catalog))

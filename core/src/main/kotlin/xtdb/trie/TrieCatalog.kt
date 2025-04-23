@@ -5,6 +5,6 @@ import xtdb.log.proto.TrieDetails
 typealias FileSize = Long
 
 interface TrieCatalog {
-    fun addTries(addedTries: Iterable<TrieDetails>)
+    fun addTries(tableName: TableName, addedTries: Iterable<TrieDetails>)
     val tableNames: Set<String>
 }

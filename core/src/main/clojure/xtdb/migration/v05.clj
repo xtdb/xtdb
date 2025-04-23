@@ -121,8 +121,9 @@
                                                     [table-name (into {:trie-key new-trie-key} (trie-details system data-buf))])))
                                               (into {}))]
 
-                           (.addTries trie-cat (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-res]
-                                                 (trie/->trie-details table-name trie-key data-file-size trie-metadata)))
+                           (doseq [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-res]
+                             (.addTries trie-cat table-name
+                                        [(trie/->trie-details table-name trie-key data-file-size trie-metadata)]))
 
                            (log/debugf "Writing table-block files for block %d" block-idx)
                            (let [table-block-paths (table-cat/finish-block! table-cat block-idx table-res

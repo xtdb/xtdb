@@ -89,7 +89,7 @@
           (t/is (<= 1.99 (HyperLogLog/estimate (get hlls2 "_id")) 2.01)))
 
         (t/testing "artifically adding tries (simulating another node finishing and compacting these)"
-          (.addTries trie-catalog
+          (.addTries trie-catalog "public/foo"
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
@@ -116,7 +116,7 @@
         ;; need some dummy tx for latest-completed-txt
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (let [cat (trie-cat/trie-catalog node)]
-          (.addTries cat
+          (.addTries cat "public/foo"
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
                            ["l01-r20200102-b01" 5] ["l01-rc-b01" 2]
