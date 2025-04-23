@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.RemovalCause
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import xtdb.RuntimeException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
@@ -67,6 +68,8 @@ class DiskCache(
                 val k = rootPath.relativize(path)
                 syncInnerCache.put(k, Entry(k, path))
             }
+
+        LOGGER.debug("disk cache started, existing size: {} bytes", pinningCache.stats0.evictableBytes)
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
