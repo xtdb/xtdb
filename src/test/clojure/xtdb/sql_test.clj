@@ -2903,3 +2903,30 @@ UNION ALL
       (doseq [[expected result] (map vector expected-res res)]
         (t/is (compare-decimals expected result)
               (str "Expected: " expected ", but got: " result))))))
+
+(t/deftest iseq-from-symbol-bug-4378
+  (t/is (thrown-with-msg? IllegalArgumentException #"Subquery arity error"
+         (sql/plan "
+WITH dates AS (
+  SELECT TIMESTAMP '2023-01-01T00:00:00Z' AS d
+  UNION ALL
+  SELECT TIMESTAMP '2023-01-02T00:00:00Z'
+),
+system_range AS (
+  SELECT
+    'a' AS _id,
+    period(TIMESTAMP '2022-12-31T00:00:00Z', TIMESTAMP '2023-01-02T00:00:00Z') AS valid_time_intersection
+  UNION ALL
+  SELECT
+    'b',
+    period(TIMESTAMP '2023-01-02T00:00:00Z', TIMESTAMP '2023-01-03T00:00:00Z')
+)
+
+SELECT
+  dates.d,
+  (
+    SELECT COUNT(DISTINCT v._id), dates.d, v._id
+    FROM system_range AS v
+    WHERE v.valid_time_intersection CONTAINS (dates.d + INTERVAL 'PT0M')
+  ) AS member_count
+FROM dates"))))

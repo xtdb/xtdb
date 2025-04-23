@@ -145,14 +145,22 @@
     (not-empty (->> (find-cols scope chain excl-cols)
                     (mapv #(->sq-sym % env !sq-refs))))))
 
-(defn- plan-sq [^ParserRuleContext sq-ctx, {:keys [!id-count] :as env}, scope, ^Map !subqs, sq-opts]
+(defrecord SubqueryArityError [^long given-col-count]
+  PlanError
+  (error-string [_] (format "Subquery arity error: expected a single column, got %d" given-col-count)))
+
+(defn- plan-sq [^ParserRuleContext sq-ctx, {:keys [!id-count] :as env}, scope, ^Map !subqs, {:keys [assert-single-col?] :as sq-opts}]
   (if-not !subqs
     (add-err! env (->SubqueryDisallowed))
 
     (let [sq-sym (-> (->col-sym (str "_sq_" (swap! !id-count inc)))
                      (vary-meta assoc :sq-out-sym? true))
           !sq-refs (HashMap.)
-          query-plan (-> sq-ctx (.accept (->QueryPlanVisitor env (->SubqueryScope env scope !sq-refs))))]
+          query-plan (-> sq-ctx (.accept (->QueryPlanVisitor env (->SubqueryScope env scope !sq-refs))))
+          sq-arity (count (:col-syms query-plan))]
+
+      (when (and assert-single-col? (not= 1 sq-arity))
+        (add-err! env (->SubqueryArityError sq-arity)))
 
       (.put !subqs sq-sym (-> sq-opts
                               (assoc :query-plan query-plan
@@ -1747,7 +1755,7 @@
 
   (visitScalarSubqueryExpr [{:keys [!subqs]} ctx]
     (plan-sq (.subquery ctx) env scope !subqs
-             {:sq-type :scalar}))
+             {:sq-type :scalar, :assert-single-col? true}))
 
   (visitNestOneSubqueryExpr [{:keys [!subqs]} ctx]
     (plan-sq (.subquery ctx) env scope !subqs
@@ -1759,7 +1767,7 @@
 
   (visitArrayValueConstructorByQuery [{:keys [!subqs]} ctx]
     (plan-sq (.subquery ctx) env scope !subqs
-             {:sq-type :array-by-query}))
+             {:sq-type :array-by-query, :assert-single-col? true}))
 
   (visitExistsPredicate [{:keys [!subqs]} ctx]
     (plan-sq (.subquery ctx) env scope !subqs
@@ -1787,7 +1795,7 @@
 
   (visitQuantifiedComparisonSubquery [{:keys [!subqs qc-pt2]} ctx]
     (plan-sq (.subquery ctx) env scope !subqs
-             (into {:sq-type :quantified-comparison}
+             (into {:sq-type :quantified-comparison, :assert-single-col? true}
                    qc-pt2)))
 
   (visitQuantifiedComparisonExpr [{{:keys [!id-count]} :env, :keys [qc-pt2, ^Map !subqs], :as this} ctx]
@@ -1817,6 +1825,7 @@
 
       (cond->> (plan-sq sq-ctx env scope !subqs
                         {:sq-type :quantified-comparison
+                         :assert-single-col? true
                          :expr (.accept (.expr ctx) this)
                          :op '=})
         (boolean (.NOT ctx)) (list 'not))))
@@ -1830,6 +1839,7 @@
 
       (cond->> (plan-sq sq-ctx env scope !subqs
                         {:sq-type :quantified-comparison
+                         :assert-single-col? true
                          :expr pt1
                          :op '=})
         (boolean (.NOT ctx)) (list 'not))))
