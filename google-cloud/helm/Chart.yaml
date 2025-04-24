@@ -3,4 +3,4 @@ name: helm-xtdb-google-cloud
 description: A Helm chart for setting up a simple XTDB cluster on Google Cloud
 type: application
 version: 0.1.0
-appVersion: "2.0.0-beta6"
+appVersion: "2.0.0-beta7"
