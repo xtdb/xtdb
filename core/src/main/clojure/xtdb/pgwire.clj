@@ -1245,6 +1245,10 @@
                            (nth arg-format arg-idx :text))
             {:keys [read-binary, read-text]} (or (get types/pg-types-by-oid param-oid)
                                                  (throw (Exception. "Unsupported param type provided for read")))]
+
+        (when (= 0 param-oid)
+          (throw (Exception. "Param type not specified or could not be inferred")))
+
         (if (= :binary arg-format)
           (read-binary session arg)
           (read-text session arg))))))
@@ -1589,7 +1593,15 @@
       ;; NOTE this means that for DML statments we assume the number and type of args is exactly
       ;; those specified by the client in param-types, irrelevant of the number featured in the query string.
       ;; If a client subsequently binds a different number of args we will send an error msg
-      (assoc stmt :param-fields param-types))))
+      (do
+        (when (some #(= 0 (:oid %)) param-types)
+          (log/error "Missing types for params in DML statement")
+          (cmd-send-error
+           conn
+           (-> (err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")
+               (assoc :error-type :dml))))
+
+        (assoc stmt :param-fields param-types)))))
 
 (defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [stmt-name param-oids] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)

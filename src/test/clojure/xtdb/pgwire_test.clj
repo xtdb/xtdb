@@ -29,7 +29,7 @@
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
            (org.pg.enums OID)
-           (org.pg.error PGErrorResponse)
+           (org.pg.error PGError PGErrorResponse)
            (org.postgresql.util PGInterval PGobject PSQLException)
            xtdb.JsonSerde
            xtdb.pgwire.Server))
@@ -1636,7 +1636,7 @@
                (pg/execute conn "SELECT $1 v" {:params ["1"]}))
             "given text params query is executable")
 
-      #_#_(t/is (= [{:v "1"}]
+      (t/is (= [{:v "1"}]
                (pg/execute conn "SELECT $1 v" {:params ["1"]
                                                :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
@@ -1647,7 +1647,7 @@
              (pg/execute conn "SELECT $1 v" {:params [1]}))
             "non text params error"))
 
-    #_(testing "params with unspecified types in DML error"
+    (testing "params with unspecified types in DML error"
       ;;postgres is able to infer the type of the param from context such as the column type
       ;;of base tables referenced in the query and the operations present. However we are currently
       ;;not able to do this, because the EE isn't yet powerful enough to work in reverese and requires
@@ -1660,6 +1660,8 @@
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]}))
             "dml with unspecified params error")
 
+      ;; without this we get a wrong parameter count error from pg2, which seems more like a bug in pg2
+      (pg/close-cached-statements conn)
 
       (t/is (thrown-with-msg?
              PGErrorResponse
