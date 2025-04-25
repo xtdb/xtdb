@@ -245,6 +245,9 @@
 (defn open-input-stream ^java.io.InputStream [^Path path]
   (Files/newInputStream path (into-array OpenOption [(standard-open-options :read)])))
 
+(defn open-output-stream ^java.io.OutputStream [^Path path]
+  (Files/newOutputStream path (into-array OpenOption (map #(standard-open-options % %) write-truncate-open-opts))))
+
 (defn ->file-channel
   (^java.nio.channels.FileChannel [^Path path]
    (->file-channel path #{:read}))

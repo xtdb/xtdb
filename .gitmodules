@@ -4,3 +4,6 @@
 [submodule "railroad"]
 	path = docs/lib/railroad
 	url = https://github.com/tabatkins/railroad-diagrams/
+[submodule "modules/datasets/lib/tsbs"]
+	path = modules/datasets/lib/tsbs
+	url = https://github.com/timescale/tsbs.git

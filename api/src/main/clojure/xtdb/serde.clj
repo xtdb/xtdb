@@ -7,7 +7,7 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql :as xtql])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream OutputStream Writer]
            (java.net URI)
            [java.nio ByteBuffer]
            (java.nio.file Path Paths)
@@ -18,8 +18,8 @@
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
-           (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
            (xtdb.time Interval)
+           (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
            (xtdb.types ClojureForm ZonedDateTimeRange)
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
 
@@ -293,6 +293,15 @@
   ([bytes fmt]
    (with-open [bais (ByteArrayInputStream. bytes)]
      (transit/read (transit/reader bais (or fmt :msgpack) {:handlers transit-read-handler-map})))))
+
+(defn transit-seq [rdr]
+  (lazy-seq
+   (try
+     (cons (transit/read rdr)
+           (transit-seq rdr))
+     (catch RuntimeException ex
+       (when-not (instance? java.io.EOFException (.getCause ex))
+         (throw ex))))))
 
 (defn write-transit
   (^bytes [v] (write-transit v nil))

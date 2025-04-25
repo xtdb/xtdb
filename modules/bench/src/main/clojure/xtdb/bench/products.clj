@@ -3,7 +3,8 @@
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [xtdb.api :as xt]
-            [xtdb.bench :as b])
+            [xtdb.bench :as b]
+            [xtdb.serde :as serde])
   (:import [java.io File]
            [java.time Duration]
            java.util.zip.GZIPInputStream
@@ -24,15 +25,6 @@
                     (.key "products.transit.msgpack.gz")
                     ^GetObjectRequest (.build))
                 (.toPath products-file))))
-
-(defn transit-seq [rdr]
-  (lazy-seq
-   (try
-     (cons (transit/read rdr)
-           (transit-seq rdr))
-     (catch RuntimeException ex
-       (when-not (instance? java.io.EOFException (.getCause ex))
-         (throw ex))))))
 
 (defn store-documents! [node docs]
   (dorun (->> docs
@@ -62,7 +54,7 @@
                                              (with-open [is (-> products-file
                                                                 io/input-stream
                                                                 (GZIPInputStream.))]
-                                               (store-documents! node (cond->> (transit-seq (transit/reader is :msgpack))
+                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :msgpack))
                                                                         limit (take limit)))))}]}])
 
                            [{:t :call, :stage :sync

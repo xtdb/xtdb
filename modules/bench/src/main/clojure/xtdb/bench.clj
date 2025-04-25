@@ -346,7 +346,9 @@
   (util/install-uncaught-exception-handler!)
   (logging/set-from-env! (System/getenv))
 
-  (require (symbol (str "xtdb.bench." benchmark-type)))
+  (require (case benchmark-type
+             "tsbs-iot" 'xtdb.bench.tsbs
+             (symbol (str "xtdb.bench." benchmark-type))))
 
   (let [benchmark-type (keyword benchmark-type)
         {:keys [options errors summary]} (cli/parse-opts args (concat (cli-flags benchmark-type)

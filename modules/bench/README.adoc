@@ -16,6 +16,12 @@ Readings::
 Products::
 `./gradlew products`
 
+TSBS IoT::
+`XTDB_LOGGING_LEVEL_BENCH_TSBS=debug ./gradlew :tsbs-iot -Pfile=/path/to/txs.transit.json`
++
+For any reasonable scale you'll want to create a txs file beforehand - they take quite a while to generate in XT format.
+See datasets -> `xtdb.tsbs`.
+
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 
 == Running from Docker

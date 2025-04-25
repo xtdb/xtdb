@@ -26,7 +26,8 @@ val defaultJvmArgs = listOf(
     "-Djdk.attach.allowAttachSelf",
     "-Darrow.memory.debug.allocator=false",
     "-XX:-OmitStackTraceInFastThrow",
-    "-Dlogback.configurationFile=${rootDir.resolve("src/main/resources/logback-test.xml")}"
+    "-Dlogback.configurationFile=${rootDir.resolve("src/main/resources/logback-test.xml")}",
+    "-Dxtdb.rootDir=$rootDir"
 )
 
 val sixGBJvmArgs = listOf(
@@ -465,6 +466,8 @@ createBench("products", mapOf("limit" to "--limit"))
 
 // can't seem to have an arg with the same name as a task
 createBench("readings", mapOf("readingCount" to "--readings", "deviceCount" to "--devices"))
+
+createBench("tsbs-iot", mapOf("file" to "--file"))
 
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
