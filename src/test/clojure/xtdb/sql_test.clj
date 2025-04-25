@@ -2103,6 +2103,10 @@ FROM docs1 FOR VALID_TIME ALL AS d1
 JOIN docs2 FOR VALID_TIME ALL AS d2
     ON d1._id = d2._id AND d1._VALID_TIME CONTAINS d2._valid_from"))))
 
+(t/deftest bound-period-contains-timestamp-expression-4381
+  (t/is (= [{:t true}] (xt/q tu/*node* "
+SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01-01' + INTERVAL 'PT0S') AS t"))))
+
 (t/deftest unescapes-escaped-quotes-3467
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (' ''foo'' ')"]])
   (t/is (= [{:xt/id " 'foo' "}] (xt/q tu/*node* "SELECT * FROM foo"))))
