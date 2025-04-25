@@ -78,7 +78,7 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class FlushBlock(val expectedBlockTxId: LogOffset) : ProtobufMessage() {
+        data class FlushBlock(val expectedBlockTxId: MessageId) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
                 flushBlock = flushBlock { expectedBlockTxId = this@FlushBlock.expectedBlockTxId }
             }

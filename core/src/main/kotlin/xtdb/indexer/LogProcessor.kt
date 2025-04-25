@@ -44,8 +44,8 @@ class LogProcessor(
     data class Flusher(
         val flushTimeout: Duration,
         var lastFlushCheck: Instant,
-        var previousBlockTxId: Long,
-        var flushedTxId: Long
+        var previousBlockTxId: MessageId,
+        var flushedTxId: MessageId
     ) {
         constructor(flushTimeout: Duration, liveIndex: LiveIndex) : this(
             flushTimeout, Instant.now(),
@@ -53,7 +53,7 @@ class LogProcessor(
             flushedTxId = -1
         )
 
-        fun checkBlockTimeout(now: Instant, currentBlockTxId: Long, latestCompletedTxId: Long): Message? =
+        fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId, latestCompletedTxId: MessageId): Message? =
             when {
                 lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> null
                 currentBlockTxId != previousBlockTxId -> {
@@ -103,7 +103,8 @@ class LogProcessor(
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
-            flusher.flushedTxId = log.appendMessage(flushMsg).await()
+            val msgId = log.appendMessage(flushMsg).await()
+            flusher.flushedTxId = msgId
         }
 
         records.forEach { record ->
