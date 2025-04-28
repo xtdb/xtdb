@@ -2635,14 +2635,14 @@
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitQueryExpr [this ctx]
-    (let [env (->> (some-> (.settingQueryVariables ctx)
-                           (.settingQueryVariable))
-                   (transduce (keep (partial accept-visitor this))
-                              conj env))]
+    (let [query-vars (into {:explain? (boolean (.EXPLAIN ctx))}
+                           (keep (partial accept-visitor this))
+                           (some-> (.settingQueryVariables ctx)
+                                   (.settingQueryVariable)))]
 
       (-> (.queryExpression ctx)
-          (.accept (->QueryPlanVisitor env scope))
-          (assoc :explain? (boolean (.EXPLAIN ctx))))))
+          (.accept (->QueryPlanVisitor (into env query-vars) scope))
+          (into query-vars))))
 
   (visitShowSnapshotTimeStatement [_ _]
     (->QueryExpr '[:table [snapshot_time]
@@ -2664,9 +2664,11 @@
      (.accept (.tableTimePeriodSpecification ctx)
               (->TableTimePeriodSpecificationVisitor (->ExprPlanVisitor env scope)))])
 
-  ;; dealt with earlier
-  (visitSettingSnapshotTime [_ _ctx])
-  (visitSettingClockTime [_ _ctx])
+  (visitSettingClockTime [_ ctx]
+    [:current-time (.accept (.clockTime ctx) (->ExprPlanVisitor env scope))])
+
+  (visitSettingSnapshotTime [_ ctx]
+    [:snapshot-time (.accept (.snapshotTime ctx) (->ExprPlanVisitor env scope))])
 
   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
@@ -2759,13 +2761,13 @@
       (->UpdateStmt (symbol table-name)
                     (->QueryExpr [:project outer-projection
                                   (as-> (plan-rel dml-scope) plan
-                    
+
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
                                           (apply-sqs subqs)
                                           (wrap-predicates predicate))
                                       plan)
-                    
+
                                     [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
                                  (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
 
@@ -2838,13 +2840,13 @@
                    (->QueryExpr [:distinct
                                  [:project internal-cols
                                   (as-> (plan-rel dml-scope) plan
-                                  
+
                                     (if-let [{:keys [predicate subqs]} where-selection]
                                       (-> plan
                                           (apply-sqs subqs)
                                           (wrap-predicates predicate))
                                       plan)
-                                  
+
                                     [:project aliased-cols plan])]]
                                 internal-cols))))
 
@@ -3016,17 +3018,18 @@
                                 :errors errs}))
        (do
          (log-warnings !warnings)
-         (let [{:keys [explain? col-syms] :as stmt} (-> stmt
+         (let [{:keys [col-syms] :as stmt} (-> stmt
                                                         #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                                                         (optimise-stmt)                ;; <<no-commit>>
                                                         #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                                                         )]
            (-> (->logical-plan stmt)
-               (vary-meta assoc
-                          :param-count @!param-count
-                          :warnings @!warnings
-                          :ordered-outer-projection col-syms
-                          :explain? explain?))))))))
+               (vary-meta (fn [m]
+                            (-> (or m {})
+                                (into (select-keys stmt [:explain? :current-time :snapshot-time]))
+                                (assoc :param-count @!param-count
+                                       :warnings @!warnings
+                                       :ordered-outer-projection col-syms)))))))))))
 
 (defn plan
   ([sql] (plan sql nil))

@@ -533,10 +533,8 @@
                                   (visitAssertStatement [_ ctx]
                                     {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
 
-                                  (visitQueryExpr [this ctx]
-                                    (let [q {:statement-type :query, :query (subsql ctx), :parsed-query ctx}]
-                                      (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
-                                           (transduce (keep (partial sql/accept-visitor this)) conj q))))
+                                  (visitQueryExpr [_ ctx]
+                                    {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
 
                                   ;; could do pre-submit validation here
                                   (visitCreateUserStatement [_ ctx]
@@ -557,19 +555,6 @@
                                      :statement-name (str (sql/identifier-sym (.statementName (.executeStatement ctx)))),
                                      :query (subsql ctx)
                                      :parsed-query ctx})
-
-                                  ;; handled in plan
-                                  (visitSettingDefaultValidTime [_ _])
-                                  (visitSettingDefaultSystemTime [_ _])
-
-                                  (visitSettingClockTime [_ ctx]
-                                    [:current-time (-> (.clockTime ctx)
-                                                       (sql/plan-expr {:default-tz default-tz})
-                                                       (time/->instant))])
-
-                                  (visitSettingSnapshotTime [_ ctx]
-                                    [:snapshot-time (-> (sql/plan-expr (.snapshotTime ctx) {:default-tz default-tz})
-                                                        (time/->instant {:default-tz default-tz}))])
 
                                   (visitShowVariableStatement [_ ctx]
                                     {:statement-type :query, :query sql, :parsed-query ctx})

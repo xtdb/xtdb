@@ -167,6 +167,7 @@
       (xt-log/await-tx this after-tx-id tx-timeout)
 
       (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
+
       (let [plan (.planQuery q-src ast query-opts)]
         (.prepareRaQuery q-src plan query-opts))))
 

@@ -175,7 +175,9 @@
                                             (map-indexed (fn [idx field]
                                                            (types/field-with-name field (str "?_" idx)))))))
            param-fields-by-name (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity)) param-fields)
-           default-tz (or default-tz expr/*default-tz*)]
+           default-tz (or default-tz expr/*default-tz*)
+
+           plan-meta (meta query)]
 
        (reify PreparedQuery
          (paramFields [_] param-fields)
@@ -191,7 +193,8 @@
 
            ;; TODO throw if basis is in the future?
            (let [{:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
-                 current-time (or (some-> current-time time/->instant)
+                 current-time (or (some-> (:current-time plan-meta) (time/->instant {:default-tz default-tz}))
+                                  (some-> current-time (time/->instant {:default-tz default-tz}))
                                   (expr/current-time))]
 
              (reify
@@ -222,7 +225,8 @@
                    (try
                      (binding [expr/*clock* (InstantSource/fixed current-time)
                                expr/*default-tz* default-tz
-                               expr/*snapshot-time* (or (some-> snapshot-time time/->instant)
+                               expr/*snapshot-time* (or (some-> (:snapshot-time plan-meta) (time/->instant {:default-tz default-tz}))
+                                                        (some-> snapshot-time (time/->instant {:default-tz default-tz}))
                                                         (some-> wm .getTxBasis .getSystemTime))]
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :default-tz default-tz,
