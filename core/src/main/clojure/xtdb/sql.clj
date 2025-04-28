@@ -2641,7 +2641,8 @@
                               conj env))]
 
       (-> (.queryExpression ctx)
-          (.accept (->QueryPlanVisitor env scope)))))
+          (.accept (->QueryPlanVisitor env scope))
+          (assoc :explain? (boolean (.EXPLAIN ctx))))))
 
   (visitShowSnapshotTimeStatement [_ _]
     (->QueryExpr '[:table [snapshot_time]
@@ -3015,16 +3016,17 @@
                                 :errors errs}))
        (do
          (log-warnings !warnings)
-         (let [{:keys [col-syms] :as stmt} (-> stmt
-                                               #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-                                               (optimise-stmt)                ;; <<no-commit>>
-                                               #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-                                               )]
+         (let [{:keys [explain? col-syms] :as stmt} (-> stmt
+                                                        #_(doto clojure.pprint/pprint) ;; <<no-commit>>
+                                                        (optimise-stmt)                ;; <<no-commit>>
+                                                        #_(doto clojure.pprint/pprint) ;; <<no-commit>>
+                                                        )]
            (-> (->logical-plan stmt)
                (vary-meta assoc
                           :param-count @!param-count
                           :warnings @!warnings
-                          :ordered-outer-projection col-syms))))))))
+                          :ordered-outer-projection col-syms
+                          :explain? explain?))))))))
 
 (defn plan
   ([sql] (plan sql nil))

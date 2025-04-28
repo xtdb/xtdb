@@ -534,8 +534,7 @@
                                     {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
 
                                   (visitQueryExpr [this ctx]
-                                    (let [q {:statement-type :query, :explain? (boolean (.EXPLAIN ctx))
-                                             :query (subsql ctx), :parsed-query ctx}]
+                                    (let [q {:statement-type :query, :query (subsql ctx), :parsed-query ctx}]
                                       (->> (some-> (.settingQueryVariables ctx) (.settingQueryVariable))
                                            (transduce (keep (partial sql/accept-visitor this)) conj q))))
 

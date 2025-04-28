@@ -294,7 +294,7 @@
                                (instance? Query query) (xtql.plan/compile-query query plan-query-opts)
 
                                :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-                    (if (:explain? query-opts)
+                    (if (or (:explain? query-opts) (:explain? (meta plan)))
                       (with-meta [:table [{:plan (with-out-str (pp/pprint plan))}]]
                                  (-> (meta plan) (select-keys [:param-count :warnings])))
                       plan))))))
