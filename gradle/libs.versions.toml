@@ -9,7 +9,7 @@ protobuf = "4.30.2"
 protobuf-plugin = "0.9.4"
 reitit="0.8.0"
 muuntaja="0.6.8"
-testcontainers="1.20.6"
+testcontainers="1.21.0"
 micrometer="1.14.6"
 transit="1.0.329"
 
