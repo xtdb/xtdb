@@ -1057,6 +1057,8 @@
   (visitCEscapesString [_ ctx] (.accept ctx string-literal-visitor))
 
   (visitDateTimeLiteral0 [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
+  (visitDateTimeExprLiteral [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
+  (visitDateTimeExprParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
   (visitDateLiteral [this ctx] (parse-date-literal (.accept (.characterString ctx) this) env))
   (visitTimeLiteral [this ctx] (parse-time-literal (.accept (.characterString ctx) this) env))

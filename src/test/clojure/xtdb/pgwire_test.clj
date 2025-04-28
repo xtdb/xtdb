@@ -993,6 +993,22 @@
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
         "both snapshot and current time")
 
+    (is (= [{:version 0
+             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
+             :ts #inst "2024-01-01"}]
+           (q conn ["SETTING SNAPSHOT_TIME = ?, CLOCK_TIME = ?
+                     SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"
+                    #inst "2020-01-01" #inst "2024-01-01"]))
+        "both snapshot and current time, params")
+
+    (is (= [{:version 0
+             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
+             :ts #inst "2024-01-01"}]
+           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z', CLOCK_TIME = ?
+                     SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo WHERE _id = ?"
+                    #inst "2024-01-01", "foo"]))
+        "gets correct param order")
+
     (q conn ["UPDATE foo SET version = 2 WHERE _id = 'foo'"])
 
     (is (= [{:version 2}]

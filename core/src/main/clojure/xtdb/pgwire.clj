@@ -417,6 +417,9 @@
 
 (defn date-time-visitor [^ZoneId default-tz]
   (reify SqlVisitor
+    (visitDateTimeExprLiteral [this ctx] (.accept (.dateTimeLiteral ctx) this))
+    (visitDateTimeExprParam [this ctx] (.accept (.parameterSpecification ctx) this))
+
     (visitDateLiteral [_ ctx]
       (-> (LocalDate/parse (.accept (.characterString ctx) sql/string-literal-visitor))
           (.atStartOfDay)

@@ -57,8 +57,8 @@ settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable
 settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
-    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=literal # SettingSnapshotTime
-    | CLOCK_TIME ('TO' | '=') clockTime=literal # SettingClockTime
+    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=dateTimeExpr # SettingSnapshotTime
+    | CLOCK_TIME ('TO' | '=') clockTime=dateTimeExpr # SettingClockTime
     ;
 
 //// §5 Lexical Elements
@@ -219,6 +219,11 @@ numericExpr
     | numericExpr (BITWISE_OR | BITWISE_XOR) numericExpr #NumericBitwiseOrExpr
     | numericExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) numericExpr #NumericBitwiseShiftExpr
     | exprPrimary #ExprPrimary1
+    ;
+
+dateTimeExpr
+    : dateTimeLiteral # DateTimeExprLiteral
+    | parameterSpecification # DateTimeExprParam
     ;
 
 exprPrimary
@@ -574,6 +579,7 @@ tableTimePeriodSpecification
     | 'FROM' periodSpecificationExpr 'TO' periodSpecificationExpr # TableFromTo
     ;
 
+// replace usages of this with dateTimeExpr when possible - #3306
 periodSpecificationExpr
     : literal #PeriodSpecLiteral
     | parameterSpecification #PeriodSpecParam
