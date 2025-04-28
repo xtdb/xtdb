@@ -988,6 +988,7 @@
 
   (visitKeywordType [_ _] {:cast-type :keyword})
   (visitUuidType [_ _] {:cast-type :uuid})
+  (visitUriType [_ _] {:cast-type :uri})
   (visitVarbinaryType [_ _] {:cast-type :varbinary})
 
   (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
@@ -1091,7 +1092,7 @@
       (keyword (if (str/starts-with? s ":") (subs s 1) s))))
 
   (visitUUIDLiteral [this ctx] (parse-uuid-literal (.accept (.characterString ctx) this) env))
-  (visitURILiteral [this ctx] (parse-uri-literal (.accept (.characterString ctx) this) env))
+  (visitUriLiteral [this ctx] (parse-uri-literal (.accept (.characterString ctx) this) env))
 
   (visitNullLiteral [_ _ctx] nil)
 
@@ -1414,6 +1415,34 @@
       (if (#{"!~" "!~*"} pro)
         (list 'not expr)
         expr)))
+
+  (visitUriSchemeFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-scheme url)))
+
+  (visitUriUserInfoFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-user-info url)))
+
+  (visitUriHostFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-host url)))
+
+  (visitUriPortFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-port url)))
+
+  (visitUriPathFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-path url)))
+
+  (visitUriQueryFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-query url)))
+
+  (visitUriFragmentFunction [this ctx]
+    (let [url (-> (.expr ctx) (.accept this))]
+      (list 'uri-fragment url)))
 
   (visitPeriodOverlapsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))

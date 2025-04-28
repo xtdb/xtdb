@@ -1468,3 +1468,19 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
                  {:current-time #inst "2024-01-01"
                   :default-tz #xt/zone "UTC"}))
         "explicitly specified"))
+
+(t/deftest test-uri-fns
+  (t/testing "URI parsing"
+    (t/is (= [{:uri #xt/uri "https://example.com/path/to/resource?query=string#fragment"}]
+             (xt/q tu/*node* "SELECT URI 'https://example.com/path/to/resource?query=string#fragment' AS uri")))
+
+    (t/is (= [{:uri #xt/uri "https://example.com/path/to/resource?query=string#fragment"}]
+             (xt/q tu/*node* "SELECT 'https://example.com/path/to/resource?query=string#fragment'::URI AS uri"))))
+
+  (t/testing "URI part extraction"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :uri #xt/uri "https://example.com/path/to/resource?query=string#fragment"}]])
+    (t/is (= [{:scheme "https", :host "example.com", :port -1,
+               :path "/path/to/resource", :query "query=string", :fragment "fragment"}]
+             (xt/q tu/*node* "SELECT URI_SCHEME(uri) AS scheme, URI_HOST(uri) AS host, COALESCE(URI_PORT(uri), -1) AS port,
+                                     URI_PATH(uri) AS path, URI_QUERY(uri) AS query, URI_FRAGMENT(uri) AS fragment
+                              FROM docs")))))

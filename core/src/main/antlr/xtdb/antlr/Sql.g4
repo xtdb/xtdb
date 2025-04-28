@@ -82,7 +82,7 @@ literal
     | intervalLiteral #IntervalLiteral0
     | 'DURATION' characterString #DurationLiteral
     | 'UUID' characterString #UUIDLiteral
-    | 'URI' characterString #URILiteral
+    | 'URI' characterString #UriLiteral
     | 'KEYWORD' characterString #KeywordLiteral
     | (TRUE | FALSE | ON | OFF) #BooleanLiteral
     | NULL #NullLiteral
@@ -163,6 +163,7 @@ dataType
     | 'UUID' #UuidType
     | 'VARBINARY' #VarbinaryType
     | 'BYTEA' #VarbinaryType
+    | 'URI' # UriType
     | dataType 'ARRAY' ('[' maximumCardinality ']')? # ArrayType
     ;
 
@@ -311,6 +312,14 @@ exprPrimary
     | 'LOCAL_NAME' '(' expr ')' # LocalNameFunction
     | 'NAMESPACE' '(' expr ')' # NamespaceFunction
     | 'STR' '(' expr (',' expr)* ')' # StrFunction
+
+    | 'URI_SCHEME' '(' expr ')' # UriSchemeFunction
+    | 'URI_USER_INFO' '(' expr ')' # UriUserInfoFunction
+    | 'URI_HOST' '(' expr ')' # UriHostFunction
+    | 'URI_PORT' '(' expr ')' # UriPortFunction
+    | 'URI_PATH' '(' expr ')' # UriPathFunction
+    | 'URI_QUERY' '(' expr ')' # UriQueryFunction
+    | 'URI_FRAGMENT' '(' expr ')' # UriFragmentFunction
 
     | 'OVERLAY' '('
         expr

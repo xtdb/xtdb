@@ -36,6 +36,7 @@ import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
 import xtdb.vector.extensions.TransitVector;
 import xtdb.vector.extensions.TsTzRangeVector;
+import xtdb.vector.extensions.UriVector;
 import xtdb.vector.extensions.UuidVector;
 
 import java.math.BigDecimal;
@@ -521,11 +522,6 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             public ByteBuffer getBytes(int idx) {
                 return underlyingVec.getBytes(idx);
-            }
-
-            @Override
-            protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-                return URI.create((String) underlyingVec.getObject(idx));
             }
         };
     }

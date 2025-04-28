@@ -6,6 +6,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
+import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.DateUnit.DAY
@@ -167,6 +168,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: ExtensionType): Vector = when (type) {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, isNullable))
                     UuidType -> UuidVector(FixedSizeBinaryVector(al, name, isNullable, 16))
+                    UriType -> UriVector(Utf8Vector(al, name, isNullable))
                     TransitType -> TransitVector(VarBinaryVector(al, name, isNullable))
                     IntervalMDMType -> IntervalMonthDayMicroVector(IntervalMonthDayNanoVector(al, name, isNullable))
                     TsTzRangeType -> TsTzRangeVector(

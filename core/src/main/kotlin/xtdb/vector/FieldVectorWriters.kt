@@ -41,6 +41,7 @@ import xtdb.vector.extensions.KeywordVector
 import xtdb.vector.extensions.SetVector
 import xtdb.vector.extensions.TransitVector
 import xtdb.vector.extensions.TsTzRangeVector
+import xtdb.vector.extensions.UriVector
 import xtdb.vector.extensions.UuidVector
 import java.math.BigDecimal
 import java.net.URI
@@ -475,7 +476,7 @@ internal class UriVectorWriter(vector: UriVector) : ExtensionVectorWriter(vector
         if (obj !is URI) throw InvalidWriteObjectException(field.fieldType, obj)
         else super.writeObject0(obj.toString())
 
-    override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 }
 
 internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWriter(vector, null) {

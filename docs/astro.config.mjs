@@ -106,6 +106,7 @@ export default defineConfig({
                                 { label: 'Numeric functions', link: '/reference/main/stdlib/numeric' },
                                 { label: 'String functions', link: '/reference/main/stdlib/string' },
                                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal' },
+                                { label: 'URI functions', link: '/reference/main/stdlib/uri' },
                                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates' },
                                 { label: 'Other functions', link: '/reference/main/stdlib/other' }
                             ]

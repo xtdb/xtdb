@@ -393,7 +393,6 @@
 (defmethod emit-value LocalTime [_ code] `(.toNanoOfDay ~code))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 (defmethod emit-value UUID [_ code] `(util/uuid->byte-buffer ~code))
-(defmethod emit-value URI [_ code] `(util/uri->byte-buffer ~code))
 
 ;; consider whether a bound hash map for literal parameters would be better
 ;; so this could be a runtime 'wrap the byte array' instead of this round trip through the clj compiler.
