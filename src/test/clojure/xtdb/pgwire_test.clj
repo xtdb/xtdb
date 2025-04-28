@@ -993,6 +993,8 @@
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
         "both snapshot and current time")
 
+    (q conn ["SET TIME ZONE 'UTC'"])
+
     (is (= [{:version 0
              :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
              :ts #inst "2024-01-01"}]
