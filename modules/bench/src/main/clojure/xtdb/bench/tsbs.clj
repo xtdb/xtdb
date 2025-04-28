@@ -61,8 +61,12 @@
                      :stage :compact
                      :f (fn [{:keys [node]}] (b/compact! node))}]}
 
-           ;; TODO queries
-           ]})
+           ;; TODO more queries
+           {:t :call
+            :stage :queries
+            :f (fn [{:keys [node]}]
+                 (log/info "readings:" (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME"))))
+                 (log/info "diagnostics:" (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM diagnostics FOR ALL VALID_TIME")))))}]})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-iot
