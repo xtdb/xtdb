@@ -1049,6 +1049,7 @@
 
   (visitLiteralExpr [this ctx] (-> (.literal ctx) (.accept this)))
   (visitFloatLiteral [_ ctx] (parse-double (.getText ctx)))
+  (visitIntegerLiteral0 [this ctx] (.accept (.integerLiteral ctx) this))
   (visitIntegerLiteral [_ ctx]
     (or (parse-long (.getText ctx))
         (add-err! env (->CannotParseInteger (.getText ctx)))))
@@ -1202,6 +1203,15 @@
   (visitStrFunction [this ctx]
     (xt/template (str ~@(->> (.expr ctx)
                              (mapv (partial accept-visitor this))))))
+
+  (visitRegexpReplaceFunction [this ctx]
+    (xt/template
+     (regexp-replace ~(-> (.source ctx) (.accept this))
+                     ~(-> (.pattern ctx) (.accept this))
+                     ~(-> (.replacement ctx) (.accept this))
+                     ~(some-> (.start ctx) (.accept this))
+                     ~(some-> (.n ctx) (.accept this))
+                     ~(some-> (.flags ctx) (.accept this)))))
 
   (visitIsBooleanValueExpr [this ctx]
     (let [boolean-value (-> (.booleanValue ctx) (.getText) (str/upper-case))
@@ -1629,9 +1639,9 @@
   (visitReplaceFunction [this ctx]
     (xt/template
      #_{:clj-kondo/ignore [:invalid-arity]}
-     (replace ~(.accept (.expr ctx) this)
-              ~(.accept (.expr (.replaceTarget ctx)) this)
-              ~(.accept (.expr (.replacement ctx)) this))))
+     (replace ~(.accept (.source ctx) this)
+              ~(.accept (.pattern ctx) this)
+              ~(.accept (.replacement ctx) this))))
 
   (visitCurrentUserFunction [_ _] '(current-user))
   (visitCurrentSchemaFunction [_ _] '(current-schema))

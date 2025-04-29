@@ -12,7 +12,6 @@
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
            (java.math RoundingMode)
-           (java.net URI)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
@@ -29,10 +28,18 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(def normalise-fn-name
+  (-> (fn [f]
+        (let [f (keyword (namespace f) (name f))]
+          (case f
+            (:. :.. :- :/) f
+            (util/kw->normal-form-kw f))))
+      memoize))
+
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti parse-list-form
   (fn [[f & args] env]
-    f)
+    (symbol (normalise-fn-name f)))
   :default ::default)
 
 (def postgres-server-version "16")
@@ -164,6 +171,13 @@
    :args [(form->expr expr env)]
    :target-type target-type
    :cast-opts cast-opts})
+
+(defmethod parse-list-form 'regexp_replace [[_ src pattern replacement start n flags] env]
+  {:op :call
+   :f :regexp-replace
+   :args [(form->expr src env)]
+   :pattern pattern, :replacement replacement
+   :start start, :n n, :flags flags})
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call
@@ -547,14 +561,6 @@
                                             `(let [~local ~code]
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
         (wrap-boxed-poly-return opts))))
-
-(def normalise-fn-name
-  (-> (fn [f]
-        (let [f (keyword (namespace f) (name f))]
-          (case f
-            (:- :/) f
-            (util/kw->normal-form-kw f))))
-      memoize))
 
 (defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of col-types.
@@ -1001,22 +1007,33 @@
                                         `(like->regex (binary->hex-like-pattern (buf->bytes ~needle-code))))
                                      (Hex/encodeHexString (buf->bytes ~haystack-code)))))})
 
+(defn compile-regex [pattern flags-str]
+  (let [flag-map {\s [Pattern/DOTALL]
+                  \i [Pattern/CASE_INSENSITIVE, Pattern/UNICODE_CASE]
+                  \m [Pattern/MULTILINE]}]
+    (Pattern/compile pattern (int (reduce bit-or 0 (mapcat flag-map flags-str))))))
+
 (defmethod codegen-call [:like_regex :utf8 :utf8 :utf8] [{:keys [args]}]
-  (let [[_ re-literal flags] (map :literal args)
-
-        flag-map
-        {\s [Pattern/DOTALL]
-         \i [Pattern/CASE_INSENSITIVE, Pattern/UNICODE_CASE]
-         \m [Pattern/MULTILINE]}
-
-        flag-int (int (reduce bit-or 0 (mapcat flag-map flags)))]
-
+  (let [[_ re-literal flags] (map :literal args)]
     {:return-type :bool
      :->call-code (fn [[haystack-code needle-code]]
-                    `(boolean (re-find ~(if re-literal
-                                          `(Pattern/compile ~re-literal ~flag-int)
-                                          `(Pattern/compile (resolve-string ~needle-code) ~flag-int))
+                    `(boolean (re-find (compile-regex ~(or re-literal `(resolve-string ~needle-code)) ~flags)
                                        (resolve-string ~haystack-code))))}))
+
+(defmethod codegen-call [:regexp_replace :utf8] [{:keys [pattern replacement start n flags]}]
+  (let [flag-map {\s [Pattern/DOTALL]
+                  \i [Pattern/CASE_INSENSITIVE, Pattern/UNICODE_CASE]
+                  \m [Pattern/MULTILINE]}
+
+        re-sym (gensym 're)]
+
+    (when (or start n)
+      (throw (UnsupportedOperationException. "regexp_replace does not yet support `start` or `n` arguments")))
+
+    {:return-type :utf8
+     :batch-bindings [[re-sym `(Pattern/compile ~pattern ~(int (reduce bit-or 0 (mapcat flag-map flags))))]]
+     :->call-code (fn [[haystack-code]]
+                    `(resolve-utf8-buf (str/replace (resolve-string ~haystack-code) ~re-sym ~replacement)))}))
 
 ;;;; SQL Trim functions.
 ;; trim-char is a **SINGLE** unicode-character string e.g \" \".

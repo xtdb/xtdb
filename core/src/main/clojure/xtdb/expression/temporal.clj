@@ -421,7 +421,7 @@
                        (string->byte-buffer)))})
 
 ;; TODO - finish this
-(defmethod expr/parse-list-form  'cast-tstz [[_ expr opts] env]
+(defmethod expr/parse-list-form 'cast_tstz [[_ expr opts] env]
   (let [unit (or (:unit opts) :micro)]
     {:op :call
      :f :cast

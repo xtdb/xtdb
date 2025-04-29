@@ -2680,8 +2680,6 @@ ORDER BY 1,2;")
             (.next rs)
             (t/is (= val (.getObject rs 1 type))))))))
 
-
-
 (t/deftest test-sql-with-leading-whitespace
   (with-open [conn (pg-conn {})]
     (pg/execute conn "     INSERT INTO test RECORDS {_id: 0, value: 'hi'}")))

@@ -72,9 +72,11 @@ dateTimeLiteral
     | 'TIMESTAMP' withOrWithoutTimeZone? characterString #TimestampLiteral
     ;
 
+integerLiteral: ('+' | '-')? UNSIGNED_INTEGER ;
+
 literal
     : ('+' | '-')? UNSIGNED_FLOAT #FloatLiteral
-    | ('+' | '-')? UNSIGNED_INTEGER #IntegerLiteral
+    | integerLiteral #IntegerLiteral0
     | characterString #CharacterStringLiteral
     | BINARY_STRING #BinaryStringLiteral
     | dateTimeLiteral #DateTimeLiteral0
@@ -329,7 +331,8 @@ exprPrimary
         ( 'USING' charLengthUnits )?
       ')' # OverlayFunction
 
-    | 'REPLACE' '(' expr ',' replaceTarget ',' replacement ')' # ReplaceFunction
+    | 'REPLACE' '(' source=expr ',' pattern=expr ',' replacement=expr ')' # ReplaceFunction
+    | 'REGEXP_REPLACE' '(' source=expr ',' pattern=characterString ',' replacement=characterString (',' start=integerLiteral ( ',' n=integerLiteral )? )? (',' flags=characterString)? ')' # RegexpReplaceFunction
 
     | (schemaName '.')? 'CURRENT_USER' # CurrentUserFunction
     | (schemaName '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
@@ -358,9 +361,6 @@ exprPrimary
 
     | 'TRIM_ARRAY' '(' expr ',' expr ')' # TrimArrayFunction
     ;
-
-replaceTarget : expr;
-replacement : expr;
 
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction

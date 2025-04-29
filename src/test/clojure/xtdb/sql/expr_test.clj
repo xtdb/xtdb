@@ -222,10 +222,18 @@
 
 (t/deftest test-replace
   (t/is (= [{:out "foobaz"}] (xt/q tu/*node* "SELECT REPLACE('foobar', 'bar', 'baz') AS out")))
-
   (t/is (= [{:out "bazfoobaz"}] (xt/q tu/*node* "SELECT REPLACE('barfoobar', 'bar', 'baz') AS out")))
+  (t/is (= [{:out "foo"}] (xt/q tu/*node* "SELECT REPLACE('foo', 'bar', 'baz') AS out")))
 
-  (t/is (= [{:out "foo"}] (xt/q tu/*node* "SELECT REPLACE('foo', 'bar', 'baz') AS out"))))
+  (t/is (= [{:out "foo"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', 'bar', '') AS out")))
+  (t/is (= [{:out "foobaz"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', 'bar', 'baz') AS out")))
+
+  (t/is (= [{:out "fooBar"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('fooBar', 'bar', 'baz') AS out")))
+  (t/is (= [{:out "foobaz"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('fooBar', 'bar', 'baz', 'i') AS out")))
+
+  (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
+  (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
+  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' $1 ') AS out"))))
 
 (t/deftest test-bool-test-expr
   (t/are [sql expected]
