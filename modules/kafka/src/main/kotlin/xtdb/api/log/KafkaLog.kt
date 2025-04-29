@@ -109,6 +109,7 @@ class KafkaLog internal constructor(
     private val kafkaConfigMap: KafkaConfigMap,
     private val topic: String,
     private val pollDuration: Duration,
+    override val epoch: Int
 ) : Log {
 
     private val producer = kafkaConfigMap.openProducer()
@@ -225,15 +226,15 @@ class KafkaLog internal constructor(
         var autoCreateTopic: Boolean = true,
         var pollDuration: Duration = Duration.ofSeconds(1),
         var propertiesMap: Map<String, String> = emptyMap(),
-        var propertiesFile: Path? = null
+        var propertiesFile: Path? = null,
+        var epoch: Int = 0
     ) : Log.Factory {
 
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
-
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
-
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
+        fun epoch(epoch: Int) = apply { this.epoch = epoch }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -253,7 +254,7 @@ class KafkaLog internal constructor(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return KafkaLog(configMap, topic, pollDuration)
+            return KafkaLog(configMap, topic, pollDuration, epoch)
         }
     }
 
