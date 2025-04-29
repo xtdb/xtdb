@@ -50,6 +50,10 @@ All critical data is durably recorded in the log and storage module.
 Compute nodes can be restarted or replaced without risking data loss.
 |===
 
+== Backup: Best Practises
+
+For best practices on backing up XTDB, see link:/ops/backup-restore/backup-practices[Best Practices for Backing Up XTDB].
+
 == Failure and Recovery Scenarios
 
 The following are common failure scenarios and links to detailed guidance for each:

@@ -155,7 +155,9 @@ export default defineConfig({
                             label: 'Backup and Restore',
                             items: [
                                 { label: 'Overview', link: '/ops/backup-and-restore/overview' },
+                                { label: 'Best Practices for Backing Up XTDB', link: '/ops/backup-and-restore/backup-practices' },
                                 { label: 'Out of Sync Log & Intact Storage', link: '/ops/backup-and-restore/out-of-sync-log' },
+                                
                             ]
                         },
                         { label: 'Troubleshooting', link: '/ops/troubleshooting' },

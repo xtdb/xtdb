@@ -1,0 +1,180 @@
+---
+title: Best Practices for Backing Up XTDB
+---
+
+This guide outlines best practices for backing up XTDB databases, based on XTDB’s architectural principles and operational experience.
+
+[#backup-goals]
+== Backup Goals
+
+Backup strategies in XTDB support multiple operational and business objectives:
+
+* Disaster recovery — restoring service after infrastructure or cloud failures
+* Point-in-time recovery — reverting the system to a known good state
+* Environment migration — moving data between clusters, regions, or cloud providers
+
+The specific backup approach should be chosen based on the criticality of the data, recovery time objectives (RTO), and regulatory requirements.
+
+[#what-to-back-up]
+== What To Back Up?
+
+XTDB’s durable state consists of two components:
+
+* The **storage module**, which holds the materialized state of all tables, indexes, and historical records
+* The **log**, which records the ordered sequence of submitted transactions
+
+For most deployments, backing up the **storage module** is essential. 
+It represents the finalized state of the database and enables full restoration without relying on the log.
+
+Backing up the **log** is optional and may be used in conjunction with other strategies (e.g. application-level replay of transactions).
+
+'''
+
+[#storage-backup]
+== Backing Up the Storage Module
+
+The storage is composed of immutable, append-only files that represent snapshots of the system at specific log offsets.
+
+Backups of the storage module form the core of XTDB’s disaster recovery and point-in-time restore capabilities.
+
+=== Safeguarding Object Store Data
+
+Remote object stores such as **Amazon S3**, **Azure Blob Storage**, and **Google Cloud Storage** offer strong durability guarantees through built-in replication across multiple availability zones or data centers.
+You can find provider-specific documentation here:
+
+* link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/DataDurability.html[Amazon S3 Durability^]
+* link:https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#durability-and-availability-parameters[Azure Storage Durability^]
+* link:https://cloud.google.com/storage/docs/availability-durability[GCS Durability^]
+
+However, these guarantees do not protect against operational risks, such as:
+
+* Accidental or malicious deletion
+* Misconfigured lifecycle policies or IAM roles
+* Loss of access due to control-plane outages or permission changes
+
+To mitigate these risks, enable the following object store features where available:
+
+* **Versioning** — retains previous versions of objects, allowing recovery in case of deletion or unintended modification.
+  - While XTDB uses immutable files, versioning remains an important safeguard and is a requirement of most available cloud backup tools.
+  - **S3**: link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html[S3 Versioning^]
+  - **Azure Blobs**: link:https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-overview[Blob Versioning^]
+  - **GCS**: link:https://cloud.google.com/storage/docs/object-versioning[Object Versioning^]
+* **Soft delete** — temporary protection against deletion
+  - Typically paired with versioning or retention policies.
+  - **S3**: _(Handled implicitly by versioning — deleting an object adds a delete marker, allowing recovery of previous versions)_
+  - **Azure Blobs**: link:https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-container-overview[Soft delete for containers^] 
+  - **GCS**: link:https://cloud.google.com/storage/docs/soft-delete[Soft delete^]
+* **Replication** — cross-region replication for resilience against regional failure
+  - **S3**: link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html[S3 Replication^]
+  - **Azure Blobs**: link:https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy[Zone Redundant / Geo-Redundant Storage^]
+  - **GCS**: link:https://cloud.google.com/storage/docs/locations#considerations[Dual-region / multi-region buckets^]
+
+These features act as a first line of defence — allowing recovery even before formal backups are consulted.
+
+=== Full Backups for Point-in-Time Recovery
+
+Full backups of the storage module are the recommended approach for recovering to a known good point in time, migrating XTDB environments, or in the case of a complete loss of object store.
+
+Because storage files are immutable once written, they are ideally suited to snapshot-based backup strategies.
+
+To perform a full backup:
+
+* Capture the full object store prefix or container used by XTDB, including all files written to date — this reliably ensures the backup includes all files associated with the latest indexed block, even if some are non-essential. 
+
+Cloud-native tools can help implement and automate storage backups — though support for point-in-time backups varies between providers:
+
+* **S3**: link:https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html[AWS Backup^] supports full point-in-time backups of S3 buckets, including versioned objects and lifecycle integration.
+* **Azure Blobs**: link:https://learn.microsoft.com/en-us/azure/backup/backup-overview[Azure Backup^] supports snapshot-based backups of blob storage, including integration with retention policies and soft delete.
+* **GCP**: Cloud Storage does not currently offer native snapshotting. Instead:
+  ** link:https://cloud.google.com/storage-transfer-service[Storage Transfer Service^] can be used to automate full or incremental copies across buckets or regions
+
+'''
+
+[#log-backup]
+== Backing Up the Log
+
+While the storage module captures finalized state, the log may contain recent transactions that have not yet been indexed. 
+If this data is lost before being written to the storage module, it cannot be recovered.
+
+This section outlines strategies for protecting that data — whether through backups, replication, or external replay — and helps you decide when and how to include the log in your disaster recovery planning.
+
+=== Safeguarding Log Data
+
+Log durability depends heavily on the chosen implementation and its configuration.
+
+For Kafka-backed logs, we recommend the following practices to ensure transactional data remains available long enough to be flushed to storage or captured by a backup process:
+
+* **Replicate the log** - use a replication factor of at least `3` to tolerate broker or zone failures
+* **Enforce quorum writes** - set `min.insync.replicas > 1` to prevent data loss during partial outages
+* **Review retention policies** - ensure `log.retention.bytes` and `log.retention.ms` are tuned to retain unindexed messages long enough for safe processing
+
+XTDB sets safe defaults for producer settings, but we recommend reviewing topic-level configuration as detailed in the link:/ops/config/log/kafka[Kafka documentation^].
+
+Managed services such as link:https://www.confluent.io/confluent-cloud/[**Confluent Cloud**] offer stronger guarantees around availability, durability, and observability — and are recommended for production deployments with stricter RPO/RTO requirements.
+
+=== Why Back Up the Log?
+
+Backing up the log is not strictly required for all XTDB deployments. 
+In many cases, a full recovery can be achieved using the storage module alone.
+
+This is because XTDB periodically flushes indexed transactions from the log into immutable storage files. 
+As a result, the storage module acts as a form of backup for the log — capturing the state of the system at known log offsets.
+
+Flush behavior is controlled by:
+
+* A threshold number of transactions.
+* A maximum time interval between flushes (this defaults to 4 hours)
+
+These settings define your effective *Recovery Point Objective (RPO)* — that is, how much recent data you could lose in the event of log failure.
+
+However, backing up the log provides additional benefits in environments with stricter recovery requirements:
+
+* **Recover transactions submitted after the last flush** — reduces data loss compared to storage-only restores
+* **Avoid resetting the `epoch`** — restoring the log preserves continuity, allowing nodes to recover without configuration changes
+* **Faster point-in-time recovery** — restoring log and storage together may reduce bootstrap time and operational complexity
+
+=== Strategies for Protecting the Log
+
+There are several approaches to safeguarding the contents of the log. 
+These strategies may be used independently or in combination, depending on your system's tolerance for data loss, latency, and operational complexity.
+
+==== Point-in-Time Backups
+
+To capture a consistent snapshot of the log:
+
+* Backup the log *only after* a successful storage flush to avoid mismatches
+* Include only committed messages in the snapshot to ensure consistency and avoid capturing in-flight transactions
+* Use infrastructure tooling (e.g. Kafka topic snapshotting) to extract consistent state
+
+[WARNING]
+====
+Always back up the *storage module first*, then the log.  
+Backing up the log before its associated storage state can result in a mismatch, as the restored log may refer to transactions not yet flushed to storage. 
+In this case, XTDB will require a reset of the `epoch`, effectively discarding the restored log and falling back to the storage backup alone — with a corresponding loss of recent transactions.
+
+Additionally, ensure the delay between the storage and log backups does *not* exceed the retention period of your log implementation. 
+If log messages are expired before the backup runs, they will be lost and cannot be restored.
+====
+
+While point-in-time log backups removes the need to reset the `epoch`, they may still lose any transactions submitted after the backup point and before failure.
+
+==== Continuous Log Replication
+
+To minimize data loss and improve availability, consider replicating the log in near real time:
+
+* Use tools like https://kafka.apache.org/documentation/#basic_ops_mirror_maker[Kafka MirrorMaker^] or https://docs.confluent.io/platform/current/multi-dc-deployments/replicator/index.html[Confluent Replicator^] to copy log data between clusters or regions
+* Supports low-RPO and geo-redundant deployment models
+* Can be used to create a hot standby cluster for failover or disaster recovery
+
+Log replication is not a substitute for backups — replicated data is still mutable and susceptible to propagation of deletion or corruption — but it is a powerful *complement* in high-availability architectures.
+
+==== Application-Level Transaction Replay
+
+Many systems already capture transactions outside XTDB (e.g., via event streams, command logs, message queues). 
+These sources can be used to rebuild the log or database state after failure.
+
+Benefits:
+
+* Offers a decoupled and observable source of truth for recovery
+* Enables transformation, filtering, or enrichment during replay
+* Complements log backups — replay can fill gaps between backup and failure
