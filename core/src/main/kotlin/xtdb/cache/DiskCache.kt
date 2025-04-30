@@ -90,6 +90,7 @@ class DiskCache(
             else
                 fetch(k, createTempPath())
                     .thenApply { tmpPath ->
+                        LOGGER.info("DiskCache > get > thenApply: ${tmpPath.fileSize().toDouble()}")
                         tmpPath.moveTo(diskCachePath.createParentDirectories(), ATOMIC_MOVE, REPLACE_EXISTING)
                         Entry(k, diskCachePath)
                     }
