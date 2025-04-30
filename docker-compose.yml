@@ -22,4 +22,21 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001" # MinIO Console
+    environment:
+      MINIO_ROOT_USER: myadmin
+      MINIO_ROOT_PASSWORD: mypassword
     command: server /data --console-address ":9001"
+
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 myadmin mypassword;
+      mc mb myminio/xtdb;
+      mc policy set public myminio/xtdb;
+      mc admin user add myminio xtdb test-password;
+      mc admin policy attach myminio readwrite --user xtdb;
+      "
