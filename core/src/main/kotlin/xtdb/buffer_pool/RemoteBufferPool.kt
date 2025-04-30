@@ -12,6 +12,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
+import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore
@@ -37,6 +38,8 @@ import java.nio.file.StandardOpenOption.*
 import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.fileSize
+
+private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
 
 class RemoteBufferPool(
     factory: RemoteStorageFactory,
@@ -66,11 +69,11 @@ class RemoteBufferPool(
     private val networkWrite: Counter? = meterRegistry?.counter("buffer-pool.network.write")
     private val networkRead: Counter? = meterRegistry?.counter("buffer-pool.network.read")
 
+
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
         private const val MAX_CONCURRENT_PART_UPLOADS = 4
 
-        private val LOGGER = RemoteBufferPool::class.logger
 
         private val Path.totalSpace
             get() = Files.getFileStore(this).totalSpace
@@ -95,7 +98,7 @@ class RemoteBufferPool(
                     LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
                     upload.abort().get()
                 } catch (abortError: Throwable) {
-                    LOGGER.warn(abortError, "Throwable caught when aborting uploadMultipartBuffers")
+                    LOGGER.warn("Throwable caught when aborting uploadMultipartBuffers", abortError)
                     e.addSuppressed(abortError)
                 }
                 throw e
@@ -184,6 +187,7 @@ class RemoteBufferPool(
         ) { pathSlice ->
             memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
+                LOGGER.info("diskCacheMiss")
                 diskCacheMisses?.increment()
                 networkRead?.increment(k.fileSize().toDouble())
                 objectStore.getObject(k, tmpFile)
