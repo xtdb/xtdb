@@ -491,21 +491,21 @@
               {:id 2 :a 3}]]
 
     (t/is (= [{:id 1, :a 1} {:id 2, :a 5}]
-             (xt/q tu/*node* '(-> (rel $data [id a])
-                                  (aggregate id {:a (sum a)}))
-                   {:args {:data data}}))
+             (xt/q tu/*node* ['#(-> (rel % [id a])
+                                    (aggregate id {:a (sum a)}))
+                              data]))
           "no default provided")
 
     (t/is (= [{:id 1, :a 3} {:id 2, :a 5}]
-             (xt/q tu/*node* '(-> (rel $data [id a])
-                                  (with {:a (coalesce a 2)})
-                                  (aggregate id {:a (sum a)}))
-                   {:args {:data data}}))
+             (xt/q tu/*node* ['#(-> (rel % [id a])
+                                    (with {:a (coalesce a 2)})
+                                    (aggregate id {:a (sum a)}))
+                              data]))
           "default provided with `coalesce`")
 
     (t/is (= [{:id 1, :a 6} {:id 2, :a 5}]
-             (xt/q tu/*node* '(-> (rel $data [id a])
-                                  (with {:a (if a a 5)})
-                                  (aggregate id {:a (sum a)}))
-                   {:args {:data data}}))
+             (xt/q tu/*node* ['#(-> (rel % [id a])
+                                    (with {:a (if a a 5)})
+                                    (aggregate id {:a (sum a)}))
+                              data]))
           "default provided with `if` (which mentions `absent` values)")))

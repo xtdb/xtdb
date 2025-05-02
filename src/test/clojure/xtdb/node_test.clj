@@ -399,16 +399,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
-                   '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
-                   {:args {:tx-id 1}})))
+                   ['#(from :xt/txs [{:xt/id %, :committed committed?}]) 1])))
 
     (t/is (thrown-with-msg?
            RuntimeException
            #"Assert failed"
 
-           (throw (-> (xt/q tu/*node*
-                            '(from :xt/txs [{:xt/id $tx-id, :error err}])
-                            {:args {:tx-id 3}})
+           (throw (-> (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])
                       first
                       :err))))))
 
@@ -426,8 +423,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
-                   '(from :xt/txs [{:xt/id $tx-id, :committed committed?}])
-                   {:args {:tx-id 0}})))))
+                   ['#(from :xt/txs [{:xt/id %, :committed committed?}]) 0])))))
 
 (t/deftest test-nulling-valid-time-columns-2504
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)"

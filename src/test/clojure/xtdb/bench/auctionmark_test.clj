@@ -181,14 +181,14 @@
 
       (am/proc-new-comment worker)
 
-      (t/is (= [{:comment-id comment-id}]
-               (xt/q *node* '(from :item-comment [{:xt/id comment-id} response])
-                     {:args {:comment-id comment-id}})))
+      (t/is (= [{}]
+               (xt/q *node* ['#(from :item-comment [{:xt/id %} response])
+                             comment-id])))
 
       (am/proc-new-comment-response worker)
 
-      (t/is (true? (-> (xt/q *node* '(from :item-comment [{:xt/id comment-id} response])
-                             {:args {:comment-id comment-id}})
+      (t/is (true? (-> (xt/q *node* ['#(from :item-comment [{:xt/id %} response])
+                                     comment-id])
                        first
                        (contains? :response)))))))
 

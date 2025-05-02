@@ -44,27 +44,29 @@
 
   The arguments are the same as for `q`."
 
-  (^clojure.lang.IReduceInit [node query] (plan-q node query {}))
-  (^clojure.lang.IReduceInit [node query opts]
+  (^clojure.lang.IReduceInit [node query+args] (plan-q node query+args {}))
+  (^clojure.lang.IReduceInit [node query+args opts]
    (let [query-opts (-> opts
                         (update :key-fn (comp serde/read-key-fn (fnil identity :kebab-case-keyword)))
                         (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node))))]
      (reify IReduceInit
        (reduce [_ f start]
-         (with-open [^Stream res (cond
-                                   (string? query) (xtp/open-sql-query node query query-opts)
-                                   (vector? query) (let [[sql & args] query]
-                                                     (xtp/open-sql-query node sql (assoc query-opts :args args)))
-                                   (seq? query) (xtp/open-xtql-query node query query-opts)
-                                   :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-           (let [^Iterator itr (.iterator res)]
-             (loop [acc start]
-               (if-not (.hasNext itr)
-                 acc
-                 (let [acc (f acc (.next itr))]
-                   (if (reduced? acc)
-                     (deref acc)
-                     (recur acc))))))))))))
+         (let [[query args] (if (vector? query+args)
+                              [(first query+args) (rest query+args)]
+                              [query+args []])
+               query-opts (assoc query-opts :args args)]
+           (with-open [^Stream res (cond
+                                     (string? query) (xtp/open-sql-query node query query-opts)
+                                     (seq? query) (xtp/open-xtql-query node query query-opts)
+                                     :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+             (let [^Iterator itr (.iterator res)]
+               (loop [acc start]
+                 (if-not (.hasNext itr)
+                   acc
+                   (let [acc (f acc (.next itr))]
+                     (if (reduced? acc)
+                       (deref acc)
+                       (recur acc)))))))))))))
 
 (defn q
   "query an XTDB node.
@@ -73,7 +75,6 @@
   - opts:
     - `:snapshot-time`: see 'Transaction Basis'
     - `:current-time`: override wall-clock time to use in functions that require it
-    - `:args`: arguments to pass to the query.
     - `:default-tz`: overrides the default time zone for the query
     - `:authn`: authentication options
 
@@ -81,8 +82,9 @@
 
   (q node '(from ...))
 
-  (q node '(from :foo [{:a $a, :b $b}])
-      {:a a-value, :b b-value})
+  (q node ['(fn [a b] (from :foo [a b])) a-value b-value])
+  (q node ['#(from :foo [{:a %1, :b %2}]) a-value b-value])
+  (q node ['#(from :foo [{:a %} b]) a-value])
 
   (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
   (q node [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])

@@ -10,7 +10,7 @@
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
            (xtdb.util NormalForm)
-           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify Unnest Where With Without)))
+           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Unify Unnest Where With Without)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -46,7 +46,7 @@
   ([prefix col] (col-sym (format "%s_%s" prefix col))))
 
 (defn- param-sym [v]
-  (-> (symbol (str "?" v))
+  (-> (symbol v)
       util/symbol->normal-form-symbol
       (with-meta {:param? true})))
 
@@ -54,7 +54,7 @@
   ([v]
    (apply-param-sym nil v))
   ([v prefix]
-   (-> (symbol (str "?" prefix v))
+   (-> (symbol (str "$" prefix v))
        util/symbol->normal-form-symbol
        (with-meta {:correlated-column? true}))))
 
@@ -111,8 +111,8 @@
   (plan-expr [this] (col-sym (.lv this)))
   (required-vars [this] #{(col-sym (.lv this))})
 
-  Expr$Param ;;TODO need to differentiate between query params and subquery/apply params
-  (plan-expr [this] (param-sym (subs (.v this) 1)))
+  Expr$Param
+  (plan-expr [this] (param-sym (.v this)))
   (required-vars [_this] #{})
 
   Expr$ListExpr
@@ -454,6 +454,8 @@
    :provided-vars (set (map :r out-bindings))})
 
 (extend-protocol PlanQuery
+  QueryWithParams (plan-query [{:keys [query]}] (plan-query query))
+
   From (plan-query [from] (plan-from from))
 
   Pipeline
@@ -885,17 +887,15 @@
     {:ra-plan [:top {:skip offset} ra-plan]
      :provided-vars provided-vars}))
 
-(def compile-query
-  (-> (fn [query {:keys [table-info]}]
-        (let [{:keys [ra-plan]} (binding [*gensym* (util/seeded-gensym "_" 0)
-                                          *table-info* table-info]
-                                  (plan-query query))]
+(defn compile-query [query {:keys [table-info]}]
+  (let [{:keys [ra-plan]} (binding [*gensym* (util/seeded-gensym "_" 0)
+                                    *table-info* table-info]
+                            (plan-query query))]
 
-          (-> ra-plan
-              #_(doto clojure.pprint/pprint)
-              #_(->> (binding [*print-meta* true]))
-              (lp/rewrite-plan {})
-              #_(doto clojure.pprint/pprint)
-              #_(->> (binding [*print-meta* true]))
-              (doto (lp/validate-plan)))))
-      util/lru-memoize))
+    (-> ra-plan
+        #_(doto clojure.pprint/pprint)
+        #_(->> (binding [*print-meta* true]))
+        (lp/rewrite-plan {})
+        #_(doto clojure.pprint/pprint)
+        #_(->> (binding [*print-meta* true]))
+        (doto (lp/validate-plan)))))
