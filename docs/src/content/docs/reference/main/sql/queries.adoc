@@ -66,10 +66,11 @@ const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
 const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
 const docs = rr.OneOrMore(doc, ",")
 const values = rr.Sequence("VALUES", docs)
+const xtql = rr.Sequence("XTQL", "<XTQL query>")
 
 const allOrDistinct = rr.Choice(0, rr.Skip(), "ALL", "DISTINCT")
 const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "EXCEPT"), allOrDistinct, "<query term>")
-return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, binary, rr.Sequence("(", "<query term>", ")")));
+return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, xtql, binary, rr.Sequence("(", "<query term>", ")")));
 ----
 
 NB:
@@ -80,6 +81,10 @@ NB:
 * If you start your query with `FROM`, you may then include arbitrarily many sets of `WHERE`/`GROUP BY`/`SELECT` clauses, which will be evaluated in order.
 * Predicates can be comma-separated in XTDB, to aid with SQL generation - these are treated as conjuncts.
   There may be an arbitrary number of commas at the start, between any two predicate expressions, or at the end.
+* XTQL queries are sent within an SQL string literal - e.g. `+'(-> (from ...) ...)'+`.
+Given the possible presence of single quotes within the query, it is recommended to use dollar-delimited strings here: `XTQL &dollar;&dollar; <xtql query> &dollar;&dollar;`
++
+For more details on XTQL queries, see the link:/xtql/tutorials/introducing-xtql[XTQL documentation].
 
 === <select clause>
 [railroad]
@@ -128,13 +133,21 @@ const join = rr.Sequence("<relation>", joinType, "JOIN", "<relation>", rr.Choice
 const crossJoin = rr.Sequence("<relation>", "CROSS", "JOIN", "<relation>")
 const naturalJoin = rr.Sequence("<relation>", "NATURAL", joinType, "JOIN", "<relation>")
 
+const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
+const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
+const docs = rr.OneOrMore(doc, ",")
+const values = rr.Sequence("VALUES", docs)
+
+const xtql = rr.Sequence("XTQL", "<XTQL query>")
 const subquery = rr.Sequence("(", "<query>", ")")
 const lateral = rr.Sequence("LATERAL", subquery)
 const unnest = rr.Sequence("UNNEST", "(", "<value>", ")", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
-const subqs = rr.Sequence(rr.Choice(0, subquery, lateral, unnest), tableAlias)
+const subqs = rr.Sequence(rr.Choice(0, values, xtql, subquery, lateral, unnest), tableAlias)
 
 return rr.Diagram(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs))
 ----
+
+* See link:#_query_term[<query term>] for details on XTQL queries.
 
 === <temporal filter>
 [railroad]
@@ -198,7 +211,7 @@ return rr.Diagram(rr.Choice(0, objectBraceConstructor, objectFnConstructor))
 === <literal>
 [railroad]
 ----
-const stringLiteral = rr.Choice(0, rr.Sequence("'", "<SQL-style string>", "'"), rr.Sequence("E'", "<C-style string>", "'"))
+const stringLiteral = rr.Choice(0, rr.Sequence("'", "<SQL-style string>", "'"), rr.Sequence('$$', '<string>', '$$'), rr.Sequence("E'", "<C-style string>", "'"))
 
 const dateLiteral = rr.Sequence("DATE", "'", "<ISO8601 date literal>", "'")
 const timeLiteral = rr.Sequence("TIME", "'", "<ISO8601 time literal>", "'")

@@ -5,15 +5,41 @@ title: Introducing XTQL
 :test: ../src/test/clojure/xtdb/docs/xtql_walkthrough_test.clj
 :example: ../src/test/resources/docs/xtql_tutorial_examples.yaml
 
-In Clojure, XTDB is queryable using two query languages: **SQL** and **XTQL**.
+XTDB is queryable using two query languages: **SQL** and **XTQL**.
 
-XTQL is our new, data-oriented, composable query language, inspired by the strong theoretical bases of both **Datalog** and **relational algebra**.
-These two combine to create a joyful, productive, interactive development experience, with the ability to build queries iteratively, testing and debugging smaller parts in isolation.
+XTQL is our new, data-oriented, composable query language:
 
+* It is inspired by the strong theoretical bases of both **Datalog** and **relational algebra**.
+  These two combine to create a joyful, productive, interactive development experience, with the ability to build queries iteratively, testing and debugging smaller parts in isolation.
 * It is designed to be highly amenable to dynamic query generation - we believe that our industry has spent more than enough time trying to generate SQL strings (not to mention the concomitant https://owasp.org/www-community/attacks/SQL_Injection[security vulnerabilities^]).
-* It can be used for both link:#operators_and_relations[queries] and link:#dml[transactions].
 
-Let's start with XTQL queries:
+== Querying XTQL
+
+XTQL can either be queried within an SQL query, or via the Clojure API.
+
+To query XTQL within a SQL query, you can either execute it:
+
+* as a top-level query (like SQL's `VALUES`): `XTQL &dollar;&dollar; <query> &dollar;&dollar;`:
++
+[source,sql]
+----
+XTQL $$
+  (-> (from :users [first-name last-name])
+      ...)
+$$
+----
+* or within a wider SQL query:
++
+[source,sql]
+----
+SELECT ...
+FROM (XTQL $$
+  (-> (from :users [first-name last-name])
+      ...)
+$$) u
+ORDER BY u.last_name DESC, u.first_name DESC
+LIMIT 10
+----
 
 [#operators_and_relations]
 == 'Operators' and 'relations'

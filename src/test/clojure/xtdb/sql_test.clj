@@ -2934,3 +2934,28 @@ SELECT
     WHERE v.valid_time_intersection CONTAINS (dates.d + INTERVAL 'PT0M')
   ) AS member_count
 FROM dates"))))
+
+(t/deftest inline-xtql
+  (xt/submit-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"
+                           "INSERT INTO bar RECORDS {_id: 1, y: 'bar'}"
+                           "INSERT INTO bar RECORDS {_id: 2, y: 'baz'}"])
+
+  (t/is (= [{:xt/id 1, :x "foo"}] (xt/q tu/*node* "XTQL $$(from :foo [*])$$")))
+  (t/is (= [{:xt/id 1, :x "foo"}] (xt/q tu/*node* "XTQL $$(from :foo [xt/id x])$$")))
+  (t/is (= [{:x "foo"}] (xt/q tu/*node* "XTQL $$ (from :foo [x]) $$")))
+
+  (t/is (= [{:x "foo", :y "bar"}]
+           (xt/q tu/*node* "SELECT * EXCLUDE _id
+                            FROM foo f1
+                              JOIN (XTQL $$(from :bar [_id y])$$) f2
+                                USING (_id)")))
+
+  (t/testing "params"
+    (t/is (= [{:xt/id 2, :y "baz"}]
+             (xt/q tu/*node* [(format "XTQL $$ %s $$" (pr-str '#(from :bar [{:xt/id %} *])))
+                              2])))
+
+    (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
+             (xt/q tu/*node* [(format "FROM (XTQL $$ %s $$) t SELECT *, ? AS x"
+                                      (pr-str '#(from :bar [{:xt/id %} *])))
+                              2 "x"])))))
