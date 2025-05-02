@@ -279,18 +279,20 @@
 (defn- unparse-arg-binding [^Binding binding]
   (unparse (.getExpr binding)))
 
-(defmethod parse-query 'fn* [[_fn params body] {:keys [subq?] :as env}]
+(defmethod parse-query 'fn* [[_fn params body] {:keys [!param-count subq?] :as env}]
   (when-not (and (vector? params)
                  (every? symbol? params))
     (throw (err/illegal-arg :xtql/malformed-fn-params {:params params})))
 
   (let [env (-> env
                 (update :params (fnil into {})
-                        (if subq?
-                          (map (fn [sym]
-                                 [sym (symbol (str "$" sym))]))
-                          (map-indexed (fn [idx sym]
-                                         [sym (symbol (str "?_" idx))])))
+                        (cond
+                          subq? (map (fn [sym]
+                                       [sym (symbol (str "$" sym))]))
+                          !param-count (map (fn [sym]
+                                              [sym (symbol (str "?_" (dec (swap! !param-count inc))))]))
+                          :else (map-indexed (fn [idx sym]
+                                               [sym (symbol (str "?_" idx))])))
                         params))]
     (->QueryWithParams params (parse-query body env))))
 

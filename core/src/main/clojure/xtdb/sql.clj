@@ -1,5 +1,6 @@
 (ns xtdb.sql
-  (:require [clojure.set :as set]
+  (:require [clojure.edn :as edn]
+            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
@@ -12,17 +13,18 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.plan :as xtql.plan])
   (:import clojure.lang.MapEntry
            (java.net URI)
-           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime Period ZoneOffset ZonedDateTime)
+           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime)
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
            (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
-           (xtdb.time Interval)
            xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]
@@ -2469,6 +2471,19 @@
                    (->> col-syms
                         (mapv #(->col-sym (str unique-table-alias) (str %)))))))
 
+  (visitXtqlQuery [_ ctx]
+    (let [table-info (->> (:table-info env)
+                          ;; TODO get XTQL using symbol table-info
+                          (into {} (map (fn [[tbl cols]]
+                                          [(str tbl) (into #{} (map str) cols)]))))
+
+          {:keys [ra-plan]} (-> (edn/read-string {:readers *data-readers*}
+                                                 (.accept (.characterString ctx) string-literal-visitor))
+                                (xtql/parse-query {:!param-count (:!param-count env)})
+                                (xtql.plan/compile-query* {:table-info table-info}))]
+
+      (->QueryExpr ra-plan (mapv symbol (lp/relation-columns ra-plan)))))
+
   (visitSubquery [this ctx] (-> (.queryExpression ctx) (.accept this)))
 
   (visitInsertRecords [this ctx]
@@ -3174,3 +3189,4 @@
      ;; eventually we could deal with these on pre-submit
      (catch IllegalArgumentException _)
      (catch RuntimeException _))))
+
