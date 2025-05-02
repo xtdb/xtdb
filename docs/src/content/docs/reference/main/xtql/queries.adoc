@@ -6,7 +6,6 @@ XTQL queries consist of composable operators, optionally combined with a pipelin
 
 == Operators
 
-
 * link:#_source_operators[Source operators] are valid at the start of a pipeline, or in isolation.
 * link:#_tail_operators[Tail operators] transform data in a pipeline - they aren't valid as the first operator, because they don't source data, but can appear anywhere else in the pipeline.
 
@@ -28,6 +27,17 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 [source,clojure]
 ----
 (from ...)
+----
+
+[source]
+----
+Query :: (fn [Param*] Pipeline) | Pipeline
+Param :: Symbol
+
+Pipeline :: (-> Source Tail*) | Source
+Source :: From | Rel | Unify
+Tail :: Aggregate | Limit | Offset | OrderBy | Return
+        | Where | With | Without | Unnest
 ----
 
 === Source operators
@@ -213,19 +223,12 @@ These binding specs act as both 'join conditions' (if the logic variables are re
 * The 'join' operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
 * The 'left-join' operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
 
-Parameters in the sub-query can be fulfilled with the `:args` option - see the link:#_argument_specs[argument specs] section for more details.
+Parameters in the sub-query can be fulfilled by passing a vector of arguments or, if the symbols all match, the arguments may be omitted - see the link:#_argument_specs[argument specs] section for more details.
 
 [source]
 ----
-Join :: (join Query JoinOpts)
-LeftJoin :: (left-join Query JoinOpts)
-
-JoinOpts :: [BindSpec+]
-          | {; required
-             :bind [BindSpec+]
-
-             ; optional
-             :args [ArgSpec+]}
+Join :: (join Subquery [BindSpec+])
+LeftJoin :: (left-join Subquery [BindSpec+])
 ----
 
 [source,clojure]
@@ -360,8 +363,8 @@ Expr :: <defined separately>
 (rel [{:a 1, :b 2}, {:a 3, :b 4}] [a b])
 
 ;; from a parameter
-(xt/q node '(rel $t [a b])
-      {:args {:t [{:a 1, :b 2}, {:a 3, :b 4}]}})
+(xt/q node ['#(rel % [a b])
+            [{:a 1, :b 2}, {:a 3, :b 4}]])
 
 ;; from a value in another document
 ;; assume we have a document {:xt/id <id>, :my-nested-rel [{:a 1, :b 2}, ...]}
@@ -560,8 +563,6 @@ The columns in the returned row will be nested into a map in the outer expressio
   The rows will be nested into an array of maps in the outer expression.
 * The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
 
-* In Clojure parameter symbols must be prefixed by a `$`; other variables must not start with a `$`.
-
 [source]
 ----
 Expr :: number | "string" | true | false | nil | ObjectExpr
@@ -577,43 +578,33 @@ VectorExpr :: [Expr*]
 MapExpr :: {MapKey Expr, ...}
 MapKey :: keyword
 
-ParamExpr :: '$' symbol
+ParamExpr :: symbol
 VariableExpr :: symbol
 GetFieldExpr :: (. Expr symbol)
 CallExpr :: (symbol Expr*)
 
-SubQueryExpr :: (q Query
-                   {; optional
-                    :args ArgSpec})
-
-ExistsExpr :: (exists Query
-                      {; optional
-                       :args ArgSpec})
-
-PullExpr :: (pull Query
-                  {; optional
-                   :args ArgSpec})
-
-PullManyExpr :: (pull* Query
-                       {; optional
-                        :args ArgSpec})
+SubqueryExpr :: (q Subquery)
+ExistsExpr :: (exists Subquery)
+PullExpr :: (pull Subquery)
+PullManyExpr :: (pull* Subquery)
 ----
 
 The following example retrieves a post together with their author and comments:
 
 [source,clojure]
 ----
-(-> (from :posts [{:xt/id $post-id} post-content author-id])
-    (with {:author (pull (from :authors [{:xt/id $author-id} first-name last-name])
-                         {:args [author-id]})
+(fn [post-id]
+  (-> (from :posts [{:xt/id post-id} post-content author-id])
+      (with {:author (pull (from :authors [{:xt/id author-id} first-name last-name])
+                           {:args [author-id]})
 
-           :comments (pull* (-> (from :comments [{:post-id $post-id} comment posted-at])
-                                (order-by posted-at)
-                                (limit 2)
-                                (return comment))
-                            {:args [{:post-id $post-id}]})})
+             :comments (pull* (-> (from :comments [{:post-id post-id} comment posted-at])
+                                  (order-by posted-at)
+                                  (limit 2)
+                                  (return comment))
+                              {:args [{:post-id post-id}]})})
 
-    (return post-content author comments))
+      (return post-content author comments)))
 
 ;; =>
 
@@ -656,7 +647,13 @@ Expr :: <defined separately>
 [source,clojure]
 ----
 (from :users [{:username "james"} first-name last-name])
-(from :users [{:username $username} first-name last-name])
+
+;; a query that takes one parameter, that we name `username`
+(fn [username]
+  (from :users [{:username username} first-name last-name]))
+
+;; using Clojure's `#()` syntax
+#(from :users [{:username %} first-name last-name])
 
 ;; i.e. `SELECT first_name, last_name FROM users WHERE username = 'james'`
 ;;      `SELECT first_name, last_name FROM users WHERE username = ?`
@@ -666,19 +663,16 @@ Expr :: <defined separately>
 
 Within unify operators, these output names (`first-name`, `last-name` etc.) create 'logic variables' which, if they are re-used within the same unify operator, will add a 'join condition' - see the link:#_unify[unify] operator for more details.
 
-== Argument specs
+== Arguments
 
-Argument specs are used to fulfil parameters in a sub-query (exists, pull, pull-many) or join (and left-join).
+Arguments are used to pass values into a query, both for the query itself and for sub-queries.
+By using parameters, we can create reusable queries that can be re-executed with different values.
 
 Where link:#_binding_specs[bindings] specify how to join the *output* of the sub-query/join to the outer query, arguments specify the *inputs* to the sub-query/join from the outer query.
 
-This is commonly used in 'pull' queries and all other link:#_subqueries[Subqueries]:
-
 [source]
 ----
-ArgSpec :: ArgVariable | {Parameter Expr, ...}
-ArgVariable :: symbol
-Parameter :: keyword
+Subquery :: [ Query Expr* ] | Query
 Expr :: <defined separately>
 ----
 
@@ -686,11 +680,22 @@ Expr :: <defined separately>
 ----
 ;; find the most recent 5 posts and, for each, their most recent 3 comments
 
-;; in this query, the `post-id` argument fulfils the `$post-id` parameter in the sub-query
 (-> (from :posts [{:xt/id post-id} ...])
-    (with {:comments (pull* (-> (from :comments [{:post-id $post-id} comment commented-at])
-                                (limit 3))
-                            {:args [post-id]})}))
+    (with {:comments (pull* [(fn [post-id]
+                               (-> (from :comments [{:post-id post-id} comment commented-at])
+                                   (limit 3)))
+
+                             post-id])}))
+
+;; in this query, the `post-id` argument is referenced as `post-id` in the sub-query
+
+;; given the variable has the same name in the outer and inner query,
+;; we can omit the application vector
+
+(-> (from :posts [{:xt/id post-id} ...])
+    (with {:comments (pull* (fn [post-id]
+                              (-> (from :comments [{:post-id post-id} comment commented-at])
+                                  (limit 3))))}))
 ----
 
 As well as 'pull', this is quite commonly used in left joins, because we don't want to filter out rows that don't match (which would happen if the `<>` here was in the outer unify).
@@ -701,14 +706,25 @@ Instead, we want to preserve them, albeit without values for the columns in the 
 ----
 ;; find everybody and, for those who have them, their siblings
 
-;; in this query, the `person` argument fulfils the `$person` parameter in the sub-query;
-;; `sibling` and `parent` (in `bind`) are joined on the way out.
+(-> (unify (from :people [{:xt/id person, :parent parent}])
+           (left-join [(fn [person]
+                         (-> (from :people [{:xt/id sibling, :parent parent}])
+                             (where (<> person sibling))))
+                        person]
+                      [sibling parent]))
+    (return person sibling))
+
+;; in this query, the `person` argument is referenced as `person` in the sub-query;
+;; `sibling` and `parent` are joined on the way out.
+
+;; again, given the variable has the same name in the outer and inner query,
+;; we can omit the application vector
 
 (-> (unify (from :people [{:xt/id person, :parent parent}])
-           (left-join (-> (from :people [{:xt/id sibling, :parent parent}])
-                          (where (<> $person sibling)))
-                      {:args [person]
-                       :bind [sibling parent]}))
+           (left-join (fn [person]
+                        (-> (from :people [{:xt/id sibling, :parent parent}])
+                            (where (<> person sibling))))
+                      [sibling parent]))
     (return person sibling))
 ----
 
@@ -722,13 +738,10 @@ requires that the node has indexed _at least_ the specified transaction.
   This is so that, by default, transactions submitted to a client are guaranteed to be visible to any later query to that same client.
 * If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the transaction token returned from `submit-tx` as the `after-tx-id` for subsequent queries to guarantee this same read-after-write consistency level.
 * If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
-`args`::
-a map of arguments to pass to the query. Parameters are prefixed with `$` in the query itself:
 +
 [source,clojure]
 ----
-(xt/q node '(from :users [{:username $username}])
-      {:args {:username "james"}})
+(xt/q node ['#(from :users [{:username %}]) "james"])
 ----
 `snapshot-time`:: specifies the latest system-time that'll be visible to the query.
 +

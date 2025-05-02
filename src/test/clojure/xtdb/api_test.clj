@@ -161,10 +161,6 @@
   (xt/submit-tx *node* devs)
 
   (t/is (= #{{:name "James"} {:name "Matt"}}
-           (set (xt/q *node* "SELECT u.name FROM users u WHERE u.name IN (?, ?)"
-                      {:args ["James" "Matt"]}))))
-
-  (t/is (= #{{:name "James"} {:name "Matt"}}
            (set (xt/q *node* ["SELECT u.name FROM users u WHERE u.name IN (?, ?)"
                               "James" "Matt"])))))
 
@@ -375,7 +371,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
 
   (t/is (= [{:name "Petr"}]
-           (xt/q tu/*node* '(from :docs [{:xt/id $petr} name]) {:args {:petr :petr}}))))
+           (xt/q tu/*node* ['#(from :docs [{:xt/id %} name]) :petr]))))
 
 (t/deftest test-close-node-multiple-times
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
@@ -468,10 +464,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
  [name age _valid_from _valid_to]
  [:scan
   {:table public/people, :for-valid-time nil, :for-system-time nil}
-  [{_id (= _id ?pid)} name age _valid_from _valid_to]]]
+  [{_id (= _id ?_0)} name age _valid_from _valid_to]]]
 "}]
            (xt/q tu/*node*
-                 '(from :people [{:xt/id $pid} name age xt/valid-from xt/valid-to])
+                 ['#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])]
                  {:explain? true})))
 
   (t/is (= '[{:plan

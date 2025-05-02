@@ -2862,8 +2862,8 @@ UNION ALL
   (t/is (= [{:mdm #xt/interval "P1DT1.123456S",
              :mdn [#xt/interval "P1DT1.123456789S"],
              :mdm-literal #xt/interval "P1DT1.123456S"}]
-           (xt/q tu/*node* "SELECT ? mdm, ? mdn, INTERVAL 'P1DT1.123456S' mdm_literal"
-                 {:args [#xt/interval "P1DT1.123456S" [#xt/interval "P1DT1.123456789S"]]}))))
+           (xt/q tu/*node* ["SELECT ? mdm, ? mdn, INTERVAL 'P1DT1.123456S' mdm_literal"
+                            #xt/interval "P1DT1.123456S" [#xt/interval "P1DT1.123456789S"]]))))
 
 (defn- compare-decimals [^BigDecimal d1 ^BigDecimal d2]
   (and (= (.scale d1) (.scale d2))

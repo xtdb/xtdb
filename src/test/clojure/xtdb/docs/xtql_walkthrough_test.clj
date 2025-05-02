@@ -3,7 +3,6 @@
             [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest testing]]
             [xtdb.api :as xt]
-            [xtdb.error :as err]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)
@@ -52,7 +51,6 @@
    [:put-docs :promotions {:xt/id 2, :promotion-type "general"}]])
 
 (deftest basic-operations
-
   (xt/submit-tx tu/*node* users)
 
   (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
@@ -137,11 +135,11 @@
                  '
                  ;; tag::joins-xtql-4[]
                  (-> (unify (from :customers [{:xt/id cid}])
-                            (where (not (exists? (from :orders [{:customer-id $cid}])
-                                                 {:args [cid]}))))
+                            (where (not (exists? (fn [cid]
+                                                   (from :orders [{:customer-id cid}]))))))
                      (limit 100))
                  ;; end::joins-xtql-4[]
-                 ,)
+                 )
            (xt/q tu/*node* (sql-example "joins-sql-4")))))
 
 (deftest projections
@@ -213,7 +211,6 @@
 
 
 (deftest pull
-
   (xt/submit-tx tu/*node*
     (concat
       articles comments
@@ -241,13 +238,13 @@
                  ;; tag::pull-xtql-1[]
                  (-> (from :articles [{:xt/id article-id} title content author-id])
 
-                     (with {:author (pull (from :authors [{:xt/id $author-id} first-name last-name])
-                                          {:args [author-id]})
+                     (with {:author (pull (fn [author-id]
+                                            (from :authors [{:xt/id author-id} first-name last-name])))
 
-                            :comments (pull* (-> (from :comments [{:article-id $article-id} created-at comment])
-                                                 (order-by {:val created-at :dir :desc})
-                                                 (limit 10))
-                                             {:args [article-id]})}))
+                            :comments (pull* (fn [article-id]
+                                               (-> (from :comments [{:article-id article-id} created-at comment])
+                                                   (order-by {:val created-at :dir :desc})
+                                                   (limit 10))))}))
                  ;; end::pull-xtql-1[]
                  ))
 
@@ -318,13 +315,12 @@
     [[:sql (sql-example "DML-Delete-sql")
       [1]]])
 
-  (t/is (empty? (xt/q tu/*node* '(from :comments [{:post-id $post-id}])
-                      {:args {:post-id 1}})))
+  (t/is (empty? (xt/q tu/*node* ['#(from :comments [{:post-id %}]) 1])))
 
   (t/is (not (empty?
-              (xt/q tu/*node* '(from :comments {:bind [{:post-id $post-id}]
-                                                :for-valid-time :all-time})
-                    {:args {:post-id 1}})))))
+              (xt/q tu/*node* ['#(from :comments {:bind [{:post-id %}]
+                                                  :for-valid-time :all-time})
+                               1])))))
 
 (deftest DML-Delete-additional-unify-clauses-sql
   (xt/submit-tx tu/*node* (concat posts comments))
@@ -334,16 +330,18 @@
                                       ["ivan"]]])))
 
   (t/is (empty? (xt/q tu/*node*
-                      '(unify (from :comments [{:post-id pid}])
-                              (from :posts [{:xt/id pid, :author-id $author}]))
-                      {:args {:author "ivan"}})))
+                      ['(fn [author]
+                          (unify (from :comments [{:post-id pid}])
+                                 (from :posts [{:xt/id pid, :author-id author}])))
+                       "ivan"])))
 
   (t/is (not (empty?
                (xt/q tu/*node*
-                     '(unify (from :comments {:bind [{:post-id pid}]
-                                              :for-valid-time :all-time})
-                             (from :posts [{:xt/id pid, :author-id $author}]))
-                     {:args {:author "ivan"}})))))
+                     ['(fn [author]
+                         (unify (from :comments {:bind [{:post-id pid}]
+                                                 :for-valid-time :all-time})
+                                (from :posts [{:xt/id pid, :author-id author}])))
+                      "ivan"])))))
 
 (deftest DML-Delete-bitemporal-xtql
   (xt/submit-tx tu/*node* promotions)

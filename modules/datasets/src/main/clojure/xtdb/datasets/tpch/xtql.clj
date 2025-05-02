@@ -1,8 +1,5 @@
 (ns xtdb.datasets.tpch.xtql)
 
-(defn- with-args [q args]
-  (vary-meta q assoc ::args (vec args)))
-
 (def q1
   '(-> (from :lineitem [l-shipdate l-quantity
                         l-extendedprice l-discount l-tax
@@ -34,61 +31,63 @@
               (from :region [{:xt/id r, :r-name "EUROPE"}])
 
               (where (= ps-supplycost
-                        (q (-> (unify (from :partsupp [{:ps-partkey $p, :ps-suppkey s} ps-supplycost])
-                                      (from :supplier [{:xt/id s, :s-nationkey n}])
-                                      (from :nation [{:xt/id n, :n-regionkey r}])
-                                      (from :region [{:xt/id r, :r-name "EUROPE"}]))
-                               (aggregate {:min-supplycost (min ps-supplycost)}))
-                           {:args [p]}))))
+                        (q (fn [p]
+                             (-> (unify (from :partsupp [{:ps-partkey p, :ps-suppkey s} ps-supplycost])
+                                        (from :supplier [{:xt/id s, :s-nationkey n}])
+                                        (from :nation [{:xt/id n, :n-regionkey r}])
+                                        (from :region [{:xt/id r, :r-name "EUROPE"}]))
+                                 (aggregate {:min-supplycost (min ps-supplycost)})))))))
 
        (order-by {:val s-acctbal, :dir :desc} n-name s-name p)
        (limit 100)))
 
 (def q3
-  (-> '(-> (unify (from :customer [{:xt/id c, :c-mktsegment segment}])
+  ['(fn [segment]
+      (-> (unify (from :customer [{:xt/id c, :c-mktsegment segment}])
 
-                  (from :orders [{:xt/id o, :o-custkey c} o-shippriority o-orderdate])
-                  (where (< o-orderdate #xt/date "1995-03-15"))
+                 (from :orders [{:xt/id o, :o-custkey c} o-shippriority o-orderdate])
+                 (where (< o-orderdate #xt/date "1995-03-15"))
 
-                  (from :lineitem [{:l-orderkey o} l-discount l-extendedprice l-shipdate])
-                  (where (> l-shipdate #xt/date "1995-03-15")))
+                 (from :lineitem [{:l-orderkey o} l-discount l-extendedprice l-shipdate])
+                 (where (> l-shipdate #xt/date "1995-03-15")))
 
-           (aggregate {:l-orderkey o}
-                      {:revenue (sum (* l-extendedprice (- 1 l-discount)))}
-                      o-orderdate o-shippriority)
-           (order-by {:val revenue, :dir :desc} o-orderdate)
-           (limit 10))
+          (aggregate {:l-orderkey o}
+                     {:revenue (sum (* l-extendedprice (- 1 l-discount)))}
+                     o-orderdate o-shippriority)
+          (order-by {:val revenue, :dir :desc} o-orderdate)
+          (limit 10)))
 
-      (with-args [{:segment "BUILDING"}])))
+   "BUILDING"])
 
 (def q4
   '(-> (from :orders [{:xt/id o} o-orderdate o-orderpriority])
        (where (>= o-orderdate #xt/date "1993-07-01")
               (< o-orderdate #xt/date "1993-10-01")
 
-              (exists? (-> (from :lineitem [{:l-orderkey $o} l-commitdate l-receiptdate])
-                           (where (< l-commitdate l-receiptdate)))
-                       {:args [o]}))
+              (exists? (fn [o]
+                         (-> (from :lineitem [{:l-orderkey o} l-commitdate l-receiptdate])
+                             (where (< l-commitdate l-receiptdate))))))
 
        (aggregate o-orderpriority {:order-count (count o)})
        (order-by o-orderpriority)))
 
 (def q5
-  (-> '(-> (unify (from :orders [{:xt/id o, :o-custkey c} o-orderdate])
-                  (where (>= o-orderdate #xt/date "1994-01-01")
-                         (< o-orderdate #xt/date "1995-01-01"))
+  ['(fn [region]
+      (-> (unify (from :orders [{:xt/id o, :o-custkey c} o-orderdate])
+                 (where (>= o-orderdate #xt/date "1994-01-01")
+                        (< o-orderdate #xt/date "1995-01-01"))
 
-                  (from :lineitem [{:l-orderkey o, :l-suppkey s}
-                                   l-extendedprice l-discount])
+                 (from :lineitem [{:l-orderkey o, :l-suppkey s}
+                                  l-extendedprice l-discount])
 
-                  (from :supplier [{:xt/id s, :s-nationkey n}])
-                  (from :customer [{:xt/id c, :c-nationkey n}])
-                  (from :nation [{:xt/id n, :n-regionkey r} n-name])
-                  (from :region [{:xt/id r, :r-name region}]))
-           (aggregate n-name {:revenue (sum (* l-extendedprice (- 1 l-discount)))})
-           (order-by {:val revenue, :dir :desc}))
+                 (from :supplier [{:xt/id s, :s-nationkey n}])
+                 (from :customer [{:xt/id c, :c-nationkey n}])
+                 (from :nation [{:xt/id n, :n-regionkey r} n-name])
+                 (from :region [{:xt/id r, :r-name region}]))
+          (aggregate n-name {:revenue (sum (* l-extendedprice (- 1 l-discount)))})
+          (order-by {:val revenue, :dir :desc})))
 
-      (with-args [{:region "ASIA"}])))
+   "ASIA"])
 
 (def q6
   '(-> (unify (from :lineitem [l-shipdate l-quantity l-extendedprice l-discount])
@@ -212,24 +211,25 @@
        (order-by {:val value, :dir :desc})))
 
 (def q12
-  (-> '(-> (unify (from :lineitem [{:l-orderkey o} l-receiptdate l-commitdate l-shipdate l-shipmode])
-                  ;; TODO `in?`
-                  (where (in? l-shipmode $ship-modes)
+  ['(fn [ship-modes]
+      (-> (unify (from :lineitem [{:l-orderkey o} l-receiptdate l-commitdate l-shipdate l-shipmode])
+                 ;; TODO `in?`
+                 (where (in? l-shipmode ship-modes)
 
-                         (>= l-receiptdate #xt/date "1994-01-01")
-                         (< l-receiptdate #xt/date "1995-01-01")
-                         (< l-commitdate l-receiptdate)
-                         (< l-shipdate l-commitdate))
+                        (>= l-receiptdate #xt/date "1994-01-01")
+                        (< l-receiptdate #xt/date "1995-01-01")
+                        (< l-commitdate l-receiptdate)
+                        (< l-shipdate l-commitdate))
 
-                  (from :orders [{:xt/id o} o-orderpriority]))
+                 (from :orders [{:xt/id o} o-orderpriority]))
 
-           (aggregate l-shipmode
-                      {:high-line-count (sum (case o-orderpriority "1-URGENT" 1, "2-HIGH" 1, 0))}
-                      {:low-line-count (sum (case o-orderpriority "1-URGENT" 0, "2-HIGH" 0, 1))})
+          (aggregate l-shipmode
+                     {:high-line-count (sum (case o-orderpriority "1-URGENT" 1, "2-HIGH" 1, 0))}
+                     {:low-line-count (sum (case o-orderpriority "1-URGENT" 0, "2-HIGH" 0, 1))})
 
-           (order-by l-shipmode))
+          (order-by l-shipmode)))
 
-      (with-args [{:ship-modes #{"MAIL" "SHIP"}}])))
+   #{"MAIL" "SHIP"}])
 
 (def q13
   '(-> (unify (from :customer [{:xt/id c}])
@@ -272,32 +272,32 @@
          (return s s-name s-address s-phone total-revenue))))
 
 (def q16
-  (-> '(-> (unify (from :part [{:xt/id p} p-brand p-type p-size])
-                  ;; TODO `in?`
-                  (where (in? p-size sizes)
-                         (<> p-brand "Brand#45")
-                         (not (like p-type "MEDIUM POLISHED%")))
+  ['(fn [sizes]
+      (-> (unify (from :part [{:xt/id p} p-brand p-type p-size])
+                 ;; TODO `in?`
+                 (where (in? p-size sizes)
+                        (<> p-brand "Brand#45")
+                        (not (like p-type "MEDIUM POLISHED%")))
 
-                  (from :partsupp [{:ps-partkey p, :ps-suppkey s}])
+                 (from :partsupp [{:ps-partkey p, :ps-suppkey s}])
 
-                  (where (not (exists? (-> (from :supplier [{:xt/id $s} s-comment])
-                                           (where (like "%Customer%Complaints%" s-comment)))
-                                       {:args [s]}))))
-           (aggregate p-brand p-type p-size {:supplier-cnt (count-distinct s)})
-           (order-by {:val supplier-cnt, :dir :desc} p-brand p-type p-size))
+                 (where (not (exists? (fn [s]
+                                        (-> (from :supplier [{:xt/id s} s-comment])
+                                            (where (like "%Customer%Complaints%" s-comment))))))))
+          (aggregate p-brand p-type p-size {:supplier-cnt (count-distinct s)})
+          (order-by {:val supplier-cnt, :dir :desc} p-brand p-type p-size)))
 
-      (with-args [{:sizes #{3 9 14 19 23 36 45 49}}])))
+   #{3 9 14 19 23 36 45 49}])
 
 (def q17
   '(-> (unify (from :part [{:xt/id p, :p-brand "Brand#23", :p-container "MED BOX"}])
               (from :lineitem [{:l-partkey p} l-quantity l-extendedprice])
 
-              (join (-> (from :lineitem [{:l-partkey $p} l-quantity])
-                        (aggregate {:avg-quantity (avg l-quantity)}))
-                    {:args [p]
-                     :bind [avg-quantity]})
-
-              (where (< l-quantity (* 0.2 avg-quantity))))
+              (where (< l-quantity
+                        (* (q (fn [p]
+                                (-> (from :lineitem [{:l-partkey p} l-quantity])
+                                    (aggregate {:avg-quantity (avg l-quantity)}))))
+                           0.2))))
 
        (aggregate {:sum-extendedprice (sum l-extendedprice)})
 
@@ -320,42 +320,43 @@
        (limit 100)))
 
 (def q19
-  (-> '(-> (unify (from :part [{:xt/id p} p-size p-brand p-container])
+  ['(fn [ship-modes]
+      (-> (unify (from :part [{:xt/id p} p-size p-brand p-container])
 
-                  (from :lineitem
-                        [{:l-shipinstruct "DELIVER IN PERSON", :l-partkey p}
-                         l-shipmode l-discount l-extendedprice l-quantity])
+                 (from :lineitem
+                       [{:l-shipinstruct "DELIVER IN PERSON", :l-partkey p}
+                        l-shipmode l-discount l-extendedprice l-quantity])
 
-                  ;; TODO `in?`
-                  (where (in? l-shipmode ship-modes)
+                 ;; TODO `in?`
+                 (where (in? l-shipmode ship-modes)
 
-                         (or (and (= p-brand "Brand#12")
-                                  ;; TODO `in?`
-                                  (in? p-container #{"SM CASE" "SM BOX" "SM PACK" "SM PKG"})
-                                  (>= l-quantity 1.0)
-                                  (<= l-quantity 11.0)
-                                  (>= p-size 1)
-                                  (<= p-size 5))
+                        (or (and (= p-brand "Brand#12")
+                                 ;; TODO `in?`
+                                 (in? p-container #{"SM CASE" "SM BOX" "SM PACK" "SM PKG"})
+                                 (>= l-quantity 1.0)
+                                 (<= l-quantity 11.0)
+                                 (>= p-size 1)
+                                 (<= p-size 5))
 
-                             (and (= p-brand "Brand#23")
-                                  ;; TODO `in?`
-                                  (in? p-container #{"MED BAG" "MED BOX" "MED PKG" "MED PACK"})
-                                  (>= l-quantity 10.0)
-                                  (<= l-quantity 20.0)
-                                  (>= p-size 1)
-                                  (<= p-size 10))
+                            (and (= p-brand "Brand#23")
+                                 ;; TODO `in?`
+                                 (in? p-container #{"MED BAG" "MED BOX" "MED PKG" "MED PACK"})
+                                 (>= l-quantity 10.0)
+                                 (<= l-quantity 20.0)
+                                 (>= p-size 1)
+                                 (<= p-size 10))
 
-                             (and (= p-brand "Brand#34")
-                                  ;; TODO `in?`
-                                  (in? p-container #{"LG CASE" "LG BOX" "LG PACK" "LG PKG"})
-                                  (>= l-quantity 20.0)
-                                  (<= l-quantity 30.0)
-                                  (>= p-size 1)
-                                  (<= p-size 15)))))
+                            (and (= p-brand "Brand#34")
+                                 ;; TODO `in?`
+                                 (in? p-container #{"LG CASE" "LG BOX" "LG PACK" "LG PKG"})
+                                 (>= l-quantity 20.0)
+                                 (<= l-quantity 30.0)
+                                 (>= p-size 1)
+                                 (<= p-size 15)))))
 
-           (aggregate {:revenue (sum (* l-extendedprice (- 1 l-discount)))}))
+          (aggregate {:revenue (sum (* l-extendedprice (- 1 l-discount)))})))
 
-      (with-args [{:ship-modes #{"AIR" "AIR REG"}}])))
+   #{"AIR" "AIR REG"}])
 
 (def q20
   '(-> (unify (from :part [{:xt/id p} p-name])
@@ -367,11 +368,11 @@
 
               (where (> ps-availqty
                         (* 0.5
-                           (q (-> (unify (from :lineitem [{:l-partkey $p, :l-suppkey $s} l-shipdate l-quantity])
-                                         (where (>= l-shipdate #xt/date "1994-01-01")
-                                                (< l-shipdate #xt/date "1995-01-01")))
-                                  (aggregate {:sum-quantity (sum l-quantity)}))
-                              {:args [s p]})))))
+                           (q (fn [s p]
+                                (-> (unify (from :lineitem [{:l-partkey p, :l-suppkey s} l-shipdate l-quantity])
+                                           (where (>= l-shipdate #xt/date "1994-01-01")
+                                                  (< l-shipdate #xt/date "1995-01-01")))
+                                    (aggregate {:sum-quantity (sum l-quantity)}))))))))
 
        (return s-name s-address)
        (order-by s-name)))
@@ -385,15 +386,15 @@
                                l-receiptdate l-commitdate]))
        (where (> l-receiptdate l-commitdate)
 
-              (exists? (-> (from :lineitem [{:l-orderkey o, :l-suppkey l2s}])
-                           (where (<> $s l2s)))
-                       {:args [o s]})
+              (exists? (fn [o s]
+                         (-> (from :lineitem [{:l-orderkey o, :l-suppkey l2s}])
+                             (where (<> s l2s)))))
 
-              (not (exists? (-> (from :lineitem [{:l-orderkey o, :l-suppkey l3s}
-                                                 l-receiptdate l-commitdate])
-                                (where (<> $s l3s)
-                                       (> l-receiptdate l-commitdate)))
-                            {:args [o s]})))
+              (not (exists? (fn [o s]
+                              (-> (from :lineitem [{:l-orderkey o, :l-suppkey l3s}
+                                                   l-receiptdate l-commitdate])
+                                  (where (<> s l3s)
+                                         (> l-receiptdate l-commitdate)))))))
 
        (aggregate s-name {:numwait (count l1)})
        (order-by {:val numwait, :dir :desc} s-name)

@@ -123,14 +123,14 @@
 
   (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
            (xt/q tu/*node*
-                 '(rel [{:first-name "Ivan"} {:first-name $petr}] [first-name])
-                 {:args {:petr "Petr"}}))
+                 ['#(rel [{:first-name "Ivan"} {:first-name %}] [first-name])
+                  "Petr"]))
         "simple param")
 
   (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
            (xt/q tu/*node*
-                 '(rel [{:foo :bar :baz {:nested-foo $nested-param}}] [foo baz])
-                 {:args {:nested-param :bar}}))
+                 ['#(rel [{:foo :bar :baz {:nested-foo %}}] [foo baz])
+                  :bar]))
         "simple param nested")
 
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
@@ -144,22 +144,21 @@
         "testing unify with restriction")
 
   (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
-           (set (xt/q tu/*node* '(rel $ivan+petr [first-name])
-                      {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
+           (set (xt/q tu/*node* ['#(rel % [first-name])
+                                 [{:first-name "Ivan"} {:first-name "Petr"}]])))
         "rel arg as parameter")
 
   (t/is (= #{{:first-name "Petr"}}
-           (set (xt/q tu/*node* '(-> (rel $ivan+petr [first-name])
-                                     (where (= "Petr" first-name)))
-                      {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
+           (set (xt/q tu/*node* ['#(-> (rel % [first-name])
+                                      (where (= "Petr" first-name)))
+                                 [{:first-name "Ivan"} {:first-name "Petr"}]])))
         "rel arg as parameter")
 
   (t/is (= [{:first-name "Petr"}]
-           (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr :first-name first-name}])
-                                   (rel $ivan+petr [first-name]))
-                 {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}}))
+           (xt/q tu/*node* ['#(unify (from :docs [{:xt/id :petr :first-name first-name}])
+                                     (rel % [first-name]))
+                            [{:first-name "Ivan"} {:first-name "Petr"}]]))
         "rel arg as paramater in unify"))
-
 
 (deftest test-order-by
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
@@ -445,19 +444,19 @@
             {:x 2, :sum-y 3, :sum-expr 14}
             {:x 3, :sum-y 6, :sum-expr 30}]
            (xt/q tu/*node*
-                  '(-> (rel $in [x y])
-                       (aggregate x {:sum-y (sum y)
-                                     :sum-expr (sum (+ (* y y) x 1))}))
-                  {:args {:in (for [x (range 4)
-                                    y (range (inc x))]
-                                {:x x :y y})}})))
+                 ['#(-> (rel % [x y])
+                        (aggregate x {:sum-y (sum y)
+                                      :sum-expr (sum (+ (* y y) x 1))}))
+                  (for [x (range 4)
+                        y (range (inc x))]
+                    {:x x :y y})])))
 
   (t/is (= [{:sum-evens 20}]
 
            (xt/q tu/*node*
-                 '(-> (rel $in [x])
-                      (aggregate {:sum-evens (sum (if (= 0 (mod x 2)) x 0))}))
-                 {:args {:in (map (partial hash-map :x) (range 10))}}))
+                 ['#(-> (rel % [x])
+                        (aggregate {:sum-evens (sum (if (= 0 (mod x 2)) x 0))}))
+                  (map (partial hash-map :x) (range 10))]))
         "if")
 
   (t/testing "stddev aggregate"
@@ -468,10 +467,10 @@
 
   (t/is (= [{:out 28.5}]
            (xt/q tu/*node*
-                  '(-> (rel $in [x])
-                       (aggregate {:out (/ (double (sum (* x x)))
-                                           (count x))}))
-                  {:args {:in (map (partial hash-map :x) (range 10))}}))
+                 ['#(-> (rel % [x])
+                        (aggregate {:out (/ (double (sum (* x x)))
+                                            (count x))}))
+                  (map (partial hash-map :x) (range 10))]))
         "aggregates can be included in exprs")
 
   ;TODO currently we require explicit groupings, however detecting the error case of
@@ -549,36 +548,35 @@
            (xt/q tu/*node* '(from :docs [xt/id {:set #{1 2 3}}]))))
 
   (t/is (= [{:xt/id 1}]
-           (xt/q tu/*node* '(from :docs [xt/id {:map {:foo $arg}}])
-                 {:args {:arg 1}})))
+           (xt/q tu/*node* ['#(from :docs [xt/id {:map {:foo %}}]) 1])))
 
   #_ ; TODO `=` on sets
   (t/is (= [{:xt/id 1}]
-           (xt/q tu/*node* '(from :docs [xt/id {:set $arg}])
-                 {:args {:arg #{1 2 3}}}))))
+           (xt/q tu/*node* ['#(from :docs [xt/id {:set %}]) #{1 2 3}]))))
 
 (deftest test-query-args
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
-                        '(from :docs [{:xt/id e :first-name $name}])
-                        {:args {:name "Ivan"}})))
+                        ['#(from :docs [{:xt/id e :first-name %}]) "Ivan"])))
 
           "param in from")
 
     (t/is (= #{{:e :petr :name "Petr"}}
              (set (xt/q tu/*node*
-                        '(-> (from :docs [{:xt/id e :first-name name}])
-                             (where (= $name name)))
-                        {:args {:name "Petr"}})))
+                        ['(fn [$name]
+                            (-> (from :docs [{:xt/id e :first-name name}])
+                                (where (= $name name))))
+                         "Petr"])))
           "param in where op")
 
     (t/is (= #{{:e :petr :name "Petr" :baz "PETR"}
                {:e :ivan :name "Ivan" :baz "PETR"}}
              (set (xt/q tu/*node*
-                        '(unify (from :docs [{:xt/id e :first-name name}])
-                                (with {baz (upper $name)}))
-                        {:args {:name "Petr"}})))
+                        ['(fn [$name]
+                            (unify (from :docs [{:xt/id e :first-name name}])
+                                   (with {baz (upper $name)})))
+                         "Petr"])))
           "param in unify with")))
 
 (deftest test-subquery-args-and-unification
@@ -587,11 +585,11 @@
              (set (xt/q tu/*node*
                         '(unify
                           (with {name "Ivan"})
-                          (join (from :docs [{:xt/id e
-                                              :first-name $name
-                                              :last-name last-name}])
-                                {:args [name]
-                                 :bind [last-name]})))))
+                          (join (fn [name]
+                                  (from :docs [{:xt/id e
+                                                :first-name name
+                                                :last-name last-name}]))
+                                [last-name])))))
 
           "single subquery")
 
@@ -599,17 +597,19 @@
              (set (xt/q tu/*node*
                         '(unify
                           (with {name "Ivan"})
-                          (join (from :docs [{:xt/id e
-                                              :first-name $name
-                                              :last-name last-name}])
-                                {:args [name]
-                                 :bind [last-name]})
+                          (join (fn [name]
+                                  (from :docs [{:xt/id e
+                                                :first-name name
+                                                :last-name last-name}]))
 
-                          (join (from :docs [{:xt/id e
-                                              :first-name $f-name
-                                              :last-name last-name}])
-                                {:args [{:f-name name}]
-                                 :bind [last-name]})))))
+                                [last-name])
+
+                          (join [(fn [f-name]
+                                   (from :docs [{:xt/id e
+                                                 :first-name f-name
+                                                 :last-name last-name}]))
+                                 name]
+                                [last-name])))))
 
           "multiple subqueries with unique args but same bind")))
 
@@ -660,10 +660,10 @@
              {:e :jeff, :s :sergei}}
            (set (xt/q tu/*node*
                       '(-> (unify (from :docs [{:xt/id e, :name name, :parent p}])
-                                  (left-join (-> (from :docs [{:xt/id s, :parent p}])
-                                                 (where (<> $e s)))
-                                             {:args [e]
-                                              :bind [s p]}))
+                                  (left-join (fn [e]
+                                               (-> (from :docs [{:xt/id s, :parent p}])
+                                                   (where (<> e s))))
+                                             [s p]))
                            (return e s)))))
         "dependent: find people who have siblings")
 
@@ -677,36 +677,33 @@
                                          [e]))))))
 
 (deftest test-exists
-  (let [_tx (xt/submit-tx tu/*node*
-                          [[:put-docs :docs {:xt/id :ivan, :name "Ivan"}]
-                           [:put-docs :docs {:xt/id :petr, :name "Petr", :parent :ivan}]
-                           [:put-docs :docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
-                           [:put-docs :docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])]
+  (xt/submit-tx tu/*node*
+                [[:put-docs :docs {:xt/id :ivan, :name "Ivan"}]
+                 [:put-docs :docs {:xt/id :petr, :name "Petr", :parent :ivan}]
+                 [:put-docs :docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
+                 [:put-docs :docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])
+  (t/is (= #{{:x true}}
+           (set (xt/q tu/*node*
+                      '(unify
+                        (with {x (exists? (from :docs [{:xt/id :ivan}]))})))))
+        "uncorrelated, contrived and rarely useful")
 
-    (t/is (= #{{:x true}}
-             (set (xt/q tu/*node*
+  (t/is (= #{{:e :ivan} {:e :petr}}
+           (set (xt/q tu/*node*
+                      '(-> (from :docs [{:xt/id e}])
+                           (where (exists? (fn [e]
+                                             (from :docs [{:parent e}]))))))))
 
-                        '(unify
-                          (with {x (exists? (from :docs [{:xt/id :ivan}]))})))))
-          "uncorrelated, contrived and rarely useful")
+        "find people who have children")
 
-    (t/is (= #{{:e :ivan} {:e :petr}}
-             (set (xt/q tu/*node*
-                        '(-> (from :docs [{:xt/id e}])
-                             (where (exists? (from :docs [{:parent $e}])
-                                             {:args [e]}))))))
-
-          "find people who have children")
-
-    (t/is (= #{{:e :sergei} {:e :jeff}}
-             (set (xt/q tu/*node*
-                        '(-> (from :docs [{:xt/id e} parent])
-                             (where (exists? (-> (from :docs [{:xt/id s, :parent $parent}])
-                                                 (where (<> $e s)))
-                                             {:args [e parent]}))
-                             (without :parent)))))
-          "find people who have siblings")))
-
+  (t/is (= #{{:e :sergei} {:e :jeff}}
+           (set (xt/q tu/*node*
+                      '(-> (from :docs [{:xt/id e} parent])
+                           (where (exists? (fn [e parent]
+                                             (-> (from :docs [{:xt/id s, :parent parent}])
+                                                 (where (<> e s))))))
+                           (without :parent)))))
+        "find people who have siblings"))
 
 (deftest test-not-exists
   (let [_tx (xt/submit-tx
@@ -718,56 +715,57 @@
     (t/is (= #{{:e :ivan} {:e :sergei}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e :foo 1}])
-                             (where (not (exists? (from :docs [{:xt/id $e} {:first-name "Petr"}])
-                                                  {:args [e]}))))))))
+                             (where (not (exists? (fn [e]
+                                                    (from :docs [{:xt/id e} {:first-name "Petr"}]))))))))))
 
     (t/is (= []
              (xt/q tu/*node*
                    '(-> (from :docs [{:xt/id e :foo n}])
-                        (where (not (exists? (from :docs [{:xt/id $e} {:foo $n}])
-                                             {:args [e n]})))))))
+                        (where (not (exists? (fn [e n]
+                                               (from :docs [{:xt/id e} {:foo n}])))))))))
 
     (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e :foo n}])
-                             (where (not (exists? (-> (from :docs [{:xt/id $e :first-name "Petr"}])
-                                                      (where (= $n 1)))
-                                                  {:args [e n]}))))))))
+                             (where (not (exists? (fn [e n]
+                                                    (-> (from :docs [{:xt/id e :first-name "Petr"}])
+                                                        (where (= n 1))))))))))))
 
     (t/is (= #{{:n 1, :e :sergei, :not-exist true}
                {:n 1, :e :petr, :not-exist true}
                {:n 1, :e :ivan, :not-exist true}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e :foo n}])
-                             (with {:not-exist (not (not (exists? (-> (rel [{}] [])
-                                                                      (where (= $n 1)))
-                                                                  {:args [n]})))}))))))
+                             (with {:not-exist (not (not (exists? (fn [n]
+                                                                    (-> (rel [{}] [])
+                                                                        (where (= n 1)))))))}))))))
 
     (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
              (set (xt/q tu/*node*
                         '(-> (from :docs [{:xt/id e, :first-name n}])
-                             (where (not (exists? (-> (rel [{}] [])
-                                                      (where (= "Ivan" $n)))
-                                                  {:args [n]}))))))))
+                             (where (not (exists? (fn [n]
+                                                    (-> (rel [{}] [])
+                                                        (where (= "Ivan" n))))))))))))
 
 
     (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
              (set (xt/q tu/*node*
                         '(unify
                           (from :docs [{:xt/id e :first-name n}])
-                          (where (not (exists? (from :docs [{:first-name "Ivan"} {:first-name $n}]) {:args [n]}))))))))
+                          (where (not (exists? (fn [n]
+                                                 (from :docs [{:first-name "Ivan"} {:first-name n}]))))))))))
 
     (t/is (= [{:first-name "Petr", :e :petr}]
              (xt/q tu/*node*
                    '(unify
                      (from :docs [{:xt/id e} first-name])
                      (where (not (exists?
-                                  (-> (rel [{}] [])
-                                      (where (= $first-name "Ivan")))
-                                  {:args [first-name]}))
+                                  (fn [first-name]
+                                    (-> (rel [{}] [])
+                                        (where (= first-name "Ivan"))))))
                             (not (exists?
-                                  (from :docs [{:xt/id $e :first-name "Sergei"}])
-                                  {:args [e]}))))))
+                                  (fn [e]
+                                    (from :docs [{:xt/id e, :first-name "Sergei"}]))))))))
           "Multiple not exists")))
 
 (deftest testing-unify-with
@@ -807,62 +805,6 @@
   (t/is (= [{:id :ivan}]
            (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
 
-#_
-(deftest test-nested-expressions-581
-  (let [_tx (xt/submit-tx tu/*node*
-                          [[:put-docs :docs {:xt/id :ivan, :age 15}]
-                           [:put-docs :docs {:xt/id :petr, :age 22, :height 240, :parent 1}]
-                           [:put-docs :docs {:xt/id :slava, :age 37, :parent 2}]])]
-
-    (t/is (= #{{:e1 :ivan, :e2 :petr, :e3 :slava}
-               {:e1 :petr, :e2 :ivan, :e3 :slava}}
-             (set (xt/q tu/*node*
-                        '{:find [e1 e2 e3]
-                          :where [(match :docs {:xt/id e1})
-                                  (match :docs {:xt/id e2})
-                                  (match :docs {:xt/id e3})
-                                  [e1 :age a1]
-                                  [e2 :age a2]
-                                  [e3 :age a3]
-                                  [(= (+ a1 a2) a3)]]}))))
-
-    (t/is (= [{:a1 15, :a2 22, :a3 37, :sum-ages 74, :inc-sum-ages 75}]
-             (xt/q tu/*node*
-                   '{:find [a1 a2 a3 sum-ages inc-sum-ages]
-                     :where [(match :docs {:xt/id :ivan})
-                             (match :docs {:xt/id :petr})
-                             (match :docs {:xt/id :slava})
-                             [:ivan :age a1]
-                             [:petr :age a2]
-                             [:slava :age a3]
-                             [(+ (+ a1 a2) a3) sum-ages]
-                             [(+ a1 (+ a2 a3 1)) inc-sum-ages]]})))
-
-    (t/testing "unifies results of two calls"
-      (t/is (= [{:a1 15, :a2 22, :a3 37, :sum-ages 74}]
-               (xt/q tu/*node*
-                     '{:find [a1 a2 a3 sum-ages]
-                       :where [(match :docs {:xt/id :ivan})
-                               (match :docs {:xt/id :petr})
-                               (match :docs {:xt/id :slava})
-                               [:ivan :age a1]
-                               [:petr :age a2]
-                               [:slava :age a3]
-                               [(+ (+ a1 a2) a3) sum-ages]
-                               [(+ a1 (+ a2 a3)) sum-ages]]})))
-
-      (t/is (= []
-               (xt/q tu/*node*
-                     '{:find [a1 a2 a3 sum-ages]
-                       :where [(match :docs {:xt/id :ivan})
-                               (match :docs {:xt/id :petr})
-                               (match :docs {:xt/id :slava})
-                               [:ivan :age a1]
-                               [:petr :age a2]
-                               [:slava :age a3]
-                               [(+ (+ a1 a2) a3) sum-ages]
-                               [(+ a1 (+ a2 a3 1)) sum-ages]]}))))))
-
 (deftest test-join-clause
   (xt/submit-tx tu/*node* bond/tx-ops)
 
@@ -894,9 +836,9 @@
   (t/is (= [{:aid :a2 :a 2 :b 3}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
-                         (join (rel [{:b (+ $a 1)}] [b])
-                               {:args [a]
-                                :bind [b]}))))
+                         (join (fn [a]
+                                 (rel [{:b (+ a 1)}] [b]))
+                               [b]))))
         "b is unified"))
 
 (t/deftest test-explicit-unnest-574
@@ -913,12 +855,13 @@
             {:brand "Rolls-Royce", :model "Silver Wraith"}]
 
            (xt/q tu/*node*
-                 '(-> (unify (from :vehicle [{:xt/id vehicle, :vehicle/brand brand, :vehicle/model model}])
-                             (from :film [{:xt/id $film, :film/vehicles vehicles}])
-                             (unnest {vehicle vehicles}))
-                      (order-by brand model)
-                      (return brand model))
-                 {:args {:film :spectre}}))))
+                 ['(fn [film]
+                     (-> (unify (from :vehicle [{:xt/id vehicle, :vehicle/brand brand, :vehicle/model model}])
+                                (from :film [{:xt/id film, :film/vehicles vehicles}])
+                                (unnest {vehicle vehicles}))
+                         (order-by brand model)
+                         (return brand model)))
+                  :spectre]))))
 
 
 (t/deftest bug-non-string-table-names-599
@@ -1348,29 +1291,31 @@
     (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
              (set (xt/q tu/*node*
-                        '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
-                                                          :xt/valid-to app-to}]
-                                      :for-valid-time (in $arg-from $arg-to)})
-                        {:args {:arg-from #inst "2021"
-                                :arg-to #inst "2023"}}))))
+                        ['(fn [$from $to]
+                            (from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
+                                                             :xt/valid-to app-to}]
+                                         :for-valid-time (in $from $to)}))
+
+                         #inst "2021", #inst "2023"]))))
 
     (t/is (= #{{:id :matthew}}
              (set (xt/q tu/*node*
-                        '(unify (from :docs {:bind [{:xt/id id}]
-                                             :for-valid-time (at $arg-t1)})
-                                (from :docs {:bind [{:xt/id id}]
-                                             :for-valid-time (at $arg-t2)}))
-                        {:args {:arg-t1 #inst "2018"
-                                :arg-t2 #inst "2024"}}))))
+                        ['(fn [$t1 $t2]
+                            (unify (from :docs {:bind [{:xt/id id}]
+                                                :for-valid-time (at $t1)})
+                                   (from :docs {:bind [{:xt/id id}]
+                                                :for-valid-time (at $t2)})))
+                         #inst "2018", #inst "2024"]))))
 
     (t/is (= #{{:id :matthew, :app-from (time/->zdt #inst "2015")}
                {:id :luke, :app-from (time/->zdt #inst "2021"), :app-to (time/->zdt #inst "2022")}}
              (set (xt/q tu/*node*
-                        '(from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
-                                                          :xt/valid-to app-to}]
-                                      :for-valid-time (in $arg-from $arg-to)})
-                        {:args {:arg-from #inst "2021"
-                                :arg-to #inst "2023"}}))))))
+                        ['(fn [$from $to]
+                            (from :docs {:bind [{:xt/id id} {:xt/valid-from app-from
+                                                             :xt/valid-to app-to}]
+                                         :for-valid-time (in $from $to)}))
+
+                         #inst "2021", #inst "2023"]))))))
 
 (t/deftest test-for-valid-time-with-current-time-2493
   (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-to #inst "2040"}
@@ -1439,12 +1384,9 @@
                   tx1, #inst "2023"))))))
 
 (deftest test-snodgrass-99-tutorial
-  (letfn [(q [q {:keys [system-time]} current-time]
-            (xt/q tu/*node* q
-                  {:snapshot-time system-time, :current-time current-time}))
-          (q-with-args [q args {:keys [system-time]} current-time]
-            (xt/q tu/*node* q
-                  {:args args, :snapshot-time system-time, :current-time current-time}))]
+  (letfn [(q [q+args {:keys [system-time]} current-time]
+            (xt/q tu/*node* q+args
+                  {:snapshot-time system-time, :current-time current-time}))]
 
     (let [tx0 (xt/execute-tx tu/*node*
                              [[:put-docs {:into :docs, :valid-from #inst "1998-01-10"}
@@ -1518,110 +1460,110 @@
             "'as best known' (as-of 30 Jan)")
 
       (t/is (= [{:prop 3621, :vt-begin (time/->zdt #inst "1998-01-15"), :vt-to (time/->zdt #inst "1998-01-20")}]
-               (q-with-args
-                '(-> (unify (from :docs {:bind [{:property-number $prop
-                                                 :customer-number cust
-                                                 :xt/valid-time app-time
-                                                 :xt/valid-from app-from
-                                                 :xt/valid-to app-to}]
-                                         :for-valid-time :all-time})
+               (q ['(fn [$prop]
+                      (-> (unify (from :docs {:bind [{:property-number $prop
+                                                      :customer-number cust
+                                                      :xt/valid-time app-time
+                                                      :xt/valid-from app-from
+                                                      :xt/valid-to app-to}]
+                                              :for-valid-time :all-time})
 
-                            (from :docs {:bind [{:property-number prop
-                                                 :customer-number cust
-                                                 :xt/valid-time app-time-2
-                                                 :xt/valid-from app-from2
-                                                 :xt/valid-to app-to2}]
-                                         :for-valid-time :all-time}))
+                                 (from :docs {:bind [{:property-number prop
+                                                      :customer-number cust
+                                                      :xt/valid-time app-time-2
+                                                      :xt/valid-from app-from2
+                                                      :xt/valid-to app-to2}]
+                                              :for-valid-time :all-time}))
 
-                     (where (<> prop $prop)
-                            (overlaps? app-time app-time-2))
-                     (order-by {:val app-from :dir :asc})
-                     (return prop
-                             {:vt-begin (greatest app-from app-from2)}
-                             {:vt-to (nullif (least (coalesce app-to xtdb/end-of-time) (coalesce app-to2 xtdb/end-of-time))
-                                             xtdb/end-of-time)}))
-                {:prop 7797}
-                tx7, nil))
+                          (where (<> prop $prop)
+                                 (overlaps? app-time app-time-2))
+                          (order-by {:val app-from :dir :asc})
+                          (return prop
+                                  {:vt-begin (greatest app-from app-from2)}
+                                  {:vt-to (nullif (least (coalesce app-to xtdb/end-of-time) (coalesce app-to2 xtdb/end-of-time))
+                                                  xtdb/end-of-time)})))
+                   7797]
+                  tx7, nil))
             "Case 2: Valid-time sequenced and transaction-time current")
 
       (t/is (= [{:prop 3621,
                  :vt-begin (time/->zdt #inst "1998-01-15"),
                  :vt-to (time/->zdt #inst "1998-01-20"),
                  :recorded-from (time/->zdt #inst "1998-01-31"),}]
-               (q-with-args
-                '(-> (unify (from :docs {:bind [{:property-number $prop
-                                                 :customer-number cust
-                                                 :xt/valid-time app-time
-                                                 :xt/system-time system-time
-                                                 :xt/valid-from app-from
-                                                 :xt/valid-to app-to
-                                                 :xt/system-from sys-from
-                                                 :xt/system-to sys-to}]
-                                         :for-valid-time :all-time
-                                         :for-system-time :all-time})
+               (q ['(fn [$prop]
+                      (-> (unify (from :docs {:bind [{:property-number $prop
+                                                      :customer-number cust
+                                                      :xt/valid-time app-time
+                                                      :xt/system-time system-time
+                                                      :xt/valid-from app-from
+                                                      :xt/valid-to app-to
+                                                      :xt/system-from sys-from
+                                                      :xt/system-to sys-to}]
+                                              :for-valid-time :all-time
+                                              :for-system-time :all-time})
 
-                            (from :docs {:bind [{:customer-number cust
-                                                 :property-number prop
-                                                 :xt/valid-time app-time-2
-                                                 :xt/system-time system-time-2
-                                                 :xt/valid-from app-from2
-                                                 :xt/valid-to app-to2
-                                                 :xt/system-from sys-from2
-                                                 :xt/system-to sys-to2}]
+                                 (from :docs {:bind [{:customer-number cust
+                                                      :property-number prop
+                                                      :xt/valid-time app-time-2
+                                                      :xt/system-time system-time-2
+                                                      :xt/valid-from app-from2
+                                                      :xt/valid-to app-to2
+                                                      :xt/system-from sys-from2
+                                                      :xt/system-to sys-to2}]
 
-                                         :for-valid-time :all-time
-                                         :for-system-time :all-time}))
+                                              :for-valid-time :all-time
+                                              :for-system-time :all-time}))
 
-                     (where (<> prop $prop)
-                            (overlaps? app-time app-time-2)
-                            (overlaps? system-time system-time-2))
-                     (order-by {:val app-from :dir :asc})
-                     (return prop {:vt-begin (greatest app-from app-from2)
-                                   :vt-to (nullif (least (coalesce app-to xtdb/end-of-time) (coalesce app-to2 xtdb/end-of-time))
-                                                  xtdb/end-of-time)
-                                   :recorded-from (greatest sys-from sys-from2)
-                                   :recorded-stop (nullif (least (coalesce sys-to xtdb/end-of-time) (coalesce sys-to2 xtdb/end-of-time))
-                                                          xtdb/end-of-time)}))
-                {:prop 7797}
-                tx7, nil))
+                          (where (<> prop $prop)
+                                 (overlaps? app-time app-time-2)
+                                 (overlaps? system-time system-time-2))
+                          (order-by {:val app-from :dir :asc})
+                          (return prop {:vt-begin (greatest app-from app-from2)
+                                        :vt-to (nullif (least (coalesce app-to xtdb/end-of-time) (coalesce app-to2 xtdb/end-of-time))
+                                                       xtdb/end-of-time)
+                                        :recorded-from (greatest sys-from sys-from2)
+                                        :recorded-stop (nullif (least (coalesce sys-to xtdb/end-of-time) (coalesce sys-to2 xtdb/end-of-time))
+                                                               xtdb/end-of-time)})))
+                   7797]
+                  tx7, nil))
             "Case 5: Application-time sequenced and system-time sequenced")
 
       (t/is (= [{:prop 3621,
                  :vt-begin (time/->zdt #inst "1998-01-15"),
                  :vt-to (time/->zdt #inst "1998-01-20"),
                  :recorded-from (time/->zdt #inst "1998-01-31")}]
-               (q-with-args
-                '(-> (unify (from :docs {:bind [{:property-number $prop
-                                                 :customer-number cust
-                                                 :xt/valid-time app-time
-                                                 :xt/system-time system-time
-                                                 :xt/valid-from app-from
-                                                 :xt/valid-to app-to
-                                                 :xt/system-from sys-from
-                                                 :xt/system-to sys-to}]
-                                         :for-valid-time :all-time
-                                         :for-system-time :all-time})
+               (q ['(fn [$prop]
+                      (-> (unify (from :docs {:bind [{:property-number $prop
+                                                      :customer-number cust
+                                                      :xt/valid-time app-time
+                                                      :xt/system-time system-time
+                                                      :xt/valid-from app-from
+                                                      :xt/valid-to app-to
+                                                      :xt/system-from sys-from
+                                                      :xt/system-to sys-to}]
+                                              :for-valid-time :all-time
+                                              :for-system-time :all-time})
 
-                            (from :docs {:bind [{:customer-number cust
-                                                 :property-number prop
-                                                 :xt/valid-time app-time-2
-                                                 :xt/system-time system-time-2
-                                                 :xt/valid-from app-from2
-                                                 :xt/valid-to app-to2
-                                                 :xt/system-from sys-from2
-                                                 :xt/system-to sys-to2}]}))
+                                 (from :docs {:bind [{:customer-number cust
+                                                      :property-number prop
+                                                      :xt/valid-time app-time-2
+                                                      :xt/system-time system-time-2
+                                                      :xt/valid-from app-from2
+                                                      :xt/valid-to app-to2
+                                                      :xt/system-from sys-from2
+                                                      :xt/system-to sys-to2}]}))
 
-                     (where (<> prop $prop)
-                            (overlaps? app-time app-time-2)
-                            (contains? system-time sys-from2))
-                     (order-by {:val app-from :dir :asc})
-                     (return prop
-                             {:vt-begin (greatest app-from app-from2)
-                              :vt-to (nullif (least (coalesce app-to xtdb/end-of-time) (coalesce app-to2 xtdb/end-of-time))
-                                             xtdb/end-of-time)
-                              :recorded-from sys-from2}))
-                {:prop 7797}
-                tx7, nil))
+                          (where (<> prop $prop)
+                                 (overlaps? app-time app-time-2)
+                                 (contains? system-time sys-from2))
+                          (order-by {:val app-from :dir :asc})
+                          (return prop
+                                  {:vt-begin (greatest app-from app-from2)
+                                   :vt-to (nullif (least (coalesce app-to xtdb/end-of-time) (coalesce app-to2 xtdb/end-of-time))
+                                                  xtdb/end-of-time)
+                                   :recorded-from sys-from2})))
+                   7797]
+                  tx7, nil))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
 
 (deftest scalar-sub-queries-test
@@ -1631,125 +1573,114 @@
                            [:put-docs :order {:xt/id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
                            [:put-docs :order {:xt/id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
 
-  (t/are [q result] (= (into #{} result) (set (xt/q tu/*node* q)))
+  (letfn [(q [query]
+            (set (xt/q tu/*node* query)))]
+    (t/is (= #{{:n-customers 2}}
+             (q '(unify (with {n-customers (q (-> (from :customer {:bind [{:xt/id id}]})
+                                                  (aggregate {:id-count (count id)})))})))))
 
-    '(unify (with {n-customers (q (-> (from :customer {:bind [{:xt/id id}]})
-                                      (aggregate {:id-count (count id)})))}))
-    [{:n-customers 2}]
+    (t/is (= #{{:n-customers 3}}
+             (q '(unify (with {n-customers (+ 1 (q (-> (from :customer {:bind [{:xt/id id}]})
+                                                       (aggregate {:id-count (count id)}))))})))))
 
-    '(unify (with {n-customers (+ 1 (q (-> (from :customer {:bind [{:xt/id id}]})
-                                           (aggregate {:id-count (count id)}))))}))
-    [{:n-customers 3}]
+    (t/is (= #{{:customer 0, :n-orders 2}
+               {:customer 1, :n-orders 1}}
 
-    '(-> (from :customer [{:xt/id customer}])
-         (with {:n-orders
-                (q (-> (from :order [{:customer $customer, :xt/id order}])
-                       (aggregate {:count (count order)}))
-                   {:args [customer]})}))
+             (q '(-> (from :customer [{:xt/id customer}])
+                     (with {:n-orders
+                            (q (fn [customer]
+                                 (-> (from :order [{:customer customer, :xt/id order}])
+                                     (aggregate {:count (count order)}))))})))))
 
-    [{:customer 0, :n-orders 2}
-     {:customer 1, :n-orders 1}]
+    (t/is (= #{{:customer 0, :n-orders 2, :n-qty 4}
+               {:customer 1, :n-orders 1, :n-qty 3}}
+             (q '(-> (from :customer [{:xt/id customer}])
+                     (with {:n-orders (q (fn [customer]
+                                           (-> (from :order [{:xt/id order, :customer customer}])
+                                               (aggregate {:n-orders (row-count)}))))
 
+                            :n-qty (q (fn [customer]
+                                        (-> (from :order [{:xt/id order, :customer customer} items])
+                                            ;; TODO unnest relation (through rel or from)
+                                            (unnest {:item items})
+                                            (return {:qty (. item qty)})
+                                            (aggregate {:n-qty (sum qty)}))))})))))
 
-    '(-> (from :customer [{:xt/id customer}])
-         (with {:n-orders (q (-> (from :order [{:xt/id order, :customer $customer}])
-                                 (aggregate {:n-orders (row-count)}))
-                             {:args [customer]})
+    #_ ; TODO subqs in rel
+    (t/is (= #{{:n-orders 3, :n-qty 7}}
+             (q '(rel [{:n-orders (q (-> (from :order [])
+                                         (aggregate {:n-orders (row-count)})))
+                        :n-qty (q (-> (from :order [items])
+                                      ;; TODO unnest relation (through rel or from)
+                                      (unnest {:item items})
+                                      (return {:qty (. item qty)})
+                                      (aggregate {:n-qty (sum qty)})))}]
+                      [n-orders n-qty]))))
 
-                :n-qty (q (-> (from :order [{:xt/id order, :customer $customer} items])
-                              ;; TODO unnest relation (through rel or from)
-                              (unnest {:item items})
-                              (return {:qty (. item qty)})
-                              (aggregate {:n-qty (sum qty)}))
-                          {:args [customer]})}))
-    [{:customer 0, :n-orders 2, :n-qty 4}
-     {:customer 1, :n-orders 1, :n-qty 3}]
+    (t/is (= #{{:order 0, :firstname "bob"}
+               {:order 1, :firstname "bob"}
+               {:order 2, :firstname "alice"}}
+             (q '(-> (from :order {:bind [{:xt/id order :customer customer}]})
+                     (with {:firstname (q (fn [customer]
+                                            (from :customer {:bind [{:xt/id customer, :firstname firstname}]})))})
+                     (without :customer)))))
 
-    ;; TODO subqs in rel
-    #_#_
-    '(rel [{:n-orders (q (-> (from :order [])
-                             (aggregate {:n-orders (row-count)})))
-            :n-qty (q (-> (from :order [items])
-                          ;; TODO unnest relation (through rel or from)
-                          (unnest {:item items})
-                          (return {:qty (. item qty)})
-                          (aggregate {:n-qty (sum qty)})))}]
-          [n-orders n-qty])
-    [{:n-orders 3, :n-qty 7}]
+    (t/is (= #{{:order 0, :firstname "bob"}
+               {:order 1, :firstname "bob"}
+               {:order 2, :firstname "alice"}}
+             (q '(-> (from :order {:bind [{:xt/id order :customer customer}]})
+                     (with {:firstname (q (fn [customer]
+                                            (from :customer {:bind [{:xt/id customer, :firstname firstname2}]})))})
+                     (without :customer)))))
 
-    '(-> (from :order {:bind [{:xt/id order :customer customer}]})
-         (with {:firstname (q (from :customer {:bind [{:xt/id $customer, :firstname firstname}]})
-                              {:args [customer]})})
-         (without :customer))
+    (t/is (= #{{:order 0, :fullname "bob smith"}
+               {:order 1, :fullname "bob smith"}
+               {:order 2, :fullname "alice carrol"}}
+             (q '(-> (from :order {:bind [{:xt/id order :customer customer}]})
+                     (with {:fullname (concat
+                                       (q (fn [customer]
+                                            (from :customer {:bind [{:xt/id customer, :firstname fn}]})))
+                                       " "
+                                       (q (fn [customer]
+                                            (from :customer {:bind [{:xt/id customer, :lastname fn}]}))))})
+                     (without :customer)))))
 
-    [{:order 0, :firstname "bob"}
-     {:order 1, :firstname "bob"}
-     {:order 2, :firstname "alice"}]
+    (t/is (= #{{:order 0} {:order 1}}
+             (q '(-> (from :order {:bind [{:xt/id order, :customer customer}]})
+                     (where (= (q (fn [customer]
+                                    (from :customer {:bind [{:xt/id customer, :firstname fn}]})))
+                               "bob"))
+                     (without :customer)))))
 
+    (t/is (= #{{:order 0}
+               {:order 1}}
+             (q '(-> (unify (from :order {:bind [{:xt/id order :customer customer}]})
+                            (where (= (q (fn [customer]
+                                           (from :customer {:bind [{:xt/id customer, :firstname fn}]})))
+                                      "bob")))
+                     (without :customer)))))
 
-    '(-> (from :order {:bind [{:xt/id order :customer customer}]})
-         (with {:firstname (q (from :customer {:bind [{:xt/id $customer, :firstname firstname2}]})
-                              {:args [customer]})})
-         (without :customer))
+    (t/is (= #{{:n 2}}
+             (q '(unify
+                  (with {n (q (-> (from :customer {:bind [{:xt/id c}]})
+                                  (aggregate {:c-count (count c)})))})))))
 
-    [{:order 0, :firstname "bob"}
-     {:order 1, :firstname "bob"}
-     {:order 2, :firstname "alice"}]
+    (t/is (= #{{:c 2, :o 3}}
+             (q '(unify
+                  (with {c (q (-> (from :customer {:bind [{:xt/id c}]})
+                                  (aggregate {:count (count c)})))
+                         o (q (-> (from :order {:bind [{:xt/id o}]})
+                                  (aggregate {:count (count o)})))})))))
 
-    '(-> (from :order {:bind [{:xt/id order, :customer customer}]})
-         (with {:fullname (concat
-                           (q (from :customer {:bind [{:xt/id $customer, :firstname fn}]})
-                              {:args [customer]})
-                           " "
-                           (q (from :customer {:bind [{:xt/id $customer, :lastname fn}]})
-                              {:args [customer]}))})
-         (without :customer))
-
-    [{:order 0, :fullname "bob smith"}
-     {:order 1, :fullname "bob smith"}
-     {:order 2, :fullname "alice carrol"}]
-
-    '(-> (from :order {:bind [{:xt/id order, :customer customer}]})
-         (where (= (q (from :customer {:bind [{:xt/id $customer, :firstname fn}]})
-                      {:args [customer]})
-                   "bob"))
-         (without :customer))
-
-    [{:order 0}
-     {:order 1}]
-
-    '(-> (unify (from :order {:bind [{:xt/id order, :customer customer}]})
-                (where (= (q (from :customer {:bind [{:xt/id $customer, :firstname fn}]})
-                             {:args [customer]})
-                          "bob")))
-         (without :customer))
-
-    [{:order 0}
-     {:order 1}]
-
-    '(unify
-      (with {n (q (-> (from :customer {:bind [{:xt/id c}]})
-                      (aggregate {:c-count (count c)})))}))
-    [{:n 2}]
-
-
-    '(unify
-      (with {c (q (-> (from :customer {:bind [{:xt/id c}]})
-                      (aggregate {:count (count c)})))
-             o (q (-> (from :order {:bind [{:xt/id o}]})
-                      (aggregate {:count (count o)})))}))
-    [{:c 2, :o 3}]
-
-    '(-> (from :customer {:bind [{:xt/id cid, :firstname "bob"}]})
-         (with {:c (q (-> (from :customer {:bind [{:xt/id $cid} {:xt/id c}]})
-                          (aggregate {:count (count c)}))
-                      {:args [cid]})}
-               {:o (q (-> (from :order {:bind [{:customer $cid} {:xt/id o}]})
-                          (aggregate {:count (count o)}))
-                      {:args [cid]})})
-         (without :cid))
-
-    [{:c 1, :o 2}])
+    (t/is (= #{{:c 1, :o 2}}
+             (q '(-> (from :customer {:bind [{:xt/id cid, :firstname "bob"}]})
+                     (with {:c (q (fn [cid]
+                                    (-> (from :customer {:bind [{:xt/id cid} {:xt/id c}]})
+                                        (aggregate {:count (count c)}))))}
+                           {:o (q (fn [cid]
+                                    (-> (from :order {:bind [{:customer cid} {:xt/id o}]})
+                                        (aggregate {:count (count o)}))))})
+                     (without :cid))))))
 
   (t/testing "cardinality violation error"
     (t/is (thrown-with-msg? xtdb.RuntimeException #"cardinality violation"
@@ -2124,15 +2055,16 @@
 
            (set (xt/q tu/*node*
                       '(-> (from :orders [{:xt/id order-id} customer-id value])
-                           (with {:customer (pull (from :customers [name {:xt/id $customer-id}])
-                                                  {:args [customer-id]})}))))))
+                           (with {:customer (pull (fn [customer-id]
+                                                    (from :customers [name {:xt/id customer-id}])))}))))))
 
   (t/is (= #{{:orders [{:id 1, :value 8.99} {:id 0, :value 26.20}], :name "bob", :id 0}
              {:orders [{:id 2, :value 12.34}], :name "alice", :id 1}}
            (set (xt/q tu/*node*
                       '(-> (from :customers [{:xt/id id} name])
-                           (with {:orders (pull* (from :orders [{:customer-id $c-id} {:xt/id id} value])
-                                                 {:args [{:c-id id}]})}))))))
+                           (with {:orders (pull* [(fn [c-id]
+                                                    (from :orders [{:xt/id id, :customer-id c-id} value]))
+                                                  id])}))))))
 
   (t/is (= [{}]
            (xt/q tu/*node* '(unify (with {orders (pull (rel [] []))})))))
@@ -2152,10 +2084,10 @@
 (deftest list-diff-test-2887
   (t/is (= []
            (xt/q tu/*node*
-                 '(-> (rel [{:x [1 2 3]}] [x])
-                      (where (<> x $foo)))
-                 {:args {:foo [1 2 3]}}))))
-
+                 ['(fn [foo]
+                     (-> (rel [{:x [1 2 3]}] [x])
+                         (where (<> x foo))))
+                  [1 2 3]]))))
 
 (deftest test-without
   (t/is (= [{}]
@@ -2231,9 +2163,10 @@
 (deftest test-unnest-col
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
-                 '(-> (rel [{}] [])
-                      (unnest {:y $in}))
-                 {:args {:in [1 2 3]}}))
+                 ['(fn [$in]
+                     (-> (rel [{}] [])
+                         (unnest {:y $in})))
+                  [1 2 3]]))
         "param")
 
   (t/is (= [{:y 1} {:y 2} {:y 3}]
@@ -2263,8 +2196,9 @@
 (deftest test-unnest-var
   (t/is (= [{:y 1} {:y 2} {:y 3}]
            (xt/q tu/*node*
-                 '(unify (unnest {y $in}))
-                 {:args {:in [1 2 3]}}))
+                 ['(fn [$in]
+                     (unify (unnest {y $in})))
+                  [1 2 3]]))
         "param")
 
   (t/is (= [{:y 1} {:y 2} {:y 3}]
@@ -2312,14 +2246,14 @@
                                  (list 'return {:full-name (cons 'concat (list 'first-name " " 'last-name))}))))))
 
 (deftest plan-expr-test
-  (let [required-vars (comp plan/required-vars xtql/parse-expr)]
+  (let [required-vars (comp plan/required-vars #(xtql/parse-expr % {:params {'b 'b}}))]
     (t/testing "required-vars"
       (t/is (= #{'a}
-               (required-vars '#{1 (+ a $b) 2})))
+               (required-vars '#{1 (+ a b) 2})))
       (t/is (= #{'a}
-               (required-vars '[1 #{(+ a $b)}  2])))
+               (required-vars '[1 #{(+ a b)}  2])))
       (t/is (= #{'a}
-               (required-vars '{"foo" #{(+ a $b)}}))))))
+               (required-vars '{"foo" #{(+ a b)}}))))))
 
 (deftest test-push-selection-down-past-map
   (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :ben :x "foo" :y "foo"}]
@@ -2345,17 +2279,15 @@
                        {:id :jimmy, :friends [{:id :ben, :friends [:jimmy :bob]}]}], :id :ben}]
            (xt/q tu/*node* '(-> (from :users [{:xt/id id} friends])
                                 (with {:friends
-                                       (pull* (-> (unify
-                                                   (from :users [{:xt/id id} friends])
-                                                   (unnest {id $friends}))
-                                                  (with {:friends (pull*
-                                                                   (-> (unify
-                                                                        (from :users [{:xt/id id} friends])
-                                                                        (unnest {id $friends}))
-                                                                       (return id friends))
-                                                                   {:args [friends]})})
-                                                  (return id friends))
-                                              {:args [friends]})}))))))
+                                       (pull* (fn [friends]
+                                                (-> (unify (from :users [{:xt/id id, :friends friends2}])
+                                                           (unnest {id friends}))
+                                                    (with {:friends (pull*
+                                                                     (fn [friends2]
+                                                                       (-> (unify (from :users [{:xt/id id, :friends friends3}])
+                                                                                  (unnest {id friends2}))
+                                                                           (return id {:friends friends3}))))})
+                                                    (return id friends))))}))))))
 
 (deftest test-expression-in-join-args
   (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id :a1, :a 2 :b 1}]
@@ -2365,54 +2297,62 @@
   (t/is (= [{:aid :a2 :a 2 :b 3 :c 4}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
-                         (join (rel [{:b $a :c $c}] [b c])
-                               {:args [{:a (+ a 1) :c (+ 1 3)}]
-                                :bind [b c]}))))
+                         (join [(fn [a c]
+                                  (rel [{:b a :c c}] [b c]))
+
+                                (+ a 1) (+ 1 3)]
+                               [b c]))))
         "simple expression in arg (join)")
 
   (t/is (= [{:aid :a3, :a 2} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
-                         (left-join (rel [{:b $a}] [b])
-                                    {:args [{:a (+ a 1)}]
-                                     :bind [b]}))))
+                         (left-join [(fn [a]
+                                       (rel [{:b a}] [b]))
+
+                                     (+ a 1)]
+                                    [b]))))
         "simple expression in arg (left-join)")
 
   (t/is (= [{:aid :a2 :a 2 :b 3}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
-                         (join (rel [{:b $a}] [b])
-                               {:args [{:a (+ a (q (rel [{:c 1}] [c])))}]
-                                :bind [b]}))))
+                         (join [(fn [a]
+                                  (rel [{:b a}] [b]))
+                                (+ a (q (rel [{:c 1}] [c])))]
+                               [b]))))
         "expression with subquery (join)")
 
   (t/is (= [{:aid :a3, :a 2} {:aid :a2, :a 2, :b 3} {:aid :a1, :a 2}]
            (xt/q tu/*node*
                  '(unify (from :a [{:xt/id aid} a b])
-                         (left-join (rel [{:b $a}] [b])
-                                    {:args [{:a (+ a (q (rel [{:c 1}] [c])))}]
-                                     :bind [b]}))))
+                         (left-join [(fn [a]
+                                       (rel [{:b a}] [b]))
+                                     (+ a (q (rel [{:c 1}] [c])))]
+                                    [b]))))
         "expression with subquery (left-join)"))
 
 (deftest test-nested-subquery-parameters-3181
   (t/is (= [{:foo 1}] (xt/q tu/*node* '(-> (rel [{}] [])
-                                           (with {:foo (q (rel [{:inner $inner}] [inner])
-                                                          {:args [{:inner 1}]})}))))
+                                           (with {:foo (q [(fn [inner]
+                                                             (rel [{:inner inner}] [inner]))
+                                                           1])}))))
         "inner literal parameter")
 
   (t/is (= [{:foo 1}]
-           (xt/q tu/*node* '(-> (rel [{}] [])
-                                (with {:foo (q (-> (rel [{}] [])
-                                                   (with {:foo $inner}))
-                                               {:args [{:inner $outer}]})}))
-                 {:args {:outer 1}}))
+           (xt/q tu/*node* ['(fn [outer]
+                               (-> (rel [{}] [])
+                                   (with {:foo (q (-> (rel [{}] [])
+                                                      (with {:foo outer})))})))
+                            1]))
         "inner outer parameter")
 
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :bar 1}]])
 
   (t/is (= [{:foo 2}]
            (xt/q tu/*node* '(-> (rel [{}] [])
-                                (with {:foo (q (-> (rel [{}] [])
-                                                   (with {:foo $inner}))
-                                               {:args [{:inner (+ 1 (q (rel [{:bar 1}] [bar])))}]})}))))
+                                (with {:foo (q [(fn [inner]
+                                                  (-> (rel [{}] [])
+                                                      (with {:foo inner})))
+                                                (+ 1 (q (rel [{:bar 1}] [bar])))])}))))
         "inner paramter with subquery"))

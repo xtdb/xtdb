@@ -3,7 +3,7 @@
             [xtdb.xtql :as xtql]))
 
 (defn- roundtrip-expr [expr]
-  (xtql/unparse (xtql/parse-expr expr)))
+  (xtql/unparse (xtql/parse-expr expr {})))
 
 (t/deftest test-parse-expr
   (t/is (= nil (roundtrip-expr nil)))
@@ -57,20 +57,23 @@
   (t/is (= '(exists? (from :foo [a]))
            (roundtrip-expr '(exists? (from :foo [a])))))
 
-  (t/is (= '(exists? (from :foo [a]) {:args [a {:b outer-b}]})
-           (roundtrip-expr '(exists? (from :foo [a]) {:args [a {:b outer-b}]}))))
+  (t/is (= '(exists? [(fn [a] (from :foo [a])) a])
+           (roundtrip-expr '(exists? (fn [a] (from :foo [a]))))))
 
   (t/is (= '(q (from :foo [a]))
            (roundtrip-expr '(q (from :foo [a]))))))
 
-(defn- roundtrip-q [q]
-  (xtql/unparse-query (xtql/parse-query q)))
+(defn- roundtrip-q
+  ([q] (roundtrip-q q {}))
+  ([q env] (xtql/unparse-query (xtql/parse-query q env))))
 
-(defn- roundtrip-q-tail [q]
-  (xtql/unparse-query-tail (xtql/parse-query-tail q)))
+(defn- roundtrip-q-tail
+  ([q] (roundtrip-q-tail q {}))
+  ([q env] (xtql/unparse-query-tail (xtql/parse-query-tail q env))))
 
-(defn- roundtrip-unify-clause [q]
-  (xtql/unparse-unify-clause (xtql/parse-unify-clause q)))
+(defn- roundtrip-unify-clause
+  ([q] (roundtrip-unify-clause q {}))
+  ([q env] (xtql/unparse-unify-clause (xtql/parse-unify-clause q env))))
 
 (t/deftest test-parse-from
   (t/is (= '(from :foo [a])
@@ -179,10 +182,10 @@
                                           [{:a b} c]))))
 
   (t/is (thrown-with-msg?
-         IllegalArgumentException #"Invalid keys provided to option map"
-         (roundtrip-unify-clause '(join (from :foo [x])
-                                        {:args [x]
-                                         :baz x})))))
+         IllegalArgumentException #"malformed-bind"
+         (roundtrip-unify-clause '(join (fn [x]
+                                          (from :foo [x]))
+                                        {:baz x})))))
 
 (t/deftest test-parse-order-by
   (t/is (= '(order-by (+ a b)
@@ -253,9 +256,9 @@
              (roundtrip-q q))
           "rel with paramater in documents"))
 
-  (let [q '(rel $bar [foo baz])]
+  (let [q '(rel bar [foo baz])]
     (t/is (= q
-             (roundtrip-q q))
+             (roundtrip-q q {:params #{'bar}}))
           "rel as a parameter")))
 
 (deftest test-generated-queries
