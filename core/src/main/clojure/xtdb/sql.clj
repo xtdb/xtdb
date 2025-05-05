@@ -2667,7 +2667,7 @@
 (defrecord EraseStmt [table query-plan]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
-(defrecord AssertStmt [query-plan]
+(defrecord AssertStmt [query-plan message]
   OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
 
 (defrecord UserStmt [stmt]
@@ -2893,12 +2893,13 @@
 
   (visitAssertStatement [_ ctx]
     (let [!subqs (HashMap.)
-          predicate (.accept (.searchCondition ctx)
+          predicate (.accept (.condition ctx)
                              (map->ExprPlanVisitor {:env env, :scope nil, :!subqs !subqs}))]
       (->AssertStmt (->QueryExpr (-> [:table [{}]]
                                      (apply-sqs (not-empty (into {} !subqs)))
                                      (wrap-predicates predicate))
-                                 []))))
+                                 [])
+                    (some-> (.message ctx) (.getText)))))
 
   (visitShowVariableStatement [this ctx] (.accept (.showVariable ctx) this))
 
@@ -3022,8 +3023,8 @@
      (->logical-plan query-plan)])
 
   AssertStmt
-  (->logical-plan [{:keys [query-plan]}]
-    [:assert {} (->logical-plan query-plan)])
+  (->logical-plan [{:keys [query-plan message]}]
+    [:assert {:message message} (->logical-plan query-plan)])
 
   UserStmt
   (->logical-plan [{:keys [stmt]}] stmt))

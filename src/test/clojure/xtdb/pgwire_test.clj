@@ -1284,7 +1284,7 @@
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
     (t/is (= [{:xt/id 2, :committed false,
-               :error {:error-key "xtdb/assert-failed", :message "Assert failed"}}
+               :error {:error-key "xtdb/assert-failed", :message "Assert failed: "}}
               {:xt/id 1, :committed true}
               {:xt/id 0, :committed true}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
@@ -2745,3 +2745,18 @@ ORDER BY 1,2;")
   (with-open [pg-conn (pg-conn {})]
     (t/is (= [{:_id 1, :foo "bar"}] (pg/execute pg-conn "FROM docs"))
           "if the driver doesn't know about keywords it might fall back to text")))
+
+(deftest better-assert-error-code-and-message-3878
+  (with-open [conn (jdbc-conn "autocommit" "false")]
+    (q conn ["BEGIN READ WRITE"])
+    (q conn ["ASSERT 2 < 1, 'boom'"])
+    (t/is (thrown-with-msg? PSQLException
+                            #"ERROR: Assert failed: 'boom'"
+                            (q conn ["COMMIT"]))))
+  (testing "no error message"
+    (with-open [conn (jdbc-conn "autocommit" "false")]
+      (q conn ["BEGIN READ WRITE"])
+      (q conn ["ASSERT 2 < 1"])
+      (t/is (thrown-with-msg? PSQLException
+                              #"ERROR: Assert failed:"
+                              (q conn ["COMMIT"]))))))

@@ -113,14 +113,14 @@ This is used to enforce constraints on the data in a concurrent environment, suc
 
 [railroad]
 ----
-return rr.Diagram("ASSERT", "<predicate>")
+return rr.Diagram("ASSERT", "<predicate>", rr.Optional("<message>"))
 ----
 
 * We check to see whether the email address already exists in the database - if not, we can insert the new user.
 +
 [source,sql]
 ----
-ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')
+ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com'), 'Email already exists!'
 
 INSERT INTO users (_id, name, email) VALUES ('james', 'James', 'james@example.com')
 ----

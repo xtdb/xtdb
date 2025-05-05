@@ -351,7 +351,7 @@
               (-> (.liveTable live-idx-tx table)
                   (.logErase iid)))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, query, tx-opts]
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, query, tx-opts, {:keys [message] :as q-opts}]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
       (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
@@ -360,7 +360,7 @@
 
         (letfn [(throw-assert-failed []
                   (throw (err/runtime-err :xtdb/assert-failed
-                                          {::err/message "Assert failed"})))]
+                                          {::err/message (str "Assert failed: " message)})))]
           (or (.tryAdvance res
                            (reify Consumer
                              (accept [_ in-rel]
@@ -580,9 +580,9 @@
                                (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
                                    (wrap-sql-args param-count)))
 
-              [:assert _query-opts inner-query]
+              [:assert query-opts inner-query]
               (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer q-src wm-src inner-query tx-opts)
+                               (-> (->assert-idxer q-src wm-src inner-query tx-opts query-opts)
                                    (wrap-sql-args param-count)))
 
               [:create-user user password]

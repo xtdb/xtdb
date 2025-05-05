@@ -22,7 +22,7 @@ directlyExecutableStatement
     | eraseStatementSearched #EraseStmt
     | prepareStatement #PrepareStmt
     | executeStatement #ExecuteStmt
-    | ASSERT searchCondition #AssertStatement
+    | ASSERT condition=expr (',' message=characterString)? #AssertStatement
     | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
     | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
     | COMMIT # CommitStatement

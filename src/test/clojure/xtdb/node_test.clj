@@ -384,8 +384,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
 
     (t/is (= (serde/->tx-aborted 3 #xt/instant "2020-01-04T00:00:00Z"
-                                 #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}])
-             (-> (xt/execute-tx tu/*node* ["ASSERT 1 = 2"])
+                                 #xt/runtime-err [:xtdb/assert-failed "Assert failed: 'boom'" {}])
+             (-> (xt/execute-tx tu/*node* ["ASSERT 1 = 2, 'boom'"])
 
                  ;; can't compare `:cause`, because Exceptions are identity-equal
                  (update :error (comp read-string pr-str)))))
