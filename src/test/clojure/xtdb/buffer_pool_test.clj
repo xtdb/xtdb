@@ -8,8 +8,11 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.buffer-pool :as bp])
-  (:import (io.micrometer.core.instrument.simple SimpleMeterRegistry)
+            [xtdb.buffer-pool :as bp]
+            [xtdb.buffer-pool-test :as bp-test])
+  (:import (io.micrometer.core.instrument Counter)
+           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
+           (io.micrometer.core.instrument.composite CompositeMeterRegistry)
            (java.io File)
            (java.nio ByteBuffer)
            [java.nio.charset StandardCharsets]
@@ -262,3 +265,39 @@
         (t/testing "live"
           (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
           (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))))))
+
+(defn byte-buffer->byte-array ^bytes [^java.nio.ByteBuffer buf]
+  (let [copy (.duplicate buf)
+        _ (.clear copy)
+        arr (byte-array (.remaining copy))]
+    (.get copy arr)
+    arr))
+
+(t/deftest network-counter-test
+  (let [registry (SimpleMeterRegistry.)]
+    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
+                       (.open tu/*allocator* registry Storage/VERSION))]
+      (let [k1 (util/->path "a")
+            k2 (util/->path "b")
+            ^ByteBuffer v1 (bp-test/utf8-buf "aaa")
+            ^ByteBuffer v2 (bp-test/utf8-buf "bbb")]
+        (t/testing "read side"
+          (.putObject bp k1 v1)
+
+          (t/is (= 0.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
+
+          (t/is (java.util.Arrays/equals (byte-buffer->byte-array v1) (.getByteArray bp k1)))
+
+          (t/is (= (double (.capacity v1)) (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
+
+          (t/is (java.util.Arrays/equals (byte-buffer->byte-array v1) (.getByteArray bp k1)))
+
+          (t/is (= (double (.capacity v1)) (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))) "counter should have not gone up"))
+
+        (t/testing "write side"
+
+          (t/is (= 3.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write")))))
+
+          (.putObject bp k2 v2)
+
+          (t/is (= 6.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write"))))))))))
