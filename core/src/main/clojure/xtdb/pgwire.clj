@@ -297,13 +297,6 @@
    :sql-state "08P01"
    :message msg})
 
-(defn- client-err
-  ([client-msg] (client-err client-msg nil))
-  ([client-msg {:keys [error-type] :as data}]
-   (ex-info client-msg (assoc data ::client-error
-                              (cond-> (err-protocol-violation client-msg)
-                                error-type (assoc :error-type error-type))))))
-
 ;;TODO parse errors should return a PSQL parse error
 ;;this code is generic, but there are specific ones a well
 #_
@@ -364,13 +357,36 @@
    :sql-state "22P03"
    :message msg})
 
+(defn- assert-failure [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "P0004"
+   :message msg})
+
 (defn err-pg-exception
   "Returns a pg specific error for an XTDB exception"
   [^Throwable ex generic-msg]
-  (if (or (instance? IllegalArgumentException ex)
-          (instance? xtdb.RuntimeException ex))
-    (err-protocol-violation (.getMessage ex))
-    (err-internal generic-msg)))
+  (cond (instance? IllegalArgumentException ex)
+
+        (err-protocol-violation (.getMessage ex))
+
+        (instance? xtdb.RuntimeException ex)
+        (let [k (.getKey ^xtdb.RuntimeException ex)]
+          (if (= k :xtdb/assert-failed)
+            (assert-failure (.getMessage ex))
+            (err-protocol-violation (.getMessage ex))))
+
+        :else
+        (err-internal generic-msg)))
+
+(defn- client-err
+  ([client-msg] (client-err client-msg nil))
+  ([client-msg {:keys [error error-type] :as data}]
+   (let [pg-error (some-> error (err-pg-exception client-msg))]
+     (ex-info client-msg (assoc data ::client-error
+                                (cond-> (or pg-error (err-protocol-violation client-msg))
+                                  error-type (assoc :error-type error-type)))))))
+
 
 ;;; sql processing
 
@@ -1302,10 +1318,11 @@
                                                  :authn {:user (-> session :parameters (get "user"))}})]
           (when-not (skip-until-sync? conn)
             (if error
-              (cmd-send-error conn (-> (err-protocol-violation (ex-message error))
+              (cmd-send-error conn (-> (err-pg-exception error "unexpected error on dml execution")
                                        (assoc :error-type :dml)))
               (cmd-write-msg conn msg-command-complete cmd-complete-msg))
             (swap! conn-state assoc :watermark-tx-id tx-id)))))))
+
 
 (defn cmd-exec-query [{:keys [conn-state !closing?] :as conn} {:keys [limit query bound-query fields] :as _portal}]
   (try
@@ -1416,7 +1433,7 @@
                                   (cond-> tx-id (assoc :watermark-tx-id tx-id)))))
 
           (when error
-            (throw (client-err (ex-message error) {:error-type :dml}))))
+            (throw (client-err (ex-message error) {:error error :error-type :dml}))))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (swap! conn-state #(dissoc % :transaction))

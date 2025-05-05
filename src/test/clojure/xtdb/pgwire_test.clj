@@ -2748,13 +2748,26 @@ ORDER BY 1,2;")
 
 (deftest better-assert-error-code-and-message-3878
   (with-open [conn (jdbc-conn "autocommit" "false")]
-    (q conn ["BEGIN READ WRITE"])
-    (q conn ["ASSERT 2 < 1, 'boom'"])
-    (t/is (thrown-with-msg? PSQLException
-                            #"ERROR: Assert failed: 'boom'"
-                            (q conn ["COMMIT"]))))
-  (testing "no error message"
-    (with-open [conn (jdbc-conn "autocommit" "false")]
+    (testing "outside transaction"
+      (try
+        (q conn ["ASSERT 2 < 1, 'boom'"] )
+        (catch PSQLException e
+          (t/is (= "P0004" (.getSQLState e)))
+          (t/is (= "ERROR: Assert failed: 'boom'"
+                   (.getMessage e))))))
+
+    (testing "inside transaction"
+      (q conn ["BEGIN READ WRITE"])
+      (q conn ["ASSERT 2 < 1, 'boom'"])
+      (try
+        (q conn ["COMMIT"])
+        (catch PSQLException e
+          (t/is (= "P0004" (.getSQLState e)))
+          (t/is (= "ERROR: Assert failed: 'boom'"
+                   (.getMessage e)))))
+      (q conn ["ROLLBACK"]))
+
+    (testing "no error message"
       (q conn ["BEGIN READ WRITE"])
       (q conn ["ASSERT 2 < 1"])
       (t/is (thrown-with-msg? PSQLException
