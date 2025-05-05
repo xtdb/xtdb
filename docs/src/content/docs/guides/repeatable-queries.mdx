@@ -1,0 +1,270 @@
+---
+title: Repeatable Queries
+---
+
+import Fiddle from '@components/fiddle.astro';
+import Txs from '@components/fiddle/txs.astro';
+import Query from '@components/fiddle/query.astro';
+
+An amazing feature of XTDB is the ability to re-run *any* query on any of the
+nodes and get back the same results.
+
+<!-- TODO: Mention how this allows you to coordinate queries -->
+
+But how do we practically do this?
+
+<!-- TODO: Add a link to "skip to the solution" -->
+
+If I run this query:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Txs systemTime="2024-01-01"
+       hidden={true}
+       txs="INSERT INTO product (_id, name)
+            VALUES
+            (1, 'Pendleton Electric Bicycle'),
+            (2, 'Bicycle Pump')" />
+  <Query q="SELECT *
+            FROM product" />
+</Fiddle>
+
+And then run it again a little later:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Txs systemTime="2024-01-02"
+       hidden={true}
+       txs="INSERT INTO product (_id, name)
+            VALUES
+            (3, 'Mega Bouncy Ball')" />
+  <Query q="SELECT *
+            FROM product" />
+</Fiddle>
+
+I get different results!
+
+
+
+## System Time
+
+The reason is that, in the time between my queries, more products were added to
+my product table.
+
+What we need to be able to do is two things:
+1. Ask XTDB "When did you ingest your most recent transaction?"
+2. Tell XTDB "Run this query as if you only knew about transactions up to that time"
+
+We can ask the first of those questions pretty easily:
+
+<Fiddle autoLoad magicContext="my-context">
+  <!-- TODO: Change out with `SHOW SNAPSHOT_TIME` -->
+  <Query q="SELECT system_time
+            FROM xt.txs
+            ORDER BY system_time DESC
+            LIMIT 1" />
+</Fiddle>
+
+And for the second, that's exactly what `SYSTEM_TIME` is for!
+Let's modify our query to use it, to set the `SYSTEM_TIME` for the whole query we
+can use `SETTING DEFAULT SYSTEM_TIME AS OF ...`:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2024-01-02T00:00:00Z'
+            SELECT *
+            FROM product" />
+</Fiddle>
+
+Shortly after a new product enters our database:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-03"
+       txs="INSERT INTO product (_id, name)
+            VALUES
+            (4, 'Power Drencher')" />
+</Fiddle>
+
+But if we run the same query as before, we get exactly the same result:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2024-01-02T00:00:00Z'
+            SELECT *
+            FROM product" />
+</Fiddle>
+
+
+
+## Snapshot Time
+
+But what if we are setting `SYSTEM_TIME` on a table in our query like so:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2024-01-02T00:00:00Z'
+            SELECT *
+            FROM product
+              FOR SYSTEM_TIME AS OF DATE '2024-01-04'" />
+</Fiddle>
+
+This overrides the default we set!
+
+So if another product comes in later our query will return different results:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Txs systemTime="2024-01-04"
+       txs="INSERT INTO product (_id, name)
+            VALUES
+            (5, 'Skip-It')" />
+  <Query q="SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2024-01-02T00:00:00Z'
+            SELECT *
+            FROM product
+              FOR SYSTEM_TIME AS OF DATE '2024-01-04'" />
+</Fiddle>
+
+To solve this, instead of setting the default `SYSTEM_TIME` which can be
+overriden, we instead need to tell XTDB set the `SNAPSHOT_TIME`. This tells
+XTDB to look at transactions with upto the given `SNAPSHOT_TIME` *and no
+further*.
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING SNAPSHOT_TIME TO TIMESTAMP '2024-01-02T00:00:00Z'
+            SELECT *
+            FROM product
+              FOR SYSTEM_TIME AS OF DATE '2024-01-04'" />
+</Fiddle>
+
+Now we're back to our results being what we expect.
+
+
+
+## Current Time
+
+There's one final wrinkle in our setup, the time you're actually running the query!
+
+So far, we've only asked XTDB to stop considering transactions newer than our
+`SNAPSHOT_TIME`. But if we use `NOW` in our query, or more importantly don't
+set `VALID_TIME` on our tables when we re-run our queries the results will still
+change!
+
+Here's an example to illustrate. We have a new table of product prices:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-05"
+       txs="INSERT INTO product_price (_id, price)
+            VALUES
+            ('Pendleton Electric Bicycle', 500)" />
+</Fiddle>
+
+We know we have a sale coming up, so we add a price change into the future in
+`VALID_TIME`:
+
+<Fiddle magicContext="my-context">
+  <Txs systemTime="2024-01-06"
+       txs="INSERT INTO product_price (_id, price, _valid_from)
+            VALUES
+            ('Pendleton Electric Bicycle', 500, DATE '2024-01-07')" />
+</Fiddle>
+
+If we use `SNAPSHOT_TIME` to fix the query as of our last transaction we get:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING SNAPSHOT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z',
+                    -- Ignore this next line, it'll come up next
+                    CURRENT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z'
+            SELECT *
+            FROM product_price" />
+</Fiddle>
+
+But if we run the exact same query again (except the line I told you to ignore):
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING SNAPSHOT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z'
+            SELECT *
+            FROM product_price" />
+</Fiddle>
+
+We get a different result!
+
+What's happened is that XTDB set's the default `VALID_TIME` to `NOW`, which is
+unaffected by `SNAPSHOT_TIME`. The solution is in the line I told you to ignore,
+if we tell XTDB to run the query at a given `CURRENT_TIME` we've fixed in place
+the last variable in our query:
+
+<Fiddle autoLoad magicContext="my-context">
+  <Query q="SETTING SNAPSHOT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z',
+                    CURRENT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z'
+            SELECT *
+            FROM product_price" />
+</Fiddle>
+
+
+
+## Basis
+
+We call the pair of `SNAPSHOT_TIME` and `CURRENT_TIME` "basis", and you need to
+provide *both* to ensure you're query is repeatable.
+
+You can get the node's current `SNAPSHOT_TIME` by using the following query:
+
+<Fiddle autoLoad magicContext="my-context-2">
+  <!-- NOTE: The below is a dummy transaction, just to ensure we have a SNAPSHOT_TIME to give -->
+  <Txs hidden={true}
+       txs="INSERT INTO product (_id, name)
+            VALUES
+            (1, 'Pendleton Electric Bicycle'),
+            (2, 'Bicycle Pump')" />
+  <!-- TODO: Change out with `SHOW SNAPSHOT_TIME` -->
+  <Query q="SELECT system_time
+            FROM xt.txs
+            ORDER BY system_time DESC
+            LIMIT 1" />
+</Fiddle>
+
+The client can choose it's own `CURRENT_TIME`, of query the nodes:
+
+<Fiddle autoLoad magicContext="my-context-2">
+  <Query q="SELECT NOW AS my_current_time" />
+</Fiddle>
+
+You can provide the basis for an individual query like so:
+
+<Fiddle autoLoad magicContext="my-context-2">
+  <Query q="SETTING SNAPSHOT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z',
+                    CURRENT_TIME TO TIMESTAMP '2024-01-06T00:00:00Z'
+            SELECT *
+            FROM product" />
+</Fiddle>
+
+
+
+## Transaction Basis
+
+Queries run inside a transaction all run at the transaction's basis which can
+be set like so:
+
+```sql
+BEGIN AT SNAPSHOT_TIME TIMESTAMP '2024-01-06T00:00:00Z',
+         CURRENT_TIME TIMESTAMP '2024-01-06T00:00:00Z';
+
+-- Your query
+SELECT *
+FROM product;
+
+-- Any other queries
+
+ROLLBACK;
+```
+
+If you don't set the transaction basis, you can retrieve it using the same two
+queries as above:
+
+```sql
+BEGIN;
+
+-- Get SNAPSHOT_TIME
+SHOW SNAPSHOT_TIME;
+
+-- Get CURRENT_TIME
+SELECT NOW AS my_current_time;
+
+-- Run your queries
+
+ROLLBACK;
+```
