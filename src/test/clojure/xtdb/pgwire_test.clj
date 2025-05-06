@@ -1284,7 +1284,7 @@
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
     (t/is (= [{:xt/id 2, :committed false,
-               :error {:error-key "xtdb/assert-failed", :message "Assert failed: "}}
+               :error {:error-key "xtdb/assert-failed", :message "Assert failed"}}
               {:xt/id 1, :committed true}
               {:xt/id 0, :committed true}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
@@ -2753,7 +2753,7 @@ ORDER BY 1,2;")
         (q conn ["ASSERT 2 < 1, 'boom'"] )
         (catch PSQLException e
           (t/is (= "P0004" (.getSQLState e)))
-          (t/is (= "ERROR: Assert failed: 'boom'"
+          (t/is (= "ERROR: boom"
                    (.getMessage e))))))
 
     (testing "inside transaction"
@@ -2763,7 +2763,7 @@ ORDER BY 1,2;")
         (q conn ["COMMIT"])
         (catch PSQLException e
           (t/is (= "P0004" (.getSQLState e)))
-          (t/is (= "ERROR: Assert failed: 'boom'"
+          (t/is (= "ERROR: boom"
                    (.getMessage e)))))
       (q conn ["ROLLBACK"]))
 
@@ -2771,5 +2771,5 @@ ORDER BY 1,2;")
       (q conn ["BEGIN READ WRITE"])
       (q conn ["ASSERT 2 < 1"])
       (t/is (thrown-with-msg? PSQLException
-                              #"ERROR: Assert failed:"
+                              #"ERROR: Assert failed"
                               (q conn ["COMMIT"]))))))

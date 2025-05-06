@@ -2899,7 +2899,8 @@
                                      (apply-sqs (not-empty (into {} !subqs)))
                                      (wrap-predicates predicate))
                                  [])
-                    (some-> (.message ctx) (.getText)))))
+                    (when-let [message (some-> (.message ctx) (.getText))]
+                      (subs message 1 (dec (count message)))))))
 
   (visitShowVariableStatement [this ctx] (.accept (.showVariable ctx) this))
 

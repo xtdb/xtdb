@@ -116,6 +116,8 @@ This is used to enforce constraints on the data in a concurrent environment, suc
 return rr.Diagram("ASSERT", "<predicate>", rr.Optional("<message>"))
 ----
 
+If the optional message string is provided, it replaces the default error message text “Assert failed”, should the predicate fail.
+
 * We check to see whether the email address already exists in the database - if not, we can insert the new user.
 +
 [source,sql]
