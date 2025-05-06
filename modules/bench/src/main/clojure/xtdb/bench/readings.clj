@@ -41,20 +41,19 @@
 (defn aggregate-query
   ([node start end] (aggregate-query node start end {}))
   ([node start end opts]
-   (xt/q node "SELECT AVG(value) AS avg, MIN(VALUE) AS min, MAX(VALUE) AS max
-              FROM readings FOR VALID_TIME BETWEEN ? AND ?
-              GROUP BY _id"
-         (assoc opts :args [start end]))))
+   (xt/q node ["SELECT AVG(value) AS avg, MIN(VALUE) AS min, MAX(VALUE) AS max
+                FROM readings FOR VALID_TIME BETWEEN ? AND ?
+                GROUP BY _id" start end]
+         opts)))
 
 (defn check-query
   "A query that returns the number 5 min intervals in the range. Good for sanity checking."
   ([node start end] (aggregate-query node start end {}))
   ([node start end opts]
-   (xt/q node "SELECT COUNT(*) AS cnt, _id AS id
-              FROM readings FOR VALID_TIME BETWEEN ? AND ?
-              GROUP BY _id"
-         (assoc opts :args [start end]))))
-
+   (xt/q node ["SELECT COUNT(*) AS cnt, _id AS id
+                FROM readings FOR VALID_TIME BETWEEN ? AND ?
+                GROUP BY _id" start end]
+         opts)))
 
 (defn ->query-stage
   ([interval] (->query-stage interval nil))
