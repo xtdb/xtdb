@@ -312,6 +312,38 @@ storage: !Remote
 
 '''
 
+[#protecting-data]
+== Protecting XTDB Data
+
+Azure Blob Storage provides link:https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#durability-and-availability-parameters[strong durability guarantees^] (up to 16 9s for GRS), but does not protect against operator error or access misconfiguration.
+
+To minimize risk:
+
+* Enable link:https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-overview[Blob Versioning^] — allows recovery of deleted or overwritten blobs
+* Enable link:https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-container-overview[Soft Delete^] — allows recovery of deleted blobs or containers for a configured retention period
+* Use link:https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy[Geo- or Zone-Redundant Storage^] for disaster recovery scenarios
+* Apply lifecycle and retention policies with care
+* Restrict blob/container access using role-based access control (RBAC) and scoped IAM roles
+
+For shared guidance on storage backup strategies, see the link:/ops/backup-and-restore/overview[Backup Overview^].
+
+'''
+
+[#backup]
+== Backing Up XTDB Data
+
+XTDB storage files in Azure Blob Storage are immutable and ideally suited for snapshot-based backup strategies.
+
+To perform a full backup:
+
+* Back up the entire blob container (or prefix) used by XTDB
+* Ensure all blobs associated with the latest flushed block are present
+* Avoid copying in-progress blobs — only finalized storage blobs are valid for recovery
+
+You can use link:https://learn.microsoft.com/en-us/azure/backup/backup-overview[Azure Backup^] for scheduled, versioning-aware backups of storage containers.
+
+'''
+
 [#monitoring]
 == Application Insights Monitoring
 

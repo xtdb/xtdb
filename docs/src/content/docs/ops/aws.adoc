@@ -16,6 +16,8 @@ In order to run an AWS based XTDB cluster, the following infrastructure is requi
 * IAM policies which grant XTDB permission to the S3 bucket
 * XTDB nodes configured to communicate with the Kafka cluster and S3 bucket.
 
+'''
+
 [#terraform]
 == Terraform Templates
 
@@ -242,19 +244,14 @@ In order to override the default configuration:
 CMD ["-f", "/path/to/custom-config.yaml"]
 ----
 
+'''
+
 [#storage]
 == S3 Storage
 
 https://aws.amazon.com/s3/[**Amazon S3**^] can be used as a shared object-store for XTDB's link:config/storage#remote[remote storage^] module.
 
 === Infrastructure Requirements
-
-[NOTE]
-====
-We provide a https://github.com/xtdb/xtdb/blob/main/modules/aws/cloudformation/s3-stack.yml[parameterized CloudFormation stack^] to help set up everything that you need.
-
-The stack accepts the (globally unique) name of an S3 bucket as an input - this will be created, and referenced in associated resources - to be used in your XTDB configuration.
-====
 
 To use S3 as the object store, the following infrastructure is required:
 
@@ -323,6 +320,40 @@ storage: !Remote
 ----
 
 If configured as an in-process node, you can also specify an `S3Configurator` instance - this is used to modify the requests sent to S3.
+
+'''
+
+[#protecting-data]
+== Protecting XTDB Data
+
+Amazon S3 provides link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/DataDurability.html[strong durability guarantees^] (11 9s), but does not protect against operator error or access misconfiguration. 
+
+To minimize risk:
+
+* Enable link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html[S3 Versioning^] — allows recovery of deleted or overwritten objects
+** Will use delete markers or retention policies for soft delete
+* Use link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html[Cross-Region Replication^] for disaster recovery scenarios
+* Apply S3 bucket lifecycle and retention policies with care
+* Lock down IAM access to prevent destructive operations from untrusted sources
+
+For shared guidance on storage backup strategies, see the link:/ops/backup-and-restore/overview[Backup Overview^].
+
+'''
+
+[#backup]
+== Backing Up XTDB Data
+
+XTDB storage files in S3 are immutable and ideally suited for snapshot-based backup strategies.
+
+To perform a full backup:
+
+* Back up the entire S3 prefix (or bucket) used by XTDB
+* Ensure all files associated with the latest flushed block are present
+* Avoid copying in-progress files — only finalized storage files are valid for recovery
+
+You can use link:https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html[AWS Backup^] for scheduled, versioning-aware backups of entire buckets.
+
+'''
 
 [#monitoring]
 == CloudWatch Monitoring

@@ -266,3 +266,36 @@ storage: !Remote
 
   localDiskCache: /var/cache/xtdb/object-store
 ----
+
+'''
+
+[#protecting-data]
+== Protecting XTDB Data
+
+Google Cloud Storage provides link:https://cloud.google.com/storage/docs/availability-durability[strong durability guarantees^] (up to 11 9s), but it does not protect against operator error or access misconfiguration.
+
+To minimize risk:
+
+* Enable link:https://cloud.google.com/storage/docs/object-versioning[Object Versioning^] — allows recovery of deleted or overwritten objects
+* Enable link:https://cloud.google.com/storage/docs/soft-delete[Soft Delete^] — provides temporary protection against deletion for a configured retention period
+* Use link:https://cloud.google.com/storage/docs/locations#considerations[Multi- or Dual-Region Buckets^] for cross-region redundancy
+* Apply lifecycle and retention policies with care
+* Restrict access using fine-grained IAM permissions and scoped service accounts
+
+For shared guidance on storage backup strategies, see the link:/ops/backup-and-restore/overview[Backup Overview^].
+
+[#backup]
+== Backing Up XTDB Data
+
+XTDB storage files in Google Cloud Storage are immutable and ideally suited for snapshot-based backup strategies.
+
+To perform a full backup:
+
+* Back up the entire GCS bucket or prefix used by XTDB
+* Ensure all objects associated with the latest flushed block are present
+* Avoid copying in-progress files — only finalized storage files are valid for recovery
+
+Google Cloud does not currently offer native snapshotting for Cloud Storage. Instead, use:
+
+* link:https://cloud.google.com/storage-transfer-service[Storage Transfer Service^] — for scheduled or on-demand full/incremental backups across buckets or regions
+* link:https://cloud.google.com/workflows[Cloud Workflows^] or link:https://cloud.google.com/scheduler[Cloud Scheduler^] — to automate transfer or backup logic
