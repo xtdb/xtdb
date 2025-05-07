@@ -435,7 +435,12 @@ fun createBench(benchName: String, properties: Map<String, String>) {
         jvmArgs(defaultJvmArgs + sixGBJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
         val args = mutableListOf("-m", "xtdb.bench", benchName)
 
-        (properties + ("dir" to "--node-dir")).forEach { (k, v) ->
+        val extraProps = properties + mapOf(
+            "dir" to "--node-dir",
+            "configFile" to "--config-file"
+        )
+
+        extraProps.forEach { (k, v) ->
             if (project.hasProperty(k)) {
                 args.add(v)
                 args.add(project.properties[k] as String)
