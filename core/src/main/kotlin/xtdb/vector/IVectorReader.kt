@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.*
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
+import xtdb.util.closeOnCatch
 
 interface IVectorReader : VectorReader, AutoCloseable {
     override val nullable get() = this.field.isNullable
@@ -25,7 +26,8 @@ interface IVectorReader : VectorReader, AutoCloseable {
 
     override val legNames: Set<String>? get() = unsupported("legs")
 
-    fun copy(allocator: BufferAllocator): IVectorReader = copyTo(field.createVector(allocator)).withName(name)
+
+    fun copy(allocator: BufferAllocator): IVectorReader = field.createVector(allocator).closeOnCatch { v -> copyTo(v).withName(name) }
     fun copyTo(vector: ValueVector): IVectorReader
 
     override fun select(idxs: IntArray): IVectorReader = IndirectVectorReader(this, selection(idxs))
