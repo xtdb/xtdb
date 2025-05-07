@@ -14,6 +14,7 @@ import xtdb.api.TransactionKey
 import xtdb.util.kebabToCamelCase
 import java.io.InputStream
 import java.io.OutputStream
+import java.math.BigDecimal
 import java.time.*
 import java.util.*
 
@@ -68,6 +69,8 @@ object AnySerde : KSerializer<Any> {
                         value.asDouble()
                             ?: value.asString()?.toDouble()
                             ?: throw jsonIAEwithMessage("@value must be double!", this)
+
+                    "xt:decimal" -> value.asStringOrThrow().toBigDecimal()
 
                     "xt:instant" -> Instant.parse(value.asStringOrThrow())
                     "xt:timestamptz" -> ZonedDateTime.parse(value.asStringOrThrow())
@@ -125,6 +128,7 @@ object AnySerde : KSerializer<Any> {
     private fun Any?.toJsonElement(): JsonElement = when (this) {
         null -> JsonNull
         is String -> JsonPrimitive(this)
+        is BigDecimal -> toJsonLdElement("xt:decimal")
         is Number -> JsonPrimitive(this)
         is Boolean -> JsonPrimitive(this)
         is Map<*, *> -> JsonObject(map { (k, v) ->

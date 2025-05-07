@@ -9,6 +9,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.query.IKeyFn
 import xtdb.http.QueryOptions
 import xtdb.http.QueryRequest
+import java.math.BigDecimal
 import java.time.*
 import java.util.*
 
@@ -50,6 +51,19 @@ class JsonSerdeTest {
         assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42 }"))
         assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42.0 }"))
         assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": \"42.0\" }"))
+    }
+
+    @Test
+    fun `round-trips big-decimals`() {
+        BigDecimal("1.0010").assertRoundTrip("""{"@type":"xt:decimal","@value":"1.0010"}""")
+
+        "1.0010000000000000000".let {
+            BigDecimal(it).assertRoundTrip("""{"@type":"xt:decimal","@value":"$it"}""")
+        }
+
+        "1001000000000000000000023421.21923989823429893842".let {
+            BigDecimal(it).assertRoundTrip("""{"@type":"xt:decimal","@value":"$it"}""")
+        }
     }
 
     @Test
