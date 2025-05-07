@@ -807,43 +807,43 @@
 
 (deftest test-timezone
   (with-open [conn (jdbc-conn)]
-    (let [q-tz #(get (first (rs->maps (.executeQuery (.createStatement %) "SHOW TIMEZONE"))) "timezone")
-          exec #(.execute (.createStatement %1) %2)
-          default-tz (str (.getZone (Clock/systemDefaultZone)))]
+    (letfn [(q-tz [conn]
+              (:timezone (jdbc/execute-one! conn ["SHOW TIME ZONE"])))]
+      (let [default-tz (str (.getZone (Clock/systemDefaultZone)))]
 
-      (t/testing "expect server timezone"
-        (t/is (= default-tz (q-tz conn))))
+        (t/testing "expect server timezone"
+          (t/is (= default-tz (q-tz conn))))
 
-      (t/testing "utc"
-        (exec conn "SET TIME ZONE '+00:00'")
-        (t/is (= "Z" (q-tz conn))))
+        (t/testing "utc"
+          (jdbc/execute! conn ["SET TIME ZONE '+00:00'"])
+          (t/is (= "Z" (q-tz conn))))
 
-      (t/testing "random tz"
-        (exec conn "SET TIME ZONE '+07:44'")
-        (t/is (= "+07:44" (q-tz conn))))
+        (t/testing "random tz"
+          (exec conn "SET TIME ZONE '+07:44'")
+          (t/is (= "+07:44" (q-tz conn))))
 
-      (t/testing "tz is session scoped"
-        (with-open [conn2 (jdbc-conn)]
+        (t/testing "tz is session scoped"
+          (with-open [conn2 (jdbc-conn)]
 
-          (t/is (= default-tz (q-tz conn2)))
-          (t/is (= "+07:44" (q-tz conn)))
+            (t/is (= default-tz (q-tz conn2)))
+            (t/is (= "+07:44" (q-tz conn)))
 
-          (exec conn2 "SET TIME ZONE '-00:01'")
+            (exec conn2 "SET TIME ZONE '-00:01'")
 
-          (t/is (= "-00:01" (q-tz conn2)))
-          (t/is (= "+07:44" (q-tz conn)))))
+            (t/is (= "-00:01" (q-tz conn2)))
+            (t/is (= "+07:44" (q-tz conn)))))
 
-      (jdbc/with-transaction [tx conn]
+        (jdbc/with-transaction [tx conn]
 
-        (t/testing "in a transaction, inherits session tz"
-          (t/is (= "+07:44" (q-tz tx))))
+          (t/testing "in a transaction, inherits session tz"
+            (t/is (= "+07:44" (q-tz tx))))
 
-        (t/testing "tz can be modified in a transaction"
-          (exec tx "SET TIME ZONE 'Asia/Tokyo'")
-          (t/is (= "Asia/Tokyo" (q-tz tx)))))
+          (t/testing "tz can be modified in a transaction"
+            (exec tx "SET TIME ZONE 'Asia/Tokyo'")
+            (t/is (= "Asia/Tokyo" (q-tz tx)))))
 
-      (testing "SET is a session operator, so the tz still applied to the session"
-        (t/is (= "Asia/Tokyo" (q-tz conn)))))))
+        (testing "SET is a session operator, so the tz still applied to the session"
+          (t/is (= "Asia/Tokyo" (q-tz conn))))))))
 
 (deftest pg-begin-unsupported-syntax-error-test
   (with-open [conn (jdbc-conn {"autocommit" "false"})]
