@@ -8,10 +8,9 @@ pluginManagement {
 
 rootProject.name = "xtdb"
 
-include("api", "core", "jdbc")
+include("api", "core")
 project(":api").name = "xtdb-api"
 project(":core").name = "xtdb-core"
-project(":jdbc").name = "xtdb-jdbc"
 
 include("http-server", "http-client-jvm")
 project(":http-server").name = "xtdb-http-server"

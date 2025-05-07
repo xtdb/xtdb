@@ -35,6 +35,10 @@ dependencies {
     api(libs.kotlinx.serialization.json)
 
     api(libs.caffeine)
+
+    implementation("org.postgresql:postgresql:42.7.5")
+
+    testImplementation(libs.next.jdbc)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

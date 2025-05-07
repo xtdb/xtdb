@@ -12,7 +12,6 @@ dependencies {
     api(project(":"))
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
-    api(project(":xtdb-jdbc"))
 
     api("io.airlift.tpch", "tpch", "0.10")
     api("org.clojure", "data.csv", "1.0.1")

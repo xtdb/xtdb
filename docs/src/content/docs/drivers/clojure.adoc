@@ -13,8 +13,8 @@ SQL queries can be executed using the XTDB JDBC driver:
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.12.0"} ; minimum reqmt
 
-        ;; https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
-        com.xtdb/xtdb-jdbc {:mvn/version "XTDB_VERSION"}
+        ;; https://mvnrepository.com/artifact/com.xtdb/xtdb-api
+        com.xtdb/xtdb-api {:mvn/version "XTDB_VERSION"}
 
         ;; https://mvnrepository.com/artifact/com/github/seancorfield/next.jdbc
         ;; other JDBC libraries are available
