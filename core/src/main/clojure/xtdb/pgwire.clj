@@ -1599,9 +1599,7 @@
         fallback-output-format (get-in session [:parameters "fallback_output_format"])
         param-types (map types/pg-types-by-oid param-oids)]
 
-    (if (or (contains? #{:query :execute} statement-type)
-            (and (= :prepare statement-type)
-                 (= :query (:inner-statement-type stmt))))
+    (if (contains? #{:query :execute} statement-type)
       (let [param-col-types (mapv :col-type param-types)]
         (when (some nil? param-col-types)
           (throw (ex-info "unsupported param-types in query"
