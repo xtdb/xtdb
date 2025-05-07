@@ -1,6 +1,7 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [integrant.core :as ig]
+            [next.jdbc :as jdbc]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
             [xtdb.error :as err]
@@ -19,11 +20,11 @@
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
+           (java.util HashMap Map)
            (java.util.concurrent ExecutionException)
-           java.util.HashMap
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api TransactionKey TransactionResult Xtdb Xtdb$Config Xtdb$CompactorNode)
+           (xtdb.api TransactionKey TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ConnectionBuilder)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)

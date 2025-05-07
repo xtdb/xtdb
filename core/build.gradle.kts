@@ -76,12 +76,12 @@ dependencies {
 
     api(libs.protobuf.kotlin)
 
-    api(libs.pgjdbc)
+    api(libs.next.jdbc)
 
     antlr(libs.antlr)
     implementation(libs.antlr.runtime)
 
-    testImplementation(libs.next.jdbc)
+    testImplementation(libs.pgjdbc)
     testImplementation(libs.mockk)
     testImplementation(libs.clojure.test.check)
     testImplementation(project(":"))

@@ -31,14 +31,15 @@
            (org.pg.enums OID)
            (org.pg.error PGError PGErrorResponse)
            (org.postgresql.util PGInterval PGobject PSQLException)
-           xtdb.JsonSerde
+           (xtdb JsonSerde)
+           (xtdb.api Xtdb$ConnectionBuilder)
            xtdb.pgwire.Server))
 
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
 
 (def ^:dynamic ^:private *port* nil)
-(def ^:dynamic ^:private *server* nil)
+(def ^:dynamic ^:private ^xtdb.api.Xtdb$DataSource *server* nil)
 
 (t/use-fixtures :once
 
@@ -80,14 +81,20 @@
 (defn- pg-conn ^org.pg.Connection [params]
   (pg/connect (pg-config params)))
 
-(defn- jdbc-url [& opts]
-  (let [opts (-> (into {} (partitionv 2 opts))
-                 (update "user" (fnil identity "xtdb")))
-        param-str (when (seq opts) (str "?" (str/join "&" (for [[k v] opts] (str k "=" v)))))]
-    (format "jdbc:xtdb://localhost:%s/xtdb%s" *port* (or param-str ""))))
+(defn- jdbc-conn
+  (^Connection [] (jdbc-conn nil))
+  (^Connection [opts]
+   (-> ^Xtdb$ConnectionBuilder
+       (reduce (fn [^Xtdb$ConnectionBuilder cb [k v]]
+                 (.option cb k v))
 
-(defn- jdbc-conn ^Connection [& params]
-  (jdbc/get-connection (apply jdbc-url params)))
+               (-> (.createConnectionBuilder *server*)
+                   (.user "xtdb")
+                   (.port *port*))
+
+               opts)
+
+       (.build))))
 
 (defn- exec [^Connection conn ^String sql]
   (.execute (.createStatement conn) sql))
@@ -99,13 +106,13 @@
       (recur (.getNextWarning warn) (conj res warn)))))
 
 (deftest connect-with-next-jdbc-test
-  (with-open [_ (jdbc/get-connection (jdbc-url))])
+  (with-open [_ (jdbc-conn)])
   ;; connect a second time to make sure we are releasing server resources properly!
-  (with-open [_ (jdbc/get-connection (jdbc-url))]))
+  (with-open [_ (jdbc-conn)]))
 
 (defn- try-sslmode [sslmode]
   (try
-    (with-open [_ (jdbc/get-connection (jdbc-url "sslmode" sslmode))])
+    (with-open [_ (jdbc-conn {"sslmode" sslmode})])
     :ok
     (catch PSQLException e
       (if (= "The server does not support SSL." (.getMessage e))
@@ -140,7 +147,7 @@
 
 (defn- try-gssencmode [gssencmode]
   (try
-    (with-open [_ (jdbc/get-connection (jdbc-url "gssEncMode" gssencmode))])
+    (with-open [_ (jdbc-conn {"gssEncMode" gssencmode})])
     :ok
     (catch PSQLException e
       (if (= "The server does not support GSS Encoding." (.getMessage e))
@@ -163,7 +170,7 @@
     (is (= false (.next rs)))))
 
 (deftest simple-query-test
-  (with-open [conn (jdbc-conn "preferQueryMode" "simple")
+  (with-open [conn (jdbc-conn {"preferQueryMode" "simple"})
               stmt (.createStatement conn)
               rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
     (is (= [{"a" "hello, world"}]
@@ -171,14 +178,14 @@
 
 ;;TODO ADD support for multiple statments in a single simple query
 #_(deftest mulitiple-statement-simple-query-test
-    (with-open [conn (jdbc-conn "preferQueryMode" "simple")
+    (with-open [conn (jdbc-conn {"preferQueryMode" "simple"})
                 stmt (.createStatement conn)
                 rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
       (is (= true (.next rs)))
       (is (= false (.next rs)))))
 
 (deftest prepared-query-test
-  (with-open [conn (jdbc-conn "prepareThreshold" "1")
+  (with-open [conn (jdbc-conn {"prepareThreshold" 1})
               stmt (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world')) a (a)")
               stmt2 (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world2')) a (a)")]
 
@@ -387,13 +394,12 @@
     (check-conn-resources-freed server-conn)))
 
 (deftest server-close-closes-idle-conns-test
-  (with-open [^Server server (serve {:drain-wait 0})]
-    (binding [*port* (:port server)]
-      (with-open [_client-conn (jdbc-conn)
-                  server-conn (get-last-conn server)]
-        (.close server)
-        (is (wait-for-close server-conn 500))
-        (check-conn-resources-freed server-conn)))))
+  (with-open [^Server server (serve {:drain-wait 0})
+              _client-conn (jdbc-conn {"port" (:port server)})
+              server-conn (get-last-conn server)]
+    (.close server)
+    (is (wait-for-close server-conn 500))
+    (check-conn-resources-freed server-conn)))
 
 (deftest canned-response-test
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
@@ -406,46 +412,45 @@
 
 (deftest concurrent-conns-test
   (with-open [server (serve {:num-threads 2})]
-    (binding [*port* (:port server)]
-      (let [results (atom [])
-            spawn (fn spawn []
-                    (future
-                      (with-open [conn (jdbc-conn)]
-                        (swap! results conj (ping conn)))))
-            futs (vec (repeatedly 10 spawn))]
+    (let [results (atom [])
+          spawn (fn spawn []
+                  (future
+                    (with-open [conn (jdbc-conn)]
+                      (swap! results conj (ping conn)))))
+          futs (vec (repeatedly 10 spawn))]
 
-        (is (every? #(not= :timeout (deref % 500 :timeout)) futs))
-        (is (= 10 (count @results)))
+      (is (every? #(not= :timeout (deref % 500 :timeout)) futs))
+      (is (= 10 (count @results)))
 
-        (.close server)
-        (check-server-resources-freed server)))))
+      (.close server)
+      (check-server-resources-freed server))))
 
 (deftest concurrent-conns-close-midway-test
   (with-open [server (serve {:num-threads 2 :accept-so-timeout 10})]
-    (binding [*port* (:port server)]
-      (logging/with-log-level 'xtdb.pgwire :off
-        (let [spawn (fn spawn [i]
-                      (future
-                        (try
-                          (with-open [conn (jdbc-conn "loginTimeout" "1"
-                                                      "socketTimeout" "1")]
-                            (loop [query-til (+ (System/currentTimeMillis)
-                                                (* i 1000))]
-                              (ping conn)
-                              (when (< (System/currentTimeMillis) query-til)
-                                (recur query-til))))
-                          ;; we expect an ex here, whether or not draining
-                          (catch PSQLException _))))
+    (logging/with-log-level 'xtdb.pgwire :off
+      (let [spawn (fn spawn [i]
+                    (future
+                      (try
+                        (with-open [conn (jdbc-conn {"loginTimeout" 1
+                                                     "socketTimeout" 1
+                                                     "port" (:port server)})]
+                          (loop [query-til (+ (System/currentTimeMillis)
+                                              (* i 1000))]
+                            (ping conn)
+                            (when (< (System/currentTimeMillis) query-til)
+                              (recur query-til))))
+                        ;; we expect an ex here, whether or not draining
+                        (catch PSQLException _))))
 
-              futs (mapv spawn (range 10))]
+            futs (mapv spawn (range 10))]
 
-          (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
+        (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
 
-          (.close server)
+        (.close server)
 
-          (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
+        (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
 
-          (check-server-resources-freed server))))))
+        (check-server-resources-freed server)))))
 
 ;; the goal of this test is to cause a bunch of ping queries to block on parse
 ;; until the server is draining
@@ -483,9 +488,9 @@
 ;;TODO no current support for cancelling queries
 
 (deftest jdbc-prepared-query-close-test
-  (with-open [conn (jdbc-conn "prepareThreshold" "1"
-                              "preparedStatementCacheQueries" 0
-                              "preparedStatementCacheMiB" 0)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" 1
+                               "preparedStatementCacheQueries" 0
+                               "preparedStatementCacheMiB" 0})]
     (dotimes [i 3]
 
       (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" i))]
@@ -574,7 +579,7 @@
   (with-open [node (xtn/start-node {:server {:ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                                    :keystore-password "password123"}}})]
     (binding [*port* (.getServerPort node)]
-      (with-open [conn (jdbc/get-connection (jdbc-url "sslmode" "require"))]
+      (with-open [conn (jdbc-conn {"sslmode" "require"})]
         (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
         (t/is (= [{:xt/id 1}]
                  (q conn ["SELECT * FROM foo"]))))
@@ -698,9 +703,6 @@
 
 (defn- session-variables [server-conn ks]
   (-> server-conn :conn-state deref :session (select-keys ks)))
-
-(defn- next-transaction-variables [server-conn ks]
-  (-> server-conn :conn-state deref :session :next-transaction (select-keys ks)))
 
 (deftest session-access-mode-default-test
   (with-open [_ (jdbc-conn)]
@@ -844,12 +846,12 @@
         (t/is (= "Asia/Tokyo" (q-tz conn)))))))
 
 (deftest pg-begin-unsupported-syntax-error-test
-  (with-open [conn (jdbc-conn "autocommit" "false")]
+  (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (is (thrown-with-msg? PSQLException #"line 1:6 mismatched input 'not'" (q conn ["BEGIN not valid sql!"])))
     (is (thrown-with-msg? PSQLException #"line 1:6 extraneous input 'SERIALIZABLE'" (q conn ["BEGIN SERIALIZABLE"])))))
 
 (deftest begin-with-access-mode-test
-  (with-open [conn (jdbc-conn "autocommit" "false")]
+  (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (testing "DML enabled with BEGIN READ WRITE"
       (q conn ["BEGIN READ WRITE"])
       (q conn ["INSERT INTO foo (_id) VALUES (42)"])
@@ -862,7 +864,7 @@
       (q conn ["ROLLBACK"]))))
 
 (deftest start-transaction-test
-  (with-open [conn (jdbc-conn "autocommit" "false")]
+  (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (let [sql #(q conn [%])]
 
       (sql "START TRANSACTION READ ONLY")
@@ -898,7 +900,7 @@
         (is (= #{{:xt/id 42} {:xt/id 43}} (set (q conn ["SELECT _id from foo"]))))))))
 
 (deftest set-session-characteristics-test
-  (with-open [conn (jdbc-conn "autocommit" "false")]
+  (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (let [sql #(q conn [%])]
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
       (sql "START TRANSACTION")
@@ -1070,7 +1072,7 @@
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
 (deftest implicit-transaction-stop-gap-test
-  (with-open [conn (jdbc-conn "autocommit" "false")]
+  (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (let [sql #(q conn [%])]
 
       (testing "read only"
@@ -1175,11 +1177,11 @@
 ;; List of types/oids that support binary format
 
 (deftest test-postgres-types
-  (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" false)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" 1 "binaryTransfer" false})]
     (q-seq conn ["INSERT INTO foo(_id, int8, int4, int2, float8 , var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?)"
                  #uuid "9e8b41a0-723f-4e6b-babb-c4e6afd17ef2" Long/MIN_VALUE Integer/MAX_VALUE Short/MIN_VALUE Double/MAX_VALUE "aa" true]))
   ;; no float4 for text format due to a bug in pgjdbc where it sends it as a float8 causing a union type.
-  (with-open [conn (jdbc-conn "prepareThreshold" 1 "binaryTransfer" true)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" 1 "binaryTransfer" true})]
     (q-seq conn ["INSERT INTO foo(_id, int8, int4, int2, float8, float4, var_char, bool) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                  #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6" Long/MAX_VALUE Integer/MIN_VALUE Short/MAX_VALUE Double/MIN_VALUE Float/MAX_VALUE "bb" false])
     ;;binary format is only requested for server side preparedStatements in pgjdbc
@@ -1290,7 +1292,7 @@
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
 
 (deftest test-untyped-null-type
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})
               stmt (.prepareStatement conn "SELECT ?")]
 
     (t/testing "untyped null param"
@@ -1316,7 +1318,7 @@
         (t/is (= [{"_column_1" 4}] (rs->maps rs)))))))
 
 (deftest test-typed-null-type
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})
               stmt (.prepareStatement conn "SELECT ?")]
 
     (t/testing "typed null param"
@@ -1338,7 +1340,7 @@
         (t/is (= [{"_column_1" nil}] (rs->maps rs)))))))
 
 (deftest test-prepared-statements-with-unknown-params
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})
               stmt (.prepareStatement conn "SELECT ?")]
 
     (t/testing "unknown param types are assumed to be of type text"
@@ -1357,7 +1359,7 @@
         (t/is (= [{"_column_1" #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6"}] (rs->maps rs)))))))
 
 (deftest test-prepared-statments
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (1, 'one', 2)"))
     (with-open [stmt (.prepareStatement conn "SELECT foo.*, ? FROM foo")]
 
@@ -1405,7 +1407,7 @@
                (with-open [_rs (.executeQuery stmt)])))))))
 
 (deftest test-nulls-in-monomorphic-types
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a) VALUES (1, NULL), (2, 22.2)"))
     (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY _id")]
 
@@ -1419,7 +1421,7 @@
                  (rs->maps rs)))))))
 
 (deftest test-nulls-in-polymorphic-types
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a) VALUES (1, 'one'), (2, 1), (3, NULL)"))
     (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY _id")]
 
@@ -1446,7 +1448,7 @@
 
     (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
 
-      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+      (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
                   stmt (.prepareStatement conn "SELECT ? AS val")]
 
         (.execute (.createStatement conn) "SET TIME ZONE '+05:00'")
@@ -1469,7 +1471,7 @@
         val2 #xt/offset-date-time "2024-07-03T19:01:34.695959+03:00"]
     (doseq [binary? [true false]]
 
-      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+      (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
                   stmt (.prepareStatement conn "SELECT val FROM (VALUES ?, ?, TIMESTAMP '2099-04-15T20:40:31[Asia/Tokyo]') AS foo(val)")]
 
         (.execute (.createStatement conn) "SET TIME ZONE '+04:00'")
@@ -1577,7 +1579,7 @@
                 (read))))))))
 
 (deftest test-prepare-select
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     ;; real Postgres does this too - it's like it defaults the type of $1 on `PREPARE`
     ;; so we need the cast
     (jdbc/execute! conn ["PREPARE foo AS SELECT $1::bigint forty_two"])
@@ -1596,7 +1598,7 @@
        (t/is (= [["forty_two"] ["42"]] (read)))))))
 
 (t/deftest test-prepare-insert
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (jdbc/execute! conn ["PREPARE foo AS INSERT INTO foo (_id, a) VALUES ($1, $2)"])
     (jdbc/execute! conn ["EXECUTE foo (1, 'one')"])
     (jdbc/execute! conn ["EXECUTE foo (?, ?)" 2 "two"])
@@ -1709,7 +1711,7 @@
 
 (deftest test-java-sql-timestamp
   (testing "java.sql.Timestamp"
-    (with-open [conn (jdbc-conn "prepareThreshold" -1)
+    (with-open [conn (jdbc-conn {"prepareThreshold" -1})
                 stmt (.prepareStatement conn "SELECT ? AS v")]
 
       (.setTimestamp
@@ -1770,7 +1772,7 @@
   (t/testing "Declared param type VARCHAR is honored, even though it maps to utf8 which XTDB maps to text"
     ;;case applies anytime we have multiple pg types that map to the same xt type, as we choose a single pg type
     ;;for the return type.
-    (with-open [conn (jdbc-conn "prepareThreshold" -1)
+    (with-open [conn (jdbc-conn {"prepareThreshold" -1})
                 stmt (.prepareStatement conn "SELECT ? x, ? y")]
 
       (.setString stmt 1 "foo")
@@ -1881,7 +1883,7 @@
     ;;but it claims to and might someday
     (t/testing (format "binary?: %s, value?: %s" binary? v)
 
-      (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+      (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
                   stmt (.prepareStatement conn "SELECT ? AS v")]
 
         (.setBoolean stmt 1 v)
@@ -1907,7 +1909,7 @@ WHERE t.typname = $1 AND (n.nspname = $2 OR $3 AND n.nspname = ANY (current_sche
 ORDER BY t.oid DESC LIMIT 1"
                            "transit" nil true])))))
 
-  (with-open [conn (jdbc-conn "prepareThreshold" -1)]
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (xt-jdbc/->pg-obj {:a 1, :b 2})])
 
     (with-open [stmt (.prepareStatement conn "SELECT v FROM foo")
@@ -1944,7 +1946,7 @@ ORDER BY t.oid DESC LIMIT 1"
             "using our transformers"))))
 
 (deftest test-fallback-transit
-  (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
+  (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: TIMESTAMP '2020-01-01T00:00:00Z'}}"])
 
     (with-open [stmt (.prepareStatement conn "SELECT * FROM foo")]
@@ -2251,36 +2253,36 @@ ORDER BY t.oid DESC LIMIT 1"
   (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}]}]})]
     (binding [*port* (.getServerPort node)]
       (t/is (thrown-with-msg? PSQLException #"ERROR: no authentication record found for user: fin"
-                              (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
+                              (with-open [_ (jdbc-conn {"user" "fin", "password" "foobar"})]))
             "users without record are blocked")
 
       ;; user xtdb should be fine
-      (with-open [_ (jdbc-conn "user" "xtdb" "password" "xtdb")])
+      (with-open [_ (jdbc-conn {"user" "xtdb", "password" "xtdb"})])
       (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: xtdb"
-                              (with-open [_ (jdbc-conn "user" "xtdb" "password" "foobar")]))
+                              (with-open [_ (jdbc-conn {"user" "xtdb", "password" "foobar"})]))
             "user with a wrong password gets blocked")))
 
   (t/testing "users with a trusted record are allowed"
     (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "fin", :method :trust, :address "127.0.0.1"}]}]})]
       (binding [*port* (.getServerPort node)]
-        (with-open [_ (jdbc-conn "user" "fin")]))))
+        (with-open [_ (jdbc-conn {"user" "fin"})]))))
 
   (with-open [node (xtn/start-node {:authn [:user-table {:rules [{:user "xtdb", :method :password, :address "127.0.0.1"}
                                                                  {:user "fin", :method :password, :address "127.0.0.1"}]}]})]
 
     (binding [*port* (.getServerPort node)]
       (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: fin"
-                              (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))
+                              (with-open [_ (jdbc-conn {"user" "fin", "password" "foobar"})]))
             "users with a authentication record but not in the database")
 
-      (with-open [conn (jdbc-conn "user" "xtdb" "password" "xtdb")]
+      (with-open [conn (jdbc-conn {"user" "xtdb" "password" "xtdb"})]
         (jdbc/execute! conn ["CREATE USER fin WITH PASSWORD 'foobar'"])
         (with-open [stmt (.createStatement conn)
                     rs (.executeQuery stmt "SELECT username FROM pg_user")]
           (is (= (set [{"username" "xtdb"} {"username" "fin"}])
                  (set (rs->maps rs))))))
 
-      (with-open [_ (jdbc-conn "user" "fin" "password" "foobar")]))))
+      (with-open [_ (jdbc-conn {"user" "fin" "password" "foobar"})]))))
 
 (t/deftest test-keywordize-nested-values-3910
   (with-open [conn (jdbc-conn)]
@@ -2359,7 +2361,7 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (= [{:v {:ba "0x00f0"}}] (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"]))
               "reading nested varbinary result")))
 
-    (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
+    (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
       (let [res (:v (first  (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))]
         (t/is (Arrays/equals  ba (.array ^ByteBuffer (:ba res)))))))
 
@@ -2370,7 +2372,7 @@ ORDER BY t.oid DESC LIMIT 1"
       (t/is (= [{:v {:uri "http://xtdb.com"}}] (q conn ["SELECT OBJECT(uri: URI 'http://xtdb.com') AS v"]))
             "nested uri"))
 
-    (with-open [conn (jdbc-conn "options" "-c fallback_output_format=transit")]
+    (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
       ;; TODO transit has it's own implementation of URI
       (t/is (= "http://xtdb.com" (str (:v (first  (q conn ["SELECT URI 'http://xtdb.com' AS v"]))))))))
 
@@ -2674,7 +2676,7 @@ ORDER BY 1,2;")
           :let [q (format "SELECT %s v" input)]]
 
       (t/testing (format "pgjdbc - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
-        (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+        (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
                     stmt (.prepareStatement conn q)]
           (with-open [rs (.executeQuery stmt)]
             (.next rs)
@@ -2690,7 +2692,7 @@ ORDER BY 1,2;")
 
 (deftest test-pgwire-decimal-support
   (doseq [binary? [false true]]
-    (with-open [conn (jdbc-conn "prepareThreshold" -1 "binaryTransfer" binary?)
+    (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
                 ps (jdbc/prepare conn ["INSERT INTO table RECORDS {_id: ?, data: ?}"])]
       (jdbc/execute-batch! ps [[1 0.1M] [2 24580955505371094.000001M]])
       (jdbc/execute! conn ["INSERT INTO table RECORDS {_id: ?, data: ?}"
@@ -2747,7 +2749,7 @@ ORDER BY 1,2;")
           "if the driver doesn't know about keywords it might fall back to text")))
 
 (deftest better-assert-error-code-and-message-3878
-  (with-open [conn (jdbc-conn "autocommit" "false")]
+  (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (testing "outside transaction"
       (try
         (q conn ["ASSERT 2 < 1, 'boom'"] )

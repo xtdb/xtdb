@@ -16,6 +16,7 @@ import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
+import java.sql.Connection
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID.randomUUID
@@ -32,6 +33,24 @@ interface Xtdb : AutoCloseable {
 
     fun addMeterRegistry(meterRegistry: MeterRegistry)
 
+    interface ConnectionBuilder : java.sql.ConnectionBuilder {
+        fun port(port: Int): ConnectionBuilder
+        override fun user(username: String?): ConnectionBuilder
+        override fun password(password: String?): ConnectionBuilder
+        fun database(password: String?): ConnectionBuilder
+        fun option(key: String, value: Any?): ConnectionBuilder
+        override fun build(): Connection
+    }
+
+    interface DataSource : javax.sql.DataSource {
+        override fun getConnection() = createConnectionBuilder().build()
+
+        override fun getConnection(username: String?, password: String?) =
+            createConnectionBuilder().user(username).password(password).build()
+
+        override fun createConnectionBuilder(): ConnectionBuilder
+    }
+
     @Serializable
     data class Config(
         var server: ServerConfig? = ServerConfig(),
@@ -43,7 +62,7 @@ interface Xtdb : AutoCloseable {
         val compactor: CompactorConfig = CompactorConfig(),
         var authn: Authenticator.Factory = UserTable(),
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
-        var nodeId: String = System.getenv("XTDB_NODE_ID")?: randomUUID().toString().takeWhile { it != '-' }
+        var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
@@ -65,10 +84,11 @@ interface Xtdb : AutoCloseable {
         fun healthz(configure: HealthzConfig.() -> Unit) =
             healthz(HealthzConfig().also(configure))
 
-        fun garbageCollector(garbageCollector: GarbageCollectorConfig) = apply { this.garbageCollector = garbageCollector }
+        fun garbageCollector(garbageCollector: GarbageCollectorConfig) =
+            apply { this.garbageCollector = garbageCollector }
 
         @JvmSynthetic
-        fun garbageCollector(configure: GarbageCollectorConfig.() -> Unit) = 
+        fun garbageCollector(configure: GarbageCollectorConfig.() -> Unit) =
             garbageCollector(GarbageCollectorConfig().also(configure))
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
