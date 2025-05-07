@@ -573,8 +573,7 @@
                                     ;; not sure if handlling time zone explicitly is the right approach
                                     ;; might be cleaner to handle it like any other session param
                                     {:statement-type :set-time-zone
-                                     :tz (let [v (.getText (.characterString ctx))]
-                                           (subs v 1 (dec (count v))))})
+                                     :tz (sql/plan-expr (.zone ctx))})
 
                                   (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
@@ -1465,7 +1464,7 @@
                                  (into tx-opts))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{:keys [transaction session portals]} @conn-state
+  (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode]} transaction
         {:keys [^Clock clock, parameters]} session]
 
@@ -1529,8 +1528,17 @@
   ;; doesn't mean anything to us because we're always serializable
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn cmd-set-time-zone [conn {:keys [tz]}]
-  (set-time-zone conn tz)
+(defn- apply-args [sym args]
+  (let [args-map (zipmap (map (fn [idx]
+                                (symbol (str "?_" idx)))
+                              (range))
+                         args)]
+    (or (args-map sym)
+        (throw (client-err (str "missing arg: " sym))))))
+
+(defn cmd-set-time-zone [conn {:keys [tz args]}]
+  (let [tz (cond-> tz (symbol? tz) (apply-args args))]
+    (set-time-zone conn tz))
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
 (defn cmd-set-watermark [{:keys [conn-state] :as conn} {:keys [watermark-tx-id]}]
@@ -1722,9 +1730,6 @@
                      (assoc :bound-query bq,
                             :fields (->fields bq))))
 
-        :dml (-> stmt
-                 (assoc :args xt-args))
-
         :execute (let [^BoundQuery bq (->bq)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
                    ;; so now we bind the inner query and pretend this was the one we were running all along
@@ -1753,7 +1758,8 @@
                      (finally
                        (util/close bq))))
 
-        stmt))))
+        (-> stmt
+            (assoc :args xt-args))))))
 
 (defn unnamed-portal? [portal-name]
   (= "" portal-name))

@@ -1060,6 +1060,9 @@
   (visitSqlStandardString [_ ctx] (.accept ctx string-literal-visitor))
   (visitCEscapesString [_ ctx] (.accept ctx string-literal-visitor))
 
+  (visitStaticStringParam [this ctx] (.accept (.parameterSpecification ctx) this))
+  (visitStaticStringLiteral [this ctx] (.accept (.characterString ctx) this))
+
   (visitDateTimeLiteral0 [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
   (visitDateTimeExprLiteral [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
   (visitDateTimeExprParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))

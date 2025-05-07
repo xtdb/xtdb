@@ -818,6 +818,10 @@
           (jdbc/execute! conn ["SET TIME ZONE '+00:00'"])
           (t/is (= "Z" (q-tz conn))))
 
+        (t/testing "param"
+          (jdbc/execute! conn ["SET TIME ZONE ?" "Europe/London"])
+          (t/is (= "Europe/London" (q-tz conn))))
+
         (t/testing "random tz"
           (exec conn "SET TIME ZONE '+07:44'")
           (t/is (= "+07:44" (q-tz conn))))

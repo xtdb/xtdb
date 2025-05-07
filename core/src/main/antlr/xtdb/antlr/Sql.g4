@@ -29,7 +29,7 @@ directlyExecutableStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
-    | SET TIME ZONE characterString # SetTimeZoneStatement
+    | SET TIME ZONE zone=staticStringExpr # SetTimeZoneStatement
     | SET WATERMARK ( TO | '=' ) literal # SetWatermarkStatement
     | SET identifier ( TO | '=' ) literal # SetSessionVariableStatement
     | SHOW showVariable # ShowVariableStatement
@@ -222,6 +222,11 @@ numericExpr
     | numericExpr (BITWISE_OR | BITWISE_XOR) numericExpr #NumericBitwiseOrExpr
     | numericExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) numericExpr #NumericBitwiseShiftExpr
     | exprPrimary #ExprPrimary1
+    ;
+
+staticStringExpr
+    : characterString # StaticStringLiteral
+    | parameterSpecification # StaticStringParam
     ;
 
 dateTimeExpr
