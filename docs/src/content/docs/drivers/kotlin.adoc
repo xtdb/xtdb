@@ -10,9 +10,9 @@ To install the XTDB JDBC driver, add the following dependency to your Gradle `bu
 
 [source,kotlin]
 ----
-// https://mvnrepository.com/artifact/com.xtdb/xtdb-jdbc
+// https://mvnrepository.com/artifact/com.xtdb/xtdb-api
 
-implementation("com.xtdb:xtdbjdbc:$XTDB_VERSION")
+implementation("com.xtdb:xtdb-api:$XTDB_VERSION")
 ----
 
 Or, for Maven:
@@ -21,7 +21,7 @@ Or, for Maven:
 ----
 <dependency>
     <groupId>com.xtdb</groupId>
-    <artifactId>xtdbjdbc</artifactId>
+    <artifactId>xtdb-api</artifactId>
     <version>$XTDB_VERSION</version>
 </dependency>
 ----
