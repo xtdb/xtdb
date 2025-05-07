@@ -1,7 +1,6 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [integrant.core :as ig]
-            [next.jdbc :as jdbc]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
             [xtdb.error :as err]
@@ -20,11 +19,11 @@
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
-           (java.util HashMap Map)
+           (java.util HashMap)
            (java.util.concurrent ExecutionException)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api TransactionKey TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ConnectionBuilder)
+           (xtdb.api DataSource TransactionKey TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
@@ -92,6 +91,11 @@
 
   (getServerReadOnlyPort [this]
     (get-in (util/component this :xtdb.pgwire/server) [:read-only :port] -1))
+
+  (createConnectionBuilder [this]
+    (let [server (util/component this :xtdb.pgwire/server)
+          ^DataSource data-source (or (:read-write server) (:read-only server))]
+      (.createConnectionBuilder data-source)))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

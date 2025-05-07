@@ -37,7 +37,7 @@
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.commons.codec.binary Hex]
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api Authenticator ServerConfig Xtdb$Config Xtdb$ConnectionBuilder Xtdb$DataSource)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.time Interval]
@@ -53,7 +53,7 @@
                             ^:unsynchronized-mutable ^String password
                             ^:unsynchronized-mutable ^String database
                             ^Map opts]
-  Xtdb$ConnectionBuilder
+  DataSource$ConnectionBuilder
   (port [this port]
     (set! (.-port this) port)
     this)
@@ -107,7 +107,7 @@
                    authn-rules
 
                    !tmp-nodes]
-  Xtdb$DataSource
+  DataSource
   (createConnectionBuilder [_]
     (ConnectionBuilder. "localhost" port "xtdb" nil "xtdb" (HashMap.)))
 

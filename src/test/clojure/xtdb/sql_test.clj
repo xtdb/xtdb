@@ -283,7 +283,7 @@
            (xt/q tu/*node* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5])))
 
   (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
-           (jdbc/execute! tu/*conn* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5]
+           (jdbc/execute! tu/*node* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5]
                           tu/jdbc-qopts))))
 
 (t/deftest test-unnest
@@ -770,7 +770,7 @@
              (xt/q tu/*node* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"])))
 
     (t/is (= [{:xt/id :matthew}]
-             (jdbc/execute! tu/*conn* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"]
+             (jdbc/execute! tu/*node* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"]
                             tu/jdbc-qopts)))))
 
 (t/deftest test-order-by-null-handling-159
@@ -2359,7 +2359,7 @@ UNION ALL
               [xtdb public/foo _valid_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
               [xtdb public/foo x :utf8]}
 
-           (->> (jdbc/execute! tu/*conn*
+           (->> (jdbc/execute! tu/*node*
                                ["SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo' ORDER BY column_name;"]
                                tu/jdbc-qopts)
                 (into #{} (map (juxt (comp symbol :table-catalog)

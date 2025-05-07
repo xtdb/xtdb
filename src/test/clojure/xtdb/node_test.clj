@@ -599,7 +599,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                         field_name3: {baz: -4113466}})"])
 
   (t/is (= [{:data {:field-name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
-           (jdbc/execute! tu/*conn* ["SELECT t1.data FROM t1"]
+           (jdbc/execute! tu/*node* ["SELECT t1.data FROM t1"]
                           tu/jdbc-qopts))
         "testing insert worked")
 
@@ -609,7 +609,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         "testing insert worked")
 
   (t/is (= [{:field-name2 true}]
-           (jdbc/execute! tu/*conn*
+           (jdbc/execute! tu/*node*
                           ["SELECT (t2.field_name1).field_name2, t2.field$name4.baz
                             FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"]
                           tu/jdbc-qopts))

@@ -32,14 +32,14 @@
            (org.pg.error PGError PGErrorResponse)
            (org.postgresql.util PGInterval PGobject PSQLException)
            (xtdb JsonSerde)
-           (xtdb.api Xtdb$ConnectionBuilder)
+           (xtdb.api DataSource$ConnectionBuilder)
            xtdb.pgwire.Server))
 
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
 
 (def ^:dynamic ^:private *port* nil)
-(def ^:dynamic ^:private ^xtdb.api.Xtdb$DataSource *server* nil)
+(def ^:dynamic ^:private ^xtdb.api.DataSource *server* nil)
 
 (t/use-fixtures :once
 
@@ -84,8 +84,8 @@
 (defn- jdbc-conn
   (^Connection [] (jdbc-conn nil))
   (^Connection [opts]
-   (-> ^Xtdb$ConnectionBuilder
-       (reduce (fn [^Xtdb$ConnectionBuilder cb [k v]]
+   (-> ^DataSource$ConnectionBuilder
+       (reduce (fn [^DataSource$ConnectionBuilder cb [k v]]
                  (.option cb k v))
 
                (-> (.createConnectionBuilder *server*)
@@ -1632,7 +1632,7 @@
                 [:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}" [3 "three"]]
                 [:sql "INSERT INTO foo RECORDS $1" [{:_id 4, :a "four"}]]]
                (-> @(:server-state *server*)
-                   (get-in [:connections 2 :conn-state])
+                   (get-in [:connections 1 :conn-state])
                    deref
                    (get-in [:transaction :dml-buf])))))
 
@@ -2752,7 +2752,7 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (testing "outside transaction"
       (try
-        (q conn ["ASSERT 2 < 1, 'boom'"] )
+        (q conn ["ASSERT 2 < 1, 'boom'"])
         (catch PSQLException e
           (t/is (= "P0004" (.getSQLState e)))
           (t/is (= "ERROR: boom"

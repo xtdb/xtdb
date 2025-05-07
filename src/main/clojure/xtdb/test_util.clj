@@ -75,9 +75,6 @@
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^xtdb.api.Xtdb *node*)
 
-#_{:clj-kondo/ignore [:uninitialized-var]}
-(def ^:dynamic ^java.sql.Connection *conn*)
-
 (defn with-opts
   ([opts] (partial with-opts opts))
   ([opts f]
@@ -92,9 +89,8 @@
     (f)))
 
 (defn with-node [f]
-  (util/with-open [node (xtn/start-node *node-opts*)
-                   conn (jdbc/get-connection node)]
-    (binding [*node* node, *conn* conn]
+  (util/with-open [node (xtn/start-node *node-opts*)]
+    (binding [*node* node]
       (f))))
 
 (extend-protocol jdbc.prep/SettableParameter

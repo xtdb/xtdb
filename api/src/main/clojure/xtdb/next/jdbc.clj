@@ -109,7 +109,3 @@
   (read-column-by-index [^PGobject obj _rs-meta _idx]
     (<-pg-obj obj)))
 
-(try
-  (Class/forName "xtdb.api.Xtdb")
-  (require 'xtdb.next.jdbc.impls)
-  (catch ClassNotFoundException _))

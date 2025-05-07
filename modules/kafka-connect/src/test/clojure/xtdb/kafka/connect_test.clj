@@ -19,7 +19,7 @@
                offset))
 
 (t/deftest e2e-test
-  (let [sink (partial kc/submit-sink-records tu/*conn*)]
+  (let [sink (partial kc/submit-sink-records tu/*node*)]
     (t/testing "basic record_key"
       (let [props (ktu/->config {"jdbcUrl" "jdbcUrl"
                                  "id.mode" "record_key"})]
