@@ -11,8 +11,11 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
-            [xtdb.types])
-  (:import (xtdb.types RegClass RegProc)))
+            [xtdb.types]
+            [xtdb.util :as util])
+  (:import (xtdb.types RegClass RegProc)
+           (java.nio.file Files)
+           (java.nio.file.attribute FileAttribute)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -24,6 +27,9 @@
          actual-plan# ~(nth form 2)]
      (binding [*print-namespace-maps* false]
        (when regen-expected-files?
+         (when-not (io/resource exp-plan-file-path#)
+           (Files/createFile (util/->path (format "src/test/resources/%s" exp-plan-file-path#))
+                             (make-array FileAttribute 0)))
          (spit (io/resource exp-plan-file-path#) (with-out-str (clojure.pprint/pprint actual-plan#))))
        (if-let [exp-plan-file# (io/resource exp-plan-file-path#)]
          (let [exp-plan# (read-string (slurp exp-plan-file#))
