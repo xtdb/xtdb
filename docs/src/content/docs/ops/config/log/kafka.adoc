@@ -95,3 +95,65 @@ The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a string s
 ----
 org.apache.kafka.common.security.plain.PlainLoginModule required username="username" password="password";
 ----
+
+[#durability]
+== Kafka Log Durability
+
+Kafka-backed logs offer strong durability, but require tuning and backup strategies to align with your recovery objectives.
+
+=== Recommended Kafka Settings
+
+To minimize the risk of data loss:
+
+* **Replicate the topic** - set a replication factor of `3+` for fault tolerance
+* **Enforce quorum writes** - use `min.insync.replicas > 1`
+* **Tune retention** - ensure `retention.ms` and/or `retention.bytes` keep unindexed messages long enough to allow for safe backup or flushing
+
+XTDB sets safe producer defaults, but you must verify your topic-level configs.
+
+See https://kafka.apache.org/documentation/[Apache Kafka documentation^] for details.
+
+Managed services like https://www.confluent.io/confluent-cloud/[Confluent Cloud^] may offer higher guarantees and simplified observability.
+
+[#backup]
+=== Strategies for Kafka Log Backup
+
+There are three main ways to safeguard your XTDB Kafka log:
+
+==== Point-in-Time Backups
+
+[WARNING]
+====
+Always back up the storage module **before** backing up the log.  
+Restoring a log without its corresponding flushed storage state may result in inconsistency and force an epoch reset.
+====
+
+* Take backups **after** a successful XTDB storage flush.
+* Capture **only committed** Kafka messages (exclude in-flight transactions).
+* Use Kafka tooling or snapshotting scripts.
+
+==== Continuous Replication
+
+Use Kafka-native tools to replicate log data between clusters:
+
+* https://kafka.apache.org/documentation/#basic_ops_mirror_maker[MirrorMaker^]
+* https://docs.confluent.io/platform/current/multi-dc-deployments/replicator/index.html[Confluent Replicator^]
+
+This allows for:
+
+* Geo-redundancy
+* Low-RPO disaster recovery
+* Hot-standby clusters
+
+Note: Replication **does not** replace backups — it only increases availability.
+
+==== Application-Level Transaction Replay
+
+XTDB can rebuild its state from upstream sources (event logs, message queues) used to submit transactions.
+
+Advantages:
+
+* Independent recovery source
+* Replay can be filtered, transformed, or validated
+* Fills gaps between backup and failure
+

@@ -156,6 +156,7 @@ export default defineConfig({
                             items: [
                                 { label: 'Overview', link: '/ops/backup-and-restore/overview' },
                                 { label: 'Out of Sync Log & Intact Storage', link: '/ops/backup-and-restore/out-of-sync-log' },
+                                
                             ]
                         },
                         { label: 'Troubleshooting', link: '/ops/troubleshooting' },
