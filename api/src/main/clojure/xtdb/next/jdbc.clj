@@ -1,10 +1,5 @@
 (ns xtdb.next.jdbc
-  "This namespace contains several helper functions for working with XTDB and next.jdbc.
-
-  Side effects - `require`-ing this namespace:
-  - extends the next.jdbc protocols for XTDB nodes
-  - implements `next.jdbc.result-set/ReadableColumn` for `PGobject`, using XTDB's extensions for Transit and JSON
-  "
+  "This namespace contains several helper functions for working with XTDB and next.jdbc. "
   (:require [clojure.walk :as w]
             [next.jdbc.result-set :as nj-rs]
             [xtdb.serde :as serde])
@@ -14,7 +9,6 @@
            [java.util List Map Set]
            org.postgresql.util.PGobject
            xtdb.api.query.IKeyFn
-           xtdb.JsonSerde
            xtdb.util.NormalForm))
 
 (defn ->pg-obj
@@ -82,30 +76,4 @@
       rs
       (assoc opts :label-fn label-fn)))
    col-reader))
-
-(defmulti <-pg-obj
-  (fn [^PGobject obj]
-    (.getType obj)))
-
-(defmethod <-pg-obj "transit" [^PGobject obj]
-  (-> (.getValue obj)
-      (.getBytes StandardCharsets/UTF_8)
-      (serde/read-transit :json)))
-
-(defmethod <-pg-obj "json" [^PGobject obj]
-  (JsonSerde/decode (.getValue obj)))
-
-(defmethod <-pg-obj "jsonb" [^PGobject obj]
-  (JsonSerde/decode (.getValue obj)))
-
-(defmethod <-pg-obj "keyword" [^PGobject obj]
-  (keyword (.getValue obj)))
-
-(defmethod <-pg-obj :default [^PGobject obj]
-  obj)
-
-(extend-protocol nj-rs/ReadableColumn
-  PGobject
-  (read-column-by-index [^PGobject obj _rs-meta _idx]
-    (<-pg-obj obj)))
 

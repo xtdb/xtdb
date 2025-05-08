@@ -7,12 +7,12 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql :as xtql])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream OutputStream Writer]
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.net URI)
            [java.nio ByteBuffer]
            (java.nio.file Path Paths)
            (java.time Duration Period)
-           java.util.List
+           [java.util Base64 List]
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
@@ -202,7 +202,9 @@
   (def transit-read-handlers
     (merge transit/default-read-handlers
            tl/transit-read-handlers
-           {"xtdb/clj-form" (transit/read-handler ClojureForm/new)
+           {"r" (transit/read-handler uri-reader)
+
+            "xtdb/clj-form" (transit/read-handler ClojureForm/new)
             "xtdb/tx-key" (transit/read-handler map->TxKey)
             "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
             "xtdb/key-fn" (transit/read-handler read-key-fn)

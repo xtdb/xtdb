@@ -1,8 +1,7 @@
 package xtdb.jdbc
 
-import org.postgresql.PGConnection
 import org.postgresql.jdbc.PgConnection
-import java.sql.DriverManager
+import java.sql.*
 import java.util.*
 
 class Driver : org.postgresql.Driver() {
@@ -17,8 +16,11 @@ class Driver : org.postgresql.Driver() {
 
     override fun acceptsURL(url: String) = super.acceptsURL(url.asPgUrl)
 
-    class Connection(conn: PgConnection) : PGConnection by conn, java.sql.Connection by conn
-
-    override fun connect(url: String, info: Properties?) =
-        (super.connect(url.asPgUrl, info) as? PgConnection)?.let(::Connection)
+    override fun connect(url: String, info: Properties?): Connection? =
+        (super.connect(url.asPgUrl, info) as? PgConnection)?.let(::XtConnection)
+            ?.also { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("SET FALLBACK_OUTPUT_FORMAT = 'transit'")
+                }
+            }
 }

@@ -291,6 +291,7 @@
 
 (deftest json-representation-test
   (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["SET FALLBACK_OUTPUT_FORMAT = 'json'"])
     (doseq [{:keys [sql, clj, clj-pred]} json-representation-examples]
       (testing (str "SQL expression " sql " should parse to " clj)
         (with-open [stmt (.prepareStatement conn (format "SELECT a FROM (VALUES (%s), (ARRAY [])) a (a)" sql))]
@@ -299,12 +300,8 @@
             ;; one row in result set
             (.next rs)
 
-            (testing "record set contains expected object"
-              (is (instance? PGobject (.getObject rs 1)))
-              (is (= "json" (.getType ^PGobject (.getObject rs 1)))))
-
             (testing "json parses to expected clj value"
-              (let [clj-value (JsonSerde/decode (str (.getObject rs 1)))]
+              (let [clj-value (.getObject rs 1)]
                 (when clj
                   (is (= clj clj-value) "parsed value should = :clj"))
                 (when clj-pred
@@ -491,18 +488,21 @@
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
                                "preparedStatementCacheQueries" 0
                                "preparedStatementCacheMiB" 0})]
-    (dotimes [i 3]
+    ;; the Driver now creates a statement.
+    ;; we do close this, but the PG driver appears to retain it
+    (t/is (= #{"", "S_1"} (set (keys (:prepared-statements @(:conn-state (get-last-conn)))))))
 
+    (dotimes [i 3]
       (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" i))]
         (.executeQuery stmt)))
 
-    (testing "no portal should remain, they are closed by sync, explicit close or rebinding the unnamed portal"
-      (is (empty? (:portals @(:conn-state (get-last-conn))))))
+    (t/testing "no portal should remain, they are closed by sync, explicit close or rebinding the unnamed portal"
+      (t/is (empty? (:portals @(:conn-state (get-last-conn))))))
 
-    (testing "the last statement should still exist as they last the duration of the session and are only closed by
-              an explicit close message, which the pg driver sends between execs"
-      ;; S_3 because i == 3
-      (is (= #{"", "S_3"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
+    (t/testing "the last statement should still exist as they last the duration of the session and are only closed by
+                an explicit close message, which the pg driver sends between execs"
+      ;; S_4 because initial q, then i == 3
+      (t/is (= #{"", "S_1" "S_4"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
 
 (defn psql-available?
   "Returns true if psql is available in $PATH"
@@ -1290,7 +1290,7 @@
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
     (t/is (= [{:xt/id 2, :committed false,
-               :error {:error-key "xtdb/assert-failed", :message "Assert failed"}}
+               :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]}
               {:xt/id 1, :committed true}
               {:xt/id 0, :committed true}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
@@ -1427,21 +1427,18 @@
 (deftest test-nulls-in-polymorphic-types
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a) VALUES (1, 'one'), (2, 1), (3, NULL)"))
-    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY _id")]
+    (with-open [stmt (.prepareStatement conn "SELECT a FROM foo ORDER BY _id")
+                rs (.executeQuery stmt)]
+      (t/is (= [{"a" "transit"}]
+               (result-metadata stmt)
+               (result-metadata rs)))
 
-      (with-open [rs (.executeQuery stmt)]
+      (let [[x y z :as res] (mapv #(get % "a") (rs->maps rs))]
+        (t/is (= 3 (count res)))
 
-        (t/is (= [{"a" "json"}]
-                 (result-metadata stmt)
-                 (result-metadata rs)))
-
-        (let [[x y z :as res] (mapv #(get % "a") (rs->maps rs))]
-
-          (t/is (= 3 (count res)))
-
-          (t/is (= "\"one\"" (.getValue x)))
-          (t/is (= "1" (.getValue y)))
-          (t/is (nil? z)))))))
+        (t/is (= "one" x))
+        (t/is (= 1 y))
+        (t/is (nil? z))))))
 
 (deftest test-datetime-types
   (doseq [{:keys [^Class type val pg-type]} [{:type LocalDate :val #xt/date "2018-07-25" :pg-type "date"}
@@ -1919,13 +1916,13 @@ ORDER BY t.oid DESC LIMIT 1"
     (with-open [stmt (.prepareStatement conn "SELECT v FROM foo")
                 rs (.executeQuery stmt)]
 
-      (t/is (= [{"v" "json"}]
+      (t/is (= [{"v" "transit"}]
                (result-metadata stmt)
                (result-metadata rs)))
 
       (.next rs)
-      (t/is (= "{\"a\":1,\"b\":2}"
-               (.getValue ^PGobject (.getObject rs 1)))))
+      (t/is (= {"a" 1, "b" 2}
+               (.getObject rs 1))))
 
     (t/testing "qualified names"
       (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
@@ -1949,8 +1946,8 @@ ORDER BY t.oid DESC LIMIT 1"
                                           :from :users}))))
             "using our transformers"))))
 
-(deftest test-fallback-transit
-  (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
+(deftest test-nested-transit
+  (with-open [conn (jdbc-conn)]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: TIMESTAMP '2020-01-01T00:00:00Z'}}"])
 
     (with-open [stmt (.prepareStatement conn "SELECT * FROM foo")]
@@ -2362,7 +2359,8 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT '00f0'::bytea AS v"]))))))
 
       (t/testing "nested varbinary"
-        (t/is (= [{:v {:ba "0x00f0"}}] (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"]))
+        (t/is (= [{:v {:ba (ByteBuffer/wrap (byte-array [0x00 0xf0]))}}]
+                 (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"]))
               "reading nested varbinary result")))
 
     (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
@@ -2371,9 +2369,9 @@ ORDER BY t.oid DESC LIMIT 1"
 
   (t/testing "uri literals"
     (with-open [conn (jdbc-conn)]
-      (t/is (= "http://xtdb.com" (:v (first (jdbc/execute! conn ["SELECT URI 'http://xtdb.com' AS v"])))))
+      (t/is (= #xt/uri "http://xtdb.com" (:v (first (jdbc/execute! conn ["SELECT URI 'http://xtdb.com' AS v"])))))
 
-      (t/is (= [{:v {:uri "http://xtdb.com"}}] (q conn ["SELECT OBJECT(uri: URI 'http://xtdb.com') AS v"]))
+      (t/is (= [{:v {:uri #xt/uri "http://xtdb.com"}}] (q conn ["SELECT OBJECT(uri: URI 'http://xtdb.com') AS v"]))
             "nested uri"))
 
     (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
@@ -2496,10 +2494,10 @@ ORDER BY t.oid DESC LIMIT 1"
                :system-time #inst "2020-01-01T00:00:00.000000000-00:00"}
               {:xt/id 1,
                :committed false,
-               :error {:tx-key {:tx-id 1, :system-time "2019-01-01T00:00Z"},
-                       :latest-completed-tx {:tx-id 0, :system-time "2020-01-01T00:00Z"},
-                       :error-key "invalid-system-time",
-                       :message "specified system-time older than current tx"},
+               :error #xt/illegal-arg [:invalid-system-time
+                                       "specified system-time older than current tx"
+                                       {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01T00:00:00Z"},
+                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}],
                :system-time #inst "2020-01-02T00:00:00.000000000-00:00"}]
 
              (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
