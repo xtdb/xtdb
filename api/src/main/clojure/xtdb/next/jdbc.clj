@@ -4,28 +4,10 @@
             [next.jdbc.result-set :as nj-rs]
             [xtdb.serde :as serde])
   (:import clojure.lang.Keyword
-           java.nio.charset.StandardCharsets
            [java.sql ResultSet]
            [java.util List Map Set]
-           org.postgresql.util.PGobject
            xtdb.api.query.IKeyFn
            xtdb.util.NormalForm))
-
-(defn ->pg-obj
-  "This function serialises a Clojure/Java (potentially nested) data structure into a PGobject,
-   in order to preserve the data structure's type information when stored in XTDB."
-  [v]
-  (doto (PGobject.)
-    (.setType "transit")
-    (.setValue (-> v
-                   (->> (w/postwalk (fn [v]
-                                      (cond-> v
-                                        (map? v) (update-keys (fn [k]
-                                                                (if (keyword? k)
-                                                                  (NormalForm/normalForm ^Keyword k)
-                                                                  k)))))))
-                   (serde/write-transit :json)
-                   (String. StandardCharsets/UTF_8)))))
 
 (defn- denormalize-keys [v, ^IKeyFn key-fn]
   (w/prewalk (fn [v]

@@ -1621,10 +1621,10 @@
 (t/deftest test-combines-dml
   (with-open [conn (jdbc-conn)]
     (jdbc/with-transaction [tx conn]
-      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 1, :a "one"})])
-      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 2, :a "two"})])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 1, :a "one"}])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 2, :a "two"}])
       (jdbc/execute! tx ["INSERT INTO foo RECORDS {_id: ?, a: ?}" 3, "three"])
-      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 4, :a "four"})])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 4, :a "four"}])
 
       ;; HACK.
       (t/is (= [[:sql "INSERT INTO foo RECORDS $1"
@@ -1911,7 +1911,7 @@ ORDER BY t.oid DESC LIMIT 1"
                            "transit" nil true])))))
 
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
-    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" (xt-jdbc/->pg-obj {:a 1, :b 2})])
+    (jdbc/execute! conn ["INSERT INTO foo (_id, v) VALUES (1, ?)" {:a 1, :b 2}])
 
     (with-open [stmt (.prepareStatement conn "SELECT v FROM foo")
                 rs (.executeQuery stmt)]
@@ -1926,12 +1926,10 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (t/testing "qualified names"
       (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
-                           (xt-jdbc/->pg-obj {:xt/id "jms",
-                                              :user/first-name "James"})])
+                           {:xt/id "jms", :user/first-name "James"}])
 
       (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
-                           (xt-jdbc/->pg-obj {:_id "jdt",
-                                              :user$first_name "Jeremy"})])
+                           {:_id "jdt", :user$first_name "Jeremy"}])
 
       (t/is (= #{{:_id "jdt", :user$first_name "Jeremy"}
                  {:_id "jms", :user$first_name "James"}}
@@ -2298,10 +2296,10 @@ ORDER BY t.oid DESC LIMIT 1"
   (with-open [conn (jdbc-conn)
               ps (jdbc/prepare conn ["INSERT INTO foo RECORDS ?, ?"])]
     (jdbc/execute-batch! ps
-                         [[(xt-jdbc/->pg-obj {:xt/id 1, :v 1})
-                           (xt-jdbc/->pg-obj {:xt/id 2, :v 1})]
-                          [(xt-jdbc/->pg-obj {:xt/id 1, :v 2})
-                           (xt-jdbc/->pg-obj {:xt/id 3, :v 1})]])))
+                         [[{:xt/id 1, :v 1}
+                           {:xt/id 2, :v 1}]
+                          [{:xt/id 1, :v 2}
+                           {:xt/id 3, :v 1}]])))
 
 (t/deftest test-multiple-tzs-3723
   (with-open [conn (jdbc-conn)]
@@ -2727,10 +2725,9 @@ ORDER BY 1,2;")
                     (every? #(compare-decimals-with-scale (:data (first %)) (:data (second %))))))
             "correct scale"))))
 
-
 (deftest keyword-roundtripping-4237
   (with-open [conn (jdbc-conn)]
-    (jdbc/execute! conn ["INSERT INTO docs RECORDS ?" (xt-jdbc/->pg-obj {:xt/id 1, :foo :bar})])
+    (jdbc/execute! conn ["INSERT INTO docs RECORDS ?" {:xt/id 1, :foo :bar}])
 
     (with-open [ps (jdbc/prepare conn ["FROM docs"])]
 

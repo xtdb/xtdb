@@ -2521,15 +2521,11 @@ UNION ALL
            (xt/q tu/*node* "SELECT STR('hello, ', NULL, 42.0, ' at ', DATE '2020-01-01') str"))))
 
 (t/deftest insert-with-transit-param-3907
-  (letfn [(->serialised-records [records]
-            (map xt-jdbc/->pg-obj records))
-
-          (jdbc-insert-txn [table records]
+  (letfn [(jdbc-insert-txn [table records]
             (let [total (count records)
                   into-table (partial str "INSERT INTO " table " RECORDS ")
-                  args (interpose ", " (repeat total "?"))
-                  pg-objects (->serialised-records records)]
-              (into [(apply into-table args)] pg-objects)))
+                  args (interpose ", " (repeat total "?"))]
+              (into [(apply into-table args)] records)))
 
           (jdbc-insert-records [conn table records]
             (jdbc/execute! conn (jdbc-insert-txn table records) {:builder-fn xt-jdbc/builder-fn}))]

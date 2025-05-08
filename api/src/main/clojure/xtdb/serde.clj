@@ -1,26 +1,31 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
     xtdb.serde
   (:require [clojure.string :as str]
+            [clojure.walk :as w]
             [cognitect.transit :as transit]
             [xtdb.error :as err]
             [xtdb.mirrors.time-literals :as tl]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql :as xtql])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
+  (:import clojure.lang.Keyword
+           [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.net URI)
            [java.nio ByteBuffer]
+           java.nio.charset.StandardCharsets
            (java.nio.file Path Paths)
            (java.time Duration Period)
-           [java.util Base64 List]
+           [java.util List]
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
+           org.postgresql.util.PGobject
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
            (xtdb.time Interval)
            (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
            (xtdb.types ClojureForm ZonedDateTimeRange)
+           xtdb.util.NormalForm
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
 
 (defrecord TxKey [tx-id system-time]
@@ -312,3 +317,19 @@
      (-> (transit/writer baos (or fmt :msgpack) {:handlers transit-write-handler-map})
          (transit/write v))
      (.toByteArray baos))))
+
+(defn ->pg-obj
+  "This function serialises a Clojure/Java (potentially nested) data structure into a PGobject,
+   in order to preserve the data structure's type information when stored in XTDB."
+  [v]
+  (doto (PGobject.)
+    (.setType "transit")
+    (.setValue (-> v
+                   (->> (w/postwalk (fn [v]
+                                      (cond-> v
+                                        (map? v) (update-keys (fn [k]
+                                                                (if (keyword? k)
+                                                                  (NormalForm/normalForm ^Keyword k)
+                                                                  k)))))))
+                   (write-transit :json)
+                   (String. StandardCharsets/UTF_8)))))

@@ -4,8 +4,12 @@ import clojure.lang.Keyword
 import org.postgresql.core.BaseConnection
 import org.postgresql.jdbc.PgConnection
 import org.postgresql.util.PGobject
+import xtdb.types.ZonedDateTimeRange
 import xtdb.util.TransitFormat.JSON
 import xtdb.util.readTransit
+import xtdb.util.requiringResolve
+import xtdb.util.writeTransit
+import java.net.URI
 import java.sql.*
 import xtdb.decode as decodeJson
 
@@ -50,6 +54,45 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
         override fun executeQuery() = XtResultSet(inner.executeQuery())
         override fun executeQuery(sql: String) = XtResultSet(inner.executeQuery(sql))
         override fun getGeneratedKeys() = XtResultSet(inner.generatedKeys)
+
+        private fun setTransit(parameterIndex: Int, x: Any?) {
+            inner.setObject(
+                parameterIndex,
+                requiringResolve("xtdb.serde/->pg-obj").invoke(x)
+            )
+        }
+
+        override fun setObject(parameterIndex: Int, x: Any?) {
+            when (x) {
+                is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI, is ZonedDateTimeRange ->
+                    setTransit(parameterIndex, x)
+
+                else -> inner.setObject(parameterIndex, x)
+            }
+        }
+
+        override fun setObject(parameterIndex: Int, x: Any?, targetSqlType: Int) {
+            setObject(parameterIndex, x, targetSqlType, -1)
+        }
+
+        override fun setObject(parameterIndex: Int, x: Any?, targetSqlType: Int, scaleOrLength: Int) {
+            if (targetSqlType == Types.OTHER)
+                when (x) {
+                    is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI, is ZonedDateTimeRange ->
+                        setTransit(parameterIndex, x)
+
+                    else -> inner.setObject(parameterIndex, x, targetSqlType, scaleOrLength)
+                }
+            else inner.setObject(parameterIndex, x, targetSqlType, scaleOrLength)
+        }
+
+        override fun setObject(parameterIndex: Int, x: Any?, targetSqlType: SQLType?) {
+            setObject(parameterIndex, x, targetSqlType, -1)
+        }
+
+        override fun setObject(parameterIndex: Int, x: Any?, targetSqlType: SQLType?, scaleOrLength: Int) {
+            throw SQLFeatureNotSupportedException("setObject(int, Object, SQLType, int)")
+        }
     }
 
     override fun createStatement() = XtStatement(conn.createStatement())

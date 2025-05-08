@@ -122,7 +122,7 @@
                   valid-from (get doc (keyword (.getValidFromField conf)))
                   valid-to (get doc (keyword (.getValidToField conf)))]
               [(format "INSERT INTO %s RECORDS ?" table)
-               (xt-jdbc/->pg-obj (assoc doc :_id id, :_valid_from valid-from, :_valid_to valid-to))])
+               (assoc doc :_id id, :_valid_from valid-from, :_valid_to valid-to)])
 
             (= "record_key" (.getIdMode conf))
             (let [id (find-record-key-eid conf record)]
