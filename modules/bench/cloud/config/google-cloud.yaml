@@ -1,0 +1,13 @@
+healthz:
+  port: 8080
+
+log: !Local
+  path: !Env XTDB_GCP_LOCAL_LOG_PATH
+
+storage: !Remote
+  objectStore: !GoogleCloud
+    projectId: !Env XTDB_GCP_PROJECT_ID
+    bucket: !Env XTDB_GCP_BUCKET
+    prefix: "xtdb-object-store"
+  localDiskCache: /var/lib/xtdb/buffers/
+  maxDiskCachePercentage: 75

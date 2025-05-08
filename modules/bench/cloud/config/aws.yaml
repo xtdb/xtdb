@@ -1,0 +1,13 @@
+healthz:
+  port: 8080
+
+log: !Kafka
+  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  topic: !Env XTDB_LOG_TOPIC
+
+storage: !Remote
+  objectStore: !S3
+    bucket: !Env XTDB_S3_BUCKET
+    prefix: "xtdb-object-store"
+  localDiskCache: /var/lib/xtdb/buffers
+  maxDiskCachePercentage: 75
