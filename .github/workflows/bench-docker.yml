@@ -42,7 +42,7 @@ jobs:
           tags: |
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=raw,value=${{ github.sha }}
+            type=sha
         
       - name: Build shadowJar for bench
         uses: gradle/actions/setup-gradle@v3
