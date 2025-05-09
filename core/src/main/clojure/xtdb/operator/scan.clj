@@ -13,7 +13,8 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            java.nio.ByteBuffer
            java.time.Instant
@@ -55,7 +56,8 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- ->temporal-bounds [^RelationReader args, {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
+(defn- ->temporal-bounds [^BufferAllocator alloc, ^RelationReader args,
+                          {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
   (letfn [(->time-μs [[tag arg]]
             (case tag
               :literal (-> arg
@@ -64,7 +66,16 @@
                                  (.getObject 0))
                              (time/sql-temporal->micros expr/*default-tz*))
               :now (-> (expr/current-time)
-                       (time/instant->micros))))
+                       (time/instant->micros))
+              :expr (let [param-types (expr/->param-types args)
+                          projection (expr/->expression-projection-spec "_temporal_expression"
+                                                                        (expr/form->expr arg {:param-types param-types})
+                                                                        {:param-types param-types})]
+                      (util/with-open [dummy-rel (vw/open-args alloc [42])
+                                       res (.project projection alloc dummy-rel {} args)]
+                        (let [inst-like (.getObject res 0)]
+                          (time/expect-instant inst-like)
+                          (-> inst-like time/->instant time/instant->micros))))))
           (apply-constraint [constraint]
             (if-let [[tag & args] constraint]
               (case tag
@@ -74,11 +85,11 @@
 
                 ;; overlaps [time-from time-to]
                 :in (let [[from to] args]
-                      (TemporalDimension/in (->time-μs (or from [:now]))
+                      (TemporalDimension/in (->time-μs (or from [:expr nil]))
                                             (some-> to ->time-μs)))
 
                 :between (let [[from to] args]
-                           (TemporalDimension/between (->time-μs (or from [:now]))
+                           (TemporalDimension/between (->time-μs (or from [:expr nil]))
                                                       (some-> to ->time-μs)))
 
                 :all-time (TemporalDimension.))
@@ -226,9 +237,9 @@
                                scan-opts (-> scan-opts
                                              (update :for-valid-time
                                                      (fn [fvt]
-                                                       (or fvt [:at [:now :now]]))))
+                                                       (or fvt [:at [:now]]))))
                                ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table-name))
-                               temporal-bounds (->temporal-bounds args scan-opts snapshot-time)]
+                               temporal-bounds (->temporal-bounds allocator args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
