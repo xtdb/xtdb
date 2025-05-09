@@ -1071,10 +1071,11 @@
                                             (.putLong micros))]
                                    (.array bb)))
 
-                 :write-text (fn [_env ^IVectorReader rdr idx]
-                               (-> ^LocalDateTime (.getObject rdr idx)
-                                   (.format iso-offset-date-time-formatter-with-space)
-                                   (utf8)))})
+                 :write-text (fn [env ^IVectorReader rdr idx]
+                               (let [^LocalDateTime ldt (.getObject rdr idx)]
+                                 (utf8 (case (get-in env [:parameters "datestyle"])
+                                         "iso8601" (str ldt)
+                                         (.format ldt iso-offset-date-time-formatter-with-space)))))})
 
    :timestamptz (let [typlen 8]
                   {:typname "timestamptz"
@@ -1113,14 +1114,12 @@
                                                 (.putLong micros))]
                                        (.array bb))))
 
-                   :write-text (fn [_env ^IVectorReader rdr idx]
-                                 ;; pgjdbc allows you to return offsets in string format,
-                                 ;; seems non-standard, but the standard isn't clear.
+                   :write-text (fn [env ^IVectorReader rdr idx]
                                  (when-let [^ZonedDateTime zdt (.getObject rdr idx)]
-                                   ;; getObject on EOT returns nil but isNull is false
-                                   (-> ^ZonedDateTime zdt
-                                       (.format iso-offset-date-time-formatter-with-space)
-                                       (utf8))))})
+                                   (utf8 (case (get-in env [:parameters "datestyle"])
+                                           "iso8601" (str zdt)
+                                           (-> ^ZonedDateTime zdt
+                                               (.format iso-offset-date-time-formatter-with-space))))))})
 
    :tstz-range {:typname "tstz-range"
                 :oid 3910

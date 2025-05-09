@@ -24,7 +24,7 @@
            (java.net Socket)
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
-           (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
+           (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.util Arrays Calendar List TimeZone UUID)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.pg.codec CodecParams)
@@ -40,6 +40,9 @@
 
 (def ^:dynamic ^:private *port* nil)
 (def ^:dynamic ^:private ^xtdb.api.DataSource *server* nil)
+
+(defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
+  (.withZoneSameInstant zdt (ZoneId/systemDefault)))
 
 (t/use-fixtures :once
 
@@ -488,9 +491,9 @@
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
                                "preparedStatementCacheQueries" 0
                                "preparedStatementCacheMiB" 0})]
-    ;; the Driver now creates a statement.
+    ;; the Driver now creates a couple of statements.
     ;; we do close this, but the PG driver appears to retain it
-    (t/is (= #{"", "S_1"} (set (keys (:prepared-statements @(:conn-state (get-last-conn)))))))
+    (t/is (= #{"", "S_1" "S_2"} (set (keys (:prepared-statements @(:conn-state (get-last-conn)))))))
 
     (dotimes [i 3]
       (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" i))]
@@ -501,8 +504,8 @@
 
     (t/testing "the last statement should still exist as they last the duration of the session and are only closed by
                 an explicit close message, which the pg driver sends between execs"
-      ;; S_4 because initial q, then i == 3
-      (t/is (= #{"", "S_1" "S_4"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
+      ;; S_5 because initial qs, then i == 3
+      (t/is (= #{"", "S_1" "S_2" "S_5"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
 
 (defn psql-available?
   "Returns true if psql is available in $PATH"
@@ -779,7 +782,7 @@
 
 (deftest test-current-time
   ;; no support for setting current-time so need to interact with clock directly
-  (let [custom-clock (Clock/fixed (Instant/parse "2000-08-16T11:08:03Z") (ZoneId/of "GMT"))]
+  (let [custom-clock (Clock/fixed (Instant/parse "2000-08-16T11:08:03Z") (ZoneId/of "Z"))]
 
     (swap! (:server-state *server*) assoc :clock custom-clock)
 
@@ -787,7 +790,7 @@
 
       (let [current-time #(get (first (rs->maps (.executeQuery (.createStatement %) "SELECT CURRENT_TIMESTAMP ct"))) "ct")]
 
-        (t/is (= #inst "2000-08-16T11:08:03.000000000-00:00" (current-time conn)))
+        (t/is (= (-> #xt/zdt "2000-08-16T12:08:03+01:00" in-system-tz) (current-time conn)))
 
         (testing "current ts instant is pinned during a tx, regardless of what happens to the session clock"
 
@@ -795,7 +798,7 @@
             (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
 
           (jdbc/with-transaction [tx conn]
-            (let [epoch #inst "1970-01-01T00:00:00.000000000-00:00"]
+            (let [epoch #xt/zdt "1970-01-01Z"]
               (t/is (= epoch (current-time tx)))
               (Thread/sleep 10)
               (t/is (= epoch (current-time tx)))
@@ -930,7 +933,7 @@
       (sql "COMMIT")
 
       (is (= [{:version 0,
-               :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
@@ -938,19 +941,19 @@
       (sql "COMMIT")
 
       (is (= [{:version 1,
-               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 0,
-               :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00",
-               :xt/valid-to #inst "2020-01-02T00:00:00.000000000-00:00"}
+               :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",
+               :xt/valid-to #xt/zdt "2020-01-02Z[UTC]"}
               {:version 1,
-               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
                        SELECT version, _valid_from, _valid_to FROM foo ORDER BY version"])))
 
       (is (= [{:version 1,
-               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (sql "START TRANSACTION READ WRITE")
@@ -958,63 +961,63 @@
       (sql "COMMIT")
 
       (is (= [{:version 2,
-               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 2,
-               :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00",
-               :xt/valid-to #inst "2020-01-02T00:00:00.000000000-00:00"}
+               :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",
+               :xt/valid-to #xt/zdt "2020-01-02Z[UTC]"}
               {:version 2,
-               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SETTING DEFAULT VALID_TIME ALL
                        SELECT version, _valid_from, _valid_to FROM foo"])))
 
       (is (= [{:version 2,
-               :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SETTING DEFAULT VALID_TIME AS OF NOW SELECT version, _valid_from, _valid_to FROM foo"]))))))
 
 (t/deftest test-setting-basis-current-time-3505
   (with-open [conn (jdbc-conn)]
-    (is (= [{:ts #inst "2020-01-01"}]
-           (q conn ["SETTING CLOCK_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
+    (is (= [{:ts (-> #xt/zdt "2020-01-01Z[UTC]" in-system-tz)}]
+           (q conn ["SETTING CLOCK_TIME = TIMESTAMP '2020-01-01Z'
                      SELECT CURRENT_TIMESTAMP AS ts"])))
 
     (q conn ["INSERT INTO foo (_id, version) VALUES ('foo', 0)"])
 
     (is (= [{:version 0,
-             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"}]
+             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
     (q conn ["UPDATE foo SET version = 1 WHERE _id = 'foo'"])
 
     (is (= [{:version 1
-             :xt/valid-from #inst "2020-01-02T00:00:00.000000000-00:00"}]
+             :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}]
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
     (is (= [{:version 0
-             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
-             :ts #inst "2024-01-01"}]
-           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z',
-                             CLOCK_TIME = TIMESTAMP '2024-01-01T00:00:00Z'
+             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
+             :ts (-> #xt/zdt "2024-01-01Z[UTC]" in-system-tz)}]
+           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z',
+                             CLOCK_TIME = TIMESTAMP '2024-01-01Z'
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
         "both snapshot and current time")
 
     (q conn ["SET TIME ZONE 'UTC'"])
 
     (is (= [{:version 0
-             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
-             :ts #inst "2024-01-01"}]
+             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
+             :ts #xt/zdt "2024-01-01Z[UTC]"}]
            (q conn ["SETTING SNAPSHOT_TIME = ?, CLOCK_TIME = ?
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"
-                    #inst "2020-01-01" #inst "2024-01-01"]))
+                    #xt/zdt "2020-01-01Z[UTC]" #xt/zdt "2024-01-01Z[UTC]"]))
         "both snapshot and current time, params")
 
     (is (= [{:version 0
-             :xt/valid-from #inst "2020-01-01T00:00:00.000000000-00:00"
-             :ts #inst "2024-01-01"}]
-           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z', CLOCK_TIME = ?
+             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
+             :ts #xt/zdt "2024-01-01Z[UTC]"}]
+           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z', CLOCK_TIME = ?
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo WHERE _id = ?"
-                    #inst "2024-01-01", "foo"]))
+                    #xt/zdt "2024-01-01Z[UTC]", "foo"]))
         "gets correct param order")
 
     (q conn ["UPDATE foo SET version = 2 WHERE _id = 'foo'"])
@@ -1025,22 +1028,22 @@
     (t/testing "for system-time cannot override snapshot"
       (exec conn "SET TIME ZONE 'UTC'")
       (is (= [{:version 0}]
-             (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z'
-                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+             (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z'
+                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
           "timestamp-tz")
 
       (is (= [{:version 0}]
              (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00'
-                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
           "timestamp-local")
 
       (is (= [{:version 0}]
              (q conn ["SETTING SNAPSHOT_TIME = DATE '2020-01-01'
-                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
           "date - #4034"))
 
     (is (= [{:version 1}]
-           (q conn ["SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T00:00:00Z'"]))
+           (q conn ["SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
         "version would have been 1 if snapshot was not set")))
 
 (t/deftest test-setting-import-system-time-3616
@@ -1053,7 +1056,7 @@
         (sql "COMMIT")
 
         (is (= [{:version 0,
-                 :xt/system-from #inst "2021-07-31T23:00:00.000000000-00:00"}]
+                 :xt/system-from #xt/zdt "2021-07-31T23:00:00Z[UTC]"}]
                (q conn ["SELECT version, _system_from FROM foo"]))))
 
       (t/testing "with BEGIN"
@@ -1062,13 +1065,13 @@
         (sql "COMMIT")
 
         (is (= [{:version 0,
-                 :xt/system-from #inst "2021-07-31T23:00:00.000000000-00:00"}
+                 :xt/system-from #xt/zdt "2021-07-31T23:00:00Z[UTC]"}
                 {:version 1,
-                 :xt/system-from #inst "2021-08-02T23:00:00.000000000-00:00"}]
+                 :xt/system-from #xt/zdt "2021-08-02T23:00:00Z[UTC]"}]
                (q conn ["SELECT version, _system_from FROM foo FOR ALL VALID_TIME ORDER BY version"]))))
 
       (t/testing "past system time"
-        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-02T00:00:00Z')")
+        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-02Z')")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 2)")
         (t/is (thrown-with-msg? PSQLException #"specified system-time older than current tx"
                                 (sql "COMMIT")))))))
@@ -1815,7 +1818,7 @@
 
 (t/deftest test-show-session-variable-3804
   (with-open [conn (jdbc-conn)]
-    (t/is (= [{:datestyle "ISO"}]
+    (t/is (= [{:datestyle "iso8601"}]
              (q conn ["SHOW DateStyle"])))
 
     (t/is (= [{:intervalstyle "ISO_8601"}]
@@ -1946,7 +1949,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest test-nested-transit
   (with-open [conn (jdbc-conn)]
-    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: TIMESTAMP '2020-01-01T00:00:00Z'}}"])
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: TIMESTAMP '2020-01-01Z'}}"])
 
     (with-open [stmt (.prepareStatement conn "SELECT * FROM foo")]
       (t/is (= [{"_id" "int8"} {"nest" "transit"}] (result-metadata stmt))))
@@ -2306,8 +2309,8 @@ ORDER BY t.oid DESC LIMIT 1"
     (jdbc/execute! conn ["INSERT INTO docs (_id, foo) VALUES (1, TIMESTAMP '2023-03-15 12:00:00+01:00')"])
     (jdbc/execute! conn ["INSERT INTO docs (_id, foo) VALUES (2, TIMESTAMP '2023-03-15 12:00:00+03:00')"])
 
-    (t/is (= [{:xt/id 1, :foo #inst "2023-03-15T11"}
-              {:xt/id 2, :foo #inst "2023-03-15T09"}]
+    (t/is (= [{:xt/id 1, :foo #xt/zdt "2023-03-15T12:00:00+01:00"}
+              {:xt/id 2, :foo #xt/zdt "2023-03-15T12:00:00+03:00"}]
              (jdbc/execute! conn ["SELECT _id, foo FROM docs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))
 
@@ -2394,20 +2397,20 @@ ORDER BY t.oid DESC LIMIT 1"
       (q conn ["INSERT INTO foo RECORDS {_id: 1, a: 1, b: 2}"])
       (q conn ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
 
-      (t/is (= [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-01" #inst "2020-01-02"]
-                [{:xt/id 1, :a 1, :b 2, :c 3} #inst "2020-01-02" nil]
-                [{:xt/id 2, :a 4, :b 5} #inst "2020-01-02" nil]]
+      (t/is (= [[{:xt/id 1, :a 1, :b 2} #xt/zdt "2020-01-01Z[UTC]" #xt/zdt "2020-01-02Z[UTC]"]
+                [{:xt/id 1, :a 1, :b 2, :c 3} #xt/zdt "2020-01-02Z[UTC]" nil]
+                [{:xt/id 2, :a 4, :b 5} #xt/zdt "2020-01-02Z[UTC]" nil]]
                (q* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
 
       (t/testing "for portion of valid_time"
         (q conn ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
         (q conn ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
-        (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"])
+        (q conn ["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #xt/zdt "2020-01-08Z"])
 
-        (let [expected [[{:xt/id 1, :a 1, :b 2} #inst "2020-01-03" #inst "2020-01-05"]
-                        [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #inst "2020-01-05" #inst "2020-01-07"]
-                        [{:xt/id 1, :a 1, :b 2} #inst "2020-01-07" nil]
-                        [{:xt/id 2, :a 6, :b 8} #inst "2020-01-08" nil]]]
+        (let [expected [[{:xt/id 1, :a 1, :b 2} #xt/zdt "2020-01-03Z[UTC]" #xt/zdt "2020-01-05Z[UTC]"]
+                        [{:xt/id 1, :a 1, :b 2, :tmp "hi!"} #xt/zdt "2020-01-05Z[UTC]" #xt/zdt "2020-01-07Z[UTC]"]
+                        [{:xt/id 1, :a 1, :b 2} #xt/zdt "2020-01-07Z[UTC]" nil]
+                        [{:xt/id 2, :a 6, :b 8} #xt/zdt "2020-01-08Z[UTC]" nil]]]
           (t/is (= expected
                    (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
 
@@ -2421,16 +2424,16 @@ ORDER BY t.oid DESC LIMIT 1"
                   "node continues"))))
 
       (t/testing "out-of-order updates"
-        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01T00:00:00Z' RECORDS {_id: 1, version: 1}"])
-        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2022-01-01T00:00:00Z' RECORDS {_id: 1, version: 2, patched: 2022}"]) ;
-        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2021-01-01T00:00:00Z' RECORDS {_id: 1, patched: 2021}"])
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01Z' RECORDS {_id: 1, version: 1}"])
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2022-01-01Z' RECORDS {_id: 1, version: 2, patched: 2022}"]) ;
+        (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2021-01-01Z' RECORDS {_id: 1, patched: 2021}"])
 
         (t/is (= [{:xt/id 1, :version 1,
-                   :xt/valid-from #inst "2020", :xt/valid-to #inst "2021"}
+                   :xt/valid-from #xt/zdt "2020-01-01Z[UTC]", :xt/valid-to #xt/zdt "2021-01-01Z[UTC]"}
                   {:xt/id 1, :patched 2021, :version 1,
-                   :xt/valid-from #inst "2021", :xt/valid-to #inst "2022"}
+                   :xt/valid-from #xt/zdt "2021-01-01Z[UTC]", :xt/valid-to #xt/zdt "2022-01-01Z[UTC]"}
                   {:xt/id 1, :patched 2021, :version 2,
-                   :xt/valid-from #inst "2022-01-01T00:00:00.000000000-00:00"}]
+                   :xt/valid-from #xt/zdt "2022-01-01Z[UTC]"}]
                  (q conn ["SELECT *, _valid_from, _valid_to FROM baz FOR ALL VALID_TIME ORDER BY _valid_from"])))))))
 
 (t/deftest set-standard-conforming-strings-on-3972
@@ -2489,14 +2492,14 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (= [{:xt/id 0,
                :committed true,
                :error nil,
-               :system-time #inst "2020-01-01T00:00:00.000000000-00:00"}
+               :system-time #xt/zdt "2020-01-01Z[UTC]"}
               {:xt/id 1,
                :committed false,
                :error #xt/illegal-arg [:invalid-system-time
                                        "specified system-time older than current tx"
-                                       {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01T00:00:00Z"},
-                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}],
-               :system-time #inst "2020-01-02T00:00:00.000000000-00:00"}]
+                                       {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01Z"},
+                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01Z"}}],
+               :system-time #xt/zdt "2020-01-02Z[UTC]"}]
 
              (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))))
@@ -2571,33 +2574,34 @@ ORDER BY 1,2;")
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
 
-    (t/is (= [{:ts #inst "2020-01-01"}]
+    (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]"}]
              (jdbc/execute! conn ["SELECT SNAPSHOT_TIME ts"])))
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 5}]])
 
-    (t/is (= [{:snapshot_time #inst "2020-01-02"}]
+    (t/is (= [{:snapshot_time #xt/zdt "2020-01-02Z[UTC]"}]
              (jdbc/execute! conn ["SHOW SNAPSHOT_TIME"])))
 
     (let [sql "SELECT SNAPSHOT_TIME ts, * FROM docs ORDER BY _id"]
-      (t/is (= [{:ts #inst "2020-01-02", :_id 1, :x 3}
-                {:ts #inst "2020-01-02", :_id 2, :x 5}]
+      (t/is (= [{:ts #xt/zdt "2020-01-02Z[UTC]", :_id 1, :x 3}
+                {:ts #xt/zdt "2020-01-02Z[UTC]", :_id 2, :x 5}]
                (jdbc/execute! conn [sql])))
 
-      (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
-               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z' " sql)])))
+      (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
+               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z' " sql)])))
 
       (t/testing "in tx"
-        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00Z', CLOCK_TIME = TIMESTAMP '2020-01-04T00:00:00Z')"])
+        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z', CLOCK_TIME = TIMESTAMP '2020-01-04Z')"])
         (try
-          (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
+          (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
                    (jdbc/execute! conn [sql])))
 
-          (t/is (= [{:ts #inst "2020-01-01", :_id 1, :x 3}]
+          (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
                    (jdbc/execute! conn [sql]))
                 "once more for luck")
 
-          (t/is (= {:clock_time #inst "2020-01-04"} (jdbc/execute-one! conn ["SHOW CLOCK_TIME"])))
+          (t/is (= {:clock_time (-> #xt/zdt "2020-01-04Z[UTC]" in-system-tz)}
+                   (jdbc/execute-one! conn ["SHOW CLOCK_TIME"])))
 
           (finally
             (jdbc/execute! conn ["ROLLBACK"])))))))
@@ -2614,13 +2618,13 @@ ORDER BY 1,2;")
         (t/is (.isAfter after ct))))
 
     (t/testing "setting on tx"
-      (jdbc/execute! conn ["BEGIN READ ONLY WITH (CLOCK_TIME = TIMESTAMP '2024-01-01T00:00:00Z')"])
+      (jdbc/execute! conn ["BEGIN READ ONLY WITH (CLOCK_TIME = TIMESTAMP '2024-01-01Z')"])
       (try
-          (t/is (= [{:clock_time #inst "2024-01-01"}]
-                   (jdbc/execute! conn ["SHOW CLOCK_TIME"])))
+        (t/is (= [{:clock_time (-> #xt/zdt "2024-01-01Z[UTC]" in-system-tz)}]
+                 (jdbc/execute! conn ["SHOW CLOCK_TIME"])))
 
-          (finally
-            (jdbc/execute! conn ["ROLLBACK"]))))))
+        (finally
+          (jdbc/execute! conn ["ROLLBACK"]))))))
 
 (t/deftest test-explain
   ;; this one might be a little brittle, let's revisit if it fails a lot.
@@ -2668,19 +2672,25 @@ ORDER BY 1,2;")
         (t/is (= [{:_id 1}] (jdbc/execute! ro-conn ["SELECT * FROM foo"])))))))
 
 (t/deftest test-return-nano-ts-as-micro-ts
-  ;;pgjdbc appears to use binary format for ts results but not tstz...
+  ;; we now have more precision for text than we do for binary
   (doseq [binary? [false true]
-          {:keys [type val input]}
-          [{:type LocalDateTime :val #xt/date-time "2024-01-01T00:00:01.123456" :input "'2024-01-01T00:00:01.123456789'::TIMESTAMP(9)"}
-           {:type OffsetDateTime :val #xt/offset-date-time "2024-01-01T00:00:01.123456Z" :input "'2024-01-01T00:00:01.123456789Z'::TIMESTAMP(9) WITH TIME ZONE"}]
+          {:keys [^Class type binary-val text-val input]} [{:input "'2024-01-01T00:00:01.123456789'::TIMESTAMP(9)"
+                                                            :type LocalDateTime
+                                                            :binary-val #xt/date-time "2024-01-01T00:00:01.123456"
+                                                            :text-val #xt/date-time "2024-01-01T00:00:01.123456789"}
+                                                           {:input "'2024-01-01T00:00:01.123456789Z'::TIMESTAMP(9) WITH TIME ZONE"
+                                                            :type OffsetDateTime,
+                                                            :binary-val (-> #xt/zdt "2024-01-01T00:00:01.123456Z" in-system-tz (.toOffsetDateTime))
+                                                            :text-val (-> #xt/zdt "2024-01-01T00:00:01.123456789Z" in-system-tz (.toOffsetDateTime))}]
           :let [q (format "SELECT %s v" input)]]
 
-      (t/testing (format "pgjdbc - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
-        (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
-                    stmt (.prepareStatement conn q)]
-          (with-open [rs (.executeQuery stmt)]
-            (.next rs)
-            (t/is (= val (.getObject rs 1 type))))))))
+    (t/testing (format "pgjdbc - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
+      (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
+                  stmt (.prepareStatement conn q)]
+        (with-open [rs (.executeQuery stmt)]
+          (.next rs)
+          (t/is (= (if binary? binary-val text-val)
+                   (.getObject rs 1 type))))))))
 
 (t/deftest test-sql-with-leading-whitespace
   (with-open [conn (pg-conn {})]
@@ -2774,3 +2784,37 @@ ORDER BY 1,2;")
       (t/is (thrown-with-msg? PSQLException
                               #"ERROR: Assert failed"
                               (q conn ["COMMIT"]))))))
+
+(t/deftest test-datestyle
+  (with-open [conn (jdbc-conn)]
+    (t/is (= {:ts #xt/zoned-date-time "2020-01-01Z"} (jdbc/execute-one! conn ["SELECT TIMESTAMP '2020-01-01Z' ts"])))
+
+    (jdbc/execute! conn ["SET datestyle = 'iso8601'"])
+    (t/is (= {:ts #xt/zoned-date-time "2020-05-01T00:00:00+01:00[Europe/London]"}
+             (jdbc/execute-one! conn ["SELECT TIMESTAMP '2020-05-01+01:00[Europe/London]' ts"])))
+
+    (t/is (= {:ts #xt/zoned-date-time "2020-05-01T00:00:00-08:00"} (jdbc/execute-one! conn ["SELECT TIMESTAMP '2020-05-01T00:00:00-08:00' ts"])))
+
+    (jdbc/execute! conn ["SET datestyle = 'iso'"])
+    (t/is (= {:ts #xt/zoned-date-time "2020-05-01T00:00:00-08:00"} (jdbc/execute-one! conn ["SELECT TIMESTAMP '2020-05-01T00:00:00-08:00' ts"]))))
+
+  (when (psql-available?)
+    (psql-session
+     (fn [send read]
+       (send "SELECT TIMESTAMP '2020-01-01Z' ts;\n")
+       (t/is (= [["ts"] ["2020-01-01 00:00:00+00:00"]] (read)))
+
+       (send "SET datestyle = 'iso8601';\n")
+       (t/is (= [["SET"]] (read)))
+
+       (send "SELECT TIMESTAMP '2020-05-01+01:00[Europe/London]' ts;\n")
+       (t/is (= [["ts"] ["2020-05-01T00:00+01:00[Europe/London]"]] (read)))
+
+       (send "SELECT TIMESTAMP '2020-05-01T00:00:00-08:00' ts;\n")
+       (t/is (= [["ts"] ["2020-05-01T00:00-08:00"]] (read)))
+
+       (send "SET datestyle = 'iso';\n")
+       (t/is (= [["SET"]] (read)))
+
+       (send "SELECT TIMESTAMP '2020-05-01T00:00:00-08:00' ts;\n")
+       (t/is (= [["ts"] ["2020-05-01 00:00:00-08:00"]] (read)))))))

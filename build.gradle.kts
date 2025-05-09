@@ -294,14 +294,19 @@ dependencies {
 
     api(libs.next.jdbc)
     testImplementation(libs.honeysql)
-    api("org.postgresql", "postgresql", "42.7.3")
     api(libs.integrant)
     api(project(":xtdb-core"))
+
+    api(libs.pgjdbc)
+    testImplementation(libs.exposed.core)
+    testImplementation(libs.exposed.jdbc)
+    testImplementation(libs.exposed.java.time)
 
     implementation(libs.junit.jupiter.api)
 
     testImplementation(libs.clojure.`data`.csv)
     testImplementation(libs.clojure.tools.cli)
+
 
     devImplementation("integrant", "repl", "0.3.2")
     devImplementation("com.azure", "azure-identity", "1.9.0")

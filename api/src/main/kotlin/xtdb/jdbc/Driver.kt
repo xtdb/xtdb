@@ -20,7 +20,8 @@ class Driver : org.postgresql.Driver() {
         (super.connect(url.asPgUrl, info) as? PgConnection)?.let(::XtConnection)
             ?.also { conn ->
                 conn.createStatement().use { stmt ->
-                    stmt.execute("SET FALLBACK_OUTPUT_FORMAT = 'transit'")
+                    stmt.execute("SET fallback_output_format = 'transit'")
+                    stmt.execute("SET datestyle = 'iso8601'")
                 }
             }
 }
