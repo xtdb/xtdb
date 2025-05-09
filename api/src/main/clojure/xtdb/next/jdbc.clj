@@ -1,61 +1,60 @@
 (ns xtdb.next.jdbc
   "This namespace contains several helper functions for working with XTDB and next.jdbc. "
   (:require [clojure.walk :as w]
-            [next.jdbc.result-set :as nj-rs]
-            [xtdb.serde :as serde])
-  (:import clojure.lang.Keyword
-           [java.sql ResultSet]
+            [next.jdbc.result-set :as njrs]
+            [xtdb.serde :as serde]
+            [xtdb.time :as time])
+  (:import [java.sql ResultSet ResultSetMetaData Timestamp]
            [java.util List Map Set]
-           xtdb.api.query.IKeyFn
-           xtdb.util.NormalForm))
+           xtdb.api.query.IKeyFn))
 
-(defn- denormalize-keys [v, ^IKeyFn key-fn]
-  (w/prewalk (fn [v]
-               (cond-> v
-                 (instance? Map v) (update-keys #(.denormalize key-fn %))
-                 (instance? List v) vec
-                 (instance? Set v) set))
-             v))
+(defn- read-col [{:keys [^IKeyFn key-fn]}, ^ResultSet rs, ^ResultSetMetaData rsmeta, ^long idx]
+  (-> (njrs/read-column-by-index (.getObject rs idx) rsmeta idx)
+      (as-> v (if (instance? Timestamp v)
+                (let [^Timestamp v v]
+                  (case (.getColumnTypeName rsmeta idx)
+                    "timestamp" (.toLocalDateTime v)
+                    "timestamptz" (time/parse-sql-timestamp-literal (.getString rs idx))
+                    v))
+                v))
+      (->> (w/prewalk (fn [v]
+                        (cond-> v
+                          (instance? Map v) (->> (into {} (keep (fn [[k v]]
+                                                                  (when (some? v)
+                                                                    [(.denormalize key-fn k) v])))))
+                          (instance? List v) vec
+                          (instance? Set v) set))))))
 
-(defn ->sql-col
-  "This function converts a keyword to an XT-normalised SQL column name."
-  [^Keyword k]
-  (NormalForm/normalForm k))
+(defn builder-fn
+  "Builder function which recursively converts result-set rows' map keys using the provided key-fn."
+  [^ResultSet rs, opts]
 
-(defn ->label-fn [key-fn]
-  (let [key-fn (serde/read-key-fn key-fn)]
-    (fn [k]
-      (.denormalize key-fn k))))
+  (let [rsmeta (.getMetaData rs)
+        key-fn (serde/read-key-fn (::key-fn opts :kebab-case-keyword))
+        read-opts {:key-fn key-fn}
+        cols (mapv (fn [^Integer i]
+                     (.denormalize key-fn (.getColumnLabel rsmeta i)))
+                   (range 1 (inc (if rsmeta (.getColumnCount rsmeta) 0))))]
 
-(def
-  ^{:doc
-    "This function converts an XT SQL column name to a kebab-cased keyword.
+    (reify
+      njrs/RowBuilder
+      (->row [_this] (transient {}))
+      (column-count [_this] (count cols))
 
-   * `_`-prefixed becomes `xt` namespaced: `_id` -> `:xt/id`, `_valid_from` -> `:xt/valid-from` etc
-   * then, `_` -> `-`"}
-  label-fn
-  (->label-fn :kebab-case-keyword))
+      (with-column [this row i]
+        (njrs/with-column-value this row (nth cols (dec i))
+          (read-col read-opts rs rsmeta i)))
 
-(defn ->col-reader
-  "This col-reader recursively walks the values, denormalizing keys with the provided key-fn."
-  [key-fn]
+      (with-column-value [_this row col v]
+        (cond-> row
+          (some? v) (assoc! col v)))
 
-  (let [key-fn (serde/read-key-fn key-fn)]
-    (fn col-reader [^ResultSet rs, rsmeta, ^long idx]
-      (-> (nj-rs/read-column-by-index (.getObject rs idx) rsmeta idx)
-          (denormalize-keys key-fn)))))
+      (row! [_this row] (persistent! row))
 
-(def
-  ^{:doc "This col-reader recursively converts result-set rows' map keys to kebab-cased keywords - see `label-fn` for more details."}
-  col-reader (->col-reader :kebab-case-keyword))
+      njrs/ResultSetBuilder
+      (->rs [_this] (transient []))
 
-(def
-  ^{:doc "Builder function which recursively converts result-set rows' map keys to kebab-cased keywords - see `label-fn` for more details."}
-  builder-fn
-  (nj-rs/as-maps-adapter
-   (fn [rs opts]
-     (nj-rs/as-unqualified-modified-maps
-      rs
-      (assoc opts :label-fn label-fn)))
-   col-reader))
+      (with-row [_this mrs row] (conj! mrs row))
+
+      (rs! [_this mrs] (persistent! mrs)))))
 

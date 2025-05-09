@@ -4,19 +4,14 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [next.jdbc :as jdbc]
-            [next.jdbc.optional :as jdbc.optional]
             [next.jdbc.prepare :as jdbc.prep]
-            [next.jdbc.result-set :as jdbc.rs]
             [xtdb.api :as xt]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
-            [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
-            [xtdb.node.impl :as node.impl]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
@@ -97,13 +92,6 @@
   java.util.Date
   (set-parameter [v ^PreparedStatement ps ^long i]
     (.setObject ps i (-> (.toInstant v) (.atZone #xt/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
-
-(def jdbc-qopts
-  {:builder-fn
-   (jdbc.rs/as-maps-adapter
-    (fn [rs opts]
-      (jdbc.optional/as-unqualified-modified-maps rs (-> opts (assoc :label-fn xt-jdbc/label-fn))))
-    xt-jdbc/col-reader)})
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *sys*)

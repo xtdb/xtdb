@@ -42,7 +42,7 @@
 
   (->instant instant))
 
-(def utc (ZoneId/of "UTC"))
+(def ^java.time.ZoneId utc (ZoneId/of "UTC"))
 
 (extend-protocol TimeConversions
   nil

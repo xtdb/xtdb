@@ -217,7 +217,8 @@
           user-writer (.get rel "user")]
 
       (when system-time
-        (.writeObject (.get rel "system-time") (time/->zdt system-time)))
+        (.writeObject (.get rel "system-time") (-> (time/->zdt system-time)
+                                                   (.withZoneSameInstant time/utc))))
 
       (when user
         (.writeObject user-writer user))

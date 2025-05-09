@@ -328,7 +328,7 @@
       (check-server-resources-freed server))))
 
 (defn q [conn sql]
-  (jdbc/execute! conn sql tu/jdbc-qopts))
+  (jdbc/execute! conn sql {:builder-fn xt-jdbc/builder-fn}))
 
 (defn q-seq [conn sql]
   (->> (jdbc/execute! conn sql {:builder-fn result-set/as-arrays})
@@ -1508,7 +1508,8 @@
                :xt/valid-time {:type "tstz-range", :value "[2020-01-02 00:00:00+00:00,)"}}
               {:xt/id 1, :v 1,
                :xt/valid-time {:type "tstz-range", :value "[2020-01-01 00:00:00+00:00,2020-01-02 00:00:00+00:00)"}}]
-             (->> (jdbc/execute! conn ["SELECT *, _valid_time FROM foo FOR ALL VALID_TIME"] tu/jdbc-qopts)
+             (->> (jdbc/execute! conn ["SELECT *, _valid_time FROM foo FOR ALL VALID_TIME"]
+                                 {:builder-fn xt-jdbc/builder-fn})
                   (mapv #(update % :xt/valid-time (fn [^PGobject vt]
                                                     {:type (.getType vt)
                                                      :value (.getValue vt)})))))))
@@ -1938,14 +1939,7 @@ ORDER BY t.oid DESC LIMIT 1"
                  {:_id "jms", :user$first_name "James"}}
                (set (jdbc/execute! conn (hsql/format {:select [:_id :user$first_name]
                                                       :from :users}))))
-            "no transformers")
-
-      (t/is (= #{{:xt/id "jdt", :user/first-name "Jeremy"}
-                 {:xt/id "jms", :user/first-name "James"}}
-               (set (q conn (hsql/format {:select (->> [:xt/id :user/first-name]
-                                                       (mapv xt-jdbc/->sql-col))
-                                          :from :users}))))
-            "using our transformers"))))
+            "no transformers"))))
 
 (deftest test-nested-transit
   (with-open [conn (jdbc-conn)]
@@ -2491,15 +2485,14 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (t/is (= [{:xt/id 0,
                :committed true,
-               :error nil,
-               :system-time #xt/zdt "2020-01-01Z[UTC]"}
+               :system-time (time/->zdt #inst "2020-01-01")}
               {:xt/id 1,
                :committed false,
                :error #xt/illegal-arg [:invalid-system-time
                                        "specified system-time older than current tx"
-                                       {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01Z"},
-                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01Z"}}],
-               :system-time #xt/zdt "2020-01-02Z[UTC]"}]
+                                       {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2019-01-01T00:00:00Z"}
+                                        :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}],
+               :system-time (time/->zdt #inst "2020-01-02")}]
 
              (jdbc/execute! conn ["SELECT * FROM xt.txs ORDER BY _id"]
                             {:builder-fn xt-jdbc/builder-fn})))))

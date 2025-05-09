@@ -290,7 +290,7 @@
 
   (t/is (= [{:xt/id 21} {:xt/id 22} {:xt/id 23} {:xt/id 24} {:xt/id 25}]
            (jdbc/execute! tu/*node* ["SELECT _id FROM foo ORDER BY _id OFFSET ? LIMIT ?" 20 5]
-                          tu/jdbc-qopts))))
+                          {:builder-fn xt-jdbc/builder-fn}))))
 
 (t/deftest test-unnest
   (t/is (=plan-file
@@ -777,7 +777,7 @@
 
     (t/is (= [{:xt/id :matthew}]
              (jdbc/execute! tu/*node* ["SELECT docs._id FROM docs FOR VALID_TIME AS OF ?" #inst "2016"]
-                            tu/jdbc-qopts)))))
+                            {:builder-fn xt-jdbc/builder-fn})))))
 
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
@@ -2367,7 +2367,7 @@ UNION ALL
 
            (->> (jdbc/execute! tu/*node*
                                ["SELECT column_name, * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'foo' ORDER BY column_name;"]
-                               tu/jdbc-qopts)
+                               {:builder-fn xt-jdbc/builder-fn})
                 (into #{} (map (juxt (comp symbol :table-catalog)
                                      (fn [{:keys [table-schema table-name]}]
                                        (symbol table-schema table-name))

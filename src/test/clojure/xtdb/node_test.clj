@@ -6,6 +6,7 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.logging :as logging]
+            [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
             [xtdb.protocols :as xtp]
@@ -600,7 +601,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:data {:field-name3 {:baz -4113466}, :field-name1 {:field-name2 true}}}]
            (jdbc/execute! tu/*node* ["SELECT t1.data FROM t1"]
-                          tu/jdbc-qopts))
+                          {:builder-fn xt-jdbc/builder-fn}))
         "testing insert worked")
 
   (t/is (= [{:field-name2 true}]
@@ -612,7 +613,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (jdbc/execute! tu/*node*
                           ["SELECT (t2.field_name1).field_name2, t2.field$name4.baz
                             FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"]
-                          tu/jdbc-qopts))
+                          {:builder-fn xt-jdbc/builder-fn}))
         "testing insert worked (JDBC)"))
 
 (t/deftest test-get-field-on-duv-with-struct-2425
