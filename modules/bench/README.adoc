@@ -24,15 +24,29 @@ See datasets -> `xtdb.tsbs`.
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 
-== Running from Docker
+=== Running with custom config
 
-. From the root of the repo:
-.. Create the standalone JAR: `./gradlew shadowJar`
-.. Create the Docker image: `docker buildx bake bench`
-.. Push it (optional): `docker push ghcr.io/xtdb/xtdb-bench`
-. Running it: `docker run --rm ghcr.io/xtdb/xtdb-bench <benchmark-type> <opts...>`.
-+
---
+You can run the benchmarks with a custom node config by passing `-PconfigFile path/to/config.yaml` to the gradle command.
+
+`./gradlew auctionmark -PconfigFile=custom-config.yaml -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
+
+== XTDB Bench Docker Image
+
+The xtdb-bench Docker image is automatically built and pushed to GitHub Container Registry (GHCR) on every commit to the main branch.
+
+You can also manually build and push the image from any branch using the workflow_dispatch trigger in the "Build xtdb-bench Docker Image" GitHub Actions workflow.
+
+=== Running the Docker Image
+
+From the root of the repository, you can run a benchmark with:
+
+[source,bash]
+----
+docker run --rm ghcr.io/xtdb/xtdb-bench <benchmark-type> <opts...>
+----
+
+Replace <benchmark-type> with the name of the benchmark, and <opts...> with any additional CLI arguments (e.g., --node-dir, --config-file, etc.).
+
 TPC-H::
 [source,bash]
 ----
@@ -63,7 +77,21 @@ Products::
 
 docker run --rm ghcr.io/xtdb/xtdb-bench products
 ----
---
+
+==== Running with custom config
+
+You can run the benchmarks with a custom node config by passing `--config-file path/to/config.yaml` to the docker command.
+
+[source,bash]
+----
+docker run --rm ghcr.io/xtdb/xtdb-bench auctionmark \
+  --config-file custom-config.yaml \
+  --duration PT30S \
+  --threads 8 \
+  --scale-factor 0.1
+----
+
+Included within the xtdb-bench are a number of config files for different cloud providers - see those under `cloud/config/`.
 
 == Prometheus and Grafana
 
@@ -74,13 +102,3 @@ If the metrics are not exposed under `localhost:8080` you need to tweak the `.co
 Under `localhost:3001` you are able to access the Grafana UI (`admin` for user and password).
 The XTDB node datasource should be setup, and there should be a dashboard available with some basic metrics.
 If you tweak the dashboard or add a new one, save the changes in the corresponding file in `.config/dashboards/dashboard_name.json`.
-
-== Auctionmark (WIP)
-
-Auctionmark runs in some capacity currently - this guide describes the requirements and steps to use the get-user query as a performance benchmark.
-Full auctionmark benchmark may or may not be working.
-Currently the auctionmark dataset is committed to the codebase so you can skip straight to the instructions in `xtdb/bench/xtdb2.clj`
-
-- Set up AWS CLI credentials (skip)
-- Run `AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark` (skip)
-- See comments at bottom of `xtdb/bench/xtdb2.clj` for further instructions.
