@@ -267,22 +267,18 @@
 
   (visitTableAllTime [_ _] :all-time)
 
-  (visitTableAsOf [this ctx]
-    [:at (-> ctx (.periodSpecificationExpr) (.accept this))])
+  (visitTableAsOf [_ ctx]
+    [:at (-> ctx (.at) (.accept expr-visitor))])
 
-  (visitTableBetween [this ctx]
+  (visitTableBetween [_ ctx]
     [:between
-     (-> ctx (.periodSpecificationExpr 0) (.accept this))
-     (-> ctx (.periodSpecificationExpr 1) (.accept this))])
+     (-> ctx (.from) (.accept expr-visitor))
+     (-> ctx (.to) (.accept expr-visitor))])
 
-  (visitTableFromTo [this ctx]
+  (visitTableFromTo [_ ctx]
     [:in
-     (-> ctx (.periodSpecificationExpr 0) (.accept this))
-     (-> ctx (.periodSpecificationExpr 1) (.accept this))])
-
-  (visitPeriodSpecLiteral [_ ctx] (-> (.literal ctx) (.accept expr-visitor)))
-  (visitPeriodSpecParam [_ ctx] (-> (.parameterSpecification ctx) (.accept expr-visitor)))
-  (visitPeriodSpecNow [_ _] :now))
+     (-> ctx (.from) (.accept expr-visitor))
+     (-> ctx (.to) (.accept expr-visitor))]))
 
 (defrecord MultipleTimePeriodSpecifications []
   PlanError
@@ -575,6 +571,14 @@
   PlanError
   (error-string [_] (format "Table projection mismatch for %s (%s)" table-alias (str/join "," projections))))
 
+(defrecord NoColumnReferenceAllowed [msg]
+  Scope
+  (available-cols [_] [])
+
+  (-find-cols [_ chain _excl-cols]
+    (throw (err/illegal-arg ::no-column-refs-allowed
+                            {::err/message (str msg (first chain))}))))
+
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
   (visitBaseTable [{{:keys [!id-count table-info ctes] :as env} :env} ctx]
@@ -600,7 +604,7 @@
                                         ['pg_catalog table-cols]))
 
                                     (add-warning! env (->BaseTableNotFound sn tn)))
-                expr-visitor (->ExprPlanVisitor env scope)]
+                expr-visitor (->ExprPlanVisitor env (->NoColumnReferenceAllowed "No column reference allowed in table period specification: "))]
             (letfn [(<-table-time-period-specification [specs]
                       (case (count specs)
                         0 nil

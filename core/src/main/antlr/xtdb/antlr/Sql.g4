@@ -577,17 +577,10 @@ queryValidTimePeriodSpecification
    ;
 
 tableTimePeriodSpecification
-    : 'AS' 'OF' periodSpecificationExpr # TableAsOf
+    : 'AS' 'OF' at=expr # TableAsOf
     | 'ALL' # TableAllTime
-    | 'BETWEEN' periodSpecificationExpr 'AND' periodSpecificationExpr # TableBetween
-    | 'FROM' periodSpecificationExpr 'TO' periodSpecificationExpr # TableFromTo
-    ;
-
-// replace usages of this with dateTimeExpr when possible - #3306
-periodSpecificationExpr
-    : literal #PeriodSpecLiteral
-    | parameterSpecification #PeriodSpecParam
-    | ('NOW' | 'CURRENT_TIMESTAMP') #PeriodSpecNow
+    | 'BETWEEN' from=expr 'AND' to=expr # TableBetween
+    | 'FROM' from=expr 'TO' to=expr # TableFromTo
     ;
 
 tableOrQueryName : tableName ;

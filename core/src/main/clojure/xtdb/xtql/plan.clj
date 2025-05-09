@@ -364,13 +364,13 @@
     ;;TODO could be better to have its own error, to make it clear you can't
     ;;ref logic vars in temporal opts
     (required-vars-available? (.getAt this) #{})
-    [:at (plan-expr (.getAt this))])
+    [:at (or (plan-expr (.getAt this)) :now)])
 
   TemporalFilter$In
   (plan-temporal-filter [this]
     (required-vars-available? (.getFrom this) #{})
     (required-vars-available? (.getTo this) #{})
-    [:in (plan-expr (.getFrom this)) (plan-expr (.getTo this))])
+    [:in (or (plan-expr (.getFrom this)) 'xtdb/start-of-time) (plan-expr (.getTo this))])
 
   nil
   (plan-temporal-filter [_this]

@@ -2040,11 +2040,11 @@
 
 (t/deftest test-disallow-col-refs-in-period-specs-3447
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"line 1:41 mismatched input 'foo' expecting"
+                          #"No column reference allowed in table period specification: foo"
                           (xt/q tu/*node* "SELECT * FROM docs FOR SYSTEM_TIME AS OF foo")))
 
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #"line 1:42 mismatched input 'bar' expecting"
+                          #"No column reference allowed in table period specification: bar"
                           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME BETWEEN bar AND baz"))))
 
 (t/deftest test-portion-of-valid-time-boundary
@@ -2156,14 +2156,14 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
                                     :valid-from #xt/date "2020-01-02"})]
 
              (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
-                                   '[[1 2] [3 4]]))))
+                                  '[[1 2] [3 4]]))))
 
   (t/testing "insert records"
     (t/is (= [(tx-ops/map->PutDocs {:table-name "public/bar", :docs [{"_id" 0, "value" "hola"} {"_id" 1, "value" "mundo"}],
                                     :valid-from nil, :valid-to nil})]
              (sql/sql->static-ops "INSERT INTO bar RECORDS $1"
-                                   '[[{"_id" 0, "value" "hola"}]
-                                     [{"_id" 1, "value" "mundo"}]])))))
+                                  '[[{"_id" 0, "value" "hola"}]
+                                    [{"_id" 1, "value" "mundo"}]])))))
 
 (t/deftest show-canned-responses
   (t/is (= [{:transaction-isolation "read committed"}]
@@ -2908,7 +2908,7 @@ UNION ALL
 
 (t/deftest iseq-from-symbol-bug-4378
   (t/is (thrown-with-msg? IllegalArgumentException #"Subquery arity error"
-         (sql/plan "
+                          (sql/plan "
 WITH dates AS (
   SELECT TIMESTAMP '2023-01-01T00:00:00Z' AS d
   UNION ALL
@@ -2984,3 +2984,34 @@ FROM dates"))))
              :error
              #xt/runtime-err [:xtdb.indexer/invalid-valid-times "Runtime error: 'xtdb.indexer/invalid-valid-times'" {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"}]}]
            (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} committed error])))))
+
+(t/deftest temporal-filter-expressions-3306
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :xt/valid-from #inst "2000-01-01" :xt/valid-to #inst "2100-01-01"}]])
+
+  (t/is (= [#:xt{:id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME AS OF (CURRENT_TIMESTAMP - INTERVAL 'PT1M')"
+                 {:current-time #inst "2020"})))
+
+  (t/is (= [#:xt{:id 1}]
+           (xt/q tu/*node* ["SELECT * FROM docs FOR VALID_TIME AS OF (? - INTERVAL 'PT1M')" #inst "2020"])))
+
+  (t/is (= [#:xt{:id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME FROM (NOW - INTERVAL 'P1Y') TO CURRENT_TIMESTAMP"
+                 {:current-time #inst "2020"})))
+
+  (t/is (= [#:xt{:id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME BETWEEN CURRENT_TIMESTAMP AND (CURRENT_TIMESTAMP + INTERVAL 'P1Y')"
+                 {:current-time #inst "2020"})))
+
+  (t/is (= [#:xt{:id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME AS OF NULL"
+                 {:current-time #inst "2020"})))
+
+  (t/is (= []
+           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME AS OF NULL"
+                 {:current-time #inst "2100"})))
+
+  (t/is (= []
+           (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME AS OF (NOW - INTERVAL 'PT1M')"
+                 {:current-time #inst "2120"}))
+        "Interval outside period"))

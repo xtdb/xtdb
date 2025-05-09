@@ -4,6 +4,6 @@
   f.1
   [:scan
    {:table public/foo,
-    :for-valid-time [:at :now],
-    :for-system-time [:at :now]}
+    :for-valid-time [:at (current-timestamp)],
+    :for-system-time [:at (current-timestamp)]}
    [bar]]]]
