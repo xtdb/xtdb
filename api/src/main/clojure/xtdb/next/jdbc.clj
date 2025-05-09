@@ -2,20 +2,16 @@
   "This namespace contains several helper functions for working with XTDB and next.jdbc. "
   (:require [clojure.walk :as w]
             [next.jdbc.result-set :as njrs]
-            [xtdb.serde :as serde]
-            [xtdb.time :as time])
-  (:import [java.sql ResultSet ResultSetMetaData Timestamp]
+            [xtdb.serde :as serde])
+  (:import [java.sql ResultSet ResultSetMetaData]
            [java.util List Map Set]
+           org.postgresql.jdbc.PgArray
            xtdb.api.query.IKeyFn))
 
 (defn- read-col [{:keys [^IKeyFn key-fn]}, ^ResultSet rs, ^ResultSetMetaData rsmeta, ^long idx]
   (-> (njrs/read-column-by-index (.getObject rs idx) rsmeta idx)
-      (as-> v (if (instance? Timestamp v)
-                (let [^Timestamp v v]
-                  (case (.getColumnTypeName rsmeta idx)
-                    "timestamp" (.toLocalDateTime v)
-                    "timestamptz" (time/parse-sql-timestamp-literal (.getString rs idx))
-                    v))
+      (as-> v (if (instance? PgArray v)
+                (vec (.getArray ^PgArray v))
                 v))
       (->> (w/prewalk (fn [v]
                         (cond-> v

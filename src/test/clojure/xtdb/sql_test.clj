@@ -2780,11 +2780,12 @@ UNION ALL
 
   (t/is (= [{:id1 1, :id2 1}, {:id1 1, :id2 2},
             {:id1 2, :id2 1}, {:id1 2, :id2 2}]
-           (xt/q tu/*node*  "FROM docs3 AS d1
-                             LEFT OUTER JOIN docs3 AS d2
-                             ON d1.value = d2.value + INTERVAL 'PT0M'
-                             SELECT d1._id AS id1, d2._id AS id2
-                             ORDER BY id1, id2"))
+           (xt/q tu/*node* "FROM docs3 AS d1
+                            LEFT OUTER JOIN docs3 AS d2
+                            ON d1.value = d2.value + INTERVAL 'PT0M'
+                            SELECT d1._id AS id1, d2._id AS id2
+                            ORDER BY id1, id2"
+                 {:default-tz #xt/zone "UTC"}))
         "Testing joins with differnt temporal types"))
 
 (t/deftest mismatched-columns-in-table-projection-stops-ingestion-4069
@@ -2960,11 +2961,10 @@ FROM dates"))))
 
   (t/testing "params"
     (t/is (= [{:xt/id 2, :y "baz"}]
-             (xt/q tu/*node* [(format "XTQL $$ %s $$" (pr-str '#(from :bar [{:xt/id %} *])))
-                              2])))
+             (xt/q tu/*node* ['#(from :bar [{:xt/id %} *]) 2])))
 
     (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
-             (xt/q tu/*node* [(format "FROM (XTQL $$ %s $$) t SELECT *, ? AS x"
+             (xt/q tu/*node* [(format "FROM (XTQL ($$ %s $$, ?)) t SELECT *, ? AS x"
                                       (pr-str '#(from :bar [{:xt/id %} *])))
                               2 "x"])))
 

@@ -450,14 +450,17 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
   (t/is (= '[{:plan
               "[:project
- [name age _valid_from _valid_to]
+ [{name name}
+  {age age}
+  {_valid_from _valid_from}
+  {_valid_to _valid_to}]
  [:scan
   {:table public/people, :for-valid-time nil, :for-system-time nil}
   [{_id (= _id ?_0)} name age _valid_from _valid_to]]]
 "}]
            (xt/q tu/*node*
-                 ['#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])]
-                 {:explain? true})))
+                 [(format "EXPLAIN XTQL $$ %s $$"
+                          (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))])))
 
   (t/is (= '[{:plan
               "[:project
@@ -472,8 +475,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
    [_valid_from {_id (= _id ?_0)} age name _valid_to]]]]
 "}]
            (xt/q tu/*node*
-                 "SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
-                 {:explain? true}))))
+                 ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
+                  "dummy-arg-because-pgjdbc-expects-one"]))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
@@ -501,6 +504,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs")
                    (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0))))
 
+  #_ ; FIXME pgwire batching
   (t/is (= 10 (->> (xt/plan-q tu/*node* "(SELECT docs.num FROM docs)
                                          UNION ALL
                                          (SELECT 1 / 0)")

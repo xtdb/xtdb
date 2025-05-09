@@ -530,8 +530,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   [:select (= (+ a b) 12) [:scan {:table public/users} [a _id foo b]]]]]
 ")}]
            (-> (xt/q tu/*node*
-                     "SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12"
-                     {:explain? true})
+                     "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12")
                (update-in [0 :plan] str/trim))))
 
   (t/is (= [{:plan (str/trim "
@@ -657,7 +656,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/testing "using file based YAML config"
     (let [config-file (io/resource "test-config.yaml")]
       (with-open [node (xtn/start-node (io/file config-file))]
-        (t/is node)
         (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
         (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
                  (xt/q node '(from :docs [{:xt/id e} inst]))))))))
@@ -841,9 +839,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (= 1 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
     (t/is (= 2 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))
 
-    (t/is (= [{:xt/id 0, :system-time #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+    (t/is (= [{:xt/id 0, :system-time #xt/zoned-date-time "2020-01-01Z[UTC]"}
               {:xt/id 1, :system-time #xt/zoned-date-time "2020-01-01T00:00:00.000001Z[UTC]"}
-              {:xt/id 2, :system-time #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
+              {:xt/id 2, :system-time #xt/zoned-date-time "2021-01-01Z[UTC]"}]
              (xt/q node "SELECT _id, system_time FROM xt.txs ORDER BY _id")))))
 
 (t/deftest startup-error-doesnt-output-integrant-system
@@ -1111,3 +1109,4 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (c/compact-all! tu/*node* nil)
 
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))))
+

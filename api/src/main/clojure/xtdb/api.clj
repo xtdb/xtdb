@@ -5,14 +5,17 @@
 
   For an in-process node, you will additionally need `xtdb.node`, in the `com.xtdb/xtdb-core` artifact."
 
-  (:require [xtdb.backtick :as backtick]
+  (:require [clojure.string :as str]
+            [next.jdbc :as jdbc]
+            [xtdb.backtick :as backtick]
             [xtdb.error :as err]
+            [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde])
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
-           (java.util Iterator)
-           [java.util.stream Stream]
+           [java.sql Connection]
+           org.postgresql.util.PSQLException
            (xtdb.api TransactionKey)
            xtdb.types.ClojureForm))
 
@@ -26,6 +29,29 @@
 
 (defmethod print-method ClojureForm [clj-form w]
   (print-dup clj-form w))
+
+(defn- begin-ro-sql [{:keys [default-tz after-tx-id snapshot-time current-time]}]
+  (let [kvs (->> [["WATERMARK = ?" after-tx-id]
+                  ["TIMEZONE = ?" (some-> default-tz str)]
+                  ["SNAPSHOT_TIME = ?" snapshot-time]
+                  ["CLOCK_TIME = ?" current-time]]
+                 (into [] (filter (comp some? second))))]
+    (into [(format "BEGIN READ ONLY WITH (%s)"
+                   (str/join ", " (map first kvs)))]
+          (map second)
+          kvs)))
+
+(defn- xtql->sql [xtql]
+  (format "XTQL ($$ %s $$ %s)"
+          (pr-str xtql)
+          (->> (repeat (or (when (seq? xtql)
+                             (let [[op params & _] xtql]
+                               (when (and (or (= 'fn op) (= 'fn* op))
+                                          (vector? params))
+                                 (count params))))
+                           0)
+                       ", ?")
+               (str/join ""))))
 
 (defn plan-q
   "General query execution function for controlling the realized result set.
@@ -41,50 +67,58 @@
 
   The arguments are the same as for `q`."
 
-  (^clojure.lang.IReduceInit [node query+args] (plan-q node query+args {}))
-  (^clojure.lang.IReduceInit [node query+args opts]
-   (let [query-opts (-> opts
-                        (update :key-fn (comp serde/read-key-fn (fnil identity :kebab-case-keyword)))
-                        (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node))))]
+  (^clojure.lang.IReduceInit [connectable query+args] (plan-q connectable query+args {}))
+  (^clojure.lang.IReduceInit [connectable query+args opts]
+   (let [[query args] (if (vector? query+args)
+                        [(first query+args) (rest query+args)]
+                        [query+args []])
+         query (cond
+                 (string? query) query
+                 (seq? query) (xtql->sql query)
+                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))
+         opts (-> opts
+                  (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id connectable))))]
      (reify IReduceInit
        (reduce [_ f start]
-         (let [[query args] (if (vector? query+args)
-                              [(first query+args) (rest query+args)]
-                              [query+args []])
-               query-opts (assoc query-opts :args args)]
-           (with-open [^Stream res (cond
-                                     (string? query) (xtp/open-sql-query node query query-opts)
-                                     (seq? query) (xtp/open-xtql-query node query query-opts)
-                                     :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-             (let [^Iterator itr (.iterator res)]
-               (loop [acc start]
-                 (if-not (.hasNext itr)
-                   acc
-                   (let [acc (f acc (.next itr))]
-                     (if (reduced? acc)
-                       (deref acc)
-                       (recur acc)))))))))))))
+         (let [was-conn? (instance? Connection connectable)
+               conn (jdbc/get-connection connectable)]
+           (try
+             (jdbc/execute! conn (begin-ro-sql opts))
+             (try
+               (->> (jdbc/plan conn (into [query] args)
+                               {:builder-fn xt-jdbc/builder-fn
+                                ::xt-jdbc/key-fn (:key-fn opts :kebab-case-keyword)})
+                    (transduce (map #(into {} %)) (completing f) start))
+               (catch PSQLException e
+                 (when-let [detail (some-> (.getServerErrorMessage e) .getDetail)]
+                   (when-not (str/blank? detail)
+                     (throw (serde/read-transit detail :json))))
+                 (throw e))
+               (finally
+                 (jdbc/execute! conn ["ROLLBACK"])))
+             (finally
+               (when-not was-conn?
+                 (.close conn))))))))))
 
 (defn q
-  "query an XTDB node.
+  "query an XTDB node/connection.
 
   - query: either an XTQL or SQL query.
   - opts:
     - `:snapshot-time`: see 'Transaction Basis'
     - `:current-time`: override wall-clock time to use in functions that require it
     - `:default-tz`: overrides the default time zone for the query
-    - `:authn`: authentication options
 
   For example:
 
-  (q node '(from ...))
+  (q conn '(from ...))
 
-  (q node ['(fn [a b] (from :foo [a b])) a-value b-value])
-  (q node ['#(from :foo [{:a %1, :b %2}]) a-value b-value])
-  (q node ['#(from :foo [{:a %} b]) a-value])
+  (q conn ['(fn [a b] (from :foo [a b])) a-value b-value])
+  (q conn ['#(from :foo [{:a %1, :b %2}]) a-value b-value])
+  (q conn ['#(from :foo [{:a %} b]) a-value])
 
-  (q node \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
-  (q node [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])
+  (q conn \"SELECT foo.id, foo.v FROM foo WHERE foo.id = 'my-foo'\")
+  (q conn [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])
 
   Please see XTQL/SQL query language docs for more details.
 
@@ -101,13 +135,8 @@
   Alternatively a specific snapshot-time can be supplied,
   in this case the query will be run exactly at that system-time, ensuring the repeatability of queries.
 
-  (q node '(from ...)
-     {:snapshot-time #inst \"2020-01-02\"}))
-
-  If your node requires authentication you can supply authentication options.
-
-  (q node '(from ...)
-     {:authn {:user \"xtdb\" :password \"xtdb\"}})"
+  (q conn '(from ...)
+     {:snapshot-time #inst \"2020-01-02\"}))"
   ([node query] (q node query {}))
 
   ([node query opts]
