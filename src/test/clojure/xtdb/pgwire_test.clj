@@ -2197,7 +2197,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
           (t/testing "parse error doesn't halt ingestion"
             (t/is (thrown-with-msg? PSQLException
-                                    #"ERROR: internal error conforming query plan"
+                                    #"internal error conforming query plan"
                                     (q conn ["PATCH INTO bar FOR VALID_TIME FROM '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])))
 
             (t/is (= expected

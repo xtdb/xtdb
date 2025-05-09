@@ -48,7 +48,8 @@
 (s/def ::temporal-filter-value
   (s/or :now #{:now '(current-timestamp)}
         :literal (some-fn util-date? temporal? nil?)
-        :param simple-symbol?))
+        :param simple-symbol?
+        :expr ::expression))
 
 (defmethod temporal-filter-spec :at [_]
   (s/tuple #{:at} ::temporal-filter-value))

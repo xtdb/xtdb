@@ -117,6 +117,8 @@
 (def ^java.time.Instant start-of-time
   (micros->instant Long/MIN_VALUE))
 
+(def ^long start-of-time-as-micros Long/MIN_VALUE)
+
 (defn max-tx [l r]
   (if (or (nil? l)
           (and r (neg? (compare l r))))

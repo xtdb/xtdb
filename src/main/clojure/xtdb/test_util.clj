@@ -528,3 +528,9 @@
    (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
      {:res (xt/q node query opts)
       :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.columnFields prepared-q))})))
+
+(defn temporal-bounds->data [^TemporalBounds bounds]
+  (let [vt (.getValidTime bounds)
+        st (.getSystemTime bounds)]
+    {:valid-time [(.getLower vt) (.getUpper vt)]
+     :system-time [(.getLower st) (.getUpper st)]}))
