@@ -32,9 +32,10 @@ You can run the benchmarks with a custom node config by passing `-PconfigFile pa
 
 == XTDB Bench Docker Image
 
-The xtdb-bench Docker image is automatically built and pushed to GitHub Container Registry (GHCR) on every commit to the main branch.
+The xtdb-bench Docker image is automatically built and pushed to GitHub Container Registry (GHCR) against the main branch every night. (tagged with `nightly`)
 
-You can also manually build and push the image from any branch using the workflow_dispatch trigger in the "Build xtdb-bench Docker Image" GitHub Actions workflow.
+
+You can also manually build and push the image from any branch using the workflow_dispatch trigger in the "Build xtdb-bench Docker Image" GitHub Actions workflow (tagged with the Git SHA).
 
 === Running the Docker Image
 
@@ -42,7 +43,7 @@ From the root of the repository, you can run a benchmark with:
 
 [source,bash]
 ----
-docker run --rm ghcr.io/xtdb/xtdb-bench <benchmark-type> <opts...>
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly <benchmark-type> <opts...>
 ----
 
 Replace <benchmark-type> with the name of the benchmark, and <opts...> with any additional CLI arguments (e.g., --node-dir, --config-file, etc.).
@@ -50,13 +51,13 @@ Replace <benchmark-type> with the name of the benchmark, and <opts...> with any 
 TPC-H::
 [source,bash]
 ----
-docker run --rm ghcr.io/xtdb/xtdb-bench tpch \
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly tpch \
   --scale-factor 0.01
 ----
 AuctionMark::
 [source,bash]
 ----
-docker run --rm ghcr.io/xtdb/xtdb-bench auctionmark \
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly auctionmark \
   --duration PT30S \
   --scale-factor 0.1 \
   --threads 8
@@ -64,7 +65,7 @@ docker run --rm ghcr.io/xtdb/xtdb-bench auctionmark \
 Readings::
 [source,bash]
 ----
-docker run --rm ghcr.io/xtdb/xtdb-bench readings \
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly readings \
   --devices 10000
   --readings 10000
 ----
@@ -75,7 +76,7 @@ Products::
 # from S3 to datasets/products.transit.msgpack.gz,
 # or your process has permissions to do so
 
-docker run --rm ghcr.io/xtdb/xtdb-bench products
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly products
 ----
 
 ==== Running with custom config
@@ -84,7 +85,7 @@ You can run the benchmarks with a custom node config by passing `--config-file p
 
 [source,bash]
 ----
-docker run --rm ghcr.io/xtdb/xtdb-bench auctionmark \
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly auctionmark \
   --config-file custom-config.yaml \
   --duration PT30S \
   --threads 8 \

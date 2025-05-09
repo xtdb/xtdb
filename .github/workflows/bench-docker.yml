@@ -1,9 +1,8 @@
 name: Build xtdb-bench Docker Image
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron:  '0 22 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -41,8 +40,9 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-bench
           tags: |
-            type=ref,event=branch
-            type=edge,branch=main
+            type=schedule
+            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
+            type=raw,value=${{ github.sha }}
         
       - name: Build shadowJar for bench
         uses: gradle/actions/setup-gradle@v3
