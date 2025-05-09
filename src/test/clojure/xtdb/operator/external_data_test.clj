@@ -12,11 +12,11 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (def example-data
-  [[{:xt/id "foo1", :a-long 10, :a-double 54.2, :an-inst (time/->zdt #inst "2021")}
-    {:xt/id "foo2", :a-long 82, :a-double 1052.25, :an-inst (time/->zdt #inst "2021-01-04")}
-    {:xt/id "foo3", :a-long -15, :a-double -1534.23, :an-inst (time/->zdt #inst "2021-01-04T12:13")}]
-   [{:xt/id "foo4", :a-long 0, :a-double 0.0, :an-inst (time/->zdt #inst "2021-05-21T17:30")}
-    {:xt/id "foo5", :a-long 53, :a-double 10.0, :an-inst (time/->zdt #inst "2022")}]])
+  [[{:xt/id "foo1", :a-long 10, :a-double 54.2, :an-inst #xt/zdt "2021-01-01Z[UTC]"}
+    {:xt/id "foo2", :a-long 82, :a-double 1052.25, :an-inst #xt/zdt "2021-01-04Z[UTC]"}
+    {:xt/id "foo3", :a-long -15, :a-double -1534.23, :an-inst #xt/zdt "2021-01-04T12:13Z[UTC]"}]
+   [{:xt/id "foo4", :a-long 0, :a-double 0.0, :an-inst #xt/zdt "2021-05-21T17:30Z[UTC]"}
+    {:xt/id "foo5", :a-long 53, :a-double 10.0, :an-inst #xt/zdt "2022-01-01Z[UTC]"}]])
 
 (t/deftest test-csv-cursor
   (t/is (= {:col-types '{_id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}

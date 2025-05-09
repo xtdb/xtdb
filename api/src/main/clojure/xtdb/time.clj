@@ -49,6 +49,10 @@
   (->instant ([_] nil) ([_ _] nil))
   (->zdt [_] nil)
 
+  String
+  (->instant [s] (Time/asInstant s))
+  (->zdt [s] (Time/asZonedDateTime s))
+
   Instant
   (->instant ([i] i) ([i _] i))
   (->zdt [i] (-> i (.atZone utc)))

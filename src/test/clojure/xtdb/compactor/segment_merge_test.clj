@@ -41,8 +41,8 @@
           (t/testing "merge segments"
             (util/with-open [results (.mergeSegments seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
               (t/is (= [[{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
-                          :xt/system-from (time/->zdt #inst "2023")
-                          :xt/valid-from (time/->zdt #inst "2023")
+                          :xt/system-from #xt/zdt "2023-01-01Z[UTC]"
+                          :xt/valid-from #xt/zdt "2023-01-01Z[UTC]"
                           :xt/valid-to (time/->zdt time/end-of-time)
                           :op {:v 2, :xt/id "bar"}}
                          {:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",

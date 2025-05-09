@@ -2,6 +2,7 @@
 
 package xtdb.time
 
+import xtdb.types.ZonedDateTimeRange
 import java.lang.Math.multiplyExact
 import java.time.*
 import java.time.format.DateTimeFormatter
@@ -11,6 +12,7 @@ import java.time.format.DateTimeFormatterBuilder
 import java.time.temporal.ChronoUnit.MICROS
 import java.time.temporal.TemporalAccessor
 import java.time.temporal.TemporalQueries
+import java.time.temporal.TemporalQuery
 
 const val MILLI_HZ = 1_000
 const val MICRO_HZ = 1_000_000
@@ -69,5 +71,24 @@ fun String.asSqlTimestamp(): TemporalAccessor =
                 { LocalDate.from(it).atStartOfDay().maybeWithZoneFrom(it) },
             )
         }
+
+fun String.asZonedDateTime(): ZonedDateTime =
+    this.replace(' ', 'T')
+        .let { s ->
+            SQL_TIMESTAMP_FORMATTER.parseBest(
+                s,
+                ZonedDateTime::from,
+                { OffsetDateTime.from(it).toZonedDateTime() },
+                { LocalDate.from(it).atStartOfDay().atZone(it.query(TemporalQueries.zone())) },
+            )
+        } as ZonedDateTime
+
+fun String.asOffsetDateTime() = asZonedDateTime().toOffsetDateTime()
+fun String.asInstant() = asZonedDateTime().toInstant()
+
+private fun <T: TemporalAccessor> String.asTemporal(q: TemporalQuery<T>): T =
+    SQL_TIMESTAMP_FORMATTER.parse(replace(' ', 'T'), q)
+
+fun String.asLocalDateTime() = asTemporal(LocalDateTime::from)
 
 val TEMPORAL_COL_NAMES = setOf("_valid_from", "_valid_to", "_system_from", "_system_to")

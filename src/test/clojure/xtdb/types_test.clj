@@ -52,11 +52,11 @@
                              (ByteBuffer/wrap (byte-array [1 2 3]))]))
         "binary types")
 
-  (t/is (= {:vs [(time/->zdt #inst "1999")
-                 (time/->zdt #inst "2021-09-02T13:54:35.809Z")
-                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt/zone "Europe/Stockholm")
-                 (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt/zone "+02:00")
-                 (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) #xt/zone "UTC")]
+  (t/is (= {:vs [#xt/zdt "1999-01-01Z[UTC]"
+                 #xt/zdt "2021-09-02T13:54:35.809Z[UTC]"
+                 #xt/zdt "2021-09-02T15:54:35.809+02:00[Europe/Stockholm]"
+                 #xt/zdt "2021-09-02T15:54:35.809+02:00"
+                 #xt/zdt "1970-01-01T01:00:00.000001Z[UTC]"]
             :vec-types (repeat 5 TimeStampMicroTZVector)}
            (test-round-trip [#inst "1999"
                              (time/->instant #inst "2021-09-02T13:54:35.809Z")
