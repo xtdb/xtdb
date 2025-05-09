@@ -273,8 +273,7 @@
      (-> ctx (.periodSpecificationExpr 0) (.accept this))
      (-> ctx (.periodSpecificationExpr 1) (.accept this))])
 
-  (visitPeriodSpecLiteral [_ ctx] (-> (.literal ctx) (.accept expr-visitor)))
-  (visitPeriodSpecParam [_ ctx] (-> (.parameterSpecification ctx) (.accept expr-visitor)))
+  (visitPeriodSpecExpr [_ ctx] (-> (.expr ctx) (.accept expr-visitor)))
   (visitPeriodSpecNow [_ _] :now))
 
 (defrecord MultipleTimePeriodSpecifications []
@@ -2666,7 +2665,7 @@
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
           [:order-by [[_iid] [_valid_from]]
            [:scan {:table ~table,
-                   :for-valid-time [:in ~valid-from ~valid-to]}
+                   :for-valid-time [:in ~(or valid-from :now) ~valid-to]}
             [_iid _valid_from _valid_to
              ~@known-cols]]]]]]]])))
 

@@ -370,7 +370,7 @@
   (plan-temporal-filter [this]
     (required-vars-available? (.getFrom this) #{})
     (required-vars-available? (.getTo this) #{})
-    [:in (plan-expr (.getFrom this)) (plan-expr (.getTo this))])
+    [:in (or (plan-expr (.getFrom this)) :now) (plan-expr (.getTo this))])
 
   nil
   (plan-temporal-filter [_this]
