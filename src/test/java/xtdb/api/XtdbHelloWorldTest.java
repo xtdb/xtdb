@@ -1,6 +1,8 @@
 package xtdb.api;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import xtdb.test.NodeResolver;
 
 import java.sql.DriverManager;
 import java.util.ArrayList;
@@ -10,12 +12,12 @@ import static java.lang.String.format;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static xtdb.api.XtdbHelloWorld.User;
 
+@ExtendWith(NodeResolver.class)
 public class XtdbHelloWorldTest {
 
     @Test
-    public void testInMemory() throws Exception {
-        try (var node = Xtdb.openNode();
-             var connection =
+    public void testInMemory(Xtdb node) throws Exception {
+        try (var connection =
                      DriverManager.getConnection(
                              format("jdbc:xtdb://localhost:%d/xtdb", node.getServerPort()),
                              "xtdb", "xtdb"
@@ -38,9 +40,8 @@ public class XtdbHelloWorldTest {
     }
 
     @Test
-    public void testDataSource() throws Exception {
-        try (var node = Xtdb.openNode();
-             var connection = node.getConnection();
+    public void testDataSource(Xtdb node) throws Exception {
+        try (var connection = node.getConnection();
              var statement = connection.createStatement()) {
 
             statement.execute("INSERT INTO users RECORDS {_id: 'jms', name: 'James'}, {_id: 'joe', name: 'Joe'}");

@@ -27,7 +27,8 @@ val defaultJvmArgs = listOf(
     "-Darrow.memory.debug.allocator=false",
     "-XX:-OmitStackTraceInFastThrow",
     "-Dlogback.configurationFile=${rootDir.resolve("src/main/resources/logback-test.xml")}",
-    "-Dxtdb.rootDir=$rootDir"
+    "-Dxtdb.rootDir=$rootDir",
+    "-Djunit.jupiter.extensions.autodetection.enabled=true"
 )
 
 val sixGBJvmArgs = listOf(
@@ -125,8 +126,8 @@ allprojects {
             devRuntimeOnly(libs.slf4j.jpl)
             testRuntimeOnly(libs.slf4j.jpl)
 
-            testImplementation("org.junit.jupiter", "junit-jupiter-api", "5.8.1")
-            testRuntimeOnly("org.junit.jupiter", "junit-jupiter-engine", "5.8.1")
+            testImplementation(libs.junit.jupiter.api)
+            testRuntimeOnly(libs.junit.jupiter.engine)
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)
             testImplementation(libs.testcontainers.minio)
@@ -296,6 +297,8 @@ dependencies {
     api("org.postgresql", "postgresql", "42.7.3")
     api(libs.integrant)
     api(project(":xtdb-core"))
+
+    implementation(libs.junit.jupiter.api)
 
     testImplementation(libs.clojure.`data`.csv)
     testImplementation(libs.clojure.tools.cli)
