@@ -1,5 +1,6 @@
 (ns xtdb.bench
   (:require [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
@@ -8,11 +9,13 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
+            [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
            (io.micrometer.core.instrument Timer)
+           (java.io File)
            (java.lang.management ManagementFactory)
            (java.time Clock Duration InstantSource)
            java.time.Duration
@@ -315,24 +318,33 @@
     benchmark-type)
   :default ::default)
 
-(defn run-benchmark [benchmark {:keys [node-dir no-load?]}]
+(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file]}]
   (let [benchmark-fn (compile-benchmark benchmark)]
-    (letfn [(run [node-dir]
-              (with-open [node (tu/->local-node {:node-dir node-dir
-                                                 :instant-src (InstantSource/system)})]
-                (binding [tu/*allocator* (util/component node :xtdb/allocator)
-                          *registry* (util/component node :xtdb.metrics/registry)]
-                  (benchmark-fn node))))]
-      (if node-dir
-        (do
-          (log/info "Using node dir:" (str node-dir))
-          (when-not no-load?
-            (util/delete-dir node-dir))
-          (run node-dir))
+    (if config-file
+      (do
+        (log/info "Running node from config file:" config-file)
+        (with-open [node (xtn/start-node config-file)]
+          (benchmark-fn node)))
+      (letfn [(run [node-dir]
+                (with-open [node (tu/->local-node {:node-dir node-dir
+                                                   :instant-src (InstantSource/system)})]
+                  (binding [tu/*allocator* (util/component node :xtdb/allocator)
+                            *registry* (util/component node :xtdb.metrics/registry)]
+                    (benchmark-fn node))))]
+        (if node-dir
+          (do
+            (log/info "Using node dir:" (str node-dir))
+            (when-not no-load?
+              (util/delete-dir node-dir))
+            (run node-dir))
 
-        (util/with-tmp-dirs #{node-tmp-dir}
-          (log/info "Using temporary dir: " node-tmp-dir)
-          (run node-tmp-dir))))))
+          (util/with-tmp-dirs #{node-tmp-dir}
+            (log/info "Using temporary dir: " node-tmp-dir)
+            (run node-tmp-dir)))))))
+
+(defn if-it-exists [^File f]
+  (when (.exists f)
+    f))
 
 (def ^:private default-cli-flags
   [[nil "--node-dir NODE_DIR"
@@ -340,7 +352,13 @@
     :parse-fn util/->path]
 
    [nil "--no-load" "don't run any load phases (use with an existing directory)"
-    :id :no-load?]])
+    :id :no-load?]
+
+   ["-f" "--config-file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
+    :id :config-file
+    :parse-fn io/file
+    :validate [if-it-exists "Config file doesn't exist"
+               #(contains? #{"yaml"} (util/file-extension %)) "Config file must be .yaml"]]])
 
 (defn -main [benchmark-type & args]
   (util/install-uncaught-exception-handler!)

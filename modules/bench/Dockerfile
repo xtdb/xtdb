@@ -11,3 +11,6 @@ ENTRYPOINT [ \
     "clojure.main", "-m", "xtdb.bench"]
 
 ADD build/libs/bench-standalone.jar xtdb-bench.jar
+ADD cloud/config/aws.yaml config/aws.yaml
+ADD cloud/config/azure.yaml config/azure.yaml
+ADD cloud/config/google-cloud.yaml config/google-cloud.yaml
