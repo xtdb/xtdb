@@ -557,6 +557,9 @@
                                   (visitTxTzOption [_ ctx]
                                     {:default-tz (sql/plan-expr (.tz ctx))})
 
+                                  (visitWatermarkTxOption [_ ctx]
+                                    {:watermark-tx-id (sql/plan-expr (.watermarkTx ctx))})
+
                                   (visitReadWriteSession [_ _] {:access-mode :read-write})
 
                                   (visitReadOnlySession [_ _] {:access-mode :read-only})
@@ -1474,7 +1477,8 @@
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (let [tx-opts (-> tx-opts
-                    (update :default-tz #(some-> % (apply-args args) (coerce->tz))))]
+                    (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
+                    (update :watermark-tx-id #(some-> % (apply-args args))))]
     (swap! conn-state
            (fn [{:keys [session watermark-tx-id] :as st}]
              (let [{:keys [^Clock clock]} session]
@@ -1486,7 +1490,7 @@
 
                                (-> {:current-time (.instant clock)
                                     :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                                    :after-tx-id (or watermark-tx-id -1)
+                                    :after-tx-id (or (:watermark-tx-id tx-opts) watermark-tx-id -1)
                                     :implicit? false}
                                    (into (:characteristics session))
                                    (into tx-opts)))))))))))
@@ -1614,11 +1618,11 @@
   "Responds to a msg-parse message that creates a prepared-statement."
   [{:keys [conn-state]} {:keys [query]}]
 
-  (let [{:keys [session watermark-tx-id]} @conn-state
+  (let [{:keys [session transaction watermark-tx-id]} @conn-state
         {:keys [^Clock clock], session-parameters :parameters} session]
 
     (interpret-sql query {:default-tz (.getZone clock)
-                          :watermark-tx-id watermark-tx-id
+                          :watermark-tx-id (or (:watermark-tx-id transaction) watermark-tx-id)
                           :session-parameters session-parameters})))
 
 (defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]

@@ -2843,3 +2843,19 @@ ORDER BY 1,2;")
     (t/is (= {:timezone "Asia/Tokyo"}
              (jdbc/execute-one! conn ["SHOW TIME ZONE"]))
           "reset tz")))
+
+(t/deftest in-tx-watermark
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
+    (t/is (= {:watermark 0} (jdbc/execute-one! conn ["SHOW WATERMARK"])))
+
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 2}"])
+    (t/is (= {:watermark 1} (jdbc/execute-one! conn ["SHOW WATERMARK"])))
+
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (watermark = ?)" 0])
+    (try
+      (t/is (= {:watermark 0} (jdbc/execute-one! conn ["SHOW WATERMARK"])))
+      (finally
+        (jdbc/execute! conn ["ROLLBACK"])))
+
+    (t/is (= {:watermark 1} (jdbc/execute-one! conn ["SHOW WATERMARK"])))))

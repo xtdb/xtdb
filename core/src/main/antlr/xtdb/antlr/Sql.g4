@@ -902,13 +902,14 @@ transactionMode
 txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
 
 readOnlyTxOption
-    : 'SNAPSHOT_TIME' ('=')? dateTimeLiteral # SnapshotTimeTxOption
-    | 'CLOCK_TIME' ('=')? dateTimeLiteral # ClockTimeTxOption
+    : 'SNAPSHOT_TIME' '='? dateTimeLiteral # SnapshotTimeTxOption
+    | 'CLOCK_TIME' '='? dateTimeLiteral # ClockTimeTxOption
+    | 'WATERMARK' '='? watermarkTx=expr # WatermarkTxOption
     | txTzOption # TxTzOption0
     ;
 
 readWriteTxOption
-    : 'SYSTEM_TIME' ('=')? dateTimeLiteral # SystemTimeTxOption
+    : 'SYSTEM_TIME' '='? dateTimeLiteral # SystemTimeTxOption
     | txTzOption # TxTzOption1
     ;
 
