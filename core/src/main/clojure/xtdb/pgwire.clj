@@ -417,7 +417,6 @@
   "Returns a pg specific error for an XTDB exception"
   [^Throwable ex generic-msg]
   (cond (instance? IllegalArgumentException ex)
-
         (err-protocol-violation (.getMessage ex))
 
         (instance? xtdb.RuntimeException ex)
@@ -1294,7 +1293,7 @@
     (catch xtdb.IllegalArgumentException e
       (throw (client-err (ex-message e) {:error-type :dml})))
     (catch Throwable e
-      (log/debug e "Error on execute-tx")
+      (log/error e "Error on execute-tx")
       (let [msg "unexpected error on tx submit (report as a bug)"]
         (throw (ex-info msg {::client-error (err-pg-exception e msg)} e))))))
 
