@@ -4,7 +4,7 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-simple-unnest
   (let [in-vals [[{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]
@@ -112,10 +112,26 @@
         "group by ordinality"))
 
 (t/deftest test-vector-not-found-4343
-  (with-open [node (xtn/start-node)]
-    (xt/execute-tx node [[:put-docs :f
-                               {:xt/id 1, :type "foo", :pid 1, :fields [{:value "v1"} {:value "v2"}]}
-                               {:xt/id 2, :type "foo", :pid 2, :fields []}]])
+  (xt/execute-tx tu/*node* [[:put-docs :f
+                             {:xt/id 1, :type "foo", :pid 1, :fields [{:value "v1"} {:value "v2"}]}
+                             {:xt/id 2, :type "foo", :pid 2, :fields []}]])
 
-    (t/is (= [{:xt/id 1, :field {:value "v1"}} {:xt/id 1, :field {:value "v2"}}]
-             (xt/q node ["SELECT f._id, field FROM f, UNNEST(f.fields) fields_table (field) WHERE f.type IN (?)" "foo"])))))
+  (t/is (= [{:xt/id 1, :field {:value "v1"}} {:xt/id 1, :field {:value "v2"}}]
+           (xt/q tu/*node* ["SELECT f._id, field FROM f, UNNEST(f.fields) fields_table (field) WHERE f.type IN (?)" "foo"]))))
+
+
+(t/deftest fix-ordinality-field-naming
+  (xt/execute-tx tu/*node* [[:put-docs :r1 {:xt/id 0, :xs [10 20 30]} ]])
+
+  (t/is (= [{:o1 1, :o2 1} {:o1 2, :o2 2} {:o1 3, :o2 3}]
+           (tu/query-ra
+            '[:project [o1 o2]
+              [:map
+               [{o2 o1}]
+               [:unnest
+                {x1 unnest}
+                {:ordinality-column o1}
+                [:map
+                 [{unnest xs}]
+                 [:scan {:table public/r1} [xs]]]]]]
+            {:node tu/*node*}))))
