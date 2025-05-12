@@ -551,6 +551,12 @@
                                     (into {:access-mode :read-only}
                                           (mapcat (partial sql/accept-visitor this) (.readOnlyTxOption ctx))))
 
+                                  (visitTxTzOption0 [this ctx] (.accept (.txTzOption ctx) this))
+                                  (visitTxTzOption1 [this ctx] (.accept (.txTzOption ctx) this))
+
+                                  (visitTxTzOption [_ ctx]
+                                    {:default-tz (sql/plan-expr (.tz ctx))})
+
                                   (visitReadWriteSession [_ _] {:access-mode :read-write})
 
                                   (visitReadOnlySession [_ _] {:access-mode :read-only})
@@ -1318,6 +1324,16 @@
                                         (invalid-text-representation (ex->message e)))}
                       e)))))
 
+(defn- apply-args [expr args]
+  (if (symbol? expr)
+    (let [args-map (zipmap (map (fn [idx]
+                                  (symbol (str "?_" idx)))
+                                (range))
+                           args)]
+      (or (args-map expr)
+          (throw (client-err (str "missing arg: " expr)))))
+    expr))
+
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
 
@@ -1446,26 +1462,38 @@
   (log/trace "sending parameter description - " {:param-fields param-fields})
   (cmd-write-msg conn msg-parameter-description {:parameter-oids (mapv :oid param-fields)}))
 
-(defn cmd-begin [{:keys [node conn-state]} tx-opts]
-  (swap! conn-state
-         (fn [{:keys [session watermark-tx-id] :as st}]
-           (let [{:keys [^Clock clock]} session]
-             (-> st
-                 (update :transaction
-                         (fn [{:keys [access-mode]}]
-                           (if access-mode
-                             (throw (client-err "transaction already started"))
+(defn- coerce->tz [tz]
+  (cond
+    (instance? ZoneId tz) tz
+    (instance? String tz) (try
+                            (ZoneId/of tz)
+                            (catch Exception e
+                              (throw (client-err (format "invalid timezone '%s': %s" tz (ex-message e))))))
 
-                             (-> {:current-time (.instant clock)
-                                  :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                                  :after-tx-id (or watermark-tx-id -1)
-                                  :implicit? false}
-                                 (into (:characteristics session))
-                                 (into tx-opts))))))))))
+    :else (throw (client-err (format "invalid timezone '%s'" (str tz))))))
+
+(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
+  (let [tx-opts (-> tx-opts
+                    (update :default-tz #(some-> % (apply-args args) (coerce->tz))))]
+    (swap! conn-state
+           (fn [{:keys [session watermark-tx-id] :as st}]
+             (let [{:keys [^Clock clock]} session]
+               (-> st
+                   (update :transaction
+                           (fn [{:keys [access-mode]}]
+                             (if access-mode
+                               (throw (client-err "transaction already started"))
+
+                               (-> {:current-time (.instant clock)
+                                    :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
+                                    :after-tx-id (or watermark-tx-id -1)
+                                    :implicit? false}
+                                   (into (:characteristics session))
+                                   (into tx-opts)))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf system-time access-mode]} transaction
+        {:keys [failed dml-buf system-time access-mode default-tz]} transaction
         {:keys [^Clock clock, parameters]} session]
 
     (if failed
@@ -1473,7 +1501,7 @@
 
       (try
         (let [{:keys [tx-id error]} (when (= :read-write access-mode)
-                                      (execute-tx conn dml-buf {:default-tz (.getZone clock)
+                                      (execute-tx conn dml-buf {:default-tz (or default-tz (.getZone clock))
                                                                 :system-time system-time
                                                                 :authn {:user (get parameters "user")}}))]
           (swap! conn-state (fn [conn-state]
@@ -1528,16 +1556,8 @@
   ;; doesn't mean anything to us because we're always serializable
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn- apply-args [sym args]
-  (let [args-map (zipmap (map (fn [idx]
-                                (symbol (str "?_" idx)))
-                              (range))
-                         args)]
-    (or (args-map sym)
-        (throw (client-err (str "missing arg: " sym))))))
-
 (defn cmd-set-time-zone [conn {:keys [tz args]}]
-  (let [tz (cond-> tz (symbol? tz) (apply-args args))]
+  (let [tz (-> tz (apply-args args))]
     (set-time-zone conn tz))
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
@@ -1711,7 +1731,7 @@
                     :current-time (or (:current-time stmt)
                                       (:current-time transaction)
                                       (.instant clock))
-                    :default-tz (.getZone clock)}
+                    :default-tz (or (:default-tz transaction) (.getZone clock))}
 
         xt-args (xtify-args conn args stmt)]
 
@@ -1808,7 +1828,7 @@
     :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
 
     :begin (do
-             (cmd-begin conn tx-characteristics)
+             (cmd-begin conn tx-characteristics portal)
              (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
     :rollback (do
@@ -1840,11 +1860,11 @@
 
   (try
     (when-not (boolean (:transaction @conn-state))
-      (cmd-begin conn {:implicit? true}))
+      (cmd-begin conn {:implicit? true} {}))
 
     (doseq [stmt (parse conn {:query query})]
       (when-not (boolean (:transaction @conn-state))
-        (cmd-begin conn {:implicit? true}))
+        (cmd-begin conn {:implicit? true} {}))
 
       (try
         (let [{:keys [param-fields statement-type] :as prepared-stmt} (prep-stmt conn stmt {})]

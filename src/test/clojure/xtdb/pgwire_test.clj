@@ -2811,3 +2811,35 @@ ORDER BY 1,2;")
 
        (send "SELECT TIMESTAMP '2020-05-01T00:00:00-08:00' ts;\n")
        (t/is (= [["ts"] ["2020-05-01 00:00:00-08:00"]] (read)))))))
+
+(t/deftest in-tx-default-tz
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["SET TIME ZONE 'Asia/Tokyo'"])
+
+    (t/testing "DML tx"
+      (jdbc/execute! conn ["BEGIN READ WRITE WITH (TIMEZONE = ?)" "America/New_York"])
+      (try
+        (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, ts: (TIMESTAMP '2020-01-01'::timestamptz)}"])
+        (jdbc/execute! conn ["COMMIT"])
+        (finally
+          (jdbc/execute! conn ["ROLLBACK"])))
+
+      (t/is (= {:_id 1, :ts #xt/zdt "2020-01-01T00:00-05:00[America/New_York]"}
+               (jdbc/execute-one! conn ["SELECT * FROM foo"]))))
+
+    (t/is (= {:timezone "Asia/Tokyo"}
+             (jdbc/execute-one! conn ["SHOW TIME ZONE"]))
+          "reset tz")
+
+    (t/testing "DQL tx"
+      (jdbc/execute! conn ["BEGIN READ ONLY WITH (TIMEZONE = ?)" "America/New_York"])
+      (try
+        (t/is (= {:timezone "America/New_York"} (jdbc/execute-one! conn ["SHOW TIME ZONE"])))
+        (t/is (= {:ts #xt/zdt "2020-01-01T00:00-05:00[America/New_York]"} (jdbc/execute-one! conn ["SELECT TIMESTAMP '2020-01-01'::timestamptz ts"])))
+        (jdbc/execute! conn ["COMMIT"])
+        (finally
+          (jdbc/execute! conn ["ROLLBACK"]))))
+
+    (t/is (= {:timezone "Asia/Tokyo"}
+             (jdbc/execute-one! conn ["SHOW TIME ZONE"]))
+          "reset tz")))

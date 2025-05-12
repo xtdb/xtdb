@@ -899,13 +899,17 @@ transactionMode
     | 'READ' 'WRITE' ('WITH' '(' readWriteTxOption? (',' readWriteTxOption?)* ')')? # ReadWriteTransaction
     ;
 
+txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
+
 readOnlyTxOption
     : 'SNAPSHOT_TIME' ('=')? dateTimeLiteral # SnapshotTimeTxOption
     | 'CLOCK_TIME' ('=')? dateTimeLiteral # ClockTimeTxOption
+    | txTzOption # TxTzOption0
     ;
 
 readWriteTxOption
     : 'SYSTEM_TIME' ('=')? dateTimeLiteral # SystemTimeTxOption
+    | txTzOption # TxTzOption1
     ;
 
 levelOfIsolation
