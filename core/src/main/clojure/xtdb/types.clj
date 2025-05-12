@@ -1157,14 +1157,14 @@
                 :write-text (fn [_env ^IVectorReader rdr idx]
                               (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
                                 (utf8
-                                 (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                 (str "[" (some-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                       "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                       ")"))))
                 :write-binary (fn [_env ^IVectorReader rdr idx]
                                 (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
                                   (byte-array
                                    (.getBytes
-                                    (str "[" (-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
+                                    (str "[" (some-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                          "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                          ")")))))}
 

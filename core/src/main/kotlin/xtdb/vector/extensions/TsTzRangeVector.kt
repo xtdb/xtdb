@@ -40,7 +40,7 @@ class TsTzRangeVector(name: String, allocator: BufferAllocator, fieldType: Field
     override fun getObject0(index: Int): ZonedDateTimeRange =
         from(underlyingVector.dataVector).let { elVec ->
             ZonedDateTimeRange(
-                elVec.getLong(index * 2).toZdt(),
+                elVec.getLong(index * 2).takeUnless { it == Long.MIN_VALUE }?.toZdt(),
                 elVec.getLong(index * 2 + 1).takeUnless { it == Long.MAX_VALUE }?.toZdt()
             )
         }

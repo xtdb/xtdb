@@ -16,15 +16,15 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         inner.listElements.let {
             ZonedDateTimeRange(
-                it.getObject(idx * 2) as ZonedDateTime,
-                it.getObject(idx * 2 + 1) as? ZonedDateTime
+                it.getObject(idx * 2) as ZonedDateTime?,
+                it.getObject(idx * 2 + 1) as? ZonedDateTime?
             )
         }
 
     override fun writeObject0(value: Any) = when (value) {
         is ZonedDateTimeRange -> {
             inner.getListElements(FieldType.notNullable(Timestamp(MICROSECOND, "UTC"))).let {
-                it.writeObject(value.from)
+                if (value.from != null) it.writeObject(value.from) else it.writeLong(Long.MIN_VALUE)
                 if (value.to != null) it.writeObject(value.to) else it.writeLong(Long.MAX_VALUE)
             }
             inner.endList()

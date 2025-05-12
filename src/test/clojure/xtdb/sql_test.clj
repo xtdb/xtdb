@@ -2961,3 +2961,4 @@ FROM dates"))))
              (xt/q tu/*node* [(format "FROM (XTQL $$ %s $$) t SELECT *, ? AS x"
                                       (pr-str '#(from :bar [{:xt/id %} *])))
                               2 "x"])))))
+
