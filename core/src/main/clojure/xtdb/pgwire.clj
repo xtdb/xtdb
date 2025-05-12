@@ -434,23 +434,7 @@
                          (subs di-str 1 (dec (count di-str)))))))
           (str/lower-case)))
 
-(defn date-time-visitor [^ZoneId default-tz]
-  (reify SqlVisitor
-    (visitDateTimeExprLiteral [this ctx] (.accept (.dateTimeLiteral ctx) this))
-    (visitDateTimeExprParam [this ctx] (.accept (.parameterSpecification ctx) this))
-
-    (visitDateLiteral [_ ctx]
-      (-> (LocalDate/parse (.accept (.characterString ctx) sql/string-literal-visitor))
-          (.atStartOfDay)
-          (.atZone default-tz)))
-
-    (visitTimestampLiteral [_ ctx]
-      (let [ts (time/parse-sql-timestamp-literal (.accept (.characterString ctx) sql/string-literal-visitor))]
-        (cond
-          (instance? LocalDateTime ts) (.atZone ^LocalDateTime ts default-tz)
-          (instance? ZonedDateTime ts) ts)))))
-
-(defn- interpret-sql [sql {:keys [default-tz watermark-tx-id session-parameters]}]
+(defn- interpret-sql [sql {:keys [watermark-tx-id session-parameters]}]
   (log/debug "Interpreting SQL: " sql)
   (let [sql (trim-sql sql)]
     (or (when (str/blank? sql)
@@ -462,159 +446,160 @@
         (try
           (letfn [(subsql [^ParserRuleContext ctx]
                     (subs sql (.getStartIndex (.getStart ctx)) (inc (.getStopIndex (.getStop ctx)))))]
-            (->> (antlr/parse-multi-statement sql)
-                 (mapv (partial sql/accept-visitor
-                                (reify SqlVisitor
-                                  (visitSetSessionVariableStatement [_ ctx]
-                                    {:statement-type :set-session-parameter
-                                     :parameter (session-param-name (.identifier ctx))
-                                     :value (sql/plan-expr (.literal ctx))})
+            (let [env (sql/->env)]
+              (->> (antlr/parse-multi-statement sql)
+                   (mapv (partial sql/accept-visitor
+                                  (reify SqlVisitor
+                                    (visitSetSessionVariableStatement [_ ctx]
+                                      {:statement-type :set-session-parameter
+                                       :parameter (session-param-name (.identifier ctx))
+                                       :value (sql/plan-expr (.literal ctx) env)})
 
-                                  (visitSetSessionCharacteristicsStatement [this ctx]
-                                    {:statement-type :set-session-characteristics
-                                     :session-characteristics
-                                     (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.sessionCharacteristic ctx))})
+                                    (visitSetSessionCharacteristicsStatement [this ctx]
+                                      {:statement-type :set-session-characteristics
+                                       :session-characteristics
+                                       (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.sessionCharacteristic ctx))})
 
-                                  (visitSessionTxCharacteristics [this ctx]
-                                    (let [[^ParserRuleContext session-mode & more-modes] (.sessionTxMode ctx)]
-                                      (assert (nil? more-modes) "pgwire only supports one for now")
-                                      (.accept session-mode this)))
+                                    (visitSessionTxCharacteristics [this ctx]
+                                      (let [[^ParserRuleContext session-mode & more-modes] (.sessionTxMode ctx)]
+                                        (assert (nil? more-modes) "pgwire only supports one for now")
+                                        (.accept session-mode this)))
 
-                                  (visitSetTransactionStatement [_ _]
-                                    ;; no-op for us
-                                    {:statement-type :set-transaction
-                                     :tx-characteristics {}})
+                                    (visitSetTransactionStatement [_ _]
+                                      ;; no-op for us
+                                      {:statement-type :set-transaction
+                                       :tx-characteristics {}})
 
-                                  (visitStartTransactionStatement [this ctx]
-                                    {:statement-type :begin
-                                     :tx-characteristics (some-> (.transactionCharacteristics ctx) (.accept this))})
+                                    (visitStartTransactionStatement [this ctx]
+                                      {:statement-type :begin
+                                       :tx-characteristics (some-> (.transactionCharacteristics ctx) (.accept this))})
 
-                                  (visitTransactionCharacteristics [this ctx]
-                                    (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.transactionMode ctx)))
+                                    (visitTransactionCharacteristics [this ctx]
+                                      (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.transactionMode ctx)))
 
-                                  (visitIsolationLevel [_ _] {})
-                                  (visitSessionIsolationLevel [_ _] {})
+                                    (visitIsolationLevel [_ _] {})
+                                    (visitSessionIsolationLevel [_ _] {})
 
-                                  (visitReadWriteTransaction [this ctx]
-                                    (into {:access-mode :read-write}
-                                          (mapcat (partial sql/accept-visitor this) (.readWriteTxOption ctx))))
+                                    (visitReadWriteTransaction [this ctx]
+                                      (into {:access-mode :read-write}
+                                            (mapcat (partial sql/accept-visitor this) (.readWriteTxOption ctx))))
 
-                                  (visitReadOnlyTransaction [this ctx]
-                                    (into {:access-mode :read-only}
-                                          (mapcat (partial sql/accept-visitor this) (.readOnlyTxOption ctx))))
+                                    (visitReadOnlyTransaction [this ctx]
+                                      (into {:access-mode :read-only}
+                                            (mapcat (partial sql/accept-visitor this) (.readOnlyTxOption ctx))))
 
-                                  (visitTxTzOption0 [this ctx] (.accept (.txTzOption ctx) this))
-                                  (visitTxTzOption1 [this ctx] (.accept (.txTzOption ctx) this))
+                                    (visitTxTzOption0 [this ctx] (.accept (.txTzOption ctx) this))
+                                    (visitTxTzOption1 [this ctx] (.accept (.txTzOption ctx) this))
 
-                                  (visitTxTzOption [_ ctx]
-                                    {:default-tz (sql/plan-expr (.tz ctx))})
+                                    (visitTxTzOption [_ ctx]
+                                      {:default-tz (sql/plan-expr (.tz ctx) env)})
 
-                                  (visitWatermarkTxOption [_ ctx]
-                                    {:watermark-tx-id (sql/plan-expr (.watermarkTx ctx))})
+                                    (visitWatermarkTxOption [_ ctx]
+                                      {:watermark-tx-id (sql/plan-expr (.watermarkTx ctx) env)})
 
-                                  (visitReadWriteSession [_ _] {:access-mode :read-write})
+                                    (visitReadWriteSession [_ _] {:access-mode :read-write})
 
-                                  (visitReadOnlySession [_ _] {:access-mode :read-only})
+                                    (visitReadOnlySession [_ _] {:access-mode :read-only})
 
-                                  (visitSystemTimeTxOption [_ ctx]
-                                    {:system-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
+                                    (visitSystemTimeTxOption [_ ctx]
+                                      {:system-time (sql/plan-expr (.systemTime ctx) env)})
 
-                                  (visitSnapshotTimeTxOption [_ ctx]
-                                    {:snapshot-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
+                                    (visitSnapshotTimeTxOption [_ ctx]
+                                      {:snapshot-time (sql/plan-expr (.snapshotTime ctx) env)})
 
-                                  (visitClockTimeTxOption [_ ctx]
-                                    {:current-time (.accept (.dateTimeLiteral ctx) (date-time-visitor default-tz))})
+                                    (visitClockTimeTxOption [_ ctx]
+                                      {:current-time (sql/plan-expr (.clockTime ctx) env)})
 
-                                  (visitCommitStatement [_ _] {:statement-type :commit})
-                                  (visitRollbackStatement [_ _] {:statement-type :rollback})
+                                    (visitCommitStatement [_ _] {:statement-type :commit})
+                                    (visitRollbackStatement [_ _] {:statement-type :rollback})
 
-                                  (visitSetRoleStatement [_ _] {:statement-type :set-role})
+                                    (visitSetRoleStatement [_ _] {:statement-type :set-role})
 
-                                  (visitSetTimeZoneStatement [_ ctx]
-                                    ;; not sure if handlling time zone explicitly is the right approach
-                                    ;; might be cleaner to handle it like any other session param
-                                    {:statement-type :set-time-zone
-                                     :tz (sql/plan-expr (.zone ctx))})
+                                    (visitSetTimeZoneStatement [_ ctx]
+                                      ;; not sure if handlling time zone explicitly is the right approach
+                                      ;; might be cleaner to handle it like any other session param
+                                      {:statement-type :set-time-zone
+                                       :tz (sql/plan-expr (.zone ctx) env)})
 
-                                  (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
+                                    (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
 
-                                  (visitInsertStatement [_ ctx]
-                                    {:statement-type :dml, :dml-type :insert, :query (subsql ctx)})
+                                    (visitInsertStatement [_ ctx]
+                                      {:statement-type :dml, :dml-type :insert, :query (subsql ctx)})
 
-                                  (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
+                                    (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
 
-                                  (visitPatchStmt [_ ctx]
-                                    {:statement-type :dml, :dml-type :patch, :query (subsql ctx)})
+                                    (visitPatchStmt [_ ctx]
+                                      {:statement-type :dml, :dml-type :patch, :query (subsql ctx)})
 
-                                  (visitUpdateStatementSearched [_ ctx]
-                                    {:statement-type :dml, :dml-type :update, :query (subsql ctx)})
+                                    (visitUpdateStatementSearched [_ ctx]
+                                      {:statement-type :dml, :dml-type :update, :query (subsql ctx)})
 
-                                  (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
+                                    (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
 
-                                  (visitDeleteStatementSearched [_ ctx]
-                                    {:statement-type :dml, :dml-type :delete, :query (subsql ctx)})
+                                    (visitDeleteStatementSearched [_ ctx]
+                                      {:statement-type :dml, :dml-type :delete, :query (subsql ctx)})
 
-                                  (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
+                                    (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
 
-                                  (visitEraseStatementSearched [_ ctx]
-                                    {:statement-type :dml, :dml-type :erase, :query (subsql ctx)})
+                                    (visitEraseStatementSearched [_ ctx]
+                                      {:statement-type :dml, :dml-type :erase, :query (subsql ctx)})
 
-                                  (visitAssertStatement [_ ctx]
-                                    {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
+                                    (visitAssertStatement [_ ctx]
+                                      {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
 
-                                  (visitQueryExpr [_ ctx]
-                                    {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
+                                    (visitQueryExpr [_ ctx]
+                                      {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
 
-                                  ;; could do pre-submit validation here
-                                  (visitCreateUserStatement [_ ctx]
-                                    {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
-                                  (visitAlterUserStatement [_ ctx]
-                                    {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
+                                    ;; could do pre-submit validation here
+                                    (visitCreateUserStatement [_ ctx]
+                                      {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
+                                    (visitAlterUserStatement [_ ctx]
+                                      {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
 
-                                  (visitPrepareStmt [this ctx] (-> (.prepareStatement ctx) (.accept this)))
+                                    (visitPrepareStmt [this ctx] (-> (.prepareStatement ctx) (.accept this)))
 
-                                  (visitPrepareStatement [this ctx]
-                                    (let [inner-ctx (.directlyExecutableStatement ctx)]
-                                      {:statement-type :prepare
-                                       :statement-name (str (sql/identifier-sym (.statementName ctx)))
-                                       :inner (.accept inner-ctx this)}))
+                                    (visitPrepareStatement [this ctx]
+                                      (let [inner-ctx (.directlyExecutableStatement ctx)]
+                                        {:statement-type :prepare
+                                         :statement-name (str (sql/identifier-sym (.statementName ctx)))
+                                         :inner (.accept inner-ctx this)}))
 
-                                  (visitExecuteStmt [_ ctx]
-                                    {:statement-type :execute,
-                                     :statement-name (str (sql/identifier-sym (.statementName (.executeStatement ctx)))),
-                                     :query (subsql ctx)
-                                     :parsed-query ctx})
+                                    (visitExecuteStmt [_ ctx]
+                                      {:statement-type :execute,
+                                       :statement-name (str (sql/identifier-sym (.statementName (.executeStatement ctx)))),
+                                       :query (subsql ctx)
+                                       :parsed-query ctx})
 
-                                  (visitShowVariableStatement [_ ctx]
-                                    {:statement-type :query, :query sql, :parsed-query ctx})
+                                    (visitShowVariableStatement [_ ctx]
+                                      {:statement-type :query, :query sql, :parsed-query ctx})
 
-                                  (visitSetWatermarkStatement [_ ctx]
-                                    (let [wm-tx-id (sql/plan-expr (.literal ctx))]
-                                      (if (number? wm-tx-id)
-                                        {:statement-type :set-watermark, :watermark-tx-id wm-tx-id}
-                                        (throw (client-err "invalid watermark - expecting number")))))
+                                    (visitSetWatermarkStatement [_ ctx]
+                                      (let [wm-tx-id (sql/plan-expr (.literal ctx) env)]
+                                        (if (number? wm-tx-id)
+                                          {:statement-type :set-watermark, :watermark-tx-id wm-tx-id}
+                                          (throw (client-err "invalid watermark - expecting number")))))
 
-                                  (visitShowWatermarkStatement [_ _]
-                                    {:statement-type :query, :query sql
-                                     :ra-plan [:table '[watermark]
-                                               (if watermark-tx-id
-                                                 [{:watermark watermark-tx-id}]
-                                                 [])]})
-
-                                  (visitShowSnapshotTimeStatement [_ ctx]
-                                    {:statement-type :query, :query sql, :parsed-query ctx})
-
-                                  (visitShowClockTimeStatement [_ ctx]
-                                    {:statement-type :query, :query sql, :parsed-query ctx})
-
-                                  ;; HACK: these values are fixed at prepare-time - if they were to change,
-                                  ;; and the same prepared statement re-evaluated, the value would be stale.
-                                  (visitShowSessionVariableStatement [_ ctx]
-                                    (let [k (session-param-name (.identifier ctx))]
+                                    (visitShowWatermarkStatement [_ _]
                                       {:statement-type :query, :query sql
-                                       :ra-plan [:table (if-let [v (get session-parameters k)]
-                                                          [{(keyword k) v}]
-                                                          [])]})))))))
+                                       :ra-plan [:table '[watermark]
+                                                 (if watermark-tx-id
+                                                   [{:watermark watermark-tx-id}]
+                                                   [])]})
+
+                                    (visitShowSnapshotTimeStatement [_ ctx]
+                                      {:statement-type :query, :query sql, :parsed-query ctx})
+
+                                    (visitShowClockTimeStatement [_ ctx]
+                                      {:statement-type :query, :query sql, :parsed-query ctx})
+
+                                    ;; HACK: these values are fixed at prepare-time - if they were to change,
+                                    ;; and the same prepared statement re-evaluated, the value would be stale.
+                                    (visitShowSessionVariableStatement [_ ctx]
+                                      (let [k (session-param-name (.identifier ctx))]
+                                        {:statement-type :query, :query sql
+                                         :ra-plan [:table (if-let [v (get session-parameters k)]
+                                                            [{(keyword k) v}]
+                                                            [])]}))))))))
 
           (catch Exception e
             (log/debug e "Error parsing SQL")
@@ -1118,8 +1103,13 @@
   (reset! !closing? true))
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
-  (swap! conn-state update-in [:session :clock] (fn [^Clock clock]
-                                                  (.withZone clock (ZoneId/of tz))))
+  (swap! conn-state
+         (fn [{:keys [transaction] :as conn-state}]
+           (-> conn-state
+               (update-in [:session :clock] (fn [^Clock clock]
+                                              (.withZone clock (ZoneId/of tz))))
+               (cond-> transaction (assoc-in [:transaction :default-tz] tz)))))
+
   (set-session-parameter conn time-zone-nf-param-name tz))
 
 (defn startup-ok [{:keys [server] :as conn} startup-opts]
@@ -1240,7 +1230,7 @@
 (def supported-oids
   (set (map :oid (vals types/pg-types))))
 
-(defn- execute-tx [{:keys [node read-only?]} dml-ops tx-opts]
+(defn- execute-tx [{:keys [node]} dml-ops tx-opts]
   (try
     (xt/execute-tx node dml-ops tx-opts)
     (catch xtdb.IllegalArgumentException e
@@ -1428,37 +1418,42 @@
     :else (throw (client-err (format "invalid timezone '%s'" (str tz))))))
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
-  (let [tx-opts (-> tx-opts
-                    (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
-                    (update :watermark-tx-id #(some-> % (apply-args args))))]
-    (swap! conn-state
-           (fn [{:keys [session watermark-tx-id] :as st}]
-             (let [{:keys [^Clock clock]} session]
-               (-> st
-                   (update :transaction
-                           (fn [{:keys [access-mode]}]
-                             (if access-mode
-                               (throw (client-err "transaction already started"))
+  (swap! conn-state
+         (fn [{:keys [session watermark-tx-id] :as st}]
+           (let [{:keys [^Clock clock]} session
+                 tx-opts (-> tx-opts
+                             (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
+                             (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                             (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                             (update :snapshot-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                             (update :watermark-tx-id #(some-> % (apply-args args)))
+                             (->> (into {} (filter (comp some? val)))))]
+             (-> st
+                 (update :transaction
+                         (fn [{:keys [access-mode]}]
+                           (if access-mode
+                             (throw (client-err "transaction already started"))
 
-                               (-> {:current-time (.instant clock)
-                                    :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                                    :after-tx-id (or (:watermark-tx-id tx-opts) watermark-tx-id -1)
-                                    :implicit? false}
-                                   (into (:characteristics session))
-                                   (into tx-opts)))))))))))
+                             (-> {:current-time (.instant clock)
+                                  :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
+                                  :after-tx-id (or (:watermark-tx-id tx-opts) watermark-tx-id -1)
+                                  :default-tz (.getZone clock)
+                                  :implicit? false}
+                                 (into (:characteristics session))
+                                 (into tx-opts))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz]} transaction
-        {:keys [^Clock clock, parameters]} session]
+        {:keys [parameters]} session]
 
     (if failed
       (throw (client-err "transaction failed" {:error-type :dml}))
 
       (try
         (let [{:keys [tx-id error]} (when (= :read-write access-mode)
-                                      (execute-tx conn dml-buf {:default-tz (or default-tz (.getZone clock))
-                                                                :system-time system-time
+                                      (execute-tx conn dml-buf {:default-tz default-tz
+                                                                :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
                                                                 :authn {:user (get parameters "user")}}))]
           (swap! conn-state (fn [conn-state]
                               (-> conn-state
