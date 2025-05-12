@@ -50,7 +50,9 @@
   (->zdt [_] nil)
 
   String
-  (->instant [s] (Time/asInstant s))
+  (->instant
+    ([s] (Time/asInstant s))
+    ([s {:keys [default-tz]}] (Time/asInstant s default-tz)))
   (->zdt [s] (Time/asZonedDateTime s))
 
   Instant

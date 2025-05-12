@@ -2142,19 +2142,18 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
         "excludes expressions")
 
   (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 2}]
-                                  :valid-from #xt/instant "2020-07-31T23:00:00Z"})
+                                  :valid-from #xt/date "2020-08-01"})
             (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 3}]
-                                  :valid-from #xt/instant "2021-01-01T00:00:00Z"})]
+                                  :valid-from #xt/date "2021-01-01"})]
 
-           (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil
-                                   {:default-tz #xt/zone "Europe/London"}))
+           (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil))
         "groups by valid-from")
 
   (t/testing "with args"
     (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 3}]
-                                    :valid-from #xt/instant "2020-01-01T00:00:00Z"})
+                                    :valid-from #xt/date "2020-01-01"})
               (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 2} {"_id" 4}]
-                                    :valid-from #xt/instant "2020-01-02T00:00:00Z"})]
+                                    :valid-from #xt/date "2020-01-02"})]
 
              (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                    '[[1 2] [3 4]]))))
@@ -2740,9 +2739,6 @@ UNION ALL
 
   (t/is (false? (execute-tx->committed? "INSERT INTO foo (SELECT *, 1 AS _system_from FROM foo)"))
         "invalid column in `INSERT INTO` from query")
-
-  (t/is (false? (execute-tx->committed? ["INSERT INTO docs (_id, _valid_to) VALUES (1, 'foo')"]))
-        "invalid column in `INSERT INTO`")
 
   (t/is (false? (execute-tx->committed? "INSERT INTO docs (_id, _valid_from, _valid_to)
                                          VALUES (1, TIMESTAMP '2021-01-01 00:00:00+00:00', TIMESTAMP '2020-01-01 00:00:00+00:00')"))

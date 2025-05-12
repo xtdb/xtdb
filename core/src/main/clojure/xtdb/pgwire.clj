@@ -468,8 +468,7 @@
                                   (visitSetSessionVariableStatement [_ ctx]
                                     {:statement-type :set-session-parameter
                                      :parameter (session-param-name (.identifier ctx))
-                                     :value (-> (.literal ctx)
-                                                (sql/plan-expr {:default-tz default-tz}))})
+                                     :value (sql/plan-expr (.literal ctx))})
 
                                   (visitSetSessionCharacteristicsStatement [this ctx]
                                     {:statement-type :set-session-characteristics

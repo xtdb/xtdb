@@ -104,7 +104,7 @@
         valid-from-writer (.vectorFor op-writer "_valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.vectorFor op-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
-    (fn write-put! [{:keys [table-name docs valid-from valid-to]}]
+    (fn write-put! [{:keys [table-name docs valid-from valid-to]} opts]
       (let [table-name (str (symbol (util/with-default-schema table-name)))]
         (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
 
@@ -125,8 +125,8 @@
             (.writeBytes iid-writer (util/->iid eid)))
           (.endList iids-writer))
 
-        (.writeObject valid-from-writer valid-from)
-        (.writeObject valid-to-writer valid-to)
+        (.writeObject valid-from-writer (time/->instant valid-from opts))
+        (.writeObject valid-to-writer (time/->instant valid-to opts))
 
         (.endStruct op-writer)))))
 
@@ -194,15 +194,15 @@
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
         TxOp$Sql (let [^TxOp$Sql tx-op tx-op]
-                   (if-let [put-docs-ops (sql/sql->static-ops (.sql tx-op) (.argRows tx-op) {:default-tz default-tz})]
+                   (if-let [put-docs-ops (sql/sql->static-ops (.sql tx-op) (.argRows tx-op))]
                      (doseq [op put-docs-ops]
-                       (@!write-put! op))
+                       (@!write-put! op {:default-tz default-tz}))
 
                      (@!write-sql! tx-op)))
 
         SqlByteArgs (@!write-sql-byte-args! tx-op)
-        PutDocs (@!write-put! tx-op)
-        PatchDocs (@!write-patch! tx-op)
+        PutDocs (@!write-put! tx-op {:default-tz default-tz})
+        PatchDocs (@!write-patch! tx-op {:default-tz default-tz})
         DeleteDocs (@!write-delete! tx-op)
         EraseDocs (@!write-erase! tx-op)
         Abort (@!write-abort! tx-op)

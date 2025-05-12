@@ -72,19 +72,22 @@ fun String.asSqlTimestamp(): TemporalAccessor =
             )
         }
 
-fun String.asZonedDateTime(): ZonedDateTime =
+@JvmOverloads
+fun String.asZonedDateTime(defaultTz: ZoneId? = null): ZonedDateTime =
     this.replace(' ', 'T')
         .let { s ->
             SQL_TIMESTAMP_FORMATTER.parseBest(
                 s,
                 ZonedDateTime::from,
                 { OffsetDateTime.from(it).toZonedDateTime() },
-                { LocalDate.from(it).atStartOfDay().atZone(it.query(TemporalQueries.zone())) },
+                { LocalDate.from(it).atStartOfDay().atZone(it.query(TemporalQueries.zone()) ?: defaultTz) },
             )
         } as ZonedDateTime
 
-fun String.asOffsetDateTime() = asZonedDateTime().toOffsetDateTime()
-fun String.asInstant() = asZonedDateTime().toInstant()
+fun String.asOffsetDateTime(): OffsetDateTime = asZonedDateTime().toOffsetDateTime()
+
+@JvmOverloads
+fun String.asInstant(defaultTz: ZoneId? = null): Instant = asZonedDateTime(defaultTz).toInstant()
 
 private fun <T: TemporalAccessor> String.asTemporal(q: TemporalQuery<T>): T =
     SQL_TIMESTAMP_FORMATTER.parse(replace(' ', 'T'), q)
