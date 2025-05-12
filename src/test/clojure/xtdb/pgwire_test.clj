@@ -70,9 +70,9 @@
   (^xtdb.pgwire.Server [] (serve {}))
   (^xtdb.pgwire.Server [opts] (pgwire/serve tu/*node* (merge {:num-threads 1
                                                               :authn authn/default-authn
-                                                              :allocator tu/*allocator*}
-                                                             opts
-                                                             {:drain-wait 250}))))
+                                                              :allocator tu/*allocator*
+                                                              :drain-wait 250}
+                                                             opts))))
 
 (defn- pg-config [params]
   (merge {:host "localhost"
@@ -395,12 +395,13 @@
     (check-conn-resources-freed server-conn)))
 
 (deftest server-close-closes-idle-conns-test
-  (with-open [^Server server (serve {:drain-wait 0})
-              _client-conn (jdbc-conn {"port" (:port server)})
-              server-conn (get-last-conn server)]
-    (.close server)
-    (is (wait-for-close server-conn 500))
-    (check-conn-resources-freed server-conn)))
+  (with-open [^Server server (serve {:drain-wait 0})]
+    (binding [*server* server, *port* (:port server)]
+      (with-open [_client-conn (jdbc-conn)
+                  server-conn (get-last-conn server)]
+        (.close server)
+        (is (wait-for-close server-conn 500))
+        (check-conn-resources-freed server-conn)))))
 
 (deftest canned-response-test
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
@@ -428,30 +429,29 @@
 
 (deftest concurrent-conns-close-midway-test
   (with-open [server (serve {:num-threads 2 :accept-so-timeout 10})]
-    (logging/with-log-level 'xtdb.pgwire :off
-      (let [spawn (fn spawn [i]
-                    (future
-                      (try
-                        (with-open [conn (jdbc-conn {"loginTimeout" 1
-                                                     "socketTimeout" 1
-                                                     "port" (:port server)})]
-                          (loop [query-til (+ (System/currentTimeMillis)
-                                              (* i 1000))]
-                            (ping conn)
-                            (when (< (System/currentTimeMillis) query-til)
-                              (recur query-til))))
-                        ;; we expect an ex here, whether or not draining
-                        (catch PSQLException _))))
+    (binding [*server* server, *port* (:port server)]
+      (logging/with-log-level 'xtdb.pgwire :off
+        (let [spawn (fn spawn [i]
+                      (future
+                        (try
+                          (with-open [conn (jdbc-conn {"loginTimeout" 1, "socketTimeout" 1})]
+                            (loop [query-til (+ (System/currentTimeMillis)
+                                                (* i 1000))]
+                              (ping conn)
+                              (when (< (System/currentTimeMillis) query-til)
+                                (recur query-til))))
+                          ;; we expect an ex here, whether or not draining
+                          (catch PSQLException _))))
 
-            futs (mapv spawn (range 10))]
+              futs (mapv spawn (range 10))]
 
-        (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
+          (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
 
-        (.close server)
+          (.close server)
 
-        (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
+          (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
 
-        (check-server-resources-freed server)))))
+          (check-server-resources-freed server))))))
 
 ;; the goal of this test is to cause a bunch of ping queries to block on parse
 ;; until the server is draining

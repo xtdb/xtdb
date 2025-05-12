@@ -4,7 +4,6 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [next.jdbc :as jdbc]
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
@@ -29,7 +28,7 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime]
-           [java.util HashMap List Map Set UUID]
+           [java.util List Map Set UUID]
            [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext SSLSocket]
            (org.antlr.v4.runtime ParserRuleContext)
@@ -46,51 +45,6 @@
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
-
-(deftype ConnectionBuilder [^String host
-                            ^:unsynchronized-mutable ^int port
-                            ^:unsynchronized-mutable ^String user
-                            ^:unsynchronized-mutable ^String password
-                            ^:unsynchronized-mutable ^String database
-                            ^Map opts]
-  DataSource$ConnectionBuilder
-  (port [this port]
-    (set! (.-port this) port)
-    this)
-
-  (user [this user]
-    (set! (.-user this) user)
-    this)
-
-  (password [this password]
-    (set! (.-password this) password)
-    this)
-
-  (database [this database]
-    (set! (.-database this) database)
-    this)
-
-  (option [this k v]
-    (case k
-      "user" (.user this (str v))
-      "password" (.password this (str v))
-      "pass" (.password this (str v))
-      "port" (.port this (int v))
-      "database" (.database this (str v))
-      "dbname" (.database this (str v))
-
-      (do
-        (.put opts k (str v))
-        this)))
-
-  (build [_]
-    (jdbc/get-connection (into {:dbtype "xtdb"
-                                :host host
-                                :port port
-                                :user user
-                                :password password
-                                :dbname database}
-                               opts))))
 
 (defrecord Server [^BufferAllocator allocator
                    port read-only?
@@ -109,7 +63,7 @@
                    !tmp-nodes]
   DataSource
   (createConnectionBuilder [_]
-    (ConnectionBuilder. "localhost" port "xtdb" nil "xtdb" (HashMap.)))
+    (DataSource$ConnectionBuilder. "localhost" port))
 
   XtdbModule
   (close [_]
