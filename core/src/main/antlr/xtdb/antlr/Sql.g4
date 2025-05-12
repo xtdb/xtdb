@@ -29,7 +29,7 @@ directlyExecutableStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
-    | SET TIME ZONE zone=staticStringExpr # SetTimeZoneStatement
+    | SET TIME ZONE zone=expr # SetTimeZoneStatement
     | SET WATERMARK ( TO | '=' ) literal # SetWatermarkStatement
     | SET identifier ( TO | '=' ) literal # SetSessionVariableStatement
     | SHOW showVariable # ShowVariableStatement
@@ -57,8 +57,8 @@ settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable
 settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
-    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=dateTimeExpr # SettingSnapshotTime
-    | CLOCK_TIME ('TO' | '=') clockTime=dateTimeExpr # SettingClockTime
+    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=expr # SettingSnapshotTime
+    | CLOCK_TIME ('TO' | '=') clockTime=expr # SettingClockTime
     ;
 
 //// §5 Lexical Elements
@@ -222,16 +222,6 @@ numericExpr
     | numericExpr (BITWISE_OR | BITWISE_XOR) numericExpr #NumericBitwiseOrExpr
     | numericExpr (BITWISE_SHIFT_LEFT | BITWISE_SHIFT_RIGHT) numericExpr #NumericBitwiseShiftExpr
     | exprPrimary #ExprPrimary1
-    ;
-
-staticStringExpr
-    : characterString # StaticStringLiteral
-    | parameterSpecification # StaticStringParam
-    ;
-
-dateTimeExpr
-    : dateTimeLiteral # DateTimeExprLiteral
-    | parameterSpecification # DateTimeExprParam
     ;
 
 exprPrimary
@@ -902,14 +892,14 @@ transactionMode
 txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
 
 readOnlyTxOption
-    : 'SNAPSHOT_TIME' '='? dateTimeLiteral # SnapshotTimeTxOption
-    | 'CLOCK_TIME' '='? dateTimeLiteral # ClockTimeTxOption
+    : 'SNAPSHOT_TIME' '='? snapshotTime=expr # SnapshotTimeTxOption
+    | 'CLOCK_TIME' '='? clockTime=expr # ClockTimeTxOption
     | 'WATERMARK' '='? watermarkTx=expr # WatermarkTxOption
     | txTzOption # TxTzOption0
     ;
 
 readWriteTxOption
-    : 'SYSTEM_TIME' '='? dateTimeLiteral # SystemTimeTxOption
+    : 'SYSTEM_TIME' '='? systemTime=expr # SystemTimeTxOption
     | txTzOption # TxTzOption1
     ;
 

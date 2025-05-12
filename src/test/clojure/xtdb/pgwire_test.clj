@@ -782,14 +782,13 @@
     (is (= [{:a "hello, world"}] (q conn ["SELECT a FROM foo where _id = 42"])))))
 
 (deftest test-current-time
-  ;; no support for setting current-time so need to interact with clock directly
   (let [custom-clock (Clock/fixed (Instant/parse "2000-08-16T11:08:03Z") (ZoneId/of "Z"))]
-
     (swap! (:server-state *server*) assoc :clock custom-clock)
 
     (with-open [conn (jdbc-conn)]
 
-      (let [current-time #(get (first (rs->maps (.executeQuery (.createStatement %) "SELECT CURRENT_TIMESTAMP ct"))) "ct")]
+      (letfn [(current-time [conn]
+                (:ct (jdbc/execute-one! conn ["SELECT CURRENT_TIMESTAMP ct"])))]
 
         (t/is (= (-> #xt/zdt "2000-08-16T12:08:03+01:00" in-system-tz) (current-time conn)))
 
@@ -980,7 +979,7 @@
 (t/deftest test-setting-basis-current-time-3505
   (with-open [conn (jdbc-conn)]
     (is (= [{:ts (-> #xt/zdt "2020-01-01Z[UTC]" in-system-tz)}]
-           (q conn ["SETTING CLOCK_TIME = TIMESTAMP '2020-01-01Z'
+           (q conn ["SETTING CLOCK_TIME = '2020-01-01Z'
                      SELECT CURRENT_TIMESTAMP AS ts"])))
 
     (q conn ["INSERT INTO foo (_id, version) VALUES ('foo', 0)"])
@@ -998,8 +997,8 @@
     (is (= [{:version 0
              :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
              :ts (-> #xt/zdt "2024-01-01Z[UTC]" in-system-tz)}]
-           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z',
-                             CLOCK_TIME = TIMESTAMP '2024-01-01Z'
+           (q conn ["SETTING SNAPSHOT_TIME = '2020-01-01Z',
+                             CLOCK_TIME = '2024-01-01Z'
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
         "both snapshot and current time")
 
@@ -1061,7 +1060,7 @@
                (q conn ["SELECT version, _system_from FROM foo"]))))
 
       (t/testing "with BEGIN"
-        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME = TIMESTAMP '2021-08-03T00:00:00')")
+        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME = '2021-08-03T00:00:00')")
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 1)")
         (sql "COMMIT")
 
@@ -1072,7 +1071,7 @@
                (q conn ["SELECT version, _system_from FROM foo FOR ALL VALID_TIME ORDER BY version"]))))
 
       (t/testing "past system time"
-        (sql "BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-02Z')")
+        (q conn ["BEGIN READ WRITE WITH (SYSTEM_TIME ?)" "2021-08-02Z"])
         (sql "INSERT INTO foo (_id, version) VALUES ('foo', 2)")
         (t/is (thrown-with-msg? PSQLException #"specified system-time older than current tx"
                                 (sql "COMMIT")))))))
@@ -2584,10 +2583,10 @@ ORDER BY 1,2;")
                (jdbc/execute! conn [sql])))
 
       (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
-               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z' " sql)])))
+               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = '2020-01-01Z' " sql)])))
 
       (t/testing "in tx"
-        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z', CLOCK_TIME = TIMESTAMP '2020-01-04Z')"])
+        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TIME = '2020-01-01Z', CLOCK_TIME = ?)" "2020-01-04Z"])
         (try
           (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
                    (jdbc/execute! conn [sql])))

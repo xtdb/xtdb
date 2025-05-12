@@ -1060,12 +1060,7 @@
   (visitSqlStandardString [_ ctx] (.accept ctx string-literal-visitor))
   (visitCEscapesString [_ ctx] (.accept ctx string-literal-visitor))
 
-  (visitStaticStringParam [this ctx] (.accept (.parameterSpecification ctx) this))
-  (visitStaticStringLiteral [this ctx] (.accept (.characterString ctx) this))
-
   (visitDateTimeLiteral0 [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
-  (visitDateTimeExprLiteral [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
-  (visitDateTimeExprParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
   (visitDateLiteral [this ctx] (parse-date-literal (.accept (.characterString ctx) this) env))
   (visitTimeLiteral [this ctx] (parse-time-literal (.accept (.characterString ctx) this) env))
@@ -2967,12 +2962,14 @@
   (doseq [warning @!warnings]
     (log/warn (error-string warning))))
 
-(defn- ->env [{:keys [table-info]}]
-  {:!errors (atom [])
-   :!warnings (atom [])
-   :!id-count (atom 0)
-   :!param-count (atom 0)
-   :table-info (xform-table-info table-info)})
+(defn ->env
+  ([] (->env {}))
+  ([{:keys [table-info]}]
+   {:!errors (atom [])
+    :!warnings (atom [])
+    :!id-count (atom 0)
+    :!param-count (atom 0)
+    :table-info (xform-table-info table-info)}))
 
 (defprotocol PlanExpr
   (-plan-expr [sql opts]))
