@@ -217,7 +217,7 @@
             "xtdb/runtime-err" (transit/read-handler runex-reader)
             "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
             "xtdb/period-duration" period-duration-reader
-            "xtdb/interval" interval-reader
+            "xtdb/interval" (transit/read-handler interval-reader)
             "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
             "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
             "xtdb.tx/sql" (transit/read-handler sql-op-reader)

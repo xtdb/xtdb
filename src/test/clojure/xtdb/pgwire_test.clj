@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
+            [cognitect.transit :as transit]
             [honey.sql :as hsql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
@@ -1965,15 +1966,6 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (= (pg/execute conn "SELECT * FROM foo ORDER BY _id")
              [{:_id 1} {:_id 2}]))))
 
-(deftest test-pg2-transit-param
-  (with-open [conn (pg-conn {})]
-    (pg/execute conn
-      "INSERT INTO foo (_id, v) VALUES (1, $1)"
-      {:params [(String. (serde/write-transit {:a 1, :b 2} :json))]
-       :oids [(int 16384)]})
-    (t/is (= (pg/execute conn "SELECT v FROM foo")
-             [{:v {:a 1, :b 2}}]))))
-
 (defn remaining-bytes ^bytes [^ByteBuffer buf]
   (let [res (byte-array (.remaining buf))]
     (.get buf res)
@@ -1990,25 +1982,36 @@ ORDER BY t.oid DESC LIMIT 1"
     (^Object decodeBin [_this ^ByteBuffer buf ^CodecParams _codecParams]
       (serde/read-transit (remaining-bytes buf) :json))))
 
-(deftest test-pg2-transit-param-using-custom-type
-  (with-open [conn (pg-conn {:type-map {:pg_catalog/transit pg2-transit-processor}
-                             :pg-params {"fallback_output_format" "transit"}})]
-    (pg/execute conn
-      "INSERT INTO foo (_id, v) VALUES (1, $1)"
-      {:params [{:a 1, :b 2}]
-       :oids [(int 16384)]})
-    (t/is (= (pg/execute conn "SELECT v FROM foo")
-             [{:v {"a" 1, "b" 2}}])))
-  (with-open [conn (pg-conn {:binary-encode? true
-                             :binary-decode? true
-                             :type-map {:pg_catalog/transit pg2-transit-processor}
-                             :pg-params {"fallback_output_format" "transit"}})]
-    (pg/execute conn
-      "INSERT INTO foo (_id, v) VALUES (1, $1)"
-      {:params [{:a 1, :b 2}]
-       :oids [(int 16384)]})
-    (t/is (= (pg/execute conn "SELECT v FROM foo")
-             [{:v {"a" 1, "b" 2}}]))))
+(deftest test-pg2-transit-params
+  (let [m-in {:a 1
+              :i (transit/tagged-value "xtdb/interval" "PT5S")}
+        expected-m-out {"a" 1
+                        "i" #xt/interval"PT5S"}
+        insert-and-query (fn [conn m]
+                           (pg/execute conn
+                             "INSERT INTO foo (_id, v) VALUES (1, $1)"
+                             {:params [m], :oids [(int 16384)]})
+                           (pg/execute conn "SELECT v FROM foo"))]
+
+    (testing "explicit transit serialization"
+      (with-open [conn (pg-conn {:pg-params {"fallback_output_format" "transit"}})]
+        (t/is (= (-> (insert-and-query conn (String. (serde/write-transit m-in :json)))
+                   (update-in [0 :v] #(serde/read-transit (.getBytes %) :json)))
+                 [{:v expected-m-out}]))))
+
+    (testing "custom type setup for transit serialization"
+      (with-open [conn (pg-conn {:type-map {:pg_catalog/transit pg2-transit-processor}
+                                 :pg-params {"fallback_output_format" "transit"}})]
+        (t/is (= (insert-and-query conn m-in)
+                 [{:v expected-m-out}]))))
+
+    (testing "custom type setup for transit serialization, binary mode"
+      (with-open [conn (pg-conn {:binary-encode? true
+                                 :binary-decode? true
+                                 :type-map {:pg_catalog/transit pg2-transit-processor}
+                                 :pg-params {"fallback_output_format" "transit"}})]
+        (t/is (= (insert-and-query conn m-in)
+                 [{:v expected-m-out}]))))))
 
 (deftest insert-select-test-3684
   (with-open [conn (jdbc-conn)]
