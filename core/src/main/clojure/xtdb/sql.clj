@@ -326,19 +326,19 @@
           sys-time-col? (contains? reqd-cols '_system_time)
           scan-cols (cond-> (vec (disj reqd-cols '_valid_time '_system_time))
                       valid-time-col? (into ['_valid_from '_valid_to])
-                      sys-time-col? (into ['_system_from '_system_to]))]
-      (let [for-vt (or for-valid-time valid-time-default)
-            for-st (or for-system-time sys-time-default)]
+                      sys-time-col? (into ['_system_from '_system_to]))
+          for-vt (or for-valid-time valid-time-default)
+          for-st (or for-system-time sys-time-default)]
 
-        [:rename unique-table-alias
-         (cond-> [:scan (cond-> {:table (symbol (if schema-name
-                                                  (str schema-name)
-                                                  "public")
-                                                (str table-name))}
-                          for-vt (assoc :for-valid-time for-vt)
-                          for-st (assoc :for-system-time for-st))
-                  scan-cols]
-           (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))]))))
+      [:rename unique-table-alias
+       (cond-> [:scan (cond-> {:table (symbol (if schema-name
+                                                (str schema-name)
+                                                "public")
+                                              (str table-name))}
+                        for-vt (assoc :for-valid-time for-vt)
+                        for-st (assoc :for-system-time for-st))
+                scan-cols]
+         (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))])))
 
 (defrecord JoinConditionScope [env l r]
   Scope
