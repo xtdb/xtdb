@@ -29,10 +29,10 @@
 
 (def router
   (http/router [["/metrics" {:name :metrics
-                             :get (fn [{:keys [^PrometheusMeterRegistry prometheus-registry]}]
+                             :get (fn [{:keys [^PrometheusMeterRegistry meter-registry]}]
                                     {:status 200,
                                      :headers {"Content-Type" "text/plain; version=0.0.4"}
-                                     :body (.scrape prometheus-registry)})}]
+                                     :body (.scrape meter-registry)})}]
 
                 ["/healthz/started" {:name :started
                                      :get (fn [{:keys [^long initial-target-message-id, ^LogProcessor log-processor]}]
@@ -83,22 +83,20 @@
 
 (defmethod ig/prep-key :xtdb/healthz [_ ^HealthzConfig config]
   {:port (.getPort config) 
-   :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :meter-registry (ig/ref :xtdb.metrics/registry)
    :log-processor (ig/ref :xtdb.log/processor)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :live-index (ig/ref :xtdb.indexer/live-index)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, ^CompositeMeterRegistry metrics-registry, ^LogProcessor log-processor, buffer-pool live-index]}]
-  (let [prometheus-registry (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)
-        ^Server server (-> (handler {:prometheus-registry prometheus-registry
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, meter-registry, ^LogProcessor log-processor, buffer-pool live-index]}]
+  (let [^Server server (-> (handler {:metrics-registry meter-registry
                                      :log-processor log-processor
                                      :buffer-pool buffer-pool
                                      :live-index live-index
                                      :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
                                      :node node})
                            (j/run-jetty {:port port, :async? true, :join? false}))]
-    (.add metrics-registry prometheus-registry) 
 
     (log/info "Healthz server started on port:" port)
 

@@ -7,7 +7,7 @@
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
-           io.micrometer.core.instrument.composite.CompositeMeterRegistry
+           (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
            java.util.List
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)))
@@ -53,7 +53,7 @@
   {:config (ig/ref :xtdb/config)})
 
 (defmethod ig/init-key ::registry [_ {{:keys [node-id]} :config}]
-  (let [reg (CompositeMeterRegistry.)]
+  (let [reg (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)]
 
     ;; Add common tag for the node
     (let [^List tags [(Tag/of "node-id" node-id)]]

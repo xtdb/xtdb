@@ -5,17 +5,15 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.types])
-  (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
-           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
-           (io.micrometer.core.instrument Counter Gauge)))
+  (:import (io.micrometer.core.instrument Counter Gauge)
+           io.micrometer.core.instrument.MeterRegistry))
 
 (t/use-fixtures :each tu/with-mock-clock)
 
 (t/deftest test-error-and-warning-counter
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
-        registry ^CompositeMeterRegistry (tu/component node :xtdb.metrics/registry)]
-    (.add registry (SimpleMeterRegistry.))
+        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
     (t/is (thrown? Exception (xt/q node "SLECT 1"))
           "parsing error via the node")
     (t/is (thrown? Exception (jdbc/execute! conn ["SLECT 1"]))
@@ -35,8 +33,7 @@
 (t/deftest test-transaction-exception-counter
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
-        registry ^CompositeMeterRegistry (tu/component node :xtdb.metrics/registry)]
-    (.add registry (SimpleMeterRegistry.))
+        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
     (t/is (thrown? Exception (jdbc/execute! conn ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via pgwire")
 
@@ -56,8 +53,7 @@
 
 (t/deftest test-transaction-exception-counter-on-submit-tx
   (let [node (xtn/start-node tu/*node-opts*)
-        registry ^CompositeMeterRegistry (tu/component node :xtdb.metrics/registry)]
-    (.add registry (SimpleMeterRegistry.))
+        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
     (t/is (thrown? Exception (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via the node (submit-tx)")
 
@@ -69,8 +65,7 @@
 
 (t/deftest test-total-and-active-connections
   (let [node (xtn/start-node tu/*node-opts*)
-        registry ^CompositeMeterRegistry (tu/component node :xtdb.metrics/registry)
-        _ (.add registry (SimpleMeterRegistry.))]
+        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
 
     (with-open [conn1 (jdbc/get-connection node)]
       (jdbc/execute! conn1 ["SELECT 1"]))

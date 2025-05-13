@@ -21,8 +21,6 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang ExceptionInfo)
-           (io.micrometer.core.instrument.composite CompositeMeterRegistry)
-           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (java.io FileOutputStream)
            java.net.ServerSocket
            (java.nio.channels Channels)
@@ -77,11 +75,6 @@
      (f))))
 
 (declare component)
-
-(defn with-simple-registry [f]
-  (let [^CompositeMeterRegistry registry (component *node* :xtdb.metrics/registry)]
-    (.add registry (SimpleMeterRegistry.))
-    (f)))
 
 (defn with-node [f]
   (util/with-open [node (xtn/start-node *node-opts*)]
