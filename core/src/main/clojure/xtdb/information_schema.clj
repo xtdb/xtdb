@@ -3,6 +3,7 @@
             [integrant.core :as ig]
             [xtdb.authn :as authn]
             [xtdb.metadata]
+            [xtdb.pgwire.types :as pg-types]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
@@ -182,7 +183,7 @@
      :reltoastrelid (int 0)}))
 
 (defn pg-type []
-  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (->> (vals types/pg-types)
+  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (->> (vals pg-types/pg-types)
                                                                                  (remove (comp zero? :oid)))]
     {:oid (int oid)
      :typname typname
@@ -200,7 +201,7 @@
      :typoutput (or typoutput "")}))
 
 (defn pg-range []
-  (for [{:keys [rngtypid rngsubtype rngmultitypid rngcollation rngsubopc rngcanonical rngsubdiff]} (vals types/pg-ranges)]
+  (for [{:keys [rngtypid rngsubtype rngmultitypid rngcollation rngsubopc rngcanonical rngsubdiff]} (vals pg-types/pg-ranges)]
     {:rngtypid (int rngtypid)
      :rngsubtype (int rngsubtype)
      :rngmultitypid (int rngmultitypid)
@@ -219,7 +220,7 @@
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name field]} col-rows
-        :let [{:keys [column-oid typlen]} (types/field->pg-type (types/field-with-name field name))]]
+        :let [{:keys [column-oid typlen]} (pg-types/field->pg-type (types/field-with-name field name))]]
     {:attrelid (name->oid table)
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
      :atttypid (int column-oid)

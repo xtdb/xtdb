@@ -6,7 +6,7 @@
            xtdb.util/with-open clojure.core/with-open
            clojure.test.check.clojure-test/defspec clojure.test/deftest
            clojure.test.check.properties/for-all clojure.core/for}
- :hooks {:analyze-call {xtdb.pgwire/def-msg hooks/pgwire-def-msg}}
+ :hooks {:analyze-call {xtdb.pgwire.io/def-msg hooks/pgwire-def-msg}}
  :linters {:not-empty? {:level :off}
            :unresolved-symbol {:level :error
                                :exclude [(clojure.test/is [=plan-file])]}}

@@ -1,9 +1,11 @@
 (ns xtdb.pgwire-protocol-test
   (:require [clojure.test :as t :refer [deftest]]
+            [xtdb.authn :as authn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.pgwire.io :as pgio]
+            [xtdb.pgwire.types :as pg-types]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
-            [xtdb.authn :as authn])
+            [xtdb.types :as types])
   (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
            [java.time Clock]))
@@ -21,7 +23,7 @@
   (String. arr StandardCharsets/UTF_8))
 
 (defrecord RecordingFrontend [!in-msgs !out-msgs]
-  pgwire/Frontend
+  pgio/Frontend
   (send-client-msg! [_ msg-def]
     (swap! !in-msgs conj [(:name msg-def)])
     nil)
@@ -136,7 +138,7 @@
 
 (deftest test-extended-query
   (let [insert "INSERT INTO docs (_id, name) VALUES ('aln', $1)"
-        param-types [(-> types/pg-types :text :oid)]
+        param-types [(-> pg-types/pg-types :text :oid)]
         param-values ["alan"]
         query "SELECT * FROM docs"
         {:keys [!in-msgs] :as frontend} (->recording-frontend)]
@@ -182,7 +184,7 @@
                @!in-msgs)))))
 
 (deftest test-wrong-param-encoding-3653
-  (let [param-types [(-> types/pg-types :timestamp :oid)]
+  (let [param-types [(-> pg-types/pg-types :timestamp :oid)]
         param-values ["alan"]
         query "SELECT $1 as v"
         {:keys [!in-msgs] :as frontend} (->recording-frontend)]

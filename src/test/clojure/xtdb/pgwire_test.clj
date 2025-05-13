@@ -16,6 +16,7 @@
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.pgwire.types :as pg-types]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -407,7 +408,8 @@
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgwire/canned-responses [{:q "hello!"
-                                          :cols [{:column-name "greet", :column-oid @#'pgwire/oid-json}]
+                                          :cols [{:column-name "greet",
+                                                  :column-oid (get-in pg-types/pg-types [:json :oid])}]
                                           :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
@@ -1988,7 +1990,7 @@ ORDER BY t.oid DESC LIMIT 1"
   (let [m-in {:a 1
               :i (transit/tagged-value "xtdb/interval" "PT5S")}
         expected-m-out {"a" 1
-                        "i" #xt/interval"PT5S"}
+                        "i" #xt/interval "PT5S"}
         insert-and-query (fn [conn m]
                            (pg/execute conn
                              "INSERT INTO foo (_id, v) VALUES (1, $1)"
