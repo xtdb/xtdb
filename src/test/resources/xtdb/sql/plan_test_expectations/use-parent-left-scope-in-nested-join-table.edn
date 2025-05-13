@@ -1,0 +1,13 @@
+[:project
+ [{i1 u1.4/i1} {i2 u2.6/i2} {x1 u1.4/x1} {x2 u2.6/x2}]
+ [:apply
+  :cross-join
+  {r1.1/xs ?_sq_xs_2, r2.2/xs ?_sq_xs_4}
+  [:mega-join
+   []
+   [[:rename r1.1 [:scan {:table public/r1} [xs]]]
+    [:rename r2.2 [:scan {:table public/r2} [xs]]]]]
+  [:mega-join
+   [{u1.4/i1 u2.6/i2}]
+   [[:map [{u1.4/i1 (row-number)}] [:table {u1.4/x1 ?_sq_xs_2}]]
+    [:map [{u2.6/i2 (row-number)}] [:table {u2.6/x2 ?_sq_xs_4}]]]]]]

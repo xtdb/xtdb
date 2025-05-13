@@ -2958,3 +2958,13 @@ FROM dates"))))
                                       (pr-str '#(from :bar [{:xt/id %} *])))
                               2 "x"])))))
 
+(t/deftest use-parent-left-scope-in-nested-join-table-4131
+  (t/is (=plan-file
+         "use-parent-left-scope-in-nested-join-table"
+         (sql/plan "FROM r1, r2
+                    , UNNEST(r1.xs) WITH ORDINALITY AS u1(x1, i1)
+                    JOIN UNNEST(r2.xs) WITH ORDINALITY AS u2(x2, i2)
+                      ON i1 = i2
+                    SELECT i1, i2, x1, x2"
+                   {:table-info {"public/r1" #{"xs"}
+                                 "public/r2" #{"xs"}}}))))

@@ -147,6 +147,13 @@
     (not-empty (->> (find-cols scope chain excl-cols)
                     (mapv #(->sq-sym % env !sq-refs))))))
 
+(defrecord CombinedScope [scopes]
+  Scope
+  (available-cols [_] (into #{} (mapcat available-cols) scopes))
+
+  (-find-cols [_ chain excl-cols]
+    (some #(not-empty (find-cols % chain excl-cols)) scopes)))
+
 (defrecord SubqueryArityError [^long given-col-count]
   PlanError
   (error-string [_] (format "Subquery arity error: expected a single column, got %d" given-col-count)))
@@ -609,7 +616,9 @@
   (visitJoinTable [this ctx]
     (let [l (-> (.tableReference ctx 0) (.accept this))
           !sq-refs (HashMap.)
-          r (.accept (.tableReference ctx 1) (->TableRefVisitor env scope (->SubqueryScope env l !sq-refs)))
+          r (.accept (.tableReference ctx 1) (->TableRefVisitor env scope
+                                                                (->CombinedScope (cond-> [(->SubqueryScope env l !sq-refs)]
+                                                                                   left-scope (conj left-scope)))))
           common-cols (.accept (.joinSpecification ctx)
                                (reify SqlVisitor
                                  (visitJoinCondition [_ _] nil)
