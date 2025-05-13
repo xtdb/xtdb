@@ -160,12 +160,9 @@
         (throw e)))))
 
 (deftest gssenc-test
-  (t/are [gssencmode expect]
-      (= expect (try-gssencmode gssencmode))
-
-    "disable" :ok
-    "prefer" :ok
-    "require" :unsupported))
+  (t/is (= :ok (try-gssencmode "disable")))
+  (t/is (= :ok (try-gssencmode "prefer")))
+  (t/is (= :unsupported (try-gssencmode "require"))))
 
 (deftest query-test
   (with-open [conn (jdbc-conn)

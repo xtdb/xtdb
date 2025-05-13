@@ -4,8 +4,7 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
             [xtdb.pgwire.types :as pg-types]
-            [xtdb.test-util :as tu]
-            [xtdb.types :as types])
+            [xtdb.test-util :as tu])
   (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
            [java.time Clock]))
@@ -55,17 +54,25 @@
   (^java.lang.AutoCloseable [frontend startup-opts]
    (->conn frontend startup-opts [{:user nil, :method #xt.authn/method :trust, :address nil}]))
   (^java.lang.AutoCloseable [frontend startup-opts authn-rules]
-   (-> (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
-                                                                           "client_encoding" "UTF8"
-                                                                           "DateStyle" "ISO"
-                                                                           "IntervalStyle" "ISO_8601"}})
-                                         :->node {"xtdb" tu/*node*}
-                                         :authn (authn/->UserTableAuthn authn-rules)}
-                                :frontend frontend
-                                :cid -1
-                                :!closing? (atom false)
-                                :conn-state (atom {:session {:clock (Clock/systemUTC)}})})
-       (pgwire/cmd-startup-pg30 startup-opts))))
+   (let [conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
+                                                                                  "client_encoding" "UTF8"
+                                                                                  "DateStyle" "ISO"
+                                                                                  "IntervalStyle" "ISO_8601"}})
+                                                :->node {"xtdb" tu/*node*}
+                                                :authn (authn/->UserTableAuthn authn-rules)}
+                                       :frontend frontend
+                                       :cid -1
+                                       :!closing? (atom false)
+                                       :conn-state (atom {:session {:clock (Clock/systemUTC)}})})]
+     (try
+       (pgwire/cmd-startup-pg30 conn startup-opts)
+       (catch Exception e
+         (if (::pgwire/severity (ex-data e))
+           (doto conn
+             (pgwire/send-ex e)
+             (pgwire/handle-msg* {:msg-name :msg-terminate}))
+
+           (throw e)))))))
 
 (deftest test-startup
   (let [{:keys [!in-msgs] :as frontend} (->recording-frontend [{:msg-name :msg-password :password "xtdb"}])]
