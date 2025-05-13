@@ -50,7 +50,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            xtdb.catalog.BlockCatalog
-           (xtdb.indexer Watermark$Source)
+           (xtdb.indexer Watermark Watermark$Source)
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
            [xtdb.vector IVectorReader RelationReader]))
@@ -141,6 +141,15 @@
     (recur (-> args (.vectorFor (str expr)) (.getObject 0)) opts)
     (time/->instant expr {:default-tz default-tz})))
 
+(defn- validate-snapshot-not-before [snapshot-time ^Watermark wm]
+  (let [wm-tx (.getTxBasis wm)]
+    (when (and snapshot-time (or (nil? wm-tx) (neg? (compare (.getSystemTime wm-tx) snapshot-time))))
+      (throw (err/illegal-arg :xtdb/unindexed-tx
+                              {::err/message (format "snapshot-time (%s) is after the latest completed tx (%s)"
+                                                     (str snapshot-time) (pr-str wm-tx))
+                               :latest-completed-tx wm-tx
+                               :snapshot-time snapshot-time})))))
+
 (defn prepare-ra
   (^xtdb.query.PreparedQuery [query deps] (prepare-ra query deps {}))
 
@@ -197,7 +206,6 @@
                    :or {default-tz default-tz
                         close-args? true}}]
 
-           ;; TODO throw if basis is in the future?
            (let [{:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
                  current-time (or (some-> (:current-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
                                   (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
@@ -223,28 +231,32 @@
                                                ;;TODO consider adding the schema diff to the error, potentially quite large.
                                                {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
                  (.acquire ref-ctr)
-                 (util/with-close-on-catch [^BufferAllocator allocator
-                                            (if allocator
-                                              (util/->child-allocator allocator "BoundQuery/openCursor")
-                                              (RootAllocator.))
-                                            wm (.openWatermark wm-src)]
-                   (try
+                 (try
+                   (util/with-close-on-catch [^BufferAllocator allocator
+                                              (if allocator
+                                                (util/->child-allocator allocator "BoundQuery/openCursor")
+                                                (RootAllocator.))
+                                              wm (.openWatermark wm-src)]
+
                      (binding [expr/*clock* (InstantSource/fixed current-time)
                                expr/*default-tz* default-tz
                                expr/*snapshot-time* (or (some-> (:snapshot-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
                                                         (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
                                                         (some-> wm .getTxBasis .getSystemTime))]
+
+                       (validate-snapshot-not-before expr/*snapshot-time* wm)
+
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :default-tz default-tz,
                                       :snapshot-time expr/*snapshot-time*
                                       :current-time current-time
                                       :args (or args vw/empty-args)
                                       :schema (scan/tables-with-cols wm-src)})
-                           (wrap-cursor wm allocator current-time expr/*snapshot-time* default-tz ref-ctr fields)))
+                           (wrap-cursor wm allocator current-time expr/*snapshot-time* default-tz ref-ctr fields))))
 
-                     (catch Throwable t
-                       (.release ref-ctr)
-                       (throw t)))))
+                   (catch Throwable t
+                     (.release ref-ctr)
+                     (throw t))))
 
                AutoCloseable
                (close [_]

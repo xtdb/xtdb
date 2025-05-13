@@ -984,9 +984,12 @@
 
     (q conn ["INSERT INTO foo (_id, version) VALUES ('foo', 0)"])
 
-    (is (= [{:version 0,
-             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
+    (is (= [{:version 0, :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
+
+    (t/is (thrown-with-msg? PSQLException #"ERROR: snapshot-time \(2024-01-01T00:00:00Z\) is after the latest completed tx"
+                            (q conn ["SETTING SNAPSHOT_TIME = '2024-01-01Z'
+                                      SELECT CURRENT_TIMESTAMP FROM foo"])))
 
     (q conn ["UPDATE foo SET version = 1 WHERE _id = 'foo'"])
 

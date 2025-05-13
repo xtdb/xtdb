@@ -52,14 +52,6 @@
       (update :snapshot-time #(some-> % (time/->instant)))
       (update :current-time #(some-> % (time/->instant)))))
 
-(defn- validate-snapshot-not-before [snapshot-time ^TransactionKey latest-completed-tx]
-  (when (and snapshot-time (or (nil? latest-completed-tx) (neg? (compare (.getSystemTime latest-completed-tx) snapshot-time))))
-    (throw (err/illegal-arg :xtdb/unindexed-tx
-                            {::err/message (format "snapshot-time (%s) is after the latest completed tx (%s)"
-                                                   (pr-str snapshot-time) (pr-str latest-completed-tx))
-                             :latest-completed-tx latest-completed-tx
-                             :snapshot-time snapshot-time}))))
-
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args], :as query-opts} {:keys [query-timer] :as metrics}]
   (util/with-close-on-catch [bound-query (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
                                            (.bind prepared-query (assoc query-opts :args args-rel)))]
@@ -169,32 +161,28 @@
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported SQL query type: %s" (type query))})))
 
-          {:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+          {:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
       (xt-log/await-tx this after-tx-id tx-timeout)
-
-      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
       (let [plan (.planQuery q-src ast query-opts)]
         (.prepareRaQuery q-src plan query-opts))))
 
   (prepare-xtql [this query query-opts]
-    (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+    (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
                 (instance? XtqlQuery query) query
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
       (xt-log/await-tx this after-tx-id tx-timeout)
-      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
       (let [plan (.planQuery q-src ast query-opts)]
         (.prepareRaQuery q-src plan query-opts))))
 
   (prepare-ra [this plan query-opts]
-    (let [{:keys [snapshot-time ^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+    (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-tx this after-tx-id tx-timeout)
-      (validate-snapshot-not-before snapshot-time (xtp/latest-completed-tx this))
 
       (.prepareRaQuery q-src plan query-opts)))
 

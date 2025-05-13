@@ -684,7 +684,7 @@
                     wm-src (reify Watermark$Source
                              (openWatermark [_]
                                (util/with-close-on-catch [live-index-wm (.openWatermark live-idx-tx)]
-                                 (Watermark. nil live-index-wm
+                                 (Watermark. tx-key live-index-wm
                                              (li/->schema live-index-wm table-catalog)))))
 
                     tx-opts {:snapshot-time system-time
