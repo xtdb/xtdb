@@ -1531,6 +1531,15 @@
                            ~(f ts-type `(time/instant->micros ~ts))
                            ~(f :null nil))))}))
 
+(defmethod expr/codegen-call [:after_tx_id] [_]
+  {:return-type [:union #{:null :i64}]
+   :continue-call (fn [f _]
+                    (let [tx-id (gensym 'tx-id)]
+                      `(let [~tx-id expr/*after-tx-id*]
+                         (if (neg? ~tx-id)
+                           ~(f :null nil)
+                           ~(f :i64 tx-id)))))})
+
 (defn- truncate-for-precision [code precision]
   (let [^long modulus (precision-modulus precision)]
     (if (= modulus 1)

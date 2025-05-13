@@ -202,7 +202,7 @@
              (->column-fields ordered-outer-projection fields)))
          (warnings [_] warnings)
 
-         (bind [_ {:keys [args current-time snapshot-time default-tz close-args?]
+         (bind [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]
                    :or {default-tz default-tz
                         close-args? true}}]
 
@@ -242,7 +242,8 @@
                                expr/*default-tz* default-tz
                                expr/*snapshot-time* (or (some-> (:snapshot-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
                                                         (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
-                                                        (some-> wm .getTxBasis .getSystemTime))]
+                                                        (some-> wm .getTxBasis .getSystemTime))
+                               expr/*after-tx-id* (or after-tx-id -1)]
 
                        (validate-snapshot-not-before expr/*snapshot-time* wm)
 

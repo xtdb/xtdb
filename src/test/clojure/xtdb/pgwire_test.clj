@@ -1798,7 +1798,7 @@
 
 (deftest test-show-watermark
   (with-open [conn (jdbc-conn)]
-    (t/is (= [] (q conn ["SHOW WATERMARK"])))
+    (t/is (= [{}] (q conn ["SHOW WATERMARK"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
@@ -2864,3 +2864,18 @@ ORDER BY 1,2;")
         (jdbc/execute! conn ["ROLLBACK"])))
 
     (t/is (= {:watermark 1} (jdbc/execute-one! conn ["SHOW WATERMARK"])))))
+
+(t/deftest watermark+snapshot-time
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 0}]])
+  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 1}]])
+
+  (with-open [conn (jdbc-conn)]
+    (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 2}]])
+    (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 3}]])
+
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (watermark = 3)"])
+    (try
+      (t/is (= {:_id 1, :version 3}
+               (jdbc/execute-one! conn ["SELECT * FROM foo"])))
+      (finally
+        (jdbc/execute! conn ["ROLLBACK"])))))

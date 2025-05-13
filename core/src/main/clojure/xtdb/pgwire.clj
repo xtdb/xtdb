@@ -17,7 +17,8 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.log :as xt-log])
   (:import [clojure.lang MapEntry]
            io.micrometer.core.instrument.Counter
            [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream]
@@ -582,9 +583,7 @@
                                     (visitShowWatermarkStatement [_ _]
                                       {:statement-type :query, :query sql
                                        :ra-plan [:table '[watermark]
-                                                 (if watermark-tx-id
-                                                   [{:watermark watermark-tx-id}]
-                                                   [])]})
+                                                 [{:watermark '(after-tx-id)}]]})
 
                                     (visitShowSnapshotTimeStatement [_ ctx]
                                       {:statement-type :query, :query sql, :parsed-query ctx})
@@ -1420,14 +1419,13 @@
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (swap! conn-state
          (fn [{:keys [session watermark-tx-id] :as st}]
-           (let [{:keys [^Clock clock]} session
-                 tx-opts (-> tx-opts
-                             (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
-                             (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                             (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                             (update :snapshot-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                             (update :watermark-tx-id #(some-> % (apply-args args)))
-                             (->> (into {} (filter (comp some? val)))))]
+           (let [watermark-tx-id (or (some-> (:watermark-tx-id tx-opts) (apply-args args))
+                                     watermark-tx-id
+                                     -1)
+                 {:keys [^Clock clock]} session]
+
+             (xt-log/await-tx node watermark-tx-id #xt/duration "PT30S")
+
              (-> st
                  (update :transaction
                          (fn [{:keys [access-mode]}]
@@ -1435,12 +1433,18 @@
                              (throw (client-err "transaction already started"))
 
                              (-> {:current-time (.instant clock)
-                                  :snapshot-time (:system-time (:latest-completed-tx (xt/status node)))
-                                  :after-tx-id (or (:watermark-tx-id tx-opts) watermark-tx-id -1)
+                                  :snapshot-time (:system-time (xtp/latest-completed-tx node))
                                   :default-tz (.getZone clock)
                                   :implicit? false}
                                  (into (:characteristics session))
-                                 (into tx-opts))))))))))
+                                 (into (-> tx-opts
+                                           (dissoc :watermark-tx-id)
+                                           (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
+                                           (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (update :snapshot-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (->> (into {} (filter (comp some? val))))))
+                                 (assoc :after-tx-id watermark-tx-id))))))))))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
@@ -1675,14 +1679,15 @@
           result-formats)))
 
 (defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [statement-type prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction]} @conn-state
+  (let [{:keys [session transaction watermark-tx-id]} @conn-state
         {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
 
         query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
                     :current-time (or (:current-time stmt)
                                       (:current-time transaction)
                                       (.instant clock))
-                    :default-tz (or (:default-tz transaction) (.getZone clock))}
+                    :default-tz (or (:default-tz transaction) (.getZone clock))
+                    :after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)}
 
         xt-args (xtify-args conn args stmt)]
 
