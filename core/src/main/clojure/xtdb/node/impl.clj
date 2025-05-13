@@ -267,6 +267,7 @@
          :xtdb/block-catalog {}
          :xtdb/table-catalog {}
          :xtdb/trie-catalog {}
+         :xtdb/information-schema {}
          :xtdb.log/processor opts
          :xtdb.metadata/metadata-manager {}
          :xtdb.operator.scan/scan-emitter {}

@@ -152,10 +152,11 @@
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :buffer-pool (ig/ref :xtdb/buffer-pool)
           :table-catalog (ig/ref :xtdb/table-catalog)
-          :trie-catalog (ig/ref :xtdb/trie-catalog)}))
+          :trie-catalog (ig/ref :xtdb/trie-catalog)
+          :info-schema (ig/ref :xtdb/information-schema)}))
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^PageMetadata$Factory metadata-mgr, ^BufferPool buffer-pool,
-                                                 ^TrieCatalog trie-catalog, table-catalog]}]
+                                                 info-schema ^TrieCatalog trie-catalog, table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (close [_] (->> table->template-rel+trie vals (map first) util/close))
@@ -216,7 +217,7 @@
            :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor allocator derived-table-schema table col-names col-preds schema args table-catalog trie-catalog watermark))
+                           (info-schema/->cursor info-schema allocator watermark derived-table-schema table col-names col-preds schema args))
 
                          (let [template-table? (info-schema/template-tables table)
                                iid-bb (selects->iid-byte-buffer selects args)
