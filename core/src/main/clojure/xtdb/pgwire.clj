@@ -381,7 +381,6 @@
 
 (defn- close-portal
   [{:keys [conn-state, cid]} portal-name]
-  (log/trace "Closing portal if exists" {:cid cid, :portal portal-name})
   (when-some [portal (get-in @conn-state [:portals portal-name])]
     (log/trace "Closing portal" {:cid cid, :portal portal-name})
     (util/close (:bound-query portal))
@@ -469,59 +468,111 @@
           (throw (client-err (str "missing arg: " expr)))))
     expr))
 
+(defn- coerce->tz [tz]
+  (cond
+    (instance? ZoneId tz) tz
+    (instance? String tz) (try
+                            (ZoneId/of tz)
+                            (catch Exception e
+                              (throw (client-err (format "invalid timezone '%s': %s" tz (ex-message e))))))
+
+    :else (throw (client-err (format "invalid timezone '%s'" (str tz))))))
+
+(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
+  (swap! conn-state
+         (fn [{:keys [session watermark-tx-id] :as st}]
+           (let [watermark-tx-id (or (some-> (:watermark-tx-id tx-opts) (apply-args args))
+                                     watermark-tx-id
+                                     -1)
+                 {:keys [^Clock clock]} session]
+
+             (xt-log/await-tx node watermark-tx-id #xt/duration "PT30S")
+
+             (-> st
+                 (update :transaction
+                         (fn [{:keys [access-mode]}]
+                           (if access-mode
+                             (throw (client-err "transaction already started"))
+
+                             (-> {:current-time (.instant clock)
+                                  :snapshot-time (:system-time (xtp/latest-completed-tx node))
+                                  :default-tz (.getZone clock)
+                                  :implicit? false}
+                                 (into (:characteristics session))
+                                 (into (-> tx-opts
+                                           (dissoc :watermark-tx-id)
+                                           (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
+                                           (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (update :snapshot-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (->> (into {} (filter (comp some? val))))))
+                                 (assoc :after-tx-id watermark-tx-id))))))))))
+
+(defn cmd-commit [{:keys [conn-state] :as conn}]
+  (let [{:keys [transaction session]} @conn-state
+        {:keys [failed dml-buf system-time access-mode default-tz]} transaction
+        {:keys [parameters]} session]
+
+    (if failed
+      (throw (client-err "transaction failed" {:error-type :dml}))
+
+      (try
+        (let [{:keys [tx-id error]} (when (= :read-write access-mode)
+                                      (execute-tx conn dml-buf {:default-tz default-tz
+                                                                :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
+                                                                :authn {:user (get parameters "user")}}))]
+          (swap! conn-state (fn [conn-state]
+                              (-> conn-state
+                                  (dissoc :transaction)
+                                  (cond-> tx-id (assoc :watermark-tx-id tx-id)))))
+
+          (when error
+            (throw (client-err (ex-message error) {:error error :error-type :dml}))))
+        (catch InterruptedException e (throw e))
+        (catch Exception e
+          (swap! conn-state #(dissoc % :transaction))
+          (throw e))
+        (finally
+          (close-all-portals conn))))))
+
+(defn cmd-rollback [{:keys [conn-state]}]
+  (swap! conn-state dissoc :transaction))
+
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
 
 (defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query args param-fields]}]
-  (if (or (not= (count param-fields) (count args))
-          (some #(= 0 (:oid %)) param-fields))
-    (do
-      (log/error "Missing types for params in DML statement")
-      (throw (pgw-ex (-> (pgio/err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")
-                         (assoc :error-type :dml)))))
+  (when (or (not= (count param-fields) (count args))
+            (some #(= 0 (:oid %)) param-fields))
+    (log/error "Missing types for params in DML statement")
+    (throw (pgw-ex (-> (pgio/err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")
+                       (assoc :error-type :dml)))))
 
-    (let [{:keys [session transaction]} @conn-state
-          ^Clock clock (:clock session)
-          cmd-complete-msg {:command (case dml-type
-                                       ;; insert <oid> <rows>
-                                       ;; oid is always 0 these days, its legacy thing in the pg protocol
-                                       ;; rows is 0 for us cus async
-                                       :insert "INSERT 0 0"
-                                       ;; otherwise head <rows>
-                                       :delete "DELETE 0"
-                                       :update "UPDATE 0"
-                                       :patch "PATCH 0"
-                                       :erase "ERASE 0"
-                                       :assert "ASSERT"
-                                       :create-role "CREATE ROLE")}]
+  (when-not (:transaction @conn-state)
+    (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
 
-      (cond
-        (skip-until-sync? conn) nil
+  (swap! conn-state update-in [:transaction :dml-buf]
+         (fnil (fn [dml-ops]
+                 (or (when-let [[_sql last-query :as last-op] (peek dml-ops)]
+                       (when (= last-query query)
+                         (conj (pop dml-ops)
+                               (conj last-op args))))
+                     (conj dml-ops [:sql query args])))
+               []))
 
-        transaction
-        ;; we buffer the statement in the transaction (to be flushed with COMMIT)
-        (do
-          (swap! conn-state update-in [:transaction :dml-buf]
-                 (fnil (fn [dml-ops]
-                         (or (when-let [[_sql last-query :as last-op] (peek dml-ops)]
-                               (when (= last-query query)
-                                 (conj (pop dml-ops)
-                                       (conj last-op args))))
-                             (conj dml-ops [:sql query args])))
-                       []))
-          (pgio/cmd-write-msg conn pgio/msg-command-complete cmd-complete-msg))
-
-        :else
-        (let [{:keys [tx-id error]} (execute-tx conn [[:sql query args]]
-                                                {:default-tz (.getZone clock)
-                                                 :authn {:user (-> session :parameters (get "user"))}})]
-          (when-not (skip-until-sync? conn)
-            (swap! conn-state assoc :watermark-tx-id tx-id)
-
-            (if error
-              (throw (pgw-ex (-> (err-pg-exception error "unexpected error on dml execution")
-                                 (assoc :error-type :dml))))
-              (pgio/cmd-write-msg conn pgio/msg-command-complete cmd-complete-msg))))))))
+  (pgio/cmd-write-msg conn pgio/msg-command-complete
+                      {:command (case dml-type
+                                  ;; insert <oid> <rows>
+                                  ;; oid is always 0 these days, its legacy thing in the pg protocol
+                                  ;; rows is 0 for us cus async
+                                  :insert "INSERT 0 0"
+                                  ;; otherwise head <rows>
+                                  :delete "DELETE 0"
+                                  :update "UPDATE 0"
+                                  :patch "PATCH 0"
+                                  :erase "ERASE 0"
+                                  :assert "ASSERT"
+                                  :create-role "CREATE ROLE")}))
 
 (defn- strip-semi-colon [s] (if (str/ends-with? s ";") (subs s 0 (dec (count s))) s))
 
@@ -597,76 +648,6 @@
   (log/trace "sending parameter description - " {:param-fields param-fields})
   (pgio/cmd-write-msg conn pgio/msg-parameter-description {:parameter-oids (mapv :oid param-fields)}))
 
-(defn- coerce->tz [tz]
-  (cond
-    (instance? ZoneId tz) tz
-    (instance? String tz) (try
-                            (ZoneId/of tz)
-                            (catch Exception e
-                              (throw (client-err (format "invalid timezone '%s': %s" tz (ex-message e))))))
-
-    :else (throw (client-err (format "invalid timezone '%s'" (str tz))))))
-
-(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
-  (swap! conn-state
-         (fn [{:keys [session watermark-tx-id] :as st}]
-           (let [watermark-tx-id (or (some-> (:watermark-tx-id tx-opts) (apply-args args))
-                                     watermark-tx-id
-                                     -1)
-                 {:keys [^Clock clock]} session]
-
-             (xt-log/await-tx node watermark-tx-id #xt/duration "PT30S")
-
-             (-> st
-                 (update :transaction
-                         (fn [{:keys [access-mode]}]
-                           (if access-mode
-                             (throw (client-err "transaction already started"))
-
-                             (-> {:current-time (.instant clock)
-                                  :snapshot-time (:system-time (xtp/latest-completed-tx node))
-                                  :default-tz (.getZone clock)
-                                  :implicit? false}
-                                 (into (:characteristics session))
-                                 (into (-> tx-opts
-                                           (dissoc :watermark-tx-id)
-                                           (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
-                                           (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                                           (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                                           (update :snapshot-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                                           (->> (into {} (filter (comp some? val))))))
-                                 (assoc :after-tx-id watermark-tx-id))))))))))
-
-(defn cmd-commit [{:keys [conn-state] :as conn}]
-  (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf system-time access-mode default-tz]} transaction
-        {:keys [parameters]} session]
-
-    (if failed
-      (throw (client-err "transaction failed" {:error-type :dml}))
-
-      (try
-        (let [{:keys [tx-id error]} (when (= :read-write access-mode)
-                                      (execute-tx conn dml-buf {:default-tz default-tz
-                                                                :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
-                                                                :authn {:user (get parameters "user")}}))]
-          (swap! conn-state (fn [conn-state]
-                              (-> conn-state
-                                  (dissoc :transaction)
-                                  (cond-> tx-id (assoc :watermark-tx-id tx-id)))))
-
-          (when error
-            (throw (client-err (ex-message error) {:error error :error-type :dml}))))
-        (catch InterruptedException e (throw e))
-        (catch Exception e
-          (swap! conn-state #(dissoc % :transaction))
-          (throw e))
-        (finally
-          (close-all-portals conn))))))
-
-(defn cmd-rollback [{:keys [conn-state]}]
-  (swap! conn-state dissoc :transaction))
-
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
   (let [rows (rows conn)]
     (doseq [row rows]
@@ -741,15 +722,18 @@
       (pgio/err-protocol-violation "Queries are unsupported in a DML transaction"))))
 
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
-  ;; Sync commands are sent by the client to commit transactions (we do not do anything here yet),
+  ;; Sync commands are sent by the client to commit transactions
   ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
 
-  ;; TODO commit / rollback should be used here if not in an explicit tx?
-
-  (when-not (:transaction @conn-state)
-    ;;if outside an explicit transaction/transaction block (BEGIN/COMMIT) close any portals
-    ;;as these are implicitly closed/cleaned up at the end of the transcation
-    (close-all-portals conn))
+  (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+    (try
+      (if implicit?
+        (if failed
+          (cmd-rollback conn)
+          (cmd-commit conn))
+        (close-all-portals conn))
+      (catch Throwable t
+        (send-ex conn t))))
 
   (cmd-send-ready conn)
   (swap! conn-state dissoc :skip-until-sync, :protocol))
