@@ -15,6 +15,8 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
+import java.time.temporal.Temporal
+import java.time.temporal.TemporalAccessor
 import java.util.*
 import xtdb.decode as decodeJson
 
@@ -97,7 +99,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
             )
         }
 
-        private fun setZonedDateTime(parameterIndex: Int, x: ZonedDateTime) {
+        private fun setIsoTimestampTz(parameterIndex: Int, x: Temporal) {
             inner.setObject(
                 parameterIndex,
                 PGobject().also {
@@ -112,7 +114,8 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI, is ZonedDateTimeRange ->
                     setTransit(parameterIndex, x)
 
-                is ZonedDateTime -> setZonedDateTime(parameterIndex, x)
+                is ZonedDateTime -> setIsoTimestampTz(parameterIndex, x)
+                is Instant -> setIsoTimestampTz(parameterIndex, x)
 
                 else -> inner.setObject(parameterIndex, x)
             }
@@ -128,7 +131,8 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                     is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI, is ZonedDateTimeRange ->
                         setTransit(parameterIndex, x)
 
-                    is ZonedDateTime -> setZonedDateTime(parameterIndex, x)
+                    is ZonedDateTime -> setIsoTimestampTz(parameterIndex, x)
+                    is Instant -> setIsoTimestampTz(parameterIndex, x)
 
                     else -> inner.setObject(parameterIndex, x, targetSqlType, scaleOrLength)
                 }
