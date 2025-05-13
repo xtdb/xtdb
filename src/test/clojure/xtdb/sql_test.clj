@@ -2956,7 +2956,13 @@ FROM dates"))))
     (t/is (= [{:xt/id 2, :y "baz", :x "x"}]
              (xt/q tu/*node* [(format "FROM (XTQL $$ %s $$) t SELECT *, ? AS x"
                                       (pr-str '#(from :bar [{:xt/id %} *])))
-                              2 "x"])))))
+                              2 "x"])))
+
+    (with-open [conn (jdbc/get-connection tu/*node*)]
+      (t/is (= {:xt/id 2, :y "baz"}
+               (jdbc/execute-one! conn [(format "XTQL ($$ %s $$, ?)" (pr-str '#(from :bar [{:xt/id %} *]))) 2]
+                                  {:builder-fn xt-jdbc/builder-fn}))
+            "XTQL params through PGJDBC"))))
 
 (t/deftest use-parent-left-scope-in-nested-join-table-4131
   (t/is (=plan-file

@@ -704,9 +704,11 @@ queryTerm
     | tableValueConstructor # ValuesQuery
     | recordsValueConstructor # RecordsQuery
     | '(' queryExpressionNoWith ')' # WrappedQuery
-    | 'XTQL' characterString # XtqlQuery
+    | 'XTQL' ( xtqlQuery=characterString | '(' xtqlQuery=characterString xtqlParams ')' ) # XtqlQuery
     | queryTerm 'INTERSECT' (ALL | DISTINCT)? queryTerm # IntersectQuery
     ;
+
+xtqlParams : ( ',' parameterSpecification )* ;
 
 queryTail
     : whereClause # WhereTail

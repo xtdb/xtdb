@@ -2485,7 +2485,7 @@
                                           [(str tbl) (into #{} (map str) cols)]))))
 
           {:keys [ra-plan]} (-> (edn/read-string {:readers *data-readers*}
-                                                 (.accept (.characterString ctx) string-literal-visitor))
+                                                 (.accept (.xtqlQuery ctx) string-literal-visitor))
                                 (xtql/parse-query {:!param-count (:!param-count env)})
                                 (xtql.plan/compile-query* {:table-info table-info}))]
 
