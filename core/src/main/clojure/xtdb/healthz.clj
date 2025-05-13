@@ -9,14 +9,13 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
-           (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
+  (:import (io.micrometer.prometheusmetrics PrometheusMeterRegistry)
            [java.lang AutoCloseable]
            org.eclipse.jetty.server.Server
-           xtdb.BufferPoolKt
-           (xtdb.api Xtdb$Config) 
+           (xtdb.api Xtdb$Config)
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
+           xtdb.BufferPoolKt
            (xtdb.indexer LiveIndex LogProcessor)))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
@@ -90,7 +89,7 @@
    :node (ig/ref :xtdb/node)})
 
 (defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, meter-registry, ^LogProcessor log-processor, buffer-pool live-index]}]
-  (let [^Server server (-> (handler {:metrics-registry meter-registry
+  (let [^Server server (-> (handler {:meter-registry meter-registry
                                      :log-processor log-processor
                                      :buffer-pool buffer-pool
                                      :live-index live-index

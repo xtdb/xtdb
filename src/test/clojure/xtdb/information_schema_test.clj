@@ -1,11 +1,12 @@
 (ns xtdb.information-schema-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.set :as set]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
+            [xtdb.compactor :as c]
             [xtdb.information-schema :as i-s]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
-            [xtdb.compactor :as c]))
+            [xtdb.time :as time]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -436,3 +437,33 @@
             ["xt" "txs" "system_time" [:timestamp-tz :micro "UTC"]]]
            (->> (xt/q tu/*node* "SELECT * FROM xt.live_columns ORDER BY schema_name, table_name, col_name")
                 (mapv (juxt :schema-name :table-name :col-name (comp read-string :col-type)))))))
+
+(t/deftest test-metrics
+  (let [res (xt/q tu/*node* "SELECT * FROM xt.metrics_timers")]
+    (t/is (= #{:name :tags :count
+               :mean-time :p75-time :p95-time :p99-time :p999-time :max-time}
+             (set (keys (first res)))))
+
+    (t/is (empty? (set/difference #{"tx.op.timer", "query.timer", "compactor.job.timer"}
+                                  (into #{} (map :name) res)))
+          "at least has these ones, maybe others"))
+
+  (let [res (xt/q tu/*node* "SELECT * FROM xt.metrics_gauges")]
+    (t/is (= #{:tags :name :value}
+             (set (keys (first res)))))
+    (t/is (empty? (set/difference #{"system.cpu.count"
+                                    "live-index.allocator.allocated_memory"
+                                    "buffer-pool.allocator.allocated_memory"
+                                    "jvm.memory.used"
+                                    "node.tx.latestSubmittedTxId"}
+                                  (into #{} (map :name) res)))
+          "at least has these ones, maybe others"))
+
+  (let [res (xt/q tu/*node* "SELECT * FROM xt.metrics_counters")]
+    (t/is (= #{:tags :name :count}
+             (set (keys (first res)))))
+    (t/is (empty? (set/difference #{"tx.error"
+                                    "query.error" "query.warning"
+                                    "pgwire.total_connections"}
+                                  (into #{} (map :name) res)))
+          "at least has these ones, maybe others")))

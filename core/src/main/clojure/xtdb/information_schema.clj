@@ -11,7 +11,10 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (org.apache.arrow.vector VectorSchemaRoot)
+  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Timer Tag)
+           (io.micrometer.core.instrument.distribution ValueAtPercentile)
+           [java.time Duration]
+           (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
@@ -95,7 +98,19 @@
 
       xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
 
-      xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}})
+      xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
+
+      xt/metrics_timers {name :utf8, tags :utf8
+                         count :i64,
+                         mean_time [:union #{:null [:duration :nano]}],
+                         p75_time [:union #{:null [:duration :nano]}]
+                         p95_time [:union #{:null [:duration :nano]}]
+                         p99_time [:union #{:null [:duration :nano]}]
+                         p999_time [:union #{:null [:duration :nano]}]
+                         max_time [:union #{:null [:duration :nano]}]}
+
+      xt/metrics_gauges {name :utf8, tags :utf8, value :f64}
+      xt/metrics_counters {name :utf8, tags :utf8, count :f64}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables xt-derived-tables)
@@ -361,6 +376,47 @@
             {:col-name col-name
              :col-type (pr-str (types/field->col-type col-field))}))))
 
+(defn metrics-timers [^MeterRegistry reg]
+  (->> (.getMeters reg)
+       (filter #(instance? Timer %))
+       (mapv (fn [^Timer timer]
+               (let [snapshot (.takeSnapshot timer)
+                     id (.getId timer)]
+                 (into {:name (.getName id)
+                        :tags (pr-str (->> (.getTags id)
+                                           (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %))))))
+                        :count (.count snapshot)
+                        :mean-time (Duration/ofNanos (.mean snapshot))
+                        :max-time (Duration/ofNanos (.max snapshot))}
+                       (keep (fn [^ValueAtPercentile pv]
+                               (case (.percentile pv)
+                                 0.75 [:p75-time (Duration/ofNanos (.value pv))]
+                                 0.95 [:p95-time (Duration/ofNanos (.value pv))]
+                                 0.99 [:p99-time (Duration/ofNanos (.value pv))]
+                                 0.999 [:p999-time (Duration/ofNanos (.value pv))]
+                                 nil)))
+                       (.percentileValues snapshot)))))))
+
+(defn metrics-gauges [^MeterRegistry reg]
+  (->> (.getMeters reg)
+       (filter #(instance? Gauge %))
+       (mapv (fn [^Gauge gauge]
+               (let [id (.getId gauge)]
+                 {:name (.getName id)
+                  :tags (pr-str (->> (.getTags id)
+                                     (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %))))))
+                  :value (.value gauge)})))))
+
+(defn metrics-counters [^MeterRegistry reg]
+  (->> (.getMeters reg)
+       (filter #(instance? Counter %))
+       (mapv (fn [^Counter counter]
+               (let [id (.getId counter)]
+                 {:name (.getName id)
+                  :tags (pr-str (->> (.getTags id)
+                                     (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %))))))
+                  :count (.count counter)})))))
+
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
   (tryAdvance [this c]
@@ -385,10 +441,11 @@
 
 (defmethod ig/prep-key :xtdb/information-schema [_ opts]
   (into {:table-catalog (ig/ref :xtdb/table-catalog)
-         :trie-catalog (ig/ref :xtdb/trie-catalog)}
+         :trie-catalog (ig/ref :xtdb/trie-catalog)
+         :metrics-registry (ig/ref :xtdb.metrics/registry)}
         opts))
 
-(defmethod ig/init-key :xtdb/information-schema [_ {:keys [table-catalog trie-catalog]}]
+(defmethod ig/init-key :xtdb/information-schema [_ {:keys [table-catalog trie-catalog metrics-registry]}]
   (reify InfoSchema
     (->cursor [_ allocator wm derived-table-schema
                table col-names col-preds
@@ -427,6 +484,9 @@
                                                             xt/trie_stats (trie-stats trie-catalog)
                                                             xt/live_tables (live-tables wm)
                                                             xt/live_columns (live-columns wm)
+                                                            xt/metrics_timers (metrics-timers metrics-registry)
+                                                            xt/metrics_gauges (metrics-gauges metrics-registry)
+                                                            xt/metrics_counters (metrics-counters metrics-registry)
                                                             (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
                                                           (into-array java.util.Map)))
                                          (.syncRowCount)))]
