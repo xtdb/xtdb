@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.tools.logging :as log]
             [xtdb.pgwire :as-alias pgw]
+            [xtdb.pgwire.types :as pg-types]
             [xtdb.util :as util])
   (:import [clojure.lang MapEntry]
            [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream EOFException InputStream OutputStream]
@@ -107,7 +108,10 @@
     :msg-parameter-status :msg-auth :msg-ready
     :msg-portal-suspended})
 
-(defn err-protocol-violation [msg] (ex-info msg {::pgw/severity :error, ::pgw/error-code "08P01"}))
+(defn err-protocol-violation
+  ([msg] (err-protocol-violation msg nil))
+  ([msg cause]
+   (ex-info msg {::pgw/severity :error, ::pgw/error-code "08P01"} cause)))
 
 (defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
   Frontend
@@ -333,7 +337,12 @@
    :write (fn write-error-or-notice-field [^DataOutputStream out [k v]]
             (when-let [field-char8 (error-or-notice-type->char k)]
               (.writeByte out (byte field-char8))
-              (write-c-string out (str v))))})
+              (if (bytes? v)
+                (do
+                  (.write out ^bytes v)
+                  (.writeByte out 0))
+
+                (write-c-string out (str v)))))})
 
 (def ^:private io-portal-or-stmt
   "An io data type that returns a keyword :portal or :prepared-statement given the next char8 in the buffer.

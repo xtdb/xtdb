@@ -46,6 +46,20 @@
 (defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
   (.withZoneSameInstant zdt (ZoneId/systemDefault)))
 
+(defn- read-ex [^PSQLException e]
+  (let [sem (.getServerErrorMessage e)]
+    {:sql-state (.getSQLState e)
+     :message (.getMessage sem)
+     :detail (some-> (.getDetail sem)
+                     not-empty
+                     (serde/read-transit :json))}))
+
+(defmacro reading-ex [& body]
+  `(try
+     ~@body
+     (catch PSQLException e#
+       (read-ex e#))))
+
 (t/use-fixtures :once
 
   #_ ; HACK commented out while we're not bringing in the Flight JDBC driver
@@ -515,33 +529,35 @@
 (defn psql-session
   "Takes a function of two args (send, read).
 
-  Send puts a string in to psql stdin, reads the next string from psql stdout. You can use (read :err) if you wish to read from stderr instead."
+  Send puts a string in to psql stdin, reads the next string from psql stdout. You can use (read :stderr) if you wish to read from stderr instead."
   [f]
   ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
   (let [^List argv ["psql" "-h" "localhost" "-p" (str *port*) "--csv" "xtdb"]
         pb (ProcessBuilder. argv)
         p (.start pb)
-        in (.getInputStream p)
-        err (.getErrorStream p)
-        out (.getOutputStream p)
+        stdout (.getInputStream p)
+        stderr (.getErrorStream p)
+        stdin (.getOutputStream p)
 
         send
         (fn [^String s]
-          (.write out (.getBytes s "utf-8"))
-          (.flush out))
+          (.write stdin (.getBytes s "utf-8"))
+          (.flush stdin))
 
         read
         (fn read
-          ([] (read in))
+          ([] (read :stdout))
           ([stream]
-           (let [^InputStream stream (case stream :err err stream)]
+           (let [^InputStream in (case stream :stderr stderr :stdout stdout stream)]
              (loop [wait-until (+ (System/currentTimeMillis) 1000)]
-               (or (when (pos? (.available stream))
-                     (let [barr (byte-array (.available stream))]
-                       (.read stream barr)
+               (or (when (pos? (.available in))
+                     (let [barr (byte-array (.available in))]
+                       (.read in barr)
                        (let [read-str (String. barr)]
-                         (when-not (str/starts-with? read-str "Null display is")
-                           (csv/read-csv read-str)))))
+                         (case stream
+                           :stderr (str/split-lines read-str)
+                           :stdout (when-not (str/starts-with? read-str "Null display is")
+                                     (csv/read-csv read-str))))))
 
                    (when (< wait-until (System/currentTimeMillis))
                      :timeout)
@@ -556,9 +572,9 @@
         (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
         (is (#{143, 0} (.exitValue p)))
 
-        (util/try-close in)
-        (util/try-close out)
-        (util/try-close err)))))
+        (util/try-close stdin)
+        (util/try-close stdin)
+        (util/try-close stderr)))))
 
 ;; define psql tests if psql is available on path
 ;; (will probably move to a selector)
@@ -616,8 +632,8 @@
        (testing "error during plan"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "slect baz.a from baz;\n")
-           (is (str/includes? (->> (read :err) (map str/join) (str/join "\n"))
-                              "line 1:0 mismatched input 'slect' expecting")))
+           (is (-> (second (read :stderr))
+                   (str/includes? "line 1:0 mismatched input 'slect' expecting"))))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
@@ -626,7 +642,9 @@
        (testing "error during query execution"
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "select (1 / 0) from (values (42)) a (a);\n")
-           (is (= [["ERROR:  data exception - division by zero"]] (read :err))))
+           (is (= ["ERROR:  data exception - division by zero"
+                   "DETAIL:  {\"error-key\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
+                  (read :stderr))))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
@@ -637,7 +655,9 @@
      (fn [send read]
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
-         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] (read :err)))
+         (is (= ["ERROR:  Illegal argument: 'missing-id'"
+                 "DETAIL:  {\"doc\":{\"id\":1,\"a\":2},\"error-key\":\"missing-id\",\"message\":\"Illegal argument: 'missing-id'\"}"]
+                (read :stderr)))
          ;; to drain the standard stream
          (read))
 
@@ -986,9 +1006,15 @@
     (is (= [{:version 0, :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
-    (t/is (thrown-with-msg? PSQLException #"ERROR: snapshot-time \(2024-01-01T00:00:00Z\) is after the latest completed tx"
-                            (q conn ["SETTING SNAPSHOT_TIME = '2024-01-01Z'
-                                      SELECT CURRENT_TIMESTAMP FROM foo"])))
+    (t/is (= {:sql-state "0B000",
+             :message "snapshot-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})",
+             :detail #xt/illegal-arg [:xtdb/unindexed-tx
+                                      "snapshot-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})"
+                                      {:latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
+                                       :snapshot-time #xt/instant "2024-01-01T00:00:00Z"}]}
+             (reading-ex
+               (q conn ["SETTING SNAPSHOT_TIME = '2024-01-01Z'
+                         SELECT CURRENT_TIMESTAMP FROM foo"]))))
 
     (q conn ["UPDATE foo SET version = 1 WHERE _id = 'foo'"])
 
@@ -1123,7 +1149,7 @@
     (psql-session
      (fn [send read]
        (send "SLECT 1 FROM foo;\n")
-       (let [s (read :err)]
+       (let [s (read :stderr)]
          (is (not= :timeout s))
          (is (str/includes? (->> s (map str/join) (str/join "\n"))
                             "line 1:0 mismatched input 'SLECT' expecting")))
@@ -1136,9 +1162,10 @@
        (read)
 
        (send "COMMIT;\n")
-       (let [error (read :err)]
+       (let [error (read :stderr)]
          (is (not= :timeout error))
-         (is (= [["ERROR:  Illegal argument: 'missing-id'"]] error)))
+         (is (= "ERROR:  Illegal argument: 'missing-id'"
+                (first error))))
 
        (send "ROLLBACK;\n")
        (let [s (read)]
@@ -1258,7 +1285,7 @@
 (deftest txs-error-as-json-3866
   (with-open [conn (pg-conn {})]
     (is (thrown-with-msg? PGErrorResponse
-                          #"code=08P01, message=Cannot put documents with columns: #\{\"_system_time\"\}"
+                          #"code=08P01, .*, message=Cannot put documents with columns: #\{\"_system_time\"\}"
                           (pg/execute conn "INSERT INTO docs (_id, _system_time) VALUES (1, DATE '2020-01-01')")))
     (testing "xt.txs.error column renders as json without errors"
       (pg/execute conn "SELECT * FROM xt.txs"))))
@@ -2757,22 +2784,20 @@ ORDER BY 1,2;")
 (deftest better-assert-error-code-and-message-3878
   (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (testing "outside transaction"
-      (try
-        (q conn ["ASSERT 2 < 1, 'boom'"])
-        (catch PSQLException e
-          (t/is (= "P0004" (.getSQLState e)))
-          (t/is (= "ERROR: boom"
-                   (.getMessage e))))))
+      (t/is (= {:sql-state "P0004",
+                :message "boom",
+                :detail #xt/runtime-err [:xtdb/assert-failed "boom" {}]}
+               (reading-ex
+                 (q conn ["ASSERT 2 < 1, 'boom'"])))))
 
     (testing "inside transaction"
       (q conn ["BEGIN READ WRITE"])
       (q conn ["ASSERT 2 < 1, 'boom'"])
-      (try
-        (q conn ["COMMIT"])
-        (catch PSQLException e
-          (t/is (= "P0004" (.getSQLState e)))
-          (t/is (= "ERROR: boom"
-                   (.getMessage e)))))
+      (t/is (= {:sql-state "P0004",
+                :message "boom",
+                :detail #xt/runtime-err [:xtdb/assert-failed "boom" {}]}
+               (reading-ex
+                 (q conn ["COMMIT"]))))
       (q conn ["ROLLBACK"]))
 
     (testing "no error message"
@@ -2878,3 +2903,21 @@ ORDER BY 1,2;")
                (jdbc/execute-one! conn ["SELECT * FROM foo"])))
       (finally
         (jdbc/execute! conn ["ROLLBACK"])))))
+
+(t/deftest ex-cause-in-detail-message
+  (with-open [conn (jdbc-conn)]
+    (t/is (= {:sql-state "0B000",
+              :message "snapshot-time (2020-01-02T00:00:00Z) is after the latest completed tx (nil)",
+              :detail #xt/illegal-arg [:xtdb/unindexed-tx
+                                       "snapshot-time (2020-01-02T00:00:00Z) is after the latest completed tx (nil)"
+                                       {:latest-completed-tx nil, :snapshot-time #xt/instant "2020-01-02T00:00:00Z"}]}
+             (reading-ex
+               (jdbc/execute! conn ["SETTING snapshot_time = '2020-01-02Z' SELECT 1"]))))
+
+    (t/is (= {:sql-state "08P01",
+              :message "Queries are unsupported in a DML transaction",
+              :detail nil}
+             (reading-ex
+               (jdbc/with-transaction [tx conn]
+                 (q tx ["INSERT INTO foo(_id, a) values(42, 42)"])
+                 (q conn ["SELECT a FROM foo"])))))))

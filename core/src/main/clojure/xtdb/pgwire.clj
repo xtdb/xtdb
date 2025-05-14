@@ -14,6 +14,7 @@
             [xtdb.pgwire.types :as pg-types]
             [xtdb.protocols :as xtp]
             [xtdb.query]
+            [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.util :as util]
@@ -148,7 +149,7 @@
      :detail (str/join "\n" (rest lines))
      :position (str (inc (:idx parse-failure)))}))
 
-(defn- err-internal [msg] (ex-info msg {::severity :error, :error-code "XX000"}))
+(defn- err-internal [msg cause] (ex-info msg {::severity :error, :error-code "XX000"} cause))
 
 (defn- err-invalid-catalog [db-name]
   (ex-info (format "database '%s' does not exist" db-name)
@@ -233,28 +234,39 @@
       (::error-code (ex-data ex)) ex
 
       (instance? IllegalArgumentException ex)
-      (pgio/err-protocol-violation ex-msg)
+      (ex-info ex-msg
+               (case (.getKey ^xtdb.IllegalArgumentException ex)
+                 :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
+
+                 {::severity :error, ::error-code "08P01"})
+               ex)
 
       (instance? xtdb.RuntimeException ex)
-      (let [k (.getKey ^xtdb.RuntimeException ex)]
-        (if (= k :xtdb/assert-failed)
-          (assert-failure ex-msg)
-          (pgio/err-protocol-violation ex-msg)))
+      (ex-info ex-msg
+               (case (.getKey ^xtdb.RuntimeException ex)
+                 :xtdb/assert-failed {::error-code "P0004", ::severity :error}
+                 {::severity :error, ::error-code "08P01"})
+               ex)
 
       :else
       (do
         (log/error ex "Uncaught exception processing message")
-        (err-internal ex-msg)))))
+        (err-internal ex-msg ex)))))
 
-(defn send-ex [conn, ^Throwable ex]
-  (let [ex-msg (ex-message ex)
-        {::keys [severity error-code]} (ex-data (ex->pgw-err ex))
+(defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
+  (let [ex (ex->pgw-err ex)
+        ex-msg (ex-message ex)
+        {::keys [severity error-code]} (ex-data ex)
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
                         {:error-fields {:severity severity-str
                                         :localized-severity severity-str
                                         :sql-state error-code
-                                        :message ex-msg}})))
+                                        :message ex-msg
+                                        :detail (when-let [cause (ex-cause ex)]
+                                                  (case (get-in @conn-state [:session :parameters "fallback_output_format"])
+                                                    :transit (serde/write-transit cause :json)
+                                                    (pg-types/json-bytes cause)))}})))
 
 ;;; startup
 

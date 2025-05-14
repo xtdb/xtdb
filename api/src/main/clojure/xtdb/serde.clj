@@ -296,9 +296,11 @@
   (transit/write-handler-map transit-write-handlers))
 
 (defn read-transit
-  ([bytes] (read-transit bytes nil))
-  ([bytes fmt]
-   (with-open [bais (ByteArrayInputStream. bytes)]
+  ([bytes-or-str] (read-transit bytes-or-str nil))
+  ([bytes-or-str fmt]
+   (with-open [bais (ByteArrayInputStream. (cond
+                                             (bytes? bytes-or-str) bytes-or-str
+                                             (string? bytes-or-str) (-> ^String bytes-or-str (.getBytes StandardCharsets/UTF_8))))]
      (transit/read (transit/reader bais (or fmt :msgpack) {:handlers transit-read-handler-map})))))
 
 (defn transit-seq [rdr]
@@ -333,3 +335,4 @@
                                                                   k)))))))
                    (write-transit :json)
                    (String. StandardCharsets/UTF_8)))))
+

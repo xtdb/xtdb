@@ -1,5 +1,6 @@
 (ns xtdb.pgwire-protocol-test
   (:require [clojure.test :as t :refer [deftest]]
+            [jsonista.core :as json]
             [xtdb.authn :as authn]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
@@ -30,6 +31,12 @@
   (send-client-msg! [_ msg-def data]
     (let [data (case (:name msg-def)
                  :msg-data-row (update data :vals (partial mapv bytes->str))
+                 :msg-error-response (update-in data [:error-fields :detail]
+                                                (fn [detail]
+                                                  (if (bytes? detail)
+                                                    (json/read-value (String. ^bytes detail StandardCharsets/UTF_8)
+                                                                     json/keyword-keys-object-mapper)
+                                                    detail)))
                  data)]
       (swap! !in-msgs conj [(:name msg-def) data]))
     nil)
@@ -101,7 +108,8 @@
                   {:severity "ERROR",
                    :localized-severity "ERROR",
                    :sql-state "28000",
-                   :message "password authentication failed for user: xtdb"}}]]
+                   :message "password authentication failed for user: xtdb"
+                   :detail nil}}]]
                @!in-msgs)))))
 
 
@@ -206,7 +214,8 @@
                   {:severity "ERROR",
                    :localized-severity "ERROR",
                    :sql-state "22P02",
-                   :message "invalid timestamp: Text 'alan' could not be parsed at index 0"}}]
+                   :message "invalid timestamp: Text 'alan' could not be parsed at index 0"
+                   :detail nil}}]
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 
@@ -223,7 +232,8 @@
                   {:severity "ERROR",
                    :localized-severity "ERROR",
                    :sql-state "08P01",
-                   :message "Parameters not allowed in simple queries"}}]
+                   :message "Parameters not allowed in simple queries"
+                   :detail nil}}]
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 
@@ -275,7 +285,8 @@
                 [:msg-command-complete {:command "SELECT 1"}]
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
-                                       :message "DML is not allowed in a READ ONLY transaction"}}]
+                                       :message "DML is not allowed in a READ ONLY transaction"
+                                       :detail nil}}]
                 [:msg-ready {:status :idle}]]
 
                (test "SELECT 1 one; INSERT INTO foo RECORDS {_id: 1}"))))
@@ -285,7 +296,8 @@
                 [:msg-row-description {:columns [(->utf8-col "one")]}]
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
-                                       :message "Queries are unsupported in a DML transaction"}}]
+                                       :message "Queries are unsupported in a DML transaction"
+                                       :detail nil}}]
                 [:msg-ready {:status :idle}]]
 
                (test "INSERT INTO foo RECORDS {_id: 1}; SELECT 1 one"))))
@@ -303,7 +315,9 @@
                 [:msg-row-description {:columns [(->utf8-col "boom")]}]
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01"
-                                       :message "data exception - division by zero"}}]
+                                       :message "data exception - division by zero"
+                                       :detail {:error-key "xtdb.expression/division-by-zero",
+                                                :message "data exception - division by zero"}}}]
                 [:msg-ready {:status :failed-transaction}]]
                (test "BEGIN; SELECT 1/0 boom;"))))
 
@@ -313,6 +327,7 @@
                 [:msg-command-complete {:command "SELECT 1"}]
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
-                                       :message "transaction already started"}}]
+                                       :message "transaction already started"
+                                       :detail nil}}]
                 [:msg-ready {:status :idle}]]
                (test "SELECT 1 one; BEGIN"))))))
