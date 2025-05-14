@@ -67,7 +67,7 @@
      (try
        (pgwire/cmd-startup-pg30 conn startup-opts)
        (catch Exception e
-         (if (::pgwire/severity (ex-data e))
+         (if (::pgwire/error-code (ex-data e))
            (doto conn
              (pgwire/send-ex e)
              (pgwire/handle-msg* {:msg-name :msg-terminate}))

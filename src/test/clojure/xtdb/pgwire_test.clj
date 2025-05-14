@@ -1692,7 +1692,7 @@
 
       (t/is (thrown-with-msg?
              PGErrorResponse
-             #"Missing types for args - client must specify types for all params in DML statements"
+             #"Param type not specified or could not be inferred"
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
                                                                         :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
