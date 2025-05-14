@@ -2974,3 +2974,14 @@ FROM dates"))))
                     SELECT i1, i2, x1, x2"
                    {:table-info {"public/r1" #{"xs"}
                                  "public/r2" #{"xs"}}}))))
+
+(t/deftest inconsistent-patch-behaviour-4448
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])
+
+  (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM NULL TO ? RECORDS {_id: 1, foo: 3}" [#inst "2015"]]])
+
+  (t/is (= [{:committed false,
+             :error
+             #xt/runtime-err [:xtdb.indexer/invalid-valid-times "Runtime error: 'xtdb.indexer/invalid-valid-times'"
+                              {:valid-from #xt/instant "2020-01-02T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"}]}]
+           (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} committed error])))))

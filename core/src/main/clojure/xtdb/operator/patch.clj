@@ -1,5 +1,6 @@
 (ns xtdb.operator.patch
   (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -35,11 +36,15 @@
                        (update 'doc types/->nullable-field))]
         {:fields fields
          :->cursor (fn [{:keys [allocator current-time] :as qopts} inner]
-                     (PatchGapsCursor. inner
-                                       (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
-                                                                                            (types/field-with-name field (str nm))))
-                                                                                 allocator))
-                                       (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
-                                       (if valid-to
-                                         (time/instant->micros (->instant valid-to qopts))
-                                         Long/MAX_VALUE)))}))))
+                     (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
+                           valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
+                       (if (> valid-from valid-to)
+                         (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                                 {:valid-from (time/micros->instant  valid-from)
+                                                  :valid-to (time/micros->instant valid-to)}))
+                         (PatchGapsCursor. inner
+                                           (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
+                                                                                                (types/field-with-name field (str nm))))
+                                                                                     allocator))
+                                           valid-from
+                                           valid-to))))}))))
