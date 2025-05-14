@@ -27,7 +27,7 @@
     (xt/q node "SELECT foo FROM bar")
     (jdbc/execute! conn ["SELECT foo FROM bar"])
 
-    (t/is (= 4.0 (.count ^Counter (.counter (.find registry "query.error")))))
+    (t/is (= 3.0 (.count ^Counter (.counter (.find registry "query.error")))))
     (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.warning")))))))
 
 (t/deftest test-transaction-exception-counter

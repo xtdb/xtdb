@@ -1,8 +1,7 @@
 (ns xtdb.pgwire.io
   (:require [clojure.set :as set]
             [clojure.tools.logging :as log]
-            [xtdb.node.impl]
-            [xtdb.query]
+            [xtdb.pgwire :as-alias pgw]
             [xtdb.util :as util])
   (:import [clojure.lang MapEntry]
            [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream EOFException InputStream OutputStream]
@@ -108,11 +107,7 @@
     :msg-parameter-status :msg-auth :msg-ready
     :msg-portal-suspended})
 
-(defn err-protocol-violation [msg]
-  {:severity "ERROR"
-   :localized-severity "ERROR"
-   :sql-state "08P01"
-   :message msg})
+(defn err-protocol-violation [msg] (ex-info msg {::pgw/severity :error, ::pgw/error-code "08P01"}))
 
 (defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
   Frontend
@@ -139,16 +134,13 @@
   (read-client-msg! [_]
     (let [type-char (char (.readUnsignedByte in))
           msg-var (or (client-msgs type-char)
-                      (throw (let [msg (str "Unknown client message " type-char)]
-                               (ex-info msg {:xtdb.pgwire/client-error (err-protocol-violation msg)}))))
+                      (throw (err-protocol-violation (str "Unknown client message " type-char))))
           rdr (:read @msg-var)]
       (try
         (-> (rdr (read-untyped-msg in))
             (assoc :msg-name (:name @msg-var)))
         (catch Exception e
-          (throw (ex-info "error reading client message"
-                          {::client-error (err-protocol-violation (str "Error reading client message " (ex-message e)))}
-                          e))))))
+          (throw (err-protocol-violation (str "Error reading client message " (ex-message e))))))))
 
   (host-address [_] (.getHostAddress (.getInetAddress socket)))
 
