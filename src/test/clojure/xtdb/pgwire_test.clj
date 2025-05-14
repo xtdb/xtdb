@@ -2090,17 +2090,17 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest test-interval-encoding-3697
   (with-open [conn (jdbc-conn)]
-    (t/is (= [{:i (PGInterval. "P1DT1H1M1.111111S")}]
+    (t/is (= [{:i #xt/interval "P1DT1H1M1.111111S"}]
              (jdbc/execute! conn ["SELECT INTERVAL 'P1DT1H1M1.111111S' AS i"])))
 
-    (t/is (= [{:i (PGInterval. "P12MT0S")}]
+    (t/is (= [{:i #xt/interval "P12M"}]
              (jdbc/execute! conn ["SELECT INTERVAL 'P12MT0S' AS i"])))
 
-    (t/is (= [{:i (PGInterval. "P-22MT0S")}]
+    (t/is (= [{:i #xt/interval "P-22M"}]
              (jdbc/execute! conn ["SELECT INTERVAL 'P-22MT0S' AS i"])))
 
     (t/testing "mdn implicitly truncated and returned with micro precision"
-      (t/is (= [{:i (PGInterval. "PT10M10.123456S")}]
+      (t/is (= [{:i #xt/interval "PT10M10.123456S"}]
                (jdbc/execute! conn ["SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(9) i"]))))))
 
 (deftest test-playground

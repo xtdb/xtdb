@@ -2,7 +2,6 @@
 
 package xtdb.time
 
-import xtdb.types.ZonedDateTimeRange
 import java.lang.Math.multiplyExact
 import java.time.*
 import java.time.format.DateTimeFormatter
@@ -89,9 +88,20 @@ fun String.asOffsetDateTime(): OffsetDateTime = asZonedDateTime().toOffsetDateTi
 @JvmOverloads
 fun String.asInstant(defaultTz: ZoneId? = null): Instant = asZonedDateTime(defaultTz).toInstant()
 
-private fun <T: TemporalAccessor> String.asTemporal(q: TemporalQuery<T>): T =
+private fun <T : TemporalAccessor> String.asTemporal(q: TemporalQuery<T>): T =
     SQL_TIMESTAMP_FORMATTER.parse(replace(' ', 'T'), q)
 
 fun String.asLocalDateTime() = asTemporal(LocalDateTime::from)
 
 val TEMPORAL_COL_NAMES = setOf("_valid_from", "_valid_to", "_system_from", "_system_to")
+
+private val INTERVAL_REGEX = Regex("(-)?P([-\\dYMWD]+)?(?:T([-\\dHMS.]+)?)?")
+
+fun String.asInterval(): Interval {
+    val groups = INTERVAL_REGEX.matchEntire(this)!!.groups
+    val neg = groups[1]?.value.orEmpty()
+    return Interval(
+        groups[2]?.let { Period.parse("${neg}P${it.value}") } ?: Period.ZERO,
+        groups[3]?.let { Duration.parse("${neg}PT${it.value}") } ?: Duration.ZERO
+    )
+}

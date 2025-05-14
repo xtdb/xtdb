@@ -46,6 +46,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 "json", "jsonb" -> getPgObject(columnIndex)?.let { decodeJson(it) }
                 "timestamp" -> getObject(columnIndex, LocalDateTime::class.java)
                 "timestamptz" -> getObject(columnIndex, ZonedDateTime::class.java)
+                "interval" -> getObject(columnIndex, Interval::class.java)
 
                 else -> inner.getObject(columnIndex)
             }
@@ -68,6 +69,8 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                             OffsetDateTime::class.java -> s.asOffsetDateTime()
                             ZonedDateTime::class.java -> s.asZonedDateTime()
                             LocalDateTime::class.java -> s.asLocalDateTime()
+                            Interval::class.java -> s.asInterval()
+
 
                             else -> inner.getObject(columnIndex, type)
                         }
