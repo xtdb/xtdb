@@ -2,6 +2,7 @@
 
 package xtdb.time
 
+import xtdb.types.ZonedDateTimeRange
 import java.lang.Math.multiplyExact
 import java.time.*
 import java.time.format.DateTimeFormatter
@@ -103,5 +104,16 @@ fun String.asInterval(): Interval {
     return Interval(
         groups[2]?.let { Period.parse("${neg}P${it.value}") } ?: Period.ZERO,
         groups[3]?.let { Duration.parse("${neg}PT${it.value}") } ?: Duration.ZERO
+    )
+}
+
+private val ZDTR_REGEX = Regex("\\[(.+)?,(.+)?\\)")
+
+fun String.asZonedDateTimeRange(defaultTz: ZoneId? = ZoneId.systemDefault()): ZonedDateTimeRange {
+    val groups = ZDTR_REGEX.matchEntire(this)!!.groups
+
+    return ZonedDateTimeRange(
+        groups[1]?.value?.asZonedDateTime(defaultTz),
+        groups[2]?.value?.asZonedDateTime(defaultTz)
     )
 }

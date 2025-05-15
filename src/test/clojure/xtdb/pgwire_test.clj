@@ -1534,14 +1534,11 @@
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, v: 2}"])
 
     (t/is (= [{:xt/id 1, :v 2,
-               :xt/valid-time {:type "tstz-range", :value "[2020-01-02 00:00:00+00:00,)"}}
+               :xt/valid-time #xt/tstz-range [#xt/zdt "2020-01-02T00:00Z" nil]}
               {:xt/id 1, :v 1,
-               :xt/valid-time {:type "tstz-range", :value "[2020-01-01 00:00:00+00:00,2020-01-02 00:00:00+00:00)"}}]
+               :xt/valid-time #xt/tstz-range [#xt/zdt "2020-01-01T00:00Z" #xt/zdt "2020-01-02T00:00Z"]}]
              (->> (jdbc/execute! conn ["SELECT *, _valid_time FROM foo FOR ALL VALID_TIME"]
-                                 {:builder-fn xt-jdbc/builder-fn})
-                  (mapv #(update % :xt/valid-time (fn [^PGobject vt]
-                                                    {:type (.getType vt)
-                                                     :value (.getValue vt)})))))))
+                                 {:builder-fn xt-jdbc/builder-fn})))))
 
   (when (psql-available?)
     (psql-session
