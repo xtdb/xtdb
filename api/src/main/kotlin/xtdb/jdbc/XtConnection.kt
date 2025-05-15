@@ -12,6 +12,7 @@ import xtdb.util.requiringResolve
 import java.net.URI
 import java.sql.*
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
@@ -44,6 +45,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 "transit" -> getPgObject(columnIndex)?.encodeToByteArray()?.let { readTransit(it, JSON) }
                 "keyword" -> getPgObject(columnIndex)?.let { Keyword.intern(it) }
                 "json", "jsonb" -> getPgObject(columnIndex)?.let { decodeJson(it) }
+                "date" -> getObject(columnIndex, LocalDate::class.java)
                 "timestamp" -> getObject(columnIndex, LocalDateTime::class.java)
                 "timestamptz" -> getObject(columnIndex, ZonedDateTime::class.java)
                 "tstz-range" -> getObject(columnIndex, ZonedDateTimeRange::class.java)
