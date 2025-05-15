@@ -797,7 +797,7 @@
            (xt/q tu/*node* "select date_trunc(day, TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as \"timestamp\"")))
 
   (t/is (thrown-with-msg?
-         ZoneRulesException
+         IllegalArgumentException
          #"Unknown time-zone ID: NotRealRegion"
          (xt/q tu/*node* "select date_trunc(hour, TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as \"timestamp\""))))
 

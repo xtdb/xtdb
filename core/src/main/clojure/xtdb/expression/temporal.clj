@@ -7,7 +7,7 @@
             [xtdb.types :as types])
   (:import (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time DateTimeException Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeParseException)
            (java.time.temporal ChronoField ChronoUnit Temporal)
            (org.apache.arrow.vector PeriodDuration)
@@ -1404,7 +1404,13 @@
 (defmethod expr/codegen-call [:date_trunc :utf8 :timestamp-tz :utf8] [{[{field :literal} _ {trunc-tz :literal}] :args, [_ [_tstz ts-unit _tz :as ts-type] _] :arg-types}]
   (let [trunc-zone-id-sym (gensym 'zone-id)]
     {:return-type ts-type
-     :batch-bindings [[trunc-zone-id-sym (ZoneId/of trunc-tz)]]
+     :batch-bindings [[trunc-zone-id-sym (try
+                                           (ZoneId/of trunc-tz)
+                                           (catch DateTimeException e
+                                             (throw (err/illegal-arg ::expr/invalid-timezone
+                                                                     {::err/message (ex-message e)
+                                                                      :timezone trunc-tz}
+                                                                     e))))]]
      :->call-code (fn [[_ x]]
                     (-> `(-> ~(ts->zdt x ts-unit trunc-zone-id-sym)
                              ~(field->truncate-fn field))
