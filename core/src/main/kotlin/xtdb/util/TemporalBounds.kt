@@ -23,7 +23,12 @@ data class TemporalDimension(
         @JvmStatic
         fun `in`(from: Long, to: Long?) = TemporalDimension(from, to ?: Long.MAX_VALUE)
         @JvmStatic
-        fun between (from: Long, to: Long?) = TemporalDimension(from, to?.inc() ?: Long.MAX_VALUE)
+        fun between(from: Long, to: Long?): TemporalDimension =
+            TemporalDimension(from, when (to) {
+                null -> Long.MAX_VALUE
+                Long.MAX_VALUE -> Long.MAX_VALUE
+                else -> to.inc()
+            })
     }
 }
 
