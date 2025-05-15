@@ -10,11 +10,8 @@
    [:scan
     {:table public/foo}
     [name
-     {_valid_from
-      (<= _valid_from #xt/zoned-date-time "2000-01-01T00:00Z")}
+     {_valid_from (<= _valid_from #xt/zdt "2000-01-01T00:00Z")}
      {_valid_to
       (>=
        (coalesce _valid_to xtdb/end-of-time)
-       (coalesce
-        #xt/zoned-date-time "2001-01-01T00:00Z"
-        xtdb/end-of-time))}]]]]]
+       (coalesce #xt/zdt "2001-01-01T00:00Z" xtdb/end-of-time))}]]]]]

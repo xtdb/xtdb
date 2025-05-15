@@ -10,7 +10,5 @@
     [:scan
      {:table public/t1,
       :for-system-time
-      [:between
-       #xt/date "3001-01-01"
-       #xt/zoned-date-time "3002-01-01T00:00Z"]}
+      [:between #xt/date "3001-01-01" #xt/zdt "3002-01-01T00:00Z"]}
      []]]]]]

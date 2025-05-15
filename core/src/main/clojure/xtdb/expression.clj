@@ -62,6 +62,7 @@
 (defn form->expr [form {:keys [col-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
+                     (= 'xtdb/start-of-time form) {:op :literal, :literal time/start-of-time}
                      (= 'xtdb/end-of-time form) {:op :literal, :literal time/end-of-time}
                      (= 'xtdb/postgres-server-version form) {:op :literal, :literal (str "PostgreSQL " postgres-server-version)}
                      (= 'xtdb/xtdb-server-version form) {:op :literal, :literal (str "XTDB @ " (xtdb-server-version))}
