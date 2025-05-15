@@ -5,7 +5,5 @@
   [:scan
    {:table public/foo,
     :for-valid-time
-    [:in
-     #xt/date "2999-01-01"
-     #xt/zoned-date-time "3000-01-01T00:00Z"]}
+    [:in #xt/date "2999-01-01" #xt/zdt "3000-01-01T00:00Z"]}
    [bar]]]]

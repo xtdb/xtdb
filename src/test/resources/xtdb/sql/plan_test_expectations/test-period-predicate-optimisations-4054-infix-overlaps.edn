@@ -13,10 +13,8 @@
      {_valid_from
       (<
        _valid_from
-       (coalesce
-        #xt/zoned-date-time "2001-01-01T00:00Z"
-        xtdb/end-of-time))}
+       (coalesce #xt/zdt "2001-01-01T00:00Z" xtdb/end-of-time))}
      {_valid_to
       (>
        (coalesce _valid_to xtdb/end-of-time)
-       #xt/zoned-date-time "2000-01-01T00:00Z")}]]]]]
+       #xt/zdt "2000-01-01T00:00Z")}]]]]]

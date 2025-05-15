@@ -3,7 +3,11 @@
  [:project
   [_iid
    {_valid_from
-    (greatest _valid_from (cast ?_0 [:timestamp-tz :micro "UTC"]))}
+    (greatest
+     _valid_from
+     (cast
+      (coalesce ?_0 xtdb/start-of-time)
+      [:timestamp-tz :micro "UTC"]))}
    {_valid_to
     (least
      (coalesce _valid_to xtdb/end-of-time)

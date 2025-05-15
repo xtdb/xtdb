@@ -272,3 +272,45 @@
                             SELECT _id, foo._valid_time * bar._valid_time AS intersection
                             FROM foo JOIN bar USING (_id)
                             WHERE foo._valid_time OVERLAPS bar._valid_time"))))
+
+(t/deftest update-delete-and-patch-explicit-null-behaviour
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]
+                            ])
+
+  (xt/execute-tx tu/*node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 1 WHERE _id = 1"
+                             [#inst "2020"]]])
+
+  (xt/execute-tx tu/*node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO NULL SET foo = 2 WHERE _id = 1"
+                             [#inst "2030"]]])
+
+  (t/is (= #{{:xt/id 1, :foo 2, :xt/valid-from #xt/zdt "2030-01-01T00:00Z[UTC]", :xt/valid-to #xt/zdt "2040-01-01T00:00Z[UTC]"}
+             {:xt/id 1, :foo 1, :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]", :xt/valid-to #xt/zdt "2020-01-01T00:00Z[UTC]"}
+             {:xt/id 1, :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]", :xt/valid-to #xt/zdt "2030-01-01T00:00Z[UTC]"}}
+           (set (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 "))))
+
+
+  (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM NULL TO NULL RECORDS {_id: 1, foo: 3}"]])
+
+
+  (t/is (= [{:xt/id 1,
+             :foo 3,
+             :xt/valid-from #xt/zdt "-290308-12-21T19:59:05.224192Z[UTC]",
+             :xt/valid-to #xt/zdt "2010-01-01T00:00Z[UTC]"}
+            {:xt/id 1,
+             :foo 3,
+             :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-01T00:00Z[UTC]"}
+            {:xt/id 1,
+             :foo 3,
+             :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2030-01-01T00:00Z[UTC]"}
+            {:xt/id 1,
+             :foo 3,
+             :xt/valid-from #xt/zdt "2030-01-01T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2040-01-01T00:00Z[UTC]"}
+            {:xt/id 1, :foo 3, :xt/valid-from #xt/zdt "2040-01-01T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from")))
+
+  (xt/execute-tx tu/*node* ["DELETE FROM users FOR PORTION OF VALID_TIME FROM NULL TO NULL WHERE _id = 1"])
+
+  (t/is (= [] (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 "))))

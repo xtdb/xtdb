@@ -2581,9 +2581,9 @@
 (def ^:private vt-col (->col-sym "_valid_to"))
 
 (defn- dml-stmt-valid-time-portion [from-expr to-expr]
-  {:for-valid-time [:in from-expr (when-not (= to-expr 'xtdb/end-of-time) to-expr)]
+  {:for-valid-time [:in (or from-expr time/start-of-time) to-expr]
    :projection [{vf-col (xt/template
-                         (greatest ~vf-col (cast ~(or from-expr '(current-timestamp)) ~types/temporal-col-type)))}
+                         (greatest ~vf-col (cast (coalesce ~from-expr xtdb/start-of-time) ~types/temporal-col-type)))}
 
                 {vt-col (if to-expr
                           (xt/template
@@ -2602,6 +2602,14 @@
     (let [expr-visitor (->ExprPlanVisitor env scope)]
       (dml-stmt-valid-time-portion (-> (.from ctx) (.accept expr-visitor))
                                    (some-> (.to ctx) (.accept expr-visitor))))))
+
+(defrecord PatchValidTimeExtentsVisitor [env scope]
+  SqlVisitor
+  (visitPatchStatementValidTimePortion [_ ctx]
+    (let [expr-visitor (->ExprPlanVisitor env scope)]
+      [(or (some-> (.from ctx) (.accept expr-visitor)) time/start-of-time)
+       (or (some-> (.to ctx) (.accept expr-visitor)) time/end-of-time)])))
+
 
 (def ^:private default-vt-extents-projection
   [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
@@ -2752,11 +2760,12 @@
   (visitPatchStatement [this ctx]
     (let [table-name (-> (identifier-sym (.tableName ctx))
                          util/with-default-schema)
-          expr-visitor (->ExprPlanVisitor env scope)]
+          [vf-expr vt-expr] (some-> (.patchStatementValidTimeExtents ctx)
+                                    (.accept (->PatchValidTimeExtentsVisitor env scope)))]
       (->PatchStmt table-name
                    (->QueryExpr (plan-patch env {:table table-name
-                                                 :valid-from (some-> (.validFrom ctx) (.accept expr-visitor))
-                                                 :valid-to (some-> (.validTo ctx) (.accept expr-visitor))
+                                                 :valid-from vf-expr
+                                                 :valid-to vt-expr
                                                  :patch-rel (.accept (.patchSource ctx) this)})
                                 '[_iid _valid_from _valid_to doc]))))
 

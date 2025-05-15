@@ -830,9 +830,13 @@ dmlStatementValidTimeExtents
 
 patchStatement
   : PATCH INTO tableName
-    ('FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' validFrom=staticExpr ('TO' validTo=staticExpr)?)?
-    patchSource
-  ;
+    patchStatementValidTimeExtents?
+    patchSource;
+
+// could become dmlStatementValidTimeExtents
+patchStatementValidTimeExtents
+: 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' from=staticExpr ('TO' to=staticExpr)? # PatchStatementValidTimePortion
+;
 
 patchSource
   : recordsValueConstructor # PatchRecords

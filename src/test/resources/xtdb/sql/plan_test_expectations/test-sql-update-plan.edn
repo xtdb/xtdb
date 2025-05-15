@@ -5,7 +5,9 @@
    {_valid_from
     (greatest
      _valid_from
-     (cast #xt/date "2021-07-01" [:timestamp-tz :micro "UTC"]))}
+     (cast
+      (coalesce #xt/date "2021-07-01" xtdb/start-of-time)
+      [:timestamp-tz :micro "UTC"]))}
    {_valid_to _valid_to}
    first_name
    id
