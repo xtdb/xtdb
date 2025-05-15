@@ -84,8 +84,12 @@
     (->instant (.atZone ldt default-tz) opts)))
 
 (defn instant->micros ^long [^Instant inst]
-  (-> (Math/multiplyExact (.getEpochSecond inst) #=(long 1e6))
-      (Math/addExact (quot (.getNano inst) 1000))))
+  (let [epoch-milli (.toEpochMilli inst)
+        sec-part (quot epoch-milli 1000)
+        milli-part-in-micros (Math/multiplyExact (long (rem epoch-milli 1000)) 1000)
+        micro-part (quot (rem (.getNano inst) (long 1e6)) 1000)]
+    (-> (Math/multiplyExact sec-part #=(long 1e6))
+        (Math/addExact (Math/addExact milli-part-in-micros micro-part)))))
 
 (defn sql-temporal->micros
   "Given some temporal value (such as a Date, LocalDateTime, OffsetDateTime and so on) will return the corresponding Instant.
@@ -109,6 +113,9 @@
 
 (def ^java.time.Instant end-of-time
   (micros->instant Long/MAX_VALUE))
+
+(def ^java.time.Instant start-of-time
+  (micros->instant Long/MIN_VALUE))
 
 (defn max-tx [l r]
   (if (or (nil? l)
