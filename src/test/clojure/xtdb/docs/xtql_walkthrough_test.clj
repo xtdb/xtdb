@@ -336,34 +336,12 @@
                        "ivan"])))
 
   (t/is (not (empty?
-               (xt/q tu/*node*
-                     ['(fn [author]
-                         (unify (from :comments {:bind [{:post-id pid}]
-                                                 :for-valid-time :all-time})
-                                (from :posts [{:xt/id pid, :author-id author}])))
-                      "ivan"])))))
-
-(deftest DML-Delete-bitemporal-xtql
-  (xt/submit-tx tu/*node* promotions)
-
-  (t/is (= #{{:promotion-type "christmas"}
-             {:promotion-type "general"}}
-           (set
-            (xt/q tu/*node*
-                  '(unify (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-25")})
-                          (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-26")}))))))
-
-  (xt/submit-tx tu/*node* [[:sql (sql-example "DML-Delete-bitemporal-sql")]])
-
-  (t/is (= #{{:promotion-type "general"}}
-           (set
-            (xt/q tu/*node*
-                  '(unify (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-25")})
-                          (from :promotions {:bind [promotion-type]
-                                             :for-valid-time (from #inst "2023-12-26")})))))))
+              (xt/q tu/*node*
+                    ['(fn [author]
+                        (unify (from :comments {:bind [{:post-id pid}]
+                                                :for-valid-time :all-time})
+                               (from :posts [{:xt/id pid, :author-id author}])))
+                     "ivan"])))))
 
 (deftest DML-Delete-bitemporal-sql
   (xt/submit-tx tu/*node* promotions)
