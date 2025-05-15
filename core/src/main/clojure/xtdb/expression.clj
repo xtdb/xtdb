@@ -1029,7 +1029,8 @@
         re-sym (gensym 're)]
 
     (when (or start n)
-      (throw (UnsupportedOperationException. "regexp_replace does not yet support `start` or `n` arguments")))
+      (throw (err/illegal-arg ::unsupported
+                              {::err/message "regexp_replace does not yet support `start` or `n` arguments"})))
 
     {:return-type :utf8
      :batch-bindings [[re-sym `(Pattern/compile ~pattern ~(int (reduce bit-or 0 (mapcat flag-map flags))))]]
@@ -1289,7 +1290,9 @@
 (defn current-setting [setting-name]
   (if (= setting-name "server_version_num")
     (parse-version (xtdb-server-version))
-    (throw (UnsupportedOperationException. "Setting not supported"))))
+    (throw (err/illegal-arg ::unsupported-setting
+                            {::err/message (str "Setting not supported: " setting-name)
+                             :setting-name setting-name}))))
 
 (defmethod codegen-call [:current_setting :utf8] [_]
   {:return-type :i64

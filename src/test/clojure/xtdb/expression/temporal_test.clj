@@ -278,7 +278,7 @@
                  first :res)))]
 
     (t/testing "cannot cast year-month interval to duration"
-      (t/is (thrown-with-msg? UnsupportedOperationException
+      (t/is (thrown-with-msg? IllegalArgumentException
                               #"Cannot cast a year-month interval to a duration"
                               (test-cast #xt/interval "P12M" [:duration :micro]))))
 
@@ -348,7 +348,7 @@
 
   (t/testing "with invalid interval qualifier"
     (t/is (thrown-with-msg?
-           UnsupportedOperationException
+           IllegalArgumentException
            #"Cannot cast a duration to a year-month interval"
            (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
                          [:table [{}]]])))
@@ -483,13 +483,13 @@
 
     (t/testing "casting YM interval to non YM interval should fail"
       (t/is (thrown-with-msg?
-             UnsupportedOperationException
+             IllegalArgumentException
              #"Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
              (test-cast #xt/interval "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "casting non YM interval to YM interval should fail"
       (t/is (thrown-with-msg?
-             UnsupportedOperationException
+             IllegalArgumentException
              #"Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
              (test-cast #xt/interval "P1M1DT1H" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
 
@@ -1119,7 +1119,7 @@
 (t/deftest test-interval-comparison
   (t/testing "comparing intervals with different types"
     (t/is (thrown-with-msg?
-           UnsupportedOperationException
+           IllegalArgumentException
            #"Cannot compare intervals with different units"
            (et/project1 '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
 
@@ -1183,8 +1183,8 @@
       true '(>= (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2)))))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
-  (t/is (thrown? UnsupportedOperationException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
-  (t/is (thrown? UnsupportedOperationException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
+  (t/is (thrown? IllegalArgumentException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
+  (t/is (thrown? IllegalArgumentException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
 
 (def period-gen
   (tcg/fmap (fn [[y m d]]

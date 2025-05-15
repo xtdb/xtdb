@@ -439,7 +439,9 @@
 (defmethod expr/codegen-cast [:interval :duration] [{[_ iunit] :source-type [_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
   (when-not (or (= iunit :month-day-nano)
                 (= iunit :month-day-micro))
-    (throw (UnsupportedOperationException. (format "Cannot cast a %s interval to a duration" (name iunit)))))
+    (throw (err/illegal-arg ::expr/invalid-cast
+                            {::err/message (format "Cannot cast a %s interval to a duration" (name iunit))
+                             :interval-unit iunit})))
 
   (when precision (ensure-fractional-precision-valid precision))
 
@@ -529,7 +531,9 @@
 
   (if interval-qualifier
     (do (when (or (= "YEAR" start-field) (= "MONTH" start-field))
-          (throw (UnsupportedOperationException. "Cannot cast a duration to a year-month interval")))
+          (throw (err/illegal-arg ::expr/unsupported-cast
+                                  {::err/message "Cannot cast a duration to a year-month interval"
+                                   :source-type :duration})))
         (ensure-interval-precision-valid leading-precision)
         (when end-field (ensure-interval-units-valid start-field end-field))
         (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
@@ -563,8 +567,15 @@
       (when end-field (ensure-interval-units-valid start-field end-field))
       (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
       ;; Assert that we are not casting year-month intervals to month-day-* intervals and vice versa
-      (when (and ym-cast? (not= source-type [:interval :year-month])) (throw (UnsupportedOperationException. "Cannot cast a non Year-Month interval with a Year-Month interval qualifier")))
-      (when (and (not ym-cast?) (= source-type [:interval :year-month])) (throw (UnsupportedOperationException. "Cannot cast a Year-Month interval with a non Year-Month interval qualifier")))
+      (when (and ym-cast? (not= source-type [:interval :year-month]))
+        (throw (err/illegal-arg ::expr/unsupported-cast
+                                {::err/message "Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
+                                 :source-type source-type})))
+
+      (when (and (not ym-cast?) (= source-type [:interval :year-month]))
+        (throw (err/illegal-arg ::expr/unsupported-cast
+                                {::err/message "Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
+                                 :source-type source-type})))
 
 
       ;;TODO logic to cast any arbitrary mdm to mdn and vice versa, would just be changing the precision of the seconds
@@ -918,7 +929,9 @@
 
 (defmethod expr/codegen-call [:compare :interval :interval] [{[[_x x-unit] [_y y-unit]] :arg-types}]
   (cond
-    (not= x-unit y-unit) (throw (UnsupportedOperationException. "Cannot compare intervals with different units")))
+    (not= x-unit y-unit) (throw (err/illegal-arg :xtdb.expression/cannot-cannot-different-unit-intervals
+                                                 {::err/message "Cannot compare intervals with different units"
+                                                  :x-unit x-unit, :y-unit y-unit})))
 
   {:return-type :i32
    :->call-code (cond
@@ -1047,7 +1060,7 @@
         days (.getDays p)
         nanos (.toNanos (.getDuration pd))]
     (if (mixed-interval? months days nanos)
-      (throw (UnsupportedOperationException. "Cannot divide mixed (month, day, time) intervals"))
+      (throw (err/illegal-arg ::expr/cannot-divide-mixed-intervals {::err/message "Cannot divide mixed (month, day, time) intervals"}))
       (PeriodDuration.
        (Period/of 0 (quot months divisor) (quot days divisor))
        (Duration/ofNanos (quot nanos divisor))))))
@@ -1070,7 +1083,8 @@
         days (.getDays p)
         nanos (.toNanos (.getDuration pd))]
     (if (mixed-interval? months days nanos)
-      (throw (UnsupportedOperationException. "Cannot ABS mixed intervals (month, day, time)"))
+      (throw (err/illegal-arg ::expr/cannot-abs-mixed-intervals
+                              {::err/message "Cannot ABS mixed intervals (month, day, time)"}))
       (PeriodDuration. (Period/of 0 (Math/abs months) (Math/abs days))
                        (Duration/ofNanos (Math/abs nanos))))))
 
@@ -1291,8 +1305,12 @@
    :->call-code (fn [[_ x]]
                   `(-> ~(ts->ldt x ts-unit)
                        ~(case field
-                          "TIMEZONE_HOUR" (throw (UnsupportedOperationException. "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"))
-                          "TIMEZONE_MINUTE" (throw (UnsupportedOperationException. "Extract \"TIMEZONE_MINUTE\" not supported for type timestamp without timezone"))
+                          "TIMEZONE_HOUR" (throw (err/illegal-arg ::expr/extract-not-supported
+                                                                  {::err/message "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
+                                                                   :field :timezone-hour, :source-type :timestamp-local}))
+                          "TIMEZONE_MINUTE" (throw (err/illegal-arg ::expr/extract-not-supported
+                                                                    {::err/message "Extract \"TIMEZONE_MINUTE\" not supported for type timestamp without timezone"
+                                                                     :field :timezone-minute, :source-type :timestamp-local}))
                           `(.get ~(time-field->ChronoField field)))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
@@ -1303,7 +1321,9 @@
                     "YEAR" `(.getYear (LocalDate/ofEpochDay ~epoch-day-code))
                     "MONTH" `(.getMonthValue (LocalDate/ofEpochDay ~epoch-day-code))
                     "DAY" `(.getDayOfMonth (LocalDate/ofEpochDay ~epoch-day-code))
-                    (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type date" field)))))})
+                    (throw (err/illegal-arg ::expr/extract-not-supported
+                                            {::err/message (format "Extract \"%s\" not supported for type date" field)
+                                             :field field, :source-type :date}))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type :i32
@@ -1317,7 +1337,9 @@
                       "HOUR" `(-> (.toHours ~duration) (int))
                       "MINUTE" `(-> (.toMinutes ~duration) (rem 60) (int))
                       "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int))
-                      (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type interval" field))))))})
+                      (throw (err/illegal-arg ::expr/extract-not-supported
+                                              {::err/message (format "Extract \"%s\" not supported for type interval" field)
+                                               :field field, :source-type :interval})))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :time-local] [{[{field :literal} _] :args [_ [_tm tm-unit]] :arg-types}]
   {:return-type :i32
@@ -1327,7 +1349,9 @@
                       "HOUR" `(.getHour ~local-time)
                       "MINUTE" `(.getMinute ~local-time)
                       "SECOND" `(.getSecond ~local-time)
-                      (throw (UnsupportedOperationException. (format "Extract \"%s\" not supported for type time without timezone" field))))))})
+                      (throw (err/illegal-arg ::expr/extract-not-supported
+                                              {::err/message (format "Extract \"%s\" not supported for type time without timezone" field)
+                                               :field field, :source-type :time-local})))))})
 
 (defn field->truncate-fn
   [field]
@@ -1927,10 +1951,12 @@
 
 (defmethod expr/codegen-call [:generate_series :date :date :interval] [{[from-type to-type [_interval i-unit :as i-type]] :arg-types, :as expr}]
   (when-not (= from-type [:date :day])
-    (throw (UnsupportedOperationException. "generate_series with date-from of type date-milli")))
+    (throw (err/illegal-arg ::expr/unsupported
+                            {::err/message "generate_series with date-from of type date-milli"})))
 
   (when-not (= to-type [:date :day])
-    (throw (UnsupportedOperationException. "generate_series with date-to of type date-milli")))
+    (throw (err/illegal-arg ::expr/unsupported
+                            {::err/message "generate_series with date-to of type date-milli"})))
 
   (case i-unit
     :year-month {:return-type [:list [:date :day]]
