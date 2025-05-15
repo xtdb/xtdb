@@ -215,8 +215,8 @@
 
                                           (if (and (:column? (meta expr))
                                                    (not (get sq-refs expr)))
-                                              ;;can't apply shortcut if column is already mapped to existing param due to limitation
-                                              ;;of input col as key in sq-refs param map
+                                            ;;can't apply shortcut if column is already mapped to existing param due to limitation
+                                            ;;of input col as key in sq-refs param map
                                             [:apply
                                              {:mark-join {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
                                              (assoc sq-refs expr needle-param)
@@ -545,7 +545,7 @@
         (add-err! env (->MissingGroupingColumns missing-grouping-cols))
         grouping-cols)))
 
-  Scope 
+  Scope
   (available-cols [_] (available-cols scope))
 
   (-find-cols [_ chain excl-cols]
@@ -974,7 +974,7 @@
                      (.withOrWithoutTimeZone ctx))
         {:->cast-fn (fn [ve]
                       (list 'cast-tstz ve
-                             {:precision precision, :unit time-unit}))}
+                            {:precision precision, :unit time-unit}))}
 
         {:cast-type [:timestamp-local time-unit]
          :cast-opts (when precision
@@ -1232,7 +1232,7 @@
       (if (.NOT ctx)
         (list 'not boolean-fn)
         boolean-fn)))
-  
+
   (visitExtractFunction [this ctx]
     (let [extract-field (-> (.extractField ctx) (.getText) (str/upper-case))
           extract-source (-> (.extractSource ctx) (.expr) (.accept this))]
@@ -2063,7 +2063,7 @@
 
 (defrecord SetOperationColumnCountMismatch [operation-type lhs-count rhs-count]
   PlanError
-  (error-string [_] 
+  (error-string [_]
     (format "Column count mismatch on %s set operation: lhs column count %s, rhs column count %s" operation-type lhs-count rhs-count)))
 
 (defrecord InsertWithoutXtId []
@@ -2235,9 +2235,9 @@
                         (plan-order-by env scope
                                        (mapv :col-sym projected-cols)))]
 
-        (when-let [dup-cols (not-empty (dups (mapv :col-sym projected-cols)))]
-          (doseq [col dup-cols]
-            (add-err! env (->DuplicateColumnProjection col))))
+    (when-let [dup-cols (not-empty (dups (mapv :col-sym projected-cols)))]
+      (doseq [col dup-cols]
+        (add-err! env (->DuplicateColumnProjection col))))
 
     (reify
       Scope
@@ -2354,12 +2354,12 @@
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "UNION" (count l-col-syms) (count r-col-syms))))
-          
+
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
                               [:rename (zipmap r-col-syms l-col-syms) plan]
-                              plan)) 
-          
+                              plan))
+
           plan [:union-all l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx) [:distinct plan] plan) l-col-syms)))
 
@@ -2373,16 +2373,16 @@
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "EXCEPT" (count l-col-syms) (count r-col-syms))))
 
-          rename-col-syms (fn [plan] 
+          rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
                               [:rename (zipmap r-col-syms l-col-syms) plan]
                               plan))
-          
+
           wrap-distinct (fn [plan]
                           (if (not (.ALL ctx))
                             [:distinct plan]
                             plan))]
-      
+
       (->QueryExpr [:difference
                     (wrap-distinct l-plan)
                     (rename-col-syms (wrap-distinct r-plan))]
@@ -2397,12 +2397,12 @@
 
           _ (when-not (= (count l-col-syms) (count r-col-syms))
               (add-err! env (->SetOperationColumnCountMismatch "INTERSECT" (count l-col-syms) (count r-col-syms))))
-          
+
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
                               [:rename (zipmap r-col-syms l-col-syms) plan]
                               plan))
-          
+
           plan [:intersect l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx)
                      [:distinct plan]
@@ -3065,37 +3065,37 @@
   Sql$DirectlyExecutableStatementContext
   (-plan-statement [ctx {:keys [scope table-info arg-fields]}]
     (let [!errors (atom [])
-         !warnings (atom [])
-         !param-count (atom 0)
-         env {:!errors !errors
-              :!warnings !warnings
-              :!id-count (atom 0)
-              :!param-count !param-count
-              :table-info (xform-table-info table-info)
-              ;; NOTE this may not necessarily be provided
-              ;; we get it through SQL DML, which is the main case we need it for #3656
-              :arg-fields arg-fields}
+          !warnings (atom [])
+          !param-count (atom 0)
+          env {:!errors !errors
+               :!warnings !warnings
+               :!id-count (atom 0)
+               :!param-count !param-count
+               :table-info (xform-table-info table-info)
+               ;; NOTE this may not necessarily be provided
+               ;; we get it through SQL DML, which is the main case we need it for #3656
+               :arg-fields arg-fields}
 
           stmt (.accept ctx (->StmtVisitor env scope))]
-     (if-let [errs (not-empty @!errors)]
-       (throw (err/illegal-arg :xtdb/sql-error
-                               {::err/message (str "Errors planning SQL statement:\n  - "
-                                                   (str/join "\n  - " (map #(error-string %) errs)))
-                                :errors errs}))
-       (do
-         (log-warnings !warnings)
-         (let [{:keys [col-syms] :as stmt} (-> stmt
-                                                        #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-                                                        (optimise-stmt)                ;; <<no-commit>>
-                                                        #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-                                                        )]
-           (-> (->logical-plan stmt)
-               (vary-meta (fn [m]
-                            (-> (or m {})
-                                (into (select-keys stmt [:explain? :current-time :snapshot-time]))
-                                (assoc :param-count @!param-count
-                                       :warnings @!warnings
-                                       :ordered-outer-projection col-syms)))))))))))
+      (if-let [errs (not-empty @!errors)]
+        (throw (err/illegal-arg :xtdb/sql-error
+                                {::err/message (str "Errors planning SQL statement:\n  - "
+                                                    (str/join "\n  - " (map #(error-string %) errs)))
+                                 :errors errs}))
+        (do
+          (log-warnings !warnings)
+          (let [{:keys [col-syms] :as stmt} (-> stmt
+                                                #_(doto clojure.pprint/pprint) ;; <<no-commit>>
+                                                (optimise-stmt)                ;; <<no-commit>>
+                                                #_(doto clojure.pprint/pprint) ;; <<no-commit>>
+                                                )]
+            (-> (->logical-plan stmt)
+                (vary-meta (fn [m]
+                             (-> (or m {})
+                                 (into (select-keys stmt [:explain? :current-time :snapshot-time]))
+                                 (assoc :param-count @!param-count
+                                        :warnings @!warnings
+                                        :ordered-outer-projection col-syms)))))))))))
 
 (defn plan
   ([sql] (plan sql nil))
@@ -3188,4 +3188,3 @@
      ;; eventually we could deal with these on pre-submit
      (catch IllegalArgumentException _)
      (catch RuntimeException _))))
-
