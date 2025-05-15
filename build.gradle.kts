@@ -317,7 +317,7 @@ dependencies {
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
     testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
-    testImplementation("com.github.igrishaev", "pg2-core", "0.1.33")
+    testImplementation("com.github.igrishaev", "pg2-core", "0.1.39")
 
     // For generating clojure docs
     testImplementation("codox", "codox", "0.10.8")
