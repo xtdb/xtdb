@@ -407,17 +407,14 @@
 
 ;;; server impl
 
-(defn- ->xtify-arg [session {:keys [arg-format param-fields]}]
+(defn- ->xtify-arg [session {:keys [arg-format param-oids]}]
   (fn xtify-arg [arg-idx arg]
     (when (some? arg)
-      (let [param-oid (:oid (nth param-fields arg-idx))
+      (let [param-oid (nth param-oids arg-idx)
             arg-format (or (nth arg-format arg-idx nil)
                            (nth arg-format arg-idx :text))
             {:keys [read-binary, read-text]} (or (get pg-types/pg-types-by-oid param-oid)
                                                  (throw (pgio/err-protocol-violation "Unsupported param type provided for read")))]
-
-        (when (= 0 param-oid)
-          (throw (pgio/err-protocol-violation "Param type not specified or could not be inferred")))
 
         (if (= :binary arg-format)
           (read-binary session arg)
@@ -520,9 +517,9 @@
 (defn skip-until-sync? [{:keys [conn-state] :as _conn}]
   (:skip-until-sync @conn-state))
 
-(defn- cmd-exec-dml [{:keys [conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-fields]}]
-  (when (or (not= (count param-fields) (count args))
-            (some #(= 0 (:oid %)) param-fields))
+(defn- cmd-exec-dml [{:keys [conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
+  (when (or (not= (count param-oids) (count args))
+            (some zero? param-oids))
     (inc-error-counter! tx-error-counter)
     (throw (pgio/err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")))
 
@@ -623,9 +620,13 @@
     (cmd-send-row-description conn fields)
     (pgio/cmd-write-msg conn pgio/msg-no-data)))
 
-(defn cmd-send-parameter-description [conn {:keys [param-fields]}]
-  (log/trace "sending parameter description - " {:param-fields param-fields})
-  (pgio/cmd-write-msg conn pgio/msg-parameter-description {:parameter-oids (mapv :oid param-fields)}))
+(defn cmd-send-parameter-description [conn {:keys [param-oids]}]
+  (log/trace "sending parameter description - " {:param-oids param-oids})
+  (pgio/cmd-write-msg conn pgio/msg-parameter-description
+                      {:parameter-oids (vec (for [^long param-oid param-oids]
+                                              (if (zero? param-oid)
+                                                (get-in pg-types/pg-types [:text :oid])
+                                                param-oid)))}))
 
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
   (let [rows (rows conn)]
@@ -659,7 +660,7 @@
         (:query :dml) (describe* describe-target)
 
         :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
-                   (describe* {:param-fields (:param-fields describe-target)
+                   (describe* {:param-oids (:param-oids describe-target)
                                :fields (:fields inner)}))
 
         (pgio/cmd-write-msg conn pgio/msg-no-data)))))
@@ -936,65 +937,64 @@
     (->> inferred-params
          (map-indexed (fn [idx inf-param]
                         (if-let [dec-param (nth declared-params idx nil)]
-                          (if (= :default (:col-type dec-param))
+                          (if (zero? (:oid dec-param))
                             inf-param
                             dec-param)
                           inf-param))))))
 
-(defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type] :as stmt} {:keys [param-oids]}]
-  (let [{:keys [session watermark-tx-id]} @conn-state
-        {:keys [^Clock clock]} session
-        fallback-output-format (get-in session [:parameters "fallback_output_format"])
-        param-types (map pg-types/pg-types-by-oid param-oids)]
+(defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
+  (if-not (contains? #{:query :execute} statement-type)
+    stmt
 
-    (if (contains? #{:query :execute} statement-type)
-      (let [param-col-types (mapv :col-type param-types)]
-        (when (some nil? param-col-types)
-          (throw (pgio/err-protocol-violation (str "Unsupported param-types in query: "
-                                                   (pr-str (->> param-types
-                                                                (into [] (comp (filter (comp nil? :col-type))
-                                                                               (map :typname)
-                                                                               (distinct)))))))))
+    (try
+      (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
 
-        (try
-          (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
-                query-opts {:after-tx-id (or watermark-tx-id -1)
-                            :tx-timeout (Duration/ofSeconds 1)
-                            :default-tz (.getZone clock)
-                            :explain? explain?}
+            {:keys [session watermark-tx-id]} @conn-state
+            {:keys [^Clock clock]} session
 
-                ^PreparedQuery pq (if ra-plan
-                                    (xtp/prepare-ra node ra-plan query-opts)
-                                    (xtp/prepare-sql node parsed-query query-opts))]
+            query-opts {:after-tx-id (or watermark-tx-id -1)
+                        :tx-timeout (Duration/ofSeconds 1)
+                        :default-tz (.getZone clock)
+                        :explain? explain?}
 
-            (when-let [warnings (.warnings pq)]
-              (doseq [warning warnings]
-                (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
+            ^PreparedQuery pq (if ra-plan
+                                (xtp/prepare-ra node ra-plan query-opts)
+                                (xtp/prepare-sql node parsed-query query-opts))]
 
-            (let [param-fields (->> (concat (mapv #(if (= :default %) :utf8 %) param-col-types)
-                                            (repeat :utf8))
-                                    (take (.paramCount pq))
-                                    (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                                   (map-indexed (fn [idx field]
-                                                                  (types/field-with-name field (str "?_" idx)))))))]
-              (assoc stmt
-                     :prepared-query pq
-                     :fields (mapv (partial pg-types/field->pg-type fallback-output-format) (.columnFields pq param-fields))
-                     :param-fields (->> param-fields
-                                        (map pg-types/field->pg-type)
-                                        (map #(set/rename-keys % {:column-oid :oid}))
-                                        (resolve-defaulted-params param-types)))))
-          (catch IllegalArgumentException e
-            (log/debug e "Error preparing statement")
-            (throw e))
-          (catch RuntimeException e
-            (log/debug e "Error preparing statement")
-            (throw e))
-          (catch Throwable e
-            (log/error e "Error preparing statement")
-            (throw e))))
+        (when-let [warnings (.warnings pq)]
+          (doseq [warning warnings]
+            (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
-      (assoc stmt :param-fields param-types))))
+        (let [param-oids (->> (concat param-oids (repeat 0))
+                              (into [] (take (.paramCount pq))))
+              param-types (map pg-types/pg-types-by-oid param-oids)
+              param-col-types (mapv :col-type param-types)]
+          (when (some nil? param-col-types)
+            (throw (pgio/err-protocol-violation (str "Unsupported param-types in query: "
+                                                     (pr-str (->> param-types
+                                                                  (into [] (comp (filter (comp nil? :col-type))
+                                                                                 (map :typname)
+                                                                                 (distinct)))))))))
+
+          (let [fallback-output-format (get-in session [:parameters "fallback_output_format"])
+
+                param-fields (->> param-col-types
+                                  (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                                 (map-indexed (fn [idx field]
+                                                                (types/field-with-name field (str "?_" idx)))))))]
+            (assoc stmt
+                   :prepared-query pq
+                   :fields (mapv (partial pg-types/field->pg-type fallback-output-format) (.columnFields pq param-fields))
+                   :param-oids param-oids))))
+      (catch IllegalArgumentException e
+        (log/debug e "Error preparing statement")
+        (throw e))
+      (catch RuntimeException e
+        (log/debug e "Error preparing statement")
+        (throw e))
+      (catch Throwable e
+        (log/error e "Error preparing statement")
+        (throw e)))))
 
 (defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [stmt-name param-oids] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
@@ -1002,7 +1002,7 @@
   (let [[stmt & more-stmts] (parse conn msg-data)]
     (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
 
-    (let [prepared-stmt (prep-stmt conn stmt {:param-oids param-oids})]
+    (let [prepared-stmt (prep-stmt conn (-> stmt (assoc :param-oids param-oids)))]
       (swap! conn-state (fn [conn-state]
                           (-> conn-state
                               (assoc-in [:prepared-statements stmt-name] prepared-stmt)))))
@@ -1015,7 +1015,7 @@
     (when (seq more-stmts)
       (throw (UnsupportedOperationException. "Multiple statements in a single PREPARE are not supported")))
 
-    (let [prepared-stmt (prep-stmt conn prepared-stmt {})]
+    (let [prepared-stmt (prep-stmt conn prepared-stmt)]
       (swap! conn-state assoc-in [:prepared-statements statement-name]
              (assoc prepared-stmt
                     :statement-name statement-name))
@@ -1077,13 +1077,15 @@
                                       (-> inner
                                           (assoc :bound-query inner-bq
                                                  :fields (->fields inner-bq))))
+
                              :dml (let [arg-fields (.columnFields bq)]
                                     (try
                                       (-> inner
                                           (assoc :args (vec (for [^Field field arg-fields]
                                                               (-> (.vectorForOrNull args-rel (.getName field))
                                                                   (.getObject 0))))
-                                                 :param-fields arg-fields))
+                                                 :param-oids (->> arg-fields
+                                                                  (mapv (comp :column-oid pg-types/field->pg-type)))))
                                       (finally
                                         (util/close args-rel))))))))
                      (finally
@@ -1175,8 +1177,8 @@
         (cmd-begin conn {:implicit? true} {}))
 
       (try
-        (let [{:keys [param-fields statement-type] :as prepared-stmt} (prep-stmt conn stmt {})]
-          (when (seq param-fields)
+        (let [{:keys [param-oids statement-type] :as prepared-stmt} (prep-stmt conn stmt)]
+          (when (seq param-oids)
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
           (let [portal (bind-stmt conn prepared-stmt)]
