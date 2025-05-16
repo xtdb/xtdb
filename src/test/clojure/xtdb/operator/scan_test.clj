@@ -373,67 +373,6 @@
     (t/is (= '{_id [:union #{:keyword :utf8}]}
              (->col-type '_id)))))
 
-#_ ; TODO adapt for scan/->temporal-bounds
-(t/deftest can-create-temporal-min-max-range
-  (let [μs-2018 (time/instant->micros (time/->instant #inst "2018"))
-        μs-2019 (time/instant->micros (time/->instant #inst "2019"))]
-    (letfn [(transpose [[mins maxs]]
-              (->> (map vector mins maxs)
-                   (zipmap [:sys-end :xt/id :sys-start :row-id :app-time-start :app-time-end])
-                   (into {} (remove (comp #{[Long/MIN_VALUE Long/MAX_VALUE]} val)))))]
-      (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]
-                :app-time-end [(inc μs-2019) Long/MAX_VALUE]}
-               (transpose (scan/->temporal-min-max-range
-                           nil nil nil
-                           {'xt/valid-from '(<= xt/valid-from #inst "2019")
-                            'xt/valid-to '(> xt/valid-to #inst "2019")}))))
-
-      (t/is (= {:app-time-start [μs-2019 μs-2019]}
-               (transpose (scan/->temporal-min-max-range
-                           nil nil nil
-                           {'xt/valid-from '(= xt/valid-from #inst "2019")}))))
-
-      (t/testing "symbol column name"
-        (t/is (= {:app-time-start [μs-2019 μs-2019]}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(= xt/valid-from #inst "2019")})))))
-
-      (t/testing "conjunction"
-        (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(and (<= xt/valid-from #inst "2019")
-                                                   (<= xt/valid-from #inst "2020"))})))))
-
-      (t/testing "disjunction not supported"
-        (t/is (= {}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(or (= xt/valid-from #inst "2019")
-                                                  (= xt/valid-from #inst "2020"))})))))
-
-      (t/testing "ignores non-ts literals"
-        (t/is (= {:app-time-start [μs-2019 μs-2019]}
-                 (transpose (scan/->temporal-min-max-range
-                             nil nil nil
-                             {'xt/valid-from '(and (= xt/valid-from #inst "2019")
-                                                   (= xt/valid-from nil))})))))
-
-      (t/testing "parameters"
-        (t/is (= {:app-time-start [μs-2018 Long/MAX_VALUE]
-                  :app-time-end [Long/MIN_VALUE (dec μs-2018)]
-                  :sys-start [Long/MIN_VALUE μs-2019]
-                  :sys-end [(inc μs-2019) Long/MAX_VALUE]}
-                 (with-open [args (tu/open-args {'?system-time (time/->instant #inst "2019")
-                                                 '?app-time (time/->instant #inst "2018")})]
-                   (transpose (scan/->temporal-min-max-range
-                               args nil nil
-                               {'xt/system-from '(>= ?system-time xt/system-from)
-                                'xt/system-to '(< ?system-time xt/system-to)
-                                'xt/valid-from '(<= ?app-time xt/valid-from)
-                                'xt/valid-to '(> ?app-time xt/valid-to)})))))))))
-
 (t/deftest test-content-pred
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
                            [:put-docs :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
