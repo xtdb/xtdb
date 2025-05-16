@@ -694,6 +694,7 @@
 (defmethod arrow-type->col-type TsTzRangeType [_ _] :tstz-range)
 (defmethod arrow-type->col-type KeywordType [_] :keyword)
 (defmethod arrow-type->col-type RegClassType [_] :regclass)
+(defmethod arrow-type->col-type RegProcType [_] :regproc)
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)
 (defmethod arrow-type->col-type TransitType [_] :transit)
