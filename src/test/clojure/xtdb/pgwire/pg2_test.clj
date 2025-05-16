@@ -84,7 +84,7 @@
 
       (t/is (thrown-with-msg?
              PGErrorResponse
-             #"Param type not specified or could not be inferred"
+             #"Missing types for args - client must specify types for all params"
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
                                                                         :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
@@ -203,7 +203,7 @@
     (testing "explicit transit serialization"
       (with-open [conn (pg-conn {:pg-params {"fallback_output_format" "transit"}})]
         (t/is (= (-> (insert-and-query conn (String. (serde/write-transit m-in :json)))
-                   (update-in [0 :v] #(serde/read-transit (.getBytes %) :json)))
+                     (update-in [0 :v] #(serde/read-transit (.getBytes %) :json)))
                  [{:v expected-m-out}]))))
 
     (testing "custom type setup for transit serialization"
@@ -225,7 +225,6 @@
   ;;to something other than the param value in the test. But this currently isn't possible.
   (t/testing "TimeZone"
     (with-open [conn (pg-conn {:pg-params {"TimeZone" "Pacific/Tarawa"}})]
-
       (t/is (= [{:timezone "Pacific/Tarawa"}]
                (pg/execute conn "SHOW TIME ZONE"))
             "Exact case"))

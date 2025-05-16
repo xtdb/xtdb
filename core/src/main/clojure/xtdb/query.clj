@@ -62,8 +62,9 @@
    "optional: if you close this BoundQuery it'll close any closed-over args relation"))
 
 (definterface PreparedQuery
-  (^java.util.List paramFields [])
-  (^java.util.List columnFields [])
+  (^long paramCount [])
+  (^java.util.List columnNames [])
+  (^java.util.List columnFields [^java.util.List paramFields])
   (^java.util.List warnings [])
   (^xtdb.query.BoundQuery bind [queryOpts]
    "queryOpts :: {:args, :close-args?, :snapshot-time, :current-time, :default-tz}
@@ -156,7 +157,7 @@
   (^xtdb.query.PreparedQuery [query
                               {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
                                       ^RefCounter ref-ctr ^Watermark$Source wm-src] :as deps}
-                              {:keys [param-types default-tz table-info]}]
+                              {:keys [default-tz table-info]}]
 
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
@@ -165,41 +166,36 @@
                            :explain (s/explain-data ::lp/logical-plan query)}))
        (throw (err/illegal-arg :malformed-query {::err/message "internal error conforming query plan", :plan query})))
 
-     (let [{:keys [ordered-outer-projection param-count warnings], :or {param-count 0}} (meta query)
-           param-types-with-defaults (->> (concat
-                                           (mapv #(if (= :default %) :utf8 %) param-types)
-                                           (repeat :utf8))
-                                          (take param-count))
-           tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
+     (let [tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
            scan-cols (->> tables
                           (into #{} (mapcat scan/->scan-cols)))
 
            _ (assert (or scan-emitter (empty? scan-cols)))
 
-           relevant-schema-at-prepare-time
-           (when (and table-info scan-emitter)
-             (with-open [wm (.openWatermark wm-src)]
-               (->> tables
-                    (map #(str (get-in % [:scan-opts :table])))
-                    (mapcat #(map (partial vector %) (get table-info %)))
-                    (.scanFields scan-emitter wm))))
+           relevant-schema-at-prepare-time (when (and table-info scan-emitter)
+                                             (with-open [wm (.openWatermark wm-src)]
+                                               (->> tables
+                                                    (map #(str (get-in % [:scan-opts :table])))
+                                                    (mapcat #(map (partial vector %) (get table-info %)))
+                                                    (.scanFields scan-emitter wm))))
 
            cache (ConcurrentHashMap.)
-           param-fields (->> param-types-with-defaults
-                             (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                            (map-indexed (fn [idx field]
-                                                           (types/field-with-name field (str "?_" idx)))))))
-           param-fields-by-name (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity)) param-fields)
+
            default-tz (or default-tz expr/*default-tz*)
 
-           plan-meta (meta query)]
+           {:keys [ordered-outer-projection warnings param-count], :or {param-count 0} :as plan-meta} (meta query)]
 
        (reify PreparedQuery
-         (paramFields [_] param-fields)
-         (columnFields [_]
-           (let [{:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
+         (paramCount [_] param-count)
+         (columnNames [_] ordered-outer-projection)
+
+         (columnFields [_ param-fields]
+           (let [param-fields-by-name (->> param-fields
+                                           (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
+                 {:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
              ;; could store column-fields in the cache/map too
              (->column-fields ordered-outer-projection fields)))
+
          (warnings [_] warnings)
 
          (bind [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]

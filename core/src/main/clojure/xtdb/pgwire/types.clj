@@ -241,11 +241,14 @@
         (utf8))))
 
 (def pg-types
-  {:default {:typname "default" :col-type :default :oid 0}
+  {
    ;;default oid is currently only used to describe a parameter without a known type
    ;;these are not supported in DML and for queries are defaulted to text by the backend
-   ;;therefore need to read/write fns.
-   ;;Note
+   :default {:typname "default"
+             :col-type :utf8
+             :oid 0
+             :read-text (fn [_env ba] (read-utf8 ba))
+             :read-binary (fn [_env ba] (read-utf8 ba))}
 
    :int8 (let [typlen 8]
            {:typname "int8"

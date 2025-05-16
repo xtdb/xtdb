@@ -454,15 +454,14 @@
                                            status))))})
 
 (def-msg msg-row-description :server \T
-  :columns (->> (io-record
-                 :column-name io-string
-                 :table-oid io-uint32
-                 :column-attribute-number io-uint16
-                 :column-oid io-uint32
-                 :typlen  io-uint16
-                 :type-modifier io-uint32
-                 :result-format io-format-code)
-                (io-list io-uint16)))
+  :columns (io-list io-uint16
+                    (io-record :column-name io-string
+                               :table-oid io-uint32
+                               :column-attribute-number io-uint16
+                               :column-oid io-uint32
+                               :typlen  io-uint16
+                               :type-modifier io-uint32
+                               :result-format io-format-code)))
 
 (defn cmd-send-notice
   "Sends an notice message back to the client (e.g (cmd-send-notice conn (warning \"You are doing this wrong!\"))."

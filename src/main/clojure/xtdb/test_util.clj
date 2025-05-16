@@ -527,7 +527,7 @@
   ([node query opts]
    (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
      {:res (xt/q node query opts)
-      :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.columnFields prepared-q))})))
+      :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.columnFields prepared-q []))})))
 
 (defn temporal-bounds->data [^TemporalBounds bounds]
   (let [vt (.getValidTime bounds)
