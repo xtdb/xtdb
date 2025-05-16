@@ -274,8 +274,7 @@
                             WHERE foo._valid_time OVERLAPS bar._valid_time"))))
 
 (t/deftest update-delete-and-patch-explicit-null-behaviour
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]
-                            ])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])
 
   (xt/execute-tx tu/*node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 1 WHERE _id = 1"
                              [#inst "2020"]]])
@@ -314,3 +313,22 @@
   (xt/execute-tx tu/*node* ["DELETE FROM users FOR PORTION OF VALID_TIME FROM NULL TO NULL WHERE _id = 1"])
 
   (t/is (= [] (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 "))))
+
+(t/deftest from-explicit-null-behaviour
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, version: 1, _valid_from: ?, _valid_to: ?}"
+                             [1 #inst "2010" #inst "2040"]]]
+                 {:system-time #inst "2000"})
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, version: 2, _valid_from: ?, _valid_to: ?}"
+                             [1 #inst "2020" #inst "2030"]]]
+                 {:system-time #inst "2001"})
+
+  (t/is (= [{:xt/id 1, :version 2} {:xt/id 1, :version 1} {:xt/id 1, :version 1}]
+           (xt/q tu/*node* "SELECT * FROM users FOR VALID_TIME FROM NULL TO NULL" {:current-time #inst "2020"})
+           (xt/q tu/*node* ["SELECT * FROM users FOR VALID_TIME FROM ? TO NULL" nil] {:current-time #inst "2020"})))
+
+  (t/is (= [{:xt/id 1, :version 2}]
+           (xt/q tu/*node* "SELECT * FROM users" {:current-time #inst "2020"})))
+
+  (t/is (= [{:xt/id 1, :version 2, :xt/system-from #xt/zdt "2001-01-01T00:00Z[UTC]"}
+            {:xt/id 1, :version 1, :xt/system-from #xt/zdt "2000-01-01T00:00Z[UTC]", :xt/system-to #xt/zdt "2001-01-01T00:00Z[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _system_from, _system_to FROM users FOR SYSTEM_TIME FROM NULL TO NULL" {:current-time #inst "2020"}))))

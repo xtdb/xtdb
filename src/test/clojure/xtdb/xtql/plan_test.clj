@@ -1332,7 +1332,7 @@
                       '(from :docs {:bind [{:xt/id id
                                             :xt/valid-from vt-from
                                             :xt/valid-to vt-to}]
-                                    :for-valid-time (in nil #inst "2040")})
+                                    :for-valid-time (in :now #inst "2040")})
                       {:current-time (time/->instant #inst "2023")})))))
 
 (t/deftest test-temporal-opts-from-and-to
@@ -1376,7 +1376,10 @@
                  :vt-to #xt/zoned-date-time "2050-01-01T00:00Z[UTC]"}
                 {:id :matthew,
                  :vt-from #xt/zoned-date-time "2020-01-02T00:00Z[UTC]",
-                 :vt-to #xt/zoned-date-time "2040-01-01T00:00Z[UTC]"}]
+                 :vt-to #xt/zoned-date-time "2040-01-01T00:00Z[UTC]"}
+                {:id :matthew,
+                 :vt-from #xt/zdt "2015-01-01T00:00Z[UTC]",
+                 :vt-to #xt/zdt "2020-01-02T00:00Z[UTC]"}]
                (q '(from :docs {:bind [{:xt/id id
                                         :xt/valid-from vt-from
                                         :xt/valid-to vt-to}]
