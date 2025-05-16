@@ -730,14 +730,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
       (tu/then-await-tx tu/*node* #xt/duration "PT2S"))
 
-  (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:param-types [:i64]})
+  (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {})
         column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]
                        #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]
                        #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
 
-    (t/is (= (conj column-fields
-                   #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 true]])
-             (.columnFields pq))
+    (t/is (= (conj column-fields #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
+             (.columnFields pq [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]))
           "param type is assumed to be nullable")
 
     (with-open [bq (.bind pq {:args (tu/open-args [42])})
@@ -833,25 +832,21 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (deftest test-default-param-types
   (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil})]
-    (t/is (= [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]]
-             (.paramFields pq))
-          "unspecified param-types are assumed to be utf8")
+    (t/testing "preparedQuery rebound with args matching the assumed type"
 
-     (t/testing "preparedQuery rebound with args matching the assumed type"
+      (with-open [bq (.bind pq {:args (tu/open-args ["42"])})
+                  cursor (.openCursor bq)]
 
-       (with-open [bq (.bind pq {:args (tu/open-args ["42"])})
-                   cursor (.openCursor bq)]
+        (t/is (= [[{:v "42"}]]
+                 (tu/<-cursor cursor))))
 
-                   (t/is (= [[{:v "42"}]]
-                            (tu/<-cursor cursor))))
+      (t/testing "or can be rebound with a different type"
 
-       (t/testing "or can be rebound with a different type"
+        (with-open [bq (.bind pq {:args (tu/open-args [44])})
+                    cursor (.openCursor bq)]
 
-         (with-open [bq (.bind pq {:args (tu/open-args [44])})
-                     cursor (.openCursor bq)]
-
-           (t/is (= [[{:v 44}]]
-                    (tu/<-cursor cursor))))))))
+          (t/is (= [[{:v 44}]]
+                   (tu/<-cursor cursor))))))))
 
 (deftest test-schema-ee-entry-points
   ;;test is using regclass to verify that expected EE entrypoints have access

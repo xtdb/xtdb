@@ -1368,8 +1368,6 @@
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (1, 'one', 2)"))
     (with-open [stmt (.prepareStatement conn "SELECT foo.*, ? FROM foo")]
-
-
       (t/testing "server side prepared statments where param types are known"
 
         (.setObject stmt 1 true Types/BOOLEAN)
@@ -1379,7 +1377,6 @@
           (t/is (= [{"_id" "int8"} {"a" "text"} {"b" "int8"} {"_column_2" "bool"}]
                    (result-metadata stmt)
                    (result-metadata rs)))
-
 
           (t/is (=
                  [{"_id" 1, "a" "one", "b" 2, "_column_2" true}]

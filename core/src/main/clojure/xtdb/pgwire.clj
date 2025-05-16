@@ -17,6 +17,7 @@
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import io.micrometer.core.instrument.Counter
@@ -959,7 +960,6 @@
           (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
                 query-opts {:after-tx-id (or watermark-tx-id -1)
                             :tx-timeout (Duration/ofSeconds 1)
-                            :param-types param-col-types
                             :default-tz (.getZone clock)
                             :explain? explain?}
 
@@ -971,13 +971,19 @@
               (doseq [warning warnings]
                 (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
-            (assoc stmt
-                   :prepared-query pq
-                   :fields (mapv (partial pg-types/field->pg-type fallback-output-format) (.columnFields pq))
-                   :param-fields (->> (.paramFields pq)
-                                      (map pg-types/field->pg-type)
-                                      (map #(set/rename-keys % {:column-oid :oid}))
-                                      (resolve-defaulted-params param-types))))
+            (let [param-fields (->> (concat (mapv #(if (= :default %) :utf8 %) param-col-types)
+                                            (repeat :utf8))
+                                    (take (.paramCount pq))
+                                    (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                                   (map-indexed (fn [idx field]
+                                                                  (types/field-with-name field (str "?_" idx)))))))]
+              (assoc stmt
+                     :prepared-query pq
+                     :fields (mapv (partial pg-types/field->pg-type fallback-output-format) (.columnFields pq param-fields))
+                     :param-fields (->> param-fields
+                                        (map pg-types/field->pg-type)
+                                        (map #(set/rename-keys % {:column-oid :oid}))
+                                        (resolve-defaulted-params param-types)))))
           (catch IllegalArgumentException e
             (log/debug e "Error preparing statement")
             (throw e))
