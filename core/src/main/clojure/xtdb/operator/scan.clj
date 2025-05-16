@@ -56,15 +56,18 @@
 (def ^:dynamic *column->pushdown-bloom* {})
 
 (defn- ->temporal-bounds [^RelationReader args, {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
-  (letfn [(->time-μs [[tag arg]]
-            (case tag
-              :literal (-> arg
-                           (time/sql-temporal->micros expr/*default-tz*))
-              :param (some-> (-> (.vectorForOrNull args (name arg))
-                                 (.getObject 0))
-                             (time/sql-temporal->micros expr/*default-tz*))
-              :now (-> (expr/current-time)
-                       (time/instant->micros))))
+  (letfn [(->time-μs
+            ([arg] (->time-μs arg nil))
+            ([[tag arg] default]
+             (case tag
+               :literal (or (some-> arg (time/sql-temporal->micros expr/*default-tz*))
+                            default)
+               :param (or (some-> (-> (.vectorForOrNull args (name arg))
+                                      (.getObject 0))
+                                  (time/sql-temporal->micros expr/*default-tz*))
+                          default)
+               :now (-> (expr/current-time)
+                        (time/instant->micros)))))
           (apply-constraint [constraint]
             (if-let [[tag & args] constraint]
               (case tag
@@ -74,11 +77,11 @@
 
                 ;; overlaps [time-from time-to]
                 :in (let [[from to] args]
-                      (TemporalDimension/in (->time-μs (or from [:now]))
-                                            (some-> to ->time-μs)))
+                      (TemporalDimension/in (->time-μs from Long/MIN_VALUE)
+                                            (some-> to (->time-μs))))
 
                 :between (let [[from to] args]
-                           (TemporalDimension/between (->time-μs (or from [:now]))
+                           (TemporalDimension/between (->time-μs from Long/MIN_VALUE)
                                                       (some-> to ->time-μs)))
 
                 :all-time (TemporalDimension.))

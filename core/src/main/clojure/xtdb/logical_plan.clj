@@ -47,25 +47,25 @@
 
 (s/def ::temporal-filter-value
   (s/or :now #{:now '(current-timestamp)}
-        :literal (some-fn util-date? temporal?)
+        :literal (some-fn util-date? temporal? nil?)
         :param simple-symbol?))
 
 (defmethod temporal-filter-spec :at [_]
   (s/tuple #{:at} ::temporal-filter-value))
 
 (defmethod temporal-filter-spec :in [_]
-  (s/tuple #{:in} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
+  (s/tuple #{:in} ::temporal-filter-value ::temporal-filter-value))
 
 (defmethod temporal-filter-spec :from [_]
-  (s/and (s/tuple #{:from} (s/nilable ::temporal-filter-value))
+  (s/and (s/tuple #{:from} ::temporal-filter-value)
          (s/conformer (fn [x] [:in (second x) nil]) identity)))
 
 (defmethod temporal-filter-spec :to [_]
-  (s/and (s/tuple #{:to} (s/nilable ::temporal-filter-value))
+  (s/and (s/tuple #{:to} ::temporal-filter-value)
          (s/conformer (fn [x] [:in nil (second x)]) identity)))
 
 (defmethod temporal-filter-spec :between [_]
-  (s/tuple #{:between} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
+  (s/tuple #{:between} ::temporal-filter-value ::temporal-filter-value))
 
 (s/def ::temporal-filter
   (s/multi-spec temporal-filter-spec (fn retag [_] (throw (UnsupportedOperationException.)))))
