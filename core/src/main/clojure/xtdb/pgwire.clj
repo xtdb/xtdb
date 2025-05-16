@@ -968,24 +968,22 @@
         (let [param-oids (->> (concat param-oids (repeat 0))
                               (into [] (take (.paramCount pq))))
               param-types (map pg-types/pg-types-by-oid param-oids)
-              param-col-types (mapv :col-type param-types)]
-          (when (some nil? param-col-types)
-            (throw (pgio/err-protocol-violation (str "Unsupported param-types in query: "
-                                                     (pr-str (->> param-types
-                                                                  (into [] (comp (filter (comp nil? :col-type))
-                                                                                 (map :typname)
-                                                                                 (distinct)))))))))
+              fallback-output-format (get-in session [:parameters "fallback_output_format"])]
+          (assoc stmt
+                 :prepared-query pq
+                 :param-oids param-oids
+                 :fields (if (some (comp nil? :col-type) param-types)
+                           ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
+                           (let [fmt (-> (get pg-types/pg-types fallback-output-format)
+                                         (set/rename-keys {:oid :column-oid}))]
+                             (for [col-name (map str (.columnNames pq))]
+                               (assoc fmt :field-name col-name, :column-name col-name)))
 
-          (let [fallback-output-format (get-in session [:parameters "fallback_output_format"])
-
-                param-fields (->> param-col-types
-                                  (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                                 (map-indexed (fn [idx field]
-                                                                (types/field-with-name field (str "?_" idx)))))))]
-            (assoc stmt
-                   :prepared-query pq
-                   :fields (mapv (partial pg-types/field->pg-type fallback-output-format) (.columnFields pq param-fields))
-                   :param-oids param-oids))))
+                           (->> (.columnFields pq (->> (mapv :col-type param-types)
+                                                       (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                                                      (map-indexed (fn [idx field]
+                                                                                     (types/field-with-name field (str "?_" idx))))))))
+                                (mapv (partial pg-types/field->pg-type fallback-output-format)))))))
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
         (throw e))

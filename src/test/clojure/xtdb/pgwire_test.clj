@@ -1253,12 +1253,9 @@
               {:xt/id 0, :a 1, :b 2}]
              (q conn ["SELECT _id, (json).a, (json).b, (json).c, (json).c.d FROM foo"])))
 
-    ;; we don't currently support JSON as a _query_ param-type, because we have to prepare the statement
-    ;; without the dynamic arg values, and we can't know the type of the JSON arg until we see the value
-    (t/is (thrown-with-msg? PSQLException
-                            #"ERROR: Unsupported param-types in query: \[\"json\"\]"
-                            (q conn ["SELECT * FROM foo WHERE json = ?"
-                                     (as-json-param {:a 2, :c {:d 3}})])))))
+    (t/is (= [{:json {:a 2, :c {:d 3}}}]
+             (q conn ["SELECT ? json"
+                      (as-json-param {:a 2, :c {:d 3}})])))))
 
 (deftest test-odbc-queries
   (with-open [conn (jdbc-conn)]
@@ -1363,6 +1360,36 @@
 
         (t/is (= [{"_column_1" "uuid"}] (result-metadata stmt) (result-metadata rs)))
         (t/is (= [{"_column_1" #uuid "7dd2ed62-bb05-43c8-b289-5503d9b19ee6"}] (rs->maps rs)))))))
+
+(t/deftest test-transit-params-4455
+  (with-open [conn (jdbc-conn {"prepareThreshold" 0})]
+    (with-open [stmt (.prepareStatement conn "SELECT ? vec")]
+      (.setObject stmt 1 [{:a 1, :b 2}, {:a 3, :b 4}])
+      (t/is (= ["transit"] (param-metadata stmt)))
+      (t/is (= [{"vec" "transit"}] (result-metadata stmt)))
+
+      (t/is (= [{:vec [{"a" 1, "b" 2} {"a" 3, "b" 4}]}]
+               (vec (resultset-seq (.executeQuery stmt)))))
+
+      (.setObject stmt 1 [{:a "foo"} {:a "bar"}])
+      (t/is (= [{:vec [{"a" "foo"} {"a" "bar"}]}]
+               (vec (resultset-seq (.executeQuery stmt))))
+            "re-run with different type for `a` (although overall param still transit)"))
+
+    (t/is (= [{:vec [{:a 1, :b 2} {:a 3, :b 4}]}]
+             (jdbc/execute! conn ["SELECT ? vec" [{:a 1, :b 2} {:a 3, :b 4}]]
+                            {:builder-fn xt-jdbc/builder-fn}))
+          "transit param in query")
+
+    (t/is (= [{:a 1}]
+             (jdbc/execute! conn ["SELECT (?[1]).a a" [{:a 1, :b 2} {:a 3, :b 4}]]
+                            {:builder-fn xt-jdbc/builder-fn}))
+          "transit param in query")
+
+    (t/is (= [{:a "foo"}]
+             (jdbc/execute! conn ["SELECT (?[1]).a a" [{:a "foo"} {:a "bar"}]]
+                            {:builder-fn xt-jdbc/builder-fn}))
+          "re-run with different type (still transit though)")))
 
 (deftest test-prepared-statments
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]

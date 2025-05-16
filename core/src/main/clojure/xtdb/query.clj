@@ -63,6 +63,7 @@
 
 (definterface PreparedQuery
   (^long paramCount [])
+  (^java.util.List columnNames [])
   (^java.util.List columnFields [^java.util.List paramFields])
   (^java.util.List warnings [])
   (^xtdb.query.BoundQuery bind [queryOpts]
@@ -186,6 +187,7 @@
 
        (reify PreparedQuery
          (paramCount [_] param-count)
+         (columnNames [_] ordered-outer-projection)
 
          (columnFields [_ param-fields]
            (let [param-fields-by-name (->> param-fields
