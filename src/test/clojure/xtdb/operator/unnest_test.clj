@@ -135,3 +135,18 @@
                  [{unnest xs}]
                  [:scan {:table public/r1} [xs]]]]]]
             {:node tu/*node*}))))
+
+(t/deftest unnest-issue-4441
+  (xt/execute-tx tu/*node* [[:put-docs :r1 {:xt/id 0, :xs [10 20 30]} {:xt/id 1, :xs [100 200 300]}]])
+
+  (t/is (= [{:x1 100, :xs [100 200 300]}
+            {:x1 200, :xs [100 200 300]}
+            {:x1 300, :xs [100 200 300]}
+            {:x1 10, :xs [10 20 30]}
+            {:x1 20, :xs [10 20 30]}
+            {:x1 30, :xs [10 20 30]}]
+           (tu/query-ra
+            '[:unnest
+              {x1 xs}
+              [:scan {:table public/r1} [xs]]]
+            {:node tu/*node*}))))

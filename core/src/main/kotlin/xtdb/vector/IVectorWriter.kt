@@ -36,13 +36,25 @@ interface IVectorWriter : ValueWriter, VectorWriter, AutoCloseable {
         vector.valueCount = this.valueCount
     }
 
+    // This is essentially the promoteChildren for monomorphic vectors except NullVector
     fun promoteChildren(field: Field) {
-        if (field.type == ArrowType.Null.INSTANCE) {
-            if (!this.field.isNullable)
-                throw FieldMismatch(this.field.fieldType, field.fieldType)
-        } else {
-            if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
-                throw FieldMismatch(this.field.fieldType, field.fieldType)
+        when {
+            (field.type == ArrowType.Null.INSTANCE) -> {
+                if (!this.field.isNullable)
+                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+            }
+            field.type is ArrowType.Union -> {
+                val nullable = field.children.fold(false) { acc, field -> acc || field.type == ArrowType.Null.INSTANCE || field.isNullable }
+                if (nullable && !this.field.isNullable)
+                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+
+                val nonNullFields = field.children.filter { it.type != ArrowType.Null.INSTANCE }
+                if ( nonNullFields.size > 1 || (nonNullFields.size == 1 && this.field.type != nonNullFields.first().type))
+                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+            }
+            else ->
+                if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
+                    throw FieldMismatch(this.field.fieldType, field.fieldType)
         }
     }
 

@@ -97,6 +97,12 @@ class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vec
         is NullVector -> RowCopier { _ -> valueCount.also { writeNull() } }
         else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
+
+    override fun promoteChildren(field: Field) {
+        if (field.type == ArrowType.Null.INSTANCE) return
+        if (field.type is ArrowType.Union && field.children.size == 1 && field.children[0].type == ArrowType.Null.INSTANCE) return
+        throw FieldMismatch(this.field.fieldType, field.fieldType)
+    }
 }
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
