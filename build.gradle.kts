@@ -275,7 +275,6 @@ dependencies {
     projectDep(":xtdb-core")
 
     projectDep(":xtdb-http-server")
-    projectDep(":xtdb-http-client-jvm")
 
     projectDep(":modules:xtdb-kafka")
     projectDep(":modules:xtdb-aws")
@@ -318,6 +317,7 @@ dependencies {
     testImplementation("org.clojure", "test.check", "1.1.1")
     testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
     testImplementation("com.github.igrishaev", "pg2-core", "0.1.33")
+    testImplementation(libs.hato)
 
     // For generating clojure docs
     testImplementation("codox", "codox", "0.10.8")

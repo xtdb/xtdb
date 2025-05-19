@@ -6,7 +6,6 @@
             [cognitect.anomalies :as-alias anom]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
@@ -97,15 +96,6 @@
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
-
-(def ^:dynamic *http-port* nil)
-
-(defn with-http-client-node [f]
-  (binding [*http-port* (free-port)]
-    (util/with-open [_ (xtn/start-node (-> *node-opts*
-                                           (assoc-in [:http-server :port] *http-port*)))]
-      (binding [*node* (xtc/start-client (str "http://localhost:" *http-port*))]
-        (f)))))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *node-type*)

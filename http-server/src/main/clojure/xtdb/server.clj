@@ -36,11 +36,14 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
+           (xtdb.api HttpServer$Factory TransactionKey Xtdb Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.api.query IKeyFn Query)
            xtdb.error.Anomaly
            (xtdb.http QueryOptions QueryRequest TxOptions TxRequest)))
+
+(defprotocol HttpServer
+  (-http-port [http-server]))
 
 (def json-format
   (mf/map->Format
@@ -414,7 +417,10 @@
                                     (merge {:port port, :h2c? true, :h2? true}
                                            {:async? true, :join? false}))]
     (log/info "HTTP server started on port:" port)
-    (reify XtdbModule
+    (reify
+      HttpServer
+      (-http-port [_] (.getPort (.getURI server)))
+      XtdbModule
       (close [_]
         (.stop server)
         (log/info "HTTP server stopped.")))))
@@ -422,3 +428,6 @@
 (defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [port]}]
   (.module config (cond-> (HttpServer$Factory.)
                     (some? port) (.port port))))
+
+(defn http-port [^Xtdb node]
+  (-http-port (.module node (:on-interface HttpServer))))

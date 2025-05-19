@@ -3,10 +3,7 @@
 
   It lives in the `com.xtdb/xtdb-api` artifact - include this in your dependency manager of choice.
 
-  To start a node, you will additionally need:
-
-  * `xtdb.node`, for an in-process node.
-  * `xtdb.client`, for a remote client."
+  For an in-process node, you will additionally need `xtdb.node`, in the `com.xtdb/xtdb-core` artifact."
 
   (:require [xtdb.backtick :as backtick]
             [xtdb.error :as err]

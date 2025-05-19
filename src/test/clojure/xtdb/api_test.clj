@@ -11,10 +11,8 @@
 
 (t/use-fixtures :each
   (tu/with-each-api-implementation
-    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),
-         :remote (t/join-fixtures [tu/with-mock-clock tu/with-http-client-node])}
-        #_(select-keys [:in-memory])
-        #_(select-keys [:remote]))))
+    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node])}
+        #_(select-keys [:in-memory]))))
 
 (t/deftest test-status
   (t/is (map? (xt/status *node*))))
