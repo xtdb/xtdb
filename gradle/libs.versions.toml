@@ -1,6 +1,6 @@
 [versions]
 antlr="4.13.2"
-arrow="18.2.0"
+arrow="18.3.0"
 arrow-adbc="0.17.0"
 clojure="1.12.0"
 exposed="0.61.0"
