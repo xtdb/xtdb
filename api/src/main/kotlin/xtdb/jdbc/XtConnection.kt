@@ -13,13 +13,8 @@ import xtdb.util.readTransit
 import xtdb.util.requiringResolve
 import java.net.URI
 import java.sql.*
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
-import java.time.ZonedDateTime
+import java.time.*
 import java.time.temporal.Temporal
-import java.time.temporal.TemporalAccessor
 import java.util.*
 import xtdb.decode as decodeJson
 
@@ -121,13 +116,27 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
             )
         }
 
+        private val ZonedDateTimeRange.asPgObject
+            get() = PGobject().also {
+                it.type = "tstz-range"
+                it.value = "[${from ?: ""},${to ?: ""})"
+            }
+
+        private val Interval.asPgObject
+            get() = PGobject().also {
+                it.type = "interval"
+                it.value = toString()
+            }
+
         override fun setObject(parameterIndex: Int, x: Any?) {
             when (x) {
-                is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI, is ZonedDateTimeRange ->
+                is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI ->
                     setTransit(parameterIndex, x)
 
                 is ZonedDateTime -> setIsoTimestampTz(parameterIndex, x)
                 is Instant -> setIsoTimestampTz(parameterIndex, x)
+                is ZonedDateTimeRange -> inner.setObject(parameterIndex, x.asPgObject)
+                is Interval -> inner.setObject(parameterIndex, x.asPgObject)
 
                 else -> inner.setObject(parameterIndex, x)
             }
@@ -140,11 +149,17 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
         override fun setObject(parameterIndex: Int, x: Any?, targetSqlType: Int, scaleOrLength: Int) {
             if (targetSqlType == Types.OTHER)
                 when (x) {
-                    is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI, is ZonedDateTimeRange ->
+                    is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI ->
                         setTransit(parameterIndex, x)
 
                     is ZonedDateTime -> setIsoTimestampTz(parameterIndex, x)
                     is Instant -> setIsoTimestampTz(parameterIndex, x)
+
+                    is ZonedDateTimeRange ->
+                        inner.setObject(parameterIndex, x.asPgObject, targetSqlType, scaleOrLength)
+
+                    is Interval ->
+                        inner.setObject(parameterIndex, x.asPgObject, targetSqlType, scaleOrLength)
 
                     else -> inner.setObject(parameterIndex, x, targetSqlType, scaleOrLength)
                 }

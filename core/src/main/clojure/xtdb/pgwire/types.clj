@@ -19,7 +19,7 @@
            [org.apache.commons.codec.binary Hex]
            xtdb.JsonSerde
            (xtdb.pg.codec NumericBin)
-           [xtdb.time Interval]
+           [xtdb.time Interval Time]
            (xtdb.types ZonedDateTimeRange)
            [xtdb.vector IVectorReader]))
 
@@ -645,8 +645,11 @@
               :typreceive "interval_recv"
               :read-binary (fn [_env _ba]
                              (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
-              :read-text (fn [_env _ba]
-                           (throw (IllegalArgumentException. "Interval parameters currently unsupported")))
+              :read-text (fn [_env ba]
+                           (try
+                             (Time/asInterval (read-utf8 ba))
+                             (catch NullPointerException _
+                               (throw (IllegalArgumentException. "Interval parameters currently unsupported")))))
               :write-binary (fn [_env ^IVectorReader rdr idx]
                              (byte-array (interval-rdr->iso-micro-interval-str-bytes rdr idx)))
               :write-text (fn [_env ^IVectorReader rdr idx] (interval-rdr->iso-micro-interval-str-bytes rdr idx))}
