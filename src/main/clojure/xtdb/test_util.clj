@@ -284,7 +284,7 @@
        (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                       (cond->> (not preserve-pages?) (into [] cat)))]
          (if with-col-types?
-           {:res rows, :col-types (->> (.columnFields bq)
+           {:res rows, :col-types (->> (.getColumnFields bq)
                                        (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))}
            rows))))))
 
@@ -527,7 +527,7 @@
   ([node query opts]
    (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
      {:res (xt/q node query opts)
-      :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.columnFields prepared-q []))})))
+      :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.getColumnFields prepared-q []))})))
 
 (defn temporal-bounds->data [^TemporalBounds bounds]
   (let [vt (.getValidTime bounds)

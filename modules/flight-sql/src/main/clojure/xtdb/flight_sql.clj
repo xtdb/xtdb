@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.indexer]
             [xtdb.node :as xtn]
-            [xtdb.query]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -22,7 +21,6 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.arrow.Relation
-           [xtdb.indexer IIndexer]
            [xtdb.query BoundQuery IQuerySource PreparedQuery]))
 
 (defn- new-id ^com.google.protobuf.ByteString []
@@ -81,7 +79,7 @@
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (try
               (with-open [res (.openCursor bq)
-                          vsr (VectorSchemaRoot/create (Schema. (.columnFields bq)) allocator)]
+                          vsr (VectorSchemaRoot/create (Schema. (.getColumnFields bq)) allocator)]
                 (.start listener vsr)
 
                 (let [out-wtr (vw/root->writer vsr)]
@@ -157,7 +155,7 @@
                                   (Any/pack)
                                   (.toByteArray)))]
           (.put tickets ticket-handle bq)
-          (FlightInfo. (Schema. (.columnFields bq)) descriptor
+          (FlightInfo. (Schema. (.getColumnFields bq)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 
@@ -182,7 +180,7 @@
               ^BoundQuery bound-query (or bound-query
                                           (.bind prepd-query {}))]
           (.put ps :bound-query bound-query)
-          (FlightInfo. (Schema. (.columnFields bound-query)) descriptor
+          (FlightInfo. (Schema. (.getColumnFields bound-query)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 

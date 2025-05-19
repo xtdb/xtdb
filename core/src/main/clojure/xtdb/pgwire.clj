@@ -13,7 +13,6 @@
             [xtdb.pgwire.io :as pgio]
             [xtdb.pgwire.types :as pg-types]
             [xtdb.protocols :as xtp]
-            [xtdb.query]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
@@ -961,12 +960,12 @@
                                 (xtp/prepare-ra node ra-plan query-opts)
                                 (xtp/prepare-sql node parsed-query query-opts))]
 
-        (when-let [warnings (.warnings pq)]
+        (when-let [warnings (.getWarnings pq)]
           (doseq [warning warnings]
             (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
         (let [param-oids (->> (concat param-oids (repeat 0))
-                              (into [] (take (.paramCount pq))))
+                              (into [] (take (.getParamCount pq))))
               param-types (map pg-types/pg-types-by-oid param-oids)
               fallback-output-format (get-in session [:parameters "fallback_output_format"])]
           (assoc stmt
@@ -976,13 +975,13 @@
                            ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
                            (let [fmt (-> (get pg-types/pg-types fallback-output-format)
                                          (set/rename-keys {:oid :column-oid}))]
-                             (for [col-name (map str (.columnNames pq))]
+                             (for [col-name (map str (.getColumnNames pq))]
                                (assoc fmt :field-name col-name, :column-name col-name)))
 
-                           (->> (.columnFields pq (->> (mapv :col-type param-types)
-                                                       (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                                                      (map-indexed (fn [idx field]
-                                                                                     (types/field-with-name field (str "?_" idx))))))))
+                           (->> (.getColumnFields pq (->> (mapv :col-type param-types)
+                                                          (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                                                         (map-indexed (fn [idx field]
+                                                                                        (types/field-with-name field (str "?_" idx))))))))
                                 (mapv (partial pg-types/field->pg-type fallback-output-format)))))))
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
@@ -1049,7 +1048,7 @@
                 (.bind ^PreparedQuery prepared-query (assoc query-opts :args args-rel))))
 
             (->fields [^BoundQuery bq]
-              (or (-> (map (partial pg-types/field->pg-type fallback_output_format) (.columnFields bq))
+              (or (-> (map (partial pg-types/field->pg-type fallback_output_format) (.getColumnFields bq))
                       (with-result-formats result-format))
                   (throw (pgio/err-protocol-violation "invalid result format"))))]
 
@@ -1076,7 +1075,7 @@
                                           (assoc :bound-query inner-bq
                                                  :fields (->fields inner-bq))))
 
-                             :dml (let [arg-fields (.columnFields bq)]
+                             :dml (let [arg-fields (.getColumnFields bq)]
                                     (try
                                       (-> inner
                                           (assoc :args (vec (for [^Field field arg-fields]

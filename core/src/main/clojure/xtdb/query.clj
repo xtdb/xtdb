@@ -51,35 +51,10 @@
            (xtdb.api.query IKeyFn Query)
            xtdb.catalog.BlockCatalog
            (xtdb.indexer Watermark Watermark$Source)
+           (xtdb.query PreparedQuery BoundQuery IQuerySource)
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter
            [xtdb.vector IVectorReader RelationReader]))
-
-(definterface BoundQuery
-  (^java.util.List columnFields [])
-  (^xtdb.ICursor openCursor [])
-  (^void close []
-   "optional: if you close this BoundQuery it'll close any closed-over args relation"))
-
-(definterface PreparedQuery
-  (^long paramCount [])
-  (^java.util.List columnNames [])
-  (^java.util.List columnFields [^java.util.List paramFields])
-  (^java.util.List warnings [])
-  (^xtdb.query.BoundQuery bind [queryOpts]
-   "queryOpts :: {:args, :close-args?, :snapshot-time, :current-time, :default-tz}
-
-    close-args? :: boolean, default true
-
-    args :: RelationReader
-      N.B. `args` will be closed when this BoundQuery closes"))
-
-(definterface IQuerySource
-  (^xtdb.query.PreparedQuery prepareRaQuery [ra-query query-opts])
-  (^xtdb.query.PreparedQuery prepareRaQuery [ra-query wm-src query-opts])
-
-  (^clojure.lang.PersistentVector planQuery [query query-opts])
-  (^clojure.lang.PersistentVector planQuery [query wm-src query-opts]))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
                                         current-time, snapshot-time, default-tz, ^RefCounter ref-ctr, fields]
@@ -186,17 +161,17 @@
            {:keys [ordered-outer-projection warnings param-count], :or {param-count 0} :as plan-meta} (meta query)]
 
        (reify PreparedQuery
-         (paramCount [_] param-count)
-         (columnNames [_] ordered-outer-projection)
+         (getParamCount [_] param-count)
+         (getColumnNames [_] ordered-outer-projection)
 
-         (columnFields [_ param-fields]
+         (getColumnFields [_ param-fields]
            (let [param-fields-by-name (->> param-fields
                                            (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
                  {:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
              ;; could store column-fields in the cache/map too
              (->column-fields ordered-outer-projection fields)))
 
-         (warnings [_] warnings)
+         (getWarnings [_] warnings)
 
          (bind [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]
                    :or {default-tz default-tz
@@ -209,7 +184,7 @@
 
              (reify
                BoundQuery
-               (columnFields [_]
+               (getColumnFields [_]
                  (->column-fields ordered-outer-projection fields))
 
                (openCursor [_]
@@ -284,7 +259,7 @@
 
       (prepareRaQuery [_ query wm-src query-opts]
         (let [prepared-query (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
-          (when (seq (.warnings prepared-query))
+          (when (seq (.getWarnings prepared-query))
             (.increment query-warning-counter))
           prepared-query))
 

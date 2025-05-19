@@ -2,18 +2,15 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.expression :as expr]
             [xtdb.node :as xtn]
             [xtdb.operator.scan :as scan]
-            xtdb.query
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie-catalog :as cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import [java.time InstantSource]
-           java.util.Date
+  (:import java.util.Date
            (java.util.function IntPredicate)
            (xtdb.compactor RecencyPartition)
            xtdb.vector.RelationReader))

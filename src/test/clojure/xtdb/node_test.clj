@@ -736,7 +736,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                        #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
 
     (t/is (= (conj column-fields #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
-             (.columnFields pq [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]))
+             (.getColumnFields pq [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]))
           "param type is assumed to be nullable")
 
     (with-open [bq (.bind pq {:args (tu/open-args [42])})
@@ -744,7 +744,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
       (t/is (= (conj column-fields
                      #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
-               (.columnFields bq))
+               (.getColumnFields bq))
             "now param value has been supplied we know its type is non-null")
 
       (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
@@ -756,7 +756,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
         (t/is (= (conj column-fields
                        #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :utf8 false]])
-                 (.columnFields bq))
+                 (.getColumnFields bq))
               "now param value has been supplied we know its type is non-null")
 
         (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
