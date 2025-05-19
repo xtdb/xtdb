@@ -2,18 +2,22 @@
   (:require [buddy.hashers :as hashers]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.node :as xtn])
+            [xtdb.node :as xtn]
+            [xtdb.query :as q])
   (:import [java.io Writer]
-           (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)))
+           (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)
+           (xtdb.query IQuerySource)))
 
-(defn encrypt-pw [pw]
-  (hashers/derive pw {:alg :argon2id}))
-
-(defn verify-pw [node user password]
+(defn verify-pw [^IQuerySource q-src user password]
   (when password
-    (when-let [{:keys [encrypted]} (first (xt/q node ["SELECT passwd AS encrypted FROM pg_user WHERE username = ?" user]))]
-      (when (:valid (hashers/verify password encrypted))
-        user))))
+    (let [plan (.planQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?" {})]
+      (with-open [bq (-> (.prepareRaQuery q-src plan {})
+                         (.bind {:args [user]}))
+                  res (q/open-cursor-as-stream bq {:key-fn #xt/key-fn :kebab-case-keyword})]
+
+        (when-let [{:keys [encrypted]} (first (.toList res))]
+          (when (:valid (hashers/verify password encrypted))
+            user))))))
 
 (defn- method-for [rules {:keys [remote-addr user]}]
   (some (fn [{rule-user :user, rule-address :address, :keys [method]}]
@@ -56,20 +60,23 @@
 (defmethod xtn/apply-config! ::user-table-authn [^Xtdb$Config config, _, {:keys [rules]}]
   (.authn config (Authenticator$Factory$UserTable. (->rules-cfg rules))))
 
-(defrecord UserTableAuthn [rules]
+(defrecord UserTableAuthn [rules q-src]
   Authenticator
   (methodFor [_ user remote-addr]
     (method-for rules {:user user, :remote-addr remote-addr}))
 
-  (verifyPassword [_ node user password]
-    (verify-pw node user password)))
+  (verifyPassword [_ user password]
+    (verify-pw q-src user password)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg]
-  (->UserTableAuthn (<-rules-cfg (.getRules cfg))))
+(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, q-src]
+  (->UserTableAuthn (<-rules-cfg (.getRules cfg)) q-src))
 
-(defmethod ig/init-key :xtdb/authn [_ ^Authenticator$Factory authn-factory]
-  (.open authn-factory))
+(defmethod ig/prep-key :xtdb/authn [_ opts]
+  (into {:q-src (ig/ref :xtdb.query/query-source)}
+        opts))
 
-(def default-authn
-  (ig/init-key :xtdb/authn (Authenticator$Factory$UserTable.)))
+(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src]}]
+  (.open authn-factory q-src))
+
+(defn <-node ^xtdb.api.Authenticator [node] (:authn node))

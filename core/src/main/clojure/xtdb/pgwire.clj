@@ -33,7 +33,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
+           (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.vector RelationReader]))
@@ -289,10 +289,11 @@
         (doto (cmd-send-ready)))))
 
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
-  (let [{:keys [->node, ^Authenticator authn]} server
+  (let [{:keys [->node]} server
         user (get startup-opts "user")
         db-name (get startup-opts "database")
-        {:keys [node] :as conn} (assoc conn :node (->node db-name))]
+        {:keys [node] :as conn} (assoc conn :node (->node db-name))
+        authn (authn/<-node node)]
     (if node
       (condp = (.methodFor authn user (pgio/host-address frontend))
         #xt.authn/method :trust
@@ -310,7 +311,7 @@
             (if (not= :msg-password msg-name)
               (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-              (if (.verifyPassword authn node user (:password msg))
+              (if (.verifyPassword authn user (:password msg))
                 (do
                   (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
                   (startup-ok conn startup-opts))
@@ -1392,7 +1393,7 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx authn metrics-registry read-only?]
+  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx metrics-registry read-only?]
                   :or {port 0
                        num-threads 42
                        drain-wait 5000}}]
@@ -1424,7 +1425,6 @@
                                                                     "standard_conforming_strings" "on"}}))
 
                                 :ssl-ctx ssl-ctx
-                                :authn authn
 
                                 :!tmp-nodes !tmp-nodes
                                 :->node (fn [db-name]
@@ -1480,19 +1480,17 @@
 
 (defmethod ig/prep-key ::server [_ config]
   (into {:node (ig/ref :xtdb/node)
-         :authn (ig/ref :xtdb/authn)
          :allocator (ig/ref :xtdb/allocator)
          :metrics-registry (ig/ref :xtdb.metrics/registry)}
         (<-config config)))
 
-(defmethod ig/init-key ::server [_ {:keys [node allocator authn port ro-port] :as opts}]
+(defmethod ig/init-key ::server [_ {:keys [node allocator port ro-port] :as opts}]
   (let [opts (dissoc opts :port :ro-port)]
     (letfn [(start-server [port read-only?]
               (when-not (neg? port)
                 (let [{:keys [port] :as srv} (serve node (-> opts
                                                              (assoc :port port
                                                                     :read-only? read-only?
-                                                                    :authn authn
                                                                     :allocator (util/->child-allocator allocator "pgwire"))))]
                   (log/infof "Server%sstarted on port: %d"
                              (if read-only? " (read-only) " " ")
@@ -1508,8 +1506,7 @@
   (^xtdb.pgwire.Server [] (open-playground nil))
 
   (^xtdb.pgwire.Server [opts]
-   (let [{:keys [port] :as srv} (serve nil (merge {:authn authn/default-authn}
-                                                  opts
+   (let [{:keys [port] :as srv} (serve nil (merge opts
                                                   {:allocator (RootAllocator.)}))]
      (log/info "Playground started on port:" port)
      srv)))

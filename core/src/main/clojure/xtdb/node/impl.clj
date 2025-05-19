@@ -262,7 +262,7 @@
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
-         :xtdb/authn (.getAuthn opts)
+         :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb/log (.getLog opts)
          :xtdb/buffer-pool (.getStorage opts)
          :xtdb.indexer/live-index indexer-cfg
@@ -286,7 +286,11 @@
                               (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system)))))))
     (catch clojure.lang.ExceptionInfo e
-      (ig/halt! (:system (ex-data e)))
+      (try
+        (ig/halt! (:system (ex-data e)))
+        (catch Throwable t
+          (let [^Throwable e (or (ex-cause e) e)]
+            (throw (doto e (.addSuppressed t))))))
       (throw (ex-cause e)))))
 
 (defrecord CompactorNode [system !closing?]

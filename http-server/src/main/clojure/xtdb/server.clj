@@ -36,7 +36,7 @@
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
-           (xtdb.api Authenticator HttpServer$Factory TransactionKey Xtdb$Config)
+           (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.api.query IKeyFn Query)
            (xtdb.http QueryOptions QueryRequest TxOptions TxRequest)))
@@ -339,7 +339,7 @@
   {:name ::authenticate
    :enter (fn [{:keys [request] :as ctx}]
             (let [{:keys [node remote-addr]} request
-                  {:keys [^Authenticator authn]} node
+                  authn (authn/<-node node)
                   [user password] (some-> (get-in request [:headers "authorization"])
                                           (decode-basic-auth))
                   success-ctx (-> ctx
@@ -351,7 +351,7 @@
                 success-ctx
 
                 #xt.authn/method :password
-                (if (.verifyPassword authn node user password)
+                (if (.verifyPassword authn user password)
                   success-ctx
                   (assoc ctx :error (ex-info (str "password authentication failed for user: " user)
                                              {:type :unauthenticated

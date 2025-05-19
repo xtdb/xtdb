@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.authn :as authn]
+            [xtdb.authn.crypt :as authn.crypt]
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
@@ -531,7 +531,7 @@
                  (.writeObject false))
 
                (doto (.vectorFor doc-writer "passwd" (FieldType/nullable #xt.arrow/type :utf8))
-                 (.writeObject (authn/encrypt-pw password)))
+                 (.writeObject (authn.crypt/encrypt-pw password)))
 
                (.endStruct doc-writer)))))
 

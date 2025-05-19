@@ -9,7 +9,6 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
-            [xtdb.authn :as authn]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -79,7 +78,6 @@
 (defn serve
   (^xtdb.pgwire.Server [] (serve {}))
   (^xtdb.pgwire.Server [opts] (pgwire/serve tu/*node* (merge {:num-threads 1
-                                                              :authn authn/default-authn
                                                               :allocator tu/*allocator*
                                                               :drain-wait 250}
                                                              opts))))

@@ -5,7 +5,8 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
             [xtdb.pgwire.types :as pg-types]
-            [xtdb.test-util :as tu])
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
            [java.time Clock]))
@@ -65,8 +66,9 @@
                                                                                   "client_encoding" "UTF8"
                                                                                   "DateStyle" "ISO"
                                                                                   "IntervalStyle" "ISO_8601"}})
-                                                :->node {"xtdb" tu/*node*}
-                                                :authn (authn/->UserTableAuthn authn-rules)}
+                                                :->node {"xtdb" (-> tu/*node*
+                                                                    (assoc :authn (authn/->UserTableAuthn authn-rules
+                                                                                                          (util/component tu/*node* :xtdb.query/query-source))))}}
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)

@@ -177,7 +177,13 @@
                    :or {default-tz default-tz
                         close-args? true}}]
 
-           (let [{:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
+           (let [^RelationReader args (cond
+                                        (instance? RelationReader args) args
+                                        (vector? args) (vw/open-args allocator args)
+                                        (nil? args) vw/empty-args
+                                        :else (throw (ex-info "invalid args"
+                                                              {:type (class args)})))
+                 {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
                  current-time (or (some-> (:current-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
                                   (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
                                   (expr/current-time))]

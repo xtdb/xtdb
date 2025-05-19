@@ -1,7 +1,7 @@
 (ns xtdb.information-schema
   (:require [clojure.string :as str]
             [integrant.core :as ig]
-            [xtdb.authn :as authn]
+            [xtdb.authn.crypt :as authn.crypt]
             [xtdb.metadata]
             [xtdb.pgwire.types :as pg-types]
             [xtdb.table-catalog :as table-cat]
@@ -303,7 +303,7 @@
                                           passwd [:union #{:utf8 :null}]}]))
 
 (def ^:private initial-user-data
-  [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn/encrypt-pw "xtdb")}])
+  [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn.crypt/encrypt-pw "xtdb")}])
 
 (defn pg-user-template-page+trie [allocator]
   (util/with-close-on-catch [out-rel-writer (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]

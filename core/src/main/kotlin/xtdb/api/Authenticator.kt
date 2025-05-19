@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
+import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
 
 val DEFAULT_RULES = listOf(MethodRule(TRUST))
@@ -11,7 +12,7 @@ val DEFAULT_RULES = listOf(MethodRule(TRUST))
 interface Authenticator : AutoCloseable {
     fun methodFor(user: String?, remoteAddress: String?): Method
 
-    fun verifyPassword(db: Xtdb, user: String, password: String): String =
+    fun verifyPassword(user: String, password: String): String =
         throw UnsupportedOperationException("password auth not supported")
 
     override fun close() = Unit
@@ -34,13 +35,13 @@ interface Authenticator : AutoCloseable {
 
         fun rules(rules: List<MethodRule>) = apply { this.rules = rules }
 
-        fun open(): Authenticator
+        fun open(querySource: IQuerySource): Authenticator
 
         @Serializable
         @SerialName("!UserTable")
         data class UserTable(override var rules: List<MethodRule> = DEFAULT_RULES) : Factory {
-            override fun open() =
-                requiringResolve("xtdb.authn/->user-table-authn")(this) as Authenticator
+            override fun open(querySource: IQuerySource): Authenticator =
+                requiringResolve("xtdb.authn/->user-table-authn")(this, querySource) as Authenticator
         }
     }
 }
