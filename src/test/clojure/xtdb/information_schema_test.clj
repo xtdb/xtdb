@@ -195,7 +195,7 @@
                                      [16 "boolean"] [21 "int2"] [23 "int4"] [20 "int8"]
                                      [700 "float4"] [701 "float8"] [1700 "numeric"]
                                      [1082 "date"] [1114 "timestamp"] [1184 "timestamptz"] [3910 "tstz-range"] [1186 "interval"]
-                                     [2205 "regclass"]
+                                     [2205 "regclass"] [24 "regproc"]
                                      [1007 "_int4"] [1016 "_int8"]
                                      [17 "bytea"]
                                      [1009 "_text"]

@@ -605,12 +605,24 @@
                             ;;if the user cannot adjust the query to cast to varchar/text
                             (utf8 (Integer/toUnsignedString (.getInt rdr idx))))
               :write-binary (fn [_env ^IVectorReader rdr idx]
-                            ;;postgres returns the table name rather than a string of the
-                            ;;oid here, however regclass is usually not returned from queries
-                            ;;could reimplement oid -> table name resolution here or in getObject
-                            ;;if the user cannot adjust the query to cast to varchar/text
+                              ;;postgres returns the table name rather than a string of the
+                              ;;oid here, however regclass is usually not returned from queries
+                              ;;could reimplement oid -> table name resolution here or in getObject
+                              ;;if the user cannot adjust the query to cast to varchar/text
                               (byte-array
                                (utf8 (Integer/toUnsignedString (.getInt rdr idx)))))}
+
+   :regproc {:typname "regproc"
+             :col-type :regproc
+             :oid 24
+             :typsend "regprocsend"
+             :typreceive "regprocrecv"
+             :write-text (fn [_env ^IVectorReader rdr idx]
+                           (utf8 (Integer/toUnsignedString (.getInt rdr idx))))
+             :write-binary (fn [_env ^IVectorReader rdr idx]
+                             (byte-array
+                              (utf8 (Integer/toUnsignedString (.getInt rdr idx)))))}
+
    :boolean {:typname "boolean"
              :col-type :bool
              :typlen 1
@@ -651,7 +663,7 @@
                              (catch NullPointerException _
                                (throw (IllegalArgumentException. "Interval parameters currently unsupported")))))
               :write-binary (fn [_env ^IVectorReader rdr idx]
-                             (byte-array (interval-rdr->iso-micro-interval-str-bytes rdr idx)))
+                              (byte-array (interval-rdr->iso-micro-interval-str-bytes rdr idx)))
               :write-text (fn [_env ^IVectorReader rdr idx] (interval-rdr->iso-micro-interval-str-bytes rdr idx))}
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
@@ -826,6 +838,7 @@
    :bool :boolean
    :null :text
    :regclass :regclass
+   :regproc :regproc
    :varbinary :bytea
    :keyword :keyword
    [:date :day] :date
