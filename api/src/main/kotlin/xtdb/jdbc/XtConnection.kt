@@ -5,6 +5,8 @@ import org.postgresql.core.BaseConnection
 import org.postgresql.jdbc.PgConnection
 import org.postgresql.util.PGobject
 import xtdb.time.*
+import xtdb.types.RegClass
+import xtdb.types.RegProc
 import xtdb.types.ZonedDateTimeRange
 import xtdb.util.TransitFormat.JSON
 import xtdb.util.readTransit
@@ -50,6 +52,8 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 "timestamptz" -> getObject(columnIndex, ZonedDateTime::class.java)
                 "tstz-range" -> getObject(columnIndex, ZonedDateTimeRange::class.java)
                 "interval" -> getObject(columnIndex, Interval::class.java)
+                "regclass" -> getObject(columnIndex, RegClass::class.java)
+                "regproc" -> getObject(columnIndex, RegProc::class.java)
 
                 else -> inner.getObject(columnIndex)
             }
@@ -74,6 +78,8 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                             LocalDateTime::class.java -> s.asLocalDateTime()
                             Interval::class.java -> s.asInterval()
                             ZonedDateTimeRange::class.java -> s.asZonedDateTimeRange()
+                            RegClass::class.java -> RegClass(s.toInt())
+                            RegProc::class.java -> RegProc(s.toInt())
 
                             else -> inner.getObject(columnIndex, type)
                         }
