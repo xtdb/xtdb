@@ -14,6 +14,10 @@ output "oidc_issuer_url" {
   value = module.aks.oidc_issuer_url
 }
 
+output "user_assigned_managed_identity_id" {
+  value = azurerm_user_assigned_identity.xtdb_infra.id
+}
+
 output "user_assigned_managed_identity_name" {
   value = azurerm_user_assigned_identity.xtdb_infra.name
 }
