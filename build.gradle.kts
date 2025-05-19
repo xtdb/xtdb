@@ -128,6 +128,7 @@ allprojects {
 
             testImplementation(libs.junit.jupiter.api)
             testRuntimeOnly(libs.junit.jupiter.engine)
+            testRuntimeOnly(libs.junit.platform.launcher)
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)
             testImplementation(libs.testcontainers.minio)
