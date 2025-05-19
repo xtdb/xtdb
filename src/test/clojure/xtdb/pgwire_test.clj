@@ -1807,7 +1807,7 @@
 SELECT t.oid, t.typname
 FROM pg_catalog.pg_type t
   JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
-WHERE t.typname = $1 AND (n.nspname = $2 OR $3 AND n.nspname = ANY (current_schemas(true)))
+WHERE t.typname = ? AND (n.nspname = ? OR ? AND n.nspname = ANY (current_schemas(true)))
 ORDER BY t.oid DESC LIMIT 1"
                            "transit" nil true])))))
 
