@@ -149,7 +149,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                     setTransit(parameterIndex, x)
 
                 is ZonedDateTime -> setIsoTimestampTz(parameterIndex, x)
-                is Instant -> setIsoTimestampTz(parameterIndex, x)
+                is Instant -> setObject(parameterIndex, x.atZone(ZoneOffset.UTC))
                 is ZonedDateTimeRange -> inner.setObject(parameterIndex, x.asPgObject)
                 is Interval -> inner.setObject(parameterIndex, x.asPgObject)
                 is Date -> setObject(parameterIndex, x.toInstant().atZone(ZoneOffset.UTC).toLocalDateTime())
