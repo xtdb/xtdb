@@ -295,7 +295,7 @@
         (let [table-info (scan/tables-with-cols wm-src)
               plan-query-opts
               (-> query-opts
-                  (select-keys [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan?])
+                  (select-keys [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan? :arg-fields])
                   (update :decorrelate? #(if (nil? %) true false))
                   (assoc :table-info table-info))]
 

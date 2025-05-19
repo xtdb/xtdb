@@ -2672,3 +2672,21 @@ ORDER BY 1,2;")
                (jdbc/with-transaction [tx conn]
                  (q tx ["INSERT INTO foo(_id, a) values(42, 42)"])
                  (q conn ["SELECT a FROM foo"])))))))
+
+(t/deftest test-patch-records-4403
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jms', first_name: 'James'}"])
+
+    (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "joe", :first-name "Joe"}])
+
+    (jdbc/execute! conn ["PATCH INTO users RECORDS ?" {:xt/id "joe", :likes "chocolate"}])
+
+    (t/is (= [{:xt/id "jms", :first-name "James",
+               :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}
+              {:xt/id "joe", :first-name "Joe",
+               :xt/valid-from #xt/zdt "2020-01-02Z[UTC]",
+               :xt/valid-to #xt/zdt "2020-01-03Z[UTC]"}
+              {:xt/id "joe", :first-name "Joe", :likes "chocolate",
+               :xt/valid-from #xt/zdt "2020-01-03Z[UTC]"}]
+             (jdbc/execute! conn ["SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME ORDER BY _id, _valid_from"]
+                            {:builder-fn xt-jdbc/builder-fn})))))

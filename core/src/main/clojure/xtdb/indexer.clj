@@ -551,7 +551,8 @@
       (indexOp [_ tx-op-idx]
         (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
           (let [query-str (.getObject query-rdr tx-op-idx)
-                compiled-query (.planQuery q-src query-str wm-src {})
+                compiled-query (.planQuery q-src query-str wm-src
+                                           {:arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields))})
                 param-count (:param-count (meta compiled-query))]
 
             (zmatch (r/vector-zip compiled-query)
