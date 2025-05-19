@@ -166,6 +166,15 @@
 ;; to deduct this, fail, and keep Apply is also an option, say by
 ;; returning nil instead of throwing an exception like now.
 
+(defn- join-cond->common-cols [join-cond]
+  (->> join-cond
+       (into #{} (keep (fn [join-cond]
+                         (when (and (map? join-cond)
+                                    (= 1 (count join-cond)))
+                           (let [[k v] (first join-cond)]
+                             (when (and (symbol? k) (= k v))
+                               k))))))))
+
 (defn relation-columns [relation-in]
   (r/zmatch relation-in
     [:table explicit-column-names _]
@@ -179,8 +188,10 @@
     [:scan _scan-opts columns]
     (mapv ->projected-column columns)
 
-    [:join _ lhs rhs]
-    (vec (mapcat relation-columns [lhs rhs]))
+    [:join join-cond lhs rhs]
+    (into (vec (relation-columns lhs))
+          (remove (join-cond->common-cols join-cond))
+          (vec (relation-columns rhs)))
 
     [:mega-join _ rels]
     (vec (mapcat relation-columns rels))
@@ -188,11 +199,15 @@
     [:cross-join lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
-    [:left-outer-join _ lhs rhs]
-    (vec (mapcat relation-columns [lhs rhs]))
+    [:left-outer-join join-cond lhs rhs]
+    (into (vec (relation-columns lhs))
+          (remove (join-cond->common-cols join-cond))
+          (vec (relation-columns rhs)))
 
-    [:full-outer-join _ lhs rhs]
-    (vec (mapcat relation-columns [lhs rhs]))
+    [:full-outer-join join-cond lhs rhs]
+    (into (vec (relation-columns lhs))
+          (remove (join-cond->common-cols join-cond))
+          (vec (relation-columns rhs)))
 
     [:semi-join _ lhs _]
     (relation-columns lhs)
