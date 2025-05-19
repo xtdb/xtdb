@@ -1493,6 +1493,9 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
                                      URI_PATH(uri) AS path, URI_QUERY(uri) AS query, URI_FRAGMENT(uri) AS fragment
                               FROM docs")))))
 
-(t/deftest period-null-first-arg-4315
+(t/deftest period-nulls-4315
   (t/is (= [{:p #xt/tstz-range [nil #xt/zdt "2020-01-01T00:00Z"]}]
-           (xt/q tu/*node* "SELECT PERIOD(NULL, TIMESTAMP '2020-01-01Z') p"))))
+           (xt/q tu/*node* "SELECT PERIOD(NULL, TIMESTAMP '2020-01-01Z') p")))
+
+  (t/is (= [{:p #xt/tstz-range [nil nil]}]
+           (xt/q tu/*node* "SELECT PERIOD(NULL, NULL) p"))))

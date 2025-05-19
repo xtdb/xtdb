@@ -1705,6 +1705,11 @@
                   `(->period Long/MIN_VALUE
                              ~(with-conversion to-code to-tsunit :micro)))})
 
+(defmethod expr/codegen-call [:period :null :null] [_]
+  {:return-type :tstz-range
+   :->call-code (fn [_]
+                  `(->period Long/MIN_VALUE Long/MAX_VALUE))})
+
 (defmethod expr/codegen-call [:period :date-time :date-time] [expr]
   (recall-with-cast2 expr types/temporal-col-type types/temporal-col-type))
 
