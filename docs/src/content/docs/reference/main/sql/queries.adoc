@@ -66,7 +66,7 @@ const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
 const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
 const docs = rr.OneOrMore(doc, ",")
 const values = rr.Sequence("VALUES", docs)
-const xtql = rr.Sequence("XTQL", "<XTQL query>")
+const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '<XTQL query>', rr.ZeroOrMore(rr.Sequence(',', '?'), null, 'skip'), ')')))
 
 const allOrDistinct = rr.Choice(0, rr.Skip(), "ALL", "DISTINCT")
 const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "EXCEPT"), allOrDistinct, "<query term>")
@@ -83,6 +83,8 @@ NB:
   There may be an arbitrary number of commas at the start, between any two predicate expressions, or at the end.
 * XTQL queries are sent within an SQL string literal - e.g. `+'(-> (from ...) ...)'+`.
 Given the possible presence of single quotes within the query, it is recommended to use dollar-delimited strings here: `XTQL &dollar;&dollar; <xtql query> &dollar;&dollar;`
++
+Due to implementation details in some drivers (e.g. PGJDBC), it is required to additionally specify the params in standard SQL (`?`) following your XTQL query, so that the driver knows how many arguments to allow.
 +
 For more details on XTQL queries, see the link:/xtql/tutorials/introducing-xtql[XTQL documentation].
 
@@ -138,7 +140,7 @@ const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
 const docs = rr.OneOrMore(doc, ",")
 const values = rr.Sequence("VALUES", docs)
 
-const xtql = rr.Sequence("XTQL", "<XTQL query>")
+const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '<XTQL query>', rr.ZeroOrMore(rr.Sequence(',', '?'), null, 'skip'), ')')))
 const subquery = rr.Sequence("(", "<query>", ")")
 const lateral = rr.Sequence("LATERAL", subquery)
 const unnest = rr.Sequence("UNNEST", "(", "<value>", ")", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
