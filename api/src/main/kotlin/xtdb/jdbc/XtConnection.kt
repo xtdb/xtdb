@@ -15,7 +15,9 @@ import java.net.URI
 import java.sql.*
 import java.time.*
 import java.time.temporal.Temporal
+import java.time.temporal.TemporalAccessor
 import java.util.*
+import java.util.Date
 import xtdb.decode as decodeJson
 
 internal class XtConnection(private val conn: PgConnection) : BaseConnection by conn {
@@ -106,12 +108,25 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
             )
         }
 
+        private fun TemporalAccessor?.toSqlString(): String? =
+            this?.let { SQL_TIMESTAMP_FORMATTER.format(it) }
+
         private fun setIsoTimestampTz(parameterIndex: Int, x: Temporal) {
             inner.setObject(
                 parameterIndex,
                 PGobject().also {
                     it.type = "timestamptz"
-                    it.value = x.toString()
+                    it.value = x.toSqlString()
+                }
+            )
+        }
+
+        private fun setIsoTimestamp(parameterIndex: Int, x: Temporal) {
+            inner.setObject(
+                parameterIndex,
+                PGobject().also {
+                    it.type = "timestamp"
+                    it.value = x.toSqlString()
                 }
             )
         }
@@ -119,7 +134,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
         private val ZonedDateTimeRange.asPgObject
             get() = PGobject().also {
                 it.type = "tstz-range"
-                it.value = "[${from ?: ""},${to ?: ""})"
+                it.value = "[${from.toSqlString() ?: ""},${to.toSqlString() ?: ""})"
             }
 
         private val Interval.asPgObject
@@ -137,6 +152,8 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 is Instant -> setIsoTimestampTz(parameterIndex, x)
                 is ZonedDateTimeRange -> inner.setObject(parameterIndex, x.asPgObject)
                 is Interval -> inner.setObject(parameterIndex, x.asPgObject)
+                is Date -> setObject(parameterIndex, x.toInstant().atZone(ZoneOffset.UTC).toLocalDateTime())
+                is LocalDateTime -> setIsoTimestamp(parameterIndex, x)
 
                 else -> inner.setObject(parameterIndex, x)
             }

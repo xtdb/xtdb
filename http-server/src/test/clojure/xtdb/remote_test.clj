@@ -70,7 +70,7 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q *node* '(from :docs [xt/id])
-                 {:snapshot-time #inst "2020-01-02"
+                 {:snapshot-time #xt/zdt "2020-01-02Z"
                   :after-tx-id 1})))
 
   (xt/submit-tx *node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])

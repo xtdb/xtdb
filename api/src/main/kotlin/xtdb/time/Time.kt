@@ -6,9 +6,10 @@ import xtdb.types.ZonedDateTimeRange
 import java.lang.Math.multiplyExact
 import java.time.*
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
 import java.time.format.DateTimeFormatter.ISO_LOCAL_TIME
 import java.time.format.DateTimeFormatterBuilder
+import java.time.format.SignStyle
+import java.time.temporal.ChronoField
 import java.time.temporal.ChronoUnit.MICROS
 import java.time.temporal.TemporalAccessor
 import java.time.temporal.TemporalQueries
@@ -45,6 +46,17 @@ private val OFFSET_AND_ZONE_FORMATTER = DateTimeFormatterBuilder()
     .appendZoneRegionId()
     .appendLiteral(']')
     .optionalEnd()
+    .toFormatter()
+
+// I wanted to use ISO_LOCAL_DATE, but it threw when the year had >4 digits and the user didn't provide a pos/neg sign.
+private val ISO_LOCAL_DATE = DateTimeFormatterBuilder()
+    .parseLenient()
+    .appendValue(ChronoField.YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+    .parseStrict()
+    .appendLiteral('-')
+    .appendValue(ChronoField.MONTH_OF_YEAR, 2)
+    .appendLiteral('-')
+    .appendValue(ChronoField.DAY_OF_MONTH, 2)
     .toFormatter()
 
 val SQL_TIMESTAMP_FORMATTER: DateTimeFormatter =

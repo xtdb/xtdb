@@ -81,11 +81,6 @@
     (binding [*node* node]
       (f))))
 
-(extend-protocol jdbc.prep/SettableParameter
-  java.util.Date
-  (set-parameter [v ^PreparedStatement ps ^long i]
-    (.setObject ps i (-> (.toInstant v) (.atZone #xt/zone "Z") (.toLocalDateTime)) Types/TIMESTAMP)))
-
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *sys*)
 

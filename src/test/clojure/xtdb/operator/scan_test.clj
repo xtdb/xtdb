@@ -805,7 +805,7 @@
 
           (doseq [[idx {:keys [interval dir range1 range2]}] (map-indexed vector intervals)]
             (t/testing (format "%s interval: '%s'" (name dir) interval)
-              (let [dates (vec (into #{(Date. Long/MIN_VALUE) (Date. Long/MAX_VALUE)}
+              (let [dates (vec (into #{(Date. (long (/ Long/MIN_VALUE 1000))) (Date. (long (/ Long/MAX_VALUE 1000)))}
                                      (comp cat
                                            (mapcat (fn [^Date date]
                                                      (for [^long delta (range -2 3)]
@@ -828,6 +828,8 @@
                   (let [q "SELECT *, _valid_from, _valid_to
                            FROM foo FOR VALID_TIME BETWEEN ? AND ? FOR SYSTEM_TIME BETWEEN ? AND ?
                            WHERE _id = ?"]
-                    (t/testing (format "query: '%s', vt-" q)
-                      (t/is (= (xt/q n1 [q from-date to-date from-date to-date idx])
-                               (xt/q n2 [q from-date to-date from-date to-date idx]))))))))))))))
+                    (t/testing (format "query: '%s', from-i %d, to-i %d" q from-i to-i)
+                      (t/is (= (xt/q n1 [q from-date to-date from-date to-date idx]
+                                     {:default-tz #xt/zone "UTC"})
+                               (xt/q n2 [q from-date to-date from-date to-date idx]
+                                     {:default-tz #xt/zone "UTC"}))))))))))))))
