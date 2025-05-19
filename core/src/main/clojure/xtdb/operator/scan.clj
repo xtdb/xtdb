@@ -71,7 +71,7 @@
                :now (-> (expr/current-time) (time/instant->micros))
                :expr (let [param-types (expr/->param-types args)
                            projection (expr/->expression-projection-spec "_temporal_expression"
-                                                                         (expr/form->expr arg {:param-types param-types})
+                                                                         (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
                                                                          {:param-types param-types})]
                        (util/with-open [res (.project projection alloc vw/empty-args {} args)]
                          (if-let [inst-like (.getObject res 0)]
