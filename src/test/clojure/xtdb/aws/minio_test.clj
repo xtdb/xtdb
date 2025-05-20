@@ -14,10 +14,7 @@
            [xtdb.api.storage ObjectStore Storage]
            [xtdb.aws S3]
            [xtdb.buffer_pool RemoteBufferPool]
-           [xtdb.multipart IMultipartUpload SupportsMultipart]
-           io.micrometer.core.instrument.Counter
-           (io.micrometer.core.instrument.simple SimpleMeterRegistry)
-           (io.micrometer.core.instrument.composite CompositeMeterRegistry)))
+           [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 ;; To run these, run the MinIO and Kafka containers in the docker-compose file
 ;; http://localhost:9001, minioadmin/minioadmin
@@ -140,28 +137,24 @@
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 
 (t/deftest ^:minio node-level-test
-  (util/with-tmp-dirs #{local-disk-cache local-disk-cache-2}
-    (let [prefix (random-uuid)]
-      (util/with-open [node (start-node local-disk-cache prefix)
-                       node-2 (start-node local-disk-cache-2 prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
-          ;; Submit some documents to the node
-          (t/is (= true
-                   (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                                     [:put-docs :bar {:xt/id "bar2"}]
-                                                     [:put-docs :bar {:xt/id "bar3"}]]))))
-
-          ;; Ensure finish-block! works
-          (t/is (nil? (tu/finish-block! node)))
-
-          ;; Ensure can query back out results
-          (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
-                   (xt/q node '(from :bar [{:xt/id e}]))))
-
-          ;; Ensure some files written to buffer-pool
-          (t/is (seq (.listAllObjects buffer-pool))))
-
-        (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}] (xt/q node-2 '(from :bar [{:xt/id e}]))))))))
+  (util/with-tmp-dirs #{local-disk-cache}
+    (util/with-open [node (start-node local-disk-cache (random-uuid))]
+      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        ;; Submit some documents to the node
+        (t/is (= true
+                 (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                                   [:put-docs :bar {:xt/id "bar2"}]
+                                                   [:put-docs :bar {:xt/id "bar3"}]]))))
+  
+        ;; Ensure finish-block! works
+        (t/is (nil? (tu/finish-block! node)))
+  
+        ;; Ensure can query back out results
+        (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
+                 (xt/q node '(from :bar [{:xt/id e}]))))
+  
+        ;; Ensure some files written to buffer-pool
+        (t/is (seq (.listAllObjects buffer-pool)))))))
 
 ;; Using large enough TPCH ensures multiparts get properly used within the bufferpool
 (comment

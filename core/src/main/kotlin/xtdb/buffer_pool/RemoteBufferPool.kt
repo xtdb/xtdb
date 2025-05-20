@@ -12,7 +12,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore
@@ -38,8 +37,6 @@ import java.nio.file.StandardOpenOption.*
 import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.fileSize
-
-private val LOGGER = LoggerFactory.getLogger(RemoteBufferPool::class.java)
 
 class RemoteBufferPool(
     factory: RemoteStorageFactory,
@@ -74,6 +71,7 @@ class RemoteBufferPool(
         internal var minMultipartPartSize = 5 * 1024 * 1024
         private const val MAX_CONCURRENT_PART_UPLOADS = 4
 
+        private val LOGGER = RemoteBufferPool::class.logger
 
         private val Path.totalSpace
             get() = Files.getFileStore(this).totalSpace
@@ -98,7 +96,7 @@ class RemoteBufferPool(
                     LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
                     upload.abort().get()
                 } catch (abortError: Throwable) {
-                    LOGGER.warn("Throwable caught when aborting uploadMultipartBuffers", abortError)
+                    LOGGER.warn(abortError, "Throwable caught when aborting uploadMultipartBuffers")
                     e.addSuppressed(abortError)
                 }
                 throw e
@@ -149,16 +147,18 @@ class RemoteBufferPool(
         }
     }
 
+    private fun getObject(key: Path, tmpFile: Path) =
+        objectStore.getObject(key, tmpFile).thenApply { path ->
+            networkRead?.increment(path.fileSize().toDouble())
+            path
+        }
+
     override fun getByteArray(key: Path): ByteArray =
         memoryCache.get(PathSlice(key)) { pathSlice ->
             memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                objectStore.getObject(k, tmpFile)
-                    .thenApply { entry ->
-                        networkRead?.increment(entry.fileSize().toDouble())
-                        entry
-                    }
+                getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { it.toByteArray() }
 
@@ -166,7 +166,7 @@ class RemoteBufferPool(
         diskCache
             .get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                objectStore.getObject(k, tmpFile)
+                getObject(k, tmpFile)
             }.get()
             .use { entry -> Relation.readFooter(entry.path.openReadableChannel()) }
     }
@@ -187,10 +187,8 @@ class RemoteBufferPool(
         ) { pathSlice ->
             memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
-                LOGGER.info("diskCacheMiss")
                 diskCacheMisses?.increment()
-                networkRead?.increment(k.fileSize().toDouble())
-                objectStore.getObject(k, tmpFile)
+                getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
