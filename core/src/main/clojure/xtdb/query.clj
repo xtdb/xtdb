@@ -253,18 +253,22 @@
 (defn ->caffeine-cache ^com.github.benmanes.caffeine.cache.Cache [size]
   (-> (Caffeine/newBuilder) (.maximumSize size) (.build)))
 
-(defmethod ig/init-key ::query-source [_ {:keys [plan-cache-size live-idx metrics-registry] :as deps}]
+(defmethod ig/init-key ::query-source [_ {:keys [allocator plan-cache-size live-idx metrics-registry] :as deps}]
   (let [plan-cache (->caffeine-cache plan-cache-size)
         ref-ctr (RefCounter.)
         deps (-> deps (assoc :ref-ctr ref-ctr))
-        query-warning-counter ^Counter (metrics/add-counter metrics-registry "query.warning")]
+        query-warning-counter ^Counter (metrics/add-counter metrics-registry "query.warning")
+        allocator (util/->child-allocator allocator "query-source")]
+
+    (metrics/add-allocator-gauge metrics-registry "query_source.allocator.allocated_memory" allocator)
+
     (reify
       IQuerySource
       (prepareRaQuery [this query query-opts]
         (.prepareRaQuery this query live-idx query-opts))
 
       (prepareRaQuery [_ query wm-src query-opts]
-        (let [prepared-query (prepare-ra query (assoc deps :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
+        (let [prepared-query (prepare-ra query (assoc deps :allocator allocator, :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
           (when (seq (.getWarnings prepared-query))
             (.increment query-warning-counter))
           prepared-query))
@@ -302,7 +306,9 @@
       AutoCloseable
       (close [_]
         (when-not (.tryClose ref-ctr (Duration/ofMinutes 1))
-          (log/warn "Failed to shut down after 60s due to outstanding queries"))))))
+          (log/warn "Failed to shut down after 60s due to outstanding queries"))
+
+        (util/close allocator)))))
 
 (defmethod ig/halt-key! ::query-source [_ ^AutoCloseable query-source]
   (.close query-source))
