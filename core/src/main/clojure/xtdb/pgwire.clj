@@ -362,6 +362,10 @@
 
           (throw (pgio/err-protocol-violation "Unknown protocol version")))))
 
+    (catch EOFException e
+      (log/debug e "EOFException during startup")
+      (doto conn
+        (handle-msg* {:msg-name :msg-terminate})))
     (catch Exception e
       (doto conn
         (send-ex e)
