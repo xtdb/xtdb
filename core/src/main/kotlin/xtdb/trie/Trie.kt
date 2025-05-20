@@ -7,7 +7,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.types.Fields
 import xtdb.types.NamelessField
-import xtdb.types.NamelessField.Companion.nullable
 import xtdb.types.Schema
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
@@ -18,6 +17,8 @@ import xtdb.vector.RootWriter
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatterBuilder
+import java.time.format.SignStyle
+import java.time.temporal.ChronoField
 
 typealias Level = Long
 typealias InstantMicros = Long
@@ -28,7 +29,12 @@ typealias ColumnName = String
 typealias TrieKey = String
 
 object Trie {
-    internal val RECENCY_FMT = DateTimeFormatterBuilder().appendPattern("yyyyMMdd").toFormatter()
+    internal val RECENCY_FMT = DateTimeFormatterBuilder()
+        .parseLenient()
+        .appendValue(ChronoField.YEAR, 4, 10, SignStyle.NOT_NEGATIVE)
+        .appendValue(ChronoField.MONTH_OF_YEAR, 2)
+        .appendValue(ChronoField.DAY_OF_MONTH, 2)
+        .toFormatter()
 
     data class Key(val level: Level, val recency: LocalDate?, val part: ByteArrayList?, val blockIndex: BlockIndex) {
         override fun toString() = buildString {
