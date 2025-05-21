@@ -5,4 +5,5 @@
            :xtql/missing-parameter {:level :error}
            :xtql/type-mismatch {:level :error}
            :xtql/invalid-arity {:level :error}}
- :hooks {:analyze-call {xtdb.api/q hooks.xtql/q}}}
+ :hooks {:analyze-call {xtdb.api/q hooks.xtql/q}}
+ :lint-as {xtdb.api/with-conn clojure.core/with-open}}

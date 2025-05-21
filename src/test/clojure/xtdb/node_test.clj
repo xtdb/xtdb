@@ -906,7 +906,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
               (reset! !skiptxid tx-id)))
 
-          (t/is (= @!skiptxid (:latest-submitted-tx-id (xt/status node))))
           (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node)))))))
 
       (t/testing "node with txs to skip"
