@@ -11,14 +11,14 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Timer Tag)
+  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer)
            (io.micrometer.core.instrument.distribution ValueAtPercentile)
            [java.time Duration]
-           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow VectorReader VectorWriter)
+           (xtdb.arrow Relation VectorReader VectorWriter)
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
@@ -100,7 +100,7 @@
 
       xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
 
-      xt/metrics_timers {name :utf8, tags :utf8
+      xt/metrics_timers {name :utf8, tags [:struct {}]
                          count :i64,
                          mean_time [:union #{:null [:duration :nano]}],
                          p75_time [:union #{:null [:duration :nano]}]
@@ -109,8 +109,8 @@
                          p999_time [:union #{:null [:duration :nano]}]
                          max_time [:union #{:null [:duration :nano]}]}
 
-      xt/metrics_gauges {name :utf8, tags :utf8, value :f64}
-      xt/metrics_counters {name :utf8, tags :utf8, count :f64}})
+      xt/metrics_gauges {name :utf8, tags [:struct {}], value :f64}
+      xt/metrics_counters {name :utf8, tags [:struct {}], count :f64}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables xt-derived-tables)
@@ -383,8 +383,8 @@
                (let [snapshot (.takeSnapshot timer)
                      id (.getId timer)]
                  (into {:name (.getName id)
-                        :tags (pr-str (->> (.getTags id)
-                                           (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %))))))
+                        :tags (->> (.getTags id)
+                                   (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %)))))
                         :count (.count snapshot)
                         :mean-time (Duration/ofNanos (.mean snapshot))
                         :max-time (Duration/ofNanos (.max snapshot))}
@@ -403,8 +403,8 @@
        (mapv (fn [^Gauge gauge]
                (let [id (.getId gauge)]
                  {:name (.getName id)
-                  :tags (pr-str (->> (.getTags id)
-                                     (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %))))))
+                  :tags (->> (.getTags id)
+                             (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %)))))
                   :value (.value gauge)})))))
 
 (defn metrics-counters [^MeterRegistry reg]
@@ -413,8 +413,8 @@
        (mapv (fn [^Counter counter]
                (let [id (.getId counter)]
                  {:name (.getName id)
-                  :tags (pr-str (->> (.getTags id)
-                                     (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %))))))
+                  :tags (->> (.getTags id)
+                             (into {} (map (juxt #(.getKey ^Tag %) #(.getValue ^Tag %)))))
                   :count (.count counter)})))))
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
@@ -450,53 +450,53 @@
     (->cursor [_ allocator wm derived-table-schema
                table col-names col-preds
                schema params]
-      (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (vec (vals derived-table-schema)))
-                                                               allocator)]
-        ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
-        ;;should be types/merge-fields as per scan-fields
-        (let [schema-info (-> (merge-with merge
-                                          (table-cat/all-column-fields table-catalog)
-                                          (some-> (.getLiveIndex ^Watermark wm)
-                                                  (.getAllColumnFields)))
-                              (update-keys symbol)
-                              (merge meta-table-schemas))
+      ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
+      ;;should be types/merge-fields as per scan-fields
+      (let [schema-info (-> (merge-with merge
+                                        (table-cat/all-column-fields table-catalog)
+                                        (some-> (.getLiveIndex ^Watermark wm)
+                                                (.getAllColumnFields)))
+                            (update-keys symbol)
+                            (merge meta-table-schemas))]
+        (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation. ^BufferAllocator allocator
+                                                                                (Schema. (vec (vals derived-table-schema)))
+                                                                                0)]
 
-              out-rel-wtr (vw/root->writer root)
-              out-rel (vw/rel-wtr->rdr (doto out-rel-wtr
-                                         (.writeRows (->> (case table
-                                                            information_schema/tables (tables schema-info)
-                                                            information_schema/columns (columns (schema-info->col-rows schema-info))
-                                                            information_schema/schemata schemas
-                                                            pg_catalog/pg_tables (pg-tables schema-info)
-                                                            pg_catalog/pg_type (pg-type)
-                                                            pg_catalog/pg_class (pg-class schema-info)
-                                                            pg_catalog/pg_description nil
-                                                            pg_catalog/pg_views nil
-                                                            pg_catalog/pg_matviews nil
-                                                            pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
-                                                            pg_catalog/pg_namespace (pg-namespace)
-                                                            pg_catalog/pg_proc (pg-proc)
-                                                            pg_catalog/pg_database (pg-database)
-                                                            pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
-                                                            pg_catalog/pg_settings (pg-settings)
-                                                            pg_catalog/pg_range (pg-range)
-                                                            pg_catalog/pg_am (pg-am)
-                                                            xt/trie_stats (trie-stats trie-catalog)
-                                                            xt/live_tables (live-tables wm)
-                                                            xt/live_columns (live-columns wm)
-                                                            xt/metrics_timers (metrics-timers metrics-registry)
-                                                            xt/metrics_gauges (metrics-gauges metrics-registry)
-                                                            xt/metrics_counters (metrics-counters metrics-registry)
-                                                            (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
-                                                          (into-array java.util.Map)))
-                                         (.syncRowCount)))]
-
-          ;;TODO reuse relation selector code from trie cursor
-          (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                              (.select rel (.select col-pred allocator rel schema params)))
-                                            (-> out-rel
-                                                (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
-                                                (vr/rel-reader (.getRowCount out-rel))
-                                                (vr/with-absent-cols allocator col-names))
-                                            (vals col-preds))
-                                    root))))))
+                                              (.writeRows out-rel (->> (case table
+                                                                         information_schema/tables (tables schema-info)
+                                                                         information_schema/columns (columns (schema-info->col-rows schema-info))
+                                                                         information_schema/schemata schemas
+                                                                         pg_catalog/pg_tables (pg-tables schema-info)
+                                                                         pg_catalog/pg_type (pg-type)
+                                                                         pg_catalog/pg_class (pg-class schema-info)
+                                                                         pg_catalog/pg_description nil
+                                                                         pg_catalog/pg_views nil
+                                                                         pg_catalog/pg_matviews nil
+                                                                         pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
+                                                                         pg_catalog/pg_namespace (pg-namespace)
+                                                                         pg_catalog/pg_proc (pg-proc)
+                                                                         pg_catalog/pg_database (pg-database)
+                                                                         pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
+                                                                         pg_catalog/pg_settings (pg-settings)
+                                                                         pg_catalog/pg_range (pg-range)
+                                                                         pg_catalog/pg_am (pg-am)
+                                                                         xt/trie_stats (trie-stats trie-catalog)
+                                                                         xt/live_tables (live-tables wm)
+                                                                         xt/live_columns (live-columns wm)
+                                                                         xt/metrics_timers (metrics-timers metrics-registry)
+                                                                         xt/metrics_gauges (metrics-gauges metrics-registry)
+                                                                         xt/metrics_counters (metrics-counters metrics-registry)
+                                                                         (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
+                                                                       (into-array java.util.Map)))
+                                              (.openAsRoot out-rel allocator))]
+          (assert out-root)
+          (let [out-rel (vr/<-root out-root)]
+            ;;TODO reuse relation selector code from trie cursor
+            (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
+                                                (.select rel (.select col-pred allocator rel schema params)))
+                                              (-> out-rel
+                                                  (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
+                                                  (vr/rel-reader (.getRowCount out-rel))
+                                                  (vr/with-absent-cols allocator col-names))
+                                              (vals col-preds))
+                                      out-root)))))))
