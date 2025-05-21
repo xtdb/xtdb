@@ -1737,6 +1737,21 @@
     (t/is (= [{:watermark 2}]
              (q conn ["SHOW WATERMARK"])))))
 
+(t/deftest test-show-latest-submitted-tx
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [] (q conn ["SHOW LATEST_SUBMITTED_TX"])))
+
+    (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "jms", :given-name "James"}])
+
+    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true}]
+             (q conn ["SHOW LATEST_SUBMITTED_TX"])))
+
+    (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
+
+    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false
+               :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]}]
+             (q conn ["SHOW LATEST_SUBMITTED_TX"])))))
+
 (t/deftest test-show-session-variable-3804
   (with-open [conn (jdbc-conn)]
     (t/is (= [{:datestyle "iso8601"}]

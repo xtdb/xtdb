@@ -165,9 +165,6 @@
    :sql-state "01000"
    :message msg})
 
-(defn- assert-failure [msg]
-  (ex-info msg {::severity :error, ::error-code "P0004"}))
-
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
   [conn]
@@ -500,21 +497,18 @@
 
       (try
         (when (= :read-write access-mode)
-          (if async?
-            (let [tx-id (xt/submit-tx node dml-buf
-                                      {:default-tz default-tz
-                                       :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
-                                       :authn {:user (get parameters "user")}})]
-              (swap! conn-state assoc :watermark-tx-id tx-id))
+          (let [tx-opts {:default-tz default-tz
+                         :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
+                         :authn {:user (get parameters "user")}}]
+            (if async?
+              (let [tx-id (xtp/submit-tx node dml-buf tx-opts)]
+                (swap! conn-state assoc :watermark-tx-id tx-id, :latest-submitted-tx {:tx-id tx-id}))
 
-            (let [{:keys [tx-id error]} (xt/execute-tx node dml-buf
-                                                       {:default-tz default-tz
-                                                        :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
-                                                        :authn {:user (get parameters "user")}})]
-              (swap! conn-state assoc :watermark-tx-id tx-id)
+              (let [{:keys [tx-id error] :as tx} (xtp/execute-tx node dml-buf tx-opts)]
+                (swap! conn-state assoc :watermark-tx-id tx-id, :latest-submitted-tx tx)
 
-              (when error
-                (throw error)))))
+                (when error
+                  (throw error))))))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (throw e))
@@ -668,7 +662,7 @@
 
       (case statement-type
         :canned-response (cmd-describe-canned-response conn canned-response)
-        (:query :dml :show-watermark :show-variable) (describe* describe-target)
+        (:query :dml :show-variable) (describe* describe-target)
 
         :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
                    (describe* {:param-oids (:param-oids describe-target)
@@ -953,8 +947,13 @@
 
                                 :show-variable
                                 (xtp/prepare-ra node (case (:variable stmt)
-                                                       "latest_completed_tx" (-> '[:table [{:tx-id ?_0, :system-time ?_1}]]
+                                                       "latest_completed_tx" (-> '[:select (not (nil? tx_id))
+                                                                                   [:table [{:tx_id ?_0, :system_time ?_1}]]]
                                                                                  (with-meta {:param-count 2}))
+                                                       "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
+                                                                                   [:table [{:tx_id ?_0, :system_time ?_1,
+                                                                                             :committed ?_2, :error ?_3}]]]
+                                                                                 (with-meta {:param-count 4}))
                                                        (-> (xt/template [:table [{~(keyword (:variable stmt)) ?_0}]])
                                                            (with-meta {:param-count 1})))
                                                 query-opts))]
@@ -1066,6 +1065,8 @@
                                                       after-tx-id)]
                                         "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
                                                                     [:tx-id :system-time])
+                                        "latest_submitted_tx" (mapv (into {} (:latest-submitted-tx @conn-state))
+                                                                    [:tx-id :system-time :committed? :error])
                                         [(get session-params variable)]))]
                          (-> stmt
                              (assoc :bound-query bq,
@@ -1163,7 +1164,7 @@
               (cmd-commit conn)
               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    (:query :show-watermark :show-variable) (cmd-exec-query conn portal)
+    (:query :show-variable) (cmd-exec-query conn portal)
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
