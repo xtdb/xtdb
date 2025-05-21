@@ -92,6 +92,7 @@ ASC : 'ASC' ;
 ASIN : 'ASIN' ;
 ASSERT : 'ASSERT' ;
 ASYMMETRIC: 'ASYMMETRIC' ;
+ASYNC : 'ASYNC' ;
 AT : 'AT' ;
 ATAN : 'ATAN' ;
 AVG : 'AVG' ;

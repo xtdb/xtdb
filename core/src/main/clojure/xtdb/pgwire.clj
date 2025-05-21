@@ -492,7 +492,7 @@
 
 (defn cmd-commit [{:keys [node conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf system-time access-mode default-tz]} transaction
+        {:keys [failed dml-buf system-time access-mode default-tz async?]} transaction
         {:keys [parameters]} session]
 
     (if failed
@@ -500,14 +500,21 @@
 
       (try
         (when (= :read-write access-mode)
-          (let [{:keys [tx-id error]} (xt/execute-tx node dml-buf
-                                                     {:default-tz default-tz
-                                                      :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
-                                                      :authn {:user (get parameters "user")}})]
-            (swap! conn-state assoc :watermark-tx-id tx-id)
+          (if async?
+            (let [tx-id (xt/submit-tx node dml-buf
+                                      {:default-tz default-tz
+                                       :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
+                                       :authn {:user (get parameters "user")}})]
+              (swap! conn-state assoc :watermark-tx-id tx-id))
 
-            (when error
-              (throw error))))
+            (let [{:keys [tx-id error]} (xt/execute-tx node dml-buf
+                                                       {:default-tz default-tz
+                                                        :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
+                                                        :authn {:user (get parameters "user")}})]
+              (swap! conn-state assoc :watermark-tx-id tx-id)
+
+              (when error
+                (throw error)))))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (throw e))
@@ -830,6 +837,9 @@
 
                                     (visitSystemTimeTxOption [_ ctx]
                                       {:system-time (sql/plan-expr (.systemTime ctx) env)})
+
+                                    (visitAsyncTxOption [_ ctx]
+                                      {:async? (boolean (sql/plan-expr (.async ctx) env))})
 
                                     (visitSnapshotTimeTxOption [_ ctx]
                                       {:snapshot-time (sql/plan-expr (.snapshotTime ctx) env)})

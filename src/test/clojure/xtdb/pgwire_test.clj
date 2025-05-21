@@ -2694,3 +2694,32 @@ ORDER BY 1,2;")
                :xt/valid-from #xt/zdt "2020-01-03Z[UTC]"}]
              (jdbc/execute! conn ["SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME ORDER BY _id, _valid_from"]
                             {:builder-fn xt-jdbc/builder-fn})))))
+
+(t/deftest begin-async
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["BEGIN READ WRITE WITH (ASYNC = TRUE)"])
+    (try
+      (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jms', given_name: 'James'}"])
+      (jdbc/execute! conn ["COMMIT"])
+      (catch Throwable t
+        (jdbc/execute! conn ["ROLLBACK"])
+        (throw t)))
+
+    (t/is (= [{:xt/id "jms", :given-name "James"}]
+             (jdbc/execute! conn ["SELECT * FROM users"]
+                            {:builder-fn xt-jdbc/builder-fn})))
+
+    (jdbc/execute! conn ["BEGIN READ WRITE WITH (ASYNC = TRUE)"])
+
+    (t/testing "shouldn't throw synchronously"
+      (try
+        (jdbc/execute! conn ["ASSERT 1 > 2"])
+        (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jdt', given_name: 'Jeremy'}"])
+        (jdbc/execute! conn ["COMMIT"])
+        (catch Throwable t
+          (jdbc/execute! conn ["ROLLBACK"])
+          (throw t))))
+
+    (t/is (= [{:xt/id "jms", :given-name "James"}]
+             (jdbc/execute! conn ["SELECT * FROM users"]
+                            {:builder-fn xt-jdbc/builder-fn})))))

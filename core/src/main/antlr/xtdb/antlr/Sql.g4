@@ -899,6 +899,7 @@ readOnlyTxOption
 
 readWriteTxOption
     : 'SYSTEM_TIME' '='? systemTime=expr # SystemTimeTxOption
+    | ASYNC '='? async=literal # AsyncTxOption
     | txTzOption # TxTzOption1
     ;
 
