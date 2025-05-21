@@ -940,9 +940,13 @@
 
             ^PreparedQuery pq (case statement-type
                                 (:query :execute) (xtp/prepare-sql node parsed-query query-opts)
+
                                 :show-variable
-                                (xtp/prepare-ra node (-> (xt/template [:table [{~(keyword (:variable stmt)) ?_0}]])
-                                                         (with-meta {:param-count 1}))
+                                (xtp/prepare-ra node (case (:variable stmt)
+                                                       "latest_completed_tx" (-> '[:table [{:tx-id ?_0, :system-time ?_1}]]
+                                                                                 (with-meta {:param-count 2}))
+                                                       (-> (xt/template [:table [{~(keyword (:variable stmt)) ?_0}]])
+                                                           (with-meta {:param-count 1})))
                                                 query-opts))]
 
         (when-let [warnings (.getWarnings pq)]
@@ -1017,7 +1021,7 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [statement-type prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [node conn-state allocator] :as conn} {:keys [statement-type prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction watermark-tx-id]} @conn-state
         {:keys [^Clock clock], {:strs [fallback_output_format] :as session-params} :parameters} session
         after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)
@@ -1047,10 +1051,12 @@
                             :fields (->fields bq))))
 
         :show-variable (let [{:keys [variable]} stmt
-                             bq (->bq [(case variable
-                                         :watermark (when-not (neg? after-tx-id)
-                                                      after-tx-id)
-                                         (get session-params variable))])]
+                             bq (->bq (case variable
+                                        :watermark [(when-not (neg? after-tx-id)
+                                                      after-tx-id)]
+                                        "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
+                                                                    [:tx-id :system-time])
+                                        [(get session-params variable)]))]
                          (-> stmt
                              (assoc :bound-query bq,
                                     :fields (->fields bq))))

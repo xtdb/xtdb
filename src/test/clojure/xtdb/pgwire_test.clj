@@ -1716,6 +1716,9 @@
     (t/is (= [{:watermark 0}]
              (q conn ["SHOW WATERMARK"])))
 
+    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
+             (q conn ["SHOW LATEST_COMPLETED_TX"])))
+
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
     (t/is (= [{:watermark 1}]
@@ -1725,6 +1728,9 @@
 
     (t/is (= [{:watermark 0}]
              (q conn ["SHOW WATERMARK"])))
+
+    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
+             (q conn ["SHOW LATEST_COMPLETED_TX"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
