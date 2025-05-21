@@ -22,7 +22,7 @@
 
 (t/deftest test-simple-query
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])]
-    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
              (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
@@ -40,7 +40,7 @@
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
                                  [:sql "INSERT INTO docs (_id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                   [4]]])]
-    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
@@ -55,7 +55,7 @@
 
 (t/deftest round-trips-sets
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
-    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
              (xt/q *node* '(from :docs [{:xt/id id} v]))))
@@ -66,7 +66,7 @@
 (t/deftest round-trips-structs
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
                                  [:put-docs :docs {:xt/id :bar, :struct {:a true, :d 42.0}}]])]
-    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
@@ -107,12 +107,13 @@
   (let [tx1 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo}]]
                            {:system-time #inst "2012"})
 
-        _invalid-tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :bar}]]
-                                   {:system-time #inst "2011"})
+        _ (t/is (thrown? IllegalArgumentException
+                                   (xt/execute-tx *node* [[:put-docs :docs {:xt/id :bar}]]
+                                                  {:system-time #inst "2011"})))
 
         tx3 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :baz}]])]
 
-    (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2012"))
+    (t/is (= (serde/->TxKey 0 (time/->instant #inst "2012"))
              tx1))
 
     (letfn [(q-at [tx]
@@ -183,7 +184,7 @@
                          ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
                          ["Susan" "Smith", (time/->zdt #inst "2021") nil]}]
 
-      (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01")) tx1))
+      (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01")) tx1))
 
       (t/is (= tx1-expected (all-users tx1)))
 
@@ -210,14 +211,14 @@
           (t/is (= tx1-expected (all-users tx1))))))))
 
 (deftest test-sql-insert
-  (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
+  (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
            (xt/execute-tx *node*
                           [[:sql "INSERT INTO users (_id, name, _valid_from) VALUES (?, ?, ?)"
                             ["dave", "Dave", #inst "2018"]
                             ["claire", "Claire", #inst "2019"]]])))
 
 
-  (t/is (= (serde/->tx-committed 1 (time/->instant #inst "2020-01-02"))
+  (t/is (= (serde/->TxKey 1 (time/->instant #inst "2020-01-02"))
            (xt/execute-tx *node*
                           ["INSERT INTO people (_id, renamed_name)
                             SELECT users._id, users.name
@@ -227,7 +228,7 @@
   (t/is (= [{:renamed-name "Claire"}]
            (xt/q *node* "SELECT renamed_name FROM people")))
 
-  (t/is (= (serde/->tx-committed 2 (time/->instant #inst "2020-01-03"))
+  (t/is (= (serde/->TxKey 2 (time/->instant #inst "2020-01-03"))
            (xt/execute-tx *node*
                           ["INSERT INTO people (_id, renamed_name, _valid_from)
                             SELECT users._id, users.name, users._valid_from
@@ -312,11 +313,9 @@
                     :xt/valid-from (time/->zdt #inst "2020-01-01")}}
                  (q tx1)))))))
 
-(t/deftest returns-dml-errors-through-execute-tx
-  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])]
-    (t/is (false? committed?))
-    (t/is (thrown-with-msg? IllegalArgumentException #"Errors parsing SQL statement"
-                            (throw error))))
+(t/deftest execute-tx-throws-dml-errors
+  (t/is (thrown-with-msg? IllegalArgumentException #"Errors parsing SQL statement"
+                          (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])))
 
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* ["INSERT INTO users (_id, name) VALUES ('dave', 'Dave')"])

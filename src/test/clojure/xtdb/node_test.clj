@@ -379,21 +379,19 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-txs-table-485
   (logging/with-log-level 'xtdb.indexer :error
-    (t/is (= (serde/->tx-committed 0 #xt/instant "2020-01-01T00:00:00Z")
+    (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 
-    (t/is (= (serde/->tx-aborted 1 #xt/instant "2020-01-02T00:00:00Z" nil)
-             (xt/execute-tx tu/*node* [[:abort]])))
+    (t/is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Transaction failed"
+                            (xt/execute-tx tu/*node* [[:abort]])))
 
-    (t/is (= (serde/->tx-committed 2 #xt/instant "2020-01-03T00:00:00Z")
+    (t/is (= (serde/->TxKey 2 #xt/instant "2020-01-03T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))
 
-    (t/is (= (serde/->tx-aborted 3 #xt/instant "2020-01-04T00:00:00Z"
-                                 #xt/runtime-err [:xtdb/assert-failed "boom" {}])
-             (-> (xt/execute-tx tu/*node* ["ASSERT 1 = 2, 'boom'"])
-
-                 ;; can't compare `:cause`, because Exceptions are identity-equal
-                 (update :error (comp read-string pr-str)))))
+    (let [ex (t/is (thrown? RuntimeException
+                            (xt/execute-tx tu/*node* ["ASSERT 1 = 2, 'boom'"])))]
+      (t/is (= #xt/runtime-err [:xtdb/assert-failed "boom" {}] ex)))
 
     (t/is (= #{{:tx-id 0, :system-time (time/->zdt #inst "2020-01-01"), :committed? true}
                {:tx-id 1, :system-time (time/->zdt #inst "2020-01-02"), :committed? false}
@@ -406,25 +404,19 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (xt/q tu/*node*
                    ['#(from :xt/txs [{:xt/id %, :committed committed?}]) 1])))
 
-    (t/is (thrown-with-msg?
-           RuntimeException
-           #"boom"
-
-           (throw (-> (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])
-                      first
-                      :err))))))
+    (t/is (= #xt/runtime-err [:xtdb/assert-failed "boom" {}]
+             (-> (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])
+                 first
+                 :err)))))
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
-    (t/is (= (serde/->tx-aborted 0 #xt/instant "2020-01-01T00:00:00Z"
-                                 #xt/runtime-err [:xtdb.indexer/invalid-valid-times
-                                                  "Runtime error: 'xtdb.indexer/invalid-valid-times'"
-                                                  {:valid-from #xt/instant "2030-01-01T00:00:00Z"
-                                                   :valid-to #xt/instant "2020-01-01T00:00:00Z"}])
-             (xt/execute-tx tu/*node*
-                            [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to)
-                               VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
-                                      (1, DATE '2030-01-01', DATE '2020-01-01')"]])))
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Errors planning SQL statement:\s*- Cannot parse date:"
+                            (xt/execute-tx tu/*node*
+                                           [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to)
+                                                  VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
+                                                         (1, DATE '2030- 01-01', DATE '2020-01-01')"]])))
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
@@ -1055,7 +1047,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                (xt/q node "SELECT * FROM docs"))))))
 
 (t/deftest ingestion-stopped-on-null-col-ref-4259
-  (t/is (false? (:committed? (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"])))))
+  (t/is (thrown-with-msg? RuntimeException
+                          #"Invalid ID type"
+                          (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"]))))
 
 (t/deftest test-field-mismatch-4271
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1.5}"])

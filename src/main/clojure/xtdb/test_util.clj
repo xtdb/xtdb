@@ -4,7 +4,6 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [next.jdbc.prepare :as jdbc.prep]
             [xtdb.api :as xt]
             [xtdb.client :as xtc]
             [xtdb.indexer :as idx]
@@ -26,7 +25,6 @@
            (java.nio.channels Channels)
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           (java.sql PreparedStatement Types)
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
            (java.util LinkedList)

@@ -325,9 +325,9 @@
 (deftest DML-Delete-additional-unify-clauses-sql
   (xt/submit-tx tu/*node* (concat posts comments))
 
-  (t/is (:committed? (xt/execute-tx tu/*node*
-                                    [[:sql (sql-example "DML-Delete-additional-unify-clauses-sql")
-                                      ["ivan"]]])))
+  (t/is (xt/execute-tx tu/*node*
+                       [[:sql (sql-example "DML-Delete-additional-unify-clauses-sql")
+                         ["ivan"]]]))
 
   (t/is (empty? (xt/q tu/*node*
                       ['(fn [author]
@@ -355,8 +355,8 @@
                           (from :promotions {:bind [promotion-type]
                                              :for-valid-time (from #inst "2023-12-26")}))))))
 
-  (t/is (:committed? (xt/execute-tx tu/*node*
-                                    [[:sql (sql-example "DML-Delete-bitemporal-sql")]])))
+  (t/is (xt/execute-tx tu/*node*
+                       [[:sql (sql-example "DML-Delete-bitemporal-sql")]]))
 
   (t/is (= #{{:promotion-type "general"}}
            (set
@@ -385,9 +385,9 @@
   (t/is (= [{:version 1}]
            (xt/q tu/*node* '(from :documents [version]))))
 
-  (t/is (:committed? (xt/execute-tx tu/*node*
-                                    [[:sql (sql-example "DML-Update-sql")
-                                      ["doc-id"]]])))
+  (t/is (xt/execute-tx tu/*node*
+                       [[:sql (sql-example "DML-Update-sql")
+                         ["doc-id"]]]))
 
   (t/is (= [{:version 2}]
            (xt/q tu/*node* '(from :documents [version])))))

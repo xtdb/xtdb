@@ -167,9 +167,9 @@
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
       (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
-        (t/is (true? (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                                       [:put-docs :bar {:xt/id "bar2"}]
-                                                       [:put-docs :bar {:xt/id "bar3"}]]))))
+        (t/is (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                   [:put-docs :bar {:xt/id "bar2"}]
+                                   [:put-docs :bar {:xt/id "bar3"}]]))
 
         (tu/finish-block! node)
 

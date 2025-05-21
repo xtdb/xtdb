@@ -651,8 +651,12 @@
       (t/testing test-name
         (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
           (xt/execute-tx node [[:put-docs :docs
-                                {:xt/id 1, :version 1 :xt/valid-from vf1 :xt/valid-to vt1}
-                                {:xt/id 1, :version 2 :xt/valid-from vf2 :xt/valid-to vt2}]])
+                                (cond-> {:xt/id 1, :version 1}
+                                  vf1 (assoc :xt/valid-from vf1)
+                                  vt1 (assoc :xt/valid-to vt1))
+                                (cond-> {:xt/id 1, :version 2}
+                                  vf2 (assoc :xt/valid-from vf2)
+                                  vt2 (assoc :xt/valid-to vt2))]])
 
           (let [res-before-compaction (xt/q node q)]
             (tu/finish-block! node)

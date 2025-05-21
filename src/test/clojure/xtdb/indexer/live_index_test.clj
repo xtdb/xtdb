@@ -115,8 +115,10 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
 
-          (let [{:keys [tx-id]} (last (for [tx-ops txs] (xt/execute-tx node tx-ops)))]
-            (tu/then-await-tx tx-id node (Duration/ofSeconds 2)))
+          (doseq [tx-ops txs]
+            (try
+              (xt/execute-tx node tx-ops)
+              (catch xtdb.RuntimeException _)))
 
           (tu/finish-block! node)
 

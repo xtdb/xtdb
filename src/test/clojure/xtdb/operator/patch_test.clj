@@ -1,10 +1,11 @@
 (ns xtdb.operator.patch-test
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.types :as types]
-            [xtdb.compactor :as c]))
+            [xtdb.types :as types]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
@@ -111,19 +112,23 @@
 (t/deftest patch-with-forbidden-columns-fails-4120
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 1}"]])
 
-  (t/is (false? (-> (xt/execute-tx tu/*node*
-                                   ["PATCH INTO docs RECORDS {_id: 1,
-                                                                _valid_from: TIMESTAMP '2020-01-01 00:00:00+00:00',
-                                                                _valid_to: TIMESTAMP '2030-01-01 00:00:00+00:00'}"])
-                    :committed?))
-        "patching with forbidden columns directly")
+  (let [ex-msg (ex-message
+                (t/is (thrown? IllegalArgumentException
+                               (xt/execute-tx tu/*node*
+                                              ["PATCH INTO docs RECORDS {_id: 1,
+                                                                         _valid_from: TIMESTAMP '2020-01-01 00:00:00+00:00',
+                                                                         _valid_to: TIMESTAMP '2030-01-01 00:00:00+00:00'}"]))
+                      "patching with forbidden columns directly"))]
+    (t/is (str/includes? ex-msg "Cannot PATCH (_valid_from _valid_to) column")))
 
   (t/testing "patching with forbidden columns in parameters"
-    (t/is (false? (-> (xt/execute-tx tu/*node* [[:sql "PATCH INTO docs RECORDS ? "
-                                                 [{:_id 1
-                                                   :_valid_from (time/->zdt #inst "2022")
-                                                   :_valid_to (time/->zdt #inst "2028")}]]])
-                      :committed?))))
+    (let [ex-msg (ex-message
+                  (t/is (thrown? IllegalArgumentException
+                                 (xt/execute-tx tu/*node* [[:sql "PATCH INTO docs RECORDS ? "
+                                                            [{:_id 1
+                                                              :_valid_from (time/->zdt #inst "2022")
+                                                              :_valid_to (time/->zdt #inst "2028")}]]]))))]
+      (t/is (str/includes? ex-msg "Cannot PATCH (_valid_from _valid_to) column"))))
 
   (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))

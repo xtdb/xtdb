@@ -166,7 +166,8 @@
 
      [:sql \"UPDATE foo SET b = 1\"]]
 
-  Returns a map with details about the submitted transaction, including system-time and tx-id.
+  If the transaction fails - either due to an error or a failed assert, this function will throw.
+  Otherwise, returns a map with details about the submitted transaction, including system-time and tx-id.
 
   opts (map):
    - :system-time
@@ -182,7 +183,10 @@
 
   (^TransactionKey [node, tx-ops] (execute-tx node tx-ops {}))
   (^TransactionKey [node, tx-ops tx-opts]
-   (xtp/execute-tx node (vec tx-ops) tx-opts)))
+   (let [{:keys [tx-id system-time committed? error]} (xtp/execute-tx node (vec tx-ops) tx-opts)]
+     (if committed?
+       (serde/->TxKey tx-id system-time)
+       (throw (or error (ex-info "Transaction failed." {})))))))
 
 (defn status
   "Returns the status of this node as a map,

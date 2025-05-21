@@ -28,7 +28,7 @@ SQL transactions are submitted through `xtdb.api/execute-tx` and `xtdb.api/submi
 ** `opts` (map):
 *** `:default-tz` (`java.time.ZoneRegion`): time zone to be used by default in functions where no explicit override is provided.
     Defaults to the current TZ of the server JVM.
-* `(xt/execute-tx <node> <tx-ops> <opts>?)` : additionally awaits for the transaction to be processed, and returns `{:committed? true|false, :error err}` alongside the transaction key.
+* `(xt/execute-tx <node> <tx-ops> <opts>?)` : additionally awaits for the transaction to be processed, and throws if the transaction fails (either through error, or assertion failure).
 
 SQL transaction operations are of the form `[:sql "<sql query>"]`.
 

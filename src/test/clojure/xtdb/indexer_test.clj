@@ -532,7 +532,7 @@
         (let [block-cat (block-cat/<-node node)]
           (t/is (nil? (.getCurrentBlockIndex block-cat)))
 
-          (t/is (= (serde/->tx-committed 0 (time/->instant #inst "2020-01-01"))
+          (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                          [0, 2, "hello", 12]
                                          [1, 1, "world", 3.3]]])))
@@ -551,21 +551,17 @@
                           (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
-  (t/is (= {:tx-id 0,
-            :committed? false,
-            :error #xt/illegal-arg [:xtdb.indexer/invalid-sql-tx-op
-                                    "Invalid SQL query sent as transaction operation"
-                                    {:query "SELECT _id, foo FROM docs"}]}
-           (-> (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]])
-               (dissoc :system-time)))))
+  (let [ex (t/is (thrown? IllegalArgumentException
+                          (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]])))]
+    (t/is (= #xt/illegal-arg [:xtdb.indexer/invalid-sql-tx-op
+                              "Invalid SQL query sent as transaction operation"
+                              {:query "SELECT _id, foo FROM docs"}]
+             ex))))
 
 (t/deftest above-max-long-halts-ingestion-3495
-  (t/is (= (str/trim "
-Errors planning SQL statement:
-  - Cannot parse integer: 9223372036854775808")
-           (-> (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]])
-               (:error)
-               (ex-message)))))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Cannot parse integer: 9223372036854775808"
+                          (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]]))))
 
 (t/deftest hyphen-in-struct-key-halts-ingestion-3388
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
@@ -637,10 +633,9 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
   ;; will likely have to remove this once we actually implement list concat
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :list [1 2]}]])
 
-  (let [{:keys [committed? error]} (xt/execute-tx tu/*node* ["UPDATE docs SET list = list || [3]"])]
-    (t/is (false? committed?))
-    (t/is (instance? IllegalArgumentException error))
-    (t/is (= "No matching clause: [:list :i64]" (ex-message error))))
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"^No matching clause: \[:list :i64\]$"
+                          (xt/execute-tx tu/*node* ["UPDATE docs SET list = list || [3]"])))
 
   (t/is (= [{:xt/id 1, :list [1 2]}]
            (xt/q tu/*node* "SELECT * FROM docs")))

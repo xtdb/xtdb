@@ -4,6 +4,7 @@ import clojure.lang.IExceptionInfo
 import clojure.lang.IPersistentMap
 import clojure.lang.Keyword
 import clojure.lang.PersistentHashMap
+import clojure.lang.Util
 
 private val ERROR_KEY: Keyword = Keyword.intern("xtdb.error", "error-key")
 
@@ -21,6 +22,25 @@ data class IllegalArgumentException(
     override fun getData(): IPersistentMap =
         (data as? IPersistentMap ?: PersistentHashMap.create(data)).assoc(ERROR_KEY, key)
 
+    // exclude `cause`
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is IllegalArgumentException) return false
+
+        if (key != other.key) return false
+        if (message != other.message) return false
+        if (!Util.equiv(data, other.data)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = key?.hashCode() ?: 0
+        result = 31 * result + (message?.hashCode() ?: 0)
+        result = 31 * result + Util.hash(data)
+        return result
+    }
+
     /**
      * @suppress
      */
@@ -35,4 +55,6 @@ data class IllegalArgumentException(
         fun create(key: Keyword?, data: Map<*, *>, cause: Throwable? = null) =
             IllegalArgumentException(key, data = data, cause = cause)
     }
+
+
 }

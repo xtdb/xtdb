@@ -1,18 +1,10 @@
 (ns ^:kafka xtdb.kafka-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.nio ByteBuffer]
-           [java.time Duration]
-           [java.util Map]
-           [org.apache.kafka.clients.admin AdminClient NewTopic]
-           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
-           [org.apache.kafka.clients.producer KafkaProducer ProducerRecord]
-           [org.apache.kafka.common TopicPartition]
-           org.apache.kafka.common.KafkaException
+  (:import org.apache.kafka.common.KafkaException
            org.testcontainers.containers.GenericContainer
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName
@@ -50,7 +42,7 @@
   (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log [:kafka {:bootstrap-servers *bootstrap-servers*
                                                     :topic (str "xtdb.kafka-test." test-uuid)}]})]
-      (t/is (true? (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))
+      (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))
 
       (t/is (= [{:xt/id :foo}]
                (tu/query-ra '[:scan {:table public/xt_docs} [_id]]
@@ -80,7 +72,7 @@
                                         :storage [:remote {:object-store [:in-memory {}]
                                                            :local-disk-cache path}]})]
         (t/testing "Send a transaction"
-          (t/is (= true (:committed? (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))))
+          (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))
 
       (t/testing "should be no 'xtdb-tx-subscription' threads remaining"
         (let [all-threads (.keySet (Thread/getAllStackTraces))
