@@ -448,14 +448,14 @@
 ;; (when we introduce read transactions I will probably extend this to short-lived transactions)
 (deftest close-drains-active-extended-queries-before-stopping-test
   (util/with-open [server (serve {:num-threads 10})]
-    (let [parse @#'pgwire/parse
+    (let [parse-sql @#'pgwire/parse-sql
           {:keys [!closing?]} server
           latch (CountDownLatch. 10)]
       ;; redefine parse to block when we ping
-      (with-redefs [pgwire/parse
-                    (fn [conn {:keys [query] :as cmd}]
+      (with-redefs [pgwire/parse-sql
+                    (fn [query]
                       (if-not (str/starts-with? query "select 'ping'")
-                        (parse conn cmd)
+                        (parse-sql query)
                         (do
                           (.countDown latch)
                           ;; delay until we see a draining state
@@ -463,7 +463,7 @@
                             (when (and (< (System/currentTimeMillis) wait-until)
                                        (not @!closing?))
                               (recur wait-until)))
-                          (parse conn cmd))))]
+                          (parse-sql query))))]
         (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
               futs (vec (repeatedly 10 spawn))]
 

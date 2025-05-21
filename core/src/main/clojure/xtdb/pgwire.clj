@@ -661,7 +661,7 @@
 
       (case statement-type
         :canned-response (cmd-describe-canned-response conn canned-response)
-        (:query :dml) (describe* describe-target)
+        (:query :dml :show-watermark :show-variable) (describe* describe-target)
 
         :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
                    (describe* {:param-oids (:param-oids describe-target)
@@ -761,7 +761,7 @@
   [sql-str]
   (when sql-str (first (filter #(probably-same-query? sql-str (:q %)) canned-responses))))
 
-(defn- interpret-sql [sql {:keys [session-parameters]}]
+(defn parse-sql [sql]
   (log/debug "Interpreting SQL: " sql)
   (let [sql (trim-sql sql)]
     (or (when (str/blank? sql)
@@ -907,9 +907,7 @@
                                           (throw (pgio/err-protocol-violation "invalid watermark - expecting number")))))
 
                                     (visitShowWatermarkStatement [_ _]
-                                      {:statement-type :query, :query sql
-                                       :ra-plan [:table '[watermark]
-                                                 [{:watermark '(after-tx-id)}]]})
+                                      {:statement-type :show-variable, :query sql, :variable :watermark})
 
                                     (visitShowSnapshotTimeStatement [_ ctx]
                                       {:statement-type :query, :query sql, :parsed-query ctx})
@@ -917,41 +915,20 @@
                                     (visitShowClockTimeStatement [_ ctx]
                                       {:statement-type :query, :query sql, :parsed-query ctx})
 
-                                    ;; HACK: these values are fixed at prepare-time - if they were to change,
-                                    ;; and the same prepared statement re-evaluated, the value would be stale.
                                     (visitShowSessionVariableStatement [_ ctx]
-                                      (let [k (session-param-name (.identifier ctx))]
-                                        {:statement-type :query, :query sql
-                                         :ra-plan [:table (if-let [v (get session-parameters k)]
-                                                            [{(keyword k) v}]
-                                                            [])]}))))))))
+                                      {:statement-type :show-variable
+                                       :query sql
+                                       :variable (session-param-name (.identifier ctx))})))))))
 
           (catch Exception e
             (log/debug e "Error parsing SQL")
             (throw e))))))
 
-(defn parse
-  "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state]} {:keys [query]}]
-
-  (interpret-sql query {:session-parameters (get-in @conn-state [:session :parameters])}))
-
-(defn resolve-defaulted-params [declared-params inferred-params]
-  (let [declared-params (vec declared-params)]
-    (->> inferred-params
-         (map-indexed (fn [idx inf-param]
-                        (if-let [dec-param (nth declared-params idx nil)]
-                          (if (zero? (:oid dec-param))
-                            inf-param
-                            dec-param)
-                          inf-param))))))
-
 (defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
-  (if-not (contains? #{:query :execute} statement-type)
-    stmt
-
+  (case statement-type
+    (:query :execute :show-variable)
     (try
-      (let [{:keys [ra-plan, ^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
+      (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
 
             {:keys [session watermark-tx-id]} @conn-state
             {:keys [^Clock clock]} session
@@ -961,9 +938,12 @@
                         :default-tz (.getZone clock)
                         :explain? explain?}
 
-            ^PreparedQuery pq (if ra-plan
-                                (xtp/prepare-ra node ra-plan query-opts)
-                                (xtp/prepare-sql node parsed-query query-opts))]
+            ^PreparedQuery pq (case statement-type
+                                (:query :execute) (xtp/prepare-sql node parsed-query query-opts)
+                                :show-variable
+                                (xtp/prepare-ra node (-> (xt/template [:table [{~(keyword (:variable stmt)) ?_0}]])
+                                                         (with-meta {:param-count 1}))
+                                                query-opts))]
 
         (when-let [warnings (.getWarnings pq)]
           (doseq [warning warnings]
@@ -996,12 +976,14 @@
         (throw e))
       (catch Throwable e
         (log/error e "Error preparing statement")
-        (throw e)))))
+        (throw e)))
+
+    stmt))
 
 (defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [stmt-name param-oids] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
 
-  (let [[stmt & more-stmts] (parse conn msg-data)]
+  (let [[stmt & more-stmts] (parse-sql (:query msg-data))]
     (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
 
     (let [prepared-stmt (prep-stmt conn (-> stmt (assoc :param-oids param-oids)))]
@@ -1013,7 +995,7 @@
 
 (defn cmd-prepare [{:keys [conn-state] :as conn} {:keys [statement-name inner] :as _portal}]
   (let [{:keys [query]} inner
-        [prepared-stmt & more-stmts] (parse conn {:query query})]
+        [prepared-stmt & more-stmts] (parse-sql query)]
     (when (seq more-stmts)
       (throw (UnsupportedOperationException. "Multiple statements in a single PREPARE are not supported")))
 
@@ -1037,18 +1019,19 @@
 
 (defn bind-stmt [{:keys [conn-state allocator] :as conn} {:keys [statement-type prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction watermark-tx-id]} @conn-state
-        {:keys [^Clock clock], {:strs [fallback_output_format]} :parameters} session
+        {:keys [^Clock clock], {:strs [fallback_output_format] :as session-params} :parameters} session
+        after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)
 
         query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
                     :current-time (or (:current-time stmt)
                                       (:current-time transaction)
                                       (.instant clock))
                     :default-tz (or (:default-tz transaction) (.getZone clock))
-                    :after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)}
+                    :after-tx-id after-tx-id}
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->bq []
+    (letfn [(->bq [xt-args]
               (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                 (.bind ^PreparedQuery prepared-query (assoc query-opts :args args-rel))))
 
@@ -1058,12 +1041,21 @@
                   (throw (pgio/err-protocol-violation "invalid result format"))))]
 
       (case statement-type
-        :query (let [bq (->bq)]
+        :query (let [bq (->bq xt-args)]
                  (-> stmt
                      (assoc :bound-query bq,
                             :fields (->fields bq))))
 
-        :execute (let [^BoundQuery bq (->bq)]
+        :show-variable (let [{:keys [variable]} stmt
+                             bq (->bq [(case variable
+                                         :watermark (when-not (neg? after-tx-id)
+                                                      after-tx-id)
+                                         (get session-params variable))])]
+                         (-> stmt
+                             (assoc :bound-query bq,
+                                    :fields (->fields bq))))
+
+        :execute (let [^BoundQuery bq (->bq xt-args)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
                    ;; so now we bind the inner query and pretend this was the one we were running all along
                    (try
@@ -1155,7 +1147,7 @@
               (cmd-commit conn)
               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    :query (cmd-exec-query conn portal)
+    (:query :show-watermark :show-variable) (cmd-exec-query conn portal)
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1174,7 +1166,7 @@
   (close-portal conn "")
 
   (try
-    (doseq [stmt (parse conn {:query query})]
+    (doseq [stmt (parse-sql query)]
       (when-not (boolean (:transaction @conn-state))
         (cmd-begin conn {:implicit? true} {}))
 
