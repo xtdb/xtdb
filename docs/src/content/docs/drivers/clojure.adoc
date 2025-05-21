@@ -34,8 +34,7 @@ Then, once you've link:/intro/installation-via-docker[started the XTDB node], fo
 
 (with-open [conn (jdbc/get-connection "jdbc:xtdb://localhost/xtdb")]
   (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'jms', first_name: 'James'}"])
-  (jdbc/execute! conn ["INSERT INTO users RECORDS ?"
-                       (xt-jdbc/->pg-obj {:xt/id "joe", :first-name "Joe"})])
+  (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "joe", :first-name "Joe"}])
 
   (prn (jdbc/execute! conn ["SELECT * FROM users"]))
   ;; => [{:_id "joe", :first_name "Joe"}
