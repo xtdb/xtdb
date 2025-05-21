@@ -1859,6 +1859,16 @@ ORDER BY t.oid DESC LIMIT 1"
                                                       :from :users}))))
             "no transformers"))))
 
+(t/deftest test-pgjdbc-type-query
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["BEGIN READ WRITE"])
+    (try
+      (jdbc/execute! conn ["INSERT INTO foo RECORDS ?" {:xt/id "foo"}])
+      (jdbc/execute! conn ["COMMIT"])
+      (catch Throwable t
+        (jdbc/execute! conn ["ROLLBACK"])
+        (throw t)))))
+
 (deftest test-nested-transit
   (with-open [conn (jdbc-conn)]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1, nest: {ts: TIMESTAMP '2020-01-01Z'}}"])

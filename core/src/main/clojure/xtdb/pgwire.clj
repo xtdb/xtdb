@@ -692,9 +692,13 @@
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
+(def ^:private pgjdbc-type-query
+  ;; need to allow this one in RW transactions
+  "SELECT pg_type.oid, typname FROM pg_catalog.pg_type LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r from pg_namespace as ns join ( select s.r, (current_schemas(false))[s.r] as nspname from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r using ( nspname ) ) as sp ON sp.nspoid = typnamespace WHERE typname = $1 ORDER BY sp.r, pg_type.oid DESC LIMIT 1")
+
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
-  [{:keys [conn-state server]} {:keys [statement-type]}]
+  [{:keys [conn-state server]} {:keys [statement-type] :as stmt}]
   (let [{:keys [access-mode]} (:transaction @conn-state)]
     (cond
       (and (= :dml statement-type) (:read-only? server))
@@ -703,7 +707,8 @@
       (and (= :dml statement-type) (= :read-only access-mode))
       (pgio/err-protocol-violation "DML is not allowed in a READ ONLY transaction")
 
-      (and (= :query statement-type) (= :read-write access-mode))
+      (and (= :query statement-type) (= :read-write access-mode)
+           (not= pgjdbc-type-query (str/replace (:query stmt) #"  +" " ")))
       (pgio/err-protocol-violation "Queries are unsupported in a DML transaction"))))
 
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
