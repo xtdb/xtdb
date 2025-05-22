@@ -392,8 +392,9 @@
         (let [param-rel (vr/<-root param-root)
               selection (int-array 1)]
           (dotimes [idx (.getRowCount param-rel)]
-            (aset selection 0 idx)
-            (eval-query (-> param-rel (.select selection)))))))))
+            (err/wrap-anomaly {:arg-idx idx}
+              (aset selection 0 idx)
+              (eval-query (-> param-rel (.select selection))))))))))
 
 (defn- patch-rel! [table-name ^LiveTable$Tx live-table, ^RelationReader rel {:keys [indexer tx-key]}]
   (let [iid-rdr (.vectorForOrNull rel "_iid")
@@ -433,10 +434,9 @@
                 (when-let [forbidden-cols (not-empty (->> ks
                                                           (into #{} (filter (every-pred #(str/starts-with? % "_")
                                                                                         (complement #{"_id" "_fn"}))))))]
-                  (throw (err/illegal-arg :xtdb/forbidden-columns
-                                          {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
-                                           :table-name table-name
-                                           :forbidden-cols forbidden-cols})))
+                  (throw (err/incorrect :xtdb/forbidden-columns
+                                        (str "Cannot put documents with columns: " (pr-str forbidden-cols))
+                                        {:table-name table-name, :forbidden-cols forbidden-cols})))
 
                 (let [live-table (.liveTable live-idx-tx table-name)]
                   (reify OpIndexer
@@ -539,51 +539,52 @@
         erase-idxer (->erase-rel-indexer live-idx-tx tx-opts)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
-          (let [query-str (.getObject query-rdr tx-op-idx)
-                compiled-query (.planQuery q-src query-str wm-src
-                                           {:arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields))})
-                param-count (:param-count (meta compiled-query))]
+        (let [query-str (.getObject query-rdr tx-op-idx)]
+          (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
+            (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
+              (let [compiled-query (.planQuery q-src query-str wm-src
+                                               {:arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields))})
+                    param-count (:param-count (meta compiled-query))]
 
-            (zmatch (r/vector-zip compiled-query)
-              [:insert query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                (zmatch (r/vector-zip compiled-query)
+                  [:insert query-opts inner-query]
+                  (foreach-arg-row args-arrow-rdr
+                                   (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                       (wrap-sql-args param-count)))
 
-              [:patch query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src patch-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                  [:patch query-opts inner-query]
+                  (foreach-arg-row args-arrow-rdr
+                                   (-> (query-indexer q-src wm-src patch-idxer inner-query tx-opts query-opts)
+                                       (wrap-sql-args param-count)))
 
-              [:update query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                  [:update query-opts inner-query]
+                  (foreach-arg-row args-arrow-rdr
+                                   (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                       (wrap-sql-args param-count)))
 
-              [:delete query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                  [:delete query-opts inner-query]
+                  (foreach-arg-row args-arrow-rdr
+                                   (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                       (wrap-sql-args param-count)))
 
-              [:erase query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                  [:erase query-opts inner-query]
+                  (foreach-arg-row args-arrow-rdr
+                                   (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                       (wrap-sql-args param-count)))
 
-              [:assert query-opts inner-query]
-              (foreach-arg-row args-arrow-rdr
-                               (-> (->assert-idxer q-src wm-src inner-query tx-opts query-opts)
-                                   (wrap-sql-args param-count)))
+                  [:assert query-opts inner-query]
+                  (foreach-arg-row args-arrow-rdr
+                                   (-> (->assert-idxer q-src wm-src inner-query tx-opts query-opts)
+                                       (wrap-sql-args param-count)))
 
-              [:create-user user password]
-              (update-pg-user! live-idx-tx tx-key user password)
+                  [:create-user user password]
+                  (update-pg-user! live-idx-tx tx-key user password)
 
-              [:alter-user user password]
-              (update-pg-user! live-idx-tx tx-key user password)
+                  [:alter-user user password]
+                  (update-pg-user! live-idx-tx tx-key user password)
 
-              (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
-                                    {:query query-str})))))
+                  (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
+                                        {:query query-str})))))))
 
         nil))))
 

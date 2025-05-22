@@ -288,7 +288,10 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "DML is not allowed in a READ ONLY transaction"
-                                       :detail nil}}]
+                                       :detail {:category "cognitect.anomalies/incorrect",
+                                                :code "xtdb/dml-in-read-only-tx",
+                                                :query "INSERT INTO foo RECORDS {_id: 1}",
+                                                :message "DML is not allowed in a READ ONLY transaction"}}}]
                 [:msg-ready {:status :idle}]]
 
                (test "SELECT 1 one; INSERT INTO foo RECORDS {_id: 1}"))))
@@ -299,7 +302,10 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "Queries are unsupported in a DML transaction"
-                                       :detail nil}}]
+                                       :detail {:category "cognitect.anomalies/incorrect",
+                                                :code "xtdb/queries-in-read-write-tx",
+                                                :query "SELECT 1 one",
+                                                :message "Queries are unsupported in a DML transaction"}}}]
                 [:msg-ready {:status :idle}]]
 
                (test "INSERT INTO foo RECORDS {_id: 1}; SELECT 1 one"))))

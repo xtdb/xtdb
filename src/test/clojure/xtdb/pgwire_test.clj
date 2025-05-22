@@ -13,7 +13,6 @@
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
-            [xtdb.pgwire :as pgw]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -1285,7 +1284,9 @@
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
     (t/is (= [{:xt/id 2, :committed false,
-               :error #xt/error [:conflict :xtdb/assert-failed "Assert failed" {}]}
+               :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
+                                 {:arg-idx 0, :sql "ASSERT 1 = (SELECT COUNT(*) FROM foo)", :tx-op-idx 0
+                                  :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]}
               {:xt/id 1, :committed true}
               {:xt/id 0, :committed true}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
@@ -1743,7 +1744,9 @@
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 
     (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false
-               :error #xt/error [:conflict :xtdb/assert-failed "Assert failed" {}]}]
+               :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
+                                 {:arg-idx 0, :sql "ASSERT FALSE", :tx-op-idx 0,
+                                  :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))))
 
 (t/deftest test-show-session-variable-3804
@@ -1790,7 +1793,7 @@
                (resolve-result-format [:text :binary] field-count))
             "format provided for each field, applies to each by index"))
 
-    (t/is (anomalous? [:incorrect ::pgw/invalid-result-format nil
+    (t/is (anomalous? [:incorrect ::pgwire/invalid-result-format nil
                        {:result-format [:text :binary], :type-count 3}]
                       (resolve-result-format [:text :binary] 3))
           "if more than 1 format is provided and it doesn't match the field count this is invalid")))
@@ -2561,7 +2564,9 @@ ORDER BY 1,2;")
     (testing "outside transaction"
       (t/is (= {:sql-state "P0004",
                 :message "boom",
-                :detail #xt/error [:conflict :xtdb/assert-failed "boom" {}]}
+                :detail #xt/error [:conflict :xtdb/assert-failed "boom"
+                                   {:arg-idx 0, :sql "ASSERT 2 < 1, 'boom'", :tx-op-idx 0,
+                                    :tx-key #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}]}
                (reading-ex
                  (q conn ["ASSERT 2 < 1, 'boom'"])))))
 
@@ -2570,7 +2575,9 @@ ORDER BY 1,2;")
       (q conn ["ASSERT 2 < 1, 'boom'"])
       (t/is (= {:sql-state "P0004",
                 :message "boom",
-                :detail #xt/error [:conflict :xtdb/assert-failed "boom" {}]}
+                :detail #xt/error [:conflict :xtdb/assert-failed "boom"
+                                   {:arg-idx 0, :sql "ASSERT 2 < 1, 'boom'", :tx-op-idx 0,
+                                    :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}
                (reading-ex
                  (q conn ["COMMIT"]))))
       (q conn ["ROLLBACK"]))
@@ -2691,7 +2698,9 @@ ORDER BY 1,2;")
 
     (t/is (= {:sql-state "08P01",
               :message "Queries are unsupported in a DML transaction",
-              :detail nil}
+              :detail #xt/error [:incorrect :xtdb/queries-in-read-write-tx
+                                 "Queries are unsupported in a DML transaction"
+                                 {:query "SELECT a FROM foo"}]}
              (reading-ex
                (jdbc/with-transaction [tx conn]
                  (q tx ["INSERT INTO foo(_id, a) values(42, 42)"])

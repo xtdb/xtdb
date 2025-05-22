@@ -550,12 +550,9 @@
                           (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
-  (let [ex (t/is (thrown? RuntimeException
-                          (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]])))]
-    (t/is (= #xt/error [:incorrect :xtdb.indexer/invalid-sql-tx-op
-                        "Invalid SQL query sent as transaction operation"
-                        {:query "SELECT _id, foo FROM docs"}]
-             ex))))
+  (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-sql-tx-op
+                     "Invalid SQL query sent as transaction operation"]
+                    (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]]))))
 
 (t/deftest above-max-long-halts-ingestion-3495
   (t/is (anomalous? [:incorrect nil
@@ -640,6 +637,8 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
   (t/is (= [{:xt/id 1,
              :committed false,
-             :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [:list :i64]" {}],
+             :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [:list :i64]"
+                               {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0,
+                                :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}],
              :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))
