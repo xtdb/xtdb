@@ -24,7 +24,7 @@
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
-           (xtdb.tx_ops Abort DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
+           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
            (xtdb.util TxIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -205,7 +205,6 @@
         PatchDocs (@!write-patch! tx-op {:default-tz default-tz})
         DeleteDocs (@!write-delete! tx-op)
         EraseDocs (@!write-erase! tx-op)
-        Abort (@!write-abort! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz]

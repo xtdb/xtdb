@@ -283,7 +283,6 @@ dependencies {
     projectDep(":modules:xtdb-google-cloud")
 
     projectDep(":modules:bench")
-    projectDep(":modules:c1-import")
     projectDep(":modules:xtdb-datasets")
     projectDep(":modules:xtdb-flight-sql")
     projectDep(":modules:xtdb-kafka-connect")

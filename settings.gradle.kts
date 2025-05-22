@@ -29,7 +29,7 @@ project(":modules:aws").name = "xtdb-aws"
 project(":modules:azure").name = "xtdb-azure"
 project(":modules:google-cloud").name = "xtdb-google-cloud"
 
-include("modules:c1-import", "modules:flight-sql")
+include("modules:flight-sql")
 project(":modules:flight-sql").name = "xtdb-flight-sql"
 
 include("modules:bench", "modules:datasets")

@@ -40,7 +40,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private abort-exn (Exception. "aborted"))
 (def ^:private skipped-exn (Exception. "skipped"))
 
 (def ^:dynamic ^java.time.InstantSource *crash-log-clock* (InstantSource/system))
@@ -614,7 +613,7 @@
                  (.writeBoolean (nil? t)))
 
                (let [e-wtr (.vectorFor doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
-                 (if (or (nil? t) (= t abort-exn))
+                 (if (nil? t)
                    (.writeNull e-wtr)
                    (try
                      (.writeObject e-wtr t)
@@ -701,37 +700,29 @@
 
                 (if-let [e (try
                              (err/wrap-anomaly {}
-                               (try
-                                 (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
-                                   (.recordCallable tx-timer
-                                                    #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                       "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
-                                                                                      (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
-                                                                                                 "Please use SQL DML statements instead - "
-                                                                                                 "see the release notes for more information."])))
-                                                       "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                       "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                       "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
-                                                       "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                       "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                       "call" (throw (err/unsupported :xtdb/tx-fns-removed
-                                                                                      (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
-                                                                                                 "Please use ASSERTs and SQL DML statements instead - "
-                                                                                                 "see the release notes for more information."])))
-                                                       "abort" (throw abort-exn))))
-                                 nil
-
-                                 (catch Exception e
-                                   (if (identical? e abort-exn)
-                                     e
-                                     (throw e)))))
+                               (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
+                                 (.recordCallable tx-timer
+                                                  #(case (.getLeg tx-ops-rdr tx-op-idx)
+                                                     "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
+                                                                                    (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
+                                                                                               "Please use SQL DML statements instead - "
+                                                                                               "see the release notes for more information."])))
+                                                     "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                     "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                     "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
+                                                     "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                     "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                     "call" (throw (err/unsupported :xtdb/tx-fns-removed
+                                                                                    (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                                                               "Please use ASSERTs and SQL DML statements instead - "
+                                                                                               "see the release notes for more information."]))))))
+                               nil)
 
                              (catch Anomaly$Caller e e))]
 
                   (do
-                    (when-not (= e abort-exn)
-                      (log/debug e "aborted tx")
-                      (.abort live-idx-tx))
+                    (log/debug e "aborted tx")
+                    (.abort live-idx-tx)
 
                     (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
                       (when tx-error-counter
@@ -739,9 +730,7 @@
                       (add-tx-row! live-idx-tx tx-key e)
                       (.commit live-idx-tx))
 
-                    (serde/->tx-aborted msg-id system-time
-                                        (when-not (= e abort-exn)
-                                          e)))
+                    (serde/->tx-aborted msg-id system-time e))
 
                   (do
                     (add-tx-row! live-idx-tx tx-key nil)

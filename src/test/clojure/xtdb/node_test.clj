@@ -326,15 +326,6 @@ WHERE foo._id = 1"]])
   (t/is (= []
            (xt/q tu/*node* "SELECT foo._id foo, foo.x FROM foo LEFT JOIN bar USING (_id) WHERE foo.x = bar.x"))))
 
-(t/deftest test-c1-importer-abort-op
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])
-
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]
-                           [:abort]
-                           [:put-docs :docs {:xt/id :baz}]])
-  (t/is (= [{:id :foo}]
-           (xt/q tu/*node* '(from :docs [{:xt/id id}])))))
-
 (t/deftest test-list-round-trip-2342
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t3(_id, data) VALUES (1, [2, 3])"]
                            [:sql "INSERT INTO t3(_id, data) VALUES (2, [6, 7])"]])
@@ -382,9 +373,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 
-    (t/is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"Transaction failed"
-                            (xt/execute-tx tu/*node* [[:abort]])))
+    (t/is (anomalous? [:conflict] (xt/execute-tx tu/*node* [["ASSERT 1 = 2"]])))
 
     (t/is (= (serde/->TxKey 2 #xt/instant "2020-01-03T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :bar}]])))

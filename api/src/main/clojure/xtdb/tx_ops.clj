@@ -87,13 +87,6 @@
 (defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]
   TxOp)
 
-(defrecord Abort []
-  TxOp
-  Unparse
-  (unparse-tx-op [_] [:abort]))
-
-(def abort (->Abort))
-
 (def ^:private eid? (some-fn uuid? integer? string? keyword?))
 
 (def ^:private table? keyword?)
@@ -214,6 +207,3 @@
                           {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
                                                     "Please use ASSERTs and SQL DML statements instead - "
                                                     "see the release notes for more information."])})))
-
-(defmethod parse-tx-op :abort [_] abort)
-
