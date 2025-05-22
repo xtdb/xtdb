@@ -314,8 +314,8 @@
                                (aset !matched 0 true)
                                (.add matching-build-idxs build-idx)
                                (.add matching-probe-idxs probe-idx))
-                             (throw (err/runtime-err :xtdb.single-join/cardinality-violation
-                                                     {::err/message "cardinality violation"}))))))
+                             (throw (err/incorrect :xtdb.single-join/cardinality-violation
+                                                   "cardinality violation"))))))
         (when-not (aget !matched 0)
           (.add matching-probe-idxs probe-idx)
           (.add matching-build-idxs emap/nil-row-idx))))

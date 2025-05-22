@@ -887,8 +887,7 @@
    :->call-code #(do `(mod ~@%))})
 
 (defn throw-div-0 []
-  (throw (err/runtime-err ::division-by-zero
-                          {::err/message "data exception - division by zero"})))
+  (throw (err/incorrect ::division-by-zero "data exception - division by zero")))
 
 (defmethod codegen-call [:/ :int :int] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
@@ -1055,8 +1054,8 @@
   (when-not (or (= 1 (.length trim-char))
                 (and (= 2 (.length trim-char))
                      (= 2 (Character/charCount (.codePointAt trim-char 0)))))
-    (throw (err/runtime-err :xtdb.expression/data-exception
-                            {::err/message "Data Exception - trim error."}))))
+    (throw (err/incorrect :xtdb.expression/data-exception
+                          "Data Exception - trim error."))))
 
 (defn sql-trim-leading ^String [^String s, ^String trim-char]
   (assert-trim-char-conforms trim-char)
@@ -1291,9 +1290,8 @@
 (defn current-setting [setting-name]
   (if (= setting-name "server_version_num")
     (parse-version (xtdb-server-version))
-    (throw (err/illegal-arg ::unsupported-setting
-                            {::err/message (str "Setting not supported: " setting-name)
-                             :setting-name setting-name}))))
+    (throw (err/unsupported ::unsupported-setting (str "Setting not supported: " setting-name)
+                            {:setting-name setting-name}))))
 
 (defmethod codegen-call [:current_setting :utf8] [_]
   {:return-type :i64
@@ -1704,9 +1702,9 @@
    :->call-code (fn [[arr dim]]
                   `(do
                      (when-not (= ~dim 1)
-                       (throw (err/runtime-err :xtdb.expression/array-dimension-error
-                                               {::err/message "Unsupported: ARRAY_UPPER for dimension != 1"
-                                                :dim ~dim})))
+                       (throw (err/unsupported :xtdb.expression/array-dimension-error
+                                               "Unsupported: ARRAY_UPPER for dimension != 1"
+                                               {:dim ~dim})))
 
                      (.size ~arr)))})
 
@@ -1724,9 +1722,9 @@
                         `(let [~list-sym ~list-code
                                ~n-sym (- (.size ~list-sym) ~n-code)]
                            (if (neg? ~n-sym)
-                             (throw (err/runtime-err :xtdb.expression/array-element-error
-                                                     {::err/message "Data exception - array element error."
-                                                      :nlen ~n-sym}))
+                             (throw (err/incorrect :xtdb.expression/array-element-error
+                                                   "Data exception - array element error."
+                                                   {:nlen ~n-sym}))
                              ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
                                                  (with-tag ListValueReader)))))))}))
 
@@ -1831,18 +1829,17 @@
   (fn [expr opts]
     (f expr (assoc opts :zone-id *default-tz*))))
 
-(defn arithmetic-ex->runtime-ex [^Throwable cause]
-  (let [message (.getMessage cause)]
+(defn arithmetic-ex->anomaly [^Throwable cause]
+  (let [message (ex-message cause)]
     (cond
       (and message (str/index-of message "/ by zero"))
-      (err/runtime-err ::division-by-zero {::err/message "data exception - division by zero"} cause)
+      (err/incorrect ::division-by-zero "data exception - division by zero" {::err/cause cause})
 
       (and message (str/index-of message "overflow"))
-      (err/runtime-err ::overflow-error {::err/message "data exception - overflow error"} cause)
+      (err/incorrect ::overflow-error "data exception - overflow error" {::err/cause cause})
 
       :else
-      (err/runtime-err ::unknown-arithmetic-error {::err/message "data exception - arithmetic exception"} cause))))
-
+      (err/incorrect ::unknown-arithmetic-error "data exception - arithmetic exception" {::err/cause cause}))))
 
 (def ^:private emit-projection
   "NOTE: we macroexpand inside the memoize on the assumption that
@@ -1906,13 +1903,13 @@
             (try
               (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e
-                (throw (arithmetic-ex->runtime-ex e)))
+                (throw (arithmetic-ex->anomaly e)))
               (catch NumberFormatException e
-                (throw (err/runtime-err :xtdb.expression/number-format-error {::err/message (.getMessage e)} e)))
+                (throw (err/incorrect :xtdb.expression/number-format-error (ex-message e) {::err/cause e})))
               (catch ClassCastException e
-                (throw (err/runtime-err :xtdb.expression/class-cast-exception {::err/message (.getMessage e)} e)))
+                (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e) {::err/cause e})))
               (catch IllegalArgumentException e
-                (throw (err/illegal-arg :xtdb.expression/illegal-argument-exception {::err/message (.getMessage e)} e))))
+                (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))
             (.setValueCount out-vec row-count)
             (vr/vec->reader out-vec)))))))
 

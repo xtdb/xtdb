@@ -10,7 +10,17 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.contextual
-import xtdb.api.TransactionKey
+import xtdb.error.*
+import xtdb.error.Anomaly.Companion.CATEGORY
+import xtdb.error.Busy.Companion.BUSY
+import xtdb.error.Conflict.Companion.CONFLICT
+import xtdb.error.Fault.Companion.FAULT
+import xtdb.error.Forbidden.Companion.FORBIDDEN
+import xtdb.error.Incorrect.Companion.INCORRECT
+import xtdb.error.Interrupted.Companion.INTERRUPTED
+import xtdb.error.NotFound.Companion.NOT_FOUND
+import xtdb.error.Unavailable.Companion.UNAVAILABLE
+import xtdb.error.Unsupported.Companion.UNSUPPORTED
 import xtdb.util.kebabToCamelCase
 import java.io.InputStream
 import java.io.OutputStream
@@ -36,16 +46,23 @@ object AnySerde : KSerializer<Any> {
         val dataObj = obj["xtdb.error/data"] as? JsonObject
 
         @Suppress("UNCHECKED_CAST")
-        val errorData = dataObj?.let { data ->
-            (data.toValue() as Map<String, *>)
-                .mapKeys { (k, _) -> Keyword.intern(k) }
-        } ?: emptyMap()
+        val errorData = PersistentHashMap.create(
+            dataObj?.toValue()?.let { it as Map<String, *> }
+                ?.mapKeys { (k, _) -> Keyword.intern(k) }
+        )
 
-        val errorKey = (obj["xtdb.error/error-key"]?.toValue() as? String)?.let { Keyword.intern(it) }
+        fun IPersistentMap.withCategory(cat: Keyword) = assoc(CATEGORY, cat)
 
         return when (obj["xtdb.error/class"]!!.asString()!!) {
-            "xtdb.IllegalArgumentException" -> IllegalArgumentException(errorKey, errorMessage, errorData)
-            "xtdb.RuntimeException" -> RuntimeException(errorKey, errorMessage, errorData)
+            "xtdb.error.Incorrect" -> Incorrect(errorMessage, errorData.withCategory(INCORRECT))
+            "xtdb.error.Unsupported" -> Unsupported(errorMessage, errorData.withCategory(UNSUPPORTED))
+            "xtdb.error.Conflict" -> Conflict(errorMessage, errorData.withCategory(CONFLICT))
+            "xtdb.error.Fault" -> Fault(errorMessage, errorData.withCategory(FAULT))
+            "xtdb.error.Interrupted" -> Interrupted(errorMessage, errorData.withCategory(INTERRUPTED))
+            "xtdb.error.NotFound" -> NotFound(errorMessage, errorData.withCategory(NOT_FOUND))
+            "xtdb.error.Forbidden" -> Forbidden(errorMessage, errorData.withCategory(FORBIDDEN))
+            "xtdb.error.Busy" -> Busy(errorMessage, errorData.withCategory(BUSY))
+            "xtdb.error.Unavailable" -> Unavailable(errorMessage, errorData.withCategory(UNAVAILABLE))
             else -> ExceptionInfo(errorMessage, PersistentHashMap.create(errorData))
         }
     }
@@ -112,15 +129,9 @@ object AnySerde : KSerializer<Any> {
         "@value" to listOfNotNull(
             "xtdb.error/message" to message,
             "xtdb.error/class" to javaClass.name,
-            (this as? IllegalArgumentException)?.let {
-                "xtdb.error/error-key" to key?.sym?.toString()
-            },
-            (this as? RuntimeException)?.let {
-                "xtdb.error/error-key" to key?.sym?.toString()
-            },
             (this as? IExceptionInfo)?.let {
                 "xtdb.error/data" to (data as Map<*, *>).mapKeys { (k, _) -> (k as? Keyword)?.sym?.toString() ?: k }
-                    .minus("xtdb.error/error-key")
+                    .minus("cognitect.anomalies/category")
             }
         ).toMap()
     ).toJsonElement()
@@ -152,7 +163,7 @@ object AnySerde : KSerializer<Any> {
         is Date -> toInstant().toJsonElement()
         is Duration -> toJsonLdElement("xt:duration")
         is Throwable -> toJsonLdElement()
-        else -> throw IllegalArgumentException.createNoKey("unknown type: ${this.javaClass.name}", mapOf<String, Any>())
+        else -> throw Incorrect("unknown type: ${this.javaClass.name}")
     }
 
     override fun deserialize(decoder: Decoder) =
@@ -180,24 +191,18 @@ val JSON_SERDE = Json {
 @JvmField
 val JSON_SERDE_PRETTY_PRINT = Json(JSON_SERDE) { prettyPrint = true }
 
-fun jsonIAE(errorType: String, element: JsonElement): IllegalArgumentException {
-    return IllegalArgumentException(
-        Keyword.intern(errorType),
-        data = mapOf(Keyword.intern("json") to JSON_SERDE_PRETTY_PRINT.encodeToString(element))
+fun jsonIAE(errorType: String, element: JsonElement) =
+    Incorrect(
+        "Errant JSON",
+        errorCode = errorType,
+        data = mapOf("json" to JSON_SERDE_PRETTY_PRINT.encodeToString(element)),
     )
-}
 
-internal fun jsonIAEwithMessage(message: String, element: JsonElement): IllegalArgumentException {
-    return IllegalArgumentException.createNoKey(
-        message,
-        mapOf(Keyword.intern("json") to JSON_SERDE_PRETTY_PRINT.encodeToString(element))
-    )
-}
+internal fun jsonIAEwithMessage(message: String, element: JsonElement) =
+    Incorrect(message, data = mapOf("json" to JSON_SERDE_PRETTY_PRINT.encodeToString(element)))
 
-/**
- * @suppress
- */
-fun jsonRemoveComments(json: String) = json.replace(Regex("//.*\n"), "")
+private fun decodeError(value: String, cause: Throwable) =
+    Incorrect("Error decoding JSON", "xtdb/json-decode-error", mapOf("json" to value), cause)
 
 /**
  * @suppress
@@ -206,11 +211,7 @@ fun decode(value: String): Any {
     try {
         return JSON_SERDE.decodeFromString(value)
     } catch (e: SerializationException) {
-        throw IllegalArgumentException.createNoKey(
-            "Error decoding JSON!",
-            mapOf(Keyword.intern("json") to value),
-            e
-        )
+        throw decodeError(value, e)
     }
 }
 
@@ -223,11 +224,7 @@ fun <T : Any> decode(value: String, clazz: Class<T>): Any {
     try {
         return JSON_SERDE.decodeFromString(clazz.kotlin.serializer(), value)
     } catch (e: SerializationException) {
-        throw IllegalArgumentException.createNoKey(
-            "Error decoding JSON!",
-            mapOf(Keyword.intern("json") to value),
-            e
-        )
+        throw decodeError(value, e)
     }
 }
 
@@ -241,11 +238,7 @@ fun decode(inputStream: InputStream): Any {
         return JSON_SERDE.decodeFromStream(inputStream)
     } catch (e: SerializationException) {
         inputStream.reset()
-        throw IllegalArgumentException.createNoKey(
-            "Error decoding JSON!",
-            mapOf(Keyword.intern("json") to inputStream.bufferedReader().use { it.readText() }),
-            e
-        )
+        throw decodeError(inputStream.bufferedReader().use { it.readText() }, e)
     }
 }
 
@@ -264,12 +257,7 @@ fun <T : Any> decode(inputStream: InputStream, clazz: Class<T>): Any {
             e.addSuppressed(t)
         }
 
-        throw IllegalArgumentException(
-            Keyword.intern("malformed-request"),
-            message = "Error decoding JSON!",
-            data = mapOf(Keyword.intern("json") to inputStream.bufferedReader().use { it.readText() }),
-            cause = e
-        )
+        throw decodeError(inputStream.bufferedReader().use { it.readText() }, e)
     }
 }
 

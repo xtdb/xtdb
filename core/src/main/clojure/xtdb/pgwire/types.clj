@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [xtdb.error :as err]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -17,6 +18,7 @@
            [java.util Arrays List Map Set UUID]
            (org.apache.arrow.vector.types.pojo Field)
            [org.apache.commons.codec.binary Hex]
+           (xtdb.error Anomaly)
            xtdb.JsonSerde
            (xtdb.pg.codec NumericBin)
            [xtdb.time Interval Time]
@@ -75,8 +77,7 @@
     ;; we are not dealing with the possibility of non kw/string keys, xt shouldn't return maps like that right now.
     (instance? Map obj) (update-vals obj json-clj)
 
-    (or (instance? xtdb.RuntimeException obj)
-        (instance? xtdb.IllegalArgumentException obj))
+    (instance? Anomaly obj)
     (json-clj (-> (ex-data obj)
                   (assoc :message (ex-message obj))))
 
@@ -87,7 +88,7 @@
     (instance? URI obj) (json-clj (str obj))
 
     :else
-    (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
+    (throw (err/unsupported ::unknown-type (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
 
 
 (defn- read-utf8 [^bytes barr] (String. barr StandardCharsets/UTF_8))

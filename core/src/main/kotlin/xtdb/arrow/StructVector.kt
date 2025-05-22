@@ -14,6 +14,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.asKeyword
+import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.util.Hasher
 import xtdb.util.normalForm
@@ -95,9 +96,9 @@ class StructVector(
                 val childWriter = childWriters[key] ?: vectorFor(key, obj.toFieldType())
 
                 if (childWriter.valueCount != this.valueCount)
-                    throw xtdb.IllegalArgumentException(
-                        "xtdb/key-already-set".asKeyword,
-                        data = mapOf("ks".asKeyword to value.keys, "k".asKeyword to key)
+                    throw Incorrect(
+                        errorCode = "xtdb/key-already-set",
+                        data = mapOf("ks" to value.keys, "k" to key)
                     )
 
                 try {
@@ -148,9 +149,9 @@ class StructVector(
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: error("missing node")
+        val node = nodes.removeFirstOrNull() ?: error("missing node")
 
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: error("missing validity buffer"))
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
         childWriters.sequencedValues().forEach { it.loadPage(nodes, buffers) }
 
         valueCount = node.length

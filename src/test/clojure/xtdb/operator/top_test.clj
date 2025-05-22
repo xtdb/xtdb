@@ -80,11 +80,11 @@
              (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]
                           {:args [1 2]})))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: null"
-                            (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]))
+    (t/is (anomalous? [:incorrect nil #"Expected: number, got: null"]
+                      (tu/query-ra [:top '{:skip ?_0, :limit ?_1} batches]))
           "missing args")
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Expected: number, got: 1"
-                            (tu/query-ra [:top '{:limit ?_0} batches]
-                                         {:args ["1"]}))
+    (t/is (anomalous? [:incorrect nil #"Expected: number, got: 1"]
+                      (tu/query-ra [:top '{:limit ?_0} batches]
+                                   {:args ["1"]}))
           "got a string")))

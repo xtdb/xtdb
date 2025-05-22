@@ -122,10 +122,10 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                  {:snapshot-time #inst "2020-01-02"}))))
 
 (t/deftest ensure-snapshot-time-has-been-indexed
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"snapshot-time \(.+?\) is after the latest completed tx \(nil\)"
-                          (xt/q tu/*node* "SELECT 1"
-                                {:snapshot-time #inst "2020"})))
+  (t/is (anomalous? [:incorrect nil
+                     #"snapshot-time \(.+?\) is after the latest completed tx \(nil\)"]
+                    (xt/q tu/*node* "SELECT 1"
+                          {:snapshot-time #inst "2020"})))
 
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
@@ -133,10 +133,10 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
            (xt/q tu/*node* "SELECT * FROM foo"
                  {:snapshot-time #inst "2020"})))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"snapshot-time \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"
-                          (xt/q tu/*node* "SELECT * FROM foo"
-                                {:snapshot-time #inst "2021"}))))
+  (t/is (anomalous? [:incorrect nil
+                     #"snapshot-time \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"]
+                    (xt/q tu/*node* "SELECT * FROM foo"
+                          {:snapshot-time #inst "2021"}))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -391,7 +391,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (let [ex (t/is (thrown? RuntimeException
                             (xt/execute-tx tu/*node* ["ASSERT 1 = 2, 'boom'"])))]
-      (t/is (= #xt/runtime-err [:xtdb/assert-failed "boom" {}] ex)))
+      (t/is (= #xt/error [:conflict :xtdb/assert-failed "boom" {}] ex)))
 
     (t/is (= #{{:tx-id 0, :system-time (time/->zdt #inst "2020-01-01"), :committed? true}
                {:tx-id 1, :system-time (time/->zdt #inst "2020-01-02"), :committed? false}
@@ -404,17 +404,15 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (xt/q tu/*node*
                    ['#(from :xt/txs [{:xt/id %, :committed committed?}]) 1])))
 
-    (t/is (= #xt/runtime-err [:xtdb/assert-failed "boom" {}]
-             (-> (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])
-                 first
-                 :err)))))
+    (t/is (= [{:err #xt/error [:conflict :xtdb/assert-failed "boom" {}]}]
+             (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])))))
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Errors planning SQL statement:\s*- Cannot parse date:"
-                            (xt/execute-tx tu/*node*
-                                           [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to)
+    (t/is (anomalous? [:incorrect nil
+                       #"Errors planning SQL statement:\s*- Cannot parse date:"]
+                      (xt/execute-tx tu/*node*
+                                     [[:sql "INSERT INTO docs (_id, _valid_from, _valid_to)
                                                   VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
                                                          (1, DATE '2030- 01-01', DATE '2020-01-01')"]])))
 
@@ -448,15 +446,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (set (xt/q tu/*node* "SELECT * EXCLUDE (_id) FROM foo, bar"))))
 
   ;; Thrown due to duplicate column projection in the query on `_id`
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Duplicate column projection: _id"
-         (xt/q tu/*node* "FROM foo, bar")))
+  (t/is (anomalous? [:incorrect nil
+                     #"Duplicate column projection: _id"]
+                    (xt/q tu/*node* "FROM foo, bar")))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Duplicate column projection: _id"
-         (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
+  (t/is (anomalous? [:incorrect nil
+                     #"Duplicate column projection: _id"]
+                    (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
 
   (t/is (= #{{:a 1 :c 3} {:a 1 :d 4} {:b 2 :c 3} {:b 2 :d 4}}
            (set (xt/q tu/*node* "SELECT bar.* EXCLUDE (_id), foo.* EXCLUDE (_id) FROM foo, bar"))))
@@ -631,8 +627,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 ;; TODO move this to api-test once #2937 is in
 (t/deftest throw-on-unknown-query-type
-  (t/is (thrown-with-msg? IllegalArgumentException #"Illegal argument: 'unknown-query-type'"
-                          (xt/q tu/*node* (Object.)))))
+  (t/is (anomalous? [:incorrect nil #"Illegal argument: 'unknown-query-type'"]
+                    (xt/q tu/*node* (Object.)))))
 
 (t/deftest test-array-agg-2946
   (xt/submit-tx tu/*node*
@@ -784,9 +780,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
             (tu/then-await-tx tx tu/*node*))
 
-          (t/is (thrown-with-msg? xtdb.RuntimeException
-                                  #"Relevant table schema has changed since preparing query, please prepare again"
-                                  (.openCursor bq))))))))
+          (t/is (anomalous? [:conflict nil "Relevant table schema has changed since preparing query, please prepare again"]
+                            (.openCursor bq))))))))
 
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
@@ -1047,9 +1042,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                (xt/q node "SELECT * FROM docs"))))))
 
 (t/deftest ingestion-stopped-on-null-col-ref-4259
-  (t/is (thrown-with-msg? RuntimeException
-                          #"Invalid ID type"
-                          (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"]))))
+  (t/is (anomalous? [:incorrect nil
+                     #"Invalid ID type"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"]))))
 
 (t/deftest test-field-mismatch-4271
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1.5}"])

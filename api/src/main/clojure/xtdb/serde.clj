@@ -163,32 +163,11 @@
 (defmethod print-method TxAborted [tx-result ^Writer w]
   (print-dup tx-result w))
 
-(defn- render-iae [^IllegalArgumentException e]
-  [nil (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
-
-(defn- render-xt-iae [^xtdb.IllegalArgumentException e]
-  [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
-
-(defmethod print-dup xtdb.IllegalArgumentException [e, ^Writer w]
-  (.write w (str "#xt/illegal-arg " (render-xt-iae e))))
-
-(defmethod print-method xtdb.IllegalArgumentException [e, ^Writer w]
-  (print-dup e w))
-
-(defn iae-reader [[k message data]]
-  (xtdb.IllegalArgumentException. k message (or data {}) nil))
-
-(defn- render-runex [^xtdb.RuntimeException e]
-  [(.getKey e) (ex-message e) (-> (ex-data e) (dissoc ::err/error-key))])
-
-(defmethod print-dup xtdb.RuntimeException [e, ^Writer w]
-  (.write w (str "#xt/runtime-err " (render-runex e))))
-
-(defmethod print-method xtdb.RuntimeException [e, ^Writer w]
-  (print-dup e w))
+(defn iae-reader [[k message data cause]]
+  (err/illegal-arg k (-> (or data {}) (assoc ::err/message message )) cause))
 
 (defn runex-reader [[k message data cause]]
-  (xtdb.RuntimeException. k message data cause))
+  (err/runtime-err k (-> data (assoc ::err/message message)) cause))
 
 (defmethod print-dup Path [^Path p, ^Writer w]
   (.write w "#xt/path ")
@@ -207,15 +186,18 @@
   (def transit-read-handlers
     (merge transit/default-read-handlers
            tl/transit-read-handlers
+           err/transit-readers
            {"r" (transit/read-handler uri-reader)
+
+            ;; NOTE: these three have been serialised to disk - do not remove.
+            "xtdb/illegal-arg" (transit/read-handler iae-reader)
+            "xtdb/runtime-err" (transit/read-handler runex-reader)
+            "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
 
             "xtdb/clj-form" (transit/read-handler ClojureForm/new)
             "xtdb/tx-key" (transit/read-handler map->TxKey)
             "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
             "xtdb/key-fn" (transit/read-handler read-key-fn)
-            "xtdb/illegal-arg" (transit/read-handler iae-reader)
-            "xtdb/runtime-err" (transit/read-handler runex-reader)
-            "xtdb/exception-info" (transit/read-handler #(ex-info (first %) (second %)))
             "xtdb/period-duration" period-duration-reader
             "xtdb/interval" (transit/read-handler interval-reader)
             "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
@@ -250,12 +232,10 @@
 (def transit-write-handlers
   (merge transit/default-write-handlers
          tl/transit-write-handlers
+         err/transit-writers
          {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
           TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
           TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))
-          IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-iae)
-          xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" render-xt-iae)
-          xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" render-runex)
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" (juxt ex-message ex-data))
           IKeyFn$KeyFn (transit/write-handler "xtdb/key-fn" write-key-fn)
 

@@ -13,9 +13,9 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types]
             [xtdb.util :as util])
-  (:import (xtdb.types RegClass RegProc)
-           (java.nio.file Files)
-           (java.nio.file.attribute FileAttribute)))
+  (:import (java.nio.file Files)
+           (java.nio.file.attribute FileAttribute)
+           (xtdb.types RegClass RegProc)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -1679,19 +1679,19 @@
   (t/testing "Invalid Queries"
     (t/is
      (thrown-with-msg?
-      IllegalArgumentException
+      Incorrect
       #"PG_CATALOG.columns.column_name is an invalid reference to columns, schema name does not match"
       (sql/plan "SELECT pg_catalog.columns.column_name FROM information_schema.columns")))
 
     (t/is
      (thrown-with-msg?
-      IllegalArgumentException
+      Incorrect
       #"INFORMATION_SCHEMA.f.column_name is an invalid reference to f, schema name does not match"
       (sql/plan "SELECT information_schema.f.column_name FROM information_schema.columns AS f")))
 
     (t/is
      (thrown-with-msg?
-      IllegalArgumentException
+      Incorrect
       #"PG_CATALOG.f.column_name is an invalid reference to f, schema name does not match"
       (sql/plan "SELECT pg_catalog.f.column_name FROM information_schema.columns AS f")))))
 
@@ -1773,7 +1773,6 @@
   (t/is (= true (-> (xt/q tu/*node* "SELECT random() < 1.0 AS smaller ") first :smaller))))
 
 (t/deftest test-tx-ops-sql-params
-  #_#_
   (t/testing "correct number of args"
     (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, u_name: ?}" [1 "dan"] [2 "james"]]])))
@@ -1782,26 +1781,22 @@
               {:u-name "james", :xt/id 2}]
              (xt/q tu/*node* "SELECT users._id, users.u_name FROM users ORDER BY _id"))))
 
-  (t/testing "no arg rows provided when args expected"
-    (let [ex (t/is (thrown? RuntimeException
-                            (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]])))]
-      (t/is (= #xt/runtime-err [:xtdb.indexer/missing-sql-args "Arguments list was expected but not provided"
-                                {:param-count 2}]
-               ex))))
+  (t/is (anomalous? [:incorrect :xtdb.indexer/missing-sql-args
+                     "Arguments list was expected but not provided"
+                     {:param-count 2}]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]]))
+        "no arg rows provided when args expected")
 
-  (t/testing "incorrect number of args on all arg-row"
-    (let [ex (t/is (thrown? RuntimeException
-                            (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]])))]
-      (t/is (= #xt/runtime-err [:xtdb.indexer/incorrect-sql-arg-count
-                                "Parameter error: 1 provided, 2 expected"
-                                {:param-count 2, :arg-count 1}]
-               ex))))
+  (t/is (anomalous? [:incorrect :xtdb.indexer/incorrect-sql-arg-count
+                     "Parameter error: 1 provided, 2 expected"
+                     {:param-count 2, :arg-count 1}]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))
+        "incorrect number of args on all arg-row")
 
-  #_
   (t/testing "incorrect number of args on one row"
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"All SQL arg-rows must have the same number of columns"
-                            (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
+    (t/is (anomalous? [:incorrect nil
+                       #"All SQL arg-rows must have the same number of columns"]
+                      (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
 
 (t/deftest test-case-sensitivity-in-delimited-cols
   (t/is (xt/execute-tx tu/*node* [[:sql "INSERT INTO T1(_id, col1, col2) VALUES(1,'fish',1000)"]]))
@@ -1971,36 +1966,36 @@
   (letfn [(f [sql]
             (xt/execute-tx tu/*node* [[:sql sql]]))]
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE _id column"
-                            (f "UPDATE table SET _id = DATE '2024-01-01' WHERE _id = 1")))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot UPDATE _id column"]
+                      (f "UPDATE table SET _id = DATE '2024-01-01' WHERE _id = 1")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE _valid_from column"
-                            (f "UPDATE table SET _valid_from = DATE '2024-01-01' WHERE _id = 1")))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot UPDATE _valid_from column"]
+                      (f "UPDATE table SET _valid_from = DATE '2024-01-01' WHERE _id = 1")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE _valid_to column"
-                            (f "UPDATE table SET _valid_to = DATE '2024-01-01' WHERE _id = 1")))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot UPDATE _valid_to column"]
+                      (f "UPDATE table SET _valid_to = DATE '2024-01-01' WHERE _id = 1")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE _system_from column"
-                            (f "UPDATE table SET _system_from = DATE '2024-01-01' WHERE _id = 1")))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot UPDATE _system_from column"]
+                      (f "UPDATE table SET _system_from = DATE '2024-01-01' WHERE _id = 1")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot UPDATE _system_to column"
-                            (f "UPDATE table SET _system_to = DATE '2024-01-01' WHERE _id = 1")))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot UPDATE _system_to column"]
+                      (f "UPDATE table SET _system_to = DATE '2024-01-01' WHERE _id = 1")))))
 
 (t/deftest disallow-period-specs-on-ctes-3440
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Period specifications not allowed on CTE reference: my_cte"
-                          (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'")))
+  (t/is (anomalous? [:incorrect nil
+                     #"Period specifications not allowed on CTE reference: my_cte"]
+                    (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'")))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Period specifications not allowed on CTE reference: my_cte"
-                          (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR VALID_TIME AS OF TIMESTAMP '2024-01-01'"))))
+  (t/is (anomalous? [:incorrect nil
+                     #"Period specifications not allowed on CTE reference: my_cte"]
+                    (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR VALID_TIME AS OF TIMESTAMP '2024-01-01'"))))
 
 (t/deftest test-assert-3445
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1}]])
@@ -2008,10 +2003,9 @@
   (t/is (xt/execute-tx tu/*node* [[:sql "ASSERT (SELECT COUNT(*) FROM docs) = 1"]
                                   [:put-docs :docs {:xt/id 2 :x 2}]]))
 
-  (t/is (thrown-with-msg? RuntimeException
-                          #"Assert failed"
-                          (xt/execute-tx tu/*node* [[:sql "ASSERT (SELECT COUNT(*) FROM docs) = 1"]
-                                                    [:put-docs :docs {:xt/id 3 :x 3}]])))
+  (t/is (anomalous? [:conflict nil #"Assert failed"]
+                    (xt/execute-tx tu/*node* [[:sql "ASSERT (SELECT COUNT(*) FROM docs) = 1"]
+                                              [:put-docs :docs {:xt/id 3 :x 3}]])))
 
   (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))
 
@@ -2022,18 +2016,16 @@
   (t/is (= [{:xt/id "james", :name "James", :email "james@example.com"}]
            (xt/q tu/*node* "SELECT * FROM users")))
 
-  (t/is (thrown-with-msg? RuntimeException
-                          #"Assert failed"
-                          (xt/execute-tx tu/*node* [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')"]
-                                                    [:sql "INSERT INTO users RECORDS {_id: 'james2', name: 'James 2', email: 'james@example.com'}"]])))
+  (t/is (anomalous? [:conflict nil #"Assert failed"]
+                    (xt/execute-tx tu/*node* [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')"]
+                                              [:sql "INSERT INTO users RECORDS {_id: 'james2', name: 'James 2', email: 'james@example.com'}"]])))
 
   (t/is (= [{:xt/id "james", :name "James", :email "james@example.com"}]
            (xt/q tu/*node* "SELECT * FROM users"))))
 
 (t/deftest test-date-id-caught-3446
-  (t/is (thrown-with-msg? RuntimeException
-                          #"Invalid ID type: java.time.LocalDate"
-                          (xt/execute-tx tu/*node* [[:sql "INSERT into readings (_id, value) VALUES (DATE '2020-01-06', 4)"]])))
+  (t/is (anomalous? [:incorrect nil #"Invalid ID type: java.time.LocalDate"]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT into readings (_id, value) VALUES (DATE '2020-01-06', 4)"]])))
 
   (t/testing "node continues"
     (xt/execute-tx tu/*node* [[:put-docs :readings {:xt/id 1 :value 4}]])
@@ -2042,13 +2034,13 @@
              (xt/q tu/*node* "SELECT * FROM readings")))))
 
 (t/deftest test-disallow-col-refs-in-period-specs-3447
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"No column reference allowed in table period specification: foo"
-                          (xt/q tu/*node* "SELECT * FROM docs FOR SYSTEM_TIME AS OF foo")))
+  (t/is (anomalous? [:incorrect nil
+                     #"No column reference allowed in table period specification: foo"]
+                    (xt/q tu/*node* "SELECT * FROM docs FOR SYSTEM_TIME AS OF foo")))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"No column reference allowed in table period specification: bar"
-                          (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME BETWEEN bar AND baz"))))
+  (t/is (anomalous? [:incorrect nil
+                     #"No column reference allowed in table period specification: bar"]
+                    (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME BETWEEN bar AND baz"))))
 
 (t/deftest test-portion-of-valid-time-boundary
   (xt/submit-tx tu/*node* [[:sql "
@@ -2205,10 +2197,9 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
            (xt/q tu/*node* "SELECT 1151209360::regclass v"))
         "int -> regclass")
 
-  (t/is (thrown-with-msg?
-         RuntimeException
-         #"Relation public.baz does not exist"
-         (xt/q tu/*node* "SELECT 'public.baz'::regclass")))
+  (t/is (anomalous? [:incorrect nil
+                     #"Relation public.baz does not exist"]
+                    (xt/q tu/*node* "SELECT 'public.baz'::regclass")))
 
   (t/testing "regclass that doesn't match a known table"
     (t/is (= [{:v "999999"}]
@@ -2247,10 +2238,9 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
            (xt/q tu/*node* "SELECT 1989914641::regproc v"))
         "int -> regproc")
 
-  (t/is (thrown-with-msg?
-         RuntimeException
-         #"Procedure public.baz does not exist"
-         (xt/q tu/*node* "SELECT 'public.baz'::regproc")))
+  (t/is (anomalous? [:incorrect nil
+                     #"Procedure public.baz does not exist"]
+                    (xt/q tu/*node* "SELECT 'public.baz'::regproc")))
 
   (t/is (= [{:v "999999"}]
            (xt/q tu/*node* "SELECT 999999::regproc::varchar v"))
@@ -2289,8 +2279,8 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"missing-id"
-                          (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))
+  (t/is (anomalous? [:incorrect nil #"missing-id"]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))
 
   (t/is (= [{:x 2, :xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM foo")))
@@ -2308,9 +2298,9 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"missing-id"
-                          (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
-                                                     [{:id 2, :x 3}]]]))))
+  (t/is (anomalous? [:incorrect nil #"missing-id"]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
+                                               [{:id 2, :x 3}]]]))))
 
 (t/deftest limit-parens-3475
   (let [q "
@@ -2417,8 +2407,9 @@ UNION ALL
            (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest test-no-column-name-list-insert-with-values-3752
-  (let [ex-msg (ex-message (t/is (thrown? IllegalArgumentException
-                                          (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs VALUES(1, 'bar')"]]))))]
+  (let [ex (t/is (anomalous? [:incorrect nil]
+                             (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs VALUES(1, 'bar')"]])))
+        ex-msg (ex-message ex)]
     (t/is (str/includes? ex-msg "INSERT with VALUES needs column name list"))
     (t/is (str/includes? ex-msg "INSERT does not contain mandatory _id column")))
 
@@ -2458,48 +2449,45 @@ UNION ALL
   (t/is (= [{:v true}] (xt/q tu/*node* ["SELECT ?::boolean v" 1]))))
 
 (t/deftest disallow-slashes-in-delimited-identifiers-3799
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"token recognition error at: '\"zip/'"
-                          (xt/execute-tx tu/*node* ["INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]))))
+  (t/is (anomalous? [:incorrect nil
+                     #"token recognition error at: '\"zip/'"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]))))
 
 (t/deftest disallow-inserting-to-system-time-cols-3748
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Cannot put documents with columns: #\{\"_system_from\" \"_valid_time\"\}"
-         (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, TIMESTAMP '2024-01-01T00:00:00Z', 'foo')"])))
+  (t/is (anomalous? [:incorrect nil #"Cannot put documents with columns: #\{\"_system_from\" \"_valid_time\"\}"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, TIMESTAMP '2024-01-01T00:00:00Z', 'foo')"])))
 
-  (try
-    (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, CURRENT_TIME - INTERVAL 'P1D', 'foo')"])
-    (throw (Exception. "should have thrown"))
-    (catch IllegalArgumentException e
-      (let [ex-msg (ex-message e)]
-        (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
-        (t/is (str/includes? ex-msg "Cannot INSERT _system_from column"))))))
+  (let [ex (t/is (anomalous? [:incorrect nil]
+                             (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, CURRENT_TIME - INTERVAL 'P1D', 'foo')"])))
+        ex-msg (ex-message ex)]
+    (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
+    (t/is (str/includes? ex-msg "Cannot INSERT _system_from column"))))
 
 (t/deftest can-not-write-to-reserved-tables
   (t/testing "submit side"
-    (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: xt/txs"
-                            (xt/submit-tx tu/*node* [[:put-docs :xt/txs {:xt/id 1}]])))
+    (t/is (anomalous? [:incorrect nil #"Cannot write to table: xt/txs"]
+                      (xt/submit-tx tu/*node* [[:put-docs :xt/txs {:xt/id 1}]])))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: xt/txs"
-                            (xt/execute-tx tu/*node* ["INSERT INTO xt.txs(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"])))
+    (t/is (anomalous? [:incorrect nil #"Cannot write to table: xt/txs"]
+                      (xt/execute-tx tu/*node* ["INSERT INTO xt.txs(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"])))
 
-    (t/is (thrown-with-msg? IllegalArgumentException #"Cannot write to table: pg_catalog/pg_user"
-                            (xt/execute-tx tu/*node* ["INSERT INTO pg_catalog.pg_user(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]))))
+    (t/is (anomalous? [:incorrect nil #"Cannot write to table: pg_catalog/pg_user"]
+                      (xt/execute-tx tu/*node* ["INSERT INTO pg_catalog.pg_user(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]))))
 
   ;; just to have something in tx.txs before the check below
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
   (t/testing "indexing side"
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot write to table: xt/txs"
-                            (xt/execute-tx tu/*node* ["INSERT INTO xt.txs (_id, system_time, committed, error) SELECT 1, 2, 3, 4"])))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot write to table: xt/txs"]
+                      (xt/execute-tx tu/*node* ["INSERT INTO xt.txs (_id, system_time, committed, error) SELECT 1, 2, 3, 4"])))
 
     (xt/submit-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, field: 'foo'}"])
 
     ;; was stopping ingestion, trying to delete from an info-schema table
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Cannot write to table: information_schema/columns"
-                            (xt/execute-tx tu/*node* ["DELETE FROM information_schema.columns WHERE column_name = 'field'"])))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot write to table: information_schema/columns"]
+                      (xt/execute-tx tu/*node* ["DELETE FROM information_schema.columns WHERE column_name = 'field'"])))))
 
 (t/deftest test-keyword
   (t/is (= [{:unq :foo, :q :foo/bar}]
@@ -2725,23 +2713,23 @@ UNION ALL
            (sql/plan q {:table-info {"public/foo" #{"_id" "vs"}}})))))
 
 (t/deftest forbid-invalid-columns-insert
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Cannot put documents with columns: #\{\"_foo\"\}"
-                          (xt/execute-tx tu/*node* ["INSERT INTO foo(_id, _foo) VALUES(1, 2)"])))
+  (t/is (anomalous? [:incorrect nil
+                     #"Cannot put documents with columns: #\{\"_foo\"\}"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO foo(_id, _foo) VALUES(1, 2)"])))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Cannot put documents with columns: #\{\"_system_time\"\}"
-                          (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, _system_time: 2}"])))
+  (t/is (anomalous? [:incorrect nil
+                     #"Cannot put documents with columns: #\{\"_system_time\"\}"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, _system_time: 2}"])))
 
   (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1}"])
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Cannot INSERT _system_from column"
-                          (xt/execute-tx tu/*node* ["INSERT INTO foo (SELECT *, 1 AS _system_from FROM foo)"])))
+  (t/is (anomalous? [:incorrect nil
+                     #"Cannot INSERT _system_from column"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO foo (SELECT *, 1 AS _system_from FROM foo)"])))
 
-  (t/is (thrown-with-msg? RuntimeException
-                          #"invalid-valid-times"
-                          (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _valid_from, _valid_to)
+  (t/is (anomalous? [:incorrect nil
+                     #"Invalid valid times"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _valid_from, _valid_to)
                                          VALUES (1, TIMESTAMP '2021-01-01 00:00:00+00:00', TIMESTAMP '2020-01-01 00:00:00+00:00')"]))))
 
 (t/deftest null-valid-time-insertion-behaves-as-if-non-specified
@@ -2752,9 +2740,9 @@ UNION ALL
 
 (t/deftest forbid-invalid-columns-update
   (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1}"])
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Cannot UPDATE _valid_from column"
-                          (xt/execute-tx tu/*node* ["UPDATE foo SET _valid_from = 2 WHERE _id = 1"]))))
+  (t/is (anomalous? [:incorrect nil
+                     #"Cannot UPDATE _valid_from column"]
+                    (xt/execute-tx tu/*node* ["UPDATE foo SET _valid_from = 2 WHERE _id = 1"]))))
 
 (t/deftest joins-across-polymorphic-data-4061+4078
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :a 1} {:xt/id 2 :a 1.0}]
@@ -2785,18 +2773,18 @@ UNION ALL
         "Testing joins with differnt temporal types"))
 
 (t/deftest mismatched-columns-in-table-projection-stops-ingestion-4069
-  (t/is (thrown-with-msg? IllegalArgumentException #"Table projection mismatch"
-                          (xt/q tu/*node* "FROM UNNEST([1,2,3]) x(_id, foo)")))
+  (t/is (anomalous? [:incorrect nil #"Table projection mismatch"]
+                    (xt/q tu/*node* "FROM UNNEST([1,2,3]) x(_id, foo)")))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Table projection mismatch for x \(_id,foo\)"
-                          (xt/execute-tx tu/*node* ["INSERT INTO docs (_id) SELECT _id FROM UNNEST([1,2,3]) x (_id, foo)"])))
+  (t/is (anomalous? [:incorrect nil
+                     #"Table projection mismatch for x \(_id,foo\)"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO docs (_id) SELECT _id FROM UNNEST([1,2,3]) x (_id, foo)"])))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Table projection mismatch"
-                          (xt/q tu/*node* "FROM generate_series (1, 4) xs (x, foo)")))
+  (t/is (anomalous? [:incorrect nil #"Table projection mismatch"]
+                    (xt/q tu/*node* "FROM generate_series (1, 4) xs (x, foo)")))
 
-  (let [ex-msg (ex-message (t/is (thrown? IllegalArgumentException
-                                          (xt/execute-tx tu/*node* ["INSERT INTO docs (_id) FROM generate_series (1, 4) xs (x, foo)"]))))]
+  (let [ex-msg (ex-message (t/is (anomalous? [:incorrect nil]
+                                             (xt/execute-tx tu/*node* ["INSERT INTO docs (_id) FROM generate_series (1, 4) xs (x, foo)"]))))]
     (t/is (str/includes? ex-msg "Table projection mismatch for xs (x,foo)"))
     (t/is (str/includes? ex-msg "Column count mismatch: expected 1, given 0"))
     (t/is (str/includes? ex-msg "INSERT does not contain mandatory _id column"))))
@@ -2816,11 +2804,10 @@ UNION ALL
                (xt/q tu/*node* q)))))
 
   (t/is
-   (thrown-with-msg?
-    IllegalArgumentException
-    #"Subqueries are not allowed in this context"
-    (sql/plan "SELECT foo, bar FROM d1 FULL OUTER JOIN d2 ON foo = (SELECT bar)"
-              {:table-info {"public/d1" #{"_id" "bar"} "public/d2" #{"_id" "foo"}}}))))
+   (anomalous? [:incorrect nil
+                #"Subqueries are not allowed in this context"]
+               (sql/plan "SELECT foo, bar FROM d1 FULL OUTER JOIN d2 ON foo = (SELECT bar)"
+                         {:table-info {"public/d1" #{"_id" "bar"} "public/d2" #{"_id" "foo"}}}))))
 
 (t/deftest order-by-ignored-4193
   (xt/submit-tx tu/*node* ["INSERT INTO docs (_id, col1, w) VALUES (1, 'foo', 'x')"
@@ -2835,10 +2822,9 @@ UNION ALL
                   ORDER BY t asc"))))
 
 (t/deftest test-duplicate-column-projection
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Duplicate column projection: a"
-         (sql/plan "SELECT 1 AS a, 2 AS a" {}))))
+  (t/is (anomalous? [:incorrect nil
+                     #"Duplicate column projection: a"]
+                    (sql/plan "SELECT 1 AS a, 2 AS a" {}))))
 
 (t/deftest test-hashcode-for-tstzrange-4263
   (t/is (= [{:p #xt/tstz-range [#xt/zoned-date-time "2024-01-01T00:00Z" #xt/zoned-date-time "2024-01-02T00:00Z"]}]
@@ -2888,7 +2874,7 @@ UNION ALL
     (t/is (= {:res 301M, :res-types [:decimal 5 0 128]} (q "SELECT 301.02::DECIMAL(5) AS V")))
     (t/is (= {:res 301.020000000M, :res-types [:decimal 64 9 256]} (q "SELECT 301.02::DECIMAL AS V")))
     (t/is (= {:res 301.020000000M, :res-types [:decimal 64 9 256]} (q "SELECT '301.02'::DECIMAL AS V")))
-    (t/is (thrown? IllegalArgumentException (q "SELECT '301.02'::DECIMAL(65) AS V"))))
+    (t/is (anomalous? [:incorrect nil] (q "SELECT '301.02'::DECIMAL(65) AS V"))))
 
   (t/testing "correct EE behaviour"
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :d 1.1M} {:xt/id 2 :d 1.02M}]])
@@ -2916,8 +2902,8 @@ UNION ALL
               (str "Expected: " expected ", but got: " result))))))
 
 (t/deftest iseq-from-symbol-bug-4378
-  (t/is (thrown-with-msg? IllegalArgumentException #"Subquery arity error"
-                          (sql/plan "
+  (t/is (anomalous? [:incorrect nil #"Subquery arity error"]
+                    (sql/plan "
 WITH dates AS (
   SELECT TIMESTAMP '2023-01-01T00:00:00Z' AS d
   UNION ALL
@@ -2987,13 +2973,16 @@ FROM dates"))))
 (t/deftest inconsistent-patch-behaviour-4448
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])
 
-  (let [ex (t/is (thrown? RuntimeException (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM ? TO ? RECORDS {_id: 1, foo: 3}" [#inst "2020" #inst "2015"]]])))]
-    (t/is (= #xt/runtime-err [:xtdb.indexer/invalid-valid-times "Runtime error: 'xtdb.indexer/invalid-valid-times'" {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"}]
-             ex)))
+  (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-valid-times
+                     "Invalid valid times"
+                     {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"}]
+                    (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM ? TO ? RECORDS {_id: 1, foo: 3}" [#inst "2020" #inst "2015"]]])))
 
   (t/is (= [{:committed false,
-             :error
-             #xt/runtime-err [:xtdb.indexer/invalid-valid-times "Runtime error: 'xtdb.indexer/invalid-valid-times'" {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"}]}]
+             :error #xt/error [:incorrect :xtdb.indexer/invalid-valid-times
+                               "Invalid valid times"
+                               {:valid-from #xt/instant "2020-01-01T00:00:00Z",
+                                :valid-to #xt/instant "2015-01-01T00:00:00Z"}]}]
            (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} committed error])))))
 
 (t/deftest temporal-filter-expressions-3306

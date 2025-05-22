@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.TransactionKey
 import xtdb.api.query.IKeyFn
+import xtdb.error.Incorrect
+import xtdb.error.Unsupported
 import xtdb.http.QueryOptions
 import xtdb.http.QueryRequest
 import java.math.BigDecimal
@@ -126,19 +128,19 @@ class JsonSerdeTest {
     }
 
     @Test
-    fun shouldDeserializeIllegalArgException() {
-        IllegalArgumentException(
-            Keyword.intern("xtdb", "malformed-req"),
-            "sort your request out!",
-            mapOf(Keyword.intern("a") to 1L),
+    fun shouldDeserializeIncorrect() {
+        Incorrect(
+            message = "sort your request out!",
+            errorCode = "xtdb/malformed-req",
+            data = mapOf("a" to 1L),
         ).assertRoundTrip(
             """{
               "@type": "xt:error",
               "@value": {
                 "xtdb.error/message": "sort your request out!",
-                "xtdb.error/class": "xtdb.IllegalArgumentException",
-                "xtdb.error/error-key": "xtdb/malformed-req",
+                "xtdb.error/class": "xtdb.error.Incorrect",
                 "xtdb.error/data": {
+                  "xtdb.error/code": {"@type":"xt:keyword","@value":"xtdb/malformed-req"},
                   "a": 1
                 }
               }
@@ -146,21 +148,20 @@ class JsonSerdeTest {
         )
     }
 
-
     @Test
-    fun shouldDeserializeRuntimeException() {
-        RuntimeException(
-            Keyword.intern("xtdb", "boom"),
-            "ruh roh.",
-            mapOf(Keyword.intern("a") to 1L)
+    fun shouldDeserializeUnsupported() {
+        Unsupported(
+            message = "ruh roh.",
+            errorCode = "xtdb/boom",
+            mapOf("a" to 1L)
         ).assertRoundTrip(
             """{
               "@type": "xt:error",
               "@value": {
                 "xtdb.error/message": "ruh roh.",
-                "xtdb.error/class": "xtdb.RuntimeException",
-                "xtdb.error/error-key": "xtdb/boom",
+                "xtdb.error/class": "xtdb.error.Unsupported",
                 "xtdb.error/data": {
+                  "xtdb.error/code": {"@type":"xt:keyword","@value":"xtdb/boom"},
                   "a": 1
                 }
               }

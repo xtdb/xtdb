@@ -318,7 +318,8 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01"
                                        :message "data exception - division by zero"
-                                       :detail {:error-key "xtdb.expression/division-by-zero",
+                                       :detail {:category "cognitect.anomalies/incorrect",
+                                                :code "xtdb.expression/division-by-zero",
                                                 :message "data exception - division by zero"}}}]
                 [:msg-ready {:status :failed-transaction}]]
                (test "BEGIN; SELECT 1/0 boom;"))))

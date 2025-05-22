@@ -13,7 +13,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUATION_TOKEN
 import org.apache.arrow.vector.ipc.message.MessageSerializer.deserializeRecordBatch
-import xtdb.IllegalArgumentException
+import xtdb.error.Incorrect
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
@@ -59,7 +59,7 @@ object ArrowUtil {
                 ARROW_MAGIC, 0, magicLength
             )
         )
-            throw IllegalArgumentException.createNoKey("invalid Arrow IPC file format", emptyMap<String, String>())
+            throw Incorrect("invalid Arrow IPC file format", errorCode = "xtdb/invalid-arrow-magic")
     }
 
     fun ArrowBuf.readArrowFooter(): ArrowFooter {

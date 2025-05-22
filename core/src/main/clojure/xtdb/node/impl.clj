@@ -20,14 +20,14 @@
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
            (java.util HashMap)
-           (java.util.concurrent ExecutionException)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionKey TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
+           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
            [xtdb.api.tx TxOp]
+           xtdb.error.Anomaly
            (xtdb.indexer IIndexer LiveIndex LogProcessor)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.util TxIdUtil)))
@@ -99,11 +99,10 @@
   xtp/PNode
   (submit-tx [this tx-ops opts]
     (try 
-      (let [offset @(xt-log/submit-tx& this (->TxOps tx-ops) opts)]
-        (TxIdUtil/offsetToTxId (.getEpoch log) offset)) 
-      (catch ExecutionException e
-        (throw (ex-cause e)))
-      (catch IllegalArgumentException e
+      (-> (let [offset @(xt-log/submit-tx& this (->TxOps tx-ops) opts)]
+            (TxIdUtil/offsetToTxId (.getEpoch log) offset))
+          (util/rethrowing-cause))
+      (catch Anomaly e
         (when tx-error-counter
           (.increment tx-error-counter))
         (throw e))))

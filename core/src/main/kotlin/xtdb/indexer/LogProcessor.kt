@@ -11,6 +11,7 @@ import xtdb.api.log.*
 import xtdb.api.log.Log.Message
 import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
+import xtdb.error.Interrupted
 import xtdb.trie.TrieCatalog
 import xtdb.util.TxIdUtil.offsetToTxId
 import xtdb.util.TxIdUtil.txIdToEpoch
@@ -149,13 +150,9 @@ class LogProcessor(
                 }
                 latestProcessedMsgId = msgId
                 watchers.notify(msgId, res)
-            } catch (e: InterruptedException) {
+            } catch (e: Interrupted) {
                 watchers.notify(msgId, e)
                 throw CancellationException(e)
-            } catch (e: ClosedByInterruptException) {
-                val ie = InterruptedException(e.toString())
-                watchers.notify(msgId, ie)
-                throw CancellationException(ie)
             } catch (e: Throwable) {
                 watchers.notify(msgId, e)
                 LOG.error(e, "Ingestion stopped: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})")

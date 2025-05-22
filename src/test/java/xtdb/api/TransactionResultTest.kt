@@ -1,15 +1,15 @@
 package xtdb.api
 
-import clojure.lang.Keyword
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.JSON_SERDE
+import xtdb.error.Incorrect
 import xtdb.trimJson
 import java.time.Instant
 
 class TransactionResultTest {
 
-    private val testError = xtdb.RuntimeException(Keyword.intern("xtdb.error", "error-key"), "test")
+    private val testError = Incorrect(errorCode = "xtdb.error/error-key", message = "test")
 
     @Test
     fun testTransactionResultSerialization() {
@@ -29,9 +29,12 @@ class TransactionResultTest {
               "committed": false,
               "error": {
                   "@type":"xt:error",
-                  "@value":{"xtdb.error/message":"test",
-                  "xtdb.error/class":"xtdb.RuntimeException",
-                  "xtdb.error/error-key":"xtdb.error/error-key","xtdb.error/data":{}
+                  "@value":{
+                    "xtdb.error/message":"test",
+                    "xtdb.error/class":"xtdb.error.Incorrect",
+                    "xtdb.error/data":{
+                      "xtdb.error/code":{"@type":"xt:keyword","@value":"xtdb.error/error-key"}
+                    }
                 }
               }
             }
@@ -58,10 +61,13 @@ class TransactionResultTest {
                   "systemTime": "1970-01-01T00:00:00Z",
                   "committed": false,
                   "error": {
-                      "@type":"xt:error",
-                      "@value":{"xtdb.error/message":"test",
-                      "xtdb.error/class":"xtdb.RuntimeException",
-                      "xtdb.error/error-key":"xtdb.error/error-key","xtdb.error/data":{}
+                    "@type":"xt:error",
+                    "@value":{
+                      "xtdb.error/message":"test",
+                      "xtdb.error/class":"xtdb.error.Incorrect",
+                      "xtdb.error/data":{
+                        "xtdb.error/code":{"@type":"xt:keyword", "@value": "xtdb.error/error-key"}
+                      }
                     }
                   }
                 }

@@ -1,12 +1,11 @@
 (ns xtdb.sql.expr-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.expression]
+            [xtdb.expression :as expr]
             [xtdb.sql :as sql]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import java.time.ZonedDateTime
-           (java.time.zone ZoneRulesException)
            [java.util HashMap]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -560,10 +559,8 @@
   (t/is (= [{:itvl #xt/interval "P24M"}]
            (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR) as itvl")))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Cannot cast integer to a multi field interval"
-         (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl"))))
+  (t/is (anomalous? [:incorrect nil #"Cannot cast integer to a multi field interval"]
+                    (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl"))))
 
 (t/deftest test-cast-string-to-interval-with-qualifier
   (t/is (= [{:itvl #xt/interval "P3DT11H10M"}]
@@ -575,10 +572,8 @@
   (t/is (= [{:itvl #xt/interval "P22M"}]
            (xt/q tu/*node* "SELECT CAST('1-10' AS INTERVAL YEAR TO MONTH) as itvl")))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Interval end field must have less significance than the start field."
-         (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl")))
+  (t/is (anomalous? [:incorrect nil #"Interval end field must have less significance than the start field."]
+                    (xt/q tu/*node* "SELECT CAST('11:10' AS INTERVAL MINUTE TO HOUR) as itvl")))
 
   (t/testing "ISO with seconds precision"
     (t/is (= [{:itvl #xt/interval "PT10M10.123456S"}]
@@ -774,10 +769,9 @@
   (with-redefs [xtdb.expression/xtdb-server-version (fn [] "2.0.0-SNAPSHOT")]
     (t/is (= [{:v 2000000}]
              (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v"))))
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Setting not supported"
-         (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
+
+  (t/is (anomalous? [:unsupported ::expr/unsupported-setting]
+                    (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
 
 (t/deftest test-date-trunc-query
   (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:34:00Z"}]
@@ -796,10 +790,9 @@
   (t/is (= [{:timestamp #xt/zoned-date-time "2001-02-16T08:00-05:00"}]
            (xt/q tu/*node* "select date_trunc(day, TIMESTAMP '2001-02-16 15:38:11-05:00', 'Australia/Sydney') as \"timestamp\"")))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"Unknown time-zone ID: NotRealRegion"
-         (xt/q tu/*node* "select date_trunc(hour, TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as \"timestamp\""))))
+  (t/is (anomalous? [:incorrect ::expr/invalid-timezone
+                     #"Unknown time-zone ID: NotRealRegion"]
+                    (xt/q tu/*node* "select date_trunc(hour, TIMESTAMP '2000-01-02 00:43:11+00:00', 'NotRealRegion') as \"timestamp\""))))
 
 (t/deftest test-date-trunc-with-interval-query
   (t/is (= [{:interval #xt/interval "P3Y"}]
@@ -922,10 +915,9 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 2021}]
              (xt/q tu/*node* "SELECT EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56') as x")))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"]
+                      (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
 
   (t/testing "timestamp with timezone behavior"
     (t/is (= [{:x 34}]
@@ -938,10 +930,9 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 3}]
              (xt/q tu/*node* "SELECT EXTRACT(MONTH FROM DATE '2001-03-11') as x")))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Extract \"TIMEZONE_HOUR\" not supported for type date"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x"))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Extract \"TIMEZONE_HOUR\" not supported for type date"]
+                      (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x"))))
 
   (t/testing "time behavior"
     (t/is (= [{:x 34}]
@@ -950,10 +941,9 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 12}]
              (xt/q tu/*node* "SELECT EXTRACT(HOUR FROM TIME '12:34:56') as x")))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"]
+                      (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
 
   (t/testing "interval behavior"
     (t/is (= [{:x 3}]
@@ -962,10 +952,9 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 47}]
              (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Extract \"TIMEZONE_HOUR\" not supported for type interval"
-           (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Extract \"TIMEZONE_HOUR\" not supported for type interval"]
+                      (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))))
 
 (t/deftest test-age-function
   (t/testing "testing AGE with timestamps"
@@ -1321,10 +1310,8 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
              (plan-expr-with-foo "UUID '550e8400-e29b-41d4-a716-446655440000'"))))
 
   (t/testing "Planning Error"
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Cannot parse UUID: error"
-           (plan-expr-with-foo "UUID 'error'")))) 
+    (t/is (anomalous? [:incorrect nil #"Cannot parse UUID: error"]
+                      (plan-expr-with-foo "UUID 'error'"))))
 
   (t/testing "Running"
     (t/is (= [{:uuid-literal #uuid "550e8400-e29b-41d4-a716-446655440000"}]
@@ -1416,17 +1403,14 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= "foo\nbar" (sql/plan-expr "$$foo\nbar$$")))
 
   (t/testing "no matching end tag"
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"no viable alternative"
-                            (sql/plan-expr "$$foo")))
+    (t/is (anomalous? [:incorrect nil #"no viable alternative"]
+                      (sql/plan-expr "$$foo")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"no viable alternative"
-                            (sql/plan-expr "$tag$foo")))
+    (t/is (anomalous? [:incorrect nil #"no viable alternative"]
+                      (sql/plan-expr "$tag$foo")))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"no viable alternative"
-                            (sql/plan-expr "$tag$foo$tagg$")))))
+    (t/is (anomalous? [:incorrect nil #"no viable alternative"]
+                      (sql/plan-expr "$tag$foo$tagg$")))))
 
 (t/deftest test-where-commas
   (letfn [(plan-expr [expr]

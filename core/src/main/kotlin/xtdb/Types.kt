@@ -16,6 +16,7 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.error.Unsupported
 import xtdb.time.Interval
 import xtdb.time.MICRO_HZ
 import xtdb.time.NANO_HZ
@@ -122,10 +123,7 @@ fun valueToArrowType(obj: Any?): ArrowType = when (obj) {
             // Java Arrow only supports 128 and 256 bit widths
             in 0..32 -> 32
             in 33..64 -> 64
-            else -> throw IllegalArgumentException.createNoKey(
-                "Unsupported precision: ${obj.precision()}",
-                emptyMap<String, String>()
-            )
+            else -> throw Unsupported("Unsupported precision: ${obj.precision()}")
         }
         ArrowType.Decimal(precision, obj.scale(), precision * 4)
     }

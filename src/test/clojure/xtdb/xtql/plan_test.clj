@@ -12,7 +12,8 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.xtql :as xtql]
-            [xtdb.xtql.plan :as plan]))
+            [xtdb.xtql.plan :as plan])
+  (:import (xtdb.error Incorrect)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -67,10 +68,10 @@
            (set (xt/q tu/*node* '(from :docs [{:last-name first-name} *]))))
         "Implicitly projected cols unify with explicitly projected cols")
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"\* is not a valid in from when inside a unify context"
-                          (xt/q tu/*node*
-                                 '(unify (from :docs [*]))))))
+  (t/is (anomalous? [:incorrect nil
+                     #"\* is not a valid in from when inside a unify context"]
+                    (xt/q tu/*node*
+                          '(unify (from :docs [*]))))))
 
 (deftest test-from-unification
   (xt/submit-tx tu/*node*
@@ -384,11 +385,11 @@
 
 (t/deftest test-with-op-errs
   (let [_tx (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])]
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Not all variables in expression are in scope"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [{:xt/id id}])
-                                       (with {:bar (str baz)})))))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Not all variables in expression are in scope"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [{:xt/id id}])
+                                 (with {:bar (str baz)})))))))
 
 (t/deftest test-with-unify-clause
   (t/testing "Duplicate vars unify"
@@ -501,41 +502,41 @@
 
   (t/testing "Error Cases"
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Variables outside of aggregate expressions must be grouping columns"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [{:category category :v v}])
-                                       (aggregate category {:sum-doubles (* v (sum v))})))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Variables outside of aggregate expressions must be grouping columns"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [{:category category :v v}])
+                                 (aggregate category {:sum-doubles (* v (sum v))})))))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Aggregate functions cannot be nested"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [v])
-                                       (aggregate {:sum-doubles (sum (count v))})))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Aggregate functions cannot be nested"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [v])
+                                 (aggregate {:sum-doubles (sum (count v))})))))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Not all variables in expression are in scope"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [v])
-                                       (aggregate {:sum-doubles (sum y)})))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Not all variables in expression are in scope"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [v])
+                                 (aggregate {:sum-doubles (sum y)})))))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Not all variables in expression are in scope"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [v])
-                                       (aggregate y {:sum-doubles (+ y (sum v))})))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Not all variables in expression are in scope"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [v])
+                                 (aggregate y {:sum-doubles (+ y (sum v))})))))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Not all variables in expression are in scope"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [v])
-                                       (aggregate y)))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Not all variables in expression are in scope"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [v])
+                                 (aggregate y)))))
 
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #"Not all variables in expression are in scope"
-                            (xt/q tu/*node*
-                                  '(-> (from :docs [v])
-                                       (aggregate {:sum-doubles (+ y (sum v))})))))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Not all variables in expression are in scope"]
+                      (xt/q tu/*node*
+                            '(-> (from :docs [v])
+                                 (aggregate {:sum-doubles (+ y (sum v))})))))))
 
 (deftest test-composite-value-bindings
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :map {:foo 1} :set #{1 2 3}}]])
@@ -667,14 +668,14 @@
                            (return e s)))))
         "dependent: find people who have siblings")
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Not all variables in expression are in scope"
-                          (xt/q tu/*node*
-                                '(unify (from :docs [{:xt/id e :foo n}])
-                                        (left-join
-                                         (-> (from :docs [{:xt/id e :first-name "Petr"}])
-                                             (where (= n 1)))
-                                         [e]))))))
+  (t/is (anomalous? [:incorrect nil
+                     #"Not all variables in expression are in scope"]
+                    (xt/q tu/*node*
+                          '(unify (from :docs [{:xt/id e :foo n}])
+                                  (left-join
+                                   (-> (from :docs [{:xt/id e :first-name "Petr"}])
+                                       (where (= n 1)))
+                                   [e]))))))
 
 (deftest test-exists
   (xt/submit-tx tu/*node*
@@ -1169,36 +1170,30 @@
                              [i :name "Ivan"]
                              [i :last-name "Ivanov"]]]})))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #":unknown-rule"
-         (xt/q tu/*node* '{:find [i]
-                           :where [(match :docs {:xt/id i})
-                                   [i :age age]
-                                   (over-twenty-one? age)]})))
+  (t/is (anomalous? [:incorrect nil #":unknown-rule"]
+                    (xt/q tu/*node* '{:find [i]
+                                      :where [(match :docs {:xt/id i})
+                                              [i :age age]
+                                              (over-twenty-one? age)]})))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #":rule-wrong-arity"
-         (xt/q tu/*node* '{:find [i]
-                           :where [(match :docs {:xt/id i})
-                                   [i :age age]
-                                   (over-twenty-one? i age)]
-                           :rules [[(over-twenty-one? x)
-                                    [(>= x 21)]]]})))
-  (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #":rule-definitions-require-unique-arity"
-         (xt/q tu/*node* '{:find [i]
-                           :where [(match :docs {:xt/id i})
-                                   [i :age age]
-                                   (is-ivan-or-petr? i name)]
-                           :rules [[(is-ivan-or-petr? i name)
-                                    (match :docs {:xt/id i})
-                                    [i :name "Ivan"]]
-                                   [(is-ivan-or-petr? i)
-                                    (match :docs {:xt/id i})
-                                    [i :name "Petr"]]]}))))
+  (t/is (anomalous? [:incorrect nil #":rule-wrong-arity"]
+                    (xt/q tu/*node* '{:find [i]
+                                      :where [(match :docs {:xt/id i})
+                                              [i :age age]
+                                              (over-twenty-one? i age)]
+                                      :rules [[(over-twenty-one? x)
+                                               [(>= x 21)]]]})))
+  (t/is (anomalous? [:incorrect nil #":rule-definitions-require-unique-arity"]
+                    (xt/q tu/*node* '{:find [i]
+                                      :where [(match :docs {:xt/id i})
+                                              [i :age age]
+                                              (is-ivan-or-petr? i name)]
+                                      :rules [[(is-ivan-or-petr? i name)
+                                               (match :docs {:xt/id i})
+                                               [i :name "Ivan"]]
+                                              [(is-ivan-or-petr? i)
+                                               (match :docs {:xt/id i})
+                                               [i :name "Petr"]]]}))))
 
 
 (t/deftest test-temporal-opts
@@ -1686,18 +1681,18 @@
                      (without :cid))))))
 
   (t/testing "cardinality violation error"
-    (t/is (thrown-with-msg? xtdb.RuntimeException #"cardinality violation"
-                            (->> '(unify
-                                   (with {first-name (q (from :customer [{:firstname firstname}]))}))
-                                 (xt/q tu/*node*)))))
+    (t/is (anomalous? [:incorrect nil #"cardinality violation"]
+                      (->> '(unify
+                             (with {first-name (q (from :customer [{:firstname firstname}]))}))
+                           (xt/q tu/*node*)))))
 
   (t/testing "multiple column error"
-    (t/is (thrown-with-msg? IllegalArgumentException #"Scalar subquery must only return a single column"
-                            (->> '(unify
-                                   (with
-                                    {n-customers
-                                     (q (from :customer [{:customer customer, :firstname firstname}]))}))
-                                 (xt/q tu/*node*))))))
+    (t/is (anomalous? [:incorrect nil #"Scalar subquery must only return a single column"]
+                      (->> '(unify
+                             (with
+                              {n-customers
+                               (q (from :customer [{:customer customer, :firstname firstname}]))}))
+                           (xt/q tu/*node*))))))
 
 (deftest test-period-predicates
 

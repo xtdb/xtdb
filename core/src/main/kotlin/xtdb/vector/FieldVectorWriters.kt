@@ -26,13 +26,13 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.RuntimeException
 import xtdb.arrow.*
+import xtdb.error.Unsupported
+import xtdb.time.Interval
 import xtdb.time.MICRO_HZ
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
 import xtdb.types.ClojureForm
-import xtdb.time.Interval
 import xtdb.types.ZonedDateTimeRange
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.*
@@ -239,7 +239,7 @@ private class TimeNanoVectorWriter(override val vector: TimeNanoVector) : TimeVe
     override fun writeLong(v: Long) = vector.setSafe(valueCount++, v)
 }
 
-val DECIMAL_ERROR_KEY: Keyword = Keyword.intern("xtdb.error", "decimal-error")
+const val DECIMAL_ERROR_KEY = "xtdb.error/decimal-error"
 
 private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVectorWriter(vector) {
     override fun writeObject0(obj: Any) {
@@ -247,7 +247,7 @@ private class DecimalVectorWriter(override val vector: DecimalVector) : ScalarVe
         try {
             vector.setSafe(valueCount++, obj)
         } catch (e: UnsupportedOperationException) {
-            throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
+            throw Unsupported(e.message, errorCode = DECIMAL_ERROR_KEY, cause = e)
         }
     }
 
@@ -260,7 +260,7 @@ private class Decimal256VectorWriter(override val vector: Decimal256Vector) : Sc
         try {
             vector.setSafe(valueCount++, obj)
         } catch (e: UnsupportedOperationException) {
-            throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
+            throw Unsupported(e.message, errorCode = DECIMAL_ERROR_KEY, cause = e)
         }
     }
 

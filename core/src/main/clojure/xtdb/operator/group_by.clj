@@ -389,14 +389,14 @@
                                                (into #{} (remove (comp (some-fn #(isa? types/col-type-hierarchy % :num)
                                                                                 #{:duration :date :timestamp-local :timestamp-tz :time-local})
                                                                        types/col-type-head)))))]
-    (throw (err/runtime-err :xtdb.group-by/unsupported-min-max-types
-                            {::err/message "Unsupported types in min/max aggregate"
-                             :unsupported-types unsupported-types})))
+    (throw (err/unsupported :xtdb.group-by/unsupported-min-max-types
+                            "Unsupported types in min/max aggregate"
+                            {:unsupported-types unsupported-types})))
 
   (when (= :any to-type)
-    (throw (err/runtime-err :xtdb.group-by/incomparable-min-max-types
-                            {::err/message "Incomparable types in min/max aggregate"
-                             :types from-types}))))
+    (throw (err/incorrect :xtdb.group-by/incomparable-min-max-types
+                          "Incomparable types in min/max aggregate"
+                          {:types from-types}))))
 
 (defn- min-max-factory
   "compare-kw: update the accumulated value if `(compare-kw el acc)`"

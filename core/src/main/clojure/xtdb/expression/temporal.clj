@@ -276,8 +276,9 @@
          (try
            (fallback-parse-fn s)
            (catch DateTimeParseException _)))
-       (throw (err/runtime-err :xtdb.expression/invalid-temporal-string
-                               {::err/message (format "String '%s' has invalid format for type %s" s date-type)})))))
+       (throw (err/incorrect ::expr/invalid-temporal-string
+                             (format "String '%s' has invalid format for type %s" s date-type)
+                             {:s s, :date-type date-type})))))
 
 (defn alter-precision [^long precision ^Temporal temporal]
   (if (= precision 0)
@@ -432,8 +433,8 @@
 (defn md*-interval->duration [^PeriodDuration x]
   (let [period (.getPeriod x)]
     (if (> (.toTotalMonths period) 0)
-      (throw (err/runtime-err :xtdb.expression/cannot-cast-mdn-interval-with-months
-                              {::err/message "Cannot cast month-day-micro/nano intervals when month component is non-zero."}))
+      (throw (err/incorrect :xtdb.expression/cannot-cast-mdn-interval-with-months
+                            "Cannot cast month-day-micro/nano intervals when month component is non-zero."))
       (.plusDays (.getDuration x) (.getDays period)))))
 
 (defmethod expr/codegen-cast [:interval :duration] [{[_ iunit] :source-type [_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
@@ -492,8 +493,8 @@
         duration (.getDuration pd)]
 
     (when (> (.toTotalMonths period) 0)
-      (throw (throw (err/runtime-err :xtdb.expression/cannot-normalize-md*-interval-with-months
-                                     {::err/message "Cannot normalize month-day-micro/nano interval with non-zero month component"}))))
+      (throw (throw (err/incorrect :xtdb.expression/cannot-normalize-md*-interval-with-months
+                                   "Cannot normalize month-day-micro/nano interval with non-zero month component"))))
 
     (case [start-field end-field]
       ["DAY" nil] (->day-md*-interval period duration)
@@ -530,18 +531,18 @@
   [{[_ d-unit] :source-type {:keys [start-field end-field leading-precision fractional-precision] :as interval-qualifier} :cast-opts}]
 
   (if interval-qualifier
-    (do (when (or (= "YEAR" start-field) (= "MONTH" start-field))
-          (throw (err/illegal-arg ::expr/unsupported-cast
-                                  {::err/message "Cannot cast a duration to a year-month interval"
-                                   :source-type :duration})))
-        (ensure-interval-precision-valid leading-precision)
-        (when end-field (ensure-interval-units-valid start-field end-field))
-        (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
+    (do
+      (when (or (= "YEAR" start-field) (= "MONTH" start-field))
+        (throw (err/incorrect ::expr/unsupported-cast "Cannot cast a duration to a year-month interval"
+                              {:source-type :duration})))
+      (ensure-interval-precision-valid leading-precision)
+      (when end-field (ensure-interval-units-valid start-field end-field))
+      (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
 
-        (if (< 6 ^long fractional-precision)
-          ;;until we have other precision intervals, stick everything sub 6 in mdm
-          (cast-duration->mdn-interval d-unit interval-qualifier)
-          (cast-duration->mdm-interval d-unit interval-qualifier)))
+      (if (< 6 ^long fractional-precision)
+        ;;until we have other precision intervals, stick everything sub 6 in mdm
+        (cast-duration->mdn-interval d-unit interval-qualifier)
+        (cast-duration->mdm-interval d-unit interval-qualifier)))
 
     (if (= :nano d-unit)
       (cast-duration->mdn-interval d-unit interval-qualifier)
@@ -613,9 +614,9 @@
                        (if (str/blank? d) Duration/ZERO
                            (time/alter-duration-precision 6 (Duration/parse (str "PT" d))))))
     (catch DateTimeParseException e
-      (throw (err/runtime-err :xtdb.expression/invalid-iso-interval-string
-                              {::err/message (format "Invalid ISO 8601 string '%s' for interval" iso-string)
-                               ::err/parse-exception e})))))
+      (throw (err/incorrect :xtdb.expression/invalid-iso-interval-string
+                            (format "Invalid ISO 8601 string '%s' for interval" iso-string)
+                            {::err/cause e})))))
 
 (defn ->single-field-interval-call [{{:keys [start-field leading-precision fractional-precision]} :cast-opts}]
   (let [expr {:op :call
@@ -919,8 +920,8 @@
   (let [^Period x-period (.getPeriod x)
         ^Period y-period (.getPeriod y)]
     (if (or (> (.toTotalMonths x-period) 0) (> (.toTotalMonths y-period) 0))
-      (throw (err/runtime-err :xtdb.expression/cannot-compare-mdn-interval-with-months
-                              {::err/message "Cannot compare month-day-micro/nano intervals when month component is non-zero."}))
+      (throw (err/incorrect :xtdb.expression/cannot-compare-mdn-interval-with-months
+                            "Cannot compare month-day-micro/nano intervals when month component is non-zero."))
       (let [x-period-nanos (* (.getDays x-period) 86400000000000)
             x-duration-nanos (.toNanos (.getDuration x))
             y-period-nanos (* (.getDays y-period) 86400000000000)
@@ -1671,10 +1672,9 @@
 (defn invalid-period-err [^long from-µs, ^long to-µs]
   (let [from (time/micros->instant from-µs)
         to (time/micros->instant to-µs)]
-    (err/runtime-err :xtdb/invalid-period
-                     {::err/message (format "'from' must be earlier than 'to' when constructing a period - 'from': %s, 'to': %s" from to)
-                      :from from
-                      :to to})))
+    (err/incorrect :xtdb/invalid-period
+                   (format "'from' must be earlier than 'to' when constructing a period - 'from': %s, 'to': %s" from to)
+                   {:from from, :to to})))
 
 (defn ->period ^xtdb.arrow.ListValueReader [^long from, ^long to]
   (when (>= from to)

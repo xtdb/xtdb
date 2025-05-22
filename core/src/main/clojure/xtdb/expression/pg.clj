@@ -38,8 +38,7 @@
                   `(let [tn# (expr/buf->str ~utf8-code)]
                      (if-let [matching-tn# (find-matching-table-name ~expr/schema-sym tn#)]
                        (info/name->oid matching-tn#)
-                       (throw (err/runtime-err ::unknown-relation
-                                               {::err/message (format "Relation %s does not exist" tn#)})))))})
+                       (throw (err/incorrect ::unknown-relation (format "Relation %s does not exist" tn#))))))})
 
 (defmethod expr/codegen-cast [:regclass :utf8] [{:keys [target-type]}]
   {:return-type target-type
@@ -61,8 +60,7 @@
    :->call-code (fn [[utf8-code]]
                   `(let [pn# (expr/buf->str ~utf8-code)]
                      (or (some (comp :oid info/procs) (symbol-names pn#))
-                         (throw (err/runtime-err ::unknown-proc
-                                                 {::err/message (format "Procedure %s does not exist" pn#)})))))})
+                         (throw (err/incorrect ::unknown-proc (format "Procedure %s does not exist" pn#))))))})
 
 (defmethod expr/codegen-cast [:regproc :utf8] [{:keys [target-type]}]
   {:return-type target-type

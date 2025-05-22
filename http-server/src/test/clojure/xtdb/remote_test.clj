@@ -9,7 +9,8 @@
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
-  (:import (xtdb JsonSerde)))
+  (:import (xtdb JsonSerde)
+           (xtdb.error Incorrect)))
 
 ;; ONLY put stuff here where remote DIFFERS to in-memory
 
@@ -104,11 +105,9 @@
                                                          :throw-exceptions? false})
           body (decode-json body)]
       (t/is (= 400 status))
-      (t/is (instance? xtdb.IllegalArgumentException body))
-      (t/is (= "Illegal argument: 'xtql/malformed-table'" (ex-message body)))
-      (t/is (= '{:xtdb.error/error-key :xtql/malformed-table,
-                 :table docs,
-                 :from [from docs [name]]} (ex-data body)))))
+      (t/is (anomalous? [:incorrect :xtql/malformed-table
+                         '{:table docs, :from [from docs [name]]}]
+                        (throw body)))))
 
 
   (t/testing "runtime error"
@@ -122,10 +121,9 @@
                                                          :url (http-url "query")})
           body (decode-json body)]
       (t/is (= 200 status))
-      (t/is (instance? xtdb.RuntimeException body))
-      (t/is (= "data exception - division by zero" (ex-message body)))
-      (t/is (= {:xtdb.error/error-key :xtdb.expression/division-by-zero}
-               (ex-data body))))))
+      (t/is (anomalous? [:incorrect :xtdb.expression/division-by-zero
+                         "data exception - division by zero"]
+                        (throw body))))))
 
 (def json-tx-ops
   [{"sql" "INSERT INTO docs (_id) VALUES (1)"}
@@ -182,9 +180,8 @@
                            :throw-exceptions? false})
             body (decode-json body)]
         (t/is (= 400 status))
-        (t/is (= "Error decoding JSON!" (ex-message body)))
-        (t/is (= {:xtdb.error/error-key :malformed-request}
-                 (-> (ex-data body) (select-keys [::err/error-key]))))))
+        (t/is (anomalous? [:incorrect nil "Error decoding JSON"]
+                          (throw body)))))
 
     (t/testing "malformed query request (see xt:instat)"
       (let [{:keys [status body] :as _resp}
@@ -199,9 +196,8 @@
                            :throw-exceptions? false})
             body (decode-json body)]
         (t/is (= 400 status))
-        (t/is (= "Error decoding JSON!" (ex-message body)))
-        (t/is (= {:xtdb.error/error-key :malformed-request}
-                 (-> (ex-data body) (select-keys [::err/error-key]))))))))
+        (t/is (anomalous? [:incorrect nil "Error decoding JSON"]
+                          (throw body)))))))
 
 (deftest json-both-ways-test
   (t/is (= [{"foo_bar" 1} {"foo_bar" 2}]

@@ -5,6 +5,7 @@ import com.cognitect.transit.Reader
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.error.Anomaly
 import xtdb.types.ClojureForm
 import xtdb.util.requiringResolve
 import xtdb.vector.extensions.TransitType
@@ -22,7 +23,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
 
     override fun writeObject0(value: Any) =
         when (value) {
-            is ClojureForm, is xtdb.RuntimeException, is xtdb.IllegalArgumentException,
+            is ClojureForm, is Anomaly,
             -> inner.writeObject(requiringResolve("xtdb.serde/write-transit")(value) as ByteArray)
 
             else -> throw InvalidWriteObjectException(fieldType, value)

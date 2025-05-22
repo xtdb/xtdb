@@ -10,7 +10,7 @@
   #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]]},
  :tries
  [{:trie-key "l00-rc-b00",
-   :data-file-size 3326,
+   :data-file-size 3302,
    :trie-metadata
    {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
     :max-valid-from #xt/instant "2020-01-06T00:00:00Z",
@@ -24,4 +24,4 @@
  {"system_time" [-2034527697 6.01764709272061],
   "committed" [-1112647138 2.001955671862574],
   "_id" [240153275 6.01764709272061],
-  "error" [825871333 2.001955671862574]}}
+  "error" [-2042553016 2.001955671862574]}}

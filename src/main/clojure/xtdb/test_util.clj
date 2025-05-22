@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [cognitect.anomalies :as-alias anom]
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.client :as xtc]

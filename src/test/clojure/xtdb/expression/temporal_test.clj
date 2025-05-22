@@ -164,8 +164,8 @@
 
       (t/testing "time ->"
         (t/testing "date"
-          (t/is (thrown? IllegalArgumentException
-                         (test-cast #xt/time "12:34:56.789012345" [:date :day]))))
+          (t/is (anomalous? [:incorrect nil]
+                            (test-cast #xt/time "12:34:56.789012345" [:date :day]))))
 
         (t/testing "time"
           (t/is (= #xt/time "12:34:56.789"
@@ -246,12 +246,12 @@
           (t/is (= #xt/zoned-date-time "2022-08-01T04:04:56.12345678Z[UTC]" (test-cast "2022-08-01T05:34:56.123456789+01:30" [:timestamp-tz :nano "UTC"] {:precision 8})))
           (t/is (= #xt/time "05:34:56.1234567" (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 7})))
           (t/is (= #xt/duration "PT13M56.1234567S" (test-cast "PT13M56.123456789S" [:duration :nano] {:precision 7})))
-          (t/is (thrown-with-msg? IllegalArgumentException
-                                  #"The minimum fractional seconds precision is 0."
-                                  (test-cast "05:34:56.123456789" [:time-local :nano] {:precision -1})))
-          (t/is (thrown-with-msg? IllegalArgumentException
-                                  #"The maximum fractional seconds precision is 9."
-                                  (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 11})))))
+          (t/is (anomalous? [:incorrect nil
+                             #"The minimum fractional seconds precision is 0."]
+                            (test-cast "05:34:56.123456789" [:time-local :nano] {:precision -1})))
+          (t/is (anomalous? [:incorrect nil
+                             #"The maximum fractional seconds precision is 9."]
+                            (test-cast "05:34:56.123456789" [:time-local :nano] {:precision 11})))))
 
       (t/testing "->string"
         (t/testing "date"
@@ -278,9 +278,9 @@
                  first :res)))]
 
     (t/testing "cannot cast year-month interval to duration"
-      (t/is (thrown-with-msg? IllegalArgumentException
-                              #"Cannot cast a year-month interval to a duration"
-                              (test-cast #xt/interval "P12M" [:duration :micro]))))
+      (t/is (anomalous? [:incorrect nil
+                         #"Cannot cast a year-month interval to a duration"]
+                        (test-cast #xt/interval "P12M" [:duration :micro]))))
 
     (t/testing "cannot cast month-day-nano interval to duration when months > 0"
       (t/is (thrown-with-msg? RuntimeException
@@ -295,12 +295,12 @@
     (t/testing "casting month-day-nano intervals -> duration with precision"
       (t/is (= #xt/duration "PT25H1.11S" (test-cast #xt/interval "P1DT1H1.111111111S" [:duration :milli] {:precision 2})))
       (t/is (= #xt/duration "PT25H1.1111111S" (test-cast #xt/interval "P1DT1H1.111111111S" [:duration :nano] {:precision 7})))
-      (t/is (thrown-with-msg? IllegalArgumentException
-                              #"The maximum fractional seconds precision is 9."
-                              (test-cast #xt/interval "P4M8D" [:duration :nano] {:precision 10})))
-      (t/is (thrown-with-msg? IllegalArgumentException
-                              #"The minimum fractional seconds precision is 0."
-                              (test-cast #xt/interval "P4M8D" [:duration :nano] {:precision -1}))))))
+      (t/is (anomalous? [:incorrect nil
+                         #"The maximum fractional seconds precision is 9."]
+                        (test-cast #xt/interval "P4M8D" [:duration :nano] {:precision 10})))
+      (t/is (anomalous? [:incorrect nil
+                         #"The minimum fractional seconds precision is 0."]
+                        (test-cast #xt/interval "P4M8D" [:duration :nano] {:precision -1}))))))
 
 
 (t/deftest cast-duration-to-interval
@@ -347,17 +347,15 @@
         (t/is (= #xt/interval "PT1.12345678S" (test-cast '(cast "PT1.123456789S" [:duration :nano]) :interval {:start-field "SECOND" :leading-precision 2 :fractional-precision 8}))))))
 
   (t/testing "with invalid interval qualifier"
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Cannot cast a duration to a year-month interval"
-           (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
-                         [:table [{}]]])))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot cast a duration to a year-month interval"]
+                      (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
+                                    [:table [{}]]])))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"The maximum fractional seconds precision is 9."
-           (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
-                         [:table [{}]]])))))
+    (t/is (anomalous? [:incorrect nil
+                       #"The maximum fractional seconds precision is 9."]
+                      (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
+                                    [:table [{}]]])))))
 
 (t/deftest cast-int-to-interval
   (letfn [(test-cast
@@ -373,11 +371,10 @@
     (t/is (= #xt/interval "PT10H" (test-cast 10 :interval {:start-field "HOUR"})))
     (t/is (= #xt/interval "PT10M" (test-cast 10 :interval {:start-field "MINUTE"})))
     (t/is (= #xt/interval "PT10S" (test-cast 10 :interval {:start-field "SECOND"})))
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Cannot cast integer to a multi field interval"
-           (test-cast 10 :interval {:start-field "DAY"
-                                    :end-field "HOUR"})))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot cast integer to a multi field interval"]
+                      (test-cast 10 :interval {:start-field "DAY"
+                                               :end-field "HOUR"})))))
 
 (t/deftest cast-utf8-to-interval-without-qualifier
   (letfn [(test-cast
@@ -434,10 +431,9 @@
       (t/is (= #xt/interval "P1DT10H10M10.111111111S"
                (test-cast "1 10:10:10.111111111" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2 :fractional-precision 9}))))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Interval end field must have less significance than the start field."
-           (test-cast "1 10:10:10.111111" :interval {:start-field "SECOND", :end-field "DAY", :leading-precision 2 :fractional-precision 6})))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Interval end field must have less significance than the start field."]
+                      (test-cast "1 10:10:10.111111" :interval {:start-field "SECOND", :end-field "DAY", :leading-precision 2 :fractional-precision 6})))))
 
 (t/deftest cast-interval-to-string
   (letfn [(test-cast
@@ -482,22 +478,19 @@
       (t/is (= #xt/interval "PT1H" (test-cast #xt/interval "PT1H" :interval {}))))
 
     (t/testing "casting YM interval to non YM interval should fail"
-      (t/is (thrown-with-msg?
-             IllegalArgumentException
-             #"Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
-             (test-cast #xt/interval "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
+      (t/is (anomalous? [:incorrect nil
+                         #"Cannot cast a Year-Month interval with a non Year-Month interval qualifier"]
+                        (test-cast #xt/interval "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "casting non YM interval to YM interval should fail"
-      (t/is (thrown-with-msg?
-             IllegalArgumentException
-             #"Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
-             (test-cast #xt/interval "P1M1DT1H" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
+      (t/is (anomalous? [:incorrect nil
+                         #"Cannot cast a non Year-Month interval with a Year-Month interval qualifier"]
+                        (test-cast #xt/interval "P1M1DT1H" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "invlaid fractional precision throws exception"
-      (t/is (thrown-with-msg?
-             IllegalArgumentException
-             #"The maximum fractional seconds precision is 9."
-             (test-cast #xt/interval "P1DT1H" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2, :fractional-precision 11}))))
+      (t/is (anomalous? [:incorrect nil
+                         #"The maximum fractional seconds precision is 9."]
+                        (test-cast #xt/interval "P1DT1H" :interval {:start-field "DAY", :end-field "SECOND", :leading-precision 2, :fractional-precision 11}))))
 
     (t/testing "casting between interval year month"
       (t/is (= #xt/interval "P12M" (test-cast #xt/interval "P13M" :interval {:start-field "YEAR", :leading-precision 2, :fractional-precision 0})))
@@ -1054,10 +1047,10 @@
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (et/project1 (list 'multi-field-interval "0-0" unit1 2 unit2 2) {}))]
-    (t/is (thrown-with-msg? IllegalArgumentException #"If YEAR specified as the interval start field, MONTH must be the end field\." (p "YEAR" "DAY")))
-    (t/is (thrown-with-msg? IllegalArgumentException #"MONTH is not permitted as the interval start field\." (p "MONTH" "DAY")))
-    (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "DAY" "DAY")))
-    (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "MINUTE" "HOUR")))))
+    (t/is (anomalous? [:incorrect nil #"If YEAR specified as the interval start field, MONTH must be the end field\."] (p "YEAR" "DAY")))
+    (t/is (anomalous? [:incorrect nil #"MONTH is not permitted as the interval start field\."] (p "MONTH" "DAY")))
+    (t/is (anomalous? [:incorrect nil #"Interval end field must have less significance than the start field\."] (p "DAY" "DAY")))
+    (t/is (anomalous? [:incorrect nil #"Interval end field must have less significance than the start field\."] (p "MINUTE" "HOUR")))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec single-field-interval-string-parse-same-as-int-prop
@@ -1118,10 +1111,9 @@
 
 (t/deftest test-interval-comparison
   (t/testing "comparing intervals with different types"
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"Cannot compare intervals with different units"
-           (et/project1 '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
+    (t/is (anomalous? [:incorrect nil
+                       #"Cannot compare intervals with different units"]
+                      (et/project1 '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
 
   (t/testing "comparing year month intervals"
     (t/are [expected expr] (= expected (et/project1 expr {}))
@@ -1183,8 +1175,10 @@
       true '(>= (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2)))))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
-  (t/is (thrown? IllegalArgumentException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
-  (t/is (thrown? IllegalArgumentException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
+  (t/is (anomalous? [:incorrect nil]
+                    (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
+  (t/is (anomalous? [:incorrect nil]
+                    (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
 
 (def period-gen
   (tcg/fmap (fn [[y m d]]
@@ -1425,8 +1419,8 @@
                (f #xt/date "2020-01-01" nil))
             "date/nil")
 
-      (t/is (thrown-with-msg? IllegalArgumentException #"period not applicable to types null and date"
-                              (f nil #xt/date "2020-01-01"))
+      (t/is (anomalous? [:incorrect nil #"period not applicable to types null and date"]
+                        (f nil #xt/date "2020-01-01"))
             "nil/date")
 
       (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z"

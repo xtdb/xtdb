@@ -2,7 +2,6 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.error :as err]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time]
@@ -28,13 +27,13 @@
              (xt/q *node* '(from :docs [{:xt/id e} inst]))))))
 
 (t/deftest test-validation-errors
-  (t/is (thrown? IllegalArgumentException
-                 (-> (xt/submit-tx *node* [[:pot :docs {:xt/id :foo}]])
-                     (util/rethrowing-cause))))
+  (t/is (anomalous? [:incorrect nil]
+                    (-> (xt/submit-tx *node* [[:pot :docs {:xt/id :foo}]])
+                        (util/rethrowing-cause))))
 
-  (t/is (thrown? IllegalArgumentException
-                 (-> (xt/submit-tx *node* [[:put-docs :docs {}]])
-                     (util/rethrowing-cause)))))
+  (t/is (anomalous? [:incorrect nil]
+                    (-> (xt/submit-tx *node* [[:put-docs :docs {}]])
+                        (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
   (let [tx (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
@@ -107,9 +106,9 @@
   (let [tx1 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo}]]
                            {:system-time #inst "2012"})
 
-        _ (t/is (thrown? IllegalArgumentException
-                                   (xt/execute-tx *node* [[:put-docs :docs {:xt/id :bar}]]
-                                                  {:system-time #inst "2011"})))
+        _ (t/is (anomalous? [:incorrect nil]
+                            (xt/execute-tx *node* [[:put-docs :docs {:xt/id :bar}]]
+                                           {:system-time #inst "2011"})))
 
         tx3 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :baz}]])]
 
@@ -127,22 +126,19 @@
 
     (t/is (= #{{:tx-id 0,
                 :system-time #xt/zoned-date-time "2012-01-01T00:00Z[UTC]",
-                :committed? true,
-                :error [nil nil]}
+                :committed? true}
                {:tx-id 1,
                 :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]",
                 :committed? false,
-                :error ["specified system-time older than current tx"
-                        {::err/error-key :invalid-system-time
-                         :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2011-01-01T00:00:00Z"},
-                         :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2012-01-01T00:00:00Z"}}]}
+                :error #xt/error [:incorrect :invalid-system-time
+                                  "specified system-time older than current tx"
+                                  {:tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2011-01-01T00:00:00Z"}
+                                   :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2012-01-01T00:00:00Z"}}]}
                {:tx-id 2,
                 :system-time #xt/zoned-date-time "2020-01-03T00:00Z[UTC]",
-                :committed? true,
-                :error [nil nil]}}
-             (->> (xt/q *node*
-                        '(from :xt/txs [{:xt/id tx-id, :committed committed?} system-time error]))
-                  (into #{} (map #(update % :error (juxt ex-message ex-data)))))))))
+                :committed? true}}
+             (set (xt/q *node*
+                        '(from :xt/txs [{:xt/id tx-id, :committed committed?} system-time error])))))))
 
 (def ^:private devs
   [[:put-docs :users {:xt/id :jms, :name "James"}]
@@ -314,8 +310,8 @@
                  (q tx1)))))))
 
 (t/deftest execute-tx-throws-dml-errors
-  (t/is (thrown-with-msg? IllegalArgumentException #"Errors parsing SQL statement"
-                          (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])))
+  (t/is (anomalous? [:incorrect nil #"Errors parsing SQL statement"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, dt) VALUES ('id', DATE \"2020-01-01\")"])))
 
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* ["INSERT INTO users (_id, name) VALUES ('dave', 'Dave')"])
@@ -362,9 +358,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
            (xt/q *node* "SELECT t1.body FROM t1 FOR ALL VALID_TIME"))))
 
 (deftest test-submit-tx-system-time-opt
-  (t/is (thrown? IllegalArgumentException
-                 (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]]
-                               {:system-time "foo"}))))
+  (t/is (anomalous? [:incorrect nil]
+                    (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]]
+                                  {:system-time "foo"}))))
 
 (t/deftest test-xtql-with-param-2933
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id :petr :name "Petr"}]])
@@ -379,21 +375,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
     (.close node)))
 
 (t/deftest test-query-with-errors
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Illegal argument: 'xtql/malformed-table'"
-                          #_{:clj-kondo/ignore [:xtql/type-mismatch]}
-                          (xt/q tu/*node* '(from docs [name]))))
+  (t/is (anomalous? [:incorrect nil #"Illegal argument: 'xtql/malformed-table'"]
+                    #_{:clj-kondo/ignore [:xtql/type-mismatch]}
+                    (xt/q tu/*node* '(from docs [name]))))
 
-  (t/is (thrown-with-msg? RuntimeException
-                          #"data exception - division by zero"
-                          (xt/q tu/*node* '(-> (rel [{}] [])
-                                               (with {:foo (/ 1 0)})))))
+  (t/is (anomalous? [:incorrect nil #"data exception - division by zero"]
+                    (xt/q tu/*node* '(-> (rel [{}] [])
+                                         (with {:foo (/ 1 0)})))))
 
   ;; Might need to get updated if this kind of error gets handled differently.
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :name 2}]])
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"upper not applicable to types i64"
-                          (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
+  (t/is (anomalous? [:incorrect nil #"upper not applicable to types i64"]
+                    (xt/q tu/*node* "SELECT UPPER(docs.name) AS name FROM docs"))))
 
 (def ivan+petr
   [[:put-docs :docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
@@ -422,10 +415,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
            (xt/q tu/*node* '(from :docs [xt/id first-name last-name])
                  {:key-fn :snake-case-string})))
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Illegal argument: "
-                          (xt/q tu/*node* '(from :docs [first-name last-name])
-                                {:key-fn :foo-bar}))))
+  (t/is (anomalous? [:incorrect nil #"Illegal argument: "]
+                    (xt/q tu/*node* '(from :docs [first-name last-name])
+                          {:key-fn :foo-bar}))))
 
 (t/deftest dynamic-xtql-queries
   (xt/submit-tx tu/*node* [[:put-docs :posts {:xt/id :uk, :text "Hello from England!", :likes 68, :author-name "James"}]
@@ -486,21 +478,18 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                  {:explain? true}))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Not all variables in expression are in scope"
-                          (xt/q tu/*node*
-                                '(-> (from :album [xt/id])
-                                     (return foo)))))
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Scalar subquery must only return a single column"
-                          (xt/q tu/*node*
-                                '(-> (from :album [xt/id])
-                                     (with {:foo (q (from :artist [xt/id name]))})))))
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"\* is not a valid in from when inside a unify context"
-                          (xt/q tu/*node*
-                                '(unify (from :album [*])
-                                        (from :album [*]))))))
+  (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
+                    (xt/q tu/*node*
+                          '(-> (from :album [xt/id])
+                               (return foo)))))
+  (t/is (anomalous? [:incorrect nil #"Scalar subquery must only return a single column"]
+                    (xt/q tu/*node*
+                          '(-> (from :album [xt/id])
+                               (with {:foo (q (from :artist [xt/id name]))})))))
+  (t/is (anomalous? [:incorrect nil #"\* is not a valid in from when inside a unify context"]
+                    (xt/q tu/*node*
+                          '(unify (from :album [*])
+                                  (from :album [*]))))))
 
 (deftest test-plan-q
   (doseq [batch (->> (range 2000)

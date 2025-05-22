@@ -7,11 +7,13 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.complex.replaceChild
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.*
-import xtdb.asKeyword
+import xtdb.arrow.InvalidCopySourceException
+import xtdb.arrow.InvalidWriteObjectException
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
+import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.util.normalForm
 import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
@@ -83,10 +85,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             val writer = writers[key] ?: newChildWriter(key, v.toFieldType())
 
             if (writer.valueCount != structPos)
-                throw xtdb.IllegalArgumentException(
-                    "xtdb/key-already-set".asKeyword,
-                    data = mapOf("ks".asKeyword to obj.keys, "k".asKeyword to k)
-                )
+                throw Incorrect(errorCode = "xtdb/key-already-set", data = mapOf("ks" to obj.keys, "k" to k))
 
             writer.writeChildObject(v)
         }
@@ -109,9 +108,11 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
     override fun vectorFor(name: String, fieldType: FieldType) =
         writers[name]?.let {
-            if ((it.field.type == fieldType.type && (it.field.isNullable || !fieldType.isNullable)) ||
-                it.field.type is ArrowType.Union
-            ) it
+            if ((it.field.type == fieldType.type
+                        && (it.field.isNullable || !fieldType.isNullable))
+                || it.field.type is UNION_TYPE
+            )
+                it
             else promoteChild(it, fieldType)
         }
             ?: newChildWriter(name, fieldType)
@@ -122,7 +123,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         writers.values.forEach { w ->
             try {
                 w.populateWithAbsents(pos)
-            } catch (e: InvalidWriteObjectException) {
+            } catch (_: InvalidWriteObjectException) {
                 promoteChild(w, FieldType.nullable(NULL_TYPE)).populateWithAbsents(pos)
             }
         }
@@ -151,7 +152,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
             else -> for (child in field.children) {
                 var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
-                if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is ArrowType.Union)
+                if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is UNION_TYPE)
                     childWriter = promoteChild(childWriter, child.fieldType)
                 if (child.children.isNotEmpty()) childWriter.promoteChildren(child)
             }

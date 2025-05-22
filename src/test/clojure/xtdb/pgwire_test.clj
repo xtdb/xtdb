@@ -619,7 +619,7 @@
          (with-redefs [clojure.tools.logging/logf (constantly nil)]
            (send "select (1 / 0) from (values (42)) a (a);\n")
            (is (= ["ERROR:  data exception - division by zero"
-                   "DETAIL:  {\"error-key\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
+                   "DETAIL:  {\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
                   (read :stderr))))
 
          (testing "query error allows session to continue"
@@ -632,7 +632,7 @@
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
          (is (= ["ERROR:  Illegal argument: 'missing-id'"
-                 "DETAIL:  {\"doc\":{\"id\":1,\"a\":2},\"error-key\":\"missing-id\",\"message\":\"Illegal argument: 'missing-id'\"}"]
+                 "DETAIL:  {\"doc\":{\"id\":1,\"a\":2},\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"missing-id\",\"message\":\"Illegal argument: 'missing-id'\"}"]
                 (read :stderr)))
          ;; to drain the standard stream
          (read))
@@ -1287,7 +1287,7 @@
              (q conn ["SELECT COUNT(*) row_count FROM foo"])))
 
     (t/is (= [{:xt/id 2, :committed false,
-               :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]}
+               :error #xt/error [:conflict :xtdb/assert-failed "Assert failed" {}]}
               {:xt/id 1, :committed true}
               {:xt/id 0, :committed true}]
              (q conn ["SELECT * EXCLUDE system_time FROM xt.txs"])))))
@@ -1749,7 +1749,7 @@
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 
     (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false
-               :error #xt/runtime-err [:xtdb/assert-failed "Assert failed" {}]}]
+               :error #xt/error [:conflict :xtdb/assert-failed "Assert failed" {}]}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))))
 
 (t/deftest test-show-session-variable-3804
@@ -2566,7 +2566,7 @@ ORDER BY 1,2;")
     (testing "outside transaction"
       (t/is (= {:sql-state "P0004",
                 :message "boom",
-                :detail #xt/runtime-err [:xtdb/assert-failed "boom" {}]}
+                :detail #xt/error [:conflict :xtdb/assert-failed "boom" {}]}
                (reading-ex
                  (q conn ["ASSERT 2 < 1, 'boom'"])))))
 
@@ -2575,7 +2575,7 @@ ORDER BY 1,2;")
       (q conn ["ASSERT 2 < 1, 'boom'"])
       (t/is (= {:sql-state "P0004",
                 :message "boom",
-                :detail #xt/runtime-err [:xtdb/assert-failed "boom" {}]}
+                :detail #xt/error [:conflict :xtdb/assert-failed "boom" {}]}
                (reading-ex
                  (q conn ["COMMIT"]))))
       (q conn ["ROLLBACK"]))

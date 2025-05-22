@@ -1,13 +1,13 @@
 (ns xtdb.indexer-test
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.block-catalog :as block-cat]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
@@ -506,9 +506,8 @@
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
-      (t/is (thrown-with-msg? Exception #"oh no!"
-                              (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :count 42}]])
-                                  (tu/then-await-tx tu/*node* (Duration/ofSeconds 1))))))))
+      (t/is (anomalous? [:unsupported ::err/unsupported]
+                        (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :count 42}]]))))))
 
 (t/deftest bug-catch-closed-by-interrupt-exception-740
   (let [e (ClosedByInterruptException.)]
@@ -518,7 +517,7 @@
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
-      (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
+      (t/is (thrown-with-msg? Exception #"Interrupted"
                               (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(_id) VALUES (1)"]])
                                   (tu/then-await-tx tu/*node* (Duration/ofSeconds 1))))))))
 
@@ -551,17 +550,17 @@
                           (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
-  (let [ex (t/is (thrown? IllegalArgumentException
+  (let [ex (t/is (thrown? RuntimeException
                           (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]])))]
-    (t/is (= #xt/illegal-arg [:xtdb.indexer/invalid-sql-tx-op
-                              "Invalid SQL query sent as transaction operation"
-                              {:query "SELECT _id, foo FROM docs"}]
+    (t/is (= #xt/error [:incorrect :xtdb.indexer/invalid-sql-tx-op
+                        "Invalid SQL query sent as transaction operation"
+                        {:query "SELECT _id, foo FROM docs"}]
              ex))))
 
 (t/deftest above-max-long-halts-ingestion-3495
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Cannot parse integer: 9223372036854775808"
-                          (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]]))))
+  (t/is (anomalous? [:incorrect nil
+                     #"Cannot parse integer: 9223372036854775808"]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]]))))
 
 (t/deftest hyphen-in-struct-key-halts-ingestion-3388
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, value) VALUES (1, {\"hyphen-bug\": 1}) "]])
@@ -633,15 +632,14 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
   ;; will likely have to remove this once we actually implement list concat
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :list [1 2]}]])
 
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"^No matching clause: \[:list :i64\]$"
-                          (xt/execute-tx tu/*node* ["UPDATE docs SET list = list || [3]"])))
+  (t/is (anomalous? [:incorrect nil #"^No matching clause: \[:list :i64\]$"]
+                    (xt/execute-tx tu/*node* ["UPDATE docs SET list = list || [3]"])))
 
   (t/is (= [{:xt/id 1, :list [1 2]}]
            (xt/q tu/*node* "SELECT * FROM docs")))
 
   (t/is (= [{:xt/id 1,
              :committed false,
-             :error #xt/illegal-arg [nil "No matching clause: [:list :i64]" {}],
+             :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [:list :i64]" {}],
              :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))

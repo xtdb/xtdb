@@ -23,7 +23,6 @@
            (io.micrometer.core.instrument Counter Timer)
            (java.io ByteArrayInputStream Closeable)
            (java.nio ByteBuffer)
-           java.nio.channels.ClosedByInterruptException
            (java.time Instant InstantSource ZoneId)
            (java.time.temporal ChronoUnit)
            (java.util.function Consumer)
@@ -34,14 +33,15 @@
            xtdb.api.TransactionKey
            (xtdb.arrow RowCopier)
            xtdb.BufferPool
+           (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private abort-exn (err/runtime-err :abort-exn))
-(def ^:private skipped-exn (err/runtime-err :skipped-exn))
+(def ^:private abort-exn (Exception. "aborted"))
+(def ^:private skipped-exn (Exception. "skipped"))
 
 (def ^:dynamic ^java.time.InstantSource *crash-log-clock* (InstantSource/system))
 
@@ -71,23 +71,23 @@
     (log/info "crash log written:" (str crash-dir))))
 
 (defmacro with-crash-log [indexer msg data state & body]
-  `(try
-     ~@body
-     (catch xtdb.RuntimeException e# (throw e#))
-     (catch IllegalArgumentException e# (throw e#))
-     (catch InterruptedException e# (throw e#))
-     (catch ClosedByInterruptException e# (throw e#))
-     (catch Exception e#
-       (let [{node-id# :node-id, :as indexer#} ~indexer
-             msg# ~msg
-             data# (-> ~data
-                       (assoc :node-id node-id#))]
-         (try
-           (crash-log! ~indexer e# data# ~state)
-           (catch Throwable t#
-             (.addSuppressed e# t#)))
+  `(let [data# ~data]
+     (try
+       (err/wrap-anomaly data#
+         ~@body)
+       (catch Interrupted e# (throw e#))
+       (catch Anomaly$Caller e# (throw e#))
+       (catch Throwable e#
+         (let [{node-id# :node-id, :as indexer#} ~indexer
+               msg# ~msg
+               data# (-> data#
+                         (assoc :node-id node-id#))]
+           (try
+             (crash-log! ~indexer e# data# ~state)
+             (catch Throwable t#
+               (.addSuppressed e# t#)))
 
-         (throw (ex-info msg# data# e#))))))
+           (throw (ex-info msg# data# e#)))))))
 
 (defn- assert-timestamp-col-type [^IVectorReader rdr]
   (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getType (.getField rdr))))
@@ -107,7 +107,7 @@
         ;; HACK: can remove this once we're sure a few more people have migrated their logs
         ^IVectorReader valid-from-rdr (or (.structKeyReader put-leg "_valid_from")
                                           (when (.structKeyReader put-leg "xt$valid_from")
-                                            (throw (IllegalStateException. "Legacy log format - see https://github.com/xtdb/xtdb/pull/3675 for more details"))))
+                                            (throw (err/fault ::legacy-log "Legacy log format - see https://github.com/xtdb/xtdb/pull/3675 for more details"))))
 
         valid-to-rdr (.structKeyReader put-leg "_valid_to")
         system-time-µs (time/instant->micros system-time)
@@ -159,9 +159,10 @@
                          Long/MAX_VALUE
                          (.getLong valid-to-rdr tx-op-idx))]
           (when-not (> valid-to valid-from)
-            (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                    {:valid-from (time/micros->instant valid-from)
-                                     :valid-to (time/micros->instant valid-to)})))
+            (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                  "Invalid valid times"
+                                  {:valid-from (time/micros->instant valid-from)
+                                   :valid-to (time/micros->instant valid-to)})))
 
           (let [doc-start-idx (.getListStartIndex docs-rdr tx-op-idx)
                 ^long iid-start-idx (or (some-> iids-rdr (.getListStartIndex tx-op-idx))
@@ -211,9 +212,9 @@
           (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
           (when (> valid-from valid-to)
-            (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                    {:valid-from (time/micros->instant valid-from)
-                                     :valid-to (time/micros->instant valid-to)})))
+            (throw (err/incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times"
+                                  {:valid-from (time/micros->instant valid-from)
+                                   :valid-to (time/micros->instant valid-to)})))
 
           (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
             (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
@@ -275,11 +276,12 @@
             (let [live-idx-table-copier (-> (.getDocWriter live-table-tx)
                                             (.rowCopier content-rel))]
               (when-not id-col
-                (throw (err/runtime-err :xtdb.indexer/missing-xt-id-column
-                                        {:column-names (vec (for [^IVectorReader col in-rel] (.getName col)))})))
+                (throw (err/incorrect :xtdb.indexer/missing-xt-id-column
+                                      "Missing ID column"
+                                      {:column-names (vec (for [^IVectorReader col in-rel] (.getName col)))})))
 
               (dotimes [idx row-count]
-                (try
+                (err/wrap-anomaly {:table-name table, :tx-key tx-key, :row-idx idx}
                   (let [eid (.getObject id-col idx)
                         valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))
                                      (.getLong valid-from-rdr idx)
@@ -288,20 +290,14 @@
                                    (.getLong valid-to-rdr idx)
                                    Long/MAX_VALUE)]
                     (when (> valid-from valid-to)
-                      (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                              {:valid-from (time/micros->instant valid-from)
-                                               :valid-to (time/micros->instant valid-to)})))
+                      (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                            "Invalid valid times"
+                                            {:valid-from (time/micros->instant valid-from)
+                                             :valid-to (time/micros->instant valid-to)})))
 
                     ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
                     (when (< valid-from valid-to)
-                      (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))
-
-                  (catch xtdb.RuntimeException e (throw e))
-                  (catch IllegalArgumentException e (throw e))
-                  (catch InterruptedException e (throw e))
-                  (catch ClosedByInterruptException e (throw e))
-                  (catch Throwable t
-                    (throw (ex-info "error upserting row" {:table-name table, :tx-key tx-key, :row-idx idx} t))))))))))))
+                      (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))
 
 (defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx, {:keys [indexer tx-key]}]
   (reify RelationIndexer
@@ -326,9 +322,10 @@
                              Long/MAX_VALUE
                              (.getLong valid-to-rdr idx))]
               (when-not (< valid-from valid-to)
-                (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                        {:valid-from (time/micros->instant valid-from)
-                                         :valid-to (time/micros->instant valid-to)})))
+                (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                      "Invalid valid times"
+                                      {:valid-from (time/micros->instant valid-from)
+                                       :valid-to (time/micros->instant valid-to)})))
 
               (-> (.liveTable live-idx-tx table)
                   (.logDelete iid valid-from valid-to)))))))))
@@ -359,8 +356,7 @@
                           (.openCursor))]
 
         (letfn [(throw-assert-failed []
-                  (throw (err/runtime-err :xtdb/assert-failed
-                                          {::err/message (or message "Assert failed")})))]
+                  (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
           (or (.tryAdvance res
                            (reify Consumer
                              (accept [_ in-rel]
@@ -454,9 +450,9 @@
                             valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
                                        (time/micros->instant (.getLong valid-to-rdr tx-op-idx)))]
                         (when-not (or (nil? valid-to) (pos? (compare valid-to valid-from)))
-                          (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                                  {:valid-from valid-from
-                                                   :valid-to valid-to})))
+                          (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                                "Invalid valid times"
+                                                {:valid-from valid-from, :valid-to valid-to})))
 
                         (let [pq (.prepareRaQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols wm-src))}
                                                                             {:table (symbol table-name)
@@ -497,16 +493,16 @@
     (if (not args)
       (if (zero? param-count)
         (f nil)
-        (throw (err/runtime-err :xtdb.indexer/missing-sql-args
-                                {::err/message "Arguments list was expected but not provided"
-                                 :param-count param-count})))
+        (throw (err/incorrect :xtdb.indexer/missing-sql-args
+                              "Arguments list was expected but not provided"
+                              {:param-count param-count})))
 
       (let [arg-count (count args)]
         (if (not= arg-count param-count)
-          (throw (err/runtime-err :xtdb.indexer/incorrect-sql-arg-count
-                                  {::err/message (format "Parameter error: %d provided, %d expected" arg-count param-count)
-                                   :param-count param-count
-                                   :arg-count arg-count}))
+          (throw (err/incorrect :xtdb.indexer/incorrect-sql-arg-count
+                                (format "Parameter error: %d provided, %d expected" arg-count param-count)
+                                {:param-count param-count, :arg-count arg-count}))
+
           (f (vr/rel-reader (->> args
                                  (map-indexed (fn [idx ^IVectorReader col]
                                                 (.withName col (str "?_" idx))))))))))))
@@ -592,8 +588,8 @@
               [:alter-user user password]
               (update-pg-user! live-idx-tx tx-key user password)
 
-              (throw (err/illegal-arg ::invalid-sql-tx-op {::err/message "Invalid SQL query sent as transaction operation"
-                                                           :query query-str})))))
+              (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
+                                    {:query query-str})))))
 
         nil))))
 
@@ -704,25 +700,33 @@
                     !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
 
                 (if-let [e (try
-                             (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
-                               (.recordCallable tx-timer
-                                                #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                   "xtql" (throw (err/illegal-arg :xtdb/xtql-dml-removed
-                                                                                  {::err/message (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
-                                                                                                            "Please use SQL DML statements instead - "
-                                                                                                            "see the release notes for more information."])}))
-                                                   "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                   "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                   "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
-                                                   "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                   "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                   "call" (throw (err/illegal-arg :xtdb/tx-fns-removed
-                                                                                  {::err/message (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
-                                                                                                            "Please use ASSERTs and SQL DML statements instead - "
-                                                                                                            "see the release notes for more information."])}))
-                                                   "abort" (throw abort-exn))))
-                             (catch xtdb.RuntimeException e e)
-                             (catch IllegalArgumentException e e))]
+                             (err/wrap-anomaly {}
+                               (try
+                                 (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
+                                   (.recordCallable tx-timer
+                                                    #(case (.getLeg tx-ops-rdr tx-op-idx)
+                                                       "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
+                                                                                      (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
+                                                                                                 "Please use SQL DML statements instead - "
+                                                                                                 "see the release notes for more information."])))
+                                                       "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                       "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                       "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
+                                                       "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                       "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                       "call" (throw (err/unsupported :xtdb/tx-fns-removed
+                                                                                      (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                                                                 "Please use ASSERTs and SQL DML statements instead - "
+                                                                                                 "see the release notes for more information."])))
+                                                       "abort" (throw abort-exn))))
+                                 nil
+
+                                 (catch Exception e
+                                   (if (identical? e abort-exn)
+                                     e
+                                     (throw e)))))
+
+                             (catch Anomaly$Caller e e))]
 
                   (do
                     (when-not (= e abort-exn)

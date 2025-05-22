@@ -112,23 +112,19 @@
 (t/deftest patch-with-forbidden-columns-fails-4120
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs RECORDS {_id: 1}"]])
 
-  (let [ex-msg (ex-message
-                (t/is (thrown? IllegalArgumentException
-                               (xt/execute-tx tu/*node*
-                                              ["PATCH INTO docs RECORDS {_id: 1,
+  (t/is (anomalous? [:incorrect nil "Cannot PATCH (_valid_from _valid_to) column"]
+                    (xt/execute-tx tu/*node*
+                                   ["PATCH INTO docs RECORDS {_id: 1,
                                                                          _valid_from: TIMESTAMP '2020-01-01 00:00:00+00:00',
                                                                          _valid_to: TIMESTAMP '2030-01-01 00:00:00+00:00'}"]))
-                      "patching with forbidden columns directly"))]
-    (t/is (str/includes? ex-msg "Cannot PATCH (_valid_from _valid_to) column")))
+        "patching with forbidden columns directly")
 
-  (t/testing "patching with forbidden columns in parameters"
-    (let [ex-msg (ex-message
-                  (t/is (thrown? IllegalArgumentException
-                                 (xt/execute-tx tu/*node* [[:sql "PATCH INTO docs RECORDS ? "
-                                                            [{:_id 1
-                                                              :_valid_from (time/->zdt #inst "2022")
-                                                              :_valid_to (time/->zdt #inst "2028")}]]]))))]
-      (t/is (str/includes? ex-msg "Cannot PATCH (_valid_from _valid_to) column"))))
+  (t/is (anomalous? [:incorrect nil "Cannot PATCH (_valid_from _valid_to) column"]
+                    (xt/execute-tx tu/*node* [[:sql "PATCH INTO docs RECORDS ? "
+                                               [{:_id 1
+                                                 :_valid_from (time/->zdt #inst "2022")
+                                                 :_valid_to (time/->zdt #inst "2028")}]]]))
+        "patching with forbidden columns in parameters")
 
   (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))

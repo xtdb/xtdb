@@ -73,7 +73,7 @@
                (project '(if (= 0 (mod a 2)) (/ a 2) 0)))
             "if")
 
-      (t/is (thrown? IllegalArgumentException (project '(vec a)))
+      (t/is (anomalous? [:incorrect nil] (project '(vec a)))
             "cannot call arbitrary functions"))))
 
 (t/deftest can-compile-simple-expression
@@ -257,10 +257,9 @@
 
     (t/testing "java.time.LocalDate"
       (let [ld (LocalDate/of 2022 03 21)]
-        (t/is (thrown-with-msg?
-               IllegalArgumentException
-               #"Extract \"SECOND\" not supported for type date"
-               (extract "SECOND" ld))) 
+        (t/is (anomalous? [:incorrect nil
+                           #"Extract \"SECOND\" not supported for type date"]
+                          (extract "SECOND" ld)))
         (t/is (= 21 (extract "DAY" ld)))
         (t/is (= 3 (extract "MONTH" ld)))
         (t/is (= 2022 (extract "YEAR" ld)))))
@@ -291,15 +290,13 @@
       (t/is (= 23 (extract "MINUTE" tm)))
       (t/is (= 3 (extract "HOUR" tm)))
 
-      (t/is (thrown-with-msg?
-             IllegalArgumentException
-             #"Extract \"DAY\" not supported for type time without timezone"
-             (extract "DAY" tm)))
+      (t/is (anomalous? [:incorrect nil
+                         #"Extract \"DAY\" not supported for type time without timezone"]
+                        (extract "DAY" tm)))
       
-      (t/is (thrown-with-msg?
-             IllegalArgumentException
-             #"Extract \"TIMEZONE_HOUR\" not supported for type time without timezone"
-             (extract "TIMEZONE_HOUR" tm))))))
+      (t/is (anomalous? [:incorrect nil
+                         #"Extract \"TIMEZONE_HOUR\" not supported for type time without timezone"]
+                        (extract "TIMEZONE_HOUR" tm))))))
 
 (t/deftest test-timezone-extract
   (letfn [(extract [part value] (project1 (list 'extract part 'value) {:value value}))]
@@ -316,14 +313,12 @@
   
     (t/testing "type that doesn't support timezone fields"
       (let [ld (LocalDate/of 2022 03 21)]
-        (t/is (thrown-with-msg?
-               IllegalArgumentException
-               #"Extract \"TIMEZONE_HOUR\" not supported for type date"
-               (extract "TIMEZONE_HOUR" ld)))
-        (t/is (thrown-with-msg?
-               IllegalArgumentException
-               #"Extract \"TIMEZONE_MINUTE\" not supported for type date"
-               (extract "TIMEZONE_MINUTE" ld)))))))
+        (t/is (anomalous? [:incorrect nil
+                           #"Extract \"TIMEZONE_HOUR\" not supported for type date"]
+                          (extract "TIMEZONE_HOUR" ld)))
+        (t/is (anomalous? [:incorrect nil
+                           #"Extract \"TIMEZONE_MINUTE\" not supported for type date"]
+                          (extract "TIMEZONE_MINUTE" ld)))))))
 
 (defn run-projection [^RelationReader rel form]
   (let [col-types (->> rel
@@ -1031,7 +1026,7 @@
     "string" -10 2147483646 "string"))
 
 (t/deftest negative-substring-length-test
-  (t/is (thrown-with-msg? IllegalArgumentException #"Negative substring length" (project1 '(substring "" 0 -1) {}))))
+  (t/is (anomalous? [:incorrect nil #"Negative substring length"] (project1 '(substring "" 0 -1) {}))))
 
 (t/deftest substring-nils-test
   (doseq [a ["" nil]
@@ -1119,7 +1114,7 @@
     "🌝😎" "😎" 2 0 "🌝😎😎"))
 
 (t/deftest overlay-negative-substring-length-test
-  (t/is (thrown-with-msg? IllegalArgumentException #"Negative substring length" (project1 '(overlay "" "" 0 0) {}))))
+  (t/is (anomalous? [:incorrect nil #"Negative substring length"] (project1 '(overlay "" "" 0 0) {}))))
 
 (t/deftest overlay-nils-test
   (doseq [a ["" nil]
@@ -2096,9 +2091,9 @@
   (t/is (= :false (project1 '(if nil :true :false) {}))))
 
 (t/deftest test-type-mismatch-throws-xtdb-error-3183
-  (t/is (thrown-with-msg? xtdb.IllegalArgumentException
-                          #"\+ not applicable to types i64 and utf8"
-                          (project1 '(+ 1 "2") {}))))
+  (t/is (anomalous? [:incorrect nil
+                     #"\+ not applicable to types i64 and utf8"]
+                    (project1 '(+ 1 "2") {}))))
 
 (t/deftest test-kw-fns
   (t/is (nil? (project1 '(namespace :bar) {})))

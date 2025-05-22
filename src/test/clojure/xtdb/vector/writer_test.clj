@@ -389,9 +389,8 @@
         (t/is (= maps (tu/vec->vals (vw/vec-wtr->rdr map-wtr))))))))
 
 (t/deftest throws-on-equivalent-ks
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"key-already-set"
-                          (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :foo, :_id :bar}]]))))
+  (t/is (anomalous? [:incorrect nil #"key-already-set"]
+                    (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :foo, :_id :bar}]]))))
 
 (deftest test-extension-types-in-struct-transfer-pairs-3305
   (let [field #xt.arrow/field ["toplevel" #xt.arrow/field-type [#xt.arrow/type :struct false]

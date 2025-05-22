@@ -1,6 +1,5 @@
 package xtdb.api.query
 
-import clojure.lang.Keyword
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -8,8 +7,8 @@ import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
-import xtdb.IllegalArgumentException
 import xtdb.api.query.Exprs.`val`
+import xtdb.error.Incorrect
 import xtdb.jsonIAE
 import java.time.Instant
 
@@ -33,15 +32,16 @@ internal object TemporalExtentsSerializer : KSerializer<TemporalFilter.TemporalE
 
                     value.to != null -> buildJsonObject { put("to", encoder.json.encodeToJsonElement(value.to)) }
                     value.from != null -> buildJsonObject { put("from", encoder.json.encodeToJsonElement(value.from)) }
-                    else -> throw IllegalArgumentException.create(
-                        Keyword.intern("xtql/invalid-temporal-filter"),
-                        mapOf(Keyword.intern("temporal-filter") to value.toString())
+                    else -> throw Incorrect(
+                        "Invalid temporal filter",
+                        errorCode = "xtql/invalid-temporal-filter",
+                        data = mapOf("temporal-filter" to value.toString())
                     )
                 })
         }
     }
 
-    fun deserialize(decoder: Decoder, element: JsonElement) : TemporalFilter.TemporalExtents {
+    fun deserialize(decoder: Decoder, element: JsonElement): TemporalFilter.TemporalExtents {
         require(decoder is JsonDecoder)
 
         return when (element) {
@@ -118,6 +118,7 @@ internal object TemporalFilterSerializer : KSerializer<TemporalFilter> {
                         element["at"] ?: throw jsonIAE("xtql/malformed-temporal-filter", element)
                     )
                 )
+
                 else -> TemporalExtentsSerializer.deserialize(decoder, element)
             }
 

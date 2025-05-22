@@ -10,6 +10,7 @@
  xt/illegal-arg xtdb.serde/iae-reader
  xt/runtime-err xtdb.serde/runex-reader
  xt/key-fn xtdb.serde/read-key-fn
+ xt/error xtdb.error/read-error
 
  xt/period-duration xtdb.serde/period-duration-reader
  xt/interval xtdb.serde/interval-reader

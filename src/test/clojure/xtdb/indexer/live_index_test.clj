@@ -11,12 +11,10 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           java.time.Duration
            [java.util Random UUID]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
-           [org.apache.arrow.vector.ipc ArrowFileReader]
-           (xtdb.arrow Relation VectorPosition)
+           (xtdb.arrow Relation)
            xtdb.BufferPool
            xtdb.indexer.LiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie$Leaf)))
@@ -118,7 +116,7 @@
           (doseq [tx-ops txs]
             (try
               (xt/execute-tx node tx-ops)
-              (catch xtdb.RuntimeException _)))
+              (catch Exception _)))
 
           (tu/finish-block! node)
 

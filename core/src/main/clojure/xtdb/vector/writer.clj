@@ -12,6 +12,7 @@
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            xtdb.Types
+           xtdb.error.Anomaly
            xtdb.time.Interval
            (xtdb.types ClojureForm ZonedDateTimeRange)
            (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
@@ -128,10 +129,7 @@
   ClojureForm
   (value->col-type [_] :transit)
 
-  xtdb.RuntimeException
-  (value->col-type [_] :transit)
-
-  xtdb.IllegalArgumentException
+  Anomaly
   (value->col-type [_] :transit))
 
 (defn write-vec! [^ValueVector v, vs]

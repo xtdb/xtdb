@@ -310,13 +310,12 @@
                                      {:a #xt/zoned-date-time "2018-05-01T12:00-07:00[America/Los_Angeles]"}]]]))
           "chooses Z if there are different TZs"))
 
-  (t/is (thrown-with-msg? xtdb.RuntimeException
-                          #"Incomparable types in min/max aggregate"
-                          (tu/query-ra '[:group-by [{min (min a)}
-                                                    {max (max a)}]
-                                         [:table [{:a #xt/date-time "2022-08-01T13:34"}
-                                                  {:a #xt/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
-                                                  {:a 12}]]]))))
+  (t/is (anomalous? [:incorrect nil #"Incomparable types in min/max aggregate"]
+                    (tu/query-ra '[:group-by [{min (min a)}
+                                              {max (max a)}]
+                                   [:table [{:a #xt/date-time "2022-08-01T13:34"}
+                                            {:a #xt/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
+                                            {:a 12}]]]))))
 
 (t/deftest test-array-agg
   (with-open [gm0 (tu/open-vec (types/->field "gm0" #xt.arrow/type :i32 false) (map int [0 1 0]))

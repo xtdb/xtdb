@@ -57,11 +57,12 @@
     (t/is (thrown? Exception (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via the node (submit-tx)")
 
-    (t/testing "async errors in the indexer"
-      (xt/submit-tx node ["INSERT foo"])
-      (Thread/sleep 200))
+    (t/is (= 1.0 (.count ^Counter (.counter (.find registry "tx.error")))))
 
-    (t/is (= 2.0 (.count ^Counter (.counter (.find registry "tx.error")))))))
+    (t/testing "async errors in the indexer"
+      (t/is (thrown? Exception (xt/execute-tx node ["INSERT foo"])))
+
+      (t/is (= 2.0 (.count ^Counter (.counter (.find registry "tx.error"))))))))
 
 (t/deftest test-total-and-active-connections
   (let [node (xtn/start-node tu/*node-opts*)

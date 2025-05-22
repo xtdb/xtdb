@@ -1,13 +1,12 @@
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal
-import xtdb.RuntimeException
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.error.Unsupported
 import xtdb.util.Hasher
 import xtdb.vector.DECIMAL_ERROR_KEY
 import java.math.BigDecimal
@@ -15,16 +14,19 @@ import java.math.BigDecimal
 class DecimalVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer,
-    private val decimalType : Decimal
+    private val decimalType: Decimal
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
-    private val BIT_WIDTHS = setOf(32, 64, 128, 256)
+    companion object {
+        private val BIT_WIDTHS = setOf(32, 64, 128, 256)
+    }
+
     val precision = decimalType.precision
     val scale = decimalType.scale
     val bitWidth = decimalType.bitWidth
 
     init {
-       require(bitWidth in BIT_WIDTHS) { "Invalid bit width for DecimalVector: $bitWidth" }
+        require(bitWidth in BIT_WIDTHS) { "Invalid bit width for DecimalVector: $bitWidth" }
     }
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, decimalType: Decimal)
@@ -34,19 +36,20 @@ class DecimalVector private constructor(
 
     override val type: ArrowType = Decimal(precision, scale, bitWidth)
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) : BigDecimal =
-       dataBuffer.readBigDecimal(idx, scale, byteWidth)
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): BigDecimal =
+        dataBuffer.readBigDecimal(idx, scale, byteWidth)
 
     override fun writeObject0(value: Any) {
         if (value is BigDecimal) {
             if (value.precision() > precision || value.scale() != scale) {
                 throw InvalidWriteObjectException(fieldType, value)
             }
-            // HACK, we throw a RuntimeError here, but it should likely be dealt with in the EE if a object doesn't fit
+
+            // HACK, we throw unsupported here, but it should likely be dealt with in the EE if a object doesn't fit
             try {
-            dataBuffer.writeBigDecimal(value, byteWidth)
+                dataBuffer.writeBigDecimal(value, byteWidth)
             } catch (e: UnsupportedOperationException) {
-                throw RuntimeException(DECIMAL_ERROR_KEY, e.message, emptyMap<Keyword, Any>(), e)
+                throw Unsupported(e.message, DECIMAL_ERROR_KEY, cause = e)
             }
             writeNotNull()
         } else throw InvalidWriteObjectException(fieldType, value)

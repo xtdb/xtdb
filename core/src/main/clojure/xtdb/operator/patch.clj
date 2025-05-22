@@ -39,9 +39,10 @@
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
                        (if (> valid-from valid-to)
-                         (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
-                                                 {:valid-from (time/micros->instant  valid-from)
-                                                  :valid-to (time/micros->instant valid-to)}))
+                         (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                               "Invalid valid times"
+                                               {:valid-from (time/micros->instant  valid-from)
+                                                :valid-to (time/micros->instant valid-to)}))
                          (PatchGapsCursor. inner
                                            (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
                                                                                                 (types/field-with-name field (str nm))))

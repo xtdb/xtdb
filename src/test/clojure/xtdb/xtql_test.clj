@@ -49,9 +49,8 @@
     (t/is (= '(. foo bar) (roundtrip-expr '(. foo bar))))
 
     (t/is
-     (thrown-with-msg?
-      IllegalArgumentException #"malformed-get"
-      (roundtrip-expr '(. foo))))))
+     (anomalous? [:incorrect nil #"malformed-get"]
+                 (roundtrip-expr '(. foo))))))
 
 (t/deftest test-expr-subquery
   (t/is (= '(exists? (from :foo [a]))
@@ -92,13 +91,11 @@
     (t/is (= q
              (roundtrip-q q))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Invalid keys provided to option map"
-         (roundtrip-q '(from :foo {:bar x :baz x}))))
+  (t/is (anomalous? [:incorrect nil #"Invalid keys provided to option map"]
+                    (roundtrip-q '(from :foo {:bar x :baz x}))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Attribute in bind spec must be keyword"
-         (roundtrip-q '(from :foo [{bar x "fish" y}])))))
+  (t/is (anomalous? [:incorrect nil #"Attribute in bind spec must be keyword"]
+                    (roundtrip-q '(from :foo [{bar x "fish" y}])))))
 
 (t/deftest test-from-star
   (t/is (= '(from :foo [* a {:xt/id b} {:d "fish"}])
@@ -132,26 +129,22 @@
     (t/is (= q
              (roundtrip-q-tail q))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Short form of col spec must be a symbol"
-         (roundtrip-q-tail '(with (+ 1 1)))))
+  (t/is (anomalous? [:incorrect nil #"Short form of col spec must be a symbol"]
+                    (roundtrip-q-tail '(with (+ 1 1)))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Attribute in col spec must be keyword"
-         (roundtrip-q-tail '(with {bar (+ 1 1)})))))
+  (t/is (anomalous? [:incorrect nil #"Attribute in col spec must be keyword"]
+                    (roundtrip-q-tail '(with {bar (+ 1 1)})))))
 
 (t/deftest test-parse-with-unify-clause
   (let [q '(with {bar 1} {baz (+ 1 1)})]
     (t/is (= q
              (roundtrip-unify-clause q))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Var specs must be pairs of bindings"
-         (roundtrip-unify-clause '(with (+ 1 1)))))
+  (t/is (anomalous? [:incorrect nil #"Var specs must be pairs of bindings"]
+                    (roundtrip-unify-clause '(with (+ 1 1)))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Attribute in var spec must be symbol"
-         (roundtrip-unify-clause '(with {:bar (+ 1 1)})))))
+  (t/is (anomalous? [:incorrect nil #"Attribute in var spec must be symbol"]
+                    (roundtrip-unify-clause '(with {:bar (+ 1 1)})))))
 
 (t/deftest test-parse-without
   (let [q '(-> (from :foo [xt/id a])
@@ -159,9 +152,8 @@
     (t/is (= q
              (roundtrip-q q)))
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException #"Columns must be keywords in without"
-           (roundtrip-q-tail '(without {:bar baz}))))))
+    (t/is (anomalous? [:incorrect nil #"Columns must be keywords in without"]
+                      (roundtrip-q-tail '(without {:bar baz}))))))
 
 (t/deftest test-parse-return
   (let [q '(-> (from :foo [a])
@@ -181,11 +173,10 @@
            (roundtrip-unify-clause '(join (from :foo [a c])
                                           [{:a b} c]))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"malformed-bind"
-         (roundtrip-unify-clause '(join (fn [x]
-                                          (from :foo [x]))
-                                        {:baz x})))))
+  (t/is (anomalous? [:incorrect nil #"malformed-bind"]
+                    (roundtrip-unify-clause '(join (fn [x]
+                                                     (from :foo [x]))
+                                                   {:baz x})))))
 
 (t/deftest test-parse-order-by
   (t/is (= '(order-by (+ a b)
@@ -198,21 +189,17 @@
                                         {:val y :nulls :last}
                                         {:val z :dir :asc}
                                         {:val l :dir :desc :nulls :first}))))
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Invalid keys provided to option map"
-         (roundtrip-q-tail '(order-by {:foo y :nulls :last}))))
+  (t/is (anomalous? [:incorrect nil #"Invalid keys provided to option map"]
+                    (roundtrip-q-tail '(order-by {:foo y :nulls :last}))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"order-by-val-missing"
-         (roundtrip-q-tail '(order-by {:nulls :last}))))
+  (t/is (anomalous? [:incorrect nil #"order-by-val-missing"]
+                    (roundtrip-q-tail '(order-by {:nulls :last}))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"malformed-order-by-direction"
-         (roundtrip-q-tail '(order-by {:val x :dir "d"}))))
+  (t/is (anomalous? [:incorrect nil #"malformed-order-by-direction"]
+                    (roundtrip-q-tail '(order-by {:val x :dir "d"}))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"malformed-order-by-nulls"
-         (roundtrip-q-tail '(order-by {:val x :nulls :fish})))))
+  (t/is (anomalous? [:incorrect nil #"malformed-order-by-nulls"]
+                    (roundtrip-q-tail '(order-by {:val x :nulls :fish})))))
 
 (t/deftest test-parse-union-all
   (t/is (= '(union-all (from :foo [{:baz b}])
@@ -285,14 +272,11 @@
              (roundtrip-q-tail q))
           "unnest op"))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Unnest takes only a single binding"
-         (roundtrip-q-tail '(unnest {:a b :c d}))))
+  (t/is (anomalous? [:incorrect nil #"Unnest takes only a single binding"]
+                    (roundtrip-q-tail '(unnest {:a b :c d}))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Unnest takes only a single binding"
-         (roundtrip-q-tail '(unnest {:a b} {:c d}))))
+  (t/is (anomalous? [:incorrect nil #"Unnest takes only a single binding"]
+                    (roundtrip-q-tail '(unnest {:a b} {:c d}))))
 
-  (t/is (thrown-with-msg?
-         IllegalArgumentException #"Unnest takes only a single binding"
-         (roundtrip-q-tail '(unnest a)))))
+  (t/is (anomalous? [:incorrect nil #"Unnest takes only a single binding"]
+                    (roundtrip-q-tail '(unnest a)))))

@@ -204,9 +204,9 @@
                      ;;especially given our "per path schema" principal.
                      (when-not (= relevant-schema-at-prepare-time
                                   (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
-                       (throw (err/runtime-err :prepared-query-out-of-date
-                                               ;;TODO consider adding the schema diff to the error, potentially quite large.
-                                               {::err/message "Relevant table schema has changed since preparing query, please prepare again"})))))
+                       ;;TODO consider adding the schema diff to the error, potentially quite large.
+                       (throw (err/conflict :prepared-query-out-of-date
+                                            "Relevant table schema has changed since preparing query, please prepare again")))))
                  (.acquire ref-ctr)
                  (try
                    (util/with-close-on-catch [^BufferAllocator allocator

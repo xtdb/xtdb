@@ -46,7 +46,7 @@ class Watchers(currentMsgId: MessageId) : AutoCloseable {
 
                 is NotifyException -> {
                     val ex = event.exception
-                        .let { if (it is IngestionStoppedException) it else IngestionStoppedException(event.msgId, it) }
+                        .let { it as? IngestionStoppedException ?: IngestionStoppedException(event.msgId, it) }
                         .also { exception = it }
 
                     watchers.forEach { it.onDone.completeExceptionally(ex) }

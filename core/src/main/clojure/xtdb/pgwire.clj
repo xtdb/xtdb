@@ -6,6 +6,7 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
+            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
@@ -35,6 +36,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
+           (xtdb.error Anomaly Conflict Incorrect)
            (xtdb.query BoundQuery PreparedQuery)
            [xtdb.vector RelationReader]))
 
@@ -149,8 +151,6 @@
      :detail (str/join "\n" (rest lines))
      :position (str (inc (:idx parse-failure)))}))
 
-(defn- err-internal [msg cause] (ex-info msg {::severity :error, :error-code "XX000"} cause))
-
 (defn- err-invalid-catalog [db-name]
   (ex-info (format "database '%s' does not exist" db-name)
            {::severity :fatal, ::error-code "3D000"}))
@@ -226,44 +226,41 @@
    (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
 
 (defn- ex->pgw-err [ex]
-  (let [ex-msg (ex-message ex)]
+  (let [data (ex-data ex)]
     (cond
-      (::error-code (ex-data ex)) ex
+      (::error-code data) data
 
-      (instance? IllegalArgumentException ex)
-      (ex-info ex-msg
-               (case (.getKey ^xtdb.IllegalArgumentException ex)
-                 :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
+      (instance? Conflict ex)
+      (case (::err/code data)
+        :xtdb/assert-failed {::error-code "P0004", ::severity :error}
+        {::severity :error, ::error-code "XX000"})
 
-                 {::severity :error, ::error-code "08P01"})
-               ex)
+      (instance? Incorrect ex)
+      (case (::err/code data)
+        :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
 
-      (instance? xtdb.RuntimeException ex)
-      (ex-info ex-msg
-               (case (.getKey ^xtdb.RuntimeException ex)
-                 :xtdb/assert-failed {::error-code "P0004", ::severity :error}
-                 {::severity :error, ::error-code "08P01"})
-               ex)
+        {::severity :error, ::error-code "08P01"})
 
       :else
       (do
         (log/error ex "Uncaught exception processing message")
-        (err-internal ex-msg ex)))))
+        {::severity :error, ::error-code "XX000"}))))
 
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
-  (let [ex (ex->pgw-err ex)
-        ex-msg (ex-message ex)
-        {::keys [severity error-code]} (ex-data ex)
+  (let [ex-msg (ex-message ex)
+        {::keys [severity error-code]} (if (::error-code (ex-data ex))
+                                         (ex-data ex)
+                                         (ex->pgw-err (err/->anomaly ex {})))
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
                         {:error-fields {:severity severity-str
                                         :localized-severity severity-str
                                         :sql-state error-code
                                         :message ex-msg
-                                        :detail (when-let [cause (ex-cause ex)]
+                                        :detail (when (instance? Anomaly ex)
                                                   (case (get-in @conn-state [:session :parameters "fallback_output_format"])
-                                                    :transit (serde/write-transit cause :json)
-                                                    (pg-types/json-bytes cause)))}})))
+                                                    :transit (serde/write-transit ex :json)
+                                                    (pg-types/json-bytes ex)))}})))
 
 ;;; startup
 

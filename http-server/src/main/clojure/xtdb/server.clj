@@ -39,6 +39,7 @@
            (xtdb.api HttpServer$Factory TransactionKey Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.api.query IKeyFn Query)
+           xtdb.error.Anomaly
            (xtdb.http QueryOptions QueryRequest TxOptions TxRequest)))
 
 (def json-format
@@ -163,7 +164,7 @@
                           (reify Consumer
                             (accept [_ el]
                               (transit/write writer el))))
-                (catch xtdb.RuntimeException e
+                (catch Anomaly e
                   (transit/write writer e))
                 (catch Throwable t
                   (transit/write writer (throwable->ex-info t))))))
@@ -310,14 +311,14 @@
                           (merge (r.coercion/encode-error (ex-data ex))
                                  {::err/message "malformed request"}))})
 
-(defn- unroll-xt-iae [ex]
-  (if (instance? xtdb.IllegalArgumentException ex)
+(defn- unroll-anomaly [ex]
+  (if (instance? Anomaly ex)
     ex
     (when-let [ex (ex-cause ex)]
       (recur ex))))
 
 (defn- handle-muuntaja-decode-error [ex _req]
-  (if-let [xt-iae (unroll-xt-iae ex)]
+  (if-let [xt-iae (unroll-anomaly ex)]
     {:status 400
      :body xt-iae}
     {:status 400
@@ -377,8 +378,7 @@
                                         [ri.exception/exception-interceptor
                                          (merge ri.exception/default-handlers
                                                 {::ri.exception/default default-handler
-                                                 xtdb.IllegalArgumentException handle-ex-info
-                                                 xtdb.RuntimeException handle-ex-info
+                                                 Anomaly handle-ex-info
                                                  :unauthenticated handle-ex-info
                                                  :muuntaja/decode handle-muuntaja-decode-error
                                                  ::r.coercion/request-coercion handle-request-coercion-error

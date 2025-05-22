@@ -374,11 +374,10 @@
             "check rounding"))))
 
 (t/deftest test-empty-rel-still-throws-149
-  (t/is (thrown-with-msg? IllegalArgumentException
-                          #"Unknown symbol: '\?x13'"
-                          (tu/query-ra '[:select (= ?x13 x4)
-                                         [:table []]]
-                                       {}))))
+  (t/is (anomalous? [:incorrect nil #"Unknown symbol: '\?x13'"]
+                    (tu/query-ra '[:select (= ?x13 x4)
+                                   [:table []]]
+                                 {}))))
 
 (t/deftest test-left-outer-join-with-composite-types-2393
   (t/is (= {:res [{{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 0} 1}

@@ -4,7 +4,7 @@ import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.ICursor
-import xtdb.asKeyword
+import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
 import xtdb.types.Fields.BOOL
 import xtdb.vector.IRelationWriter
@@ -116,10 +116,7 @@ sealed interface ApplyMode {
 
         private val cardinalityViolation: Nothing
             get() =
-                throw xtdb.RuntimeException(
-                    "xtdb.single-join/cardinality-violation".asKeyword,
-                    "cardinality violation"
-                )
+                throw Incorrect(message = "cardinality violation", errorCode = "xtdb.single-join/cardinality-violation")
 
         override fun accept(
             dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
