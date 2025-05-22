@@ -2982,7 +2982,7 @@
 
 (defn log-warnings [!warnings]
   (doseq [warning @!warnings]
-    (log/warn (error-string warning))))
+    (log/debug (error-string warning))))
 
 (defn ->env
   ([] (->env {}))
