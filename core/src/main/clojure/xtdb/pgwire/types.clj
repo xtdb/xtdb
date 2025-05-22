@@ -518,6 +518,19 @@
                               (.format DateTimeFormatter/ISO_LOCAL_DATE)
                               (utf8)))})
 
+   :time (let [typlen 8]
+          {:typname "time"
+           :col-type [:time :micro]
+           :oid 1083
+           :typlen typlen
+           :typsend "time_send"
+           :typreceive "time_recv"
+           :read-text (fn [_env ba] (LocalTime/parse (read-utf8 ba)))
+           :write-text (fn [_env ^IVectorReader rdr idx]
+                         (-> ^LocalTime (.getObject rdr idx)
+                             (.format DateTimeFormatter/ISO_LOCAL_TIME)
+                             (utf8)))})
+
    :varchar {:typname "varchar"
              :col-type :utf8
              :oid 1043
@@ -666,6 +679,7 @@
               :write-binary (fn [_env ^IVectorReader rdr idx]
                               (byte-array (interval-rdr->iso-micro-interval-str-bytes rdr idx)))
               :write-text (fn [_env ^IVectorReader rdr idx] (interval-rdr->iso-micro-interval-str-bytes rdr idx))}
+
    ;; json-write-text is essentially the default in send-query-result so no need to specify here
    :json {:typname "json"
           :oid 114
@@ -843,6 +857,10 @@
    :varbinary :bytea
    :keyword :keyword
    [:date :day] :date
+   [:time :second] :time
+   [:time :milli] :time
+   [:time :micro] :time
+   [:time :nano] :time
    [:timestamp-local :micro] :timestamp
    [:timestamp-tz :micro] :timestamptz
    [:timestamp-local :nano] :timestamp
