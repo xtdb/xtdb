@@ -908,6 +908,4 @@
            col-type
            (col-type->pg-type fallback-pg-type col-type))
          (pg-types)
-         (set/rename-keys {:oid :column-oid})
-         (assoc :field-name field-name
-                :column-name field-name)))))
+         (assoc :col-name field-name)))))

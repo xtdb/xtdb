@@ -235,10 +235,10 @@
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name field]} col-rows
-        :let [{:keys [column-oid typlen]} (pg-types/field->pg-type (types/field-with-name field name))]]
+        :let [{:keys [oid typlen]} (pg-types/field->pg-type (types/field-with-name field name))]]
     {:attrelid (name->oid table)
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
-     :atttypid (int column-oid)
+     :atttypid (int oid)
      :attlen (int (or typlen -1))
      :attnum (int idx)
      :attisdropped false

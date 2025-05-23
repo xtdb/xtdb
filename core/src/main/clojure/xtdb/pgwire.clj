@@ -582,8 +582,8 @@
                                    :else (dotimes [idx (cond-> (.getRowCount rel)
                                                          limit (min (- limit @n-rows-out)))]
                                            (let [row (mapv
-                                                      (fn [{:keys [^String field-name write-binary write-text result-format]}]
-                                                        (let [rdr (.vectorForOrNull rel field-name)]
+                                                      (fn [{:keys [^String col-name write-binary write-text result-format]}]
+                                                        (let [rdr (.vectorForOrNull rel col-name)]
                                                           (when-not (.isNull rdr idx)
                                                             (if (= :binary result-format)
                                                               (write-binary session rdr idx)
@@ -609,8 +609,9 @@
                   :result-format :text}
         apply-defaults (fn [col]
                          (-> (merge defaults col)
-                             (select-keys [:column-name :table-oid :column-attribute-number
-                                           :column-oid :typlen :type-modifier :result-format])))
+                             (select-keys [:col-name :table-oid :column-attribute-number
+                                           :oid :typlen :type-modifier :result-format])
+                             (set/rename-keys {:col-name :column-name, :oid :column-oid})))
         data {:columns (mapv apply-defaults cols)}]
 
     (log/trace "sending row description - " (assoc data :input-cols cols))
@@ -747,7 +748,7 @@
    ;; because our query protocol impl is broken, or partially implemented.
    ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
    {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
-    :cols [{:column-name "col1" :column-oid (get-in pg-types/pg-types [:varchar :oid])}]
+    :cols [{:col-name "col1" :oid (get-in pg-types/pg-types [:varchar :oid])}]
     :rows (fn [_conn] [["xtdb"]])}])
 
 (defn- trim-sql [s]
@@ -972,10 +973,9 @@
                  :param-oids param-oids
                  :fields (if (some (comp nil? :col-type) param-types)
                            ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
-                           (let [fmt (-> (get pg-types/pg-types fallback-output-format)
-                                         (set/rename-keys {:oid :column-oid}))]
+                           (let [fmt (get pg-types/pg-types fallback-output-format)]
                              (for [col-name (map str (.getColumnNames pq))]
-                               (assoc fmt :field-name col-name, :column-name col-name)))
+                               (assoc fmt :col-name col-name)))
 
                            (->> (.getColumnFields pq (->> (mapv :col-type param-types)
                                                           (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
@@ -1098,7 +1098,7 @@
                                                           (-> (.vectorForOrNull args-rel (.getName field))
                                                               (.getObject 0))))
                                              :param-oids (->> arg-fields
-                                                              (mapv (comp :column-oid pg-types/field->pg-type)))))
+                                                              (mapv (comp :oid pg-types/field->pg-type)))))
                                   (finally
                                     (util/close args-rel))))))))
 

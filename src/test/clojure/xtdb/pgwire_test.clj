@@ -396,8 +396,8 @@
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgwire/canned-responses [{:q "hello!"
-                                          :cols [{:column-name "greet",
-                                                  :column-oid (get-in pg-types/pg-types [:json :oid])}]
+                                          :cols [{:col-name "greet",
+                                                  :oid (get-in pg-types/pg-types [:json :oid])}]
                                           :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
@@ -2030,13 +2030,12 @@ ORDER BY t.oid DESC LIMIT 1"
           (t/is (= [{"names" ["a" "b"]}] (rs->maps rs)))))))
 
   (t/testing "array in select"
-    (with-open [conn (jdbc-conn)]
-      (with-open [stmt (.prepareStatement conn "SELECT ['a', 'b', 'c'] AS arr")]
+    (with-open [conn (jdbc-conn)
+                stmt (.prepareStatement conn "SELECT ['a', 'b', 'c'] AS arr")]
+      (t/is (= [{"arr" "_text"}] (result-metadata stmt)))
 
-        (t/is (= [{"arr" "_text"}] (result-metadata stmt)))
-
-        (with-open [rs (.executeQuery stmt)]
-          (t/is (= [{"arr" ["a" "b" "c"]}] (rs->maps rs)))))))
+      (with-open [rs (.executeQuery stmt)]
+        (t/is (= [{"arr" ["a" "b" "c"]}] (rs->maps rs))))))
 
   (t/testing "text array as parameter"
     (with-open [conn (jdbc-conn)
@@ -2053,30 +2052,30 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (= [{"_id" 1, "name" ["aa", "bbb", "cccc"]}] (rs->maps rs)))))))
 
 (deftest test-elixir-client-complex-array
-  (with-open [conn (jdbc-conn)]
-    (with-open [stmt (.prepareStatement conn
-                                        "SELECT ARRAY (SELECT a.atttypid
-                                                       FROM pg_attribute AS a
-                                                       WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
-                                                       ORDER BY a.attnum) as arr
-                                         FROM pg_type AS t
-                                           LEFT JOIN pg_type AS d ON t.typbasetype = d.oid
-                                           LEFT JOIN pg_range AS r ON r.rngtypid = t.oid
-                                                                   OR r.rngmultitypid = t.oid
-                                                                   OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)
-                                         WHERE (t.typrelid = 0)
-                                           AND (t.typelem = 0
-                                                OR NOT EXISTS (SELECT 1
-                                                               FROM pg_catalog.pg_type s
-                                                               WHERE s.typrelid <> 0 AND s.oid = t.typelem))")]
-      (with-open [rs (.executeQuery stmt)]
-        (t/is (= [{"arr" "_int4"}]
-                 (result-metadata stmt)
-                 (result-metadata rs)))
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn
+                                      "SELECT ARRAY (SELECT a.atttypid
+                                                     FROM pg_attribute AS a
+                                                     WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+                                                     ORDER BY a.attnum) as arr
+                                       FROM pg_type AS t
+                                         LEFT JOIN pg_type AS d ON t.typbasetype = d.oid
+                                         LEFT JOIN pg_range AS r ON r.rngtypid = t.oid
+                                                                 OR r.rngmultitypid = t.oid
+                                                                 OR (t.typbasetype <> 0 AND r.rngtypid = t.typbasetype)
+                                       WHERE (t.typrelid = 0)
+                                         AND (t.typelem = 0
+                                              OR NOT EXISTS (SELECT 1
+                                                             FROM pg_catalog.pg_type s
+                                                             WHERE s.typrelid <> 0 AND s.oid = t.typelem))")
+              rs (.executeQuery stmt)]
+    (t/is (= [{"arr" "_int4"}]
+             (result-metadata stmt)
+             (result-metadata rs)))
 
-        (doseq [res (rs->maps rs)
-                :let [arr (get res "arr")]]
-          (t/is (= [] arr)))))))
+    (doseq [res (rs->maps rs)
+            :let [arr (get res "arr")]]
+      (t/is (= [] arr)))))
 
 (deftest test-array-field
   (with-open [conn (jdbc-conn)]
