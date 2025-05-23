@@ -46,19 +46,21 @@
            [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb ICursor IResultCursor)
+           (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            xtdb.catalog.BlockCatalog
            (xtdb.indexer Watermark Watermark$Source)
-           (xtdb.query PreparedQuery BoundQuery IQuerySource)
            xtdb.operator.scan.IScanEmitter
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter
            [xtdb.vector IVectorReader RelationReader]))
 
-(defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
-                                        current-time, snapshot-time, default-tz, ^RefCounter ref-ctr, fields]
+(defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
+                                        current-time, snapshot-time, default-tz,
+                                        ^AutoCloseable wm, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
   (reify IResultCursor
+    (getResultFields [_] result-fields)
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
         (throw (InterruptedException.)))
@@ -78,10 +80,9 @@
     (close [_]
       (.release ref-ctr)
       (util/close cursor)
+      (util/close args-to-close)
       (util/close wm)
-      (util/close al))
-
-    (columnFields [_] fields)))
+      (util/close al))))
 
 (defn emit-expr [^ConcurrentHashMap cache {:keys [^IScanEmitter scan-emitter, ^BlockCatalog block-cat, ^Watermark$Source wm-src]}
                  conformed-query scan-cols default-tz param-fields]
@@ -97,7 +98,7 @@
                         (binding [expr/*default-tz* default-tz]
                           (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter)))))))
 
-(defn ->column-fields [ordered-outer-projection fields]
+(defn- ->result-fields [ordered-outer-projection fields]
   (if ordered-outer-projection
     (->> ordered-outer-projection
          (mapv (fn [field-name]
@@ -136,10 +137,11 @@
 
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
-       (log/debug "error conforming LP"
-                  (pr-str {:plan query
-                           :explain (s/explain-data ::lp/logical-plan query)}))
-       (throw (err/illegal-arg :malformed-query {::err/message "internal error conforming query plan", :plan query})))
+       (log/warn "error conforming LP"
+                 (pr-str {:plan query
+                          :explain (s/explain-data ::lp/logical-plan query)}))
+       (throw (err/incorrect ::invalid-query-plan "internal error conforming query plan"
+                             {:plan query})))
 
      (let [tables (filter (comp #{:scan} :op) (lp/child-exprs conformed-query))
            scan-cols (->> tables
@@ -169,14 +171,13 @@
                                            (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
                  {:keys [fields]} (emit-expr cache deps conformed-query scan-cols default-tz param-fields-by-name)]
              ;; could store column-fields in the cache/map too
-             (->column-fields ordered-outer-projection fields)))
+             (->result-fields ordered-outer-projection fields)))
 
          (getWarnings [_] warnings)
 
-         (bind [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]
-                   :or {default-tz default-tz
-                        close-args? true}}]
-
+         (openQuery [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]
+                        :or {default-tz default-tz
+                             close-args? true}}]
            (let [^RelationReader args (cond
                                         (instance? RelationReader args) args
                                         (vector? args) (vw/open-args allocator args)
@@ -188,58 +189,52 @@
                                   (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
                                   (expr/current-time))]
 
-             (reify
-               BoundQuery
-               (getColumnFields [_]
-                 (->column-fields ordered-outer-projection fields))
+             (.acquire ref-ctr)
+             (try
+               (when relevant-schema-at-prepare-time
+                 (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
+                                                      (.scanFields scan-emitter wm
+                                                                   (mapcat #(map (partial vector (key %)) (val %))
+                                                                           (scan/tables-with-cols wm-src))))]
 
-               (openCursor [_]
-                 (when relevant-schema-at-prepare-time
-                   (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
-                                                        (.scanFields scan-emitter wm
-                                                                     (mapcat #(map (partial vector (key %)) (val %))
-                                                                             (scan/tables-with-cols wm-src))))]
+                   ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
+                   ;;especially given our "per path schema" principal.
+                   (when-not (= relevant-schema-at-prepare-time
+                                (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
+                     ;;TODO consider adding the schema diff to the error, potentially quite large.
+                     (throw (err/conflict :prepared-query-out-of-date
+                                          "Relevant table schema has changed since preparing query, please prepare again")))))
 
-                     ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
-                     ;;especially given our "per path schema" principal.
-                     (when-not (= relevant-schema-at-prepare-time
-                                  (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
-                       ;;TODO consider adding the schema diff to the error, potentially quite large.
-                       (throw (err/conflict :prepared-query-out-of-date
-                                            "Relevant table schema has changed since preparing query, please prepare again")))))
-                 (.acquire ref-ctr)
-                 (try
-                   (util/with-close-on-catch [^BufferAllocator allocator
-                                              (if allocator
-                                                (util/->child-allocator allocator "BoundQuery/openCursor")
-                                                (RootAllocator.))
-                                              wm (.openWatermark wm-src)]
+               (util/with-close-on-catch [^BufferAllocator allocator
+                                          (if allocator
+                                            (util/->child-allocator allocator "BoundQuery/openCursor")
+                                            (RootAllocator.))
+                                          wm (.openWatermark wm-src)]
 
-                     (binding [expr/*clock* (InstantSource/fixed current-time)
-                               expr/*default-tz* default-tz
-                               expr/*snapshot-time* (or (some-> (:snapshot-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
-                                                        (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
-                                                        (some-> wm .getTxBasis .getSystemTime))
-                               expr/*after-tx-id* (or after-tx-id -1)]
+                 (binding [expr/*clock* (InstantSource/fixed current-time)
+                           expr/*default-tz* default-tz
+                           expr/*snapshot-time* (or (some-> (:snapshot-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
+                                                    (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
+                                                    (some-> wm .getTxBasis .getSystemTime))
+                           expr/*after-tx-id* (or after-tx-id -1)]
 
-                       (validate-snapshot-not-before expr/*snapshot-time* wm)
+                   (validate-snapshot-not-before expr/*snapshot-time* wm)
 
-                       (-> (->cursor {:allocator allocator, :watermark wm
-                                      :default-tz default-tz,
-                                      :snapshot-time expr/*snapshot-time*
-                                      :current-time current-time
-                                      :args (or args vw/empty-args)
-                                      :schema (scan/tables-with-cols wm-src)})
-                           (wrap-cursor wm allocator current-time expr/*snapshot-time* default-tz ref-ctr fields))))
+                   (-> (->cursor {:allocator allocator, :watermark wm
+                                  :default-tz default-tz,
+                                  :snapshot-time expr/*snapshot-time*
+                                  :current-time current-time
+                                  :args (or args vw/empty-args)
+                                  :schema (scan/tables-with-cols wm-src)})
+                       (wrap-cursor (->result-fields ordered-outer-projection fields)
+                                    current-time expr/*snapshot-time* default-tz
+                                    allocator wm ref-ctr (when close-args? args)))))
 
-                   (catch Throwable t
-                     (.release ref-ctr)
-                     (throw t))))
-
-               AutoCloseable
-               (close [_]
+               (catch Throwable t
+                 (.release ref-ctr)
                  (when close-args?
-                   (util/close args)))))))))))
+                   (util/close args))
+                 (throw t))))))))))
 
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts
@@ -322,36 +317,15 @@
                             (apply [_ k]
                               (.denormalize key-fn k))))))))
 
-(defn wrapping-error-count-cursor [^IResultCursor source ^Counter query-error-counter]
-  (reify IResultCursor
-    (tryAdvance [_ c]
-      (try
-        (.tryAdvance source c)
-        (catch Exception e
-          (when query-error-counter
-            (.increment query-error-counter))
-          (throw e))))
-
-    (characteristics [_] (.characteristics source))
-    (estimateSize [_] (.estimateSize source))
-    (getComparator [_] (.getComparator source))
-    (getExactSizeIfKnown [_] (.getExactSizeIfKnown source))
-    (hasCharacteristics [_ c] (.hasCharacteristics source c))
-    (trySplit [_] (.trySplit source))
-    (close [_] (.close source))
-    (columnFields [_] (.columnFields source))))
-
-(defn open-cursor-as-stream
-  (^java.util.stream.Stream [^BoundQuery bound-query query-opts]
-   (open-cursor-as-stream bound-query query-opts {}))
-  (^java.util.stream.Stream [^BoundQuery bound-query {:keys [key-fn]} {:keys [^Counter query-error-counter]}]
+(defn cursor->stream
+  (^java.util.stream.Stream [^IResultCursor cursor query-opts]
+   (cursor->stream cursor query-opts {}))
+  (^java.util.stream.Stream [^IResultCursor cursor {:keys [key-fn]} {:keys [query-error-counter]}]
    (let [key-fn (cache-key-fn key-fn)]
-     (util/with-close-on-catch [cursor (.openCursor bound-query)]
-       (-> (StreamSupport/stream (cond-> cursor
-                                   query-error-counter (wrapping-error-count-cursor query-error-counter)) false)
-           ^Stream (.onClose (fn []
-                               (util/close cursor)
-                               (util/close bound-query)))
-           (.flatMap (reify Function
-                       (apply [_ rel]
-                         (.stream (vr/rel->rows rel key-fn))))))))))
+     (-> (StreamSupport/stream (cond-> cursor
+                                 query-error-counter (IResultCursor$ErrorTrackingCursor. query-error-counter))
+                               false)
+         ^Stream (.onClose (fn []
+                             (util/close cursor)))
+         (.flatMap (fn [rel]
+                     (.stream (vr/rel->rows rel key-fn))))))))

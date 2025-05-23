@@ -350,9 +350,8 @@
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, query, tx-opts, {:keys [message]}]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                        (assoc :args args, :close-args? false)))
-                          (.openCursor))]
+      (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                                         (assoc :args args, :close-args? false)))]
 
         (letfn [(throw-assert-failed []
                   (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
@@ -371,9 +370,8 @@
 (defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, tx-opts, query-opts]
   (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
     (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.bind pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                        (assoc :args args, :close-args? false)))
-                          (.openCursor))]
+      (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                                             (assoc :args args, :close-args? false))))]
 
         (.forEachRemaining res
                            (reify Consumer
@@ -471,11 +469,8 @@
                                                                      (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
                                                                          (.withName "doc"))])))])]
 
-                          (with-open [bq (.bind pq
-                                                (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                                    (assoc :args args
-                                                           :close-args? false)))
-                                      res (.openCursor bq)]
+                          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                                                             (assoc :args args, :close-args? false)))]
                             (.forEachRemaining res
                                                (fn [^RelationReader rel]
                                                  (patch-rel! table-name live-table rel tx-opts)))))))))))]

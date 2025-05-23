@@ -53,10 +53,10 @@
       (update :current-time #(some-> % (time/->instant)))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args], :as query-opts} {:keys [query-timer] :as metrics}]
-  (util/with-close-on-catch [bound-query (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
-                                           (.bind prepared-query (assoc query-opts :args args-rel)))]
+  (util/with-close-on-catch [cursor (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
+                                      (.openQuery prepared-query (assoc query-opts :args args-rel)))]
     ;;TODO metrics only currently wrapping openQueryAsync results
-    (-> (q/open-cursor-as-stream bound-query query-opts metrics)
+    (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
 
 (defn- ->TxOps [tx-ops]

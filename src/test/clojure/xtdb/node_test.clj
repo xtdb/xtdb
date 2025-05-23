@@ -716,24 +716,22 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (.getColumnFields pq [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]))
           "param type is assumed to be nullable")
 
-    (with-open [bq (.bind pq {:args (tu/open-args [42])})
-                cursor (.openCursor bq)]
+    (with-open [cursor (.openQuery pq {:args (tu/open-args [42])})]
 
       (t/is (= (conj column-fields
                      #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
-               (.getColumnFields bq))
+               (.getResultFields cursor))
             "now param value has been supplied we know its type is non-null")
 
       (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
                (tu/<-cursor cursor))))
 
     (t/testing "preparedQuery rebound with different param types"
-      (with-open [bq (.bind pq {:args (tu/open-args ["fish"])})
-                  cursor (.openCursor bq)]
+      (with-open [cursor (.openQuery pq {:args (tu/open-args ["fish"])})]
 
         (t/is (= (conj column-fields
                        #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :utf8 false]])
-                 (.getColumnFields bq))
+                 (.getResultFields cursor))
               "now param value has been supplied we know its type is non-null")
 
         (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
@@ -741,8 +739,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/testing "statement invalidation"
 
-      (with-open [bq (.bind pq {:args (tu/open-args [42])})]
-
+      (with-open [args (tu/open-args [42])]
         (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
                     {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
 
@@ -751,7 +748,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])]
               (tu/then-await-tx tx tu/*node*))
 
-            (with-open [cursor (.openCursor bq)]
+            (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
 
               (t/is (= res (tu/<-cursor cursor)))))
 
@@ -760,7 +757,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (let [tx (xt/submit-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])]
               (tu/then-await-tx tx tu/*node*))
 
-            (with-open [cursor (.openCursor bq)]
+            (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
 
               (t/is (= res (tu/<-cursor cursor))))))
 
@@ -770,7 +767,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (tu/then-await-tx tx tu/*node*))
 
           (t/is (anomalous? [:conflict nil "Relevant table schema has changed since preparing query, please prepare again"]
-                            (.openCursor bq))))))))
+                            (.openQuery pq {:args args, :close-args? false}))))))))
 
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
@@ -778,49 +775,36 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
 
       (t/testing "and not at bind"
-        (with-open [bq (.bind pq {})
-                    cursor (.openCursor bq)]
-
+        (with-open [cursor (.openQuery pq {})]
           (t/is (= ptz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
       (t/testing "and and also at bind"
         (let [tz #xt/zone "Asia/Bangkok"]
-          (with-open [bq (.bind pq {:default-tz tz})
-                      cursor (.openCursor bq)]
-
+          (with-open [cursor (.openQuery pq {:default-tz tz})]
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
 
   (t/testing "default-tz not supplied at prepare"
     (let [pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {})]
 
-      (t/testing "and not at bind"
-        (with-open [bq (.bind pq {})
-                    cursor (.openCursor bq)]
-
+      (t/testing "and not at open"
+        (with-open [cursor (.openQuery pq {})]
           (t/is (= #xt/zone "Z" (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
       (t/testing "but at bind"
         (let [tz #xt/zone "Asia/Bangkok"]
-          (with-open [bq (.bind pq {:default-tz tz})
-                      cursor (.openCursor bq)]
-
+          (with-open [cursor (.openQuery pq {:default-tz tz})]
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
   (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil})]
     (t/testing "preparedQuery rebound with args matching the assumed type"
 
-      (with-open [bq (.bind pq {:args (tu/open-args ["42"])})
-                  cursor (.openCursor bq)]
-
+      (with-open [cursor (.openQuery pq {:args (tu/open-args ["42"])})]
         (t/is (= [[{:v "42"}]]
                  (tu/<-cursor cursor))))
 
       (t/testing "or can be rebound with a different type"
-
-        (with-open [bq (.bind pq {:args (tu/open-args [44])})
-                    cursor (.openCursor bq)]
-
+        (with-open [cursor (.openQuery pq {:args (tu/open-args [44])})]
           (t/is (= [[{:v 44}]]
                    (tu/<-cursor cursor))))))))
 

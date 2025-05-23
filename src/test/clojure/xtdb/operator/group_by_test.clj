@@ -196,7 +196,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {n (sum a)}]
-                          [:table []]]))
+                          [::tu/pages {a :f64, b :utf8} []]]))
         "sum empty returns empty when there are groups")
 
   (t/is (= [{}]
@@ -221,7 +221,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {n (avg a)}]
-                          [:table []]]))
+                          [::tu/pages {a :f64, b :utf8} []]]))
         "avg empty returns empty when there are groups")
 
   (t/is (= [{}]
@@ -246,7 +246,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {n (min a)}]
-                          [:table []]]))
+                          [::tu/pages {a :f64, b :utf8} []]]))
         "min empty returns empty when there are groups")
 
   (t/is (= [{}]
@@ -338,12 +338,12 @@
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
   (t/is (= [{}]
            (tu/query-ra '[:group-by [{arr-out (array-agg a)}]
-                          [:table []]]))
+                          [::tu/pages {a :i64} []]]))
         "array agg empty returns null")
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {arr-out (array-agg a)}]
-                          [:table []]]))
+                          [::tu/pages {a :i64, b :utf8} []]]))
         "array-agg empty returns empty when there are groups")
 
   (t/is (= [{:arr-out [nil]}]
@@ -368,7 +368,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {vec-out (vec-agg a)}]
-                          [:table []]]))
+                          [::tu/pages {a :f64, b :utf8} []]]))
         "vec-agg empty returns empty when there are groups")
 
   (t/is (= [{:vec-out [nil]}]

@@ -1418,13 +1418,12 @@
                    (result-metadata stmt)
                    (result-metadata rs)))
 
-          (t/is (=
-                 [{"_id" 1, "a" "one", "b" 2, "_column_2" 44.4}]
-                 (rs->maps rs)))))
+          (t/is (= [{:_id 1, :a "one", :b 2, :_column_2 44.4}]
+                   (resultset-seq rs)))))
 
       (t/testing "relevant schema change reported to pgwire client"
 
-        (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (2, 1, 1)"))
+        (jdbc/execute! conn ["INSERT INTO foo(_id, a, b) VALUES (2, 1, 1)"])
 
         ;;TODO we just return our own custom error here, rather than 'cached plan must not change result type'
         ;;might be worth confirming if there is a specific error type/message that matters for pgjdbc as there

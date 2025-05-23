@@ -21,7 +21,8 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.arrow.Relation
-           [xtdb.query BoundQuery IQuerySource PreparedQuery]))
+           xtdb.IResultCursor
+           [xtdb.query IQuerySource PreparedQuery]))
 
 (defn- new-id ^com.google.protobuf.ByteString []
   (ByteString/copyFrom (util/uuid->bytes (random-uuid))))
@@ -76,14 +77,13 @@
 
               (xt/execute-tx node [dml])))
 
-          (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
+          (handle-get-stream [^IResultCursor cursor, ^FlightProducer$ServerStreamListener listener]
             (try
-              (with-open [res (.openCursor bq)
-                          vsr (VectorSchemaRoot/create (Schema. (.getColumnFields bq)) allocator)]
+              (with-open [vsr (VectorSchemaRoot/create (Schema. (.getResultFields cursor)) allocator)]
                 (.start listener vsr)
 
                 (let [out-wtr (vw/root->writer vsr)]
-                  (.forEachRemaining res
+                  (.forEachRemaining cursor
                                      (reify Consumer
                                        (accept [_ in-rel]
                                          (.clear out-wtr)
@@ -122,9 +122,8 @@
                                                                                                                  (vr/vec->reader))))))
                                                                                (vr/rel-reader 1))]
                                          (doto ps
-                                           (some-> (.put :bound-query
-                                                         (.bind prepd-query {:args new-args}))
-                                                   util/try-close))))))
+                                           (some-> (.put :cursor (.openQuery prepd-query {:args new-args}))
+                                                   util/close))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 
           (.onCompleted ack-stream)))
@@ -147,27 +146,30 @@
         (let [sql (.toStringUtf8 (.getQueryBytes cmd))
               ticket-handle (new-id)
               plan (.planQuery q-src sql wm-src {})
-              bq (-> (.prepareRaQuery q-src plan wm-src {})
-                     (.bind {}))
+              cursor (-> (.prepareRaQuery q-src plan wm-src {})
+                         (.openQuery {}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)
                                   (Any/pack)
                                   (.toByteArray)))]
-          (.put tickets ticket-handle bq)
-          (FlightInfo. (Schema. (.getColumnFields bq)) descriptor
+          (.put tickets ticket-handle cursor)
+          (FlightInfo. (Schema. (.getResultFields cursor)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 
       (getStreamStatement [_ ticket _ctx listener]
-        (let [bq (or (.remove tickets (.getStatementHandle ticket))
-                     (throw (UnsupportedOperationException. "unknown ticket-id")))]
-          (handle-get-stream bq listener)))
+        (let [cursor (or (.remove tickets (.getStatementHandle ticket))
+                         (throw (UnsupportedOperationException. "unknown ticket-id")))]
+          (try
+            (handle-get-stream cursor listener)
+            (finally
+              (util/close cursor)))))
 
       (getFlightInfoPreparedStatement [_ cmd _ctx descriptor]
         (let [ps-id (.getPreparedStatementHandle cmd)
 
-              {:keys [bound-query ^PreparedQuery prepd-query], :as ^Map ps}
+              {:keys [cursor ^PreparedQuery prepd-query], :as ^Map ps}
               (or (get stmts ps-id)
                   (throw (UnsupportedOperationException. "invalid ps-id")))
 
@@ -177,17 +179,17 @@
                                   (Any/pack)
                                   (.toByteArray)))
 
-              ^BoundQuery bound-query (or bound-query
-                                          (.bind prepd-query {}))]
-          (.put ps :bound-query bound-query)
-          (FlightInfo. (Schema. (.getColumnFields bound-query)) descriptor
+              ^IResultCursor cursor (or cursor
+                                        (.openQuery prepd-query {}))]
+          (.put ps :cursor cursor)
+          (FlightInfo. (Schema. (.getResultFields cursor)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 
       (getStreamPreparedStatement [_ ticket _ctx listener]
-        (let [{:keys [bound-query]} (or (get stmts (.getPreparedStatementHandle ticket))
+        (let [{:keys [cursor]} (or (get stmts (.getPreparedStatementHandle ticket))
                                         (throw (UnsupportedOperationException. "invalid ps-id")))]
-          (handle-get-stream bound-query listener)))
+          (handle-get-stream cursor listener)))
 
       (createPreparedStatement [_ req _ctx listener]
         (let [ps-id (new-id)
@@ -213,7 +215,7 @@
 
       (closePreparedStatement [_ req _ctx listener]
         (let [ps (.remove stmts (.getPreparedStatementHandle req))]
-          (some-> (:bound-query ps) util/try-close)
+          (some-> (:cursor ps) util/close)
 
           (.onCompleted listener)))
 
@@ -280,7 +282,7 @@
                                                 (.build))
                                         (.start))]
 
-      (log/infof "Flight SQL server started, port %d" port)
+      (log/infof "Flight SQL server started, port %d" (.getPort server))
       (reify FlightSqlServer
         (getPort [_] (.getPort server))
 

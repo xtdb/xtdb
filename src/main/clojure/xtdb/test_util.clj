@@ -272,14 +272,15 @@
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args *allocator* args)
                                                  vw/empty-args)
-                      bq (.bind pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
-                                       (assoc :args args-rel, :close-args? false)))
-                      res (.openCursor bq)]
+                      res (.openQuery pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
+                                             (assoc :args args-rel, :close-args? false)))]
        (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                       (cond->> (not preserve-pages?) (into [] cat)))]
          (if with-col-types?
-           {:res rows, :col-types (->> (.getColumnFields bq)
-                                       (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))}
+           {:res rows,
+            :col-types (->> (.getResultFields res)
+                            (into {} (map (juxt #(symbol (.getName ^Field %))
+                                                types/field->col-type))))}
            rows))))))
 
 (t/deftest round-trip-cursor

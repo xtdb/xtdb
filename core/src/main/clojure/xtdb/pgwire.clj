@@ -37,8 +37,9 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.error Anomaly Conflict Incorrect)
-           (xtdb.query BoundQuery PreparedQuery)
+           (xtdb.error Anomaly)
+           xtdb.IResultCursor
+           (xtdb.query PreparedQuery)
            [xtdb.vector RelationReader]))
 
 ;; references
@@ -370,7 +371,7 @@
   [{:keys [conn-state, cid]} portal-name]
   (when-some [portal (get-in @conn-state [:portals portal-name])]
     (log/trace "Closing portal" {:cid cid, :portal portal-name})
-    (util/close (:bound-query portal))
+    (util/close (:cursor portal))
     (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj portal-name)
     (swap! conn-state update :portals dissoc portal-name)))
 
@@ -556,45 +557,44 @@
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit query bound-query fields] :as _portal}]
+                      {:keys [limit query ^IResultCursor cursor fields] :as _portal}]
   (try
-    (with-open [result-cursor (.openCursor ^BoundQuery bound-query)]
-      (let [cancelled-by-client? #(:cancel @conn-state)
-            ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
+    (let [cancelled-by-client? #(:cancel @conn-state)
+          ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
 
-            n-rows-out (volatile! 0)
+          n-rows-out (volatile! 0)
 
-            session (:session @conn-state)]
+          session (:session @conn-state)]
 
-        (while (and (or (nil? limit) (< @n-rows-out limit))
-                    (.tryAdvance result-cursor
-                                 (fn [^RelationReader rel]
-                                   (cond
-                                     (cancelled-by-client?)
-                                     (do (log/trace "query cancelled by client")
-                                         (swap! conn-state dissoc :cancel)
-                                         (throw (err-query-cancelled "query cancelled during execution")))
+      (while (and (or (nil? limit) (< @n-rows-out limit))
+                  (.tryAdvance cursor
+                               (fn [^RelationReader rel]
+                                 (cond
+                                   (cancelled-by-client?)
+                                   (do (log/trace "query cancelled by client")
+                                       (swap! conn-state dissoc :cancel)
+                                       (throw (err-query-cancelled "query cancelled during execution")))
 
-                                     (Thread/interrupted) (throw (InterruptedException.))
+                                   (Thread/interrupted) (throw (InterruptedException.))
 
-                                     @!closing? (log/trace "query result stream stopping (conn closing)")
+                                   @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                     :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                           limit (min (- limit @n-rows-out)))]
-                                             (let [row (mapv
-                                                        (fn [{:keys [^String field-name write-binary write-text result-format]}]
-                                                          (let [rdr (.vectorForOrNull rel field-name)]
-                                                            (when-not (.isNull rdr idx)
-                                                              (if (= :binary result-format)
-                                                                (write-binary session rdr idx)
-                                                                (if write-text
-                                                                  (write-text session rdr idx)
-                                                                  (pg-types/write-json session rdr idx))))))
-                                                        fields)]
-                                               (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                               (vswap! n-rows-out inc))))))))
+                                   :else (dotimes [idx (cond-> (.getRowCount rel)
+                                                         limit (min (- limit @n-rows-out)))]
+                                           (let [row (mapv
+                                                      (fn [{:keys [^String field-name write-binary write-text result-format]}]
+                                                        (let [rdr (.vectorForOrNull rel field-name)]
+                                                          (when-not (.isNull rdr idx)
+                                                            (if (= :binary result-format)
+                                                              (write-binary session rdr idx)
+                                                              (if write-text
+                                                                (write-text session rdr idx)
+                                                                (pg-types/write-json session rdr idx))))))
+                                                      fields)]
+                                             (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                                             (vswap! n-rows-out inc))))))))
 
-        (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)})))
+      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
 
     (catch InterruptedException e (throw e))
     (catch Throwable e
@@ -1031,7 +1031,7 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state allocator] :as conn} {:keys [statement-type prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [node conn-state allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction watermark-tx-id]} @conn-state
         {:keys [^Clock clock], {:strs [fallback_output_format] :as session-params} :parameters} session
         after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)
@@ -1045,63 +1045,62 @@
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->bq [xt-args]
+    (letfn [(->cursor ^xtdb.IResultCursor [xt-args]
               (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                (.bind ^PreparedQuery prepared-query (assoc query-opts :args args-rel))))
+                (.openQuery  prepared-query (assoc query-opts :args args-rel))))
 
-            (->fields [^BoundQuery bq]
-              (or (-> (map (partial pg-types/field->pg-type fallback_output_format) (.getColumnFields bq))
+            (->fields [^IResultCursor cursor]
+              (or (-> (map (partial pg-types/field->pg-type fallback_output_format) (.getResultFields cursor))
                       (with-result-formats result-format))
                   (throw (pgio/err-protocol-violation "invalid result format"))))]
 
       (case statement-type
-        :query (let [bq (->bq xt-args)]
+        :query (util/with-close-on-catch [cursor (->cursor xt-args)]
                  (-> stmt
-                     (assoc :bound-query bq,
-                            :fields (->fields bq))))
+                     (assoc :cursor cursor,
+                            :fields (->fields cursor))))
 
-        :show-variable (let [{:keys [variable]} stmt
-                             bq (->bq (case variable
-                                        :watermark [(when-not (neg? after-tx-id)
-                                                      after-tx-id)]
-                                        "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
-                                                                    [:tx-id :system-time])
-                                        "latest_submitted_tx" (mapv (into {} (:latest-submitted-tx @conn-state))
-                                                                    [:tx-id :system-time :committed? :error])
-                                        [(get session-params variable)]))]
-                         (-> stmt
-                             (assoc :bound-query bq,
-                                    :fields (->fields bq))))
+        :show-variable (let [{:keys [variable]} stmt]
+                         (util/with-close-on-catch [cursor (->cursor (case variable
+                                                                       :watermark [(when-not (neg? after-tx-id)
+                                                                                     after-tx-id)]
+                                                                       "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
+                                                                                                   [:tx-id :system-time])
+                                                                       "latest_submitted_tx" (mapv (into {} (:latest-submitted-tx @conn-state))
+                                                                                                   [:tx-id :system-time :committed? :error])
+                                                                       [(get session-params variable)]))]
 
-        :execute (let [^BoundQuery bq (->bq xt-args)]
+                           (-> stmt
+                               (assoc :cursor cursor,
+                                      :fields (->fields cursor)))))
+
+        :execute (util/with-open [^IResultCursor args-cursor (->cursor xt-args)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
                    ;; so now we bind the inner query and pretend this was the one we were running all along
-                   (try
-                     (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (:statement-name stmt)])
-                           !args (object-array 1)]
-                       (with-open [args-cursor (.openCursor bq)]
-                         (.forEachRemaining args-cursor
-                                            (fn [^RelationReader args-rel]
-                                              (aset !args 0 (.copy args-rel allocator))))
-                         (let [^RelationReader args-rel (aget !args 0)]
-                           (case (:statement-type inner)
-                             :query (let [inner-bq (.bind inner-pq (assoc query-opts :args args-rel))]
-                                      (-> inner
-                                          (assoc :bound-query inner-bq
-                                                 :fields (->fields inner-bq))))
+                   (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (:statement-name stmt)])
+                         !args (object-array 1)]
 
-                             :dml (let [arg-fields (.getColumnFields bq)]
-                                    (try
-                                      (-> inner
-                                          (assoc :args (vec (for [^Field field arg-fields]
-                                                              (-> (.vectorForOrNull args-rel (.getName field))
-                                                                  (.getObject 0))))
-                                                 :param-oids (->> arg-fields
-                                                                  (mapv (comp :column-oid pg-types/field->pg-type)))))
-                                      (finally
-                                        (util/close args-rel))))))))
-                     (finally
-                       (util/close bq))))
+                     (.forEachRemaining args-cursor
+                                        (fn [^RelationReader args-rel]
+                                          (aset !args 0 (.copy args-rel allocator))))
+
+                     (let [^RelationReader args-rel (aget !args 0)]
+                       (case (:statement-type inner)
+                         :query (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel))]
+                                  (-> inner
+                                      (assoc :cursor inner-cursor
+                                             :fields (->fields inner-cursor))))
+
+                         :dml (let [arg-fields (.getResultFields args-cursor)]
+                                (try
+                                  (-> inner
+                                      (assoc :args (vec (for [^Field field arg-fields]
+                                                          (-> (.vectorForOrNull args-rel (.getName field))
+                                                              (.getObject 0))))
+                                             :param-oids (->> arg-fields
+                                                              (mapv (comp :column-oid pg-types/field->pg-type)))))
+                                  (finally
+                                    (util/close args-rel))))))))
 
         (-> stmt
             (assoc :args xt-args))))))
@@ -1204,7 +1203,7 @@
 
               (execute-portal conn portal)
               (finally
-                (util/close (:bound-query portal))))))
+                (util/close (:cursor portal))))))
 
         (catch InterruptedException e (throw e))
         (catch Exception e

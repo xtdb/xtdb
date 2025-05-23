@@ -1,7 +1,9 @@
 package xtdb.query
 
 import org.apache.arrow.vector.types.pojo.Field
+import xtdb.IResultCursor
 import xtdb.trie.ColumnName
+import xtdb.vector.RelationReader
 
 interface PreparedQuery {
     val paramCount: Int
@@ -10,5 +12,5 @@ interface PreparedQuery {
 
     val warnings: List<String>
 
-    fun bind(opts: Any?): BoundQuery
+    fun openQuery(opts: Any?): IResultCursor<RelationReader>
 }
