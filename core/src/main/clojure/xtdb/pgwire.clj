@@ -214,19 +214,6 @@
 
   (set-session-parameter conn time-zone-nf-param-name tz))
 
-(defn cmd-send-ready
-  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
-  If the status is omitted, the status is determined from whether a transaction is currently open."
-  ([conn]
-   ;; it would be good to look at ready status being automatically driven by pure conn state, this is a bit messy.
-   (if-some [transaction (:transaction @(:conn-state conn))]
-     (if (:failed transaction)
-       (cmd-send-ready conn :failed-transaction)
-       (cmd-send-ready conn :transaction))
-     (cmd-send-ready conn :idle)))
-  ([conn status]
-   (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
-
 (defn- ex->pgw-err [ex]
   (let [data (ex-data ex)]
     (if (::error-code data)
@@ -235,9 +222,9 @@
         ::anom/conflict (case (::err/code data)
                           :xtdb/assert-failed {::error-code "P0004", ::severity :error}
                           {::severity :error, ::error-code "XX000"})
+
         ::anom/incorrect (case (::err/code data)
                            :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
-
                            {::severity :error, ::error-code "08P01"})
 
         ::anom/unsupported {::severity :error, ::error-code "XX000"}
@@ -263,6 +250,19 @@
                                                     (pg-types/json-bytes ex)))}})))
 
 ;;; startup
+
+(defn cmd-send-ready
+  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
+  If the status is omitted, the status is determined from whether a transaction is currently open."
+  ([conn]
+   ;; it would be good to look at ready status being automatically driven by pure conn state, this is a bit messy.
+   (if-some [transaction (:transaction @(:conn-state conn))]
+     (if (:failed transaction)
+       (cmd-send-ready conn :failed-transaction)
+       (cmd-send-ready conn :transaction))
+     (cmd-send-ready conn :idle)))
+  ([conn status]
+   (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
 
 (defn startup-ok [{:keys [server] :as conn} startup-opts]
   (let [{:keys [server-state]} server]
@@ -405,31 +405,6 @@
 
 ;;; server impl
 
-(defn- ->xtify-arg [session {:keys [arg-format param-oids]}]
-  (fn xtify-arg [arg-idx arg]
-    (when (some? arg)
-      (let [param-oid (nth param-oids arg-idx)
-            arg-format (or (nth arg-format arg-idx nil)
-                           (nth arg-format arg-idx :text))
-            {:keys [read-binary, read-text]} (or (get pg-types/pg-types-by-oid param-oid)
-                                                 (throw (pgio/err-protocol-violation "Unsupported param type provided for read")))]
-
-        (if (= :binary arg-format)
-          (read-binary session arg)
-          (read-text session arg))))))
-
-(defn- invalid-text-representation [msg] (ex-info msg {::severity :error, ::error-code "22P02"}))
-(defn- invalid-binary-representation [msg] (ex-info msg {::severity :error, ::error-code "22P03"}))
-
-(defn- xtify-args [{:keys [conn-state] :as _conn} args {:keys [arg-format] :as stmt}]
-  (try
-    (vec (map-indexed (->xtify-arg (:session @conn-state) stmt) args))
-    (catch Exception e
-      (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
-        (throw (if (= arg-format :binary)
-                 (invalid-binary-representation ex-msg)
-                 (invalid-text-representation ex-msg)))))))
-
 (defn- apply-args [expr args]
   (if (symbol? expr)
     (let [args-map (zipmap (map (fn [idx]
@@ -516,95 +491,6 @@
 (defn cmd-rollback [{:keys [conn-state]}]
   (swap! conn-state dissoc :transaction))
 
-(defn skip-until-sync? [{:keys [conn-state] :as _conn}]
-  (:skip-until-sync @conn-state))
-
-(defn- cmd-exec-dml [{:keys [conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
-  (when (or (not= (count param-oids) (count args))
-            (some zero? param-oids))
-    (inc-error-counter! tx-error-counter)
-    (throw (pgio/err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")))
-
-  (when-not (:transaction @conn-state)
-    (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
-
-  (swap! conn-state update-in [:transaction :dml-buf]
-         (fnil (fn [dml-ops]
-                 (or (when-let [[_sql last-query :as last-op] (peek dml-ops)]
-                       (when (= last-query query)
-                         (conj (pop dml-ops)
-                               (conj last-op args))))
-                     (conj dml-ops [:sql query args])))
-               []))
-
-  (pgio/cmd-write-msg conn pgio/msg-command-complete
-                      {:command (case dml-type
-                                  ;; insert <oid> <rows>
-                                  ;; oid is always 0 these days, its legacy thing in the pg protocol
-                                  ;; rows is 0 for us cus async
-                                  :insert "INSERT 0 0"
-                                  ;; otherwise head <rows>
-                                  :delete "DELETE 0"
-                                  :update "UPDATE 0"
-                                  :patch "PATCH 0"
-                                  :erase "ERASE 0"
-                                  :assert "ASSERT"
-                                  :create-role "CREATE ROLE")}))
-
-(defn- strip-semi-colon [s] (if (str/ends-with? s ";") (subs s 0 (dec (count s))) s))
-
-(defn- statement-head [s]
-  (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
-
-(defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
-  (try
-    (let [cancelled-by-client? #(:cancel @conn-state)
-          ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-
-          n-rows-out (volatile! 0)
-
-          session (:session @conn-state)
-          types-with-default (-> pg-types/pg-types
-                                 (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
-                                                      (get pg-types/pg-types))))]
-
-      (while (and (or (nil? limit) (< @n-rows-out limit))
-                  (.tryAdvance cursor
-                               (fn [^RelationReader rel]
-                                 (cond
-                                   (cancelled-by-client?)
-                                   (do (log/trace "query cancelled by client")
-                                       (swap! conn-state dissoc :cancel)
-                                       (throw (err-query-cancelled "query cancelled during execution")))
-
-                                   (Thread/interrupted) (throw (InterruptedException.))
-
-                                   @!closing? (log/trace "query result stream stopping (conn closing)")
-
-                                   :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                         limit (min (- limit @n-rows-out)))]
-                                           (let [row (mapv
-                                                      (fn [{:keys [^String col-name pg-type result-format]}]
-                                                        (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
-                                                              rdr (.vectorForOrNull rel col-name)]
-                                                          (when-not (.isNull rdr idx)
-                                                            (if (= :binary result-format)
-                                                              (write-binary session rdr idx)
-                                                              (if write-text
-                                                                (write-text session rdr idx)
-                                                                (pg-types/write-json session rdr idx))))))
-                                                      pg-cols)]
-                                             (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                             (vswap! n-rows-out inc))))))))
-
-      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
-
-    (catch InterruptedException e (throw e))
-    (catch Throwable e
-      (inc-error-counter! query-error-counter)
-      (throw e))))
-
 (defn- cmd-send-row-description [{:keys [conn-state] :as conn} pg-cols]
   (let [defaults {:table-oid 0
                   :column-attribute-number 0
@@ -639,13 +525,6 @@
                                                 (get-in pg-types/pg-types [:text :oid])
                                                 param-oid)))}))
 
-(defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
-  (let [rows (rows conn)]
-    (doseq [row rows]
-      (pgio/cmd-write-msg conn pgio/msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (pg-types/utf8 v))) row)}))
-
-    (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head q) " " (count rows))})))
-
 (defn cmd-describe-canned-response [conn canned-response]
   (let [{:keys [cols]} canned-response]
     (cmd-send-row-description conn cols)))
@@ -676,47 +555,6 @@
 
         (pgio/cmd-write-msg conn pgio/msg-no-data)))))
 
-(defn cmd-set-session-parameter [conn parameter value]
-  (set-session-parameter conn parameter value)
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET"}))
-
-(defn cmd-set-transaction [conn _tx-opts]
-  ;; no-op - can only set transaction isolation, and that
-  ;; doesn't mean anything to us because we're always serializable
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
-
-(defn cmd-set-time-zone [conn {:keys [tz args]}]
-  (let [tz (-> tz (apply-args args))]
-    (set-time-zone conn tz))
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
-
-(defn cmd-set-watermark [{:keys [conn-state] :as conn} {:keys [watermark-tx-id]}]
-  (swap! conn-state assoc :watermark-tx-id watermark-tx-id)
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET WATERMARK"}))
-
-(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
-  (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
-
-(def ^:private pgjdbc-type-query
-  ;; need to allow this one in RW transactions
-  "SELECT pg_type.oid, typname FROM pg_catalog.pg_type LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r from pg_namespace as ns join ( select s.r, (current_schemas(false))[s.r] as nspname from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r using ( nspname ) ) as sp ON sp.nspoid = typnamespace WHERE typname = $1 ORDER BY sp.r, pg_type.oid DESC LIMIT 1")
-
-(defn- permissibility-err
-  "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
-  [{:keys [conn-state server]} {:keys [statement-type] :as stmt}]
-  (let [{:keys [access-mode]} (:transaction @conn-state)]
-    (cond
-      (and (= :dml statement-type) (:read-only? server))
-      (pgio/err-protocol-violation "DML is not allowed on the READ ONLY server")
-
-      (and (= :dml statement-type) (= :read-only access-mode))
-      (pgio/err-protocol-violation "DML is not allowed in a READ ONLY transaction")
-
-      (and (= :query statement-type) (= :read-write access-mode)
-           (not= pgjdbc-type-query (str/replace (:query stmt) #"  +" " ")))
-      (pgio/err-protocol-violation "Queries are unsupported in a DML transaction"))))
-
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
   ;; Sync commands are sent by the client to commit transactions
   ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
@@ -732,7 +570,7 @@
         (send-ex conn t))))
 
   (cmd-send-ready conn)
-  (swap! conn-state dissoc :skip-until-sync, :protocol))
+  (swap! conn-state dissoc :skip-until-sync?, :protocol))
 
 (defmethod handle-msg* :msg-flush [{:keys [frontend]} _]
   (pgio/flush! frontend))
@@ -1028,6 +866,32 @@
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "PREPARE"}))))
 
+(defn- ->xtify-arg [session {:keys [arg-format param-oids]}]
+  (fn xtify-arg [arg-idx arg]
+    (when (some? arg)
+      (let [param-oid (nth param-oids arg-idx)
+            arg-format (or (nth arg-format arg-idx nil)
+                           (nth arg-format arg-idx :text))
+            {:keys [read-binary, read-text]} (or (get pg-types/pg-types-by-oid param-oid)
+                                                 (throw (pgio/err-protocol-violation "Unsupported param type provided for read")))]
+
+        (if (= :binary arg-format)
+          (read-binary session arg)
+          (read-text session arg))))))
+
+(defn- invalid-text-representation [msg] (ex-info msg {::severity :error, ::error-code "22P02"}))
+(defn- invalid-binary-representation [msg] (ex-info msg {::severity :error, ::error-code "22P03"}))
+
+(defn- xtify-args [{:keys [conn-state] :as _conn} args {:keys [arg-format] :as stmt}]
+  (try
+    (vec (map-indexed (->xtify-arg (:session @conn-state) stmt) args))
+    (catch Exception e
+      (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
+        (throw (if (= arg-format :binary)
+                 (invalid-binary-representation ex-msg)
+                 (invalid-text-representation ex-msg)))))))
+
+
 (defn with-result-formats [pg-types result-format]
   (when-let [result-formats (let [type-count (count pg-types)]
                               (cond
@@ -1135,6 +999,141 @@
                    (update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name)))))
 
     (pgio/cmd-write-msg conn pgio/msg-bind-complete)))
+
+(defn- strip-semi-colon [s] (if (str/ends-with? s ";") (subs s 0 (dec (count s))) s))
+
+(defn- statement-head [s]
+  (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
+
+(def ^:private pgjdbc-type-query
+  ;; need to allow this one in RW transactions
+  "SELECT pg_type.oid, typname FROM pg_catalog.pg_type LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r from pg_namespace as ns join ( select s.r, (current_schemas(false))[s.r] as nspname from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r using ( nspname ) ) as sp ON sp.nspoid = typnamespace WHERE typname = $1 ORDER BY sp.r, pg_type.oid DESC LIMIT 1")
+
+(defn- permissibility-err
+  "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
+  [{:keys [conn-state server]} {:keys [statement-type] :as stmt}]
+  (let [{:keys [access-mode]} (:transaction @conn-state)]
+    (cond
+      (and (= :dml statement-type) (:read-only? server))
+      (pgio/err-protocol-violation "DML is not allowed on the READ ONLY server")
+
+      (and (= :dml statement-type) (= :read-only access-mode))
+      (pgio/err-protocol-violation "DML is not allowed in a READ ONLY transaction")
+
+      (and (= :query statement-type) (= :read-write access-mode)
+           (not= pgjdbc-type-query (str/replace (:query stmt) #"  +" " ")))
+      (pgio/err-protocol-violation "Queries are unsupported in a DML transaction"))))
+
+(defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
+  (let [rows (rows conn)]
+    (doseq [row rows]
+      (pgio/cmd-write-msg conn pgio/msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (pg-types/utf8 v))) row)}))
+
+    (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head q) " " (count rows))})))
+
+(defn cmd-set-session-parameter [conn parameter value]
+  (set-session-parameter conn parameter value)
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET"}))
+
+(defn cmd-set-transaction [conn _tx-opts]
+  ;; no-op - can only set transaction isolation, and that
+  ;; doesn't mean anything to us because we're always serializable
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
+
+(defn cmd-set-time-zone [conn {:keys [tz args]}]
+  (let [tz (-> tz (apply-args args))]
+    (set-time-zone conn tz))
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
+
+(defn cmd-set-watermark [{:keys [conn-state] :as conn} {:keys [watermark-tx-id]}]
+  (swap! conn-state assoc :watermark-tx-id watermark-tx-id)
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET WATERMARK"}))
+
+(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
+  (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
+
+
+(defn- cmd-exec-dml [{:keys [conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
+  (when (or (not= (count param-oids) (count args))
+            (some zero? param-oids))
+    (inc-error-counter! tx-error-counter)
+    (throw (pgio/err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")))
+
+  (when-not (:transaction @conn-state)
+    (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
+
+  (swap! conn-state update-in [:transaction :dml-buf]
+         (fnil (fn [dml-ops]
+                 (or (when-let [[_sql last-query :as last-op] (peek dml-ops)]
+                       (when (= last-query query)
+                         (conj (pop dml-ops)
+                               (conj last-op args))))
+                     (conj dml-ops [:sql query args])))
+               []))
+
+  (pgio/cmd-write-msg conn pgio/msg-command-complete
+                      {:command (case dml-type
+                                  ;; insert <oid> <rows>
+                                  ;; oid is always 0 these days, its legacy thing in the pg protocol
+                                  ;; rows is 0 for us cus async
+                                  :insert "INSERT 0 0"
+                                  ;; otherwise head <rows>
+                                  :delete "DELETE 0"
+                                  :update "UPDATE 0"
+                                  :patch "PATCH 0"
+                                  :erase "ERASE 0"
+                                  :assert "ASSERT"
+                                  :create-role "CREATE ROLE")}))
+
+(defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
+                      {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
+  (try
+    (let [cancelled-by-client? #(:cancel @conn-state)
+          ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
+
+          n-rows-out (volatile! 0)
+
+          session (:session @conn-state)
+          types-with-default (-> pg-types/pg-types
+                                 (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
+                                                      (get pg-types/pg-types))))]
+
+      (while (and (or (nil? limit) (< @n-rows-out limit))
+                  (.tryAdvance cursor
+                               (fn [^RelationReader rel]
+                                 (cond
+                                   (cancelled-by-client?)
+                                   (do (log/trace "query cancelled by client")
+                                       (swap! conn-state dissoc :cancel)
+                                       (throw (err-query-cancelled "query cancelled during execution")))
+
+                                   (Thread/interrupted) (throw (InterruptedException.))
+
+                                   @!closing? (log/trace "query result stream stopping (conn closing)")
+
+                                   :else (dotimes [idx (cond-> (.getRowCount rel)
+                                                         limit (min (- limit @n-rows-out)))]
+                                           (let [row (mapv
+                                                      (fn [{:keys [^String col-name pg-type result-format]}]
+                                                        (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
+                                                              rdr (.vectorForOrNull rel col-name)]
+                                                          (when-not (.isNull rdr idx)
+                                                            (if (= :binary result-format)
+                                                              (write-binary session rdr idx)
+                                                              (if write-text
+                                                                (write-text session rdr idx)
+                                                                (pg-types/write-json session rdr idx))))))
+                                                      pg-cols)]
+                                             (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                                             (vswap! n-rows-out inc))))))))
+
+      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
+
+    (catch InterruptedException e (throw e))
+    (catch Throwable e
+      (inc-error-counter! query-error-counter)
+      (throw e))))
 
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (when-let [err (permissibility-err conn portal)]
@@ -1245,7 +1244,7 @@
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
-    (if (and (skip-until-sync? conn) (not= :msg-sync msg-name))
+    (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
       (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
       (handle-msg* conn msg))
 
@@ -1257,7 +1256,7 @@
              (fn [{:keys [transaction protocol] :as cs}]
                (cond-> cs
                  ;; error seen while in :extended mode, start skipping messages until sync received
-                 (= :extended protocol) (assoc :skip-until-sync true)
+                 (= :extended protocol) (assoc :skip-until-sync? true)
 
                  ;; mark a transaction (if open as failed), for now we will consider all errors to do this
                  transaction (update :transaction assoc :failed true, :err e))))
