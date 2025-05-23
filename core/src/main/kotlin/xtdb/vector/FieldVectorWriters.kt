@@ -474,7 +474,7 @@ internal class IntervalMonthDayMicroVectorWriter(vector: IntervalMonthDayMicroVe
         else -> throw InvalidWriteObjectException(field.fieldType, obj)
     }
 
-    override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 }
 
 internal class UriVectorWriter(vector: UriVector) : ExtensionVectorWriter(vector, null) {
