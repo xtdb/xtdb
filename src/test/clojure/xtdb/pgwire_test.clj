@@ -9,6 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
+            [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -2719,6 +2720,20 @@ ORDER BY 1,2;")
                :xt/valid-from #xt/zdt "2020-01-03Z[UTC]"}]
              (jdbc/execute! conn ["SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME ORDER BY _id, _valid_from"]
                             {:builder-fn xt-jdbc/builder-fn})))))
+
+(t/deftest test-patch-interval-4475
+  (with-open [conn (jdbc-conn)]
+    (t/is (= {:sql-state "XX000",
+              :message "org.apache.arrow.vector.IntervalMonthDayNanoVector",
+              :detail #xt/error [:unsupported ::err/unsupported
+                                 "org.apache.arrow.vector.IntervalMonthDayNanoVector"
+                                 {}]}
+             (reading-ex
+               (jdbc/execute! conn ["PATCH INTO my_table RECORDS ?" {:xt/id "my-id", :i #xt/interval "PT5M"}]))))
+
+    (jdbc/execute! conn ["INSERT INTO my_table RECORDS ?" {:xt/id "id2", :i #xt/interval "PT10M"}])
+    (t/is (= [{:_id "id2", :i #xt/interval "PT10M"}]
+             (jdbc/execute! conn ["SELECT * FROM my_table"])))))
 
 (t/deftest begin-async
   (with-open [conn (jdbc-conn)]

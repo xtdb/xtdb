@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [cognitect.anomalies :as-alias anom]
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
@@ -227,24 +228,22 @@
 
 (defn- ex->pgw-err [ex]
   (let [data (ex-data ex)]
-    (cond
-      (::error-code data) data
+    (if (::error-code data)
+      data
+      (case (::anom/category data)
+        ::anom/conflict (case (::err/code data)
+                          :xtdb/assert-failed {::error-code "P0004", ::severity :error}
+                          {::severity :error, ::error-code "XX000"})
+        ::anom/incorrect (case (::err/code data)
+                           :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
 
-      (instance? Conflict ex)
-      (case (::err/code data)
-        :xtdb/assert-failed {::error-code "P0004", ::severity :error}
-        {::severity :error, ::error-code "XX000"})
+                           {::severity :error, ::error-code "08P01"})
 
-      (instance? Incorrect ex)
-      (case (::err/code data)
-        :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
+        ::anom/unsupported {::severity :error, ::error-code "XX000"}
 
-        {::severity :error, ::error-code "08P01"})
-
-      :else
-      (do
-        (log/error ex "Uncaught exception processing message")
-        {::severity :error, ::error-code "XX000"}))))
+        (do
+          (log/error ex "Uncaught exception processing message")
+          {::severity :error, ::error-code "XX000"})))))
 
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
   (let [ex-msg (ex-message ex)
