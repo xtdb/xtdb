@@ -876,7 +876,7 @@
    #_#_ ; FIXME not supported by pgjdbc until we sort #3683 and #3212
    :transit :transit})
 
-(defn col-type->pg-type [fallback-pg-type col-type]
+(defn col-type->pg-type [col-type]
   (get col-types->pg-types
        (cond-> col-type
          ;; ignore TZ
@@ -884,7 +884,7 @@
 
          (= (types/col-type-head col-type) :decimal) types/col-type-head)
 
-       (or fallback-pg-type :json)))
+       :default))
 
 (defn ->unified-col-type [col-types]
   (when (pos? (count col-types))
@@ -894,18 +894,13 @@
       (set/subset? col-types #{:int2 :int4 :int8}) :int8
       (set/subset? col-types #{:_int4 :_int8}) :_int8)))
 
-(defn field->pg-col
-  ([field] (field->pg-col nil field))
-
-  ([fallback-pg-type ^Field field]
+(defn field->pg-col [^Field field]
    (let [field-name (.getName field)
          col-type (types/field->col-type field)
          col-types (-> (types/remove-nulls col-type)
                        types/flatten-union-types
-                       (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
+                       (->> (into #{} (map col-type->pg-type))))]
      (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
 
-     {:pg-type (if-let [col-type (->unified-col-type col-types)]
-                 col-type
-                 (col-type->pg-type fallback-pg-type col-type))
-      :col-name field-name})))
+     {:pg-type (or (->unified-col-type col-types) :default)
+      :col-name field-name}))

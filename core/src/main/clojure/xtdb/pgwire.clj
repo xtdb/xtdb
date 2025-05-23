@@ -564,7 +564,10 @@
 
           n-rows-out (volatile! 0)
 
-          session (:session @conn-state)]
+          session (:session @conn-state)
+          types-with-default (-> pg-types/pg-types
+                                 (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
+                                                      (get pg-types/pg-types))))]
 
       (while (and (or (nil? limit) (< @n-rows-out limit))
                   (.tryAdvance cursor
@@ -583,7 +586,7 @@
                                                          limit (min (- limit @n-rows-out)))]
                                            (let [row (mapv
                                                       (fn [{:keys [^String col-name pg-type result-format]}]
-                                                        (let [{:keys [write-binary write-text]} (pg-types/pg-types pg-type)
+                                                        (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
                                                               rdr (.vectorForOrNull rel col-name)]
                                                           (when-not (.isNull rdr idx)
                                                             (if (= :binary result-format)
@@ -602,15 +605,18 @@
       (inc-error-counter! query-error-counter)
       (throw e))))
 
-(defn- cmd-send-row-description [conn pg-cols]
+(defn- cmd-send-row-description [{:keys [conn-state] :as conn} pg-cols]
   (let [defaults {:table-oid 0
                   :column-attribute-number 0
                   :typlen -1
                   :type-modifier -1
                   :result-format :text}
+        types-with-default (-> pg-types/pg-types
+                               (assoc :default (->> (get-in @conn-state [:session :parameters "fallback_output_format"] :json)
+                                                    (get pg-types/pg-types))))
         apply-defaults (fn [{:keys [pg-type col-name result-format]}]
                          (-> (into defaults
-                                   (-> (get pg-types/pg-types pg-type)
+                                   (-> (get types-with-default pg-type)
                                        (select-keys [:oid :typlen :type-modifier])
                                        (set/rename-keys {:oid :column-oid})))
                              (assoc :column-name col-name)
@@ -983,7 +989,7 @@
                                                            (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
                                                                           (map-indexed (fn [idx field]
                                                                                          (types/field-with-name field (str "?_" idx))))))))
-                                 (mapv (partial pg-types/field->pg-col fallback-output-format)))))))
+                                 (mapv pg-types/field->pg-col))))))
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
         (throw e))
@@ -1035,7 +1041,7 @@
 
 (defn bind-stmt [{:keys [node conn-state allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction watermark-tx-id]} @conn-state
-        {:keys [^Clock clock], {:strs [fallback_output_format] :as session-params} :parameters} session
+        {:keys [^Clock clock], session-params :parameters} session
         after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)
 
         query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
@@ -1049,10 +1055,10 @@
 
     (letfn [(->cursor ^xtdb.IResultCursor [xt-args]
               (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                (.openQuery  prepared-query (assoc query-opts :args args-rel))))
+                (.openQuery prepared-query (assoc query-opts :args args-rel))))
 
             (->pg-cols [^IResultCursor cursor]
-              (or (-> (map (partial pg-types/field->pg-col fallback_output_format) (.getResultFields cursor))
+              (or (-> (map pg-types/field->pg-col (.getResultFields cursor))
                       (with-result-formats result-format))
                   (throw (pgio/err-protocol-violation "invalid result format"))))]
 

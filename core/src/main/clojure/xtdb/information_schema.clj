@@ -239,7 +239,8 @@
                                        (types/field-with-name name)
                                        (pg-types/field->pg-col)
                                        :pg-type
-                                       (pg-types/pg-types))]]
+                                       (->> (get (-> pg-types/pg-types
+                                                     (assoc :default (get pg-types/pg-types :json))))))]]
     {:attrelid (name->oid table)
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
      :atttypid (int oid)

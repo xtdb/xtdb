@@ -9,12 +9,10 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
-            [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
-            [xtdb.pgwire.types :as pg-types]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -168,14 +166,6 @@
               rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
     (is (= [{"a" "hello, world"}]
            (rs->maps rs)))))
-
-;;TODO ADD support for multiple statments in a single simple query
-#_(deftest mulitiple-statement-simple-query-test
-    (with-open [conn (jdbc-conn {"preferQueryMode" "simple"})
-                stmt (.createStatement conn)
-                rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
-      (is (= true (.next rs)))
-      (is (= false (.next rs)))))
 
 (deftest prepared-query-test
   (with-open [conn (jdbc-conn {"prepareThreshold" 1})
