@@ -13,6 +13,7 @@
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.pgwire :as pgw]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -1765,8 +1766,8 @@
 
 (deftest test-resolve-result-format
   (letfn [(resolve-result-format [fmt type-count]
-            (some->> (pgwire/with-result-formats (repeat type-count {}) fmt)
-                     (mapv :result-format)))]
+            (->> (pgwire/with-result-formats (repeat type-count {}) fmt)
+                 (mapv :result-format)))]
 
     (let [field-count 2]
       (t/is (= [:text :text]
@@ -1785,7 +1786,9 @@
                (resolve-result-format [:text :binary] field-count))
             "format provided for each field, applies to each by index"))
 
-    (t/is (nil? (resolve-result-format [:text :binary] 3))
+    (t/is (anomalous? [:incorrect ::pgw/invalid-result-format nil
+                       {:result-format [:text :binary], :type-count 3}]
+                      (resolve-result-format [:text :binary] 3))
           "if more than 1 format is provided and it doesn't match the field count this is invalid")))
 
 (deftest test-pgjdbc-boolean-param

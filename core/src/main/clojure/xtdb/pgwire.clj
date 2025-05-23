@@ -891,13 +891,14 @@
                  (invalid-binary-representation ex-msg)
                  (invalid-text-representation ex-msg)))))))
 
-
 (defn with-result-formats [pg-types result-format]
-  (when-let [result-formats (let [type-count (count pg-types)]
-                              (cond
-                                (empty? result-format) (repeat type-count :text)
-                                (= 1 (count result-format)) (repeat type-count (first result-format))
-                                (= (count result-format) type-count) result-format))]
+  (let [result-formats (let [type-count (count pg-types)]
+                         (cond
+                           (empty? result-format) (repeat type-count :text)
+                           (= 1 (count result-format)) (repeat type-count (first result-format))
+                           (= (count result-format) type-count) result-format
+                           :else (throw (err/incorrect ::invalid-result-format "invalid result-format for query"
+                                                       {:result-format result-format, :type-count type-count}))))]
     (mapv (fn [pg-type result-format]
             (assoc pg-type :result-format result-format))
           pg-types
@@ -922,9 +923,8 @@
                 (.openQuery prepared-query (assoc query-opts :args args-rel))))
 
             (->pg-cols [^IResultCursor cursor]
-              (or (-> (map pg-types/field->pg-col (.getResultFields cursor))
-                      (with-result-formats result-format))
-                  (throw (pgio/err-protocol-violation "invalid result format"))))]
+              (-> (map pg-types/field->pg-col (.getResultFields cursor))
+                  (with-result-formats result-format)))]
 
       (case statement-type
         :query (util/with-close-on-catch [cursor (->cursor xt-args)]
