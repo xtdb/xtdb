@@ -777,6 +777,27 @@
             (log/debug e "Error parsing SQL")
             (throw e))))))
 
+(defn- show-var-query [variable]
+  (case variable
+    "latest_completed_tx" (-> '[:select (not (nil? tx_id))
+                                [:table [{:tx_id ?_0, :system_time ?_1}]]]
+                              (with-meta {:param-count 2}))
+    "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
+                                [:table [{:tx_id ?_0, :system_time ?_1,
+                                          :committed ?_2, :error ?_3}]]]
+                              (with-meta {:param-count 4}))
+    (-> (xt/template [:table [{~(keyword variable) ?_0}]])
+        (with-meta {:param-count 1}))))
+
+(defn- show-var-param-types [variable]
+  (case variable
+    "latest_completed_tx" [:i64 types/temporal-col-type]
+    "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit]
+    :watermark [:i64]
+    "standard_conforming_strings" [:bool]
+
+    [:utf8]))
+
 (defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
   (case statement-type
     (:query :execute :show-variable)
@@ -793,19 +814,7 @@
 
             ^PreparedQuery pq (case statement-type
                                 (:query :execute) (xtp/prepare-sql node parsed-query query-opts)
-
-                                :show-variable
-                                (xtp/prepare-ra node (case (:variable stmt)
-                                                       "latest_completed_tx" (-> '[:select (not (nil? tx_id))
-                                                                                   [:table [{:tx_id ?_0, :system_time ?_1}]]]
-                                                                                 (with-meta {:param-count 2}))
-                                                       "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
-                                                                                   [:table [{:tx_id ?_0, :system_time ?_1,
-                                                                                             :committed ?_2, :error ?_3}]]]
-                                                                                 (with-meta {:param-count 4}))
-                                                       (-> (xt/template [:table [{~(keyword (:variable stmt)) ?_0}]])
-                                                           (with-meta {:param-count 1})))
-                                                query-opts))]
+                                :show-variable (xtp/prepare-ra node (show-var-query (:variable stmt)) query-opts))]
 
         (when-let [warnings (.getWarnings pq)]
           (doseq [warning warnings]
@@ -813,21 +822,24 @@
 
         (let [param-oids (->> (concat param-oids (repeat 0))
                               (into [] (take (.getParamCount pq))))
-              param-types (map pg-types/pg-types-by-oid param-oids)
-              fallback-output-format (get-in session [:parameters "fallback_output_format"])]
+              param-types (case statement-type
+                            (:query :execute) (map (comp :col-type pg-types/pg-types-by-oid) param-oids)
+                            :show-variable (show-var-param-types (:variable stmt)))
+              pg-cols (if (some nil? param-types)
+                        ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
+                        (for [col-name (map str (.getColumnNames pq))]
+                          {:pg-type :default, :col-name col-name})
+
+                        (->> (.getColumnFields pq (->> param-types
+                                                       (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                                                      (map-indexed (fn [idx field]
+                                                                                     (types/field-with-name field (str "?_" idx))))))))
+                             (mapv pg-types/field->pg-col)))]
           (assoc stmt
                  :prepared-query pq
                  :param-oids param-oids
-                 :pg-cols (if (some (comp nil? :col-type) param-types)
-                            ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
-                            (for [col-name (map str (.getColumnNames pq))]
-                              {:pg-type fallback-output-format, :col-name col-name})
-
-                            (->> (.getColumnFields pq (->> (mapv :col-type param-types)
-                                                           (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                                                          (map-indexed (fn [idx field]
-                                                                                         (types/field-with-name field (str "?_" idx))))))))
-                                 (mapv pg-types/field->pg-col))))))
+                 :prepared-pg-cols pg-cols
+                 :pg-cols pg-cols)))
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
         (throw e))
@@ -870,8 +882,7 @@
   (fn xtify-arg [arg-idx arg]
     (when (some? arg)
       (let [param-oid (nth param-oids arg-idx)
-            arg-format (or (nth arg-format arg-idx nil)
-                           (nth arg-format arg-idx :text))
+            arg-format (nth arg-format arg-idx :text)
             {:keys [read-binary, read-text]} (or (get pg-types/pg-types-by-oid param-oid)
                                                  (throw (pgio/err-protocol-violation "Unsupported param type provided for read")))]
 
@@ -922,15 +933,28 @@
               (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                 (.openQuery prepared-query (assoc query-opts :args args-rel))))
 
-            (->pg-cols [^IResultCursor cursor]
-              (-> (map pg-types/field->pg-col (.getResultFields cursor))
-                  (with-result-formats result-format)))]
+            (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
+              (let [resolved-pg-cols (mapv pg-types/field->pg-col (.getResultFields cursor))]
+                (-> (map (fn [{prepared-pg-type :pg-type, :as prepared-pg-col} {resolved-pg-type :pg-type}]
+                           (when-not (or (= prepared-pg-type :default)
+                                         (= resolved-pg-type :null)
+                                         (= prepared-pg-type resolved-pg-type))
+                             (throw (err/conflict :prepared-query-out-of-date
+                                                  "Relevant table schema has changed since preparing query, please prepare again"
+                                                  {:prepared-cols prepared-pg-cols
+                                                   :resolved-cols resolved-pg-cols})))
+                           prepared-pg-col)
+
+                         prepared-pg-cols
+                         resolved-pg-cols)
+
+                    (with-result-formats result-format))))]
 
       (case statement-type
         :query (util/with-close-on-catch [cursor (->cursor xt-args)]
                  (-> stmt
                      (assoc :cursor cursor,
-                            :pg-cols (->pg-cols cursor))))
+                            :pg-cols (->pg-cols (:pg-cols stmt) cursor))))
 
         :show-variable (let [{:keys [variable]} stmt]
                          (util/with-close-on-catch [cursor (->cursor (case variable
@@ -944,7 +968,7 @@
 
                            (-> stmt
                                (assoc :cursor cursor,
-                                      :pg-cols (->pg-cols cursor)))))
+                                      :pg-cols (:pg-cols stmt)))))
 
         :execute (util/with-open [^IResultCursor args-cursor (->cursor xt-args)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
@@ -961,7 +985,7 @@
                          :query (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel))]
                                   (-> inner
                                       (assoc :cursor inner-cursor
-                                             :pg-cols (->pg-cols inner-cursor))))
+                                             :pg-cols (->pg-cols (:pg-cols inner) inner-cursor))))
 
                          :dml (let [arg-fields (.getResultFields args-cursor)]
                                 (try

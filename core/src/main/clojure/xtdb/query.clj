@@ -149,13 +149,6 @@
 
            _ (assert (or scan-emitter (empty? scan-cols)))
 
-           relevant-schema-at-prepare-time (when (and table-info scan-emitter)
-                                             (with-open [wm (.openWatermark wm-src)]
-                                               (->> tables
-                                                    (map #(str (get-in % [:scan-opts :table])))
-                                                    (mapcat #(map (partial vector %) (get table-info %)))
-                                                    (.scanFields scan-emitter wm))))
-
            cache (ConcurrentHashMap.)
 
            default-tz (or default-tz expr/*default-tz*)
@@ -191,20 +184,6 @@
 
              (.acquire ref-ctr)
              (try
-               (when relevant-schema-at-prepare-time
-                 (let [table-info-at-execution-time (with-open [wm (.openWatermark wm-src)]
-                                                      (.scanFields scan-emitter wm
-                                                                   (mapcat #(map (partial vector (key %)) (val %))
-                                                                           (scan/tables-with-cols wm-src))))]
-
-                   ;;TODO nullability of col is considered a schema change, not relevant for pgwire, maybe worth ignoring
-                   ;;especially given our "per path schema" principal.
-                   (when-not (= relevant-schema-at-prepare-time
-                                (select-keys table-info-at-execution-time (keys relevant-schema-at-prepare-time)))
-                     ;;TODO consider adding the schema diff to the error, potentially quite large.
-                     (throw (err/conflict :prepared-query-out-of-date
-                                          "Relevant table schema has changed since preparing query, please prepare again")))))
-
                (util/with-close-on-catch [^BufferAllocator allocator
                                           (if allocator
                                             (util/->child-allocator allocator "BoundQuery/openCursor")

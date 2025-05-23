@@ -54,6 +54,13 @@
      (catch PSQLException e#
        (read-ex e#))))
 
+(defmacro throwing-xt-ex [& body]
+  `(try
+     ~@body
+     (catch PSQLException e#
+       (some-> (:detail (read-ex e#))
+               throw))))
+
 (t/use-fixtures :once
 
   #_ ; HACK commented out while we're not bringing in the Flight JDBC driver
@@ -1313,23 +1320,18 @@
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})
               stmt (.prepareStatement conn "SELECT ?")]
 
+    (t/is (= ["text"] (param-metadata stmt)))
+
     (t/testing "typed null param"
 
       (.setObject stmt 1 nil Types/INTEGER)
 
       (t/is (= ["int4"] (param-metadata stmt)))
+      (t/is (= [{"_column_1" "int4"}] (result-metadata stmt)))
 
       (with-open [rs (.executeQuery stmt)]
-
-        (t/is (= [{"_column_1" "text"}] (result-metadata stmt) (result-metadata rs))
-              "untyped nulls are of type text in result sets")
-        ;;the reason the above null is untyped and rather than int4 is that during bind
-        ;;we prefer to use the type of the arg itself (in this case nil which is simply of type nil
-        ;;in xt) rather than force it to be the type originally specified as part of query prep
-        ;;
-        ;;could be a mistake, postgres would almost certainly describe this as an int4 in the result set
-
-        (t/is (= [{"_column_1" nil}] (rs->maps rs)))))))
+        (t/is (= [{"_column_1" "int4"}] (result-metadata stmt) (result-metadata rs)))
+        (t/is (= [{:_column_1 nil}] (resultset-seq rs)))))))
 
 (deftest test-prepared-statements-with-unknown-params
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})
@@ -1385,25 +1387,20 @@
     (.execute (.prepareStatement conn "INSERT INTO foo(_id, a, b) VALUES (1, 'one', 2)"))
     (with-open [stmt (.prepareStatement conn "SELECT foo.*, ? FROM foo")]
       (t/testing "server side prepared statments where param types are known"
-
-        (.setObject stmt 1 true Types/BOOLEAN)
+        (.setBoolean stmt 1 true)
 
         (with-open [rs (.executeQuery stmt)]
-
           (t/is (= [{"_id" "int8"} {"a" "text"} {"b" "int8"} {"_column_2" "bool"}]
                    (result-metadata stmt)
                    (result-metadata rs)))
 
-          (t/is (=
-                 [{"_id" 1, "a" "one", "b" 2, "_column_2" true}]
-                 (rs->maps rs)))))
+          (t/is (= [{:_id 1, :a "one", :b 2, :_column_2 true}]
+                   (resultset-seq rs)))))
 
       (t/testing "param types can be rebound for the same prepared statment"
-
-        (.setObject stmt 1 44.4 Types/DOUBLE)
+        (.setDouble stmt 1 44.4)
 
         (with-open [rs (.executeQuery stmt)]
-
           (t/is (= [{"_id" "int8"} {"a" "text"} {"b" "int8"} {"_column_2" "float8"}]
                    (result-metadata stmt)
                    (result-metadata rs)))
@@ -1419,10 +1416,17 @@
         ;;might be worth confirming if there is a specific error type/message that matters for pgjdbc as there
         ;;appears to be retry logic built into the driver
         ;;https://jdbc.postgresql.org/documentation/server-prepare/#re-execution-of-failed-statements
-        (t/is (thrown-with-msg?
-               PSQLException
-               #"ERROR: Relevant table schema has changed since preparing query, please prepare again"
-               (with-open [_rs (.executeQuery stmt)])))))))
+        (t/is (anomalous? [:conflict :prepared-query-out-of-date "Relevant table schema has changed since preparing query, please prepare again"
+                           {:prepared-cols [{:pg-type :int8, :col-name "_id"}
+                                            {:pg-type :text, :col-name "a"}
+                                            {:pg-type :int8, :col-name "b"}
+                                            {:pg-type :float8, :col-name "_column_2"}],
+                            :resolved-cols [{:pg-type :int8, :col-name "_id"}
+                                            {:pg-type :default, :col-name "a"}
+                                            {:pg-type :int8, :col-name "b"}
+                                            {:pg-type :float8, :col-name "_column_2"}]}]
+                          (throwing-xt-ex
+                            (jdbc/execute! stmt))))))))
 
 (deftest test-nulls-in-monomorphic-types
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
@@ -1605,7 +1609,7 @@
   (when (psql-available?)
     (psql-session
      (fn [send read]
-       (send "PREPARE foo AS SELECT $1 forty_two;\n")
+       (send "PREPARE foo AS SELECT $1::bigint forty_two;\n")
        (read)
        (send "EXECUTE foo (42);\n")
        (t/is (= [["forty_two"] ["42"]] (read)))))))
@@ -1729,7 +1733,7 @@
 
 (t/deftest test-show-latest-submitted-tx
   (with-open [conn (jdbc-conn)]
-    (t/is (= [] (q conn ["SHOW LATEST_SUBMITTED_TX"])))
+    (t/is (= [] (throwing-xt-ex (q conn ["SHOW LATEST_SUBMITTED_TX"]))))
 
     (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "jms", :given-name "James"}])
 

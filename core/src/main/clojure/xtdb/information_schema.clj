@@ -198,8 +198,7 @@
      :reltoastrelid (int 0)}))
 
 (defn pg-type []
-  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (->> (vals pg-types/pg-types)
-                                                                                 (remove (comp zero? :oid)))]
+  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (vals (dissoc pg-types/pg-types :default :null))]
     {:oid (int oid)
      :typname typname
      :typnamespace (name->oid "pg_catalog")

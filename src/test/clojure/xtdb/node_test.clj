@@ -738,18 +738,15 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                  (tu/<-cursor cursor)))))
 
     (t/testing "statement invalidation"
-
       (with-open [args (tu/open-args [42])]
         (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
                     {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
 
           (t/testing "relevant schema unchanged since preparing query"
-
             (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])]
               (tu/then-await-tx tx tu/*node*))
 
             (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
-
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "irrelevant schema changed since preparing query"
@@ -758,16 +755,17 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               (tu/then-await-tx tx tu/*node*))
 
             (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
+              (t/is (= res (tu/<-cursor cursor)))))
 
-              (t/is (= res (tu/<-cursor cursor))))))
+          (t/testing "a -> union, but prepared query is still fine outside of pgwire"
+            (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
+              (tu/then-await-tx tx tu/*node*))
 
-        (t/testing "relevant schema changed since preparing query"
-
-          (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
-            (tu/then-await-tx tx tu/*node*))
-
-          (t/is (anomalous? [:conflict nil "Relevant table schema has changed since preparing query, please prepare again"]
-                            (.openQuery pq {:args args, :close-args? false}))))))))
+            (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
+              (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
+                         {:xt/id 1, :a "one", :b 2, :xt/column-2 42}
+                         {:xt/id 3, :a 1, :b 4, :xt/column-2 42}]]
+                       (tu/<-cursor cursor))))))))))
 
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
