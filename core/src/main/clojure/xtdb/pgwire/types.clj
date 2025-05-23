@@ -894,8 +894,8 @@
       (set/subset? col-types #{:int2 :int4 :int8}) :int8
       (set/subset? col-types #{:_int4 :_int8}) :_int8)))
 
-(defn field->pg-type
-  ([field] (field->pg-type nil field))
+(defn field->pg-col
+  ([field] (field->pg-col nil field))
 
   ([fallback-pg-type ^Field field]
    (let [field-name (.getName field)
@@ -904,8 +904,8 @@
                        types/flatten-union-types
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
      (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
-     (-> (if-let [col-type (->unified-col-type col-types)]
-           col-type
-           (col-type->pg-type fallback-pg-type col-type))
-         (pg-types)
-         (assoc :col-name field-name)))))
+
+     {:pg-type (if-let [col-type (->unified-col-type col-types)]
+                 col-type
+                 (col-type->pg-type fallback-pg-type col-type))
+      :col-name field-name})))

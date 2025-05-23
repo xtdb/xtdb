@@ -235,7 +235,11 @@
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name field]} col-rows
-        :let [{:keys [oid typlen]} (pg-types/field->pg-type (types/field-with-name field name))]]
+        :let [{:keys [oid typlen]} (-> field
+                                       (types/field-with-name name)
+                                       (pg-types/field->pg-col)
+                                       :pg-type
+                                       (pg-types/pg-types))]]
     {:attrelid (name->oid table)
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
      :atttypid (int oid)

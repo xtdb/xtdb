@@ -396,8 +396,7 @@
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgwire/canned-responses [{:q "hello!"
-                                          :cols [{:col-name "greet",
-                                                  :oid (get-in pg-types/pg-types [:json :oid])}]
+                                          :cols [{:col-name "greet", :pg-type :json}]
                                           :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))

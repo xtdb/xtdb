@@ -154,9 +154,7 @@
           v [true false]]
 
     (t/testing (format "binary?: %s, value?: %s" binary? v)
-
       (with-open [conn (pg-conn {:binary-encode? binary? :binary-decode? binary?})]
-
         (t/is (= [{:v v}]
                  (pg/execute conn "SELECT ? v" {:oids [OID/BOOL]
                                                 :params [v]})))))))

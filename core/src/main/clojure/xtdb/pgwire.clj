@@ -557,7 +557,7 @@
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit query ^IResultCursor cursor fields] :as _portal}]
+                      {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
   (try
     (let [cancelled-by-client? #(:cancel @conn-state)
           ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
@@ -582,15 +582,16 @@
                                    :else (dotimes [idx (cond-> (.getRowCount rel)
                                                          limit (min (- limit @n-rows-out)))]
                                            (let [row (mapv
-                                                      (fn [{:keys [^String col-name write-binary write-text result-format]}]
-                                                        (let [rdr (.vectorForOrNull rel col-name)]
+                                                      (fn [{:keys [^String col-name pg-type result-format]}]
+                                                        (let [{:keys [write-binary write-text]} (pg-types/pg-types pg-type)
+                                                              rdr (.vectorForOrNull rel col-name)]
                                                           (when-not (.isNull rdr idx)
                                                             (if (= :binary result-format)
                                                               (write-binary session rdr idx)
                                                               (if write-text
                                                                 (write-text session rdr idx)
                                                                 (pg-types/write-json session rdr idx))))))
-                                                      fields)]
+                                                      pg-cols)]
                                              (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
                                              (vswap! n-rows-out inc))))))))
 
@@ -601,25 +602,27 @@
       (inc-error-counter! query-error-counter)
       (throw e))))
 
-(defn- cmd-send-row-description [conn cols]
+(defn- cmd-send-row-description [conn pg-cols]
   (let [defaults {:table-oid 0
                   :column-attribute-number 0
                   :typlen -1
                   :type-modifier -1
                   :result-format :text}
-        apply-defaults (fn [col]
-                         (-> (merge defaults col)
-                             (select-keys [:col-name :table-oid :column-attribute-number
-                                           :oid :typlen :type-modifier :result-format])
-                             (set/rename-keys {:col-name :column-name, :oid :column-oid})))
-        data {:columns (mapv apply-defaults cols)}]
+        apply-defaults (fn [{:keys [pg-type col-name result-format]}]
+                         (-> (into defaults
+                                   (-> (get pg-types/pg-types pg-type)
+                                       (select-keys [:oid :typlen :type-modifier])
+                                       (set/rename-keys {:oid :column-oid})))
+                             (assoc :column-name col-name)
+                             (cond-> result-format (assoc :result-format result-format))))
+        data {:columns (mapv apply-defaults pg-cols)}]
 
-    (log/trace "sending row description - " (assoc data :input-cols cols))
+    (log/trace "sending row description - " (assoc data :input-cols pg-cols))
     (pgio/cmd-write-msg conn pgio/msg-row-description data)))
 
-(defn cmd-describe-portal [conn {:keys [fields]}]
-  (if fields
-    (cmd-send-row-description conn fields)
+(defn cmd-describe-portal [conn {:keys [pg-cols]}]
+  (if pg-cols
+    (cmd-send-row-description conn pg-cols)
     (pgio/cmd-write-msg conn pgio/msg-no-data)))
 
 (defn cmd-send-parameter-description [conn {:keys [param-oids]}]
@@ -649,12 +652,12 @@
                  (Object.))
         {:keys [statement-type canned-response] :as describe-target} (get-in @conn-state [coll-k describe-name])]
 
-    (letfn [(describe* [{:keys [fields] :as describe-target}]
+    (letfn [(describe* [{:keys [pg-cols] :as describe-target}]
               (when (= :prepared-stmt describe-type)
                 (cmd-send-parameter-description conn describe-target))
 
-              (if fields
-                (cmd-send-row-description conn fields)
+              (if pg-cols
+                (cmd-send-row-description conn pg-cols)
                 (pgio/cmd-write-msg conn pgio/msg-no-data)))]
 
       (case statement-type
@@ -663,7 +666,7 @@
 
         :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
                    (describe* {:param-oids (:param-oids describe-target)
-                               :fields (:fields inner)}))
+                               :pg-cols (:pg-cols inner)}))
 
         (pgio/cmd-write-msg conn pgio/msg-no-data)))))
 
@@ -971,17 +974,16 @@
           (assoc stmt
                  :prepared-query pq
                  :param-oids param-oids
-                 :fields (if (some (comp nil? :col-type) param-types)
-                           ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
-                           (let [fmt (get pg-types/pg-types fallback-output-format)]
-                             (for [col-name (map str (.getColumnNames pq))]
-                               (assoc fmt :col-name col-name)))
+                 :pg-cols (if (some (comp nil? :col-type) param-types)
+                            ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
+                            (for [col-name (map str (.getColumnNames pq))]
+                              {:pg-type fallback-output-format, :col-name col-name})
 
-                           (->> (.getColumnFields pq (->> (mapv :col-type param-types)
-                                                          (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                                                         (map-indexed (fn [idx field]
-                                                                                        (types/field-with-name field (str "?_" idx))))))))
-                                (mapv (partial pg-types/field->pg-type fallback-output-format)))))))
+                            (->> (.getColumnFields pq (->> (mapv :col-type param-types)
+                                                           (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
+                                                                          (map-indexed (fn [idx field]
+                                                                                         (types/field-with-name field (str "?_" idx))))))))
+                                 (mapv (partial pg-types/field->pg-col fallback-output-format)))))))
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
         (throw e))
@@ -1049,8 +1051,8 @@
               (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                 (.openQuery  prepared-query (assoc query-opts :args args-rel))))
 
-            (->fields [^IResultCursor cursor]
-              (or (-> (map (partial pg-types/field->pg-type fallback_output_format) (.getResultFields cursor))
+            (->pg-cols [^IResultCursor cursor]
+              (or (-> (map (partial pg-types/field->pg-col fallback_output_format) (.getResultFields cursor))
                       (with-result-formats result-format))
                   (throw (pgio/err-protocol-violation "invalid result format"))))]
 
@@ -1058,7 +1060,7 @@
         :query (util/with-close-on-catch [cursor (->cursor xt-args)]
                  (-> stmt
                      (assoc :cursor cursor,
-                            :fields (->fields cursor))))
+                            :pg-cols (->pg-cols cursor))))
 
         :show-variable (let [{:keys [variable]} stmt]
                          (util/with-close-on-catch [cursor (->cursor (case variable
@@ -1072,7 +1074,7 @@
 
                            (-> stmt
                                (assoc :cursor cursor,
-                                      :fields (->fields cursor)))))
+                                      :pg-cols (->pg-cols cursor)))))
 
         :execute (util/with-open [^IResultCursor args-cursor (->cursor xt-args)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
@@ -1089,7 +1091,7 @@
                          :query (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel))]
                                   (-> inner
                                       (assoc :cursor inner-cursor
-                                             :fields (->fields inner-cursor))))
+                                             :pg-cols (->pg-cols inner-cursor))))
 
                          :dml (let [arg-fields (.getResultFields args-cursor)]
                                 (try
@@ -1098,7 +1100,7 @@
                                                           (-> (.vectorForOrNull args-rel (.getName field))
                                                               (.getObject 0))))
                                              :param-oids (->> arg-fields
-                                                              (mapv (comp :oid pg-types/field->pg-type)))))
+                                                              (mapv (comp :oid pg-types/pg-types :pg-type pg-types/field->pg-col)))))
                                   (finally
                                     (util/close args-rel))))))))
 
