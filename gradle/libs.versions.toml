@@ -17,7 +17,7 @@ micrometer="1.14.6"
 transit="1.0.329"
 
 slf4j="2.0.17"
-logback="1.5.16"
+logback="1.5.18"
 
 [libraries]
 arrow-algorithm={ group="org.apache.arrow", name="arrow-algorithm", version.ref="arrow" }
