@@ -858,18 +858,27 @@
 
     stmt))
 
-(defmethod handle-msg* :msg-parse [{:keys [conn-state] :as conn} {:keys [stmt-name param-oids] :as msg-data}]
+(defmethod handle-msg* :msg-parse [{:keys [conn-state tx-error-counter] :as conn}
+                                   {:keys [stmt-name param-oids] :as msg-data}]
   (swap! conn-state assoc :protocol :extended)
 
-  (let [[stmt & more-stmts] (parse-sql (:query msg-data))]
-    (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
+  (try
+    (let [[stmt & more-stmts] (parse-sql (:query msg-data))]
+      (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
 
-    (let [prepared-stmt (prep-stmt conn (-> stmt (assoc :param-oids param-oids)))]
-      (swap! conn-state (fn [conn-state]
-                          (-> conn-state
-                              (assoc-in [:prepared-statements stmt-name] prepared-stmt)))))
+      (let [prepared-stmt (prep-stmt conn (-> stmt (assoc :param-oids param-oids)))]
+        (swap! conn-state (fn [conn-state]
+                            (-> conn-state
+                                (assoc-in [:prepared-statements stmt-name] prepared-stmt)))))
 
-    (pgio/cmd-write-msg conn pgio/msg-parse-complete)))
+      (pgio/cmd-write-msg conn pgio/msg-parse-complete))
+
+    (catch Interrupted e (throw e))
+    (catch Exception e
+      (when (= :read-write (get-in @conn-state [:transaction :access-mode]))
+        (inc-error-counter! tx-error-counter))
+
+      (throw e))))
 
 (defn cmd-prepare [{:keys [conn-state] :as conn} {:keys [statement-name inner] :as _portal}]
   (let [{:keys [query]} inner

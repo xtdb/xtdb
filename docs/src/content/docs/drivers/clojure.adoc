@@ -3,7 +3,7 @@ title: Using XTDB from Clojure
 ---
 
 Clojure users can execute SQL queries using standard JDBC tooling, via XTDB's PostgreSQL wire-compatible server.
-Additionally, there is an XTDB Clojure API for both SQL and XTQL queries.
+Additionally, there is an link:#clojure-api[XTDB Clojure API] for both SQL and XTQL queries.
 
 == JDBC
 
@@ -50,24 +50,24 @@ Then, once you've link:/intro/installation-via-docker[started the XTDB node], fo
 
 ----
 
+[#clojure-api]
 == Clojure API
 
 link:/drivers/clojure/codox/xtdb.api.html[API documentation^]
 
 The XTDB Clojure API supports both SQL and XTQL queries.
-You can run XTDB nodes either in-process, or connect to a remote XTDB server via an (internal) HTTP API.
+You can run XTDB nodes either in-process, or connect to a remote XTDB server via the Postgres wire-compatible server.
 
 [source,clojure]
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.12.0"} ; minimum reqmt
 
-        ;; xtdb-api for the main public API, for both remote-client and in-process nodes
+        ;; minimum JDK: 21
+
+        ;; xtdb-api for the main public API, for both remote and in-process nodes
         com.xtdb/xtdb-api {:mvn/version "XTDB_VERSION"}
 
-        ;; xtdb-http-client-jvm for connecting to a remote server
-        com.xtdb/xtdb-http-client-jvm {:mvn/version "XTDB_VERSION"}
-
-        ;; xtdb-core for running an in-process (test) node (JDK 21+)
+        ;; xtdb-core for running an in-process (test) node
         com.xtdb/xtdb-core {:mvn/version "XTDB_VERSION"}}
 
  ;; JVM options required for in-process node
@@ -76,23 +76,6 @@ You can run XTDB nodes either in-process, or connect to a remote XTDB server via
 ----
 
 For Maven (pom.xml) or Gradle (build.gradle.kts), see the link:/drivers/java[Java getting-started guide].
-
-=== Remote node
-
-First, ensure you've included the `xtdb-http-client-jvm` library in your dependencies.
-Once your XTDB server is running, you then can connect to it with the following code:
-
-[source,clojure]
-----
-(require '[xtdb.client :as xtc]
-         '[xtdb.api :as xt])
-
-(with-open [node (xtc/start-client "http://localhost:3000")]
-  (xt/status node)
-
-  ;; ...
-  )
-----
 
 From here, check out the link:/drivers/clojure/codox/xtdb.api.html[`xtdb.api` API docs^] to submit data and run queries.
 
@@ -122,4 +105,4 @@ In-process XTDB is particularly useful for testing and interactive development -
   )
 ----
 
-This node uses exactly the same API as the thin client - so, again, from here, check out the link:/drivers/clojure/codox/xtdb.api.html[`xtdb.api` API docs^] to submit data and run queries.
+This node uses exactly the same API as the remote client - so, again, from here, check out the link:/drivers/clojure/codox/xtdb.api.html[`xtdb.api` API docs^] to submit data and run queries.

@@ -5,6 +5,7 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -15,8 +16,7 @@
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import [java.time ZonedDateTime]
-           [java.time.format DateTimeParseException]
+  (:import [java.time ZoneId ZonedDateTime]
            [xtdb.api ServerConfig Xtdb$Config]
            [xtdb.query IQuerySource]
            xtdb.types.RegClass))
@@ -47,16 +47,16 @@ FROM %s FOR ALL SYSTEM_TIME FOR ALL VALID_TIME AS p"
 
     (xt/submit-tx tu/*node* [[:sql "
 INSERT INTO posts (_id, body, _valid_from)
-VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
-       (1, 'Happy 2025!', DATE '2025-01-01'),
-       (1, 'Happy 2026!', DATE '2026-01-01')"]])
+VALUES (1, 'Happy 2024!', TIMESTAMP '2024-01-01Z'),
+       (1, 'Happy 2025!', TIMESTAMP '2025-01-01Z'),
+       (1, 'Happy 2026!', TIMESTAMP '2026-01-01Z')"]])
 
     (t/is (= (expected (time/->zdt #inst "2020-01-01"))
              (q "posts")))
 
-    (xt/submit-tx tu/*node* [[:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2024!', DATE '2024-01-01')"]
-                             [:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2025!', DATE '2025-01-01')"]
-                             [:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2026!', DATE '2026-01-01')"]])
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2024!', TIMESTAMP '2024-01-01Z')"]
+                             [:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2025!', TIMESTAMP '2025-01-01Z')"]
+                             [:sql "INSERT INTO posts2 (_id, body, _valid_from) VALUES (1, 'Happy 2026!', TIMESTAMP '2026-01-01Z')"]])
 
     (t/is (= (expected (time/->zdt #inst "2020-01-02"))
              (q "posts2")))))
@@ -178,11 +178,11 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 (t/deftest test-overrides-range
   (xt/submit-tx tu/*node* [[:sql "
 INSERT INTO foo (_id, v, _valid_from, _valid_to)
-VALUES (1, 1, DATE '1998-01-01', DATE '2000-01-01')"]])
+VALUES (1, 1, TIMESTAMP '1998-01-01Z', TIMESTAMP '2000-01-01Z')"]])
 
   (xt/submit-tx tu/*node* [[:sql "
 INSERT INTO foo (_id, v, _valid_from, _valid_to)
-VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')"]])
+VALUES (1, 2, TIMESTAMP '1997-01-01Z', TIMESTAMP '2001-01-01Z')"]])
 
   (t/is (= #{{:xt/id 1, :v 1,
               :xt/valid-from (time/->zdt #inst "1998")
@@ -242,13 +242,13 @@ ORDER BY foo._valid_from"
 
     (xt/submit-tx tu/*node* [[:sql "
 UPDATE foo
-FOR PORTION OF VALID_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
+FOR PORTION OF VALID_TIME FROM TIMESTAMP '2022-01-01Z' TO TIMESTAMP '2024-01-01Z'
 SET v = 2
 WHERE foo._id = 1"]])
 
     (xt/submit-tx tu/*node* [[:sql "
 DELETE FROM foo
-FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
+FOR PORTION OF VALID_TIME FROM TIMESTAMP '2023-01-01Z' TO TIMESTAMP '2025-01-01Z'
 WHERE foo._id = 1"]])
 
     (t/is (= [{:xt/id 1, :v 1
@@ -286,14 +286,14 @@ WHERE foo._id = 1"]])
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   ;; this is now supported
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from) VALUES (1, '2018-01-01')"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from) VALUES (1, '2018-01-01')"]]
+                 {:default-tz #xt/zone "Asia/Tokyo"})
 
-  (t/is (= [{:xt/id 1, :xt/valid-from #xt/zdt "2018-01-01Z[UTC]"}]
+  (t/is (= [{:xt/id 1, :xt/valid-from (.withZoneSameInstant #xt/zdt "2018-01-01+09:00[Asia/Tokyo]" (ZoneId/of "UTC"))}]
            (xt/q tu/*node* "SELECT _id, _valid_from FROM foo")))
 
-  (t/is (thrown-with-msg? DateTimeParseException
-                          #"Text 'nope-01-01' could not be parsed"
-                          (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from) VALUES (1, 'nope-01-01')"]]))))
+  (t/is (anomalous? [:incorrect ::err/date-time-parse #"Text 'nope-01-01' could not be parsed"]
+                    (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from) VALUES (1, 'nope-01-01')"]]))))
 
 (t/deftest test-vector-type-mismatch-245
   (t/is (= [{:a [4 "2"]}]
@@ -393,7 +393,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                    ['#(from :xt/txs [{:xt/id %, :committed committed?}]) 1])))
 
     (t/is (= [{:err #xt/error [:conflict :xtdb/assert-failed "boom"
-                               {:sql "ASSERT 1 = 2, 'boom'", :tx-op-idx 0,
+                               {:sql "ASSERT 1 = 2, 'boom'", :tx-op-idx 0, :arg-idx 0
                                 :tx-key #xt/tx-key {:tx-id 3, :system-time #xt/instant "2020-01-04T00:00:00Z"}}]}]
              (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])))))
 
@@ -530,8 +530,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   [:select (= (+ a b) 12) [:scan {:table public/users} [a _id foo b]]]]]
 ")}]
            (-> (xt/q tu/*node*
-                     "SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12"
-                     {:explain? true})
+                     "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12")
                (update-in [0 :plan] str/trim))))
 
   (t/is (= [{:plan (str/trim "
@@ -617,7 +616,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 ;; TODO move this to api-test once #2937 is in
 (t/deftest throw-on-unknown-query-type
-  (t/is (anomalous? [:incorrect nil #"Illegal argument: 'unknown-query-type'"]
+  (t/is (anomalous? [:incorrect nil "Unknown query type"]
                     (xt/q tu/*node* (Object.)))))
 
 (t/deftest test-array-agg-2946
@@ -657,7 +656,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/testing "using file based YAML config"
     (let [config-file (io/resource "test-config.yaml")]
       (with-open [node (xtn/start-node (io/file config-file))]
-        (t/is node)
         (xt/submit-tx node [[:put-docs :docs {:xt/id :foo, :inst #inst "2021"}]])
         (t/is (= [{:e :foo, :inst (time/->zdt #inst "2021")}]
                  (xt/q node '(from :docs [{:xt/id e} inst]))))))))
@@ -841,9 +839,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (= 1 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
     (t/is (= 2 (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))
 
-    (t/is (= [{:xt/id 0, :system-time #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+    (t/is (= [{:xt/id 0, :system-time #xt/zoned-date-time "2020-01-01Z[UTC]"}
               {:xt/id 1, :system-time #xt/zoned-date-time "2020-01-01T00:00:00.000001Z[UTC]"}
-              {:xt/id 2, :system-time #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"}]
+              {:xt/id 2, :system-time #xt/zoned-date-time "2021-01-01Z[UTC]"}]
              (xt/q node "SELECT _id, system_time FROM xt.txs ORDER BY _id")))))
 
 (t/deftest startup-error-doesnt-output-integrant-system
@@ -908,7 +906,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
               (reset! !skiptxid tx-id)))
 
-          (t/is (= @!skiptxid (:latest-submitted-tx-id (xt/status node))))
           (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node)))))))
 
       (t/testing "node with txs to skip"
@@ -981,7 +978,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (xt/execute-tx tu/*node* [[:put-docs {:into :docs2, :valid-from #inst "2025-01-01"}
                              {:xt/id 1, :xt/valid-from #inst "2000-01-01"}
-                             {:xt/id 1, :a 1, :xt/valid-from nil}
+                             {:xt/id 1, :a 1}
                              {:xt/id 2, :xt/valid-from #inst "2000-01-01", :xt/valid-to #inst "2000-01-02"}]])
 
   (t/is (= [{:xt/id 1, :xt/valid-from (time/->zdt #inst "2000-01-01"), :xt/valid-to (time/->zdt #inst "2025-01-01")}
@@ -1111,3 +1108,4 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (c/compact-all! tu/*node* nil)
 
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))))
+

@@ -20,6 +20,8 @@
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
            (java.util HashMap)
+           (java.util.concurrent ExecutionException)
+           [java.util.concurrent.atomic AtomicLong]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
@@ -66,17 +68,13 @@
                  (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
 
 (defrecord Node [^BufferAllocator allocator
-                 ^IIndexer indexer
-                 ^LiveIndex live-idx
-                 ^Log log
-                 ^LogProcessor log-processor
+                 ^IIndexer indexer, ^LiveIndex live-idx
+                 ^Log log, ^LogProcessor log-processor
                  ^IQuerySource q-src, scan-emitter
                  ^CompositeMeterRegistry metrics-registry
-                 default-tz
+                 default-tz, ^AtomicLong !wm-tx-id
                  system, close-fn,
-                 query-timer
-                 ^Counter query-error-counter
-                 ^Counter tx-error-counter]
+                 query-timer, ^Counter query-error-counter, ^Counter tx-error-counter]
   Xtdb
   (getServerPort [this]
     (get-in (util/component this :xtdb.pgwire/server) [:read-write :port] -1))
@@ -92,6 +90,14 @@
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
 
+  (getWatermarkTxId [_] (.get !wm-tx-id))
+  (setWatermarkTxId [_ tx-id]
+    (loop []
+      (let [wm-tx-id (.get !wm-tx-id)]
+        (when (< wm-tx-id tx-id)
+          (when-not (.compareAndSet !wm-tx-id wm-tx-id tx-id)
+            (recur))))))
+
   (module [_ clazz]
     (->> (vals (:xtdb/modules system))
          (some #(when (instance? clazz %) %))))
@@ -99,8 +105,10 @@
   xtp/PNode
   (submit-tx [this tx-ops opts]
     (try 
-      (-> (let [offset @(xt-log/submit-tx& this (->TxOps tx-ops) opts)]
-            (TxIdUtil/offsetToTxId (.getEpoch log) offset))
+      (-> (let [offset @(xt-log/submit-tx& this (->TxOps tx-ops) opts)
+                tx-id (TxIdUtil/offsetToTxId (.getEpoch log) offset)]
+            (.set !wm-tx-id tx-id)
+            tx-id)
           (util/rethrowing-cause))
       (catch Anomaly e
         (when tx-error-counter
@@ -209,7 +217,8 @@
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry config] :as deps}]
   (let [node (map->Node (-> deps
                             (dissoc :config)
-                            (assoc :default-tz (:default-tz config))
+                            (assoc :default-tz (:default-tz config)
+                                   :!wm-tx-id (AtomicLong. -1))
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"})
                                    :query-error-counter (metrics/add-counter metrics-registry "query.error")

@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.indexer]
             [xtdb.node :as xtn]
+            [xtdb.protocols :as xtp]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -75,7 +76,7 @@
                                          (update fsql-tx :dml conj dml))))
                 (throw (UnsupportedOperationException. "unknown tx")))
 
-              (xt/execute-tx node [dml])))
+              (xtp/execute-tx node [dml] {})))
 
           (handle-get-stream [^IResultCursor cursor, ^FlightProducer$ServerStreamListener listener]
             (try
@@ -239,7 +240,7 @@
                  (.getAction req))
 
             (try
-              (xt/execute-tx node dml)
+              (xtp/execute-tx node dml {})
               (.onCompleted listener)
 
               (catch Throwable t

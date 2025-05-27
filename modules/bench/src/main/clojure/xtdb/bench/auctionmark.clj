@@ -224,16 +224,16 @@
   (let [now (b/current-timestamp worker)
         now-minus-60s (.minusSeconds now 60)]
     (proc-post-auction worker
-                       (for [{:keys [item-id] :as due-item} (xt/q node ["SELECT _id AS item_id FROM item WHERE (start_date BETWEEN ? AND ?) AND status = ? ORDER BY _id ASC LIMIT 100"
-                                                                        now-minus-60s now :open])]
-                         (if-let [{:keys [buyer-id]} (first
-                                                      (xt/q node ["SELECT ib.bidder_id AS buyer_id
+                       (vec (for [{:keys [item-id] :as due-item} (xt/q node ["SELECT _id AS item_id FROM item WHERE (start_date BETWEEN ? AND ?) AND status = ? ORDER BY _id ASC LIMIT 100"
+                                                                             now-minus-60s now :open])]
+                              (if-let [{:keys [buyer-id]} (first
+                                                           (xt/q node ["SELECT ib.bidder_id AS buyer_id
                                                                    FROM item_max_bid AS imb
                                                                      JOIN item_bid AS ib ON (ib._id = imb.max_bid_id)
                                                                    WHERE imb._id = ?"
-                                                                  item-id]))]
-                           (assoc due-item :buyer-id buyer-id)
-                           due-item)))))
+                                                                       item-id]))]
+                                (assoc due-item :buyer-id buyer-id)
+                                due-item))))))
 
 (defn proc-get-comment [{:keys [node] :as worker}]
   (let [{:keys [item-id]} (random-item worker {:status :open})]

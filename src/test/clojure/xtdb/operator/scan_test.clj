@@ -804,6 +804,9 @@
           (c/compact-all! n2 #xt/duration "PT2S")
 
           (doseq [[idx {:keys [interval dir range1 range2]}] (map-indexed vector intervals)]
+            (when (Thread/interrupted)
+              (throw (InterruptedException.)))
+
             (t/testing (format "%s interval: '%s'" (name dir) interval)
               (let [dates (vec (into #{(Date. (long (/ Long/MIN_VALUE 1000))) (Date. (long (/ Long/MAX_VALUE 1000)))}
                                      (comp cat
@@ -812,19 +815,26 @@
                                                        (Date. (+ (.getTime date) delta))))))
                                      [range1 range2]))]
                 (doseq [date dates]
+                  (when (Thread/interrupted)
+                    (throw (InterruptedException.)))
                   (t/testing (format "date: '%s'" (pr-str date))
                     (doseq [q ["SELECT * FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"
                                "SELECT *, _valid_from, _valid_to FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"
                                "SELECT *, _valid_from, _valid_to, _system_from, _system_to
                                 FROM foo FOR VALID_TIME AS OF ? FOR SYSTEM_TIME ALL WHERE _id = ?"]]
                       (t/testing (format "query: '%s'" q)
-                        (t/is (= (xt/q n1 [q date idx])
-                                 (xt/q n2 [q date idx])))))))
+                        (t/is (= (xt/q n1 [q date idx]
+                                       {:default-tz #xt/zone "UTC"})
+                                 (xt/q n2 [q date idx]
+                                       {:default-tz #xt/zone "UTC"})))))))
 
                 (doseq [to-i (range (count dates))
                         from-i (range to-i)
                         :let [from-date (nth dates from-i)
                               to-date (nth dates to-i)]]
+                  (when (Thread/interrupted)
+                    (throw (InterruptedException.)))
+
                   (let [q "SELECT *, _valid_from, _valid_to
                            FROM foo FOR VALID_TIME BETWEEN ? AND ? FOR SYSTEM_TIME BETWEEN ? AND ?
                            WHERE _id = ?"]

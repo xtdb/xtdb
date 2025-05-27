@@ -14,12 +14,17 @@
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
         registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
+
+    ;; it's only the runtime errors that increment the error counter
     (t/is (thrown? Exception (xt/q node "SLECT 1"))
           "parsing error via the node")
+
     (t/is (thrown? Exception (jdbc/execute! conn ["SLECT 1"]))
           "parsing error via pgwire")
+
     (t/is (thrown? Exception (xt/q node "SELECT 1/0"))
           "runtime error via the node")
+
     (t/is (thrown? Exception (jdbc/execute! conn ["SELECT 1/0"]))
           "runtime error via pgwire")
 
@@ -27,7 +32,7 @@
     (xt/q node "SELECT foo FROM bar")
     (jdbc/execute! conn ["SELECT foo FROM bar"])
 
-    (t/is (= 3.0 (.count ^Counter (.counter (.find registry "query.error")))))
+    (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.error")))))
     (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.warning")))))))
 
 (t/deftest test-transaction-exception-counter
@@ -54,13 +59,15 @@
 (t/deftest test-transaction-exception-counter-on-submit-tx
   (let [node (xtn/start-node tu/*node-opts*)
         registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
-    (t/is (thrown? Exception (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
+    (t/is (anomalous? [:incorrect :missing-id] (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via the node (submit-tx)")
 
     (t/is (= 1.0 (.count ^Counter (.counter (.find registry "tx.error")))))
 
     (t/testing "async errors in the indexer"
-      (t/is (thrown? Exception (xt/execute-tx node ["INSERT foo"])))
+      (t/is (anomalous? [:incorrect :xtdb/sql-error
+                         "missing 'INTO'"]
+                        (xt/submit-tx node ["INSERT foo"])))
 
       (t/is (= 2.0 (.count ^Counter (.counter (.find registry "tx.error"))))))))
 

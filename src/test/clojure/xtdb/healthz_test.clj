@@ -38,7 +38,8 @@
     (let [port (tu/free-port)]
       (with-open [node (tu/->local-node {:node-dir local-path
                                          :compactor-threads 0})]
-        (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :foo 1}]])
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :foo 1}]]
+                       {:default-tz #xt/zone "Asia/Kolkata"})
         (tu/finish-block! node))
 
       (with-open [_node (tu/->local-node {:node-dir local-path
@@ -61,7 +62,7 @@
                         (Thread/sleep 250)
                         (recur))
                   200 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" "2097", "X-XTDB-Current-Message-Id" "2097"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" "2113", "X-XTDB-Current-Message-Id" "2113"}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
                         (t/is (= "Started." (:body resp)))))))))))))

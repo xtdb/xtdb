@@ -79,7 +79,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4753)
+  4769)
 
 (t/deftest can-build-block-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]
@@ -93,7 +93,7 @@
 
           (t/is (= magic-last-tx-id
                    (last (for [tx-ops txs]
-                           (xt/submit-tx node tx-ops)))))
+                           (xt/submit-tx node tx-ops {:default-tz #xt/zone "Europe/London"})))))
 
           (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
 
@@ -185,13 +185,15 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]])
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]]
+                       {:default-tz #xt/zone "Europe/London"})
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects") {:file-pattern #"^b00.binpb.*"})
 
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]])
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]]
+                       {:default-tz #xt/zone "Europe/London"})
         (tu/finish-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
@@ -214,9 +216,9 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-page 3})]
-        (xt/execute-tx node tx0)
+        (xt/execute-tx node tx0 {:default-tz #xt/zone "Europe/London"})
 
-        (-> (xt/submit-tx node tx1)
+        (-> (xt/submit-tx node tx1 {:default-tz #xt/zone "Europe/London"})
             (tu/then-await-tx node (Duration/ofMillis 200)))
 
         (tu/finish-block! node)
@@ -285,23 +287,38 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir})]
         (xt/submit-tx node [[:put-docs :xt_docs {:xt/id "foo"}]
-                            [:put-docs :xt_docs {:xt/id "bar"}]])
+                            [:put-docs :xt_docs {:xt/id "bar"}]]
+                      {:default-tz #xt/zone "Europe/London"})
 
         ;; aborted tx shows up in log
-        (xt/submit-tx node [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+        (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-valid-times]
+                          (xt/execute-tx node [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]
+                                         {:default-tz #xt/zone "Europe/London"})))
 
-        (-> (xt/submit-tx node [[:delete-docs {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
-                                [:put-docs {:into :xt_docs, :valid-from #inst "2020-04-01", :valid-to #inst "2020-05-01"}
-                                 {:xt/id "bar", :month "april"}]])
-            (tu/then-await-tx node))
+        (xt/execute-tx node [[:delete-docs {:from :xt_docs, :valid-from #inst "2020-04-01"} "foo"]
+                             [:put-docs {:into :xt_docs, :valid-from #inst "2020-04-01", :valid-to #inst "2020-05-01"}
+                              {:xt/id "bar", :month "april"}]]
+                       {:default-tz #xt/zone "Europe/London"})
+
+        (t/is (= [{:xt/id "bar",
+                   :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+                   :xt/valid-to #xt/zdt "2020-04-01T00:00Z[UTC]"}
+                  {:xt/id "bar", :month "april",
+                   :xt/valid-from #xt/zdt "2020-04-01T00:00Z[UTC]",
+                   :xt/valid-to #xt/zdt "2020-05-01T00:00Z[UTC]"}
+                  {:xt/id "bar", :xt/valid-from #xt/zdt "2020-05-01T00:00Z[UTC]"}
+                  {:xt/id "foo",
+                   :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+                   :xt/valid-to #xt/zdt "2020-04-01T00:00Z[UTC]"}]
+                 (xt/q node "SELECT *, _valid_from, _valid_to FROM xt_docs FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
 
         (tu/finish-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
                        (.resolve node-dir "objects"))
 
-        (cpb/check-pbuf  (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
-                         (.resolve node-dir "objects"))))))
+        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
+                        (.resolve node-dir "objects"))))))
 
 (t/deftest can-stop-node-without-writing-blocks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-blocks")
@@ -315,7 +332,8 @@
 
         (t/is (= magic-last-tx-id
                  (last (for [tx-ops txs]
-                         (xt/submit-tx node tx-ops)))))
+                         (xt/submit-tx node tx-ops
+                                       {:default-tz #xt/zone "Europe/London"})))))
 
         (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
         (t/is (= last-tx-key (tu/latest-completed-tx node)))
@@ -550,13 +568,13 @@
                           (.resolve node-dir "objects")))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
-  (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-sql-tx-op
-                     "Invalid SQL query sent as transaction operation"]
+  (t/is (anomalous? [:incorrect :xtdb/queries-in-read-write-tx
+                     "Queries are unsupported in a DML transaction"
+                     {:query "SELECT _id, foo FROM docs"}]
                     (xt/execute-tx tu/*node* [[:sql "SELECT _id, foo FROM docs"]]))))
 
 (t/deftest above-max-long-halts-ingestion-3495
-  (t/is (anomalous? [:incorrect nil
-                     #"Cannot parse integer: 9223372036854775808"]
+  (t/is (anomalous? [:incorrect :xtdb/sql-error #"Cannot parse integer: 9223372036854775808"]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) VALUES (9223372036854775808, 'bar')"]]))))
 
 (t/deftest hyphen-in-struct-key-halts-ingestion-3388
@@ -638,7 +656,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
   (t/is (= [{:xt/id 1,
              :committed false,
              :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [:list :i64]"
-                               {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0,
+                               {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0, :arg-idx 0
                                 :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}],
              :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))

@@ -50,7 +50,7 @@
                                 (swap! !cache assoc sql plan)
                                 plan)))]
       (let [res (xt/q node sql-statement
-                      (-> opts
+                      (-> (into {:default-tz #xt/zone "UTC"} opts)
                           (assoc :key-fn :snake-case-string)
                           (cond-> (get variables "CURRENT_TIMESTAMP") (assoc :current-time (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
 

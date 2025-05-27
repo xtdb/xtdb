@@ -1,11 +1,13 @@
 (ns xtdb.sql.expr-test
   (:require [clojure.test :as t]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.expression :as expr]
             [xtdb.sql :as sql]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import java.time.ZonedDateTime
+           java.time.ZoneId
            [java.util HashMap]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -437,8 +439,9 @@
              (xt/q tu/*node* "SELECT '2021-10-21'::DATE as x")))))
 
 (t/deftest test-cast-string-to-temporal
-  (t/is (= [{:timestamp-tz #xt/zoned-date-time "2021-10-21T12:34:00Z"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz")))
+  (t/is (= [{:timestamp-tz #xt/zoned-date-time "2021-10-21T14:34:00+02:00[Europe/Berlin]"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP WITH TIME ZONE) as timestamp_tz"
+                 {:default-tz #xt/zone "Europe/Berlin"})))
 
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP) as \"timestamp\"")))
@@ -446,8 +449,8 @@
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as \"timestamp\"")))
 
-  (t/is (= [{:duration #xt/date "2021-10-21"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as \"duration\"")))
+  (t/is (= [{:date #xt/date "2021-10-21"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as \"date\"")))
 
   (t/is (= [{:time #xt/time "12:00:01"}]
            (xt/q tu/*node* "SELECT CAST('12:00:01' AS TIME) as \"time\"")))
@@ -464,8 +467,9 @@
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00.1234567"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123456789' AS TIMESTAMP(7)) as \"timestamp\"")))
 
-  (t/is (= [{:timestamp-tz #xt/zoned-date-time "2021-10-21T12:34:00.12Z"}]
-           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123Z' AS TIMESTAMP(2) WITH TIME ZONE) as timestamp_tz")))
+  (t/is (= [{:timestamp-tz #xt/zoned-date-time "2021-10-21T14:34:00.12+02:00[Europe/Berlin]"}]
+           (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00.123Z' AS TIMESTAMP(2) WITH TIME ZONE) as timestamp_tz"
+                 {:default-tz #xt/zone "Europe/Berlin"})))
 
   (t/is (thrown-with-msg?
          RuntimeException
@@ -591,7 +595,7 @@
     (t/is (= [{:itvl #xt/interval "PT10M10.123456S"}]
              (xt/q tu/*node* "SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(6) itvl")))
 
-    (t/is (= [{:itvl #xt/interval "PT10M10.123456789S"}]
+    (t/is (= [{:itvl #xt/interval "PT10M10.123456S"}]
              (xt/q tu/*node* "SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(9) itvl")))))
 
 (t/deftest test-cast-string-to-interval-without-qualifier
@@ -875,7 +879,8 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
           "migrate away from `$` (#3735)")
 
     (t/is (= [{:bins bins}]
-             (xt/q tu/*node* "SELECT RANGE_BINS(INTERVAL 'P30D', PERIOD(DATE '2024-01-01', DATE '2024-06-01')) bins"))
+             (xt/q tu/*node* "SELECT RANGE_BINS(INTERVAL 'P30D', PERIOD(DATE '2024-01-01', DATE '2024-06-01')) bins"
+                   {:default-tz #xt/zone "UTC"}))
           "support dates too (#3734)")))
 
 (t/deftest test-extract-plan
@@ -969,7 +974,8 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:itvl #xt/interval "PT1H"}]
              (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T11:00:00+01:00[Europe/London]', TIMESTAMP '2023-06-01T11:00:00+02:00[Europe/Berlin]') as itvl")))
     (t/is (= [{:itvl #xt/interval "PT2H"}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T09:00:00-05:00[America/Chicago]', TIMESTAMP '2023-06-01T12:00:00') as itvl"))))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-06-01T09:00:00-05:00[America/Chicago]', TIMESTAMP '2023-06-01T12:00:00') as itvl"
+                   {:default-tz #xt/zone "UTC"}))))
 
   (t/testing "testing AGE with date"
     (t/is (= [{:itvl #xt/interval "P1D"}]
@@ -980,12 +986,15 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/testing "test with mixed types"
     (t/is (= [{:itvl #xt/interval "P1D"}]
              (xt/q tu/*node* "SELECT AGE(DATE '2023-01-02', TIMESTAMP '2023-01-01T00:00:00') as itvl")))
-    (t/is (= [{:itvl #xt/interval "P-6M"}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-01T00:00:00', TIMESTAMP '2022-11-01T00:00:00+00:00[Europe/London]') as itvl")))
+    (t/is (= [{:itvl #xt/interval "P-6MT-9H"}]
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2022-05-01T00:00:00', TIMESTAMP '2022-11-01T00:00:00+00:00[Europe/London]') as itvl"
+                   {:default-tz #xt/zone "Asia/Tokyo"})))
     (t/is (= [{:itvl #xt/interval "PT2H0.001S"}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.501', TIMESTAMP '2023-07-01T12:00:30.500+02:00[Europe/Berlin]') as itvl")))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.501', TIMESTAMP '2023-07-01T12:00:30.500+02:00[Europe/Berlin]') as itvl"
+                   {:default-tz #xt/zone "UTC"})))
     (t/is (= [{:itvl #xt/interval "PT-2H-0.001S"}]
-             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl")))))
+             (xt/q tu/*node* "SELECT AGE(TIMESTAMP '2023-07-01T12:00:30.499+02:00[Europe/Berlin]', TIMESTAMP '2023-07-01T12:00:30.500') as itvl"
+                   {:default-tz #xt/zone "UTC"})))))
 
 (t/deftest test-period-predicates
   (t/are [expected sql] (= expected (plan-expr-with-foo sql))
@@ -1287,22 +1296,19 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
              (xt/q tu/*node* "SELECT 2 + ~ - 1 + 3 col2")))))
 
 (t/deftest test-bitwise-type-widening
-  (let [ret (-> (xt/q tu/*node* "SELECT ~1::smallint col2") first :col2)]
-    (t/is (= java.lang.Short (type ret)))
-    (t/is (= -2 ret)))
-  (let [ret (-> (xt/q tu/*node* "SELECT 0::smallint | 32::int col2") first :col2)]
-    (t/is (= java.lang.Integer (type ret)))
-    (t/is (= 32 ret)))
-  (let [ret (-> (xt/q tu/*node* "SELECT 0::smallint # 32::int col2") first :col2)]
-    (t/is (= java.lang.Integer (type ret)))
-    (t/is (= 32 ret)))
-  (let [ret (-> (xt/q tu/*node* "SELECT 1::smallint >> 2::int col2") first :col2)]
-    (t/is (= java.lang.Short (type ret)))
-    (t/is (= 0 ret)))
-  (let [ret (-> (xt/q tu/*node* "SELECT 1::smallint << 16::int col2") first :col2)]
-    (t/is (= java.lang.Short (type ret)))
-    (t/is (= 0 ret)))
-  (t/is (= [{:col2 0}] (xt/q tu/*node* "SELECT 1::int << 32::int col2"))))
+  (with-open [conn (jdbc/get-connection tu/*node*)
+              stmt (.createStatement conn)]
+    (letfn [(exec [sql]
+              (with-open [rs (.executeQuery stmt sql)]
+                [(.getColumnTypeName (.getMetaData rs) 1)
+                 (first (resultset-seq rs))]))]
+
+      (t/is (= ["int2" {:col2 -2}] (exec "SELECT ~1::smallint col2")))
+      (t/is (= ["int4" {:col2 32}] (exec "SELECT 0::smallint | 32::int col2")))
+      (t/is (= ["int4" {:col2 32}] (exec "SELECT 0::smallint # 32::int col2")))
+      (t/is (= ["int2" {:col2 0}] (exec "SELECT 1::smallint >> 2::int col2")))
+      (t/is (= ["int2" {:col2 0}] (exec "SELECT 1::smallint << 16::int col2")))
+      (t/is (= ["int4" {:col2 0}] (exec "SELECT 1::int << 32::int col2"))))))
 
 (t/deftest test-uuid-literal
   (t/testing "Planning Success"
@@ -1329,6 +1335,9 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
              {:xt/id 4, :date #xt/date-time "2005-07-31T12:30:30"}}
            (set (xt/q tu/*node* "SELECT * FROM test")))))
 
+(defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
+  (.withZoneSameInstant zdt (ZoneId/systemDefault)))
+
 (t/deftest timestamptz-literals-and-casts-3612
   (t/is (= [{:v #xt/zoned-date-time "2005-07-31T12:30:30+01:00"}]
            (xt/q tu/*node* "SELECT TIMESTAMP WITHOUT TIME ZONE '2005-07-31 12:30:30+01:00' AS v")))
@@ -1336,16 +1345,31 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= [{:v #xt/zoned-date-time "2005-07-31T12:30:30+01:00"}]
            (xt/q tu/*node* "SELECT TIMESTAMP WITH TIME ZONE '2005-07-31 12:30:30+01:00' v")))
 
-  (t/is (= [{:v #xt/zoned-date-time "2021-10-21T11:34Z"}]
-           (xt/q tu/*node* "SELECT '2021-10-21 12:34:00+01:00'::timestamptz v")))
+  ;; unfortunately when we cast from string we don't have the tz info ahead of time (i.e. when emitting the expr)
+  ;; so we have to default to the TZ of the query
+  ;; we could later consider parameterising the timestamptz type.
 
-  (t/is (= [{:v #xt/zoned-date-time "2021-10-21T11:34Z"}]
-           (xt/q tu/*node* "SELECT '2021-10-21T12:34:00+01:00'::timestamptz v")))
+  (t/is (= [{:v (-> #xt/zoned-date-time "2021-10-21T12:34+01:00" in-system-tz)}]
+           (xt/q tu/*node* "SELECT '2021-10-21 12:34:00+01:00'::timestamptz v"))
+        "space")
 
-  (t/is (= [{:v #xt/zoned-date-time "2021-10-21T11:34Z"}]
+  (t/is (= [{:v #xt/zdt "2021-10-21T20:34+09:00[Asia/Tokyo]"}]
+           (xt/q tu/*node* "SELECT '2021-10-21 12:34:00+01:00'::timestamptz v"
+                 {:default-tz #xt/zone "Asia/Tokyo"}))
+        "explicit TZ")
+
+  (t/is (= [{:v (-> #xt/zoned-date-time "2021-10-21T11:34Z" in-system-tz)}]
+           (xt/q tu/*node* "SELECT '2021-10-21T12:34:00+01:00'::timestamptz v"))
+        "T")
+
+  (t/is (= [{:v (-> #xt/zoned-date-time "2021-10-21T12:34:00-04:00[America/New_York]" in-system-tz)}]
+           (xt/q tu/*node* "SELECT '2021-10-21T12:34:00-04:00[America/New_York]'::timestamptz v"))
+        "zone")
+
+  (t/is (= [{:v (-> #xt/zoned-date-time "2021-10-21T12:34+01:00" in-system-tz)}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21 12:34:00+01:00' AS TIMESTAMP WITH TIME ZONE) v")))
 
-  (t/is (= [{:v #xt/zoned-date-time "2021-10-21T11:34Z"}]
+  (t/is (= [{:v (-> #xt/zoned-date-time "2021-10-21T12:34+01:00" in-system-tz)}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00+01:00' AS TIMESTAMP WITH TIME ZONE) v")))
 
   (t/is (= [{:v #xt/zoned-date-time "2021-10-21T12:34+01:00"}]

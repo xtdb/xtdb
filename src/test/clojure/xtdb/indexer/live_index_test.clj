@@ -115,7 +115,8 @@
 
           (doseq [tx-ops txs]
             (try
-              (xt/execute-tx node tx-ops)
+              (xt/execute-tx node tx-ops
+                             {:default-tz #xt/zone "Europe/London"})
               (catch Exception _)))
 
           (tu/finish-block! node)

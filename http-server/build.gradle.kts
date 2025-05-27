@@ -46,9 +46,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(project(":"))
-    testImplementation(project(":xtdb-http-client-jvm"))
     testImplementation(libs.junit.jupiter.api)
-    testImplementation("pro.juxt.clojars-mirrors.hato", "hato", "0.8.2")
+    testImplementation(libs.hato)
     // hato uses cheshire for application/json encoding
     testImplementation("cheshire", "cheshire", "5.12.0")
 }

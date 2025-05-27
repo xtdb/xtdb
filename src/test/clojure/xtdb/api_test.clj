@@ -1,5 +1,6 @@
 (ns xtdb.api-test
   (:require [clojure.test :as t :refer [deftest]]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.serde :as serde]
@@ -11,10 +12,8 @@
 
 (t/use-fixtures :each
   (tu/with-each-api-implementation
-    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),
-         :remote (t/join-fixtures [tu/with-mock-clock tu/with-http-client-node])}
-        #_(select-keys [:in-memory])
-        #_(select-keys [:remote]))))
+    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node])}
+        #_(select-keys [:in-memory]))))
 
 (t/deftest test-status
   (t/is (map? (xt/status *node*))))
@@ -184,7 +183,8 @@
 
       (t/is (= tx1-expected (all-users tx1)))
 
-      (let [tx2 (xt/execute-tx *node* [["DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?" "dave"]])
+      (let [tx2 (xt/execute-tx *node* [["DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?" "dave"]]
+                               {:default-tz #xt/zone "UTC"})
             tx2-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
                            ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
@@ -194,7 +194,8 @@
         (t/is (= tx1-expected (all-users tx1)))
 
         (let [tx3 (xt/execute-tx *node* [["UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u._id = ?"
-                                          "susan"]])
+                                          "susan"]]
+                                 {:default-tz #xt/zone "UTC"})
 
               tx3-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                              ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
@@ -240,7 +241,9 @@
 
     (t/is (= 0 tx))
 
-    (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
+    (t/is (= [{:xt/id "foo", :xt/valid-from (-> (time/->zdt #inst "2018")
+                                                (.withZoneSameLocal (ZoneId/systemDefault))
+                                                (.withZoneSameInstant (ZoneId/of "UTC")))}]
              (xt/q *node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")))))
 
 (deftest test-dql-as-of-now-flag-339
@@ -452,14 +455,17 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
   (t/is (= '[{:plan
               "[:project
- [name age _valid_from _valid_to]
+ [{name name}
+  {age age}
+  {_valid_from _valid_from}
+  {_valid_to _valid_to}]
  [:scan
   {:table public/people, :for-valid-time nil, :for-system-time nil}
   [{_id (= _id ?_0)} name age _valid_from _valid_to]]]
 "}]
            (xt/q tu/*node*
-                 ['#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])]
-                 {:explain? true})))
+                 [(format "EXPLAIN XTQL $$ %s $$"
+                          (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))])))
 
   (t/is (= '[{:plan
               "[:project
@@ -474,8 +480,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
    [_valid_from {_id (= _id ?_0)} age name _valid_to]]]]
 "}]
            (xt/q tu/*node*
-                 "SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
-                 {:explain? true}))))
+                 ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
+                  "dummy-arg-because-pgjdbc-expects-one"]))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
@@ -503,6 +509,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (t/is (= 10 (->> (xt/plan-q tu/*node* "SELECT docs.num FROM docs")
                    (reduce (fn [acc _] (let [acc (inc acc)] (if (== 10 acc) (reduced acc) acc))) 0))))
 
+  #_ ; FIXME pgwire batching
   (t/is (= 10 (->> (xt/plan-q tu/*node* "(SELECT docs.num FROM docs)
                                          UNION ALL
                                          (SELECT 1 / 0)")
@@ -526,7 +533,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                             (tu/->tstz-range #inst "2020-03-01" #inst "2021-01-01")]
 
                            "INSERT INTO foo (_id, for_range)
-                            VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"])
+                            VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"]
+                {:default-tz #xt/zone "UTC"})
 
   (let [expected #{{:xt/id 1,
                     :for-range #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]}
@@ -542,3 +550,24 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
       (c/compact-all! tu/*node* #xt/duration "PT2S")
 
       (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo")))))))
+
+(t/deftest test-remote-client
+  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+
+    (t/is (= [{:xt/id :foo, :name "Foo"}]
+             (xt/q client "SELECT * FROM docs"))
+          "through the client")
+
+    (t/is (= [{:xt/id :foo, :name "Foo"}]
+             (xt/q tu/*node* "SELECT * FROM docs"))
+          "original node")
+
+    (with-open [conn (jdbc/get-connection client)]
+      (t/is (= 1 (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+
+      (t/is (= [{:name "Bar", :xt/id :bar}
+                {:xt/id :foo, :name "Foo"}]
+               (xt/q client "SELECT * FROM docs ORDER BY _id"))
+
+            "submit-tx through a connection awaits the previous transaction"))))

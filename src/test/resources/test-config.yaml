@@ -7,14 +7,5 @@ storage: !InMemory
 server:
   port: 0
 
-authn: !UserTable
-  rules:
-    - user: admin
-      remoteAddress: 127.0.0.42
-      method: TRUST
-    - user: all
-      remoteAddress: 127.0.0.1
-      method: PASSWORD
-
 healthz:
   port: 8282
