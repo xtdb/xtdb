@@ -3,7 +3,9 @@
 
   It lives in the `com.xtdb/xtdb-api` artifact - include this in your dependency manager of choice.
 
-  For an in-process node, you will additionally need `xtdb.node`, in the `com.xtdb/xtdb-core` artifact."
+  For an in-process node, you will additionally need `xtdb.node`, in the `com.xtdb/xtdb-core` artifact.
+
+  For a remote node, connect using the `xtdb.api/client` function."
 
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
@@ -319,6 +321,21 @@
        (when (instance? xtdb.api.DataSource connectable)
          (.setWatermarkTxId ^xtdb.api.DataSource connectable tx-id))
        (serde/->TxKey tx-id (time/->instant system-time))))))
+
+(defn client
+  "Open up a client to a (possibly) remote XTDB node
+
+    * `:host`: the hostname or IP address of the database (default: `127.0.0.1`)
+    * `:port`: the port for the database connection (default: `5432`)
+
+    * `:user`: the username to authenticate with
+    * `:password`: the password to authenticate with
+    * `:dbname`: the database to connect to (default: `xtdb`)
+
+   See `next.jdbc/get-datasource` for more options."
+  ^javax.sql.DataSource [conn-opts]
+
+  (jdbc/get-datasource (into {:dbtype "xtdb", :dbname "xtdb"} conn-opts)))
 
 (defn status
   "Returns the status of this node as a map"

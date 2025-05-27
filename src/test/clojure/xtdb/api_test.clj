@@ -1,5 +1,6 @@
 (ns xtdb.api-test
   (:require [clojure.test :as t :refer [deftest]]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.serde :as serde]
@@ -549,3 +550,24 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
       (c/compact-all! tu/*node* #xt/duration "PT2S")
 
       (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo")))))))
+
+(t/deftest test-remote-client
+  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+
+    (t/is (= [{:xt/id :foo, :name "Foo"}]
+             (xt/q client "SELECT * FROM docs"))
+          "through the client")
+
+    (t/is (= [{:xt/id :foo, :name "Foo"}]
+             (xt/q tu/*node* "SELECT * FROM docs"))
+          "original node")
+
+    (with-open [conn (jdbc/get-connection client)]
+      (t/is (= 1 (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+
+      (t/is (= [{:name "Bar", :xt/id :bar}
+                {:xt/id :foo, :name "Foo"}]
+               (xt/q client "SELECT * FROM docs ORDER BY _id"))
+
+            "submit-tx through a connection awaits the previous transaction"))))
