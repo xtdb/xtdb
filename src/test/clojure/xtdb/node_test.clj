@@ -881,6 +881,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                           :storage [:local {:path (str path "/storage")}]
                                           :indexer {:skip-txs [@!skiptxid]}})]
+          (tu/then-await-tx node)
           (t/testing "Can query two back out - skipped one"
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs")))))
