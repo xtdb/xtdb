@@ -84,11 +84,17 @@
 
       (t/is (thrown-with-msg?
              PGErrorResponse
-             #"Missing types for args - client must specify types for all params"
+             #"Missing types for args - client must specify types for all non-null params"
              (pg/execute conn "INSERT INTO foo(_id, v) VALUES (1, $1)" {:params ["1"]
                                                                         :oids [OID/DEFAULT]}))
             "params declared with the default oid (0) by clients are
-             treated as unspecified and therefore also error"))))
+             treated as unspecified and therefore also error")
+
+      (t/testing "... unless it's null"
+        (pg/execute conn "INSERT INTO foo(_id, v) VALUES (2, $1)" {:params [nil], :oids [OID/DEFAULT]})
+
+        (t/is (= [{:_id 2, :v nil}]
+                 (pg/query conn "SELECT * FROM foo WHERE _id = 2")))))))
 
 (deftest test-postgres-native-params
   (with-open [conn (pg-conn {})]

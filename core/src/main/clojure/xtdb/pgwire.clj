@@ -1084,12 +1084,15 @@
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-
 (defn- cmd-exec-dml [{:keys [conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
   (when (or (not= (count param-oids) (count args))
-            (some zero? param-oids))
+            (some (fn [idx]
+                    (and (zero? (nth param-oids idx))
+                         (some? (nth args idx))))
+                  (range (count param-oids))))
     (inc-error-counter! tx-error-counter)
-    (throw (pgio/err-protocol-violation "Missing types for args - client must specify types for all params in DML statements")))
+    (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
+                          {:query query, :param-oids param-oids})))
 
   (when-not (:transaction @conn-state)
     (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
