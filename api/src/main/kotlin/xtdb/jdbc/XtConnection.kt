@@ -94,6 +94,10 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
 
     internal inner class XtCallableStatement(private val inner: CallableStatement) : CallableStatement by inner
 
+    companion object {
+        private val UTC_CAL = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    }
+
     internal inner class XtPreparedStatement(private val inner: PreparedStatement) : PreparedStatement by inner {
         override fun getResultSet() = inner.resultSet?.let { XtResultSet(it) }
 
@@ -143,6 +147,10 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 it.value = toString()
             }
 
+        override fun setTimestamp(parameterIndex: Int, x: Timestamp?) {
+            setTimestamp(parameterIndex, x, UTC_CAL)
+        }
+
         override fun setObject(parameterIndex: Int, x: Any?) {
             when (x) {
                 is Map<*, *>, is List<*>, is Set<*>, is Keyword, is URI ->
@@ -152,7 +160,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 is Instant -> setObject(parameterIndex, x.atZone(ZoneOffset.UTC))
                 is ZonedDateTimeRange -> inner.setObject(parameterIndex, x.asPgObject)
                 is Interval -> inner.setObject(parameterIndex, x.asPgObject)
-                is Date -> setObject(parameterIndex, x.toInstant().atZone(ZoneOffset.UTC).toLocalDateTime())
+                is Date -> setObject(parameterIndex, x.toInstant())
                 is LocalDateTime -> setIsoTimestamp(parameterIndex, x)
 
                 else -> inner.setObject(parameterIndex, x)
