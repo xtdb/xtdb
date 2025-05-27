@@ -916,6 +916,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                           :storage [:local {:path (str path "/storage")}]
                                           :indexer {:skip-txs [@!skiptxid]}
                                           :compactor {:threads 0}})]
+
+          (tu/then-await-tx node)
           (t/testing "Can query one back out - skipped one"
             (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
 
