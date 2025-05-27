@@ -18,7 +18,7 @@
            [java.util List]
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
-           org.postgresql.util.PGobject
+           (org.postgresql.util PGobject PSQLException)
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
@@ -299,6 +299,25 @@
      (-> (transit/writer baos (or fmt :msgpack) {:handlers transit-write-handler-map})
          (transit/write v))
      (.toByteArray baos))))
+
+;; here to prevent a cyclic dep on xtdb.error
+(extend-protocol err/ToAnomaly
+  PSQLException
+  (->anomaly [ex data]
+    (let [sem (.getServerErrorMessage ex)]
+      (or (when-let [detail (some-> sem .getDetail)]
+            (when-not (str/blank? detail)
+              (try
+                (read-transit detail :json)
+                (catch Exception _))))
+
+          (let [sql-state (.getSQLState ex)
+                msg (or (some-> sem .getMessage) (ex-message ex))
+                data (into {::err/cause ex, :psql/state sql-state} data)]
+            (case sql-state
+              "22023" (err/incorrect :psql/invalid-parameter-value msg data)
+
+              (err/fault :psql/exception msg data)))))))
 
 (defn ->pg-obj
   "This function serialises a Clojure/Java (potentially nested) data structure into a PGobject,

@@ -5,6 +5,7 @@
             [cognitect.transit :as transit])
   (:import [java.io Writer]
            [java.nio.channels ClosedByInterruptException]
+           [java.sql BatchUpdateException]
            [java.time.format DateTimeParseException]
            [java.util.regex Pattern]
            [xtdb.error Anomaly Busy Conflict Fault Forbidden Incorrect Interrupted NotFound Unavailable Unsupported]))
@@ -191,6 +192,9 @@
 
   UnsupportedOperationException
   (->anomaly [ex data] (unsupported ::unsupported (ex-message ex) (into {::cause ex} data)))
+
+  BatchUpdateException
+  (->anomaly [ex data] (->anomaly (ex-cause ex) data))
 
   Throwable
   (->anomaly [ex data] (fault ::unknown (ex-message ex) (into {::cause ex} data))))
