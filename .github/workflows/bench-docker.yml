@@ -43,11 +43,12 @@ jobs:
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=sha
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         
       - name: Build shadowJar for bench
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          arguments: shadowJar
+        run: ./gradlew shadowJar
   
       - name: Build and Push xtdb-bench Image
         uses: docker/build-push-action@v5

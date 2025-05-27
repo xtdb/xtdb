@@ -79,10 +79,11 @@ jobs:
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build Uberjar
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          arguments: :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
+        run: ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 
       - name: Push Standalone
         uses: docker/build-push-action@v5
