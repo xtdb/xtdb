@@ -37,7 +37,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.error Anomaly)
+           (xtdb.error Anomaly Interrupted)
            xtdb.IResultCursor
            (xtdb.query PreparedQuery)
            [xtdb.vector RelationReader]))
@@ -225,6 +225,11 @@
 
         ::anom/incorrect (case (::err/code data)
                            :xtdb/unindexed-tx {::error-code "0B000", ::severity :error}
+                           ::invalid-arg-representation {::severity :error
+                                                         ::error-code (case (:arg-format data)
+                                                                        :text "22P02"
+                                                                        :binary "22P03")}
+
                            {::severity :error, ::error-code "08P01"})
 
         ::anom/unsupported {::severity :error, ::error-code "XX000"}
@@ -481,6 +486,7 @@
 
                 (when error
                   (throw error))))))
+        (catch Interrupted e (throw e))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (throw e))
@@ -884,23 +890,20 @@
       (let [param-oid (nth param-oids arg-idx)
             arg-format (nth arg-format arg-idx :text)
             {:keys [read-binary, read-text]} (or (get pg-types/pg-types-by-oid param-oid)
-                                                 (throw (pgio/err-protocol-violation "Unsupported param type provided for read")))]
+                                                 (throw (err/unsupported ::unsupported-param-type "Unsupported param type provided for read"
+                                                                         {:param-oid param-oid, :arg-format arg-format, :arg arg})))]
 
-        (if (= :binary arg-format)
-          (read-binary session arg)
-          (read-text session arg))))))
+        (try
+          (if (= :binary arg-format)
+            (read-binary session arg)
+            (read-text session arg))
+          (catch Exception e
+            (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
+              (throw (err/incorrect ::invalid-arg-representation ex-msg
+                                    {:arg-format arg-format, :arg-idx arg-idx})))))))))
 
-(defn- invalid-text-representation [msg] (ex-info msg {::severity :error, ::error-code "22P02"}))
-(defn- invalid-binary-representation [msg] (ex-info msg {::severity :error, ::error-code "22P03"}))
-
-(defn- xtify-args [{:keys [conn-state] :as _conn} args {:keys [arg-format] :as stmt}]
-  (try
-    (vec (map-indexed (->xtify-arg (:session @conn-state) stmt) args))
-    (catch Exception e
-      (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
-        (throw (if (= arg-format :binary)
-                 (invalid-binary-representation ex-msg)
-                 (invalid-text-representation ex-msg)))))))
+(defn- xtify-args [{:keys [conn-state] :as _conn} args stmt]
+  (into [] (map-indexed (->xtify-arg (:session @conn-state) stmt) args)))
 
 (defn with-result-formats [pg-types result-format]
   (let [result-formats (let [type-count (count pg-types)]
@@ -1158,6 +1161,7 @@
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
 
+    (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
     (catch Throwable e
       (inc-error-counter! query-error-counter)
@@ -1239,6 +1243,7 @@
               (finally
                 (util/close (:cursor portal))))))
 
+        (catch Interrupted e (throw e))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (when-let [{:keys [implicit?]} (:transaction @conn-state)]
@@ -1255,6 +1260,7 @@
           (cmd-commit conn))))
 
     ;; here we catch explicitly because we need to send the error, then a ready message
+    (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
     (catch Throwable e
       (send-ex conn e)))
@@ -1271,11 +1277,12 @@
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
-    (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
-      (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
-      (handle-msg* conn msg))
+    (err/wrap-anomaly {}
+      (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
+        (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
+        (handle-msg* conn msg)))
 
-    (catch InterruptedException e (throw e))
+    (catch Interrupted e (throw e))
 
     (catch Throwable e
       (log/debug e "error processing message: " (ex-message e))
@@ -1389,6 +1396,7 @@
       (catch IOException e
         (log/debug e "IOException in connection" {:port port, :cid cid}))
 
+      (catch Interrupted _)
       (catch InterruptedException _)
 
       (finally
@@ -1422,6 +1430,7 @@
               (log/warn e "Accept IO exception")))
           (recur))))
 
+    (catch Interrupted _)
     (catch InterruptedException _)
 
     (finally

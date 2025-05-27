@@ -144,7 +144,7 @@
      (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name :query query :param-oids param-oids})
      (pgwire/handle-msg conn {:msg-name :msg-bind
                               :portal-name portal-name :stmt-name stmt-name
-                              :arg-format (repeat (count args) 0)
+                              :arg-format (repeat (count args) :text)
                               ;; we are assuming strings for now
                               :args (map #(.getBytes ^String %) args)
                               ;; can be ommitted
@@ -217,7 +217,11 @@
                    :localized-severity "ERROR",
                    :sql-state "22P02",
                    :message "invalid timestamp: Text 'alan' could not be parsed at index 0"
-                   :detail nil}}]
+                   :detail {:arg-idx 0,
+                            :category "cognitect.anomalies/incorrect",
+                            :arg-format "text",
+                            :code "xtdb.pgwire/invalid-arg-representation",
+                            :message "invalid timestamp: Text 'alan' could not be parsed at index 0"}}}]
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 
