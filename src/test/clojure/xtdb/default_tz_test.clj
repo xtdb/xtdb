@@ -23,7 +23,8 @@
 
 (t/deftest can-specify-default-tz-in-dml-396
   (let [q "INSERT INTO foo (_id, dt, tstz) VALUES (?, DATE '2020-08-01', CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"]
-    (xt/submit-tx tu/*node* [[:sql q ["foo"]]])
+    (xt/submit-tx tu/*node* [[:sql q ["foo"]]]
+                  {:default-tz #xt/zone "Europe/London"})
     (xt/submit-tx tu/*node* [[:sql q ["bar"]]]
                   {:default-tz #xt/zone "America/Los_Angeles"})
 

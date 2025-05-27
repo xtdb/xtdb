@@ -1,6 +1,5 @@
 (ns xtdb.operator.patch-test
-  (:require [clojure.string :as str]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.test-util :as tu]
@@ -100,7 +99,7 @@
 
     (t/testing "for portion of valid_time"
       (xt/submit-tx tu/*node* ["INSERT INTO bar RECORDS {_id: 1, a: 1, b: 2}"])
-      (xt/execute-tx tu/*node* ["PATCH INTO bar FOR VALID_TIME FROM DATE '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])
+      (xt/execute-tx tu/*node* ["PATCH INTO bar FOR VALID_TIME FROM TIMESTAMP '2020-01-05Z' TO TIMESTAMP '2020-01-07Z' RECORDS {_id: 1, tmp: 'hi!'}"])
       (xt/execute-tx tu/*node* [["PATCH INTO bar FOR VALID_TIME FROM ? RECORDS {_id: 2, a: 6, b: 8}" #inst "2020-01-08"]])
 
       (t/is (= [[{:xt/id 1, :a 1, :b 2} (time/->zdt #inst "2020-01-03") (time/->zdt #inst "2020-01-05")]
@@ -115,8 +114,8 @@
   (t/is (anomalous? [:incorrect nil "Cannot PATCH (_valid_from _valid_to) column"]
                     (xt/execute-tx tu/*node*
                                    ["PATCH INTO docs RECORDS {_id: 1,
-                                                                         _valid_from: TIMESTAMP '2020-01-01 00:00:00+00:00',
-                                                                         _valid_to: TIMESTAMP '2030-01-01 00:00:00+00:00'}"]))
+                                                              _valid_from: TIMESTAMP '2020-01-01 00:00:00+00:00',
+                                                              _valid_to: TIMESTAMP '2030-01-01 00:00:00+00:00'}"]))
         "patching with forbidden columns directly")
 
   (t/is (anomalous? [:incorrect nil "Cannot PATCH (_valid_from _valid_to) column"]

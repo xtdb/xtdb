@@ -1565,7 +1565,7 @@
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
 
 (deftest scalar-sub-queries-test
-  (xt/submit-tx tu/*node* [[:put-docs :customer {:xt/id 0, :firstname "bob", :lastname "smith"}]
+  (xt/execute-tx tu/*node* [[:put-docs :customer {:xt/id 0, :firstname "bob", :lastname "smith"}]
                            [:put-docs :customer {:xt/id 1, :firstname "alice" :lastname "carrol"}]
                            [:put-docs :order {:xt/id 0, :customer 0, :items [{:sku "eggs", :qty 1}]}]
                            [:put-docs :order {:xt/id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
@@ -1954,20 +1954,21 @@
           "with dots in namespace")))
 
 (t/deftest test-inconsistent-valid-time-range-2494
-  (xt/submit-tx tu/*node* [[:put-docs {:into :xt-docs, :valid-to #inst "2011"}
-                            {:xt/id 1}]])
+  (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-valid-times]
+                    (xt/execute-tx tu/*node* [[:put-docs {:into :xt-docs, :valid-to #inst "2011"}
+                                               {:xt/id 1}]])))
   (t/is (= [{:tx-id 0, :committed? false}]
 
            (xt/q tu/*node*
                  '(from :xt/txs [{:xt/id tx-id, :committed committed?}]))))
-  (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id 2}]])
-  (xt/submit-tx tu/*node* [[:delete-docs {:from :xt-docs, :valid-to #inst "2011"} 2]])
 
-  (t/is (= #{{:tx-id 0, :committed? false}
-             {:tx-id 1, :committed? true}
-             {:tx-id 2, :committed? false}}
-           (set (xt/q tu/*node*
-                      '(from :xt/txs [{:xt/id tx-id, :committed committed?}]))))))
+  (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id 2}]])
+
+  (t/testing "delete for-portion-of-vt is a no-op"
+    (xt/execute-tx tu/*node* [[:delete-docs {:from :xt-docs, :valid-from #inst "2012", :valid-to #inst "2011"} 2]])
+
+    (t/is (= [{:id 2, :valid-time #xt/tstz-range [#xt/zdt "2020-01-02T00:00Z" nil]}]
+             (xt/q tu/*node* '(from :xt-docs [{:xt/id id, :xt/valid-time valid-time}]))))))
 
 (deftest test-date-and-time-literals
   (t/is (= [{:a true, :b false, :c true, :d true}]

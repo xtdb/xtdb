@@ -182,7 +182,8 @@
 
       (t/is (= tx1-expected (all-users tx1)))
 
-      (let [tx2 (xt/execute-tx *node* [["DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?" "dave"]])
+      (let [tx2 (xt/execute-tx *node* [["DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO NULL AS u WHERE u._id = ?" "dave"]]
+                               {:default-tz #xt/zone "UTC"})
             tx2-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
                            ["Alan" "Andrews", (time/->zdt #inst "2020"), nil]
@@ -192,7 +193,8 @@
         (t/is (= tx1-expected (all-users tx1)))
 
         (let [tx3 (xt/execute-tx *node* [["UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO NULL AS u SET first_name = 'Sue' WHERE u._id = ?"
-                                          "susan"]])
+                                          "susan"]]
+                                 {:default-tz #xt/zone "UTC"})
 
               tx3-expected #{["Dave" "Davis", (time/->zdt #inst "2018"), (time/->zdt #inst "2020-05-01")]
                              ["Claire" "Cooper", (time/->zdt #inst "2019"), nil]
@@ -238,7 +240,9 @@
 
     (t/is (= 0 tx))
 
-    (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
+    (t/is (= [{:xt/id "foo", :xt/valid-from (-> (time/->zdt #inst "2018")
+                                                (.withZoneSameLocal (ZoneId/systemDefault))
+                                                (.withZoneSameInstant (ZoneId/of "UTC")))}]
              (xt/q *node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")))))
 
 (deftest test-dql-as-of-now-flag-339
@@ -528,7 +532,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                             (tu/->tstz-range #inst "2020-03-01" #inst "2021-01-01")]
 
                            "INSERT INTO foo (_id, for_range)
-                            VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"])
+                            VALUES (3, PERIOD(DATE '2021-08-01'::timestamptz, DATE '2022-01-01'::timestamptz))"]
+                {:default-tz #xt/zone "UTC"})
 
   (let [expected #{{:xt/id 1,
                     :for-range #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]}

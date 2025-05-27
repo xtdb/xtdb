@@ -11,13 +11,17 @@
             [xtdb.error :as err]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.protocols :as xtp]
-            [xtdb.serde :as serde])
+            [xtdb.serde :as serde]
+            [xtdb.time :as time]
+            [xtdb.tx-ops :as tx-ops])
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
-           [java.sql Connection]
-           org.postgresql.util.PSQLException
+           (java.sql BatchUpdateException Connection)
            (xtdb.api TransactionKey)
-           xtdb.types.ClojureForm))
+           (xtdb.api.tx TxOp TxOp$Sql)
+           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs)
+           xtdb.types.ClojureForm
+           xtdb.util.NormalForm))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->ClojureForm [form]
@@ -46,9 +50,9 @@
 (defn- begin-ro-sql [{:keys [default-tz after-tx-id snapshot-time current-time]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
                   ["SNAPSHOT_TIME = ?" snapshot-time]
-                  ["CLOCK_TIME = ?" current-time]]
-                 (into [["WATERMARK = ?" after-tx-id]]
-                       (filter (comp some? second))))]
+                  ["CLOCK_TIME = ?" current-time]
+                  ["WATERMARK = ?" after-tx-id]]
+                 (into [] (filter (comp some? second))))]
     (into [(format "BEGIN READ ONLY WITH (%s)"
                    (str/join ", " (map first kvs)))]
           (map second)
@@ -88,24 +92,22 @@
          query (cond
                  (string? query) query
                  (seq? query) (xtql->sql query)
-                 :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))
-         ;; TODO to be removed when execute-tx goes to pgwire
-         opts (-> opts
-                  (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id connectable))))]
+                 :else (throw (err/incorrect :unknown-query-type "Unknown query type"
+                                             {:query query, :type (type query)})))
+
+         opts (cond-> opts
+                (instance? xtdb.api.DataSource connectable)
+                (update :after-tx-id (fnil identity (.getWatermarkTxId ^xtdb.api.DataSource connectable))))]
      (reify IReduceInit
        (reduce [_ f start]
          (with-conn [conn connectable]
            (jdbc/execute! conn (begin-ro-sql opts))
            (try
-             (->> (jdbc/plan conn (into [query] args)
-                             {:builder-fn xt-jdbc/builder-fn
-                              ::xt-jdbc/key-fn (:key-fn opts :kebab-case-keyword)})
-                  (transduce (map #(into {} %)) (completing f) start))
-             (catch PSQLException e
-               (when-let [detail (some-> (.getServerErrorMessage e) .getDetail)]
-                 (when-not (str/blank? detail)
-                   (throw (serde/read-transit detail :json))))
-               (throw e))
+             (err/wrap-anomaly {:sql query}
+               (->> (jdbc/plan conn (into [query] args)
+                               {:builder-fn xt-jdbc/builder-fn
+                                ::xt-jdbc/key-fn (:key-fn opts :kebab-case-keyword)})
+                    (transduce (map #(into {} %)) (completing f) start)))
              (finally
                (jdbc/execute! conn ["ROLLBACK"])))))))))
 
@@ -151,6 +153,93 @@
   ([node query opts]
    (into [] (plan-q node query opts))))
 
+(defn- begin-rw-sql [{:keys [system-time default-tz async?]}]
+  (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
+                  ["SYSTEM_TIME = ?" system-time]]
+                 (into [] (filter (comp some? second))))]
+    (into [(format "BEGIN READ WRITE WITH (%s, ASYNC = %s)"
+                   (str/join ", " (map first kvs))
+                   (boolean async?))]
+          (map second)
+          kvs)))
+
+(extend-protocol xtp/ExecuteOp
+  PutDocs
+  (execute-op! [{:keys [table-name valid-from valid-to docs]} conn]
+    (let [table-name (NormalForm/normalTableName table-name)]
+      (with-open [stmt (jdbc/prepare conn [(format "INSERT INTO \"%s\".\"%s\" RECORDS ?"
+                                                   (namespace table-name) (name table-name))])]
+        (jdbc/execute-batch! stmt (mapv (fn [doc]
+                                          [(into {:xt/valid-from valid-from, :xt/valid-to valid-to} doc)])
+                                        docs)))))
+
+  PatchDocs
+  (execute-op! [{:keys [table-name valid-from valid-to docs]} conn]
+    (let [table-name (NormalForm/normalTableName table-name)]
+      (with-open [stmt (jdbc/prepare conn [(format "PATCH INTO \"%s\".\"%s\" %s RECORDS ?"
+                                                   (namespace table-name) (name table-name)
+                                                   (if (or valid-from valid-to)
+                                                     "FOR VALID_TIME FROM ? TO ?"
+                                                     ""))])]
+        (jdbc/execute-batch! stmt (mapv (fn [doc]
+                                          (if (or valid-from valid-to)
+                                            [valid-from valid-to doc]
+                                            [doc]))
+                                        docs)))))
+
+  DeleteDocs
+  (execute-op! [{:keys [table-name valid-from valid-to doc-ids]} conn]
+    (let [table-name (NormalForm/normalTableName table-name)]
+      (with-open [stmt (jdbc/prepare conn [(format "DELETE FROM \"%s\".\"%s\" %s WHERE _id = ?"
+                                                   (namespace table-name) (name table-name)
+                                                   (if (or valid-from valid-to)
+                                                     "FOR VALID_TIME FROM ? TO ?"
+                                                     ""))])]
+        (jdbc/execute-batch! stmt (mapv (fn [doc-id]
+                                          (if (or valid-from valid-to)
+                                            [valid-from valid-to doc-id]
+                                            [doc-id]))
+                                        doc-ids)))))
+
+  EraseDocs
+  (execute-op! [{:keys [table-name doc-ids]} conn]
+    (let [table-name (NormalForm/normalTableName table-name)]
+      (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _id = ?"
+                                                   (namespace table-name) (name table-name))])]
+        (jdbc/execute-batch! stmt (mapv vector doc-ids)))))
+
+  TxOp$Sql
+  (execute-op! [op conn]
+    (let [sql (.sql op), arg-rows (.argRows op)]
+      (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
+        (cond
+          (nil? arg-rows) (jdbc/execute! conn [sql])
+          (empty? arg-rows) nil
+          (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
+          :else (with-open [stmt (jdbc/prepare conn [sql])]
+                  (jdbc/execute-batch! stmt arg-rows)))))))
+
+(defn- submit-tx* [conn tx-ops tx-opts]
+  (try
+    (err/wrap-anomaly {}
+      (jdbc/execute! conn (begin-rw-sql tx-opts))
+      (try
+        (doseq [tx-op tx-ops
+                :let [tx-op (cond-> tx-op
+                              (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)]]
+          (xtp/execute-op! tx-op conn))
+        (catch BatchUpdateException e
+          (throw (ex-cause e))))
+
+      (jdbc/execute! conn ["COMMIT"]))
+
+    (catch Exception e
+      (try
+        (jdbc/execute! conn ["ROLLBACK"])
+        (catch Throwable t
+          (throw (doto e (.addSuppressed t)))))
+      (throw e))))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
   "Writes transactions to the log for processing
@@ -176,15 +265,18 @@
 
    - :default-tz
      overrides the default time zone for the transaction,
-     should be an instance of java.time.ZoneId
+     should be an instance of java.time.ZoneId"
+  (^TransactionKey [connectable, tx-ops] (submit-tx connectable tx-ops {}))
 
-   - :authn
-     a map of user and password if the node requires authentication"
+  (^TransactionKey [connectable, tx-ops tx-opts]
+   (with-conn [conn connectable]
+     (submit-tx* conn tx-ops (-> tx-opts
+                                 (assoc :async? true)))
 
-
-  (^TransactionKey [node, tx-ops] (submit-tx node tx-ops {}))
-  (^TransactionKey [node, tx-ops tx-opts]
-   (xtp/submit-tx node (vec tx-ops) tx-opts)))
+     (let [wm-tx-id (:watermark (jdbc/execute-one! conn ["SHOW WATERMARK"]))]
+       (when (instance? xtdb.api.DataSource connectable)
+         (.setWatermarkTxId ^xtdb.api.DataSource connectable wm-tx-id))
+       wm-tx-id))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
@@ -216,12 +308,17 @@
    - :authn
      a map of user and password if the node requires authentication"
 
-  (^TransactionKey [node, tx-ops] (execute-tx node tx-ops {}))
-  (^TransactionKey [node, tx-ops tx-opts]
-   (let [{:keys [tx-id system-time committed? error]} (xtp/execute-tx node (vec tx-ops) tx-opts)]
-     (if committed?
-       (serde/->TxKey tx-id system-time)
-       (throw (or error (ex-info "Transaction failed." {})))))))
+  (^TransactionKey [connectable, tx-ops] (execute-tx connectable tx-ops {}))
+
+  (^TransactionKey [connectable, tx-ops tx-opts]
+   (with-conn [conn connectable]
+     (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))
+
+     (let [{:keys [tx-id system-time]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
+                                                          {:builder-fn xt-jdbc/builder-fn})]
+       (when (instance? xtdb.api.DataSource connectable)
+         (.setWatermarkTxId ^xtdb.api.DataSource connectable tx-id))
+       (serde/->TxKey tx-id (time/->instant system-time))))))
 
 (defn status
   "Returns the status of this node as a map"
@@ -241,6 +338,7 @@
                        (->> (group-by :name))
                        (update-vals (fn [metrics]
                                       (mapv #(dissoc % :name) metrics))))
+
           :latest-completed-tx (some-> (first (status-q conn ["SHOW LATEST_COMPLETED_TX"]))
                                        (serde/map->TxKey))
 

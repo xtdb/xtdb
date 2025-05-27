@@ -1781,29 +1781,31 @@
               {:u-name "james", :xt/id 2}]
              (xt/q tu/*node* "SELECT users._id, users.u_name FROM users ORDER BY _id"))))
 
-  (t/is (anomalous? [:incorrect :xtdb.indexer/missing-sql-args
-                     "Arguments list was expected but not provided"
-                     {:param-count 2
+  (t/is (anomalous? [:incorrect :psql/invalid-parameter-value
+                     "No value specified for parameter 1."
+                     {:psql/state "22023",
                       :sql "INSERT INTO users(_id, u_name) VALUES (?, ?)",
-                      :tx-op-idx 0,
-                      :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
+                      :arg-rows nil}]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]]))
         "no arg rows provided when args expected")
 
-  (t/is (anomalous? [:incorrect :xtdb.indexer/incorrect-sql-arg-count
-                     "Parameter error: 1 provided, 2 expected"
-                     {:param-count 2, :arg-count 1
-                      :arg-idx 0,
+  (t/is (anomalous? [:incorrect :psql/invalid-parameter-value
+                     "No value specified for parameter 2."
+                     {:psql/state "22023",
                       :sql "INSERT INTO users(_id, u_name) VALUES (?, ?)",
-                      :tx-op-idx 0,
-                      :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]
+                      :arg-rows [[3] [4]]}]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))
         "incorrect number of args on all arg-row")
 
+  #_ ; FIXME see https://github.com/seancorfield/next-jdbc/issues/303
   (t/testing "incorrect number of args on one row"
     (t/is (anomalous? [:incorrect nil
                        #"All SQL arg-rows must have the same number of columns"]
-                      (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))))
+                      (xt/submit-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3 "finn"] [4]]])))
+
+    (t/is (= []
+             (xt/q tu/*node* "SELECT users._id, users.u_name FROM users ORDER BY _id"))
+          "no rows inserted due to error")))
 
 (t/deftest test-case-sensitivity-in-delimited-cols
   (t/is (xt/execute-tx tu/*node* [[:sql "INSERT INTO T1(_id, col1, col2) VALUES(1,'fish',1000)"]]))
@@ -2051,24 +2053,24 @@
 
 (t/deftest test-portion-of-valid-time-boundary
   (xt/submit-tx tu/*node* [[:sql "
-INSERT INTO system_active_power (_id, value, _valid_from, _valid_to)
+INSERT INTO system_power (_id, value, _valid_from, _valid_to)
 VALUES
-(1, 500,  TIMESTAMP '2024-01-01T00:00:00', TIMESTAMP '2024-01-01T00:05:00'),
-(1, 510,  TIMESTAMP '2024-01-01T00:05:00', TIMESTAMP '2024-01-01T00:10:00'),
-(1, 530,  TIMESTAMP '2024-01-01T00:10:00', TIMESTAMP '2024-01-01T00:15:00'),
-(1, 9999, TIMESTAMP '2024-01-01T00:15:00', TIMESTAMP '2024-01-01T00:20:00'),
-(1, 560,  TIMESTAMP '2024-01-01T00:20:00', TIMESTAMP '2024-01-01T00:25:00'),
-(1, 580,  TIMESTAMP '2024-01-01T00:25:00', TIMESTAMP '2024-01-01T00:30:00')"]])
+(1, 500,  TIMESTAMP '2024-01-01T00:00:00Z', TIMESTAMP '2024-01-01T00:05:00Z'),
+(1, 510,  TIMESTAMP '2024-01-01T00:05:00Z', TIMESTAMP '2024-01-01T00:10:00Z'),
+(1, 530,  TIMESTAMP '2024-01-01T00:10:00Z', TIMESTAMP '2024-01-01T00:15:00Z'),
+(1, 9999, TIMESTAMP '2024-01-01T00:15:00Z', TIMESTAMP '2024-01-01T00:20:00Z'),
+(1, 560,  TIMESTAMP '2024-01-01T00:20:00Z', TIMESTAMP '2024-01-01T00:25:00Z'),
+(1, 580,  TIMESTAMP '2024-01-01T00:25:00Z', TIMESTAMP '2024-01-01T00:30:00Z')"]])
 
   (letfn [(zdt [mins]
             (.plusMinutes #xt/zoned-date-time "2024-01-01T00:00Z[UTC]" mins))
           (q []
             (set (xt/q tu/*node* "SELECT value, _valid_from, _valid_to
-                                  FROM system_active_power FOR ALL VALID_TIME WHERE _id = 1")))
+                                  FROM system_power FOR ALL VALID_TIME WHERE _id = 1")))
           (del! [from to]
-            (xt/execute-tx tu/*node* [[:sql "DELETE FROM system_active_power
-                                                          FOR PORTION OF VALID_TIME FROM ? TO ?
-                                                          WHERE _id = 1"
+            (xt/execute-tx tu/*node* [[:sql "DELETE FROM system_power
+                                             FOR PORTION OF VALID_TIME FROM ? TO ?
+                                             WHERE _id = 1"
                                        [from to]]]))]
 
     (t/is (del! (zdt 15) (zdt 20)))
@@ -2307,7 +2309,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
                             [:sql "INSERT INTO bar RECORDS ?, {_id: 4, x: 5}"
                              [{:_id 5, :x 6.0}]]
 
-                            [:sql "INSERT INTO bar RECORDS $1"
+                            [:sql "INSERT INTO bar RECORDS ?"
                              [{:_id 7, :x "8"}]]])
 
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
@@ -2991,7 +2993,7 @@ FROM dates"))))
   (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-valid-times
                      "Invalid valid times"
                      {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"
-                      :arg-idx 0, :sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM ? TO ? RECORDS {_id: 1, foo: 3}", :tx-op-idx 0,
+                      :arg-idx 0, :sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM $1 TO $2 RECORDS {_id: 1, foo: 3}", :tx-op-idx 0,
                       :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
                     (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM ? TO ? RECORDS {_id: 1, foo: 3}" [#inst "2020" #inst "2015"]]])))
 
@@ -3000,7 +3002,7 @@ FROM dates"))))
                                "Invalid valid times"
                                {:valid-from #xt/instant "2020-01-01T00:00:00Z",
                                 :valid-to #xt/instant "2015-01-01T00:00:00Z"
-                                :arg-idx 0, :sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM ? TO ? RECORDS {_id: 1, foo: 3}", :tx-op-idx 0,
+                                :arg-idx 0, :sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM $1 TO $2 RECORDS {_id: 1, foo: 3}", :tx-op-idx 0,
                                 :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}]
            (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} committed error])))))
 

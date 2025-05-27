@@ -31,3 +31,6 @@
 
    ["/openapi.yaml" {:name :openapi
                      :no-doc true}]])
+
+(defprotocol ExecuteOp
+  (execute-op! [tx-op conn]))
