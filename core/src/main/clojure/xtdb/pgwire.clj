@@ -1033,20 +1033,24 @@
   ;; need to allow this one in RW transactions
   "SELECT pg_type.oid, typname FROM pg_catalog.pg_type LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r from pg_namespace as ns join ( select s.r, (current_schemas(false))[s.r] as nspname from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r using ( nspname ) ) as sp ON sp.nspoid = typnamespace WHERE typname = $1 ORDER BY sp.r, pg_type.oid DESC LIMIT 1")
 
-(defn- permissibility-err
-  "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
+(defn- verify-permissibility
   [{:keys [conn-state server]} {:keys [statement-type] :as stmt}]
   (let [{:keys [access-mode]} (:transaction @conn-state)]
-    (cond
-      (and (= :dml statement-type) (:read-only? server))
-      (pgio/err-protocol-violation "DML is not allowed on the READ ONLY server")
+    (when (and (= :dml statement-type) (:read-only? server))
+      (throw (err/incorrect :xtdb/dml-in-read-only-server
+                            "DML is not allowed on the READ ONLY server"
+                            {:query (:query stmt)})))
 
-      (and (= :dml statement-type) (= :read-only access-mode))
-      (pgio/err-protocol-violation "DML is not allowed in a READ ONLY transaction")
+    (when (and (= :dml statement-type) (= :read-only access-mode))
+      (throw (err/incorrect :xtdb/dml-in-read-only-tx
+                            "DML is not allowed in a READ ONLY transaction"
+                            {:query (:query stmt)})))
 
-      (and (= :query statement-type) (= :read-write access-mode)
-           (not= pgjdbc-type-query (str/replace (:query stmt) #"  +" " ")))
-      (pgio/err-protocol-violation "Queries are unsupported in a DML transaction"))))
+    (when (and (= :query statement-type) (= :read-write access-mode)
+               (not= pgjdbc-type-query (str/replace (:query stmt) #"  +" " ")))
+      (throw (err/incorrect :xtdb/queries-in-read-write-tx
+                            "Queries are unsupported in a DML transaction"
+                            {:query (:query stmt)})))))
 
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
   (let [rows (rows conn)]
@@ -1160,8 +1164,7 @@
       (throw e))))
 
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
-  (when-let [err (permissibility-err conn portal)]
-    (throw err))
+  (verify-permissibility conn portal)
 
   (swap! conn-state (fn [{:keys [transaction] :as cs}]
                       (cond-> cs
