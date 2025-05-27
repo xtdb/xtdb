@@ -11,9 +11,9 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
-           xtdb.Types
            xtdb.error.Anomaly
            xtdb.time.Interval
+           xtdb.Types
            (xtdb.types ClojureForm ZonedDateTimeRange)
            (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
 
@@ -53,7 +53,9 @@
   (value->col-type [_] :f64)
 
   BigDecimal
-  (value->col-type [_] :decimal))
+  (value->col-type [dec]
+    (let [precision (* 32 (long (Math/ceil (/ (long (.precision dec)) 32.0))))]
+      [:decimal precision (.scale dec) (* precision 4)])))
 
 (extend-protocol ArrowWriteable
   Date

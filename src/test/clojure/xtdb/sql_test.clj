@@ -2158,14 +2158,22 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
                                     :valid-from #xt/date "2020-01-02"})]
 
              (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
-                                  '[[1 2] [3 4]]))))
+                                  [[1 2] [3 4]]))))
 
   (t/testing "insert records"
     (t/is (= [(tx-ops/map->PutDocs {:table-name "public/bar", :docs [{"_id" 0, "value" "hola"} {"_id" 1, "value" "mundo"}],
                                     :valid-from nil, :valid-to nil})]
              (sql/sql->static-ops "INSERT INTO bar RECORDS $1"
-                                  '[[{"_id" 0, "value" "hola"}]
-                                    [{"_id" 1, "value" "mundo"}]])))))
+                                  [[{"_id" 0, "value" "hola"}]
+                                   [{"_id" 1, "value" "mundo"}]])))))
+
+(t/deftest test-sql->static-ops-decimals-4483
+  (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo",
+                                  :docs [{"xt/id" 1, "dec" 1.01M} {"xt/id" 2, "dec" 1.012M}],
+                                  :valid-from nil, :valid-to nil})]
+           (sql/sql->static-ops "INSERT INTO foo RECORDS ?"
+                                [[{:xt/id 1, :dec 1.01M}]
+                                 [{:xt/id 2, :dec 1.012M}]]))))
 
 (t/deftest show-canned-responses
   (t/is (= [{:transaction-isolation "read committed"}]

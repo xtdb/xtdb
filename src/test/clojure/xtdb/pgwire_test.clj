@@ -9,6 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
+            [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -52,13 +53,6 @@
      ~@body
      (catch PSQLException e#
        (read-ex e#))))
-
-(defmacro throwing-xt-ex [& body]
-  `(try
-     ~@body
-     (catch PSQLException e#
-       (some-> (:detail (read-ex e#))
-               throw))))
 
 (t/use-fixtures :once
 
@@ -1426,7 +1420,7 @@
                                             {:pg-type :default, :col-name "a"}
                                             {:pg-type :int8, :col-name "b"}
                                             {:pg-type :float8, :col-name "_column_2"}]}]
-                          (throwing-xt-ex
+                          (err/wrap-anomaly {}
                             (jdbc/execute! stmt))))))))
 
 (deftest test-nulls-in-monomorphic-types
@@ -1734,7 +1728,7 @@
 
 (t/deftest test-show-latest-submitted-tx
   (with-open [conn (jdbc-conn)]
-    (t/is (= [] (throwing-xt-ex (q conn ["SHOW LATEST_SUBMITTED_TX"]))))
+    (t/is (= [] (q conn ["SHOW LATEST_SUBMITTED_TX"])))
 
     (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "jms", :given-name "James"}])
 
@@ -2523,6 +2517,21 @@ ORDER BY 1,2;")
                       (map vector expected-res res)
                       (every? #(compare-decimals-with-scale (:data (first %)) (:data (second %))))))
               "correct scale")))))
+
+(t/deftest test-pgwire-decimals-different-scales
+  (with-open [conn (jdbc-conn)]
+    (with-open [stmt (jdbc/prepare conn ["INSERT INTO decimals RECORDS ?"])]
+      (jdbc/execute-batch! stmt [[{:xt/id 1, :dec 1.01M}]
+                                 [{:xt/id 2, :dec 1.012M}]])
+      (t/is (= [{:_id 1, :dec 1.01M} {:_id 2, :dec 1.012M}]
+               (jdbc/execute! conn ["SELECT * FROM decimals ORDER BY _id"]))))
+
+    (with-open [stmt (jdbc/prepare conn ["INSERT INTO decimals2 SELECT ? _id, ? AS `dec`"])]
+      (jdbc/execute-batch! stmt [[1 1.01M]
+                                 [2 1.012M]])
+
+      (t/is (= [{:_id 1, :dec 1.01M} {:_id 2, :dec 1.012M}]
+               (jdbc/execute! conn ["SELECT * FROM decimals2 ORDER BY _id"]))))))
 
 (deftest test-pgwire-numeric-type-annotation
   (with-open [conn (jdbc-conn)]
