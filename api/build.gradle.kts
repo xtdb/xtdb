@@ -36,7 +36,7 @@ dependencies {
 
     api(libs.caffeine)
 
-    implementation("org.postgresql:postgresql:42.7.5")
+    implementation(libs.pgjdbc)
 
     testImplementation(libs.next.jdbc)
 }

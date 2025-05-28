@@ -140,3 +140,25 @@ SELECT * FROM xt.txs;
     2 | f         | ... "Precondition failed" ... | "2024-06-25T16:45:32.577224Z"
 (3 rows)
 ----
+
+=== `COPY`
+
+Copies data directly into an XTDB table - usually significantly more efficiently than the equivalent `INSERT`s.
+
+[railroad]
+----
+const formatOpt = rr.Sequence("FORMAT", rr.Optional('=', 'skip'), rr.Choice(0, "'transit-json'", "'transit-msgpack'"))
+
+return rr.Diagram(rr.Stack(
+  rr.Sequence("COPY", "<table name>", "FROM", "STDIN"),
+  rr.Sequence("WITH", "(", rr.ZeroOrMore(rr.Choice(0, formatOpt), ',', 'skip'), ")")
+))
+----
+
+* A single `COPY` will atomically insert all of its documents within one transaction - if you're using Kafka, we recommend you split your documents into batches of ~1-10k so as not to exceed Kafka's message size limits.
+* If you're using `psql` (or a similar tool) to connect to XTDB, those tools also support other sources in addition to `STDIN` - please see their own documentation for more details.
+  For example, `psql` has a link:https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMANDS-COPY[`\copy`^] command which supports loading from a file.
+* Currently, there are two accepted formats: `'transit-json'` and `'transit-msgpack'`.
+  For more details on the Transit format, see the https://github.com/cognitect/transit-format?tab=readme-ov-file#implementations[available libraries^] for your language.
+* On the JVM, you can use Postgres's link:https://jdbc.postgresql.org/documentation/publicapi/org/postgresql/copy/CopyManager.html[`CopyManager`^] with an XTDB connection by calling `conn.unwrap(PGConnection.class).getCopyAPI()`.
+* In the Clojure API, `:put-docs` uses `COPY` commands on your behalf.

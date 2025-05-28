@@ -1,4 +1,4 @@
 {:block-idx 0,
  :latest-completed-tx
- {:tx-id 4018, :system-time #xt/instant "2020-01-03T00:00:00Z"},
+ {:tx-id 4050, :system-time #xt/instant "2020-01-03T00:00:00Z"},
  :table-names #{"xt/txs" "public/xt_docs"}}

@@ -126,20 +126,20 @@
           },
           "children" : [ ]
         },{
-          "name" : "cpu_avg_1min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
           "name" : "time",
           "nullable" : false,
           "type" : {
             "name" : "timestamp",
             "unit" : "MICROSECOND",
             "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "cpu_avg_1min",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
           },
           "children" : [ ]
         },{
@@ -261,15 +261,15 @@
           "VALIDITY" : [1,1],
           "DATA" : [4.10011078E8,7.20742332E8]
         },{
-          "name" : "cpu_avg_1min",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : [24.81,4.93]
-        },{
           "name" : "time",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : [1479211200000000,1479211200000000]
+        },{
+          "name" : "cpu_avg_1min",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : [24.81,4.93]
         },{
           "name" : "_id",
           "count" : 2,

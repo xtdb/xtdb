@@ -20,9 +20,10 @@ directlyExecutableStatement
     | deleteStatementSearched #DeleteStmt
     | patchStatement #PatchStmt
     | eraseStatementSearched #EraseStmt
+    | ASSERT condition=expr (',' message=characterString)? #AssertStatement
     | prepareStatement #PrepareStmt
     | executeStatement #ExecuteStmt
-    | ASSERT condition=expr (',' message=characterString)? #AssertStatement
+    | COPY tableName FROM STDIN opts=copyOpts # CopyInStmt
     | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
     | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
     | COMMIT # CommitStatement
@@ -41,11 +42,17 @@ directlyExecutableStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
     ;
 
+prepareStatement : PREPARE statementName=identifier AS directlyExecutableStatement ;
+
 executeStatement : EXECUTE statementName=identifier executeArgs ;
 
 executeArgs : ('(' expr (',' expr)* ')')? ;
 
-prepareStatement : PREPARE statementName=identifier AS directlyExecutableStatement ;
+copyOpts : 'WITH' '(' copyOpt? (',' copyOpt?)* ')' ;
+
+copyOpt
+    : FORMAT '='? format=characterString # CopyFormatOption
+    ;
 
 showVariable
    : 'TRANSACTION' 'ISOLATION' 'LEVEL' # ShowTransactionIsolationLevel
@@ -125,6 +132,7 @@ identifier
         | 'USER' | 'PASSWORD'
         | 'VARBINARY' | 'BYTEA'
         | 'URI'
+        | 'COPY' | 'FORMAT'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier

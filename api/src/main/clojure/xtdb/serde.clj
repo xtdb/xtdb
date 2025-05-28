@@ -290,7 +290,7 @@
            (transit-seq rdr))
      (catch RuntimeException ex
        (when-not (instance? java.io.EOFException (.getCause ex))
-         (throw ex))))))
+         (throw (ex-cause ex)))))))
 
 (defn write-transit
   (^bytes [v] (write-transit v nil))
@@ -299,6 +299,13 @@
      (-> (transit/writer baos (or fmt :msgpack) {:handlers transit-write-handler-map})
          (transit/write v))
      (.toByteArray baos))))
+
+(defn write-transit-seq ^bytes [vs format]
+  (with-open [baos (ByteArrayOutputStream.)]
+    (let [wtr (transit/writer baos (or format :msgpack) {:handlers transit-write-handler-map})]
+      (doseq [doc vs]
+        (transit/write wtr doc)))
+     (.toByteArray baos)))
 
 ;; here to prevent a cyclic dep on xtdb.error
 (extend-protocol err/ToAnomaly

@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [cognitect.anomalies :as-alias anom]
+            [cognitect.transit :as transit]
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
@@ -25,7 +26,9 @@
            [java.io Closeable DataInputStream EOFException IOException PushbackInputStream]
            [java.lang Thread$State]
            [java.net ServerSocket Socket SocketException]
-           [java.nio.file Path]
+           [java.nio ByteBuffer]
+           [java.nio.channels FileChannel]
+           [java.nio.file Files Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
            [java.util Map]
@@ -37,7 +40,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.error Anomaly Interrupted)
+           (xtdb.error Anomaly Incorrect Interrupted)
            xtdb.IResultCursor
            (xtdb.query PreparedQuery)
            [xtdb.vector RelationReader]))
@@ -488,10 +491,6 @@
 
                 (when error
                   (throw error))))))
-        (catch Interrupted e (throw e))
-        (catch InterruptedException e (throw e))
-        (catch Exception e
-          (throw e))
         (finally
           (swap! conn-state dissoc :transaction)
           (close-all-portals conn))))))
@@ -737,6 +736,15 @@
 
                                     (visitQueryExpr [_ ctx]
                                       {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
+
+                                    (visitCopyInStmt [this ctx]
+                                      (into {:statement-type :copy-in,
+                                             :table-name (sql/identifier-sym (.tableName ctx))}
+                                            (map (partial sql/accept-visitor this))
+                                            (some-> (.opts ctx) (.copyOpt))))
+
+                                    (visitCopyFormatOption [_ ctx]
+                                      [:format (sql/plan-expr (.format ctx) env)])
 
                                     ;; could do pre-submit validation here
                                     (visitCreateUserStatement [_ ctx]
@@ -1222,6 +1230,30 @@
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
+    :copy-in (let [format (case (:format portal)
+                            "transit-json" :transit-json
+                            "transit-msgpack" :transit-msgpack
+                            (throw (err/incorrect ::invalid-copy-format "COPY IN requires a valid format: 'transit-json' or 'transit-msgpack'"
+                                                  {:format (:format portal)})))
+                   {:keys [table-name]} portal
+                   copy-file (doto (util/->temp-file "copy-in" "")
+                               (-> .toFile (.deleteOnExit)))]
+
+               (swap! conn-state assoc
+                      :copy {:table-name table-name
+                             :format format
+                             :copy-file copy-file
+                             :write-ch (util/->file-channel copy-file util/write-truncate-open-opts)})
+
+               (log/trace "Starting COPY IN" {:cid (:cid conn), :table-name table-name, :copy-file copy-file})
+
+               (pgio/cmd-write-msg conn pgio/msg-copy-in-response
+                                   (let [copy-format (case format
+                                                       :transit-json :text
+                                                       :transit-msgpack :binary)]
+                                     {:copy-format copy-format
+                                      :column-formats [copy-format]})))
+
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 
 (defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name limit]}]
@@ -1281,13 +1313,72 @@
     (catch Throwable e
       (send-ex conn e)))
 
-  (cmd-send-ready conn))
+  (when-not (:copy @conn-state)
+    (cmd-send-ready conn)))
+
+(defmethod handle-msg* :msg-copy-data [{:keys [conn-state]} {:keys [data]}]
+  (let [{:keys [^FileChannel write-ch]} (or (:copy @conn-state)
+                                            (throw (err/incorrect ::copy-not-in-progress "COPY IN not in progress, cannot write data")))]
+    (.write write-ch (ByteBuffer/wrap data))))
+
+(defmethod handle-msg* :msg-copy-done [{:keys [conn-state] :as conn} _msg]
+  (let [{:keys [^Path copy-file, ^FileChannel write-ch, format]} (or (:copy @conn-state)
+                                                                     (throw (err/incorrect ::copy-not-in-progress
+                                                                                           "COPY IN not in progress, cannot write data")))]
+    (try
+      (err/wrap-anomaly {}
+        (.close write-ch)
+
+        (let [started-tx? (when-not (:transaction @conn-state)
+                            (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
+                            true)
+              doc-count (try
+                          (let [docs (with-open [is (util/open-input-stream copy-file)]
+                                       (vec (serde/transit-seq (transit/reader is
+                                                                               (case format
+                                                                                 :transit-json :json
+                                                                                 :transit-msgpack :msgpack)
+                                                                               {:handlers serde/transit-read-handler-map}))))]
+
+                            (swap! conn-state
+                                   (fn [{:keys [copy], :as conn-state}]
+                                     (-> conn-state
+                                         (update-in [:transaction :dml-buf] (fnil conj [])
+                                                    (into [:put-docs (keyword (:table-name copy))]
+                                                          docs))
+                                         (dissoc :copy))))
+
+                            (when started-tx?
+                              (cmd-commit conn))
+
+                            (count docs))
+
+                          (catch Throwable e
+                            (when started-tx?
+                              (cmd-rollback conn))
+                            (throw e)))]
+
+          (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str "COPY " doc-count)})))
+
+      (catch Incorrect e
+        (log/debug e "Error writing COPY IN data")
+        (send-ex conn e))
+
+      (catch Throwable e
+        (log/warn e "Error writing COPY IN data")
+        (send-ex conn e))
+
+      (finally
+        (util/delete-file copy-file)))
+
+    (cmd-send-ready conn)))
 
 ;; ignore password messages, we are authenticated when getting here
 (defmethod handle-msg* :msg-password [_conn _msg])
 
-(defmethod handle-msg* ::default [_conn _]
-  (throw (pgio/err-protocol-violation "unknown client message")))
+(defmethod handle-msg* ::default [_conn {:keys [msg-name]}]
+  (throw (err/unsupported ::unknown-client-msg (str "unknown client message: " msg-name)
+                          {:msg-name msg-name})))
 
 (defn handle-msg [{:keys [cid conn-state] :as conn} {:keys [msg-name] :as msg}]
   (try

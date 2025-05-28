@@ -21,6 +21,7 @@
            (java.sql BatchUpdateException Connection)
            (xtdb.api TransactionKey)
            (xtdb.api.tx TxOp TxOp$Sql)
+           xtdb.jdbc.XtConnection
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs)
            xtdb.types.ClojureForm
            xtdb.util.NormalForm))
@@ -168,12 +169,16 @@
 (extend-protocol xtp/ExecuteOp
   PutDocs
   (execute-op! [{:keys [table-name valid-from valid-to docs]} conn]
-    (let [table-name (NormalForm/normalTableName table-name)]
-      (with-open [stmt (jdbc/prepare conn [(format "INSERT INTO \"%s\".\"%s\" RECORDS ?"
-                                                   (namespace table-name) (name table-name))])]
-        (jdbc/execute-batch! stmt (mapv (fn [doc]
-                                          [(into {:xt/valid-from valid-from, :xt/valid-to valid-to} doc)])
-                                        docs)))))
+    (let [table-name (NormalForm/normalTableName table-name)
+          docs (cond->> docs
+                 (or valid-from valid-to)
+                 (map (partial into (->> {:xt/valid-from valid-from, :xt/valid-to valid-to}
+                                         (into {} (remove (comp nil? val)))))))
+          copy-in (xt-jdbc/copy-in conn (format "COPY \"%s\".\"%s\" FROM STDIN WITH (FORMAT 'transit-json')"
+                                                (namespace table-name) (name table-name)))
+          bytes (serde/write-transit-seq docs :json)]
+      (.writeToCopy copy-in bytes 0 (alength bytes))
+      (.endCopy copy-in)))
 
   PatchDocs
   (execute-op! [{:keys [table-name valid-from valid-to docs]} conn]

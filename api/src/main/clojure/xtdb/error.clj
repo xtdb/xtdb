@@ -8,6 +8,7 @@
            [java.sql BatchUpdateException]
            [java.time.format DateTimeParseException]
            [java.util.regex Pattern]
+           com.fasterxml.jackson.core.JsonParseException
            [xtdb.error Anomaly Busy Conflict Fault Forbidden Incorrect Interrupted NotFound Unavailable Unsupported]))
 
 (defprotocol ToAnomaly
@@ -192,6 +193,9 @@
 
   UnsupportedOperationException
   (->anomaly [ex data] (unsupported ::unsupported (ex-message ex) (into {::cause ex} data)))
+
+  JsonParseException
+  (->anomaly [ex data] (incorrect ::json-parse (ex-message ex) (into {::cause ex} data)))
 
   BatchUpdateException
   (->anomaly [ex data] (->anomaly (ex-cause ex) data))

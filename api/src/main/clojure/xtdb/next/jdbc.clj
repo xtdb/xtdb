@@ -5,6 +5,7 @@
             [xtdb.serde :as serde])
   (:import [java.sql ResultSet ResultSetMetaData]
            [java.util List Map Set]
+           org.postgresql.PGConnection
            org.postgresql.jdbc.PgArray
            xtdb.api.query.IKeyFn))
 
@@ -54,3 +55,6 @@
 
       (rs! [_this mrs] (persistent! mrs)))))
 
+(defn copy-in ^org.postgresql.copy.CopyIn [^PGConnection conn, sql]
+  (-> (.getCopyAPI conn)
+      (.copyIn sql)))

@@ -106,7 +106,8 @@
 (def ^:private flush-messages
   #{:msg-error-response :msg-notice-response
     :msg-parameter-status :msg-auth :msg-ready
-    :msg-portal-suspended})
+    :msg-portal-suspended
+    :msg-copy-in-response :msg-copy-done})
 
 (defn err-protocol-violation
   ([msg] (err-protocol-violation msg nil))
@@ -144,6 +145,7 @@
         (-> (rdr (read-untyped-msg in))
             (assoc :msg-name (:name @msg-var)))
         (catch Exception e
+          (log/error e "Error reading client message")
           (throw (err-protocol-violation (str "Error reading client message " (ex-message e))))))))
 
   (host-address [_] (.getHostAddress (.getInetAddress socket)))
@@ -209,6 +211,11 @@
   {:read #(char (.readUnsignedByte ^DataInputStream %))
    :write #(.writeByte ^DataOutputStream %1 (byte %2))})
 
+(def ^:private io-uint8
+  "An unsigned 32bit integer"
+  {:read #(.readByte ^DataInputStream %)
+   :write #(.writeByte ^DataOutputStream %1 (int %2))})
+
 (def ^:private io-uint16
   "An unsigned short integer"
   {:read #(.readUnsignedShort ^DataInputStream %)
@@ -237,7 +244,17 @@
              (vec (repeatedly (len-rdr in) #(el-rdr in))))
      :write (fn [out coll] (len-wtr out (count coll)) (run! #(el-wtr out %) coll))}))
 
-(def ^:private io-format-code
+(def ^:private io-format-code8
+  "Postgres format codes are integers, whose value is either
+
+  0 (:text)
+  1 (:binary)
+
+  On read returns a keyword :text or :binary, write of these keywords will be transformed into the correct integer."
+  {:read (fn [^DataInputStream in] (case (.readUnsignedByte in) 0 :text, 1 :binary))
+   :write (fn [^DataOutputStream out v] (.writeByte out (case v :text 0, :binary 1)))})
+
+(def ^:private io-format-code16
   "Postgres format codes are integers, whose value is either
 
   0 (:text)
@@ -246,10 +263,6 @@
   On read returns a keyword :text or :binary, write of these keywords will be transformed into the correct integer."
   {:read (fn [^DataInputStream in] ({0 :text, 1 :binary} (.readUnsignedShort in)))
    :write (fn [^DataOutputStream out v] (.writeShort out ({:text 0, :binary 1} v)))})
-
-(def ^:private io-format-codes
-  "A list of format codes of max len len(uint16). This is the format used by the msg-bind."
-  (io-list io-uint16 io-format-code))
 
 (defn- io-record
   "Returns an io data type for a record containing named fields. Useful for definining typed message contents.
@@ -316,6 +329,12 @@
                     (.write out arr))
                 (.writeInt out -1)))}))
 
+(def io-just-bytes
+  {:read (fn read-bytes-or-null [^DataInputStream in]
+           (let [ba (byte-array (.available in))]
+             (.readFully in ba)
+             ba))})
+
 (def ^:private error-or-notice-type->char
   {:localized-severity \S
    :severity \V
@@ -359,16 +378,19 @@
 (def-msg msg-bind :client \B
   :portal-name io-string
   :stmt-name io-string
-  :arg-format io-format-codes
+  :arg-format (io-list io-uint16 io-format-code16)
   :args (io-list io-uint16 (io-bytes-or-null io-uint32))
-  :result-format io-format-codes)
+  :result-format (io-list io-uint16 io-format-code16))
 
 (def-msg msg-close :client \C
   :close-type io-portal-or-stmt
   :close-name io-string)
 
-(def-msg msg-copy-data :client \d)
+(def-msg msg-copy-data :client \d
+  :data io-just-bytes)
+
 (def-msg msg-copy-done :client \c)
+
 (def-msg msg-copy-fail :client \f)
 
 (def-msg msg-describe :client \D
@@ -430,7 +452,6 @@
 
 (def-msg msg-empty-query :server \I)
 
-
 (def-msg msg-auth :server \R
   :result io-uint32)
 
@@ -438,7 +459,9 @@
   :process-id io-uint32
   :secret-key io-uint32)
 
-(def-msg msg-copy-in-response :server \G)
+(def-msg msg-copy-in-response :server \G
+  :copy-format io-format-code8
+  :column-formats (io-list io-uint16 io-format-code16))
 
 (def-msg msg-ready :server \Z
   :status {:read (fn [^DataInputStream in]
@@ -461,7 +484,7 @@
                                :column-oid io-uint32
                                :typlen  io-uint16
                                :type-modifier io-uint32
-                               :result-format io-format-code)))
+                               :result-format io-format-code16)))
 
 (defn cmd-send-notice
   "Sends an notice message back to the client (e.g (cmd-send-notice conn (warning \"You are doing this wrong!\"))."

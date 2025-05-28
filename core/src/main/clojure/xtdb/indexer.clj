@@ -157,11 +157,6 @@
               valid-to (if (.isNull valid-to-rdr tx-op-idx)
                          Long/MAX_VALUE
                          (.getLong valid-to-rdr tx-op-idx))]
-          (when-not (> valid-to valid-from)
-            (throw (err/incorrect :xtdb.indexer/invalid-valid-times
-                                  "Invalid valid times"
-                                  {:valid-from (time/micros->instant valid-from)
-                                   :valid-to (time/micros->instant valid-to)})))
 
           (let [doc-start-idx (.getListStartIndex docs-rdr tx-op-idx)
                 ^long iid-start-idx (or (some-> iids-rdr (.getListStartIndex tx-op-idx))
@@ -174,6 +169,12 @@
                     valid-to (if (and row-valid-to-rdr (not (.isNull row-valid-to-rdr doc-idx)))
                                (.getLong row-valid-to-rdr doc-idx)
                                valid-to)]
+
+                (when-not (> valid-to valid-from)
+                  (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                        "Invalid valid times"
+                                        {:valid-from (time/micros->instant valid-from)
+                                         :valid-to (time/micros->instant valid-to)})))
 
                 (with-crash-log indexer "error putting document"
                     {:table-name table-name :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
