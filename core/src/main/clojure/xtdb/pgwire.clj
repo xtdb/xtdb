@@ -814,7 +814,7 @@
             {:keys [^Clock clock]} session
 
             query-opts {:after-tx-id (or watermark-tx-id -1)
-                        :tx-timeout (Duration/ofSeconds 1)
+                        :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?}
 
