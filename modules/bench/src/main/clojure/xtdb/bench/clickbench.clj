@@ -131,6 +131,17 @@
                                      :xt/valid-to (-> event-time
                                                       (.plusNanos 1000)))))]))
 
+(defn store-documents! [node docs]
+  (dorun
+   (->> (partition-all 1000 docs)
+        (map-indexed (fn [batch-idx docs]
+                       (log/debug "batch" batch-idx)
+
+                       (when (Thread/interrupted)
+                         (throw (InterruptedException.)))
+
+                       (submit-batch! node docs))))))
+
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
     :parse-fn parse-long]
@@ -154,17 +165,9 @@
                                :tasks [{:t :call
                                         :f (fn [{:keys [node]}]
                                              (with-open [is (GZIPInputStream. (io/input-stream hits-file))]
-                                               (dorun (-> (serde/transit-seq (transit/reader is :msgpack
-                                                                                             {:handlers serde/transit-read-handler-map}))
-                                                          (cond->> limit (take limit))
-                                                          (->> (partition-all 1000)
-                                                               (map-indexed (fn [batch-idx docs]
-                                                                              (log/debug "batch" batch-idx)
-
-                                                                              (when (Thread/interrupted)
-                                                                                (throw (InterruptedException.)))
-
-                                                                              (submit-batch! node docs))))))))}]}])
+                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :msgpack
+                                                                                                                  {:handlers serde/transit-read-handler-map}))
+                                                                        limit (take limit)))))}]}])
 
                            [{:t :call, :stage :sync
                              :f (fn [{:keys [node]}]
