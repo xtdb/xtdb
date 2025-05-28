@@ -63,6 +63,9 @@ class RemoteBufferPool(
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
     private val diskCacheMisses: Counter? = meterRegistry?.counter("disk-cache-misses")
+    private val networkWrite: Counter? = meterRegistry?.counter("buffer-pool.network.write")
+    private val networkRead: Counter? = meterRegistry?.counter("buffer-pool.network.read")
+
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -144,12 +147,18 @@ class RemoteBufferPool(
         }
     }
 
+    private fun getObject(key: Path, tmpFile: Path) =
+        objectStore.getObject(key, tmpFile).thenApply { path ->
+            networkRead?.increment(path.fileSize().toDouble())
+            path
+        }
+
     override fun getByteArray(key: Path): ByteArray =
         memoryCache.get(PathSlice(key)) { pathSlice ->
             memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                objectStore.getObject(k, tmpFile)
+                getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { it.toByteArray() }
 
@@ -157,7 +166,7 @@ class RemoteBufferPool(
         diskCache
             .get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                objectStore.getObject(k, tmpFile)
+                getObject(k, tmpFile)
             }.get()
             .use { entry -> Relation.readFooter(entry.path.openReadableChannel()) }
     }
@@ -179,7 +188,7 @@ class RemoteBufferPool(
             memCacheMisses?.increment()
             diskCache.get(key) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                objectStore.getObject(k, tmpFile)
+                getObject(k, tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
@@ -216,6 +225,7 @@ class RemoteBufferPool(
 
                             val size = tmpPath.fileSize()
                             objectStore.uploadArrowFile(key, tmpPath)
+                            networkWrite?.increment(size.toDouble())
 
                             diskCache.put(key, tmpPath)
                             return size
@@ -232,6 +242,7 @@ class RemoteBufferPool(
     }
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
+        networkWrite?.increment(buffer.capacity().toDouble())
         objectStore.putObject(key, buffer).get()
     }
 
