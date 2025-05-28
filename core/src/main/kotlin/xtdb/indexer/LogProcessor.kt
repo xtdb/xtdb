@@ -150,6 +150,12 @@ class LogProcessor(
                 }
                 latestProcessedMsgId = msgId
                 watchers.notify(msgId, res)
+            } catch (e: ClosedByInterruptException) {
+                watchers.notify(msgId, e)
+                throw CancellationException(e)
+            } catch (e: InterruptedException) {
+                watchers.notify(msgId, e)
+                throw CancellationException(e)
             } catch (e: Interrupted) {
                 watchers.notify(msgId, e)
                 throw CancellationException(e)
