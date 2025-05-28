@@ -10,7 +10,7 @@ import java.util.*
  * See https://github.com/cognitect-labs/anomalies.
  */
 sealed class Anomaly(
-    override val message: String, private val data: IPersistentMap, cause: Throwable?,
+    override val message: String?, private val data: IPersistentMap, cause: Throwable?,
 ) : RuntimeException(message, cause), IExceptionInfo {
 
     sealed class Caller(message: String, data: IPersistentMap, cause: Throwable?) : Anomaly(message, data, cause)
