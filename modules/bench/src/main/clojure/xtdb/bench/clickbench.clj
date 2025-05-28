@@ -2,13 +2,15 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.test :as t]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
-            [xtdb.serde :as serde])
+            [xtdb.serde :as serde]
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
-           [java.time Duration LocalDate LocalDateTime ZoneOffset]
+           [java.time Duration LocalDate LocalDateTime ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter]
            [java.util.zip GZIPInputStream GZIPOutputStream]
            [software.amazon.awssdk.services.s3 S3Client]
@@ -76,10 +78,12 @@
 (defn with-tsv-rows [tsv-gz-file f]
   (with-open [in (io/reader (GZIPInputStream. (io/input-stream tsv-gz-file)))]
     (f (for [row (csv/read-csv in, :separator \tab, :quote \")]
-         (->> (map (fn [col cell]
-                     (MapEntry/create col (parse-value col cell)))
-                   hits-header row)
-              (into {}))))))
+         (-> (->> (map (fn [col cell]
+                         (MapEntry/create col (parse-value col cell)))
+                       hits-header row)
+                  (into {}))
+             (as-> row-map (assoc row-map :xt/id (->> (map row-map [:counter-id :event-date :user-id :event-time :watch-id])
+                                                      (str/join "_")))))))))
 
 (def ^java.io.File hits-file
   (io/file "datasets/clickbench/hits.transit.msgpack.gz"))
@@ -94,7 +98,7 @@
                                          {:handlers serde/transit-write-handler-map})]
               (dorun
                (->> rows
-                    #_(take 10000000)
+                    (take 10000000)
                     (partition-all 1000)
                     (map-indexed (fn [batch-idx rows]
                                    (when (Thread/interrupted)
@@ -102,7 +106,8 @@
 
                                    (log/debug "batch" batch-idx)
                                    (doseq [row rows]
-                                     (transit/write writer row)))))))))))))
+                                     (transit/write writer row))
+                                   (.flush out))))))))))))
 
 (defn download-dataset []
   (when-not (.exists hits-file)
@@ -116,12 +121,15 @@
                     ^GetObjectRequest (.build))
                 (.toPath hits-file))))
 
-(defn store-documents! [node docs]
-  (dorun (->> docs
-              (partition-all 1000)
-              (map-indexed (fn [idx docs]
-                             (log/debug "batch" idx)
-                             (xt/submit-tx node [(into [:put-docs :hits] docs)]))))))
+(defn submit-batch! [node docs]
+  (xt/submit-tx node [(into [:put-docs :hits]
+                            (for [{:keys [^ZonedDateTime event-time] :as doc} docs]
+                              (assoc doc
+                                     :xt/id (->> (map doc [:counter-id :event-date :user-id :event-time :watch-id])
+                                                 (str/join "_"))
+                                     :xt/valid-from event-time
+                                     :xt/valid-to (-> event-time
+                                                      (.plusNanos 1000)))))]))
 
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
@@ -146,8 +154,17 @@
                                :tasks [{:t :call
                                         :f (fn [{:keys [node]}]
                                              (with-open [is (GZIPInputStream. (io/input-stream hits-file))]
-                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :msgpack))
-                                                                        limit (take limit)))))}]}])
+                                               (dorun (-> (serde/transit-seq (transit/reader is :msgpack
+                                                                                             {:handlers serde/transit-read-handler-map}))
+                                                          (cond->> limit (take limit))
+                                                          (->> (partition-all 1000)
+                                                               (map-indexed (fn [batch-idx docs]
+                                                                              (log/debug "batch" batch-idx)
+
+                                                                              (when (Thread/interrupted)
+                                                                                (throw (InterruptedException.)))
+
+                                                                              (submit-batch! node docs))))))))}]}])
 
                            [{:t :call, :stage :sync
                              :f (fn [{:keys [node]}]
@@ -161,8 +178,17 @@
                              :f (fn [{:keys [node]}]
                                   (b/compact! node))}
 
+                            #_
                             {:t :call, :stage :queries
                              :f (fn [{:keys [node]}]
                                   (doseq [query queries]
                                     (log/info "Running query:" query)
                                     (xt/q node query)))}])}]})
+
+(comment
+  (util/delete-dir (util/->path "/home/james/tmp/clickbench-10M"))
+  )
+
+(t/deftest ^:benchmark run-clickbench
+  (-> (b/->benchmark :clickbench {})
+      (b/run-benchmark {:node-dir (util/->path "/home/james/tmp/clickbench-10M")})))
