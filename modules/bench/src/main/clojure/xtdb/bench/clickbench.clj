@@ -8,6 +8,7 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
+            [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.serde :as serde]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
@@ -135,17 +136,20 @@
                       ^GetObjectRequest (.build))
                   (.toPath file)))))
 
-(defn store-documents! [node docs]
+(defn store-documents! [node doc-lines]
   (with-open [conn (jdbc/get-connection node)]
     (dorun
-     (->> (partition-all 1000 docs)
-          (map-indexed (fn [batch-idx docs]
+     (->> (partition-all 1000 doc-lines)
+          (map-indexed (fn [batch-idx doc-lines]
                          (log/debug "batch" batch-idx)
 
                          (when (Thread/interrupted)
                            (throw (InterruptedException.)))
 
-                         (xt/submit-tx conn [(into [:put-docs :hits] docs)])))))))
+                         (let [copy-in (xt-jdbc/copy-in conn "COPY hits FROM STDIN WITH (FORMAT 'transit-json')")
+                               bytes (.getBytes (str/join "\n" doc-lines))]
+                           (.writeToCopy copy-in bytes 0 (alength bytes))
+                           (.endCopy copy-in))))))))
 
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
@@ -169,9 +173,8 @@
                                :stage :submit-docs
                                :tasks [{:t :call
                                         :f (fn [{:keys [node]}]
-                                             (with-open [is (GZIPInputStream. (io/input-stream (hits-file size)))]
-                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :json
-                                                                                                                  {:handlers serde/transit-read-handler-map}))
+                                             (with-open [rdr (io/reader (GZIPInputStream. (io/input-stream (hits-file size))))]
+                                               (store-documents! node (cond->> (line-seq rdr)
                                                                         limit (take limit)))))}]}])
 
                            [{:t :call, :stage :sync
