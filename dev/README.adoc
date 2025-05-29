@@ -50,6 +50,7 @@ This is particularly useful for non-JVM testing - see the `/lang` README for mor
 == Attaching a debugger to the Clojure REPL
 
 1. Add `-PdebugJvm` to the Gradle command - e.g. `./gradlew :clojureRepl -PdebugJvm` - you should see `Listening for transport dt_socket at address: 5005`.
+.. Optionally, add `-PnoLocalsClearing` if Clojure's locals-clearing is getting in the way of you debugging (i.e. you're seeing a lot of null local variables in the debugger)
 2. Connect the debugger - in IntelliJ, 'Run' -> 'Attach to Process' (or `Ctrl-Alt-5`).
 
 == Testing

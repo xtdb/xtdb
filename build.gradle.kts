@@ -166,6 +166,9 @@ allprojects {
                     if (project.hasProperty("debugJvm")) {
                         jvmArgs += "-Xdebug"
                         jvmArgs += "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
+                    }
+
+                    if (project.hasProperty("noLocalsClearing")) {
                         jvmArgs += "-Dclojure.compiler.disable-locals-clearing=true"
                     }
 
