@@ -5,6 +5,7 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.serde :as serde]
@@ -121,26 +122,28 @@
                     ^GetObjectRequest (.build))
                 (.toPath hits-file))))
 
-(defn submit-batch! [node docs]
-  (xt/submit-tx node [(into [:put-docs :hits]
-                            (for [{:keys [^ZonedDateTime event-time] :as doc} docs]
-                              (assoc doc
-                                     :xt/id (->> (map doc [:counter-id :event-date :user-id :event-time :watch-id])
-                                                 (str/join "_"))
-                                     :xt/valid-from event-time
-                                     :xt/valid-to (-> event-time
-                                                      (.plusNanos 1000)))))]))
+(defn submit-batch! [conn docs]
+  (xt/submit-tx conn
+                [(into [:put-docs :hits]
+                       (for [{:keys [^ZonedDateTime event-time] :as doc} docs]
+                         (assoc doc
+                                :xt/id (->> (map doc [:counter-id :event-date :user-id :event-time :watch-id])
+                                            (str/join "_"))
+                                :xt/valid-from event-time
+                                :xt/valid-to (-> event-time
+                                                 (.plusNanos 1000)))))]))
 
 (defn store-documents! [node docs]
-  (dorun
-   (->> (partition-all 1000 docs)
-        (map-indexed (fn [batch-idx docs]
-                       (log/debug "batch" batch-idx)
+  (with-open [conn (jdbc/get-connection node)]
+    (dorun
+     (->> (partition-all 1000 docs)
+          (map-indexed (fn [batch-idx docs]
+                         (log/debug "batch" batch-idx)
 
-                       (when (Thread/interrupted)
-                         (throw (InterruptedException.)))
+                         (when (Thread/interrupted)
+                           (throw (InterruptedException.)))
 
-                       (submit-batch! node docs))))))
+                         (submit-batch! conn docs)))))))
 
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
@@ -181,16 +184,11 @@
                              :f (fn [{:keys [node]}]
                                   (b/compact! node))}
 
-                            #_
                             {:t :call, :stage :queries
                              :f (fn [{:keys [node]}]
-                                  (doseq [query queries]
+                                  (doseq [query (take 1 queries)]
                                     (log/info "Running query:" query)
                                     (xt/q node query)))}])}]})
-
-(comment
-  (util/delete-dir (util/->path "/home/james/tmp/clickbench-10M"))
-  )
 
 (t/deftest ^:benchmark run-clickbench
   (-> (b/->benchmark :clickbench {})
