@@ -980,7 +980,8 @@
 
                            (-> stmt
                                (assoc :cursor cursor,
-                                      :pg-cols (:pg-cols stmt)))))
+                                      :pg-cols (-> (:pg-cols stmt)
+                                                   (with-result-formats result-format))))))
 
         :execute (util/with-open [^IResultCursor args-cursor (->cursor xt-args)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
@@ -997,7 +998,8 @@
                          :query (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel))]
                                   (-> inner
                                       (assoc :cursor inner-cursor
-                                             :pg-cols (->pg-cols (:pg-cols inner) inner-cursor))))
+                                             :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
+                                                          (with-result-formats result-format)))))
 
                          :dml (let [arg-fields (.getResultFields args-cursor)]
                                 (try

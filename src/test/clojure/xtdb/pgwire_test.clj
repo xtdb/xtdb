@@ -2781,3 +2781,11 @@ ORDER BY 1,2;")
     (t/is (= [{:xt/id "jms", :given-name "James"}]
              (jdbc/execute! conn ["SELECT * FROM users"]
                             {:builder-fn xt-jdbc/builder-fn})))))
+
+(t/deftest test-show-variables-returns-binary-4498
+  (with-open [conn (jdbc-conn {"prepareThreshold" 1})]
+    (dotimes [n 3]
+      (xt/submit-tx conn [[:put-docs :foo {:xt/id n}]]))
+
+    (t/is (= [{:xt/id 0} {:xt/id 1} {:xt/id 2}]
+             (xt/q conn ["SELECT * FROM foo ORDER BY _id"])))))
