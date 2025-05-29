@@ -34,7 +34,7 @@
         (t/is (= 4 (.endCopy copy-in))))
 
       (t/is (= [{:xt/id 1, :v 1} {:xt/id 2, :v 2} {:xt/id 3, :v 3} {:xt/id 4, :v 4}]
-               (xt/q conn "SELECT * FROM foo ORDER BY _id"))))
+               (xt/q conn "SELECT * FROM bar ORDER BY _id"))))
 
     (t/testing "error - no format specified"
       (t/is (anomalous? [:incorrect ::pgw/invalid-copy-format]
