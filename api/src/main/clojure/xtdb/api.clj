@@ -275,10 +275,17 @@
      (submit-tx* conn tx-ops (-> tx-opts
                                  (assoc :async? true)))
 
-     (let [wm-tx-id (:watermark (jdbc/execute-one! conn ["SHOW WATERMARK"]))]
-       (when (instance? xtdb.api.DataSource connectable)
-         (.setWatermarkTxId ^xtdb.api.DataSource connectable wm-tx-id))
-       wm-tx-id))))
+     (try
+       (jdbc/execute! conn ["BEGIN READ ONLY WITH (WATERMARK = -1)"])
+
+       (let [{:keys [tx-id]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
+                                                {:builder-fn xt-jdbc/builder-fn})]
+         (when (instance? xtdb.api.DataSource connectable)
+           (.setWatermarkTxId ^xtdb.api.DataSource connectable tx-id))
+         tx-id)
+
+       (finally
+         (jdbc/execute! conn ["ROLLBACK"]))))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.

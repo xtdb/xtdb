@@ -438,7 +438,9 @@
                                      -1)
                  {:keys [^Clock clock]} session]
 
-             (xt-log/await-tx node watermark-tx-id #xt/duration "PT30S")
+             (when-not (or (neg? watermark-tx-id)
+                           (= :read-write (:access-mode tx-opts)))
+               (xt-log/await-tx node watermark-tx-id #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction
