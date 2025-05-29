@@ -11,7 +11,7 @@
             [xtdb.serde :as serde]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
-           [java.time Duration LocalDate LocalDateTime ZoneOffset ZonedDateTime]
+           [java.time Duration LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter]
            [java.util.zip GZIPInputStream GZIPOutputStream]
            [software.amazon.awssdk.services.s3 S3Client]
@@ -86,52 +86,54 @@
              (as-> row-map (assoc row-map :xt/id (->> (map row-map [:counter-id :event-date :user-id :event-time :watch-id])
                                                       (str/join "_")))))))))
 
-(def ^java.io.File hits-file
-  (io/file "datasets/clickbench/hits.transit.msgpack.gz"))
+(defn hits-file ^java.io.File [size]
+  (io/file (format "datasets/clickbench/hits-%s.transit.json.gz" (name size))))
 
 (comment ; to generate the transit file from the TSV file
   (def !transform
     (future
-      (with-tsv-rows (io/file "/tmp/downloads/hits.tsv.gz")
-        (fn [rows]
-          (with-open [out (GZIPOutputStream. (io/output-stream (doto hits-file io/make-parents)))]
-            (let [writer (transit/writer out :msgpack
-                                         {:handlers serde/transit-write-handler-map})]
-              (dorun
-               (->> rows
-                    (take 10000000)
-                    (partition-all 1000)
-                    (map-indexed (fn [batch-idx rows]
-                                   (when (Thread/interrupted)
-                                     (throw (InterruptedException.)))
+      (doseq [size [:tiny :small :medium #_:full]]
+        (log/info "transforming" size)
+        (with-tsv-rows (io/file "datasets/clickbench/hits.tsv.gz")
+          (fn [rows]
+            (with-open [out (GZIPOutputStream. (io/output-stream (doto (hits-file size) io/make-parents)))]
+              (let [writer (transit/writer out :json {:handlers serde/transit-write-handler-map})]
+                (dorun
+                 (->> rows
+                      (take (case size
+                              :tiny 1000
+                              :small 250000
+                              :medium 5000000
+                              :full Long/MAX_VALUE))
+                      (partition-all 1000)
+                      (map-indexed (fn [batch-idx rows]
+                                     (when (Thread/interrupted)
+                                       (throw (InterruptedException.)))
 
-                                   (log/debug "batch" batch-idx)
-                                   (doseq [row rows]
-                                     (transit/write writer row))
-                                   (.flush out))))))))))))
+                                     (log/debug "batch" batch-idx)
+                                     (doseq [{:keys [^ZonedDateTime event-time] :as row} rows
+                                             :let [event-time (.withZoneSameInstant event-time (ZoneId/of "UTC"))
+                                                   row (assoc row
+                                                              :xt/id (->> (map row [:counter-id :event-date :user-id :event-time :watch-id])
+                                                                          (str/join "_"))
+                                                              :xt/valid-from event-time
+                                                              :xt/valid-to (-> event-time
+                                                                               (.plusNanos 1000)))]]
+                                       (transit/write writer row)
+                                       (.write out (int \newline)))))))))))))))
 
-(defn download-dataset []
-  (when-not (.exists hits-file)
-    (log/info "downloading" (str hits-file))
-    (io/make-parents (io/file "datasets"))
+(defn download-dataset [size]
+  (let [file (hits-file size)]
+    (when-not (.exists file)
+      (log/info "downloading" (str file))
+      (io/make-parents (io/file "datasets"))
 
-    (.getObject (S3Client/create)
-                (-> (GetObjectRequest/builder)
-                    (.bucket "xtdb-datasets")
-                    (.key "clickbench/hits.transit.msgpack.gz")
-                    ^GetObjectRequest (.build))
-                (.toPath hits-file))))
-
-(defn submit-batch! [conn docs]
-  (xt/submit-tx conn
-                [(into [:put-docs :hits]
-                       (for [{:keys [^ZonedDateTime event-time] :as doc} docs]
-                         (assoc doc
-                                :xt/id (->> (map doc [:counter-id :event-date :user-id :event-time :watch-id])
-                                            (str/join "_"))
-                                :xt/valid-from event-time
-                                :xt/valid-to (-> event-time
-                                                 (.plusNanos 1000)))))]))
+      (.getObject (S3Client/create)
+                  (-> (GetObjectRequest/builder)
+                      (.bucket "xtdb-datasets")
+                      (.key (format "clickbench/hits-%s.transit.msgpack.gz" (name size)))
+                      ^GetObjectRequest (.build))
+                  (.toPath file)))))
 
 (defn store-documents! [node docs]
   (with-open [conn (jdbc/get-connection node)]
@@ -143,7 +145,7 @@
                          (when (Thread/interrupted)
                            (throw (InterruptedException.)))
 
-                         (submit-batch! conn docs)))))))
+                         (xt/submit-tx conn [(into [:put-docs :hits] docs)])))))))
 
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
@@ -155,11 +157,11 @@
   (->> (io/file "/home/james/src/xtdb/xtdb2/modules/bench/src/main/resources/clickbench/queries.sql")
        slurp str/split-lines))
 
-(defmethod b/->benchmark :clickbench [_ {:keys [no-load? limit]}]
+(defmethod b/->benchmark :clickbench [_ {:keys [no-load? limit size], :or {size :small}}]
   {:title "Clickbench Hits"
    :tasks [{:t :call, :stage :download
             :f (fn [_]
-                 (download-dataset))}
+                 (download-dataset size))}
 
            {:t :do, :stage :ingest
             :tasks (concat (when-not no-load?
@@ -167,8 +169,8 @@
                                :stage :submit-docs
                                :tasks [{:t :call
                                         :f (fn [{:keys [node]}]
-                                             (with-open [is (GZIPInputStream. (io/input-stream hits-file))]
-                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :msgpack
+                                             (with-open [is (GZIPInputStream. (io/input-stream (hits-file size)))]
+                                               (store-documents! node (cond->> (serde/transit-seq (transit/reader is :json
                                                                                                                   {:handlers serde/transit-read-handler-map}))
                                                                         limit (take limit)))))}]}])
 
