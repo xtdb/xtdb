@@ -127,12 +127,12 @@
   (let [file (hits-file size)]
     (when-not (.exists file)
       (log/info "downloading" (str file))
-      (io/make-parents (io/file "datasets"))
+      (io/make-parents file)
 
       (.getObject (S3Client/create)
                   (-> (GetObjectRequest/builder)
                       (.bucket "xtdb-datasets")
-                      (.key (format "clickbench/hits-%s.transit.msgpack.gz" (name size)))
+                      (.key (format "clickbench/hits-%s.transit.json.gz" (name size)))
                       ^GetObjectRequest (.build))
                   (.toPath file)))))
 
@@ -158,7 +158,7 @@
    ["-h" "--help"]])
 
 (def queries
-  (->> (io/file "/home/james/src/xtdb/xtdb2/modules/bench/src/main/resources/clickbench/queries.sql")
+  (->> (io/resource "clickbench/queries.sql")
        slurp str/split-lines))
 
 (defmethod b/->benchmark :clickbench [_ {:keys [no-load? limit size], :or {size :small}}]
