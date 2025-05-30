@@ -180,6 +180,10 @@ allprojects {
                         jvmArgs += "-enableassertions"
                     }
 
+                    if (project.hasProperty("twelveGBJvm")) {
+                        jvmArgs += twelveGBJvmArgs
+                    }
+
                     this.jvmArgs = jvmArgs
                 }
 
