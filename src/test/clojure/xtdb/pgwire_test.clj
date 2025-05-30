@@ -1726,6 +1726,21 @@
     (t/is (= [{:watermark 2}]
              (q conn ["SHOW WATERMARK"])))))
 
+(t/deftest show-watermark-param-fail-4504
+  (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
+    (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
+
+    (t/is (= [{:watermark 0}]
+             (q conn ["SHOW WATERMARK"]))))
+
+  (when (psql-available?)
+    (psql-session
+     (fn [send read]
+       (send "INSERT INTO foo (_id) VALUES (1);\n")
+       (read)
+       (send "SHOW WATERMARK;\n")
+       (t/is (= [["watermark"] ["1"]] (read)))))))
+
 (t/deftest test-show-latest-submitted-tx
   (with-open [conn (jdbc-conn)]
     (t/is (= [] (q conn ["SHOW LATEST_SUBMITTED_TX"])))

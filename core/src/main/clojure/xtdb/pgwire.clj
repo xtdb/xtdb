@@ -524,13 +524,15 @@
     (cmd-send-row-description conn pg-cols)
     (pgio/cmd-write-msg conn pgio/msg-no-data)))
 
-(defn cmd-send-parameter-description [conn {:keys [param-oids]}]
+(defn cmd-send-parameter-description [conn {:keys [statement-type param-oids]}]
   (log/trace "sending parameter description - " {:param-oids param-oids})
   (pgio/cmd-write-msg conn pgio/msg-parameter-description
-                      {:parameter-oids (vec (for [^long param-oid param-oids]
-                                              (if (zero? param-oid)
-                                                (get-in pg-types/pg-types [:text :oid])
-                                                param-oid)))}))
+                      {:parameter-oids (case statement-type
+                                         :show-variable []
+                                         (vec (for [^long param-oid param-oids]
+                                                (if (zero? param-oid)
+                                                  (get-in pg-types/pg-types [:text :oid])
+                                                  param-oid))))}))
 
 (defn cmd-describe-canned-response [conn canned-response]
   (let [{:keys [cols]} canned-response]
@@ -1275,12 +1277,12 @@
 
       (try
         (let [{:keys [param-oids statement-type] :as prepared-stmt} (prep-stmt conn stmt)]
-          (when (seq param-oids)
+          (when (and (seq param-oids) (not= statement-type :show-variable))
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
           (let [portal (bind-stmt conn prepared-stmt)]
             (try
-              (when (or (contains? #{:query :canned-response} statement-type)
+              (when (or (contains? #{:query :canned-response :show-variable} statement-type)
                         (and (= :execute statement-type)
                              (= :query (get-in @conn-state [:prepared-statements (:statement-name prepared-stmt) :statement-type]))))
                 ;; Client only expects to see a RowDescription (result of cmd-descibe)
