@@ -3,7 +3,7 @@ FROM eclipse-temurin:21
 LABEL org.opencontainers.image.source=https://github.com/xtdb/xtdb
 LABEL org.opencontainers.image.description="XTDB 2.x"
 LABEL org.opencontainers.image.licenses="MPL-2.0"
-LABEL com.googleapis.cloudmarketplace.product.service.name="services/xtdb-oss"
+LABEL com.googleapis.cloudmarketplace.product.service.name="services/xtdb-oss.endpoints.gd-gcp-rnd-xtdb.cloud.goog"
 
 WORKDIR /usr/local/lib/xtdb
 
