@@ -8,8 +8,7 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.buffer-pool :as bp]
-            [xtdb.buffer-pool-test :as bp-test])
+            [xtdb.buffer-pool :as bp])
   (:import (io.micrometer.core.instrument Counter)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)
            (io.micrometer.core.instrument.composite CompositeMeterRegistry)
@@ -279,8 +278,8 @@
                        (.open tu/*allocator* registry Storage/VERSION))]
       (let [k1 (util/->path "a")
             k2 (util/->path "b")
-            ^ByteBuffer v1 (bp-test/utf8-buf "aaa")
-            ^ByteBuffer v2 (bp-test/utf8-buf "bbb")]
+            ^ByteBuffer v1 (utf8-buf "aaa")
+            ^ByteBuffer v2 (utf8-buf "bbb")]
         (t/testing "read side"
           (.putObject bp k1 v1)
 
