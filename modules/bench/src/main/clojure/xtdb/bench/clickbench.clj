@@ -146,10 +146,16 @@
                          (when (Thread/interrupted)
                            (throw (InterruptedException.)))
 
-                         (let [copy-in (xt-jdbc/copy-in conn "COPY hits FROM STDIN WITH (FORMAT 'transit-json')")
-                               bytes (.getBytes (str/join "\n" doc-lines))]
-                           (.writeToCopy copy-in bytes 0 (alength bytes))
-                           (.endCopy copy-in))))))))
+                         (jdbc/execute! conn ["BEGIN READ WRITE WITH (ASYNC = true)"])
+                         (try
+                           (let [copy-in (xt-jdbc/copy-in conn "COPY hits FROM STDIN WITH (FORMAT 'transit-json')")
+                                 bytes (.getBytes (str/join "\n" doc-lines))]
+                             (.writeToCopy copy-in bytes 0 (alength bytes))
+                             (.endCopy copy-in))
+                           (jdbc/execute! conn ["COMMIT"])
+                           (catch Throwable e
+                             (jdbc/execute! conn ["ROLLBACK"])
+                             (throw e)))))))))
 
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
