@@ -325,3 +325,16 @@
                             [(str "l00-rc-b" (util/->lex-hex-string n)) 1])
                           (for [n (range 10000)]
                             [(str "l01-rc-b" (util/->lex-hex-string n)) 1]))))))
+
+(t/deftest l3h-missing-l2h-files-to-supersede
+  ;; it was missing these because b08 was marked garbage, so it didn't continue looking for live ones
+  ;; so b06, b05 and b02 were left live
+  (t/is (= #{"l03-r20250101-p0-b09" "l03-r20250101-p1-b09" "l03-r20250101-p2-b09" "l03-r20250101-p3-b09"}
+           (curr-tries ["l02-r20250101-b01" 10] ["l02-r20250101-b02" 25]
+                       ["l02-r20250101-b03" 10] ["l02-r20250101-b04" 15] ["l02-r20250101-b05" 22]
+                       ["l02-r20250101-b06" 30]
+                       ["l02-r20250101-b07" 10] ["l02-r20250101-b08" 18] ["l02-r20250101-b09" 24]
+                       ["l03-r20250101-p0-b09"]
+                       ["l03-r20250101-p1-b09"]
+                       ["l03-r20250101-p2-b09"]
+                       ["l03-r20250101-p3-b09"]))))

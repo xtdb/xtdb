@@ -107,10 +107,11 @@
       (supersede-partial-tries trie trie-cat)
       (conj-trie trie :live)))
 
-(defn- supersede-by-block-idx [tries, ^long block-idx]
+(defn- supersede-by-block-idx [tries, ^long block-idx {:keys [^long file-size-target]}]
   (->> tries
-       (map-while (fn [{other-state :state, ^long other-block-idx :block-idx, :as trie}]
-                    (when-not (= other-state :garbage)
+       (map-while (fn [{^long other-size :data-file-size, other-state :state, ^long other-block-idx :block-idx, :as trie}]
+                    (when-not (and (= other-state :garbage)
+                                   (>= other-size file-size-target))
                       (cond-> trie
                         (<= other-block-idx block-idx) (-> (assoc :state :garbage)
                                                            (dissoc :trie-metadata))))))))
@@ -176,7 +177,7 @@
                           (update [1 nil []] insert-levelled-trie trie trie-cat)
 
                           ;; and supersede L0 files
-                          (update [0 nil []] supersede-by-block-idx block-idx))))
+                          (update [0 nil []] supersede-by-block-idx block-idx trie-cat))))
 
             (update :l1h-recencies dissoc block-idx)))
 
@@ -190,7 +191,7 @@
                         (update [2 recency part] insert-levelled-trie trie trie-cat)
 
                         ;; we supersede any L1H files that we've incorporated into this L2H
-                        (update [1 recency []] supersede-by-block-idx block-idx)))))
+                        (update [1 recency []] supersede-by-block-idx block-idx trie-cat)))))
 
       (-> table-cat
           (update-in [:tries [level recency part]] conj-trie trie :nascent)
@@ -200,7 +201,7 @@
                     (cond-> table-tries
                       (completed-part-group? table-tries trie)
                       (-> (mark-part-group-live trie)
-                          (update [(dec level) recency (when (seq part) (pop part))] supersede-by-block-idx block-idx)))))))))
+                          (update [(dec level) recency (when (seq part) (pop part))] supersede-by-block-idx block-idx trie-cat)))))))))
 
 (defn apply-trie-notification [trie-cat table-cat trie]
   (let [trie (-> trie (update :part vec))]
