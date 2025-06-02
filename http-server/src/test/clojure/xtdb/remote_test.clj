@@ -55,18 +55,6 @@
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
   (Thread/sleep 100)
 
-  (t/is (= {"latestSubmittedTxId" 0,
-            "latestCompletedTx" {"txId" 0, "systemTime" "2020-01-01T00:00:00Z"}}
-           (-> (http/request {:accept :json
-                              :as :string
-                              :request-method :post
-                              :content-type :transit+json
-                              :form-params {}
-                              :url (http-url "status")})
-               :body
-               decode-json))
-        "testing status")
-
   (t/is (= 1
            (-> (http/request {:accept :json
                               :as :string
@@ -240,7 +228,7 @@
                                          :authn [:user-table {:rules [{:user "xtdb" :method :password :address "127.0.0.1"}]}]})]
     (binding [*http-port* (xt-http/http-port node)]
       (t/testing "no authentication record"
-        (let [{:keys [status]} (-> (http/post (http-url "status")
+        (let [{:keys [status]} (-> (http/post (http-url "query")
                                               {:accept :json
                                                :as :string
                                                :content-type :transit+json
@@ -248,18 +236,6 @@
                                                :transit-opts transit-opts
                                                :throw-exceptions? false}))]
           (t/is (= 401 status))))
-
-      (t/is (= {"latestCompletedTx" nil, "latestSubmittedTxId" nil}
-               (-> (http/post (http-url "status")
-                              {:accept :json
-                               :as :string
-                               :content-type :transit+json
-                               :basic-auth {:user "xtdb", :pass "xtdb"}
-                               :form-params {}
-                               :transit-opts transit-opts
-                               :throw-exceptions? false})
-                   :body
-                   decode-json)))
 
       (t/is (= [{"x" 1}] (-> (http/post (http-url "query")
                                         {:accept :json
@@ -283,7 +259,7 @@
             "transaction auth with json")
 
       (t/testing "wrong password"
-        (let [{:keys [status body]} (-> (http/post (http-url "status")
+        (let [{:keys [status body]} (-> (http/post (http-url "query")
                                                    {:accept :json
                                                     :as :string
                                                     :content-type :transit+json
@@ -298,7 +274,7 @@
     (util/with-open [node (xtn/start-node {:http-server {:port 0}
                                            :authn [:user-table {:rules [{:user "fin", :method :password, :address "127.0.0.1"}]}]})]
       (binding [*http-port* (xt-http/http-port node)]
-        (let [{:keys [status body]} (-> (http/post (http-url "status")
+        (let [{:keys [status body]} (-> (http/post (http-url "query")
                                                    {:accept :json
                                                     :as :string
                                                     :request-method :post
