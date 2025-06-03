@@ -16,6 +16,7 @@ import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import java.time.Duration
 
 private val LOGGER = LoggerFactory.getLogger(BlockCatalog::class.java)
 
@@ -78,14 +79,25 @@ class BlockCatalog(private val bp: BufferPool) {
         blocks.forEach { block -> deleteBlock(block.key) }
     }
 
-    fun garbageCollectBlocks(blocksToKeep: Int) {
+    fun garbageCollectBlocks(blocksToKeep: Int, gracePeriod: Duration) {
         LOGGER.debug("Garbage collecting blocks, keeping $blocksToKeep blocks")
-        deleteOldestBlocks(blocksPath, blocksToKeep)
+
+        val gracePeriodCutoff = latestCompletedTx?.systemTime?.minus(gracePeriod)
+
+        val newBlocksToKeep = blocksToKeep + bp.listAllObjects(blocksPath).toList().dropLast(blocksToKeep).takeLastWhile {
+            val block = Block.parseFrom(bp.getByteArray(it.key))
+            val latestCompletedTx = block.latestCompletedTx
+            gracePeriodCutoff?.let { cutoff ->
+                latestCompletedTx.systemTime.microsAsInstant.isAfter(cutoff)
+            } ?: false
+        }.size
+
+        deleteOldestBlocks(blocksPath, newBlocksToKeep)
 
         allTableNames.shuffled().take(100).forEach { tableName ->
             LOGGER.debug("Garbage collecting blocks for table $tableName, keeping $blocksToKeep blocks")
             val tableBlockPath = tableName.tablePath.resolve(blocksPath)
-            deleteOldestBlocks(tableBlockPath, blocksToKeep)
+            deleteOldestBlocks(tableBlockPath, newBlocksToKeep)
         }
     }
 }

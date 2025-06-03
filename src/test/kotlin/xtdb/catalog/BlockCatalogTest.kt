@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import xtdb.BufferPool
+import xtdb.ClockUtil
 import xtdb.api.storage.Storage
+import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.buffer_pool.LocalBufferPool
@@ -18,23 +20,33 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class BlockCatalogTest {
-    private fun writeBlock(bufferPool: BufferPool, index: Long, tableNames: List<String>, basePaths: List<Path>) {
+    private lateinit var clock : Clock
+
+    private fun writeBlock(bufferPool: BufferPool, index: Long, blockPath: Path, tableNames: List<String>, tablePaths: List<Path>) {
         val block = block {
             blockIndex = index
             latestCompletedTx = txKey {
                 txId = index
-                systemTime = Instant.now().asMicros
+                systemTime =  clock.instant().asMicros
             }
             this.tableNames.addAll(tableNames)
         }
         val bytes = ByteBuffer.wrap(block.toByteArray())
-        basePaths.forEach { bufferPool.putObject(it.resolve("b${index.asLexHex}.binpb"), bytes.duplicate()) }
+        bufferPool.putObject(blockPath.resolve("b${index.asLexHex}.binpb"), bytes.duplicate())
+
+        val randomBytes = ByteBuffer.wrap(ByteArray(16) { (0..255).random().toByte() })
+        tablePaths.forEach { tablePath ->
+            bufferPool.putObject(tablePath.resolve("b${index.asLexHex}.binpb"), randomBytes )
+        }
     }
 
     private fun assertBlockCount(bufferPool: BufferPool, path: Path, expected: Int) {
@@ -44,6 +56,8 @@ class BlockCatalogTest {
 
     @Test
     fun `garbageCollectBlocks deletes oldest blocks and per-table blocks`(@TempDir tempDir: Path) {
+        clock = Clock.systemUTC()
+
         val bufferPool: BufferPool = LocalBufferPool(
             Storage.localStorage(tempDir),
             Storage.VERSION,
@@ -58,7 +72,7 @@ class BlockCatalogTest {
 
         // Write 10 blocks
         (1L..10L).forEach { index ->
-            writeBlock(bufferPool, index, listOf("foo", "bar"), listOf(blocksPath, table1BlockPath, table2BlockPath))
+            writeBlock(bufferPool, index, blocksPath, listOf("foo", "bar"), listOf(table1BlockPath, table2BlockPath))
         }
 
         // Validate 10 files exist for blocks and table blocks
@@ -78,7 +92,7 @@ class BlockCatalogTest {
         assertEquals(10L,latestCompletedTx?.txId)
 
         // Trigger block GC
-        catalog.garbageCollectBlocks(blocksToKeep = 3)
+        catalog.garbageCollectBlocks(blocksToKeep = 3, Duration.ZERO)
 
         // Validate that the oldest blocks are deleted, leaving only the latest 3 blocks
         assertBlockCount(bufferPool, blocksPath, 3)
@@ -91,7 +105,7 @@ class BlockCatalogTest {
 
         // Attempting to delete the current block should throw an exception
         assertThrows<IllegalStateException> {
-            catalog.garbageCollectBlocks(blocksToKeep = 0)
+            catalog.garbageCollectBlocks(blocksToKeep = 0, Duration.ZERO)
         }
 
         // Latest block should still exist - in blocks and table blocks
@@ -105,6 +119,43 @@ class BlockCatalogTest {
         assertNotNull(latestTable1BlockFileAfterGC, "Expected latest table1 block file to exist after GC, but it was deleted")
         assertNotNull(latestTable2BlockFileAfterGC, "Expected latest table2 block file to exist after GC, but it was deleted")
     }
+
+    @Test
+    fun `garbageCollectBlocks gracePeriod larger than blocksToKeep`(@TempDir tempDir: Path) {
+        clock = ClockUtil.createClock(Duration.ofHours(1), Instant.parse("2023-01-01T00:00:00Z"))
+
+        val bufferPool: BufferPool = LocalBufferPool(
+            Storage.localStorage(tempDir),
+            Storage.VERSION,
+            RootAllocator(),
+            SimpleMeterRegistry()
+        )
+
+        // Write dummy blocks and table blocks
+        val blocksPath = "blocks".asPath
+        val table1BlockPath = "foo".tablePath.resolve(blocksPath)
+        val table2BlockPath = "bar".tablePath.resolve(blocksPath)
+
+        // Write 10 blocks
+        (1L..10L).forEach { index ->
+            writeBlock(bufferPool, index, blocksPath, listOf("foo", "bar"), listOf(table1BlockPath, table2BlockPath))
+        }
+
+        // Create BlockCatalog instance
+        val catalog = BlockCatalog(bufferPool)
+
+        catalog.garbageCollectBlocks(blocksToKeep = 3, Duration.ofHours(6))
+
+        // We keep 3 blocks via blocksToKeep and another 3 blocks via grace period
+        assertBlockCount(bufferPool, blocksPath, 6)
+        assertBlockCount(bufferPool, table1BlockPath, 6)
+        assertBlockCount(bufferPool, table2BlockPath, 6)
+
+        // Validate latest block still exists
+        val latestBlockFile = bufferPool.listAllObjects(blocksPath).toList().find { it.key == blocksPath.resolve("b${10L.asLexHex}.binpb") }
+        assertNotNull(latestBlockFile, "Expected latest block file to exist after GC, but it was deleted")
+    }
+
 
     /*
     TODO: Fix this test - race condition with ListAllObjects

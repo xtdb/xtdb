@@ -16,6 +16,7 @@ private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 class GarbageCollector(
     private val blockCatalog: BlockCatalog,
     private val blocksToKeep: Int,
+    private val gracePeriod: Duration,
     private val approxRunInterval: Duration
 ) : Closeable {
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -27,7 +28,7 @@ class GarbageCollector(
             while (isActive) {
                 try {
                     LOGGER.debug("Starting block garbage collection")
-                    blockCatalog.garbageCollectBlocks(blocksToKeep)
+                    blockCatalog.garbageCollectBlocks(blocksToKeep, gracePeriod)
                     LOGGER.debug("Block garbage collection completed")
                 } catch (e: Exception) {
                     LOGGER.warn("Block garbage collection failed", e)
