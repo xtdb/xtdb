@@ -314,6 +314,9 @@
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
 
+(defn node->log ^xtdb.api.log.Log [node]
+  (util/component node :xtdb/log))
+
 (defn await-tx
   (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]}]
    (-> @(.awaitAsync log-processor)
