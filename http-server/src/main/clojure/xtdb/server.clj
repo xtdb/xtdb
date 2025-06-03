@@ -88,24 +88,13 @@
 
 (s/def :xtdb.server.tx/opts (s/nilable (s/keys :opt-un [::system-time ::default-tz ::key-fn ::explain?])))
 
-(defn- json-status-encoder []
-  (reify
-    mf/EncodeToBytes
-    (encode-to-bytes [_ data _charset]
-      (let [{:keys [^TransactionKey latest-completed-tx latest-submitted-tx-id]} data]
-        (json/write-value-as-bytes {"latestCompletedTx" (when latest-completed-tx
-                                                          {"txId" (.getTxId latest-completed-tx)
-                                                           "systemTime" (.getSystemTime latest-completed-tx)})
-                                    "latestSubmittedTxId" (when-not (neg? latest-submitted-tx-id)
-                                                            latest-submitted-tx-id)})))
-    mf/EncodeToOutputStream))
-
-(defmethod route-handler :status [_]
-  {:muuntaja (m/create (-> muuntaja-opts
-                           (assoc-in [:formats "application/json" :encoder] (json-status-encoder))))
-
-   :post {:handler (fn [{:keys [node] :as _req}]
-                     {:status 200, :body (xtp/status node)})}})
+(defmethod route-handler ::default [_]
+  {:get {:handler (fn [_req]
+                    {:status 404
+                     :body {:error "Not found"}})}
+   :post {:handler (fn [_req]
+                     {:status 404
+                      :body {:error "Not found"}})}})
 
 (def ^:private json-tx-encoder
   (reify
