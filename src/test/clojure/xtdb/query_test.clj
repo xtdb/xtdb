@@ -407,3 +407,14 @@
                             {:preserve-pages? true, :with-col-types? true})
                (update :res (partial mapv frequencies))))
         "testing left-outer-join with lists"))
+
+(t/deftest test-string-inequality-metadata-4516
+  (xt/execute-tx tu/*node* ["INSERT INTO test RECORDS {_id: '1'}, {_id: '2'}, {_id: '3'}, {_id: '4'}"])
+
+  (t/is (= #{{:xt/id "1"} {:xt/id "2"}}
+           (set (xt/q tu/*node* "SELECT * FROM test WHERE _id < '3'"))))
+
+  (tu/finish-block! tu/*node*)
+
+  (t/is (= #{{:xt/id "1"} {:xt/id "2"}}
+           (set (xt/q tu/*node* "SELECT * FROM test WHERE _id < '3'")))))

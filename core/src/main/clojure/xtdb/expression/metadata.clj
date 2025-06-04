@@ -45,13 +45,14 @@
                                     :literal (vw/value->col-type (:literal value-expr))
                                     :param (:param-type value-expr))
                                   types/flatten-union-types)
-                   :let [flavour-class (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type))]
-                   :when (.isAssignableFrom MetadataFlavour$Numeric flavour-class)]
-               {:op :test-minmax, :f f, :min-or-max min-or-max, :col col
-                :flavour-col (MetadataFlavour/getMetaColName flavour-class)
+                   :let [flavour-class (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type))]]
+               (if (.isAssignableFrom MetadataFlavour$Numeric flavour-class)
+                 {:op :test-minmax, :f f, :min-or-max min-or-max, :col col
+                  :flavour-col (MetadataFlavour/getMetaColName flavour-class)
 
-                :value-expr value-expr
-                :double-sym (gensym 'meta-double)})}
+                  :value-expr value-expr
+                  :double-sym (gensym 'meta-double)}
+                 {:op :literal, :literal true}))}
       simplify-and-or-expr))
 
 (defn- bloom-expr [{col :variable} value-expr]
@@ -59,26 +60,29 @@
        :args (for [value-type (-> (case (:op value-expr)
                                     :literal (vw/value->col-type (:literal value-expr))
                                     :param (:param-type value-expr))
-                                  types/flatten-union-types)
-                   :when (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type)))]
-               {:op :test-bloom,
-                :col col,
-                :value-expr value-expr
-                :bloom-hash-sym (gensym 'bloom-hashes)})}
+                                  types/flatten-union-types)]
+               (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type)))
+                 {:op :test-bloom,
+                  :col col,
+                  :value-expr value-expr
+                  :bloom-hash-sym (gensym 'bloom-hashes)}
+                 {:op :literal, :literal true}))}
 
       simplify-and-or-expr))
 
 (defn- presence-expr [{col :variable} value-expr]
   (-> {:op :call, :f :or
        :args (for [col-type (-> (case (:op value-expr)
-                                    :literal (vw/value->col-type (:literal value-expr))
-                                    :param (:param-type value-expr))
-                                  types/flatten-union-types)
-                   :let [value-type (types/->arrow-type col-type)]
-                   :when (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour value-type))]
-               {:op :test-presence,
-                :col col,
-                :value-type value-type})}
+                                  :literal (vw/value->col-type (:literal value-expr))
+                                  :param (:param-type value-expr))
+                                types/flatten-union-types)
+                   :let [value-type (types/->arrow-type col-type)]]
+               (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour value-type))
+                 {:op :test-presence,
+                  :col col,
+                  :value-type value-type}
+
+                 {:op :literal, :literal true}))}
       simplify-and-or-expr))
 
 (declare meta-expr)
@@ -97,10 +101,9 @@
                            :<= (minmax-expr :<= :min col-expr val-expr)
                            :> (minmax-expr :> :max col-expr val-expr)
                            :>= (minmax-expr :>= :max col-expr val-expr)
-                           := {:op :call, :f :or
-                               :args [{:op :call, :f :and
-                                       :args [(minmax-expr :<= :min col-expr val-expr)
-                                              (minmax-expr :>= :max col-expr val-expr)]}
+                           := {:op :call, :f :and
+                               :args [(minmax-expr :<= :min col-expr val-expr)
+                                      (minmax-expr :>= :max col-expr val-expr)
 
                                       (bloom-expr col-expr val-expr)
                                       (presence-expr col-expr val-expr)]})
