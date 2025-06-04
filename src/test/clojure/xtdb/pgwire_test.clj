@@ -2814,3 +2814,8 @@ ORDER BY 1,2;")
     (doto (xt-log/node->log tu/*node*)
       (.appendMessage (Log$Message$FlushBlock. 1)))
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))))
+
+(t/deftest test-database-metadata
+  (with-open [conn (jdbc-conn)]
+    ;; atm we just return 'xtdb' to keep pgjdbc happy
+    (t/is (= "xtdb" (.getSQLKeywords (.getMetaData conn))))))

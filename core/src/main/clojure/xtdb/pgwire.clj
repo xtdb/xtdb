@@ -604,7 +604,7 @@
    ;; because our query protocol impl is broken, or partially implemented.
    ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
    {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
-    :cols [{:col-name "col1" :oid (get-in pg-types/pg-types [:varchar :oid])}]
+    :cols [{:col-name "col1" :pg-type :varchar}]
     :rows (fn [_conn] [["xtdb"]])}])
 
 (defn- trim-sql [s]
