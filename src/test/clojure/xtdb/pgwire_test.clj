@@ -1409,11 +1409,7 @@
 
         (jdbc/execute! conn ["INSERT INTO foo(_id, a, b) VALUES (2, 1, 1)"])
 
-        ;;TODO we just return our own custom error here, rather than 'cached plan must not change result type'
-        ;;might be worth confirming if there is a specific error type/message that matters for pgjdbc as there
-        ;;appears to be retry logic built into the driver
-        ;;https://jdbc.postgresql.org/documentation/server-prepare/#re-execution-of-failed-statements
-        (t/is (anomalous? [:conflict :prepared-query-out-of-date "Relevant table schema has changed since preparing query, please prepare again"
+        (t/is (anomalous? [:conflict :prepared-query-out-of-date "cached plan must not change result type"
                            {:prepared-cols [{:pg-type :int8, :col-name "_id"}
                                             {:pg-type :text, :col-name "a"}
                                             {:pg-type :int8, :col-name "b"}

@@ -224,6 +224,7 @@
       (case (::anom/category data)
         ::anom/conflict (case (::err/code data)
                           :xtdb/assert-failed {::error-code "P0004", ::severity :error}
+                          :prepared-query-out-of-date {::error-code "0A000", ::severity :error}
                           {::severity :error, ::error-code "XX000"})
 
         ::anom/incorrect (case (::err/code data)
@@ -235,7 +236,7 @@
 
                            {::severity :error, ::error-code "08P01"})
 
-        ::anom/unsupported {::severity :error, ::error-code "XX000"}
+        ::anom/unsupported {::severity :error, ::error-code "0A000"}
 
         (do
           (log/error ex "Uncaught exception processing message")
@@ -963,8 +964,7 @@
                            (when-not (or (= prepared-pg-type :default)
                                          (= resolved-pg-type :null)
                                          (= prepared-pg-type resolved-pg-type))
-                             (throw (err/conflict :prepared-query-out-of-date
-                                                  "Relevant table schema has changed since preparing query, please prepare again"
+                             (throw (err/conflict :prepared-query-out-of-date "cached plan must not change result type"
                                                   {:prepared-cols prepared-pg-cols
                                                    :resolved-cols resolved-pg-cols})))
                            prepared-pg-col)
