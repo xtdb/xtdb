@@ -224,7 +224,12 @@
       (case (::anom/category data)
         ::anom/conflict (case (::err/code data)
                           :xtdb/assert-failed {::error-code "P0004", ::severity :error}
-                          :prepared-query-out-of-date {::error-code "0A000", ::severity :error}
+                          :prepared-query-out-of-date {::error-code "0A000", ::severity :error,
+
+                                                       ;; PG returns this, some drivers look for it
+                                                       ;; and re-prepare the query on the user's behalf
+                                                       ::routine "RevalidateCachedQuery"}
+
                           {::severity :error, ::error-code "XX000"})
 
         ::anom/incorrect (case (::err/code data)
@@ -244,9 +249,9 @@
 
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
   (let [ex-msg (ex-message ex)
-        {::keys [severity error-code]} (if (::error-code (ex-data ex))
-                                         (ex-data ex)
-                                         (ex->pgw-err (err/->anomaly ex {})))
+        {::keys [severity error-code routine]} (if (::error-code (ex-data ex))
+                                                 (ex-data ex)
+                                                 (ex->pgw-err (err/->anomaly ex {})))
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
                         {:error-fields {:severity severity-str
@@ -256,7 +261,8 @@
                                         :detail (when (instance? Anomaly ex)
                                                   (case (get-in @conn-state [:session :parameters "fallback_output_format"])
                                                     :transit (serde/write-transit ex :json)
-                                                    (pg-types/json-bytes ex)))}})))
+                                                    (pg-types/json-bytes ex)))
+                                        :routine routine}})))
 
 ;;; startup
 

@@ -48,7 +48,8 @@
      :message (.getMessage sem)
      :detail (some-> (.getDetail sem)
                      not-empty
-                     (serde/read-transit :json))}))
+                     (serde/read-transit :json))
+     :routine (some-> (.getRoutine sem) not-empty)}))
 
 (defmacro reading-ex [& body]
   `(try
@@ -1407,19 +1408,26 @@
 
       (t/testing "relevant schema change reported to pgwire client"
 
-        (jdbc/execute! conn ["INSERT INTO foo(_id, a, b) VALUES (2, 1, 1)"])
+        (t/testing "outside of a transaction, we return an error that pgwire will retry"
+          (jdbc/execute! conn ["INSERT INTO foo(_id, a, b) VALUES (2, 1, 1)"])
 
-        (t/is (anomalous? [:conflict :prepared-query-out-of-date "cached plan must not change result type"
-                           {:prepared-cols [{:pg-type :int8, :col-name "_id"}
-                                            {:pg-type :text, :col-name "a"}
-                                            {:pg-type :int8, :col-name "b"}
-                                            {:pg-type :float8, :col-name "_column_2"}],
-                            :resolved-cols [{:pg-type :int8, :col-name "_id"}
-                                            {:pg-type :default, :col-name "a"}
-                                            {:pg-type :int8, :col-name "b"}
-                                            {:pg-type :float8, :col-name "_column_2"}]}]
-                          (err/wrap-anomaly {}
-                            (jdbc/execute! stmt))))))))
+          (t/is (= [{:_id 2, :a 1, :b 1, :_column_2 44.4}
+                    {:_id 1, :a "one", :b 2, :_column_2 44.4}]
+                   (jdbc/execute! stmt))))
+
+        (t/testing "pgjdbc won't re-prep during a transaction"
+          (jdbc/execute! conn ["INSERT INTO foo(_id, a, b) VALUES (3, 1, '1')"])
+
+          (jdbc/execute! conn ["BEGIN"])
+
+          (try
+            (t/is (= {:sql-state "0A000",
+                      :message "cached plan must not change result type",
+                      :routine "RevalidateCachedQuery"}
+                     (-> (reading-ex (jdbc/execute! stmt))
+                         (dissoc :detail))))
+            (finally
+              (jdbc/execute! conn ["ROLLBACK"]))))))))
 
 (deftest test-nulls-in-monomorphic-types
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]

@@ -342,7 +342,8 @@
    :message \M
    :detail \D
    :position \P
-   :where \W})
+   :where \W
+   :routine \R})
 
 (def ^:private char->error-or-notice-type (set/map-invert error-or-notice-type->char))
 
