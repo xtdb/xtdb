@@ -173,3 +173,20 @@ describe("XT cleans up portals correctly", function() {
     sql.end();
   })
 })
+
+describe("Postgres.js handles cached-query-must-not-change-result-type errors", function() {
+  it("re-prepares when outside of a transaction", async () => {
+    const conn = await sql.reserve();
+
+    try {
+      await conn`INSERT INTO foo (_id, a, b) VALUES (1, 1, 2)`;
+      assert.deepStrictEqual([{_id: 1, a: 1, b: 2}], [...await conn`SELECT * FROM foo ORDER BY _id`]);
+
+      await conn`INSERT INTO foo (_id, a, b) VALUES (2, '1', 2)`;
+
+      assert.deepStrictEqual([{_id: 1, a: 1, b: 2}, {_id: 2, a: '1', b: 2}], [...await conn`SELECT * FROM foo ORDER BY _id`])
+    } finally {
+      conn.release();
+    }
+  })
+})
