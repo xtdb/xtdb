@@ -267,50 +267,52 @@
         "L4H covered idx 0 but not 1"))
 
 (t/deftest reconstructs-state-on-startup
-  (let [node-dir (util/->path "target/trie-catalog-test/reconstructs-state")]
-    (util/delete-dir node-dir)
+  (doseq [val [true false]]
+    (binding [cat/*force-old-trie-details* val]
+      (let [node-dir (util/->path "target/trie-catalog-test/reconstructs-state")]
+        (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/trie-catalog node)]
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (tu/finish-block! node)
+        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+          (let [cat (cat/trie-catalog node)]
+            (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
+            (tu/finish-block! node)
 
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-        (tu/finish-block! node)
+            (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
+            (tu/finish-block! node)
 
-        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
-        (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                      (into #{} (map :trie-key)))))))
+            (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+            (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
+                     (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                          (into #{} (map :trie-key)))))))
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/trie-catalog node)]
-        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
-        (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                      (into #{} (map :trie-key)))))))
+        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+          (let [cat (cat/trie-catalog node)]
+            (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+            (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
+                     (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                          (into #{} (map :trie-key)))))))
 
-    (t/testing "artifically adding tries"
+        (t/testing "artifically adding tries"
 
-      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        (let [cat (cat/trie-catalog node)]
-          (.addTries cat "public/foo"
-                     (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
-                           ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
-                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                          (map #(apply trie/->trie-details "public/foo" %))))
-          (tu/finish-block! node))))
+          (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+            (let [cat (cat/trie-catalog node)]
+              (.addTries cat "public/foo"
+                         (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                               ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
+                               ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                              (map #(apply trie/->trie-details "public/foo" %))))
+              (tu/finish-block! node))))
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/trie-catalog node)]
-        (t/is (= #{"l00-rc-b03"
-                   "l01-rc-b02"
-                   "l02-rc-p0-b01"
-                   "l02-rc-p1-b01"
-                   "l02-rc-p2-b01"
-                   "l02-rc-p3-b01"}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                      (into (sorted-set) (map :trie-key)))))))))
+        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+          (let [cat (cat/trie-catalog node)]
+            (t/is (= #{"l00-rc-b03"
+                       "l01-rc-b02"
+                       "l02-rc-p0-b01"
+                       "l02-rc-p1-b01"
+                       "l02-rc-p2-b01"
+                       "l02-rc-p3-b01"}
+                     (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                          (into (sorted-set) (map :trie-key)))))))))))
 
 (t/deftest handles-l1h-l1c-ordering-4301
   ;; L1H and L1C are in different partitions, so (strictly speaking) we should handle these out of order

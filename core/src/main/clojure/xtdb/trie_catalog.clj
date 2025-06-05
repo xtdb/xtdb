@@ -228,7 +228,7 @@
                       (filter #(= (:state %) :live))))))
 
 (defn all-tries [{:keys [tries]}]
-  (->> (into [] (mapcat (comp (fn [{:keys [live+nascent garbage]}] (concat live+nascent garbage))  val)) tries)
+  (->> (into [] (mapcat (comp (fn [{:keys [live+nascent garbage]}] (concat live+nascent garbage)) val)) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
@@ -284,12 +284,31 @@
          :table-cat (ig/ref :xtdb/table-catalog)}
         opts))
 
+(defn new-trie-details? [^TrieDetails trie-details]
+  (not (nil? (.getTrieState trie-details))))
+
+(def ^:dynamic *force-old-trie-details*)
+
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
   (log/debug "starting trie catalog...")
   (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)
-        cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)]
-    (doseq [[table-name {:keys [tries]}] table->table-block]
-      (.addTries cat table-name tries))
+        cat (if (and (some-> table->table-block first val :tries first new-trie-details?) *force-old-trie-details*)
+              (let [!table-cats (ConcurrentHashMap.)]
+                (doseq [[table-name {:keys [tries]}] table->table-block
+                        :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
+                                                  (let [{:keys [level recency part state] :as trie} (trie/<-trie-details added-trie)]
+                                                    (update table-cat [level recency part] conj-trie trie state)))
+                                                {}
+                                                tries)
+                                        (update-vals (fn [tries]
+                                                       (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
+                  (.put !table-cats table-name {:tries tries}))
+
+                (TrieCatalog. !table-cats *file-size-target*))
+              (let [cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)]
+                (doseq [[table-name {:keys [tries]}] table->table-block]
+                  (.addTries cat table-name tries))
+                cat))]
 
     (log/debug "trie catalog started")
 

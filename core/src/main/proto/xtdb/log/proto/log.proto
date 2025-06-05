@@ -35,9 +35,17 @@ message TrieMetadata {
     bytes iid_bloom = 8;
 }
 
+enum TrieState {
+    LIVE = 0;
+    NASCENT = 1;
+    GARBAGE = 2;
+}
+
 message TrieDetails {
     string table_name = 1;
     string trie_key = 2;
     int64 data_file_size = 3;
     TrieMetadata trie_metadata = 4;
+    TrieState trie_state = 5;
+    int64 as_of_system_time = 6;
 }

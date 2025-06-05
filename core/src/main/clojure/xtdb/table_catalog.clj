@@ -106,8 +106,8 @@
             (.add table-names table-name)
             (.putObject buffer-pool table-block-path
                         (write-table-block-data (Schema. fields) row-count
-                                                (map (fn [{:keys [trie-key data-file-size trie-metadata]}]
-                                                       (trie/->trie-details table-name trie-key data-file-size trie-metadata))
+                                                (map (fn [{:keys [trie-key data-file-size trie-metadata state]}]
+                                                       (trie/->trie-details table-name trie-key data-file-size trie-metadata state))
                                                      table-tries)
                                                 hlls))))
         (set! (.block-idx this) block-idx)
