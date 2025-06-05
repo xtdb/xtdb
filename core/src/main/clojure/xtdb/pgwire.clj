@@ -254,15 +254,15 @@
                                                  (ex->pgw-err (err/->anomaly ex {})))
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
-                        {:error-fields {:severity severity-str
-                                        :localized-severity severity-str
-                                        :sql-state error-code
-                                        :message ex-msg
-                                        :detail (when (instance? Anomaly ex)
-                                                  (case (get-in @conn-state [:session :parameters "fallback_output_format"])
-                                                    :transit (serde/write-transit ex :json)
-                                                    (pg-types/json-bytes ex)))
-                                        :routine routine}})))
+                        {:error-fields (cond-> {:severity severity-str
+                                                :localized-severity severity-str
+                                                :sql-state error-code
+                                                :message ex-msg
+                                                :detail (when (instance? Anomaly ex)
+                                                          (case (get-in @conn-state [:session :parameters "fallback_output_format"])
+                                                            :transit (serde/write-transit ex :json)
+                                                            (pg-types/json-bytes ex)))}
+                                         routine (assoc :routine routine))})))
 
 ;;; startup
 

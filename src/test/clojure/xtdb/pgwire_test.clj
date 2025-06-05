@@ -44,12 +44,13 @@
 
 (defn- read-ex [^PSQLException e]
   (let [sem (.getServerErrorMessage e)]
-    {:sql-state (.getSQLState e)
-     :message (.getMessage sem)
-     :detail (some-> (.getDetail sem)
-                     not-empty
-                     (serde/read-transit :json))
-     :routine (some-> (.getRoutine sem) not-empty)}))
+    (->> {:sql-state (.getSQLState e)
+          :message (.getMessage sem)
+          :detail (some-> (.getDetail sem)
+                          not-empty
+                          (serde/read-transit :json))
+          :routine (some-> (.getRoutine sem) not-empty)}
+         (into {} (filter (comp some? val))))))
 
 (defmacro reading-ex [& body]
   `(try
