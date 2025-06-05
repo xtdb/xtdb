@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
+            [xtdb.expression.list :as expr-list]
             [xtdb.logical-plan :as lp]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
@@ -13,7 +14,7 @@
            (org.apache.arrow.vector VectorSchemaRoot ZeroVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Null ArrowType$Union Field Schema)
            (xtdb ICursor)
-           xtdb.arrow.VectorPosition
+           (xtdb.arrow ListExpression VectorPosition)
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
@@ -136,30 +137,20 @@
 (defn- emit-col-table [col-spec table-expr {:keys [param-fields schema] :as opts}]
   (let [[out-col v] (first col-spec)
         param-types (update-vals param-fields types/field->col-type)
-
         expr (expr/form->expr v (assoc opts :param-types param-types))
         input-types (assoc opts :param-types param-types)
-        projection-spec (expr/->expression-projection-spec out-col expr input-types)
-        field (-> (.getField projection-spec)
-                  (types/unnest-field)
-                  (types/field-with-name (str out-col)))]
-
-    {:fields (-> {(symbol (.getName field)) field}
+        {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
+        named-field (types/field-with-name field (str out-col))]
+    {:fields (-> {(symbol (.getName named-field)) named-field}
                  (restrict-cols table-expr))
-
      :->out-rel (fn [{:keys [allocator ^RelationReader args]}]
-                  (util/with-open [list-rdr (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
-                    (let [list-rdr-type (.getType (.getField list-rdr))
-                          list-rdr (cond
-                                     (instance? ArrowType$Null list-rdr-type) nil
-                                     (instance? ArrowType$Union list-rdr-type) (.legReader list-rdr "list")
-                                     :else list-rdr)]
-
-                      (util/with-close-on-catch [el-rdr (.copy (or (some-> list-rdr .getListElements (.withName (str out-col)))
-                                                                   (vr/vec->reader (ZeroVector. (str out-col))))
-                                                               allocator)]
-
-                        (vr/rel-reader [el-rdr] (.getValueCount el-rdr))))))}))
+                  (if (instance? ArrowType$Null (.getType named-field))
+                    (vr/rel-reader [(vr/vec->reader (ZeroVector. (str out-col)))])
+                    (util/with-close-on-catch [out-vec (.createVector named-field allocator)]
+                      (let [^ListExpression list-expr (->list-expr schema args)
+                            out-vec-writer (vw/->writer out-vec)]
+                        (.writeTo list-expr out-vec-writer 0 (.getSize list-expr))
+                        (vr/rel-reader [(vw/vec-wtr->rdr out-vec-writer)])))))}))
 
 (defn- emit-arg-table [param table-expr {:keys [param-fields]}]
   (let [fields (-> (into {} (for [^Field field (-> (or (get param-fields param)
