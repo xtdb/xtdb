@@ -357,8 +357,7 @@
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [table-name (.getTableNames trie-catalog)
         :let [trie-state (trie-cat/trie-state trie-catalog table-name)]
-        [_ tries] (:tries trie-state)
-        {:keys [trie-key level recency state data-file-size trie-metadata]} tries
+        {:keys [trie-key level recency state data-file-size trie-metadata]} (trie-cat/all-tries trie-state)
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
     (into (split-table-name table-name)
           {:trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
