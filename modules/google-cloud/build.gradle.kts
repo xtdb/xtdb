@@ -8,10 +8,6 @@ plugins {
     id("org.jetbrains.dokka")
 }
 
-ext {
-    set("labs", true)
-}
-
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 publishing {
