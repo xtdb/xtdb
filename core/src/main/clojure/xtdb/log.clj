@@ -18,7 +18,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api Xtdb$Config TransactionKey)
+           (xtdb.api TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Factory Log$Message$Tx)
            (xtdb.api.tx TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
@@ -177,19 +177,13 @@
 
           (.endStruct erase-writer))))))
 
-(defn- ->abort-writer [^VectorWriter op-writer]
-  (let [abort-writer (.vectorFor op-writer "abort" (FieldType/nullable #xt.arrow/type :null))]
-    (fn [_op]
-      (.writeNull abort-writer))))
-
 (defn write-tx-ops! [^BufferAllocator allocator, ^VectorWriter op-writer, tx-ops, {:keys [default-tz]}]
   (let [!write-sql! (delay (->sql-writer op-writer allocator))
         !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer))
         !write-put! (delay (->put-writer op-writer))
         !write-patch! (delay (->patch-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
-        !write-erase! (delay (->erase-writer op-writer))
-        !write-abort! (delay (->abort-writer op-writer))]
+        !write-erase! (delay (->erase-writer op-writer))]
 
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
