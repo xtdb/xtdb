@@ -144,13 +144,12 @@
     {:fields (-> {(symbol (.getName named-field)) named-field}
                  (restrict-cols table-expr))
      :->out-rel (fn [{:keys [allocator ^RelationReader args]}]
-                  (if (instance? ArrowType$Null (.getType named-field))
-                    (vr/rel-reader [(vr/vec->reader (ZeroVector. (str out-col)))])
-                    (util/with-close-on-catch [out-vec (.createVector named-field allocator)]
-                      (let [^ListExpression list-expr (->list-expr schema args)
-                            out-vec-writer (vw/->writer out-vec)]
-                        (.writeTo list-expr out-vec-writer 0 (.getSize list-expr))
-                        (vr/rel-reader [(vw/vec-wtr->rdr out-vec-writer)])))))}))
+                  (util/with-close-on-catch [out-vec (.createVector named-field allocator)]
+                    (let [^ListExpression list-expr (->list-expr schema args)
+                          out-vec-writer (vw/->writer out-vec)] 
+                      (when list-expr
+                        (.writeTo list-expr out-vec-writer 0 (.getSize list-expr)))
+                      (vr/rel-reader [(vw/vec-wtr->rdr out-vec-writer)]))))}))
 
 (defn- emit-arg-table [param table-expr {:keys [param-fields]}]
   (let [fields (-> (into {} (for [^Field field (-> (or (get param-fields param)
