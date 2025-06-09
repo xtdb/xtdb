@@ -61,12 +61,6 @@
     (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
 
-(defn- ->TxOps [tx-ops]
-  (->> tx-ops
-       (mapv (fn [tx-op]
-               (cond-> tx-op
-                 (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
-
 (defrecord Node [^BufferAllocator allocator
                  ^IIndexer indexer, ^LiveIndex live-idx
                  ^Log log, ^LogProcessor log-processor
@@ -105,11 +99,9 @@
   xtp/PNode
   (submit-tx [this tx-ops opts]
     (try 
-      (-> (let [offset @(xt-log/submit-tx& this (->TxOps tx-ops) opts)
-                tx-id (TxIdUtil/offsetToTxId (.getEpoch log) offset)]
-            (.set !wm-tx-id tx-id)
-            tx-id)
-          (util/rethrowing-cause))
+      (let [tx-id (xt-log/submit-tx this tx-ops opts)]
+        (.set !wm-tx-id tx-id)
+        tx-id)
       (catch Anomaly e
         (when tx-error-counter
           (.increment tx-error-counter))

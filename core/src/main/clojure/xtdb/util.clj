@@ -65,7 +65,7 @@
     (seqable? c) (run! try-close c)
     :else (throw (ClassCastException. (format "could not close '%s'" (.getName (class c)))))))
 
-(defmacro rethrowing-cause [form]
+(defmacro rethrowing-cause {:style/indent 0} [form]
   `(try
      ~form
      (catch ExecutionException e#

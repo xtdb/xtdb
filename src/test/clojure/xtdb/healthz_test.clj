@@ -6,8 +6,7 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import xtdb.api.log.Log
-           xtdb.indexer.LiveIndex))
+  (:import xtdb.indexer.LiveIndex))
 
 (defn ->healthz-url [port endpoint]
   (format "http://localhost:%s/healthz/%s" port endpoint))

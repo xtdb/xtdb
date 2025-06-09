@@ -8,6 +8,7 @@
             xtdb.protocols
             [xtdb.sql :as sql]
             [xtdb.time :as time]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -20,7 +21,7 @@
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Factory Log$Message$Tx)
-           (xtdb.api.tx TxOp$Sql)
+           (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
@@ -282,14 +283,23 @@
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
 
-(defn submit-tx& ^java.util.concurrent.CompletableFuture
+(defn- ->TxOps [tx-ops]
+  (->> tx-ops
+       (mapv (fn [tx-op]
+               (cond-> tx-op
+                 (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
+
+(defn submit-tx ^long
   [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
-  (.appendMessage log
-                  (Log$Message$Tx. (serialize-tx-ops allocator tx-ops
-                                                     (-> (select-keys opts [:authn])
-                                                         (assoc :default-tz (:default-tz opts default-tz)
-                                                                :system-time (some-> system-time time/expect-instant)))))))
+  (let [default-tz (:default-tz opts default-tz)]
+    (util/rethrowing-cause
+      (let [offset @(.appendMessage log
+                                    (Log$Message$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
+                                                                       (-> (select-keys opts [:authn])
+                                                                           (assoc :default-tz (:default-tz opts default-tz)
+                                                                                  :system-time (some-> system-time time/expect-instant))))))]
+         (TxIdUtil/offsetToTxId (.getEpoch log) offset)))))
 
 (defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
   {:allocator (ig/ref :xtdb/allocator)
