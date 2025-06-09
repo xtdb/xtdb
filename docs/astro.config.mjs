@@ -33,7 +33,9 @@ export default defineConfig({
                     label: 'Introduction',
                     collapsed: true,
                     items: [
-                        'index', 'quickstart/sql-overview', 'intro/installation-via-docker'
+                        'index', 'quickstart/sql-overview', 'intro/installation-via-docker',
+
+                        { label: 'Community', link: '/intro/community' },
                     ],
                 },
 
@@ -189,12 +191,8 @@ export default defineConfig({
                         { label: 'Mission', link: '/intro/why-xtdb' },
                         { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
                         { label: 'Key Concepts', link: '/concepts/key-concepts' },
-			            { label: 'How XTDB works', link: '/intro/data-model' },
+                        { label: 'How XTDB works', link: '/intro/data-model' },
                         // { label: 'Bitemporality', link: '/intro/bitemporality' }
-
-                        { label: 'Community', link: '/intro/community' },
-                        { label: 'Roadmap', link: '/intro/roadmap' },
-
                     ],
                 },
             ],

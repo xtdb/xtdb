@@ -1,8 +1,8 @@
 image::img/xtdb-logo-banner.svg[XTDB Logo]
 
-https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel. XTDB has been built to simplify application development and address complex data compliance requirements. XTDB can be used via SQL and https://docs.xtdb.com/xtql/tutorials/introducing-xtql.html[XTQL].
-
-XTDB 2.x is in 'beta' whilst we collaborate closely with our https://forms.gle/K2bMsPxkbreKSKqs9[Design Partners] ahead of General Availability; if you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb/tree/1.x.
+https://xtdb.com[XTDB] is an open-source immutable database with comprehensive time-travel.
+XTDB has been built to simplify application development and address complex data compliance requirements.
+XTDB can be used via SQL and https://docs.xtdb.com/xtql/tutorials/introducing-xtql.html[XTQL].
 
 Major features:
 
@@ -20,9 +20,9 @@ Major features:
 * https://repo1.maven.org/maven2/com/xtdb/[Maven releases]
 * https://github.com/xtdb/xtdb/releases[Release notes]
 * Support:
-  https://discuss.xtdb.com/[discuss.xtdb.com^] |
+  https://github.com/xtdb/xtdb/discussions[GitHub Discussions^] |
   hello@xtdb.com
-* https://github.com/xtdb/xtdb/tree/main/dev[Developing XTDB 2.x]
+* https://github.com/xtdb/xtdb/tree/main/dev[Developing XTDB]
 * https://www.zotero.org/groups/4778667/xtdb/[Bibliography^]
 
 == Inside-out Architecture
@@ -37,30 +37,6 @@ Simpler code, better scalability, better robustness, lower latency, and more fle
 ____
 
 image::img/xtdb-node-1.svg[XTDB 2.x Architecture Diagram, 1000, 460]
-
-== XTDB 1.x
-
-XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
-XTDB 1.x is an embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
-
-XTDB 2.x's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream audience.
-
-[cols=3*]
-|===
-| | XTDB 1.x | XTDB 2.x
-| Status | Stable | Beta
-| Initial Stable Release | 2019 | 2025
-| Query languages | EDN Datalog | XTQL + SQL:2011
-| Bitemporal Querying | Timeslice only (point-in-time) | Fully bitemporal - SQL:2011 and beyond
-| Query focus | OLTP | OLAP + OLTP ('HTAP')
-| Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
-| Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
-| - | - | -
-| Immutable Semantics | Yes | Yes
-| Online Transactions (ACID, strong consistency) | Yes | Yes
-| Always-On Bitemporality | Yes | Yes
-| Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
-|===
 
 == Questions, Thoughts & Feedback
 
