@@ -5,10 +5,15 @@
             [xtdb.healthz :as healthz]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import xtdb.api.log.Log
+           xtdb.indexer.LiveIndex))
 
 (defn ->healthz-url [port endpoint]
   (format "http://localhost:%s/healthz/%s" port endpoint))
+
+(defn ->system-url [port endpoint]
+  (format "http://localhost:%s/system/%s" port endpoint))
 
 (t/deftest test-healthz-endpoints
   (util/with-tmp-dirs #{local-path}
@@ -109,3 +114,45 @@
           (with-redefs [healthz/->block-lag (fn [_] 6)]
             (t/is (= [503 {"X-XTDB-Block-Lag" "6", "X-XTDB-Block-Lag-Healthy" "false"}]
                      (alive-resp)))))))))
+
+(t/deftest test-finish-block-endpoint
+  (util/with-tmp-dirs #{local-path}
+    (let [port (tu/free-port)]
+      (with-open [node (tu/->local-node {:node-dir local-path
+                                         :healthz-port port})]
+        (let [^LiveIndex live-index (tu/component node :xtdb.indexer/live-index)]
+
+          (t/testing "no latest completed tx, do nothing"
+            (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
+              (t/is (= 409 (:status resp)))
+              (t/is (= "No completed transactions found, cannot flush block." (:body resp)))))
+
+          (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
+
+          (t/is (= nil (:tx-id (.getLatestCompletedBlockTx live-index))))
+
+          (let [first-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                                        [:put-docs :bar {:xt/id "bar2"}]
+                                                        [:put-docs :bar {:xt/id "bar3"}]]))]
+
+            (t/testing "successful block flush"
+              (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
+                (t/is (= 200 (:status resp)))
+                (t/is (= "Block flush message sent successfully." (:body resp)))))
+
+            (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
+
+            (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedBlockTx live-index)))))
+
+          (let [second-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar7"}]
+                                                        [:put-docs :bar {:xt/id "bar8"}]
+                                                        [:put-docs :bar {:xt/id "bar9"}]]))]
+
+            (t/testing "second successful block flush"
+              (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
+                (t/is (= 200 (:status resp)))
+                (t/is (= "Block flush message sent successfully." (:body resp)))))
+
+            (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
+
+            (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedBlockTx live-index))))))))))
