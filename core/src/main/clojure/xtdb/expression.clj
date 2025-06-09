@@ -1825,7 +1825,7 @@
        :write-value-out! (fn [value-type code]
                            (write-value-code value-type out-writer-sym code))})))
 
-(defn- wrap-zone-id-cache-buster [f]
+(defn wrap-zone-id-cache-buster [f]
   (fn [expr opts]
     (f expr (assoc opts :zone-id *default-tz*))))
 
