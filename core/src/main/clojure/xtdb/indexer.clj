@@ -629,16 +629,13 @@
                     ^Timer tx-timer
                     ^Counter tx-error-counter]
   IIndexer
-  (indexTx [this msg-id msg-ts tx-root]
+  (indexTx [this msg-id msg-ts tx-ops-rdr
+            system-time default-tz _user]
     (let [lc-tx (.getLatestCompletedTx live-idx)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                     (when-not (neg? (compare lc-sys-time msg-ts))
                                       (.plusNanos lc-sys-time 1000)))
-                                  msg-ts)
-
-          system-time (when tx-root
-                        (let [sys-time-vec (vr/vec->reader (.getVector tx-root "system-time"))]
-                          (some-> (.getObject sys-time-vec 0) time/->instant)))]
+                                  msg-ts)]
 
       (if (and system-time lc-tx
                (neg? (compare system-time (.getSystemTime lc-tx))))
@@ -662,7 +659,7 @@
         (let [system-time (or system-time default-system-time)
               tx-key (serde/->TxKey msg-id system-time)]
           (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
-            (if (nil? tx-root)
+            (if (nil? tx-ops-rdr)
               (do
                 (.abort live-idx-tx)
                 (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
@@ -671,10 +668,7 @@
 
                 (serde/->tx-aborted msg-id system-time skipped-exn))
 
-              (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                                     (.getDataVector))
-
-                    wm-src (reify Watermark$Source
+              (let [wm-src (reify Watermark$Source
                              (openWatermark [_]
                                (util/with-close-on-catch [live-index-wm (.openWatermark live-idx-tx)]
                                  (Watermark. tx-key live-index-wm
@@ -682,12 +676,9 @@
 
                     tx-opts {:snapshot-time system-time
                              :current-time system-time
-                             :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
-                                                             (.getObject 0))))
+                             :default-tz default-tz
                              :tx-key tx-key
                              :indexer this}
-
-                    tx-ops-rdr (vr/vec->reader tx-ops-vec)
 
                     !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
                     !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))

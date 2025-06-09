@@ -7,8 +7,10 @@ import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.slf4j.LoggerFactory
-import xtdb.api.log.*
+import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
+import xtdb.api.log.MessageId
+import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
 import xtdb.error.Interrupted
@@ -18,9 +20,12 @@ import xtdb.util.TxIdUtil.txIdToEpoch
 import xtdb.util.TxIdUtil.txIdToOffset
 import xtdb.util.error
 import xtdb.util.logger
+import xtdb.vector.RelationReader
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 
 class LogProcessor(
@@ -124,13 +129,30 @@ class LogProcessor(
                         if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
                             LOGGER.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
                             // use abort flow in indexTx
-                            indexer.indexTx(msgId, record.logTimestamp, null)
+                            indexer.indexTx(
+                                msgId, record.logTimestamp,
+                                null, null, null, null
+                            )
                         } else {
                             msg.payload.asChannel.use { txOpsCh ->
                                 ArrowStreamReader(txOpsCh, allocator).use { reader ->
                                     reader.vectorSchemaRoot.use { root ->
                                         reader.loadNextBatch()
-                                        indexer.indexTx(msgId, record.logTimestamp, root)
+                                        val rdr = RelationReader.from(root)
+
+                                        val systemTime =
+                                            (rdr["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+
+                                        val defaultTz =
+                                            (rdr["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+
+                                        val user = rdr["user"].getObject(0) as String?
+
+                                        indexer.indexTx(
+                                            msgId, record.logTimestamp,
+                                            rdr["tx-ops"].listElements,
+                                            systemTime, defaultTz, user
+                                        )
                                     }
                                 }
                             }
@@ -161,7 +183,10 @@ class LogProcessor(
                 throw CancellationException(e)
             } catch (e: Throwable) {
                 watchers.notify(msgId, e)
-                LOG.error(e, "Ingestion stopped: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})")
+                LOG.error(
+                    e,
+                    "Ingestion stopped: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})"
+                )
                 LOG.error(
                     """
                     XTDB transaction processing has encountered an unrecoverable error and has been stopped to prevent corruption of your data.
