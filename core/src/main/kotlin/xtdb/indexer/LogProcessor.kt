@@ -116,7 +116,7 @@ class LogProcessor(
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
-            val offset = log.appendMessage(flushMsg).await()
+            val offset = log.appendMessage(flushMsg).await().logOffset
             flusher.flushedTxId = offsetToTxId(epoch, offset)
         }
 

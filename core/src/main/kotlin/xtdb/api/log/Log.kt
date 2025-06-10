@@ -13,6 +13,7 @@ import java.time.Instant
 import java.util.concurrent.CompletableFuture
 
 typealias LogOffset = Long
+typealias LogTimestamp = Instant
 typealias MessageId = Long
 
 interface Log : AutoCloseable {
@@ -107,7 +108,12 @@ interface Log : AutoCloseable {
 
     val epoch: Int
 
-    fun appendMessage(message: Message): CompletableFuture<LogOffset>
+    class MessageMetadata(
+        val logOffset: LogOffset,
+        val logTimestamp: LogTimestamp
+    )
+
+    fun appendMessage(message: Message): CompletableFuture<MessageMetadata>
 
     fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription
 

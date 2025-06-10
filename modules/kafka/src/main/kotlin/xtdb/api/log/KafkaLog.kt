@@ -129,19 +129,19 @@ class KafkaLog internal constructor(
     private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
     override val latestSubmittedOffset get() = latestSubmittedOffset0.get()
 
-    override fun appendMessage(message: Message): CompletableFuture<LogOffset> =
+    override fun appendMessage(message: Message): CompletableFuture<MessageMetadata> =
         scope.future {
-            CompletableDeferred<LogOffset>()
+            CompletableDeferred<MessageMetadata>()
                 .also { res ->
                     producer.send(
                         ProducerRecord(topic, null, Unit, message.encode()),
                         Callback { recordMetadata, e ->
-                            if (e == null) res.complete(recordMetadata.offset()) else res.completeExceptionally(e)
+                            if (e == null) res.complete(MessageMetadata(recordMetadata.offset(), Instant.ofEpochMilli(recordMetadata.timestamp()))) else res.completeExceptionally(e)
                         }
                     )
                 }
                 .await()
-                .also { offset -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(offset) } }
+                .also { messageMetadata -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(messageMetadata.logOffset) } }
         }
 
     override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {

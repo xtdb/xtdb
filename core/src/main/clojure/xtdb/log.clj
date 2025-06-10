@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Factory Log$Message$Tx)
+           (xtdb.api.log Log Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -253,7 +253,7 @@
 
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
-   
+
    Please see https://docs.xtdb.com/ops/ops/backup-and-restore/out-of-sync-log for more information and next steps.")
 
 (defn ->out-of-sync-exception [latest-completed-offset ^long latest-submitted-offset ^long epoch]
@@ -294,12 +294,12 @@
 
   (let [default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
-      (let [offset @(.appendMessage log
-                                    (Log$Message$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
-                                                                       (-> (select-keys opts [:authn])
-                                                                           (assoc :default-tz (:default-tz opts default-tz)
-                                                                                  :system-time (some-> system-time time/expect-instant))))))]
-         (TxIdUtil/offsetToTxId (.getEpoch log) offset)))))
+      (let [^Log$MessageMetadata message-meta @(.appendMessage log
+                                                               (Log$Message$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
+                                                                                                  (-> (select-keys opts [:authn])
+                                                                                                      (assoc :default-tz (:default-tz opts default-tz)
+                                                                                                             :system-time (some-> system-time time/expect-instant))))))]
+        (TxIdUtil/offsetToTxId (.getEpoch log) (.getLogOffset message-meta))))))
 
 (defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
   {:allocator (ig/ref :xtdb/allocator)

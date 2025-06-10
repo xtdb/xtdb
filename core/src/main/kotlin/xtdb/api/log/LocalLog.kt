@@ -195,7 +195,8 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
         scope.future {
             val onCommit = CompletableDeferred<Record>()
             appendCh.send(NewMessage(message, onCommit))
-            onCommit.await().logOffset
+            val record = onCommit.await()
+            MessageMetadata(record.logOffset, record.logTimestamp)
         }
 
     override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {

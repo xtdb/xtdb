@@ -34,7 +34,7 @@ class InMemoryLog(private val instantSource: InstantSource, override val epoch: 
 
     internal data class NewMessage(
         val message: Message,
-        val onCommit: CompletableDeferred<LogOffset>
+        val onCommit: CompletableDeferred<MessageMetadata>
     )
 
     private val appendCh: Channel<NewMessage> = Channel(100)
@@ -45,7 +45,7 @@ class InMemoryLog(private val instantSource: InstantSource, override val epoch: 
             val ts = if (message is Message.Tx) instantSource.instant() else Instant.now()
 
             val record = Record(++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
-            onCommit.complete(record.logOffset)
+            onCommit.complete(MessageMetadata(record.logOffset,ts.truncatedTo(MICROS)))
             record
         }
         .shareIn(scope, SharingStarted.Eagerly, 100)
@@ -56,7 +56,7 @@ class InMemoryLog(private val instantSource: InstantSource, override val epoch: 
 
     override fun appendMessage(message: Message) =
         scope.future {
-            val res = CompletableDeferred<LogOffset>()
+            val res = CompletableDeferred<MessageMetadata>()
             appendCh.send(NewMessage(message, res))
             res.await()
         }
