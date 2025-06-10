@@ -13,7 +13,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType FieldType)
            xtdb.time.Interval
            (xtdb.types RegClass RegProc)
-           (xtdb.vector IVectorWriter)
+           (xtdb.arrow VectorWriter)
            (xtdb.vector.extensions IntervalMonthDayMicroVector KeywordVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -34,7 +34,7 @@
                            (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 
 (defn- test-round-trip [vs]
-  (test-read vw/value->arrow-type #(.writeObject ^IVectorWriter %1 %2) vs))
+  (test-read vw/value->arrow-type #(.writeObject ^VectorWriter %1 %2) vs))
 
 (t/deftest round-trips-values
   (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0 BigDecimal/ONE]
@@ -99,7 +99,7 @@
 
     (->> "LocalDate can be read from MILLISECOND date vectors"
          (t/is (= vs (:vs (test-read (constantly #xt.arrow/type [:date :milli])
-                                     (fn [^IVectorWriter w ^LocalDate v]
+                                     (fn [^VectorWriter w ^LocalDate v]
                                        (.writeLong w (long (.toEpochDay v))))
                                      vs)))))))
 
@@ -116,21 +116,21 @@
 
     (->> "LocalTime can be read from SECOND time vectors"
          (t/is (= secs (:vs (test-read (constantly #xt.arrow/type [:time-local :second])
-                                       (fn [^IVectorWriter w, ^LocalTime v]
+                                       (fn [^VectorWriter w, ^LocalTime v]
                                          (.writeLong w (.toSecondOfDay v)))
                                        secs)))))
 
     (let [millis+ (concat millis secs)]
       (->> "LocalTime can be read from MILLI time vectors"
            (t/is (= millis+ (:vs (test-read (constantly #xt.arrow/type [:time-local :milli])
-                                            (fn [^IVectorWriter w, ^LocalTime v]
+                                            (fn [^VectorWriter w, ^LocalTime v]
                                               (.writeLong w (int (quot (.toNanoOfDay v) 1e6))))
                                             millis+))))))
 
     (let [micros+ (concat micros millis secs)]
       (->> "LocalTime can be read from MICRO time vectors"
            (t/is (= micros+ (:vs (test-read (constantly #xt.arrow/type [:time-local :micro])
-                                            (fn [^IVectorWriter w, ^LocalTime v]
+                                            (fn [^VectorWriter w, ^LocalTime v]
                                               (.writeLong w (long (quot (.toNanoOfDay v) 1e3))))
                                             micros+))))))))
 
@@ -139,14 +139,14 @@
   (let [iym #xt/interval "P35M"]
     (t/is (= [iym]
              (:vs (test-read (constantly #xt.arrow/type [:interval :year-month])
-                             (fn [^IVectorWriter w, ^Interval v]
+                             (fn [^VectorWriter w, ^Interval v]
                                (.writeObject w v))
                              [iym])))))
 
   (let [idt #xt/interval "P1434DT0.023S"]
     (t/is (= [idt]
              (:vs (test-read (constantly #xt.arrow/type [:interval :day-time])
-                             (fn [^IVectorWriter w, ^Interval v]
+                             (fn [^VectorWriter w, ^Interval v]
                                (.writeObject w v))
                              [idt])))))
 

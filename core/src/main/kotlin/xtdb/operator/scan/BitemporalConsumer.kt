@@ -2,18 +2,18 @@ package xtdb.operator.scan
 
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.TEMPORAL_COL_TYPE
+import xtdb.arrow.RelationWriter
+import xtdb.arrow.VectorWriter
 import xtdb.bitemporal.IRowConsumer
 import xtdb.trie.ColumnName
-import xtdb.vector.IRelationWriter
-import xtdb.vector.IVectorWriter
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
-class BitemporalConsumer(outRel: IRelationWriter, colNames: Set<ColumnName>) : IRowConsumer {
+class BitemporalConsumer(outRel: RelationWriter, colNames: Set<ColumnName>) : IRowConsumer {
 
-    private val validFromVec: IVectorWriter?
-    private val validToVec: IVectorWriter?
-    private val systemFromVec: IVectorWriter?
-    private val systemToVec: IVectorWriter?
+    private val validFromVec: VectorWriter?
+    private val validToVec: VectorWriter?
+    private val systemFromVec: VectorWriter?
+    private val systemToVec: VectorWriter?
 
     init {
         fun writerFor(colName: ColumnName, nullable: Boolean) =

@@ -1,7 +1,5 @@
 package xtdb.vector;
 
-import clojure.java.api.Clojure;
-import clojure.lang.IFn;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -14,16 +12,12 @@ import xtdb.util.Hasher;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
 import static xtdb.arrow.VectorIndirection.selection;
 
 class IndirectVectorReader implements IVectorReader {
-
-    private static final IFn VEC_TO_WRITER = Clojure.var("xtdb.vector.writer", "->writer");
 
     private final IVectorReader reader;
     private final VectorIndirection indirection;
@@ -179,7 +173,7 @@ class IndirectVectorReader implements IVectorReader {
 
     @Override
     public IVectorReader copyTo(ValueVector vector) {
-        IVectorWriter writer = (IVectorWriter) VEC_TO_WRITER.invoke(vector);
+        IVectorWriter writer = FieldVectorWriters.writerFor(vector);
         var copier = rowCopier(writer);
 
         for (int i = 0; i < getValueCount(); i++) {

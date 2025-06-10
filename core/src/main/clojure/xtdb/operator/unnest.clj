@@ -12,8 +12,8 @@
            (org.apache.arrow.vector IntVector)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field FieldType)
            (xtdb ICursor)
-           (xtdb.arrow RowCopier)
-           (xtdb.vector IVectorReader IVectorWriter RelationReader)
+           (xtdb.arrow RowCopier VectorReader VectorWriter)
+           (xtdb.vector RelationReader)
            xtdb.vector.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)
@@ -73,11 +73,11 @@
                                            _ (when ordinal-vec
                                                (.add out-cols (vr/vec->reader ordinal-vec)))
 
-                                           ^IVectorWriter ordinal-wtr (some-> ordinal-vec vw/->writer)]
+                                           ^VectorWriter ordinal-wtr (some-> ordinal-vec vw/->writer)]
 
                                        (try
                                          (dotimes [n (.getValueCount vec-rdr)]
-                                           (doseq [[^IVectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
+                                           (doseq [[^VectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
                                              (when (and coll-rdr (not (.isNull coll-rdr n)))
                                                (let [len (.getListCount coll-rdr n)
                                                      start-pos (.getListStartIndex coll-rdr n)]
@@ -90,7 +90,7 @@
                                            (when (pos? (alength idxs))
                                              (some-> ordinal-vec (.setValueCount (alength idxs)))
 
-                                             (doseq [^IVectorReader in-col in-rel]
+                                             (doseq [^VectorReader in-col in-rel]
                                                (when (= from-column-name (.getName in-col))
                                                  (.add out-cols (vw/vec-wtr->rdr out-writer)))
 
