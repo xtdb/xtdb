@@ -48,15 +48,17 @@ class StructVector(
     override fun vectorFor(name: String) = childWriters[name] ?: error("missing child vector: $name")
 
     override fun vectorFor(name: String, fieldType: FieldType) =
-        childWriters.compute(name) { _, v ->
-            if (v == null) {
-                fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
-                    repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
-                }
-            } else {
-                val existingFieldType = v.fieldType
-                if (existingFieldType != fieldType) TODO("promotion to union")
-                v
+        childWriters.compute(name) { _, existingChild ->
+            when {
+                existingChild == null ->
+                    fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
+                        repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
+                    }
+
+                existingChild.fieldType.type != fieldType.type || (!existingChild.nullable && fieldType.isNullable) ->
+                    existingChild.maybePromote(allocator, fieldType)
+
+                else -> existingChild
             }
         }!!
 
@@ -129,9 +131,17 @@ class StructVector(
         }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        require(src is StructVector)
+        if (src.fieldType.type != type) throw InvalidCopySourceException(src.fieldType, fieldType)
+        nullable = nullable || src.nullable
+
+        check(src is StructVector)
         val childCopiers = src.childWriters.map { (childName, child) ->
-            child.rowCopier(childWriters[childName] ?: error("missing child vector: $childName"))
+            child.rowCopier(vectorFor(childName, child.fieldType))
+        }
+
+        val srcKeys = src.childWriters.keys
+        for (child in childWriters.values) {
+            if (child.name !in srcKeys) child.nullable = true
         }
 
         return RowCopier { srcIdx ->

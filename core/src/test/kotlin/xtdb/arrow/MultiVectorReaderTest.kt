@@ -1,39 +1,23 @@
 package xtdb.arrow
 
-import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType.*
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.test.AllocatorResolver
 
-fun <T> cycle(list: List<T>): Sequence<T> {
-    return sequence {
-        while (true) {
-            yieldAll(list)
-        }
-    }
-}
+fun <T> cycle(list: List<T>) = sequence { while (true) yieldAll(list) }
 
+@ExtendWith(AllocatorResolver::class)
 class MultiVectorReaderTest {
-    private lateinit var alloc: RootAllocator
-
-    @BeforeEach
-    fun setUp() {
-        alloc = RootAllocator()
-    }
-
-    @AfterEach
-    fun tearDown() {
-        alloc.close()
-    }
 
     @Test
-    fun testMonomorphicSimpleVectors() {
+    fun testMonomorphicSimpleVectors(alloc: BufferAllocator) {
         IntVector(alloc, "my-int", false).use { intVec1 ->
             IntVector(alloc, "my-int", false).use { intVec2 ->
                 for (i in 0..4) {
@@ -69,7 +53,7 @@ class MultiVectorReaderTest {
         }
 
     @Test
-    fun testMonomorphicStructVectors() {
+    fun testMonomorphicStructVectors(alloc: BufferAllocator) {
         val fooField = Field("foo", FieldType.notNullable(Bool.INSTANCE), null)
         val barField = Field("bar", FieldType.notNullable(Bool.INSTANCE), null)
         val structField =
@@ -107,7 +91,7 @@ class MultiVectorReaderTest {
     }
 
     @Test
-    fun testPolymorphicSimpleVectors() {
+    fun testPolymorphicSimpleVectors(alloc: BufferAllocator) {
         IntVector(alloc, "i32", false).use { intVec ->
             intVec.writeInt(0)
             intVec.writeInt(1)
@@ -145,7 +129,7 @@ class MultiVectorReaderTest {
     }
 
     @Test
-    fun testPolymorphicSimpleAndComplexVectors() {
+    fun testPolymorphicSimpleAndComplexVectors(alloc: BufferAllocator) {
         IntVector(alloc, "i32", false).use { intVec ->
             intVec.writeInt(0)
             intVec.writeInt(3)
@@ -189,7 +173,7 @@ class MultiVectorReaderTest {
     }
 
     @Test
-    fun testAbsentVectors() {
+    fun testAbsentVectors(alloc: BufferAllocator) {
         val duvField = Field(
             "my-duv", FieldType(false, DENSEUNION.type, null, null),
             listOf(
@@ -236,7 +220,7 @@ class MultiVectorReaderTest {
     }
 
     @Test
-    fun testSingleLeggedDUVs() {
+    fun testSingleLeggedDUVs(alloc: BufferAllocator) {
         val duvField = Field(
             "my-duv", FieldType(false, DENSEUNION.type, null, null),
             listOf(Field("i32", FieldType.notNullable(INT.type), emptyList()))

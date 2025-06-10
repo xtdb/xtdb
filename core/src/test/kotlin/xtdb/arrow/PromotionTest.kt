@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.test.AllocatorResolver
 import xtdb.types.Fields
@@ -59,7 +60,59 @@ class PromotionTest {
                 promoted.writeAll(listOf("hello", listOf(4, 5), "world"))
 
                 assertEquals(listOf(listOf(1, 2), listOf(3), "hello", listOf(4, 5), "world"), promoted.toList())
-                assertEquals(Fields.Union("list" to Fields.List(Fields.I32), "utf8" to Fields.UTF8).toArrowField("v"), promoted.field)
+                assertEquals(
+                    Fields.Union("list" to Fields.List(Fields.I32), "utf8" to Fields.UTF8).toArrowField("v"),
+                    promoted.field
+                )
             }
+    }
+
+    @Test
+    fun `rowCopier throws on invalid-copy-source`(al: BufferAllocator) {
+        Vector.fromField(al, Fields.I32.toArrowField("src")).use { src ->
+            Vector.fromField(al, Fields.UTF8.toArrowField("dest")).closeOnCatch { dest ->
+                dest.writeAll(listOf("hello", "world"))
+                src.writeAll(listOf(1, 2))
+                assertThrows<InvalidCopySourceException> { src.rowCopier(dest) }
+                dest.maybePromote(al, src.fieldType)
+            }.use { newDest ->
+                val copier = src.rowCopier(newDest)
+                copier.copyRow(0)
+                copier.copyRow(1)
+
+                assertEquals(listOf("hello", "world", 1, 2), newDest.toList())
+            }
+        }
+    }
+
+    @Test
+    fun `rowCopier within a struct promotes the child-vecs`(al: BufferAllocator) {
+        Vector.fromField(al, Fields.Struct("a" to Fields.I32).toArrowField("src")).use { src ->
+            Vector.fromField(al, Fields.Struct("a" to Fields.UTF8).toArrowField("dest")).use { dest ->
+                src.writeObject(mapOf("a" to 1))
+                dest.writeObject(mapOf("a" to "hello"))
+                val copier = src.rowCopier(dest)
+                copier.copyRow(0)
+
+                assertEquals(listOf(mapOf("a" to "hello"), mapOf("a" to 1)), dest.toList())
+            }
+        }
+
+        Vector.fromField(al, Fields.Struct("a" to Fields.I32).toArrowField("src")).use { src ->
+            Vector.fromField(al, Fields.Struct("b" to Fields.I32).toArrowField("dest")).use { dest ->
+                src.writeObject(mapOf("a" to 4))
+                dest.writeObject(mapOf("b" to 10))
+                val copier = src.rowCopier(dest)
+
+                assertEquals(
+                    Fields.Struct("b" to Fields.I32.nullable, "a" to Fields.I32.nullable).toArrowField("dest"),
+                    dest.field
+                )
+
+                copier.copyRow(0)
+
+                assertEquals(listOf(mapOf("b" to 10), mapOf("a" to 4)), dest.toList())
+            }
+        }
     }
 }

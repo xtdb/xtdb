@@ -10,6 +10,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.error.Unsupported
 import xtdb.toFieldType
 import xtdb.toLeg
 import xtdb.util.Hasher
@@ -199,7 +200,7 @@ class DenseUnionVector(
             val leg = legVectors[i]
             if (leg.name == name) {
                 val legFieldType = leg.fieldType
-                if (legFieldType.type != fieldType.type) TODO("promotion")
+                if (legFieldType.type != fieldType.type) throw Unsupported("cannot promote DUV leg")
                 leg.nullable = leg.nullable || fieldType.isNullable
 
                 return LegVector(i.toByte(), leg)
@@ -236,7 +237,6 @@ class DenseUnionVector(
         }
     }
 
-    @Suppress("CANDIDATE_CHOSEN_USING_OVERLOAD_RESOLUTION_BY_LAMBDA_ANNOTATION")
     override val metadataFlavours: Collection<MetadataFlavour>
         get() = legVectors.flatMap { it.metadataFlavours }
 
@@ -244,15 +244,7 @@ class DenseUnionVector(
 
     override fun rowCopier0(src: VectorReader): RowCopier =
         when (src) {
-            is DenseUnionVector -> {
-                val copierMapping = src.legVectors.map { childVec ->
-                    childVec.rowCopier(vectorFor(childVec.name, childVec.fieldType))
-                }
-
-                RowCopier { srcIdx ->
-                    copierMapping[src.getTypeId(srcIdx).toInt().also { check(it >= 0) }].copyRow(src.getOffset(srcIdx))
-                }
-            }
+            is DenseUnionVector -> error("should have been handled by rowCopier")
 
             is NullVector -> {
                 // we try to find a nullable child vector
@@ -267,15 +259,24 @@ class DenseUnionVector(
             }
 
             else -> {
-                vectorFor(src.fieldType.type.toLeg()).rowCopier0(src)
+                vectorFor(src.fieldType.type.toLeg(), src.fieldType).rowCopier0(src)
             }
         }
 
     override fun rowCopier(dest: VectorWriter) =
         when {
-            dest is DenseUnionVector -> dest.rowCopier0(this).let { copier ->
+            dest is DenseUnionVector -> {
+                val copierMapping = legVectors.map { childVec ->
+                    childVec.rowCopier(dest.vectorFor(childVec.name, childVec.fieldType))
+                }
+
                 RowCopier { srcIdx ->
-                    if (getTypeId(srcIdx) < 0) valueCount.also { dest.writeUndefined() } else copier.copyRow(srcIdx)
+                    val typeId = getTypeId(srcIdx)
+
+                    if (typeId < 0)
+                        valueCount.also { writeUndefined() }
+                    else
+                        copierMapping[typeId.toInt().also { check(it >= 0) }].copyRow(getOffset(srcIdx))
                 }
             }
 

@@ -114,8 +114,12 @@ sealed class FixedWidthVector : Vector() {
         hasher.hash(getByteArray(idx))
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        require(src is FixedWidthVector)
-        require(src.byteWidth == byteWidth)
+        if (src.fieldType.type != type) throw InvalidCopySourceException(src.fieldType, fieldType)
+        nullable = nullable || src.nullable
+
+        check(src is FixedWidthVector)
+        check(src.byteWidth == byteWidth)
+
         return RowCopier { srcIdx ->
             dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
             valueCount.also { writeNotNull() }
@@ -129,9 +133,9 @@ sealed class FixedWidthVector : Vector() {
     }
 
     final override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
-        dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
+        val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing validity buffer"))
+        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing data buffer"))
 
         valueCount = node.length
     }

@@ -62,7 +62,11 @@ abstract class VariableWidthVector : Vector() {
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByteArray(idx))
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        require(src is VariableWidthVector)
+        if (src.fieldType.type != type) throw InvalidCopySourceException(src.fieldType, fieldType)
+
+        check(src is VariableWidthVector)
+        nullable = nullable || src.nullable
+
         return RowCopier { srcIdx ->
             val start = src.offsetBuffer.getInt(srcIdx).toLong()
             val len = src.offsetBuffer.getInt(srcIdx + 1) - start

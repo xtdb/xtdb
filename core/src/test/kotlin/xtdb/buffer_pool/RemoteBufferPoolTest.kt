@@ -56,7 +56,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
         val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
         Relation(allocator, schema).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
-                val v = relation["a"]!!
+                val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
                 writer.writePage()
                 writer.end()
