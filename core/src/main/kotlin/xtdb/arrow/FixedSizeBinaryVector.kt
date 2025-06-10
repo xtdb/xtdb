@@ -27,6 +27,8 @@ class FixedSizeBinaryVector private constructor(
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
+
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =

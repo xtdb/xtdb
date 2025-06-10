@@ -71,8 +71,21 @@ class ListVector(
             }
         }
 
+        is ListValueReader ->
+            for (i in 0..<value.size()) {
+                val el = value.nth(i)
+                try {
+                    elVector.writeValue(el)
+                } catch (e: InvalidWriteObjectException) {
+                    elVector = DenseUnionVector.promote(allocator, elVector, e.obj.toFieldType())
+                    elVector.writeValue(el)
+                }
+            }
+
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override val listElements get() = elVector
 

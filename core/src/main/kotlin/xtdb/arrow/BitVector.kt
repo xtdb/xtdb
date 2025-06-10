@@ -51,6 +51,8 @@ class BitVector private constructor(
         if (value is Boolean) writeBoolean(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeBoolean(v.readBoolean())
+
     override val metadataFlavours get() = listOf(this)
 
     override fun hashCode0(idx: Int, hasher: Hasher) = if (getBoolean(idx)) 17 else 19
@@ -69,9 +71,9 @@ class BitVector private constructor(
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
-        dataBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing data buffer"))
+        val node = nodes.removeFirstOrNull() ?: error("missing node")
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
+        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing data buffer"))
 
         valueCount = node.length
     }

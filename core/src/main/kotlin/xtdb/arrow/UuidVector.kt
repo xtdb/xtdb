@@ -17,11 +17,12 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(),
         }
 
     override fun writeObject0(value: Any) = when (value) {
-        is UUID -> ByteBuffer.allocate(16).run {
-            putLong(value.mostSignificantBits)
-            putLong(value.leastSignificantBits)
-            inner.writeObject(array())
-        }
+        is UUID ->
+            writeBytes(ByteBuffer.allocate(16).run {
+                putLong(value.mostSignificantBits)
+                putLong(value.leastSignificantBits)
+                flip()
+            })
 
         else -> throw InvalidWriteObjectException(fieldType, value)
     }

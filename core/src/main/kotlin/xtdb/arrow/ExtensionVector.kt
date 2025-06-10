@@ -36,6 +36,9 @@ abstract class ExtensionVector : Vector() {
     override fun writeNull() = inner.writeNull()
 
     override fun getBytes(idx: Int): ByteBuffer = inner.getBytes(idx)
+    override fun writeBytes(v: ByteBuffer) = inner.writeBytes(v)
+
+    override fun writeValue0(v: ValueReader) = inner.writeValue0(v)
 
     override fun getPointer(idx: Int, reuse: ArrowBufPointer) = inner.getPointer(idx, reuse)
 

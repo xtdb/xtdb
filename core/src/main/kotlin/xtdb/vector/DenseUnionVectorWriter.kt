@@ -202,8 +202,12 @@ class DenseUnionVectorWriter(
         }
 
         return RowCopier { srcIdx ->
-            copierMapping[src.getTypeId(srcIdx).also { check(it >= 0) }.toInt()]
-                .copyRow(src.getOffset(srcIdx))
+            val typeId = src.getTypeId(srcIdx)
+            if (typeId < 0)
+                writeUndefined()
+            else
+                copierMapping[src.getTypeId(srcIdx).toInt()]
+                    .copyRow(src.getOffset(srcIdx))
         }
     }
 

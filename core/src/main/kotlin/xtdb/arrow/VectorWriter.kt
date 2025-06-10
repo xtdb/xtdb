@@ -21,6 +21,9 @@ interface VectorWriter : VectorReader, ValueWriter, AutoCloseable {
 
     fun writeUndefined()
 
+    fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)
+    fun writeValue0(v: ValueReader)
+
     override fun vectorForOrNull(name: String): VectorWriter? = unsupported("vectorFor")
 
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")

@@ -27,6 +27,8 @@ class FloatVector private constructor(
         if (value is Float) writeFloat(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeFloat(v.readFloat())
+
     override fun getMetaDouble(idx: Int) = getFloat(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())

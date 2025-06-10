@@ -27,6 +27,8 @@ class LongVector private constructor(
         if (value is Long) writeLong(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
+
     override fun getMetaDouble(idx: Int) = getLong(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getLong(idx).toDouble())

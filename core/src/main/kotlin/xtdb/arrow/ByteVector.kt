@@ -28,6 +28,8 @@ class ByteVector private constructor(
         if (value is Byte) writeByte(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeByte(v.readByte())
+
     override fun getMetaDouble(idx: Int) = getByte(idx).toDouble()
 
     override fun rowCopier0(src: VectorReader) =

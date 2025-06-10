@@ -90,9 +90,6 @@ interface IVectorWriter : ValueWriter, VectorWriter, AutoCloseable {
 
     fun writeObject0(obj: Any)
 
-    fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)
-    fun writeValue0(v: ValueReader)
-
     override fun endStruct(): Unit = unsupported("endStruct")
 
     override val listElements: IVectorWriter get() = unsupported("listElementWriter")

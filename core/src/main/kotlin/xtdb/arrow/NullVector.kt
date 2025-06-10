@@ -35,6 +35,8 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
 
     override fun writeObject0(value: Any) = throw InvalidWriteObjectException(fieldType, value)
 
+    override fun writeValue0(v: ValueReader) = writeNull()
+
     override val metadataFlavours get() = emptyList<MetadataFlavour>()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")

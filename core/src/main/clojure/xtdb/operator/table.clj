@@ -11,10 +11,10 @@
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            (java.util HashMap HashSet Set)
-           (org.apache.arrow.vector VectorSchemaRoot ZeroVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Null ArrowType$Union Field Schema)
+           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression VectorPosition)
+           (xtdb.arrow ListExpression RelationWriter VectorPosition VectorWriter)
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
@@ -86,12 +86,12 @@
                                                                        (case (:op expr)
                                                                          :literal (do
                                                                                     (.add field-set (types/col-type->field (vw/value->col-type v)))
-                                                                                    (MapEntry/create k (fn write-literal! [_ ^IVectorWriter out-col]
+                                                                                    (MapEntry/create k (fn write-literal! [_ ^VectorWriter out-col]
                                                                                                          (.writeObject out-col v))))
 
                                                                          :param (let [{:keys [param]} expr]
                                                                                   (.add field-set (get param-fields param))
-                                                                                  (MapEntry/create k (fn write-param! [{:keys [^RelationReader args]} ^IVectorWriter out-col]
+                                                                                  (MapEntry/create k (fn write-param! [{:keys [^RelationReader args]} ^VectorWriter out-col]
                                                                                                        (.writeValue out-col
                                                                                                                     (-> (.vectorForOrNull args (str param))
                                                                                                                         (.valueReader (VectorPosition/build 0)))))))
@@ -102,12 +102,12 @@
                                                                                expr (expr/form->expr v input-types)
                                                                                projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                                                                            (.add field-set (.getField projection-spec))
-                                                                           (MapEntry/create k (fn write-expr! [{:keys [allocator args]} ^IVectorWriter out-col]
+                                                                           (MapEntry/create k (fn write-expr! [{:keys [allocator args]} ^VectorWriter out-col]
                                                                                                 (util/with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) schema args)]
                                                                                                   (.writeValue out-col (.valueReader out-vec (VectorPosition/build 0)))))))))))))]
 
                                        {:ks (set (keys out-row))
-                                        :write-row! (fn write-row! [opts ^IRelationWriter out-rel]
+                                        :write-row! (fn write-row! [opts ^RelationWriter out-rel]
                                                       (doseq [[k write-val!] out-row]
                                                         (write-val! opts (.vectorFor out-rel (str k))))
                                                       (.endRow out-rel))})))))

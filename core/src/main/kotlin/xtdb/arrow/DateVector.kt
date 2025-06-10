@@ -36,6 +36,8 @@ class DateDayVector private constructor(
         else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
+
     override fun getMetaDouble(idx: Int) = (getInt(idx) * SECONDS_PER_DAY).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
@@ -64,6 +66,8 @@ class DateMilliVector internal constructor(
         if (value is LocalDate) writeLong(value.toEpochDay() * MILLIS_PER_DAY)
         else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
 
     override fun getMetaDouble(idx: Int) = getLong(idx) / (MILLI_HZ.toDouble())
 

@@ -47,6 +47,8 @@ abstract class VariableWidthVector : Vector() {
         dataBuffer.writeBytes(v.duplicate())
     }
 
+    override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
+
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
         offsetBuffer.getInt(idx).let { start ->
             dataBuffer.getPointer(start, offsetBuffer.getInt(idx + 1) - start, reuse)

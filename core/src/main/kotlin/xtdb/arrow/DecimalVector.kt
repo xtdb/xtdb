@@ -45,7 +45,7 @@ class DecimalVector private constructor(
                 throw InvalidWriteObjectException(fieldType, value)
             }
 
-            // HACK, we throw unsupported here, but it should likely be dealt with in the EE if a object doesn't fit
+            // HACK, we throw unsupported here, but it should likely be dealt with in the EE if an object doesn't fit
             try {
                 dataBuffer.writeBigDecimal(value, byteWidth)
             } catch (e: UnsupportedOperationException) {
@@ -54,6 +54,8 @@ class DecimalVector private constructor(
             writeNotNull()
         } else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override fun getMetaDouble(idx: Int): Double = getObject0(idx, KEBAB_CASE_KEYWORD).toDouble()
 

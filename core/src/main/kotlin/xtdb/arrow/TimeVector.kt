@@ -49,6 +49,8 @@ class Time32Vector private constructor(
         if (value is LocalTime) writeInt(unit.toInt(value)) else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
+
     override fun getMetaDouble(idx: Int) = when(unit) {
         SECOND -> getInt(idx).toDouble()
         MILLISECOND -> getInt(idx) / (MILLI_HZ.toDouble())
@@ -80,6 +82,8 @@ class Time64Vector private constructor(
         if (value is LocalTime) writeLong(unit.toLong(value.toSecondOfDay().toLong(), value.nano))
         else throw InvalidWriteObjectException(fieldType, value)
     }
+
+    override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
 
     override fun getMetaDouble(idx: Int) =
         getLong(idx) / when (unit) {

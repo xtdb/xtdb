@@ -27,6 +27,8 @@ class ShortVector private constructor(
         if (value is Short) writeShort(value) else throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeShort(v.readShort())
+
     override fun getMetaDouble(idx: Int) = getShort(idx).toDouble()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getShort(idx).toDouble())

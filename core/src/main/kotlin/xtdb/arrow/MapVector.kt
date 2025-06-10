@@ -83,6 +83,8 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+
     override val listElements get() = listVector.listElements
     override fun getListElements(fieldType: FieldType) = listVector.getListElements(fieldType)
 

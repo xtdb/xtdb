@@ -47,6 +47,8 @@ class TimestampLocalVector private constructor(
         }
     )
 
+    override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
+
     override fun getMetaDouble(idx: Int) =
         when (unit) {
             SECOND -> getLong(idx).toDouble()
@@ -96,6 +98,8 @@ class TimestampTzVector private constructor(
         }.let {
             writeLong(unit.toLong(it.epochSecond, it.nano))
         }
+
+    override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
 
     override fun getMetaDouble(idx: Int) =
         when (unit) {

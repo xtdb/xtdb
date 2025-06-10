@@ -34,6 +34,8 @@ class IntervalYearMonthVector private constructor(
         writeInt(value.months)
     }
 
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
@@ -72,6 +74,8 @@ class IntervalDayTimeVector private constructor(
                 writeBytes(this)
             }
         } else throw InvalidWriteObjectException(fieldType, value)
+
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override val metadataFlavours get() = listOf(this)
 
@@ -114,6 +118,8 @@ class IntervalMonthDayNanoVector private constructor(
             is Interval -> writeObject0(value.months, value.days, value.nanos)
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
+
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override val metadataFlavours get() = listOf(this)
 

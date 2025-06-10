@@ -53,7 +53,6 @@ class ExtensionVectorTest {
                val hasher = Hasher.Xx()
 
                assertEquals(rdr.hashCode(0, hasher), newVector.hashCode(0, hasher))
-
            }
        }
     }

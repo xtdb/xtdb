@@ -43,6 +43,8 @@ class DurationVector private constructor(
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
+
     override fun getMetaDouble(idx: Int) =
         when (unit) {
             SECOND -> getLong(idx).toDouble()

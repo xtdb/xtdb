@@ -114,6 +114,8 @@ class StructVector(
             endStruct()
         }
 
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+
     override fun valueReader(pos: VectorPosition): ValueReader {
         val readers = childWriters.mapValues { it.value.valueReader(pos) }
 

@@ -115,6 +115,8 @@ class DenseUnionVector(
         override fun writeBytes(v: ByteBuffer) = writeValueThen().writeBytes(v)
         override fun writeObject(obj: Any?) = writeValueThen().writeObject(obj)
 
+        override fun writeValue0(v: ValueReader) = writeValueThen().writeValue0(v)
+
         override fun vectorFor(name: String, fieldType: FieldType) =
             LegVector(typeId, inner.vectorFor(name, fieldType), true)
 
@@ -168,7 +170,14 @@ class DenseUnionVector(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
 
     override fun writeObject0(value: Any) =
-        value.toFieldType().let(::legWriter).writeObject(value)
+        legWriter(value.toFieldType()).writeObject(value)
+
+    // DUV overrides the nullable one because DUVs themselves can't be null.
+    override fun writeValue(v: ValueReader) {
+        vectorFor(v.leg!!).writeValue(v)
+    }
+
+    override fun writeValue0(v: ValueReader) = throw UnsupportedOperationException()
 
     override fun getLeg(idx: Int) = leg(idx)?.name
 
