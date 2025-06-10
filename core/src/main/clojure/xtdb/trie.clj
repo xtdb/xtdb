@@ -36,7 +36,7 @@
       {:trie-key trie-key
        :level (.getLevel k)
        :recency (.getRecency k)
-       :part (some-> (.getPart k) (.toArray))
+       :part (or (some-> (.getPart k) (.toArray)) [])
        :block-idx (.getBlockIndex k)})
     (catch IllegalArgumentException _)
     (catch IllegalStateException _)))
