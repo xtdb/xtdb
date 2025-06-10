@@ -40,7 +40,7 @@ object Trie {
         override fun toString() = buildString {
             append("l"); append(level.asLexHex)
             append("-r"); append(recency?.let { RECENCY_FMT.format(it) } ?: "c")
-            part?.let { append("-p"); it.forEach { b -> append(b.value) } }
+            part?.takeIf { it.size() > 0 }?.let { append("-p"); it.forEach { b -> append(b.value) } }
             append("-b"); append(blockIndex.asLexHex)
         }
     }
