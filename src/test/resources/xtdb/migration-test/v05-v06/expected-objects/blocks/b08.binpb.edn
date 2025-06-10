@@ -1,4 +1,0 @@
-{:block-idx 8,
- :latest-completed-tx
- {:tx-id 93148, :system-time #xt/instant "2020-01-05T00:00:00Z"},
- :table-names #{"public/prices" "xt/txs" "public/readings"}}

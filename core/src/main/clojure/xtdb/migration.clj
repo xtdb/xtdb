@@ -2,7 +2,6 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.error :as err]
-            [xtdb.migration.v05 :as v05]
             [xtdb.node :as xtn]
             xtdb.node.impl
             [xtdb.util :as util])
@@ -59,7 +58,6 @@
              (assert (empty? (.listAllObjects bp)) "Target directory not empty.")
 
              (case from-version
-               5 (v05/migrate->v06! system)
                (throw (err/illegal-arg :unsupported-migration-version
                                        {::err/message (format "Unsupported migration version: %d" from-version)})))
 
