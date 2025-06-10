@@ -480,6 +480,34 @@
          plan]
         plan))))
 
+(defrecord ListTable [env table-alias unique-table-alias unnest-col unnest-expr ordinality-col]
+  Scope
+  (available-cols [_]
+    (->insertion-ordered-set (cond-> [unnest-col]
+                               ordinality-col (conj ordinality-col))))
+
+  (-find-cols [this [col-name table-name] excl-cols]
+    (when (or (nil? table-name) (= table-name table-alias))
+      (for [col (available-cols this)
+            :when (or (nil? col-name) (= col-name col))
+            :when (not (contains? excl-cols col))]
+        (-> (->col-sym (str unique-table-alias) (str col))
+            (with-meta (meta col))))))
+
+  PlanRelation
+  (plan-rel [_]
+    (as-> [:list {(-> (->col-sym (str unique-table-alias) (str unnest-col))
+                      (with-meta (meta unnest-col)))
+                   unnest-expr}]
+          plan
+
+      (if ordinality-col
+        [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
+                    (with-meta (meta ordinality-col)))
+                '(row-number)}]
+         plan]
+        plan))))
+
 (defrecord ArrowTable [env url table-alias unique-table-alias ^SequencedSet !table-cols]
   Scope
   (available-cols [_]
@@ -699,16 +727,16 @@
       (if-not (or (nil? table-projection)
                   (= (+ 1 (if with-ordinality? 1 0)) (count table-projection)))
         (add-err! env (->TableProjectionMismatch table-alias table-projection))
-        (->UnnestTable env table-alias
-                       (symbol (str table-alias "." (swap! !id-count inc)))
-                       (or (->col-sym (first table-projection))
-                           (-> (->col-sym (str "_genseries." (swap! !id-count inc)))
-                               (vary-meta assoc :unnamed-unnest-col? true)))
-                       expr
-                       (when with-ordinality?
-                         (or (->col-sym (second table-projection))
-                             (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
-                                 (vary-meta assoc :unnamed-unnest-col? true))))))))
+        (->ListTable env table-alias
+                     (symbol (str table-alias "." (swap! !id-count inc)))
+                     (or (->col-sym (first table-projection))
+                         (-> (->col-sym (str "_genseries." (swap! !id-count inc)))
+                             (vary-meta assoc :unnamed-unnest-col? true)))
+                     expr
+                     (when with-ordinality?
+                       (or (->col-sym (second table-projection))
+                           (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
+                               (vary-meta assoc :unnamed-unnest-col? true))))))))
 
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
 

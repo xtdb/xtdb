@@ -134,3 +134,24 @@
               {:ts #xt/zoned-date-time "2020-03-29T00:00Z[Europe/London]", :idx 2}
               {:ts #xt/zoned-date-time "2020-03-30T00:00+01:00[Europe/London]", :idx 3}]
              (xt/q tu/*node* "FROM generate_series(TIMESTAMP '2020-03-28T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'P1D') WITH ORDINALITY timestamps (ts, idx)")))))
+
+(t/deftest test-generate-series-limit-batching-4412
+  (t/is (= [{:xt/id 1}
+            {:xt/id 2}
+            {:xt/id 3}
+            {:xt/id 4}
+            {:xt/id 5}]
+           (xt/q tu/*node* "SELECT system._id FROM generate_series(1, 200000000) AS system(_id) LIMIT 5"))
+        "generate_series with large range + LIMIT should not consume all memory")
+
+  (t/is (= [{:xt/id 100000001}
+            {:xt/id 100000002}
+            {:xt/id 100000003}
+            {:xt/id 100000004}
+            {:xt/id 100000005}]
+           (xt/q tu/*node* "
+             SELECT system._id
+             FROM generate_series(1, 200000000) AS system(_id)
+             OFFSET 100000000
+             LIMIT 5"))
+        "generate_series with large range, OFFSET + LIMIT should not consume all memory"))
