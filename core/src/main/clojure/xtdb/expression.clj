@@ -1262,7 +1262,7 @@
 (defmethod codegen-call [:current_schema] [_]
   {:return-type :utf8 :->call-code (fn [_] `(ByteBuffer/wrap (.getBytes "public" StandardCharsets/UTF_8)))})
 
-(defn current-schemas [include-implicit?]
+(defn current-schemas ^xtdb.arrow.ListValueReader [include-implicit?]
   (let [schemas (if include-implicit? search-path explicit-search-path)
         schema-entry-box (ValueBox.)]
     (reify ListValueReader
