@@ -7,7 +7,8 @@
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
-  (:import [xtdb BufferPool]
+  (:import [java.time Instant]
+           [xtdb BufferPool]
            [xtdb.block.proto TableBlock]
            [xtdb.log.proto TrieDetails]
            [xtdb.trie TrieCatalog]
@@ -42,8 +43,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4418)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4572)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4427)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4590)]
                  (.listAllObjects bp (table-cat/->table-block-dir "public/foo"))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
@@ -93,7 +94,8 @@
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                          (map #(apply trie/->trie-details "public/foo" %))))
+                          (map #(apply trie/->trie-details "public/foo" %)))
+                     (Instant/now))
 
           (tu/finish-block! node)
 
@@ -122,7 +124,8 @@
                            ["l01-r20200102-b01" 5] ["l01-rc-b01" 2]
                            ["l01-r20200101-b02" 5] ["l01-r20200102-b02" 5] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p2-b01" 4]]
-                          (map #(apply trie/->trie-details "public/foo" %))))
+                          (map #(apply trie/->trie-details "public/foo" %)))
+                     (Instant/now))
           (tu/finish-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]

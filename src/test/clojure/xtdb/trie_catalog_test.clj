@@ -5,7 +5,8 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import (xtdb.operator.scan Metadata)
+  (:import (java.time Instant)
+           (xtdb.operator.scan Metadata)
            (xtdb.util TemporalBounds)))
 
 (defn- apply-msgs [& trie-keys]
@@ -300,7 +301,8 @@
                          (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                                ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                                ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                              (map #(apply trie/->trie-details "public/foo" %))))
+                              (map #(apply trie/->trie-details "public/foo" %)))
+                         (Instant/now))
               (tu/finish-block! node))))
 
         (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
@@ -340,3 +342,58 @@
                        ["l03-r20250101-p1-b09"]
                        ["l03-r20250101-p2-b09"]
                        ["l03-r20250101-p3-b09"]))))
+
+(t/deftest test-as-of
+  (let [node-dir (util/->path "target/trie-catalog-test/test-as-of")
+        clock (tu/->mock-clock (tu/->instants :year))]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0 :instant-src clock})]
+      (let [cat (cat/trie-catalog node)]
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
+        (tu/finish-block! node)
+
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
+        (tu/finish-block! node)
+
+        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+        (t/is (= #{["l00-rc-b01" #xt/instant "2023-01-01T00:00:00Z"]
+                   ["l00-rc-b00" #xt/instant "2021-01-01T00:00:00Z"]}
+                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                      (into #{} (map (juxt :trie-key :as-of))))))))
+
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+      (let [cat (cat/trie-catalog node)]
+        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+        (t/is (= #{["l00-rc-b01" #xt/instant "2023-01-01T00:00:00Z"]
+                   ["l00-rc-b00" #xt/instant "2021-01-01T00:00:00Z"]}
+                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                      (into #{} (map (juxt :trie-key :as-of))))))))
+
+    (t/testing "artifically adding tries"
+
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+        (let [cat (cat/trie-catalog node)]
+          (.addTries cat "public/foo"
+                     (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                           ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
+                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                          (map #(apply trie/->trie-details "public/foo" %)))
+                     (.instant clock))
+          (tu/finish-block! node)
+
+          (t/is (= [["l00-rc-b00" :garbage #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l00-rc-b01" :garbage #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l00-rc-b02" :garbage #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l01-rc-b00" :garbage #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l01-rc-b01" :garbage #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l00-rc-b03" :live #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l01-rc-b02" :live #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l02-rc-p0-b01" :live #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l02-rc-p1-b01" :live #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l02-rc-p2-b01" :live #xt/instant "2024-01-01T00:00:00Z"]
+                    ["l02-rc-p3-b01" :live #xt/instant "2024-01-01T00:00:00Z"]]
+                   (->> (cat/all-tries (cat/trie-state cat "public/foo"))
+                        (sort-by (juxt :state :trie-key))
+                        (map (juxt :trie-key :state :as-of))))))))))

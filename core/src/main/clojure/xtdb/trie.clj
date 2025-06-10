@@ -1,9 +1,10 @@
 (ns xtdb.trie
   (:require [xtdb.buffer-pool]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.time :as time])
   (:import com.carrotsearch.hppc.ByteArrayList
            (java.nio.file Path)
-           java.time.LocalDate
+           (java.time LocalDate)
            (java.util ArrayList)
            (xtdb.log.proto TrieDetails TrieMetadata TrieState)
            (xtdb.operator.scan Metadata)
@@ -11,22 +12,27 @@
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
+  ([table-name {:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state as-of]}]
+   (-> (TrieDetails/newBuilder)
+       (.setTableName table-name)
+       (.setTrieKey trie-key)
+       (.setDataFileSize data-file-size)
+       (cond-> trie-metadata (.setTrieMetadata trie-metadata))
+       (cond-> state (.setTrieState (case state
+                                      :live TrieState/LIVE
+                                      :nascent TrieState/NASCENT
+                                      :garbage TrieState/GARBAGE)))
+       (cond-> as-of (.setAsOfSystemTime (time/instant->micros as-of)))
+       (.build)))
   ([table-name, trie-key, data-file-size]
    (->trie-details table-name trie-key data-file-size nil))
   ([table-name, trie-key, data-file-size, ^TrieMetadata trie-metadata]
    (->trie-details table-name trie-key data-file-size trie-metadata nil))
   ([table-name, trie-key, data-file-size, ^TrieMetadata trie-metadata state]
-   (let [^long data-file-size data-file-size]
-     (-> (TrieDetails/newBuilder)
-         (.setTableName table-name)
-         (.setTrieKey trie-key)
-         (.setDataFileSize data-file-size)
-         (cond-> trie-metadata (.setTrieMetadata trie-metadata))
-         (cond-> state (.setTrieState (case state
-                                        :live TrieState/LIVE
-                                        :nascent TrieState/NASCENT
-                                        :garbage TrieState/GARBAGE)))
-         (.build)))))
+   (->trie-details table-name {:trie-key trie-key
+                               :data-file-size data-file-size
+                               :trie-metadata trie-metadata
+                               :state state})))
 
 (declare parse-trie-key)
 
@@ -42,7 +48,10 @@
      (assoc :state (condp = (.getTrieState trie-details)
                      TrieState/LIVE :live
                      TrieState/NASCENT :nascent
-                     TrieState/GARBAGE :garbage)))
+                     TrieState/GARBAGE :garbage))
+
+     (.hasAsOfSystemTime trie-details)
+     (assoc :as-of (time/micros->instant (.getAsOfSystemTime trie-details))))
    (parse-trie-key (.getTrieKey trie-details))))
 
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
