@@ -42,9 +42,9 @@ abstract class VariableWidthVector : Vector() {
         return dataBuffer.getBytes(start, end - start)
     }
 
-    override fun writeBytes(buf: ByteBuffer) {
-        writeNotNull(buf.remaining())
-        dataBuffer.writeBytes(buf.duplicate())
+    override fun writeBytes(v: ByteBuffer) {
+        writeNotNull(v.remaining())
+        dataBuffer.writeBytes(v.duplicate())
     }
 
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
