@@ -45,7 +45,7 @@
                                                   tu/*allocator* in-rel
                                                   {}
                                                   vw/empty-args)]
-                  (tu/<-reader project-col))))]
+                  (.toList project-col))))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
                (project '(+ a b))))
@@ -328,7 +328,7 @@
         expr (expr/form->expr form input-types)]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
                                    tu/*allocator* rel {} vw/empty-args)]
-      {:res (tu/<-reader out-ivec)
+      {:res (.toList out-ivec #xt/key-fn :kebab-case-keyword)
        :res-type (types/field->col-type (.getField out-ivec))})))
 
 (t/deftest test-nils

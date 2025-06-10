@@ -6,7 +6,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
-import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.DateUnit.DAY

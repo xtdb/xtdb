@@ -1,10 +1,8 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [cognitect.anomalies :as-alias anom]
-            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -37,14 +35,14 @@
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
-           xtdb.arrow.Relation
+           (xtdb.arrow Relation VectorReader)
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie MetadataFileWriter Trie)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -78,20 +76,6 @@
   (util/with-open [node (xtn/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
-
-#_{:clj-kondo/ignore [:uninitialized-var]}
-(def ^:dynamic *sys*)
-
-(defn with-system [sys-opts f]
-  (let [sys (-> sys-opts
-                (doto ig/load-namespaces)
-                ig/prep
-                ig/init)]
-    (try
-      (binding [*sys* sys]
-        (f))
-      (finally
-        (ig/halt! sys)))))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
@@ -226,13 +210,6 @@
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema pages))}))
 
-(defn <-reader
-  ([^IVectorReader col] (<-reader col #xt/key-fn :kebab-case-keyword))
-  ([^IVectorReader col ^IKeyFn key-fn]
-   (mapv (fn [idx]
-           (.getObject col idx key-fn))
-         (range (.getValueCount col)))))
-
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
   ([^ICursor cursor ^IKeyFn key-fn]
@@ -336,17 +313,6 @@
      (.setMaxSystemFrom builder sf-max)
      (.build builder))))
 
-(defn ->temporal-metadata-fn [page-idx-pred->bounds]
-  (let [page-idx-pred->bounds (update-vals page-idx-pred->bounds #(apply ->temporal-metadata %))]
-    (fn page-bounds-fn [page-idx]
-      (if-let [bounds (reduce-kv (fn [_ page-idx-pred bounds]
-                                   (when (page-idx-pred page-idx)
-                                     (reduced bounds)))
-                                 nil
-                                 page-idx-pred->bounds)]
-        bounds
-        (throw (IllegalStateException. (str "No bounds found for page " page-idx "!")))))))
-
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
   (util/with-close-on-catch [meta-rel (Relation. al MetadataFileWriter/metaRelSchema)]
     (let [nodes-wtr (.vectorFor meta-rel "nodes")
@@ -385,29 +351,6 @@
         (write-paths paths)))
 
     meta-rel))
-
-(defn verify-hash-tries+page-bounds [paths page-bounds]
-  (letfn [(get-bounds [page-idx]
-            (or (reduce-kv (fn [_ page-idx-pred bounds] (when (page-idx-pred page-idx) (reduced bounds))) nil page-bounds)
-                (throw (IllegalStateException. "Missing page bounds!"))))
-          (get-receny-paths [paths]
-            (cond (nil? paths) nil
-                  (number? paths) (list (list paths))
-                  (vector? paths) (->> (mapcat get-receny-paths paths)
-                                       (filter identity))
-                  (map? paths) (mapcat (fn [[k v]]
-                                         (->> (get-receny-paths v)
-                                              (filter identity)
-                                              (map #(cons k %)))) paths)))]
-    (let [recency-paths (get-receny-paths paths)]
-      (doseq [recency-path recency-paths
-              :let [recencies (butlast recency-path)
-                    page-idx (last recency-path)
-                    [_min-vt max-vt _min-st max-st] (get-bounds page-idx)
-                    max-st (or max-st Long/MAX_VALUE)]]
-        (assert (apply >= recencies))
-        (doseq [recency recencies]
-          (assert (<= (min max-vt max-st) recency)))))))
 
 (defn write-arrow-data-file ^org.apache.arrow.vector.VectorSchemaRoot
   [^BufferAllocator al, page-idx->documents, ^Path data-file-path]
@@ -487,24 +430,9 @@
             (java.util.UUID. (Long/reverse n) 0))]
     (map new-uuid (range n))))
 
-(defn bad-uuid-seq
-  ([n] (bad-uuid-seq 0 n))
-  ([start end]
-   (letfn [(new-uuid [n]
-             (java.util.UUID. 0 n))]
-     (map new-uuid (range start end)))))
-
 (defn vec->vals
-  ([^IVectorReader rdr] (vec->vals rdr #xt/key-fn :kebab-case-keyword))
-  ([^IVectorReader rdr ^IKeyFn key-fn]
-   (->> (for [i (range (.getValueCount rdr))]
-          (.getObject rdr i key-fn))
-        (into []))))
-
-(defn get-extension [^Path path]
-  (let [name (str (.getFileName path))]
-    (when-let [idx (str/last-index-of name ".")]
-      (subs name (inc idx)))))
+  ([^VectorReader rdr] (vec->vals rdr #xt/key-fn :kebab-case-keyword))
+  ([^VectorReader rdr ^IKeyFn key-fn] (.toList rdr key-fn)))
 
 (defn q-sql
   "Like xtdb.api/q, but also returns the result type."
@@ -514,8 +442,3 @@
      {:res (xt/q node query opts)
       :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.getColumnFields prepared-q []))})))
 
-(defn temporal-bounds->data [^TemporalBounds bounds]
-  (let [vt (.getValidTime bounds)
-        st (.getSystemTime bounds)]
-    {:valid-time [(.getLower vt) (.getUpper vt)]
-     :system-time [(.getLower st) (.getUpper st)]}))

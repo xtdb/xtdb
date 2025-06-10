@@ -411,6 +411,13 @@
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/prices")))
                        (.resolve node-dir (tables-key "public$prices")) #"l(?!00|01)(.+)\.arrow")))))
 
+(defn bad-uuid-seq
+  ([n] (bad-uuid-seq 0 n))
+  ([start end]
+   (letfn [(new-uuid [n]
+             (java.util.UUID. 0 n))]
+     (map new-uuid (range start end)))))
+
 (t/deftest test-no-empty-pages-3580
   (let [node-dir (util/->path "target/compactor/test-badly-distributed")]
     (util/delete-dir node-dir)
@@ -427,7 +434,7 @@
                                                       (for [x batch]
                                                         {:xt/id x}))]))))]
 
-            (let [tx-id (submit! (take 512 (cycle (tu/bad-uuid-seq 8))))]
+            (let [tx-id (submit! (take 512 (cycle (bad-uuid-seq 8))))]
               (tu/then-await-tx tx-id node)
               (c/compact-all! node (Duration/ofSeconds 5)))
 
@@ -465,23 +472,23 @@
                                   (order-by id)))
                        (map :id)))]
 
-          (submit! (tu/bad-uuid-seq 100))
+          (submit! (bad-uuid-seq 100))
           (tu/then-await-tx node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
-          (t/is (= (tu/bad-uuid-seq 100) (q)))
+          (t/is (= (bad-uuid-seq 100) (q)))
 
-          (submit! (tu/bad-uuid-seq 100 200))
+          (submit! (bad-uuid-seq 100 200))
           (tu/then-await-tx node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
-          (t/is (= (tu/bad-uuid-seq 200) (q)))
+          (t/is (= (bad-uuid-seq 200) (q)))
 
-          (submit! (tu/bad-uuid-seq 200 500))
+          (submit! (bad-uuid-seq 200 500))
           (tu/then-await-tx node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
-          (t/is (= (tu/bad-uuid-seq 500) (q))))))))
+          (t/is (= (bad-uuid-seq 500) (q))))))))
 
 (t/deftest losing-data-when-compacting-3459
   (binding [c/*page-size* 8

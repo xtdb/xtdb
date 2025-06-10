@@ -129,7 +129,7 @@
 
         (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v0)]) group-mapping)
         (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v1)]) group-mapping)
-        (t/is (= [12.0] (tu/<-reader (.finish sum-spec))))
+        (t/is (= [12.0] (.toList (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
 
@@ -331,7 +331,7 @@
 
         (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k0)]) gm0)
         (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k1)]) gm1)
-        (t/is (= [[1 3 6] [2 4] [5]] (tu/<-reader (.finish agg-spec))))
+        (t/is (= [[1 3 6] [2 4] [5]] (.toList (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))
 
