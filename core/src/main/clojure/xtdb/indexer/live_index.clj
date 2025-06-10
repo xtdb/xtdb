@@ -175,9 +175,6 @@
                                    (util/rethrowing-cause))]
             (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
                                 (trie/->trie-details table-name trie-key data-file-size trie-metadata state))]
-              ;; TODO remove this if once we need as-of-system-time
-              (doseq [^TrieDetails added-trie added-tries]
-                (.addTries trie-cat (.getTableName added-trie) [added-trie]))
               (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
 
             (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
