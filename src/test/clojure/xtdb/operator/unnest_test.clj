@@ -1,7 +1,6 @@
 (ns xtdb.operator.unnest-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)

@@ -198,9 +198,9 @@ class DenseUnionVector(
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
-                val legFieldType = leg.field.fieldType
-                if (legFieldType.type != fieldType.type || (fieldType.isNullable && !legFieldType.isNullable))
-                    TODO("promotion")
+                val legFieldType = leg.fieldType
+                if (legFieldType.type != fieldType.type) TODO("promotion")
+                leg.nullable = leg.nullable || fieldType.isNullable
 
                 return LegVector(i.toByte(), leg)
             }
@@ -273,7 +273,6 @@ class DenseUnionVector(
 
     override fun rowCopier(dest: VectorWriter) =
         when {
-
             dest is DenseUnionVector -> dest.rowCopier0(this).let { copier ->
                 RowCopier { srcIdx ->
                     if (getTypeId(srcIdx) < 0) valueCount.also { dest.writeUndefined() } else copier.copyRow(srcIdx)
@@ -282,9 +281,10 @@ class DenseUnionVector(
 
             legVectors.size == 2 -> {
                 require(legVectors.filter { it.type == NULL_TYPE }.size == 1)
-                val copier = legVectors.mapIndexed {i, v -> Pair(i, v)}. filter { it.second.type != NULL_TYPE }.first().let { (i, v) ->
-                    LegVector(i.toByte(), v).rowCopier(dest)
-                }
+                val copier = legVectors
+                    .mapIndexed { i, v -> Pair(i, v) }
+                    .first { it.second.type != NULL_TYPE }
+                    .let { (i, v) -> LegVector(i.toByte(), v).rowCopier(dest) }
                 RowCopier { srcIdx ->
                     if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
                 }
@@ -328,6 +328,8 @@ class DenseUnionVector(
 
     override fun openSlice(al: BufferAllocator) =
         DenseUnionVector(al, name, legVectors.map { it.openSlice(al) }, valueCount)
+
+    override fun maybePromote(al: BufferAllocator, target: FieldType) = this.also { it.legWriter(target) }
 
     override fun clear() {
         typeBuffer.clear()

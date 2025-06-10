@@ -13,7 +13,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.asKeyword
 import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.util.Hasher
@@ -52,7 +51,7 @@ class StructVector(
         childWriters.compute(name) { _, v ->
             if (v == null) {
                 fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
-                    repeat(valueCount) { if(isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
+                    repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
                 }
             } else {
                 val existingFieldType = v.fieldType
@@ -104,11 +103,9 @@ class StructVector(
                 try {
                     childWriter.writeObject(obj)
                 } catch (e: InvalidWriteObjectException) {
-                    DenseUnionVector.promote(allocator, childWriter, e.obj.toFieldType())
-                        .apply {
-                            childWriters[key] = this
-                            writeObject(obj)
-                        }
+                    val newWriter = childWriter.maybePromote(allocator, e.obj.toFieldType())
+                    childWriters[key] = newWriter
+                    newWriter.writeObject(obj)
                 }
             }
             endStruct()

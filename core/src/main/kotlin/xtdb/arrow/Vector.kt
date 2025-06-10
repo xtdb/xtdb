@@ -69,6 +69,13 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
+    internal open fun maybePromote(al: BufferAllocator, target: FieldType): Vector {
+        if (target.type != type) return DenseUnionVector.promote(al, this, target)
+
+        nullable = nullable || target.isNullable
+        return this
+    }
+
     override fun toList() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)
