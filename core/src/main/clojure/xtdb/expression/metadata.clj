@@ -247,8 +247,7 @@
       (util/lru-memoize)))
 
 (defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [allocator form col-types params]
-  (let [params (RelationReader/from params)
-        param-types (expr/->param-types params)
+  (let [param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
                                                                    :col-types col-types})
                                             {:param-types param-types

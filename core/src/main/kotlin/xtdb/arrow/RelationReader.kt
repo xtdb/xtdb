@@ -1,17 +1,11 @@
 package xtdb.arrow
 
-import clojure.lang.Counted
-import clojure.lang.ILookup
-import clojure.lang.ISeq
-import clojure.lang.PersistentHashMap
-import clojure.lang.RT
-import clojure.lang.Seqable
+import clojure.lang.*
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.util.closeAll
 import java.util.*
-import xtdb.vector.RelationReader as OldRelationReader
 
 interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     val schema: Schema
@@ -61,20 +55,6 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     }
 
     companion object {
-        private class FromOldRelation(private val oldReader: OldRelationReader) : RelationReader {
-            override val schema = Schema(oldReader.vectors.map { it.field })
-            override val rowCount: Int get() = oldReader.rowCount
-            override val vectors get() = oldReader.vectors.map { VectorReader.from(it) }
-
-            override fun vectorForOrNull(name: String): VectorReader? =
-                oldReader.vectorForOrNull(name)?.let { VectorReader.from(it) }
-
-            override fun select(idxs: IntArray): RelationReader = FromOldRelation(oldReader.select(idxs))
-        }
-
-        @JvmStatic
-        fun from(oldReader: OldRelationReader): RelationReader = FromOldRelation(oldReader)
-
         fun from(cols: Iterable<VectorReader>, rowCount: Int): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
     }

@@ -2,7 +2,6 @@ package xtdb.arrow
 
 import clojure.lang.ILookup
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
@@ -10,8 +9,6 @@ import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
-import xtdb.vector.IVectorReader
-import xtdb.vector.IVectorWriter
 import java.nio.ByteBuffer
 
 interface VectorReader : ILookup, AutoCloseable {
@@ -122,48 +119,6 @@ interface VectorReader : ILookup, AutoCloseable {
 
             return "(${this::class.simpleName}[$valueCount]$content)"
         }
-
-        private class OldToNewAdapter(private val old: IVectorReader) : VectorReader {
-            override val name: String get() = old.name
-            override val valueCount: Int get() = old.valueCount
-            override val nullable: Boolean get() = this.field.isNullable
-            override val fieldType: FieldType get() = this.field.fieldType
-            override val field: Field get() = old.field
-
-            override fun isNull(idx: Int) = old.isNull(idx)
-
-            override fun getBoolean(idx: Int) = old.getBoolean(idx)
-            override fun getByte(idx: Int) = old.getByte(idx)
-            override fun getShort(idx: Int) = old.getShort(idx)
-            override fun getInt(idx: Int) = old.getInt(idx)
-            override fun getLong(idx: Int) = old.getLong(idx)
-            override fun getFloat(idx: Int) = old.getFloat(idx)
-            override fun getDouble(idx: Int) = old.getDouble(idx)
-            override fun getBytes(idx: Int): ByteBuffer = old.getBytes(idx)
-            override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = old.getObject(idx, keyFn)
-
-            override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer = old.getPointer(idx, reuse)
-
-            override fun hashCode(idx: Int, hasher: Hasher) = old.hashCode(idx, hasher)
-
-            override val keyNames: Set<String>? get() = old.keyNames?.toSet()
-            override fun vectorForOrNull(name: String) = old.structKeyReader(name)?.let { OldToNewAdapter(it) }
-            override val listElements get() = OldToNewAdapter(old.listElements)
-
-            override fun valueReader(pos: VectorPosition): ValueReader = old.valueReader(pos)
-
-            override fun toList() = List(valueCount) { old.getObject(it) }
-
-            override fun rowCopier(dest: VectorWriter) = error("rowCopier")
-
-            override fun close() = old.close()
-
-            override fun toString(): String = "(OldToNewAdaptor{oldReader=$old})"
-        }
-
-        @JvmStatic
-        fun from(old: IVectorReader): VectorReader = OldToNewAdapter(old)
-
     }
 
     override fun valAt(key: Any?): Any? = valAt(key, null)

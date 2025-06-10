@@ -17,9 +17,9 @@
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader ArrowFileWriter)
+           (org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowReader)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader RowCopier VectorReader)
+           (xtdb.arrow Relation Relation$Loader RowCopier)
            xtdb.ICursor
            (xtdb.vector IVectorReader RelationReader RelationWriter)))
 
@@ -59,7 +59,7 @@
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                                       :or {direction :asc, null-ordering :nulls-last}}]]
-                         (let [read-col (VectorReader/from (.vectorForOrNull read-rel (str column)))
+                         (let [read-col (.vectorForOrNull read-rel (str column))
                                col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
                                comparator (cond-> ^Comparator (fn [left right]

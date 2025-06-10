@@ -5,13 +5,14 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
-import xtdb.arrow.VectorReader
-import xtdb.indexer.LiveTable.LiveTrieFactory
 import xtdb.log.proto.TrieMetadata
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
 import xtdb.types.Fields
-import xtdb.util.*
+import xtdb.util.HLL
+import xtdb.util.RowCounter
+import xtdb.util.closeAllOnCatch
+import xtdb.util.openSlice
 import xtdb.vector.*
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
@@ -49,7 +50,7 @@ constructor(
 
     private val trieWriter = TrieWriter(al, bp, calculateBlooms = false)
     private val trieMetadataCalculator = TrieMetadataCalculator(
-        VectorReader.from(iidRdr), validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
+        iidRdr, validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
     )
 
     private val hllCalculator = HllCalculator()

@@ -80,7 +80,7 @@
   (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(select-relation [form col-types args-map]
               (with-open [arg-rel (tu/open-args args-map)]
-                (let [input-types {:col-types col-types, :param-types (expr/->param-types (RelationReader/from arg-rel))}]
+                (let [input-types {:col-types col-types, :param-types (expr/->param-types arg-rel)}]
                   (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
                                     tu/*allocator* in-rel {} arg-rel)))))]
 

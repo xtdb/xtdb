@@ -226,8 +226,7 @@
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
-              (let [in-rel (RelationReader/from in-rel)
-                    input-opts {:var->col-type (->> in-rel
+              (let [input-opts {:var->col-type (->> in-rel
                                                     (into {acc-col-sym to-type}
                                                           (map (juxt #(symbol (.getName ^VectorReader %))
                                                                      #(-> (.getField ^VectorReader %) types/field->col-type)))))}

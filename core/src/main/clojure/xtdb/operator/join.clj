@@ -22,7 +22,6 @@
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
-           (xtdb.arrow VectorReader)
            (xtdb.bloom BloomUtils)
            (xtdb.expression.map IRelationMap)
            (xtdb.operator ProjectionSpec)
@@ -177,7 +176,7 @@
                                      build-col (.vectorForOrNull build-rel (str build-col-name))
                                      ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                  (dotimes [build-idx (.getRowCount build-rel)]
-                                   (.add pushdown-bloom ^ints (BloomUtils/bloomHashes (VectorReader/from build-col) build-idx)))))))))))
+                                   (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx)))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.vector.RelationReader probe-phase

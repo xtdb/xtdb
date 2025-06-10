@@ -115,10 +115,10 @@
                             {:var->col-type {left-vec (types/field->col-type (.getField left-col))
                                              right-vec (types/field->col-type (.getField right-col))}
                              :param-types param-types})]
-    (f (RelationReader/from (vr/rel-reader [(.withName left-col (str left-vec))]))
-       (RelationReader/from (vr/rel-reader [(.withName right-col (str right-vec))]))
+    (f (vr/rel-reader [(.withName left-col (str left-vec))])
+       (vr/rel-reader [(.withName right-col (str right-vec))])
        pg-class-schema-hack
-       (some-> params RelationReader/from))))
+       params)))
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
   (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
@@ -132,10 +132,10 @@
                                                                     {:rel left-rel, :idx left-idx}
                                                                     {:rel right-rel, :idx right-idx})))))))
                             {:var->col-type col-types, :param-types param-types})]
-    (f (RelationReader/from probe-rel)
-       (RelationReader/from build-rel)
+    (f probe-rel
+       build-rel
        pg-class-schema-hack
-       (RelationReader/from params))))
+       params)))
 
 (defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntBinaryOperator comparator, ^long idx, remove-on-match?]
   (if-not hash-bitmap
