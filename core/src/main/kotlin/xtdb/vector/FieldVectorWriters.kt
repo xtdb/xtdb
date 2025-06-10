@@ -3,6 +3,7 @@
 package xtdb.vector
 
 import clojure.lang.Keyword
+import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.*
 import org.apache.arrow.vector.BitVector
 import org.apache.arrow.vector.DateDayVector
@@ -339,6 +340,9 @@ private class IntervalMdnVectorWriter(override val vector: IntervalMonthDayNanoV
 }
 
 private class FixedSizeBinaryVectorWriter(override val vector: FixedSizeBinaryVector) : ScalarVectorWriter(vector) {
+    override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =
+        vector.getDataPointer(idx, reuse)
+
     override fun writeBytes(v: ByteBuffer) {
         val pos = v.position()
 

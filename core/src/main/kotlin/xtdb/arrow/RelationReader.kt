@@ -79,9 +79,6 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
     }
 
-    val oldRelReader: xtdb.vector.RelationReader
-        get() = OldRelationReader.from(vectors.map(VectorReader.Companion::NewToOldAdapter), rowCount)
-
     override fun valAt(key: Any?) = valAt(key, null)
     override fun valAt(key: Any?, notFound: Any?) = vectorForOrNull(key as String) ?: notFound
 

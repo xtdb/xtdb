@@ -8,8 +8,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorWriter
+import xtdb.types.Fields
 import xtdb.types.Fields.IID
 import xtdb.vector.RelationReader
+import xtdb.vector.RelationWriter
 import java.nio.ByteBuffer
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -41,15 +43,15 @@ class IidSelectorTest {
         val iidSel = IidSelector(ByteBuffer.wrap(search.toByteArray()))
 
         fun testUuids(vararg uuids: Uuid) =
-            Relation(al, linkedMapOf("_iid" to IID)).use { rel ->
-                val iids = rel["_iid"]
+            RelationWriter(al).use { rel ->
+                val iids = rel.vectorFor("_iid", IID.fieldType)
 
                 for (uuid in uuids) {
                     iids.writeUuid(uuid)
                     rel.endRow()
                 }
 
-                iidSel.select(al, rel.oldRelReader, emptyMap(), RelationReader.from(emptyList()))
+                iidSel.select(al, rel, emptyMap(), RelationReader.from(emptyList()))
             }
 
         assertArrayEquals(IntArray(0), testUuids(), "empty")

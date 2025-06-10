@@ -123,59 +123,6 @@ interface VectorReader : ILookup, AutoCloseable {
             return "(${this::class.simpleName}[$valueCount]$content)"
         }
 
-        internal class NewToOldAdapter(private val vector: VectorReader) : IVectorReader {
-
-            override fun hashCode(idx: Int, hasher: Hasher) = vector.hashCode(idx, hasher)
-
-            override val valueCount get() = vector.valueCount
-
-            override val name get() = vector.name
-
-            override val field get() = vector.field
-
-            override fun isNull(idx: Int) = vector.isNull(idx)
-            override fun getBoolean(idx: Int) = vector.getBoolean(idx)
-            override fun getByte(idx: Int) = vector.getByte(idx)
-            override fun getShort(idx: Int) = vector.getShort(idx)
-            override fun getInt(idx: Int) = vector.getInt(idx)
-            override fun getLong(idx: Int) = vector.getLong(idx)
-            override fun getFloat(idx: Int) = vector.getFloat(idx)
-            override fun getDouble(idx: Int) = vector.getDouble(idx)
-            override fun getBytes(idx: Int) = vector.getBytes(idx)
-
-            override fun getPointer(idx: Int, reuse: ArrowBufPointer) = vector.getPointer(idx, reuse)
-
-            override fun getObject(idx: Int) = vector.getObject(idx)
-            override fun getObject(idx: Int, keyFn: IKeyFn<*>) = getObject(idx)
-
-            override fun structKeyReader(colName: String) = vector.vectorForOrNull(colName)?.let { NewToOldAdapter(it) }
-
-            override val keyNames get() = TODO()
-
-            override val listElements get() = NewToOldAdapter(vector.listElements)
-            override fun getListStartIndex(idx: Int) = vector.getListStartIndex(idx)
-            override fun getListCount(idx: Int) = vector.getListCount(idx)
-
-            override val mapKeys get() = NewToOldAdapter(vector.mapKeys)
-            override val mapValues get() = NewToOldAdapter(vector.mapValues)
-
-            override fun getLeg(idx: Int) = vector.getLeg(idx)
-
-            override fun legReader(legKey: String) = vector.vectorForOrNull(legKey)?.let { NewToOldAdapter(it) }
-
-            override val legNames get() = vector.legNames
-
-            override fun copyTo(vector: ValueVector) = error("copyTo")
-
-            override fun rowCopier(writer: IVectorWriter) = error("rowCopier")
-
-            override fun valueReader(pos: VectorPosition) = vector.valueReader(pos)
-
-            override fun close() = vector.close()
-
-            override fun toString(): String = "(NewToOldAdaptor{vector=$vector})"
-        }
-
         private class OldToNewAdapter(private val old: IVectorReader) : VectorReader {
             override val name: String get() = old.name
             override val valueCount: Int get() = old.valueCount
@@ -218,8 +165,6 @@ interface VectorReader : ILookup, AutoCloseable {
         fun from(old: IVectorReader): VectorReader = OldToNewAdapter(old)
 
     }
-
-    val asOldReader: IVectorReader get() = NewToOldAdapter(this)
 
     override fun valAt(key: Any?): Any? = valAt(key, null)
     override fun valAt(key: Any?, notFound: Any?) = this.vectorForOrNull(key as String) ?: notFound
