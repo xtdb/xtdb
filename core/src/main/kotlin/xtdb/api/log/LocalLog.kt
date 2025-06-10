@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 
-class LocalLog(rootPath: Path, private val instantSource: InstantSource, override val epoch: Int) : Log {
+class LocalLog(rootPath: Path, private val instantSource: InstantSource, override val epoch: Int, val useInstantSourceForNonTx: Boolean) : Log {
     companion object {
         private val Path.logFilePath get() = resolve("LOG")
 
@@ -117,7 +117,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
                 val (msg) = msgs[idx]
                 // we only use the instantSource for Tx messages so that the tests
                 // that check files can be deterministic
-                val ts = if (msg is Message.Tx) instantSource.instant() else Instant.now()
+                val ts = if (msg is Message.Tx || useInstantSourceForNonTx) instantSource.instant() else Instant.now()
                 val payload = msg.encode()
                 val size = payload.remaining()
                 val offset = logFileChannel.position()
@@ -268,13 +268,15 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
     data class Factory @JvmOverloads constructor(
         val path: Path,
         @Transient var instantSource: InstantSource = InstantSource.system(),
-        var epoch: Int = 0
+        var epoch: Int = 0,
+        var useInstantSourceForNonTx: Boolean = false
     ) : Log.Factory {
 
         @Suppress("unused")
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
+        fun useInstantSourceForNonTx() = apply { this.useInstantSourceForNonTx = true}
 
-        override fun openLog() = LocalLog(path, instantSource, epoch)
+        override fun openLog() = LocalLog(path, instantSource, epoch, useInstantSourceForNonTx)
     }
 }
