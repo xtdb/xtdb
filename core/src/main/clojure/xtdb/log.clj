@@ -236,11 +236,13 @@
                instant-src (.instantSource instant-src)
                epoch (.epoch epoch)))))
 
-(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _ {:keys [path instant-src epoch]}]
+(defmethod xtn/apply-config! ::local-directory-log [^Xtdb$Config config _
+                                                    {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
   (doto config
     (.setLog (cond-> (Log/localLog (util/->path path))
                instant-src (.instantSource instant-src)
-               epoch (.epoch epoch)))))
+               epoch (.epoch epoch)
+               instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx)))))
 
 (defmethod xtn/apply-config! :xtdb/log [config _ [tag opts]]
   (xtn/apply-config! config

@@ -170,10 +170,11 @@ interface Compactor : AutoCloseable {
                                     val timer = meterRegistry?.let { Timer.start(it) }
                                     val addedTries = runInterruptible { job.execute() }
                                     jobTimer?.let { timer?.stop(it) }
+                                    val messageMetadata =  log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
                                     // add the trie to the catalog eagerly so that it's present
                                     // next time we run `availableJobs` (it's idempotent)
-                                    trieCatalog.addTries(job.tableName, addedTries)
-                                    log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
+                                    trieCatalog.addTries(job.tableName, addedTries, messageMetadata.logTimestamp)
+
                                 }
 
                                 doneCh.send(jobKey)

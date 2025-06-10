@@ -5,7 +5,8 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import (xtdb.operator.scan Metadata)
+  (:import (java.time Instant)
+           (xtdb.operator.scan Metadata)
            (xtdb.util TemporalBounds)))
 
 (defn- apply-msgs [& trie-keys]
@@ -306,7 +307,8 @@
                          (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                                ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                                ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                              (map #(apply trie/->trie-details "public/foo" %))))
+                              (map #(apply trie/->trie-details "public/foo" %)))
+                         (Instant/now))
               (tu/finish-block! node))))
 
         (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
