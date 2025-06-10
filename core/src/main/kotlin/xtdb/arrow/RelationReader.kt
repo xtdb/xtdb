@@ -35,12 +35,14 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     fun toMaps(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
         List(rowCount) { idx ->
             PersistentHashMap.create(
-                vectors.associate {
-                    Pair(
-                        keyFn.denormalize(it.name),
-                        it.getObject(idx, keyFn)
-                    )
-                }
+                vectors
+                    .associate {
+                        Pair(
+                            keyFn.denormalize(it.name),
+                            it.getObject(idx, keyFn)
+                        )
+                    }
+                    .filterValues { it != null }
             ) as Map<*, *>
         }
 

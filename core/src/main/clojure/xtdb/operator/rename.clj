@@ -7,10 +7,10 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
-           java.util.function.Consumer
            (org.apache.arrow.vector.types.pojo Field)
+           xtdb.arrow.VectorReader
            xtdb.ICursor
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :rename [_]
   (s/cat :op #{:ρ :rho :rename}
@@ -29,16 +29,14 @@
                                                    [(get col-name-reverse-mapping k) v])
                                                  (into {}))]
       (.tryAdvance in-cursor
-                   (reify Consumer
-                     (accept [_ in-rel]
-                       (let [^RelationReader in-rel in-rel
-                             out-cols (LinkedList.)]
+                   (fn [^RelationReader in-rel]
+                     (let [out-cols (LinkedList.)]
 
-                         (doseq [^IVectorReader in-col in-rel
-                                 :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
-                           (.add out-cols (.withName in-col col-name)))
+                       (doseq [^VectorReader in-col in-rel
+                               :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
+                         (.add out-cols (.withName in-col col-name)))
 
-                         (.accept c (vr/rel-reader out-cols (.getRowCount in-rel)))))))))
+                       (.accept c (vr/rel-reader out-cols (.getRowCount in-rel))))))))
 
   (close [_]
     (util/try-close in-cursor)))

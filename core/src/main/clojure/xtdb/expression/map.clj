@@ -13,19 +13,18 @@
            (org.apache.arrow.vector NullVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap IntConsumer RoaringBitmap)
-           xtdb.arrow.RelationReader
+           (xtdb.arrow RelationReader VectorReader)
            (xtdb.util Hasher$Xx)
-           (xtdb.vector IVectorReader)
            (com.carrotsearch.hppc IntObjectHashMap)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexHasher
   (^int hashCode [^int idx]))
 
-(defn ->hasher ^xtdb.expression.map.IIndexHasher [^List #_<IVectorReader> cols]
+(defn ->hasher ^xtdb.expression.map.IIndexHasher [^List #_<VectorReader> cols]
   (let [hasher (Hasher$Xx.)]
     (case (.size cols)
-      1 (let [^IVectorReader col (.get cols 0)]
+      1 (let [^VectorReader col (.get cols 0)]
           (reify IIndexHasher
             (hashCode [_ idx]
               (.hashCode col idx hasher))))
@@ -35,7 +34,7 @@
           (loop [n 0
                  hash-code 0]
             (if (< n (.size cols))
-              (let [^IVectorReader col (.get cols n)]
+              (let [^VectorReader col (.get cols n)]
                 (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode col idx hasher))))
               hash-code)))))))
 
@@ -107,7 +106,7 @@
 (def ^:private pg-class-schema-hack
   {"pg_catalog/pg_class" #{}})
 
-(defn- ->equi-comparator [^IVectorReader left-col, ^IVectorReader right-col, params
+(defn- ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params
                           {:keys [nil-keys-equal? param-types]}]
   (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
                              :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}

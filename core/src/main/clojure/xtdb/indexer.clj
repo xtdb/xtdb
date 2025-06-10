@@ -23,15 +23,14 @@
            (io.micrometer.core.instrument Counter Timer)
            (java.io ByteArrayInputStream Closeable)
            (java.nio ByteBuffer)
-           (java.time Instant InstantSource ZoneId)
+           (java.time Instant InstantSource)
            (java.time.temporal ChronoUnit)
            (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           (xtdb.arrow RowCopier)
+           (xtdb.arrow RowCopier VectorReader)
            xtdb.BufferPool
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
@@ -88,7 +87,7 @@
 
            (throw (ex-info msg# data# e#)))))))
 
-(defn- assert-timestamp-col-type [^IVectorReader rdr]
+(defn- assert-timestamp-col-type [^VectorReader rdr]
   (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getType (.getField rdr))))
     (throw (err/illegal-arg :xtdb/invalid-timestamp-col-type
                             {:col-name (.getName rdr)

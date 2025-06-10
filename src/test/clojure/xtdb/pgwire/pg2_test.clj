@@ -207,7 +207,7 @@
     (testing "explicit transit serialization"
       (with-open [conn (pg-conn {:pg-params {"fallback_output_format" "transit"}})]
         (t/is (= (-> (insert-and-query conn (String. (serde/write-transit m-in :json)))
-                     (update-in [0 :v] #(serde/read-transit (.getBytes %) :json)))
+                     (update-in [0 :v] #(serde/read-transit (.getBytes ^String %) :json)))
                  [{:v expected-m-out}]))))
 
     (testing "custom type setup for transit serialization"

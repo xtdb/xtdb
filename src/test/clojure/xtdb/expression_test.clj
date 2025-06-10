@@ -15,12 +15,11 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
-           org.apache.arrow.vector.types.TimeUnit
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
-           xtdb.arrow.RelationReader
+           org.apache.arrow.vector.types.TimeUnit
+           (xtdb.arrow RelationReader VectorReader)
            (xtdb.time Interval)
-           (xtdb.util StringUtil)
-           xtdb.vector.IVectorReader))
+           (xtdb.util StringUtil)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -322,8 +321,8 @@
 
 (defn run-projection [^RelationReader rel form]
   (let [col-types (->> rel
-                       (into {} (map (juxt #(symbol (.getName ^IVectorReader %))
-                                           #(types/field->col-type (.getField ^IVectorReader %))))))
+                       (into {} (map (juxt #(symbol (.getName ^VectorReader %))
+                                           #(types/field->col-type (.getField ^VectorReader %))))))
         input-types {:col-types col-types, :param-types {}}
         expr (expr/form->expr form input-types)]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)

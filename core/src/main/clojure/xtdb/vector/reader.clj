@@ -1,11 +1,10 @@
 (ns xtdb.vector.reader
   (:require [clojure.set :as set]
             [xtdb.types :as types])
-  (:import clojure.lang.MapEntry
-           java.util.List
+  (:import java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
-           xtdb.api.query.IKeyFn
+           xtdb.arrow.VectorReader
            (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt)))
 
 (defn vec->reader ^IVectorReader [^ValueVector v]
@@ -25,7 +24,7 @@
                  (.setValueCount row-count))))
 
 (defn- available-col-names [^RelationReader rel]
-  (into #{} (map #(.getName ^IVectorReader %)) rel))
+  (into #{} (map #(.getName ^VectorReader %)) (.getVectors rel)))
 
 ;; we don't allocate anything here, but we need it because BaseValueVector
 ;; (a distant supertype of NullVector) thinks it needs one.
@@ -36,17 +35,3 @@
                         (->> (set/difference col-names available-col-names)
                              (map #(->absent-col % allocator row-count))))
                 (.getRowCount rel))))
-
-(defn rel->rows
-  (^java.util.List [^RelationReader rel] (rel->rows rel #xt/key-fn :kebab-case-keyword))
-  (^java.util.List [^RelationReader rel ^IKeyFn key-fn]
-   (let [col-ks (for [^IVectorReader col rel]
-                  [col (.denormalize key-fn (.getName col))])]
-     (mapv (fn [idx]
-             (->> col-ks
-                  (into {} (keep (fn [[^IVectorReader col k]]
-                                   (let [v (.getObject col idx key-fn)]
-                                     (when (some? v)
-                                       (MapEntry/create k v))))))))
-           (range (.getRowCount rel))))))
-

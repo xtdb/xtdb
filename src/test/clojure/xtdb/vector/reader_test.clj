@@ -28,7 +28,7 @@
         (.copyRow copier1 0)
         (.copyRow copier2 0))
       (t/is (= [{:my-column 42} {:my-column "forty-two"}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))))
+               (.toMaps (vw/rel-wtr->rdr rel-wtr3))))))
 
   (t/testing "copying rows from different (composite) col-types from different relations"
     (t/testing "structs"
@@ -55,7 +55,7 @@
 
           (t/is (= [{:my-column {:foo 42, :bar "forty-two"}}
                     {:my-column {:foo 42.0, :toto :my-keyword}}]
-                   (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+                   (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
           (t/is (= combined-field
                    (.getField (.vectorFor rel-wtr3 "my-column")))))))
 
@@ -80,7 +80,7 @@
                   {:my-column "forty-two"}
                   {:my-column 42}
                   {:my-column :my-keyword}]
-                 (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+                 (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
         (t/is (= (types/->field "my-column" #xt.arrow/type :union false
                                 (types/col-type->field "i64" :i64)
                                 (types/col-type->field "utf8" :utf8)
@@ -107,7 +107,7 @@
           (.copyRow copier2 0))
 
         (t/is (= [{:my-column [42 43]} {:my-column ["forty-two" "forty-three"]}]
-                 (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+                 (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
         (t/is (= (types/->field "my-column" #xt.arrow/type :union false
                                 (types/->field "list" #xt.arrow/type :list false
                                                (types/->field "$data$" #xt.arrow/type :union false
@@ -135,7 +135,7 @@
             (.copyRow copier2 0))
 
           (t/is (= [{:my-column #{42 43}} {:my-column #{"forty-two" "forty-three"}}]
-                   (vr/rel->rows (vw/rel-wtr->rdr rel-wtr3))))
+                   (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
           (t/is (= (types/->field "my-column" #xt.arrow/type :union false
                                   (types/->field "set" #xt.arrow/type :set false
                                                  (types/->field "$data$" #xt.arrow/type :union false
@@ -260,10 +260,10 @@
         (.endRow rel-wtr1))
 
       (t/is (= [{:my-column {:short-name "forty-two", :long-name 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :kebab-case-keyword)))
+               (.toMaps (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :kebab-case-keyword)))
 
       (t/is (= [{:my_column {:short_name "forty-two", :long_name 42}}]
-               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :snake-case-keyword))))))
+               (.toMaps (vw/rel-wtr->rdr rel-wtr1) #xt/key-fn :snake-case-keyword))))))
 
 (deftest multivec-underlying-monomorphic-vectors-get-leg-test ; see #3343
   (with-open [struct-int-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false

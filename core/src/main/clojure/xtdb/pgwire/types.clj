@@ -18,12 +18,12 @@
            [java.util Arrays List Map Set UUID]
            (org.apache.arrow.vector.types.pojo Field)
            [org.apache.commons.codec.binary Hex]
+           xtdb.arrow.VectorReader
            (xtdb.error Anomaly)
            xtdb.JsonSerde
            (xtdb.pg.codec NumericBin)
            [xtdb.time Interval Time]
-           (xtdb.types ZonedDateTimeRange)
-           [xtdb.vector IVectorReader]))
+           (xtdb.types ZonedDateTimeRange)))
 
 (defn- json-clj
   "This function is temporary, the long term goal will be to walk arrow directly to generate the json (and later monomorphic
@@ -100,7 +100,7 @@
 
 (def json-bytes (comp utf8 json/json-str json-clj))
 
-(defn write-json [_env ^IVectorReader rdr idx]
+(defn write-json [_env ^VectorReader rdr idx]
   (json-bytes (.getObject rdr idx)))
 
 (def iso-local-date-time-formatter-with-space
@@ -221,12 +221,12 @@
                  (conj arr string)))
         arr))))
 
-(defn get-unix-micros ^long [^IVectorReader rdr idx]
+(defn get-unix-micros ^long [^VectorReader rdr idx]
   (let [[_ unit] (types/field->col-type (.getField rdr))]
     (cond-> (.getLong rdr idx)
       (= :nano unit) (quot 1000))))
 
-(defn interval-rdr->iso-micro-interval-str-bytes ^bytes [^IVectorReader rdr idx]
+(defn interval-rdr->iso-micro-interval-str-bytes ^bytes [^VectorReader rdr idx]
   (let [itvl (.getObject rdr idx)]
     (-> (cond
           (instance? Interval itvl)
@@ -260,11 +260,11 @@
                 :typreceive "int8recv"
                 :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getLong))
                 :read-text (fn [_env ba] (-> ba read-utf8 Long/parseLong))
-                :write-binary (fn [_env ^IVectorReader rdr idx]
+                :write-binary (fn [_env ^VectorReader rdr idx]
                                 (let [bb (doto (ByteBuffer/allocate typlen)
                                            (.putLong (.getLong rdr idx)))]
                                   (.array bb)))
-                :write-text (fn [_env ^IVectorReader rdr idx]
+                :write-text (fn [_env ^VectorReader rdr idx]
                               (utf8 (.getLong rdr idx)))})
        :int4 (let [typlen 4]
                {:typname "int4"
@@ -275,11 +275,11 @@
                 :typreceive "int4recv"
                 :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getInt))
                 :read-text (fn [_env ba] (-> ba read-utf8 Integer/parseInt))
-                :write-binary (fn [_env ^IVectorReader rdr idx]
+                :write-binary (fn [_env ^VectorReader rdr idx]
                                 (let [bb (doto (ByteBuffer/allocate typlen)
                                            (.putInt (.getInt rdr idx)))]
                                   (.array bb)))
-                :write-text (fn [_env ^IVectorReader rdr idx]
+                :write-text (fn [_env ^VectorReader rdr idx]
                               (utf8 (.getInt rdr idx)))})
        :int2 (let [typlen 2]
                {:typname "int2"
@@ -290,11 +290,11 @@
                 :typreceive "int2recv"
                 :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getShort))
                 :read-text (fn [_env ba] (-> ba read-utf8 Short/parseShort))
-                :write-binary (fn [_env ^IVectorReader rdr idx]
+                :write-binary (fn [_env ^VectorReader rdr idx]
                                 (let [bb (doto (ByteBuffer/allocate typlen)
                                            (.putShort (.getShort rdr idx)))]
                                   (.array bb)))
-                :write-text (fn [_env ^IVectorReader rdr idx]
+                :write-text (fn [_env ^VectorReader rdr idx]
                               (utf8 (.getShort rdr idx)))})
        ;;
        ;;Java boolean maps to both bit and bool, opting to support latter only for now
@@ -303,12 +303,12 @@
                  :typlen 1
                  :read-binary (fn [ba] (-> ba ByteBuffer/wrap .get))
                  :read-text (fn [ba] (-> ba read-utf8 Byte/parseByte))
-                 :write-binary (fn [^IVectorReader rdr idx]
+                 :write-binary (fn [^VectorReader rdr idx]
                                  (when-not (.isNull rdr idx)
                                    (let [bb (doto (ByteBuffer/allocate 1)
                                               (.put (.getByte rdr idx)))]
                                      (.array bb))))
-                 :write-text (fn [^IVectorReader rdr idx]
+                 :write-text (fn [^VectorReader rdr idx]
                                (when-not (.isNull rdr idx)
                                  (utf8 (.getByte rdr idx))))}
 
@@ -321,11 +321,11 @@
                   :typreceive "float4recv"
                   :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getFloat))
                   :read-text (fn [_env ba] (-> ba read-utf8 Float/parseFloat))
-                  :write-binary (fn [_env ^IVectorReader rdr idx]
+                  :write-binary (fn [_env ^VectorReader rdr idx]
                                   (let [bb (doto (ByteBuffer/allocate 4)
                                              (.putFloat (.getFloat rdr idx)))]
                                     (.array bb)))
-                  :write-text (fn [_env ^IVectorReader rdr idx]
+                  :write-text (fn [_env ^VectorReader rdr idx]
                                 (utf8 (.getFloat rdr idx)))})
        :float8 (let [typlen 8]
                  {:typname "float8"
@@ -336,11 +336,11 @@
                   :typreceive "float8recv"
                   :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getDouble))
                   :read-text (fn [_env ba] (-> ba read-utf8 Double/parseDouble))
-                  :write-binary (fn [_env ^IVectorReader rdr idx]
+                  :write-binary (fn [_env ^VectorReader rdr idx]
                                   (let [bb (doto (ByteBuffer/allocate typlen)
                                              (.putDouble (.getDouble rdr idx)))]
                                     (.array bb)))
-                  :write-text (fn [_env ^IVectorReader rdr idx]
+                  :write-text (fn [_env ^VectorReader rdr idx]
                                 (utf8 (.getDouble rdr idx)))})
 
        :numeric {:typname "numeric"
@@ -351,9 +351,9 @@
                  :typreceive "numeric_recv"
                  :read-binary (fn [_env ba] (NumericBin/decode (ByteBuffer/wrap ba)))
                  :read-text (fn [_env ba] (-> ba read-utf8 bigdec))
-                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                 :write-binary (fn [_env ^VectorReader rdr idx]
                                  (.array (NumericBin/encode (.getObject rdr idx))))
-                 :write-text (fn [_env ^IVectorReader rdr idx]
+                 :write-text (fn [_env ^VectorReader rdr idx]
                                (utf8 (.getObject rdr idx)))}
 
        :uuid (let [typlen 16]
@@ -367,11 +367,11 @@
                 :typoutput "uuid_out"
                 :read-binary (fn [_env ba] (util/byte-buffer->uuid (ByteBuffer/wrap ba)))
                 :read-text (fn [_env ba] (UUID/fromString (read-utf8 ba)))
-                :write-binary (fn [_env ^IVectorReader rdr idx]
+                :write-binary (fn [_env ^VectorReader rdr idx]
                                 (let [ba ^bytes (byte-array typlen)]
                                   (.get (.getBytes rdr idx) ba)
                                   ba))
-                :write-text (fn [_env ^IVectorReader rdr idx]
+                :write-text (fn [_env ^VectorReader rdr idx]
                               (utf8 (util/byte-buffer->uuid (.getBytes rdr idx))))})
 
        :timestamp (let [typlen 8]
@@ -392,13 +392,13 @@
                                       res
                                       (throw (IllegalArgumentException. (format "Can not parse '%s' as timestamp" text))))))
 
-                     :write-binary (fn [_env ^IVectorReader rdr idx]
+                     :write-binary (fn [_env ^VectorReader rdr idx]
                                      (let [micros (- (get-unix-micros rdr idx) unix-pg-epoch-diff-in-micros)
                                            bb (doto (ByteBuffer/allocate typlen)
                                                 (.putLong micros))]
                                        (.array bb)))
 
-                     :write-text (fn [env ^IVectorReader rdr idx]
+                     :write-text (fn [env ^VectorReader rdr idx]
                                    (let [^LocalDateTime ldt (.getObject rdr idx)]
                                      (utf8 (case (get-in env [:parameters "datestyle"])
                                              "iso8601" (str ldt)
@@ -428,7 +428,7 @@
                                         res
                                         (throw (IllegalArgumentException. (format "Can not parse '%s' as timestamptz" text))))))
 
-                       :write-binary (fn [_env ^IVectorReader rdr idx]
+                       :write-binary (fn [_env ^VectorReader rdr idx]
                                        ;;despite the wording in the docs, based off pgjdbc behaviour
                                        ;;and other sources, this appears to be in UTC rather than the session tz
                                        (when-let [^ZonedDateTime zdt (.getObject rdr idx)]
@@ -441,7 +441,7 @@
                                                     (.putLong micros))]
                                            (.array bb))))
 
-                       :write-text (fn [env ^IVectorReader rdr idx]
+                       :write-text (fn [env ^VectorReader rdr idx]
                                      (when-let [^ZonedDateTime zdt (.getObject rdr idx)]
                                        (utf8 (case (get-in env [:parameters "datestyle"])
                                                "iso8601" (str zdt)
@@ -481,13 +481,13 @@
                                                      (= ::malformed-date-time to))
                                          (ZonedDateTimeRange. from to))))))
 
-                    :write-text (fn [_env ^IVectorReader rdr idx]
+                    :write-text (fn [_env ^VectorReader rdr idx]
                                   (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
                                     (utf8
                                      (str "[" (some-> (.getFrom tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                           "," (some-> (.getTo tstz-range) (.format iso-offset-date-time-formatter-with-space))
                                           ")"))))
-                    :write-binary (fn [_env ^IVectorReader rdr idx]
+                    :write-binary (fn [_env ^VectorReader rdr idx]
                                     (let [^ZonedDateTimeRange tstz-range (.getObject rdr idx)]
                                       (byte-array
                                        (.getBytes
@@ -508,12 +508,12 @@
                                            unix-pg-epoch-diff-in-days)]
                                  (LocalDate/ofEpochDay days)))
                 :read-text (fn [_env ba] (LocalDate/parse (read-utf8 ba)))
-                :write-binary (fn [_env ^IVectorReader rdr idx]
+                :write-binary (fn [_env ^VectorReader rdr idx]
                                 (let [days (- (.getInt rdr idx) unix-pg-epoch-diff-in-days)
                                       bb (doto (ByteBuffer/allocate typlen)
                                            (.putInt days))]
                                   (.array bb)))
-                :write-text (fn [_env ^IVectorReader rdr idx]
+                :write-text (fn [_env ^VectorReader rdr idx]
                               (-> ^LocalDate (.getObject rdr idx)
                                   (.format DateTimeFormatter/ISO_LOCAL_DATE)
                                   (utf8)))})
@@ -526,7 +526,7 @@
                 :typsend "time_send"
                 :typreceive "time_recv"
                 :read-text (fn [_env ba] (LocalTime/parse (read-utf8 ba)))
-                :write-text (fn [_env ^IVectorReader rdr idx]
+                :write-text (fn [_env ^VectorReader rdr idx]
                               (-> ^LocalTime (.getObject rdr idx)
                                   (.format DateTimeFormatter/ISO_LOCAL_TIME)
                                   (utf8)))})
@@ -538,12 +538,12 @@
                  :typreceive "varcharrecv"
                  :read-text (fn [_env ba] (read-utf8 ba))
                  :read-binary (fn [_env ba] (read-utf8 ba))
-                 :write-text (fn [_env ^IVectorReader rdr idx]
+                 :write-text (fn [_env ^VectorReader rdr idx]
                                (let [bb (.getBytes rdr idx)
                                      ba ^bytes (byte-array (.remaining bb))]
                                  (.get bb ba)
                                  ba))
-                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                 :write-binary (fn [_env ^VectorReader rdr idx]
                                  (let [bb (.getBytes rdr idx)
                                        ba ^bytes (byte-array (.remaining bb))]
                                    (.get bb ba)
@@ -556,12 +556,12 @@
                  :typreceive "keywordrecv"
                  :read-text (fn [_env ba] (read-utf8 ba))
                  :read-binary (fn [_env ba] (read-utf8 ba))
-                 :write-text (fn [_env ^IVectorReader rdr idx]
+                 :write-text (fn [_env ^VectorReader rdr idx]
                                (let [bb (.getBytes rdr idx)
                                      ba ^bytes (byte-array (.remaining bb))]
                                  (.get bb ba)
                                  ba))
-                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                 :write-binary (fn [_env ^VectorReader rdr idx]
                                  (let [bb (.getBytes rdr idx)
                                        ba ^bytes (byte-array (.remaining bb))]
                                    (.get bb ba)
@@ -575,12 +575,12 @@
                :read-text (fn [_env ba] ba)
                :read-binary (fn [_env ba] (ByteBuffer/wrap ba)
                               (throw (UnsupportedOperationException.)))
-               :write-text (fn [_env ^IVectorReader rdr idx]
+               :write-text (fn [_env ^VectorReader rdr idx]
                              (let [bb (.getBytes rdr idx)
                                    ba ^bytes (byte-array (.remaining bb))]
                                (.get bb ba)
                                ba))
-               :write-binary (fn [_env ^IVectorReader rdr idx]
+               :write-binary (fn [_env ^VectorReader rdr idx]
                                (let [bb (.getBytes rdr idx)
                                      ba ^bytes (byte-array (.remaining bb))]
                                  (.get bb ba)
@@ -595,12 +595,12 @@
               :typreceive "textrecv"
               :read-text (fn [_env ba] (read-utf8 ba))
               :read-binary (fn [_env ba] (read-utf8 ba))
-              :write-text (fn [_env ^IVectorReader rdr idx]
+              :write-text (fn [_env ^VectorReader rdr idx]
                             (let [bb (.getBytes rdr idx)
                                   ba ^bytes (byte-array (.remaining bb))]
                               (.get bb ba)
                               ba))
-              :write-binary (fn [_env ^IVectorReader rdr idx]
+              :write-binary (fn [_env ^VectorReader rdr idx]
                               (let [bb (.getBytes rdr idx)
                                     ba ^bytes (byte-array (.remaining bb))]
                                 (.get bb ba)
@@ -612,13 +612,13 @@
                   :typsend "regclasssend"
                   :typreceive "regclassrecv"
                   ;;skipping read impl, unsure if anything can/would send a regclass param
-                  :write-text (fn [_env ^IVectorReader rdr idx]
+                  :write-text (fn [_env ^VectorReader rdr idx]
                                 ;;postgres returns the table name rather than a string of the
                                 ;;oid here, however regclass is usually not returned from queries
                                 ;;could reimplement oid -> table name resolution here or in getObject
                                 ;;if the user cannot adjust the query to cast to varchar/text
                                 (utf8 (Integer/toUnsignedString (.getInt rdr idx))))
-                  :write-binary (fn [_env ^IVectorReader rdr idx]
+                  :write-binary (fn [_env ^VectorReader rdr idx]
                                   ;;postgres returns the table name rather than a string of the
                                   ;;oid here, however regclass is usually not returned from queries
                                   ;;could reimplement oid -> table name resolution here or in getObject
@@ -631,9 +631,9 @@
                  :oid 24
                  :typsend "regprocsend"
                  :typreceive "regprocrecv"
-                 :write-text (fn [_env ^IVectorReader rdr idx]
+                 :write-text (fn [_env ^VectorReader rdr idx]
                                (utf8 (Integer/toUnsignedString (.getInt rdr idx))))
-                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                 :write-binary (fn [_env ^VectorReader rdr idx]
                                  (byte-array
                                   (utf8 (Integer/toUnsignedString (.getInt rdr idx)))))}
 
@@ -658,9 +658,9 @@
                                 ("tr" "yes" "tru" "true" "on" "ye" "t" "y" "1") true
                                 ("f" "fa" "fal" "fals" "false" "no" "n" "off" "0") false
                                 (throw (IllegalArgumentException. "Invalid boolean value"))))
-                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                 :write-binary (fn [_env ^VectorReader rdr idx]
                                  (byte-array [(if (.getBoolean rdr idx) 1 0)]))
-                 :write-text (fn [_env ^IVectorReader rdr idx]
+                 :write-text (fn [_env ^VectorReader rdr idx]
                                (utf8 (if (.getBoolean rdr idx) "t" "f")))}
 
        :interval {:typname "interval"
@@ -676,9 +676,9 @@
                                  (Time/asInterval (read-utf8 ba))
                                  (catch NullPointerException _
                                    (throw (IllegalArgumentException. "Interval parameters currently unsupported")))))
-                  :write-binary (fn [_env ^IVectorReader rdr idx]
+                  :write-binary (fn [_env ^VectorReader rdr idx]
                                   (byte-array (interval-rdr->iso-micro-interval-str-bytes rdr idx)))
-                  :write-text (fn [_env ^IVectorReader rdr idx] (interval-rdr->iso-micro-interval-str-bytes rdr idx))}
+                  :write-text (fn [_env ^VectorReader rdr idx] (interval-rdr->iso-micro-interval-str-bytes rdr idx))}
 
        ;; json-write-text is essentially the default in send-query-result so no need to specify here
        :json {:typname "json"
@@ -689,7 +689,7 @@
                            (JsonSerde/decode (ByteArrayInputStream. ba)))
               :read-binary (fn [_env ba]
                              (JsonSerde/decode (ByteArrayInputStream. ba)))
-              :write-binary (fn [_env ^IVectorReader rdr idx]
+              :write-binary (fn [_env ^VectorReader rdr idx]
                               (let [json (-> (.getObject rdr idx) (JsonSerde/encode))]
                                 (.getBytes json)))}
 
@@ -708,9 +708,9 @@
                  :typreceive "transit_recv"
                  :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
                  :read-binary (fn [_env ^bytes ba] (serde/read-transit ba :json))
-                 :write-text (fn [_env ^IVectorReader rdr idx]
+                 :write-text (fn [_env ^VectorReader rdr idx]
                                (serde/write-transit (.getObject rdr idx) :json))
-                 :write-binary (fn [_env ^IVectorReader rdr idx]
+                 :write-binary (fn [_env ^VectorReader rdr idx]
                                  (serde/write-transit (.getObject rdr idx) :json))}
 
        :_int4 (let [typlen 4
@@ -734,7 +734,7 @@
                                 (mapv #(Integer/parseInt %) elems)))
                  :read-binary (fn [_env ba]
                                 (read-binary-int-array ba))
-                 :write-text (fn [_env ^IVectorReader list-rdr idx]
+                 :write-text (fn [_env ^VectorReader list-rdr idx]
                                (let [list (.getObject list-rdr idx)
                                      sb (StringBuilder. "{")]
                                  (doseq [elem list]
@@ -744,7 +744,7 @@
                                    (.setCharAt sb (dec (.length sb)) \})
                                    (.append sb "}"))
                                  (utf8 (.toString sb))))
-                 :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                 :write-binary (fn [_env ^VectorReader list-rdr idx]
                                  (let [list (.getObject list-rdr idx)
                                        ^ByteBuffer bb (binary-list-header (count list) typelem typlen)]
                                    (doseq [elem list]
@@ -776,7 +776,7 @@
                                 (mapv #(Long/parseLong %) elems)))
                  :read-binary (fn [_env ba]
                                 (read-binary-int-array ba))
-                 :write-text (fn [_env ^IVectorReader list-rdr idx]
+                 :write-text (fn [_env ^VectorReader list-rdr idx]
                                (let [list (.getObject list-rdr idx)
                                      sb (StringBuilder. "{")]
                                  (doseq [elem list]
@@ -786,7 +786,7 @@
                                    (.setCharAt sb (dec (.length sb)) \})
                                    (.append sb "}"))
                                  (utf8 (.toString sb))))
-                 :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                 :write-binary (fn [_env ^VectorReader list-rdr idx]
                                  (let [list (.getObject list-rdr idx)
                                        ^ByteBuffer bb (binary-list-header (count list) typelem typlen)]
                                    (doseq [elem list]
@@ -811,7 +811,7 @@
                                   (-> sa
                                       (subs 1 (dec (count sa)))
                                       (str/split #",")))))
-                 :write-text (fn [_env ^IVectorReader list-rdr idx]
+                 :write-text (fn [_env ^VectorReader list-rdr idx]
                                (let [list (.getObject list-rdr idx)
                                      sb (StringBuilder. "{")]
                                  (doseq [elem list]
@@ -823,7 +823,7 @@
                                  (utf8 (.toString sb))))
                  :read-binary (fn [_env ba]
                                 (read-binary-text-array ba))
-                 :write-binary (fn [_env ^IVectorReader list-rdr idx]
+                 :write-binary (fn [_env ^VectorReader list-rdr idx]
                                  (let [list (.getObject list-rdr idx)
                                        ^ByteBuffer bb (binary-variable-size-array-header
                                                        (count list)

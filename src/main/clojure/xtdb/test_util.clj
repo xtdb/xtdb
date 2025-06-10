@@ -215,9 +215,8 @@
   ([^ICursor cursor ^IKeyFn key-fn]
    (let [!res (volatile! (transient []))]
      (.forEachRemaining cursor
-                        (reify Consumer
-                          (accept [_ rel]
-                            (vswap! !res conj! (vr/rel->rows rel key-fn)))))
+                        (fn [^RelationReader rel]
+                          (vswap! !res conj! (.toMaps rel key-fn))))
      (persistent! @!res))))
 
 (defn query-ra

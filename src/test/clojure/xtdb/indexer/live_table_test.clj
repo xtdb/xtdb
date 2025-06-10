@@ -106,7 +106,7 @@
                 (.resolve path "objects")))))))))
 
 (defn live-table-wm->data [^LiveTable$Watermark live-table-wm]
-  (let [live-rel-data (vr/rel->rows (.getLiveRelation live-table-wm))
+  (let [live-rel-data (.toMaps (.getLiveRelation live-table-wm))
         live-trie (.compactLogs (.getLiveTrie live-table-wm))
         live-trie-leaf-data (->> live-trie
                                  (.getLeaves)

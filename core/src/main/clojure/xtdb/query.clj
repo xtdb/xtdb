@@ -49,12 +49,13 @@
            (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
+           xtdb.arrow.VectorReader
            xtdb.catalog.BlockCatalog
            (xtdb.indexer Watermark Watermark$Source)
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter
-           [xtdb.vector IVectorReader RelationReader]))
+           [xtdb.vector RelationReader]))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
                                         current-time, snapshot-time, default-tz,
@@ -110,7 +111,7 @@
 
 (defn ->arg-fields [^RelationReader args]
   (->> args
-       (into {} (map (fn [^IVectorReader col]
+       (into {} (map (fn [^VectorReader col]
                        (MapEntry/create (symbol (.getName col)) (.getField col)))))))
 
 (defn expr->instant [expr {:keys [^RelationReader args default-tz] :as opts}]
@@ -306,5 +307,5 @@
                                false)
          ^Stream (.onClose (fn []
                              (util/close cursor)))
-         (.flatMap (fn [rel]
-                     (.stream (vr/rel->rows rel key-fn))))))))
+         (.flatMap (fn [^RelationReader rel]
+                     (.stream (.toMaps rel key-fn))))))))

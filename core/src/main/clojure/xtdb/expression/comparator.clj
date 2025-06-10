@@ -3,8 +3,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import java.util.function.IntBinaryOperator
-           xtdb.arrow.VectorReader
-           (xtdb.vector IVectorReader)))
+           xtdb.arrow.VectorReader))
 
 (set! *unchecked-math* :warn-on-boxed)
 

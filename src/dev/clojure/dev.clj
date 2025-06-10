@@ -121,7 +121,7 @@
         (loop [v init]
           (cond
             (reduced? v) (unreduced v)
-            (.loadNextBatch rdr) (recur (f v (vr/rel->rows (vr/<-root (.getVectorSchemaRoot rdr)))))
+            (.loadNextBatch rdr) (recur (f v (.toMaps (vr/<-root (.getVectorSchemaRoot rdr)))))
             :else v))))))
 
 (comment
