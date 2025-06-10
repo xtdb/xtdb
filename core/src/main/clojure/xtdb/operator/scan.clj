@@ -24,13 +24,13 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            (xtdb BufferPool)
+           xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
-           (xtdb.util TemporalBounds TemporalDimension)
-           (xtdb.vector RelationReader)))
+           (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table symbol?)
 

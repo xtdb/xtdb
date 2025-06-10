@@ -2,6 +2,8 @@
   (:require [clojure.test :as t]
             [xtdb.test-util :as tu]))
 
+(t/use-fixtures :each tu/with-allocator)
+
 (t/deftest test-union-all
   (t/is (= {:col-types '{a :i64, b :i64}
             :res [#{{:a 0, :b 15}

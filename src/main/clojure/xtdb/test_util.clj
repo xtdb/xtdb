@@ -162,7 +162,7 @@
 (defn open-rel ^xtdb.vector.RelationReader [vecs]
   (vw/open-rel vecs))
 
-(defn open-args ^xtdb.vector.RelationReader [args]
+(defn open-args ^xtdb.arrow.RelationReader [args]
   (vw/open-args *allocator* args))
 
 (defn populate-root ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root rows]
@@ -224,6 +224,7 @@
   ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [{:keys [live-idx]} node
+         allocator (:allocator node *allocator*)
          query-opts (-> query-opts
                         (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
                                          (doto (-> :after-tx-id (then-await-tx node))))))
@@ -231,12 +232,13 @@
          ^PreparedQuery pq (if node
                              (let [^IQuerySource q-src (util/component node ::q/query-source)]
                                (.prepareRaQuery q-src query live-idx query-opts))
-                             (q/prepare-ra query {:ref-ctr (RefCounter.)
+                             (q/prepare-ra query {:allocator allocator
+                                                  :ref-ctr (RefCounter.)
                                                   :wm-src (reify Watermark$Source
                                                             (openWatermark [_]
                                                               (Watermark. nil nil {})))}))]
      (util/with-open [^RelationReader args-rel (if args
-                                                 (vw/open-args *allocator* args)
+                                                 (vw/open-args allocator args)
                                                  vw/empty-args)
                       res (.openQuery pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
                                              (assoc :args args-rel, :close-args? false)))]

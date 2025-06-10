@@ -1,6 +1,9 @@
 (ns xtdb.expression.uri-test
   (:require [clojure.test :as t]
-            [xtdb.expression-test :as et]))
+            [xtdb.expression-test :as et]
+            [xtdb.test-util :as tu]))
+
+(t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-cast
   (t/is (= #xt/uri "https://xtdb.com"

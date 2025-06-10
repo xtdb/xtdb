@@ -4,10 +4,13 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.RowCopier;
 import xtdb.arrow.ValueReader;
 import xtdb.arrow.VectorPosition;
+import xtdb.arrow.VectorReader;
 import xtdb.util.Hasher;
 
 import java.nio.ByteBuffer;
@@ -108,6 +111,11 @@ public class RenamedVectorReader implements IVectorReader {
     @Override
     public Object getObject(int idx, IKeyFn<?> keyFn) {
         return reader.getObject(idx, keyFn);
+    }
+
+    @Override
+    public @Nullable IVectorReader vectorForOrNull(@NotNull String name) {
+        return reader.vectorForOrNull(name);
     }
 
     @Override

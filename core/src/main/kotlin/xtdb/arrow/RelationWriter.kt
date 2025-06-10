@@ -26,18 +26,20 @@ interface RelationWriter : RelationReader {
      */
     fun clear()
 
-    fun writeRows(vararg rows: Map<*, *>) {
-        rows.forEach { row ->
-            row.forEach { (k, v) ->
-                val vector = this[when (k) {
-                    is String -> k
-                    is Keyword -> normalForm(k.sym).toString()
-                    else -> throw IllegalArgumentException("Column name must be a string or keyword")
-                }]
+    fun writeRow(row: Map<*, *>) {
+        row.forEach { (k, v) ->
+            val vector = this[when (k) {
+                is String -> k
+                is Keyword -> normalForm(k.sym).toString()
+                else -> throw IllegalArgumentException("Column name must be a string or keyword")
+            }]
 
-                vector.writeObject(v)
-            }
-            endRow()
+            vector.writeObject(v)
         }
+        endRow()
+    }
+
+    fun writeRows(vararg rows: Map<*, *>) {
+        rows.forEach(::writeRow)
     }
 }

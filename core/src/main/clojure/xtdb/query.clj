@@ -31,7 +31,6 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql]
             [xtdb.xtql.plan :as xtql.plan])
@@ -49,13 +48,12 @@
            (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
-           xtdb.arrow.VectorReader
+           (xtdb.arrow RelationReader VectorReader)
            xtdb.catalog.BlockCatalog
            (xtdb.indexer Watermark Watermark$Source)
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
-           xtdb.util.RefCounter
-           [xtdb.vector RelationReader]))
+           xtdb.util.RefCounter))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
                                         current-time, snapshot-time, default-tz,
@@ -172,12 +170,12 @@
          (openQuery [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]
                         :or {default-tz default-tz
                              close-args? true}}]
-           (let [^RelationReader args (cond
-                                        (instance? RelationReader args) args
-                                        (vector? args) (vw/open-args allocator args)
-                                        (nil? args) vw/empty-args
-                                        :else (throw (ex-info "invalid args"
-                                                              {:type (class args)})))
+           (let [args (cond
+                        (instance? RelationReader args) args
+                        (vector? args) (vw/open-args allocator args)
+                        (nil? args) vw/empty-args
+                        :else (throw (ex-info "invalid args"
+                                              {:type (class args)})))
                  {:keys [fields ->cursor]} (emit-expr cache deps conformed-query scan-cols default-tz (->arg-fields args))
                  current-time (or (some-> (:current-time plan-meta) (expr->instant {:args args, :default-tz default-tz}))
                                   (some-> current-time (expr->instant {:args args, :default-tz default-tz}))

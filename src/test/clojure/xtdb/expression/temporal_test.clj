@@ -7,8 +7,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression-test :as et]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
-            [xtdb.vector.writer :as vw])
+            [xtdb.time :as time])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            java.time.temporal.ChronoUnit
            (xtdb.time Interval)))

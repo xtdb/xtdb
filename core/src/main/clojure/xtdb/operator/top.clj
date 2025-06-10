@@ -5,7 +5,7 @@
   (:import java.util.function.Consumer
            java.util.stream.IntStream
            xtdb.ICursor
-           xtdb.vector.RelationReader))
+           xtdb.arrow.RelationReader))
 
 (s/def ::skip (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
 (s/def ::limit (s/nilable (s/or :literal nat-int?, :param ::lp/param)))

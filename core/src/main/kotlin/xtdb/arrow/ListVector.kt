@@ -154,7 +154,24 @@ class ListVector(
 
     override fun openSlice(al: BufferAllocator) = ListVector(al, name, nullable, elVector.openSlice(al), valueCount)
 
-    override fun valueReader(pos: VectorPosition): ValueReader = TODO("List.valueReader")
+    override fun valueReader(pos: VectorPosition): ValueReader {
+        val elPos = VectorPosition.build()
+        val elValueReader = elVector.valueReader(elPos)
+
+        val listValReader = object : ListValueReader {
+            override fun size(): Int = getListCount(pos.position)
+
+            override fun nth(idx: Int): ValueReader {
+                elPos.position = getListStartIndex(pos.position) + idx
+                return elValueReader
+            }
+        }
+
+        return object : ValueReader {
+            override val isNull get() = this@ListVector.isNull(pos.position)
+            override fun readObject() = listValReader
+        }
+    }
 
     override fun clear() {
         validityBuffer.clear()

@@ -18,7 +18,7 @@
   (rel-reader (map vec->reader (.getFieldVectors root))
               (.getRowCount root)))
 
-(defn ->absent-col [col-name allocator row-count]
+(defn- ->absent-col [col-name allocator row-count]
   (vec->reader (doto (-> (types/col-type->field col-name :null)
                          (.createVector allocator))
                  (.setValueCount row-count))))

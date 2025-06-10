@@ -25,6 +25,7 @@ import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xtdb.Types;
 import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
@@ -1387,6 +1388,11 @@ public class ValueVectorReader implements IVectorReader {
             if (structKeyReader == null) return null;
 
             return new IndirectVectorReader(structKeyReader, new DuvIndirection(v, (byte) legs.indexOf("struct")));
+        }
+
+        @Override
+        public @Nullable IVectorReader vectorForOrNull(@NotNull String name) {
+            return legReader(name);
         }
 
         @Override

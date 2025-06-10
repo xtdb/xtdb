@@ -351,11 +351,6 @@ class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: In
             }
         }
 
-        @Suppress("unused")
-        @JvmField
-        // naming from Oracle - zero cols, one row
-        val DUAL = Relation(emptyList(), 1)
-
         @JvmStatic
         fun fromRoot(vsr: VectorSchemaRoot) = Relation(vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
 

@@ -10,7 +10,7 @@ class SelectCursor(
     private val inCursor: ICursor<RelationReader>,
     private val selector: SelectionSpec,
     private val schema: Map<String, Any>,
-    private val args: RelationReader
+    private val args: xtdb.arrow.RelationReader
 ) : ICursor<RelationReader> {
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         var advanced = false

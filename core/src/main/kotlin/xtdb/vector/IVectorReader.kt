@@ -14,6 +14,11 @@ interface IVectorReader : VectorReader, AutoCloseable {
 
     override fun withName(newName: String): IVectorReader = RenamedVectorReader(this, newName)
 
+    override fun vectorForOrNull(name: String): IVectorReader? = unsupported("vectorForOrNull")
+    override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+    override fun get(name: String) = vectorFor(name)
+    override fun get(idx: Int) = getObject(idx)
+
     fun structKeyReader(colName: String): IVectorReader? = unsupported("structKeyReader")
     override val keyNames: Set<String>? get() = unsupported("keyNames")
 

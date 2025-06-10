@@ -3,11 +3,10 @@ package xtdb.vector;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xtdb.api.query.IKeyFn;
-import xtdb.arrow.RowCopier;
-import xtdb.arrow.ValueReader;
-import xtdb.arrow.VectorIndirection;
-import xtdb.arrow.VectorPosition;
+import xtdb.arrow.*;
 import xtdb.util.Hasher;
 
 import java.nio.ByteBuffer;
@@ -117,6 +116,12 @@ class IndirectVectorReader implements IVectorReader {
     @Override
     public Object getObject(int idx, IKeyFn<?> keyFn) {
         return reader.getObject(indirection.getIndex(idx), keyFn);
+    }
+
+    @Override
+    public @Nullable IVectorReader vectorForOrNull(@NotNull String name) {
+        var inner = reader.vectorForOrNull(name);
+        return inner == null ? null : new IndirectVectorReader(inner, indirection);
     }
 
     @Override

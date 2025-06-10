@@ -13,7 +13,7 @@
   (:import java.util.Date
            (java.util.function IntPredicate)
            (xtdb.compactor RecencyPartition)
-           xtdb.vector.RelationReader))
+           xtdb.arrow.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 

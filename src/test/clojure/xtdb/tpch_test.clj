@@ -13,6 +13,8 @@
   (:import (java.nio.file Path)
            [java.time Duration]))
 
+(t/use-fixtures :each tu/with-allocator)
+
 (def ^:dynamic *node* nil)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))

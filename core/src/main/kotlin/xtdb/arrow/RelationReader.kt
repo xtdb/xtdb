@@ -57,8 +57,14 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     }
 
     companion object {
+        @JvmStatic
         fun from(cols: Iterable<VectorReader>, rowCount: Int): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
+
+        @Suppress("unused")
+        @JvmField
+        // naming from Oracle - zero cols, one row
+        val DUAL = from(emptyList(), 1)
     }
 
     override fun valAt(key: Any?) = valAt(key, null)

@@ -12,7 +12,7 @@ class ProjectCursor(
     private val inCursor: ICursor<RelationReader>,
     private val specs: List<ProjectionSpec>,
     private val schema: Map<String, Any>,
-    private val args: RelationReader,
+    private val args: xtdb.arrow.RelationReader,
 ) : ICursor<RelationReader> {
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean = inCursor.tryAdvance { inRel ->
         mutableListOf<VectorReader>().useAll { closeCols ->

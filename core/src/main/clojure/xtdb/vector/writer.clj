@@ -7,10 +7,11 @@
            java.net.URI
            (java.nio ByteBuffer)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
-           (java.util Date List Map Set UUID)
+           (java.util Date LinkedList List Map Set UUID)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
+           xtdb.arrow.Vector
            xtdb.error.Anomaly
            xtdb.time.Interval
            xtdb.Types
@@ -186,17 +187,24 @@
   (-> (symbol (str "?" v))
       util/symbol->normal-form-symbol))
 
-(defn open-args ^xtdb.vector.RelationReader [allocator args]
+(defn open-args ^xtdb.arrow.RelationReader [allocator args]
   (let [args-map (->> args
                       (into {} (map-indexed (fn [idx v]
                                               (if (map-entry? v)
                                                 {(param-sym (str (symbol (key v)))) (val v)}
                                                 {(symbol (str "?_" idx)) v})))))]
 
-    (open-rel (for [[k v] args-map]
-                (open-vec allocator k [v])))))
+    ;; TODO this is way more general than just this function
+    ;; TODO can also move to Relation/fromMaps as and when we implement that
+    (util/with-close-on-catch [arg-vecs (LinkedList.)]
+      (doseq [[k v] args-map]
+        (let [vec (Vector/fromField allocator (types/col-type->field k (value->col-type v)))]
+          (.add arg-vecs vec)
+          (.writeObject vec v)))
 
-(def empty-args (vr/rel-reader [] 1))
+      (xtdb.arrow.RelationReader/from arg-vecs (count args-map)))))
+
+(def empty-args xtdb.arrow.RelationReader/DUAL)
 
 (defn vec-wtr->rdr ^xtdb.vector.IVectorReader [^xtdb.vector.IVectorWriter w]
   (vr/vec->reader (.getVector (doto w (.syncValueCount)))))

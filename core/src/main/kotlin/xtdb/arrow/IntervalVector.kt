@@ -1,15 +1,27 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.PeriodDuration
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import xtdb.time.Interval
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
-import xtdb.time.Interval
+import xtdb.util.Hasher
+import xtdb.vector.extensions.IntervalMDMType
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+
+private class IntervalValueReader(private val vec: VectorReader, private val pos: VectorPosition) : ValueReader {
+    override val isNull: Boolean get() = vec.isNull(pos.position)
+
+    override fun readObject(): Any? =
+        vec.getObject(pos.position)
+            ?.let { it as Interval }
+            ?.let { PeriodDuration(it.period, it.duration) }
+}
 
 class IntervalYearMonthVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
@@ -33,6 +45,8 @@ class IntervalYearMonthVector private constructor(
 
         writeInt(value.months)
     }
+
+    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
@@ -74,6 +88,8 @@ class IntervalDayTimeVector private constructor(
                 writeBytes(this)
             }
         } else throw InvalidWriteObjectException(fieldType, value)
+
+    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
@@ -119,10 +135,30 @@ class IntervalMonthDayNanoVector private constructor(
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
 
+    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
+
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
         IntervalMonthDayNanoVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+}
+
+class IntervalMonthDayMicroVector(
+    override val inner: IntervalMonthDayNanoVector
+) : ExtensionVector(), MetadataFlavour.Presence {
+
+    override val type = IntervalMDMType
+
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn)
+    override fun writeObject0(value: Any) = inner.writeObject(value)
+
+    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
+
+    override val metadataFlavours get() = listOf(this)
+
+    override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
+
+    override fun openSlice(al: BufferAllocator) = IntervalMonthDayMicroVector(inner.openSlice(al))
 }

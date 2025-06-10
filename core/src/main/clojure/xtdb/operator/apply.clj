@@ -8,8 +8,8 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util.function Consumer)
            (xtdb ICursor)
-           (xtdb.operator.apply ApplyCursor ApplyMode$AntiJoin ApplyMode$CrossJoin ApplyMode$LeftJoin ApplyMode$MarkJoin ApplyMode$SemiJoin ApplyMode$SingleJoin DependentCursorFactory)
-           (xtdb.vector RelationReader)))
+           (xtdb.arrow RelationReader)
+           (xtdb.operator.apply ApplyCursor ApplyMode$AntiJoin ApplyMode$CrossJoin ApplyMode$LeftJoin ApplyMode$MarkJoin ApplyMode$SemiJoin ApplyMode$SingleJoin DependentCursorFactory)))
 
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
@@ -96,9 +96,9 @@
                                          (open-dependent-cursor (-> query-opts
                                                                     (update :args
                                                                             (fn [^RelationReader args]
-                                                                              (vr/rel-reader (concat args
-                                                                                                     (for [[ik dk] columns]
-                                                                                                       (-> (.vectorForOrNull in-rel (str ik))
-                                                                                                           (.select (int-array [idx]))
-                                                                                                           (.withName (str dk)))))
-                                                                                             1))))))))))}))))
+                                                                              (RelationReader/from (concat args
+                                                                                                           (for [[ik dk] columns]
+                                                                                                             (-> (.vectorForOrNull in-rel (str ik))
+                                                                                                                 (.select (int-array [idx]))
+                                                                                                                 (.withName (str dk)))))
+                                                                                                   1))))))))))}))))

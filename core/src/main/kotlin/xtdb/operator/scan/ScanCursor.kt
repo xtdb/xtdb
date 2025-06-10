@@ -24,7 +24,7 @@ class ScanCursor(
 
     private val mergeTasks: Iterator<MergeTask>,
 
-    private val schema: Map<String, Any>, private val args: RelationReader,
+    private val schema: Map<String, Any>, private val args: xtdb.arrow.RelationReader,
 ) : ICursor<RelationReader> {
 
     class MergeTask(val pages: List<MergePlanPage>, val path: ByteArray)
