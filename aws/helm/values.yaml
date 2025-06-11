@@ -2,7 +2,7 @@ nodeCount: 3
 
 image:
   repository: ghcr.io/xtdb/xtdb-aws
-  # tag: 2.0.0-beta7
+  # tag: 2.0.0
   pullPolicy: IfNotPresent
 
 nodeSelector:
