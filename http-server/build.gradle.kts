@@ -10,6 +10,10 @@ plugins {
     id("org.jetbrains.dokka")
 }
 
+ext {
+    set("labs", true)
+}
+
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
