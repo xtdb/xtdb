@@ -138,14 +138,6 @@ components:
         queryOpts:
           $ref: '#/components/schemas/QueryOpts'
 
-    Status:
-      type: object
-      properties:
-        latestCompletedTx:
-          $ref: '#/components/schemas/TransactionKey'
-        latestSubmittedTx:
-          $ref: '#/components/schemas/TransactionKey'
-
     TransactionKey:
       type: object
       properties:
@@ -381,23 +373,6 @@ components:
         '@value': "2020-01-01T12:34:56.789[Europe/Paris]"
 
 paths:
-  /status:
-    post:
-      summary: Status
-      description: Get status information from the node
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AuthOpts'
-        required: false
-      responses:
-        '200':
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Status'
   /tx:
     post:
       summary: Transaction
