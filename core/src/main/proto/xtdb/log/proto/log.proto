@@ -47,5 +47,5 @@ message TrieDetails {
     int64 data_file_size = 3;
     TrieMetadata trie_metadata = 4;
     TrieState trie_state = 5;
-    int64 as_of_system_time = 6;
+    int64 garbage_as_of = 6;
 }

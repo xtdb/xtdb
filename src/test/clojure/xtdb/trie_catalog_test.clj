@@ -1,13 +1,23 @@
 (ns xtdb.trie-catalog-test
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
+            [xtdb.compactor :as c]
+            [xtdb.garbage-collector :as gc]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
-            [xtdb.util :as util])
-  (:import (java.time Instant)
+            [xtdb.util :as util]
+            [xtdb.buffer-pool-test :as bpt])
+  (:import (java.time Duration Instant)
+           (java.util.concurrent ConcurrentHashMap)
+           (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.operator.scan Metadata)
+           (xtdb.trie_catalog TrieCatalog)
            (xtdb.util TemporalBounds)))
+
+(t/use-fixtures :once tu/with-allocator)
 
 (defn- apply-msgs [& trie-keys]
   (-> trie-keys
@@ -274,53 +284,80 @@
         "L4H covered idx 0 but not 1"))
 
 (t/deftest reconstructs-state-on-startup
-  (doseq [force-old-trie-details [true false]]
-    (binding [cat/*force-old-trie-details* force-old-trie-details]
-      (let [node-dir (util/->path "target/trie-catalog-test/reconstructs-state")]
-        (util/delete-dir node-dir)
+  (let [node-dir (util/->path "target/trie-catalog-test/reconstructs-state")]
+    (util/delete-dir node-dir)
 
-        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-          (let [cat (cat/trie-catalog node)]
-            (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-            (tu/finish-block! node)
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+      (let [cat (cat/trie-catalog node)]
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
+        (tu/finish-block! node)
 
-            (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-            (tu/finish-block! node)
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
+        (tu/finish-block! node)
 
-            (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
-            (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
-                     (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                          (into #{} (map :trie-key)))))))
+        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+        (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
+                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                      (into #{} (map :trie-key)))))))
 
-        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-          (let [cat (cat/trie-catalog node)]
-            (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
-            (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
-                     (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                          (into #{} (map :trie-key)))))))
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+      (let [cat (cat/trie-catalog node)]
+        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+        (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
+                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                      (into #{} (map :trie-key)))))))
 
-        (t/testing "artifically adding tries"
+    (t/testing "artifically adding tries"
 
-          (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-            (let [cat (cat/trie-catalog node)]
-              (.addTries cat "public/foo"
-                         (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
-                               ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
-                               ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                              (map #(apply trie/->trie-details "public/foo" %)))
-                         (Instant/now))
-              (tu/finish-block! node))))
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+        (let [cat (cat/trie-catalog node)]
+          (.addTries cat "public/foo"
+                     (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                           ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
+                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                          (map #(apply trie/->trie-details "public/foo" %)))
+                     (Instant/now))
+          (tu/finish-block! node))))
 
-        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-          (let [cat (cat/trie-catalog node)]
-            (t/is (= #{"l00-rc-b03"
-                       "l01-rc-b02"
-                       "l02-rc-p0-b01"
-                       "l02-rc-p1-b01"
-                       "l02-rc-p2-b01"
-                       "l02-rc-p3-b01"}
-                     (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                          (into (sorted-set) (map :trie-key)))))))))))
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+      (let [cat (cat/trie-catalog node)]
+        (t/is (= #{"l00-rc-b03"
+                   "l01-rc-b02"
+                   "l02-rc-p0-b01"
+                   "l02-rc-p1-b01"
+                   "l02-rc-p2-b01"
+                   "l02-rc-p3-b01"}
+                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                      (into (sorted-set) (map :trie-key)))))))))
+
+(t/deftest test-trie-catalog-init
+  (let [->trie-details (partial trie/->trie-details "public/foo")]
+    ;; old
+    (let [old-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
+                                    (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})
+                                    (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
+          cat (cat/trie-catalog-init {"public/foo" old-table-blocks})]
+
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                                                 (into (sorted-set) (map :trie-key)))))
+
+      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat "public/foo")
+                                           #xt/instant "2025-01-01T00:00:00Z")
+                        (into (sorted-set) (map :trie-key))))))
+
+    ;; new
+    (let [new-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
+                                                     :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
+                                    (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})
+                                    (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+          cat (cat/trie-catalog-init {"public/foo" new-table-blocks})]
+
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                                                 (into (sorted-set) (map :trie-key)))))
+
+      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat "public/foo")
+                                           #xt/instant "2025-01-01T00:00:00Z")
+                        (into (sorted-set) (map :trie-key))))))))
 
 (t/deftest handles-l1h-l1c-ordering-4301
   ;; L1H and L1C are in different partitions, so (strictly speaking) we should handle these out of order
@@ -349,155 +386,121 @@
                        ["l03-r20250101-p2-b09"]
                        ["l03-r20250101-p3-b09"]))))
 
-(t/deftest test-as-of
-  (let [node-dir (util/->path "target/trie-catalog-test/test-as-of")
-        clock (tu/->mock-clock (tu/->instants :year))]
-    (util/delete-dir node-dir)
+(t/deftest test-dry-trie-catalog-gc
+  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)] ;file-size-target
+    (letfn [(add-tries [tries inst]
+              (.addTries cat "public/foo"
+                         (map #(apply trie/->trie-details "public/foo" %) tries)
+                         inst))
+            (all-tries []
+              (->> (cat/all-tries (cat/trie-state cat "public/foo"))
+                   (sort-by (juxt :trie-key :state))
+                   (map (juxt :trie-key :state :garbage-as-of))))
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0 :instant-src clock
-                                       :instant-source-for-non-tx-msgs? true})]
-      (let [cat (cat/trie-catalog node)]
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (tu/finish-block! node)
+            (garbage-tries [as-of]
+              (->> (cat/garbage-tries (cat/trie-state cat "public/foo") as-of)
+                   (sort-by (juxt :trie-key :state))
+                   (map (juxt :trie-key :state :garbage-as-of))))
+            (delete-tries [garbage-trie-keys]
+              (.deleteTries cat "public/foo" garbage-trie-keys))]
 
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-        (tu/finish-block! node)
+      (add-tries [["l00-rc-b00" 1] ["l01-rc-b00" 1]]
+                 #xt/instant "2000-01-01T00:00:00Z")
+      (add-tries [["l00-rc-b01" 1] ["l01-rc-b01" 1]]
+                 #xt/instant "2001-01-01T00:00:00Z")
 
-        ;; L0 files get the as-of time of the latest-completed-tx when the block finishes
-        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
-        (t/is (= #{["l00-rc-b01" #xt/instant "2022-01-01T00:00:00Z"]
-                   ["l00-rc-b00" #xt/instant "2020-01-01T00:00:00Z"]}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                      (into #{} (map (juxt :trie-key :as-of))))))))
+      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
+                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l01-rc-b01" :live nil]]
+               (all-tries)))
 
+      (add-tries [["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                  ["l01-rc-b02" 2]
+                  ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                 #xt/instant "2002-01-01T00:00:00Z")
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/trie-catalog node)]
-        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
-        (t/is (= #{["l00-rc-b01" #xt/instant "2022-01-01T00:00:00Z"]
-                   ["l00-rc-b00" #xt/instant "2020-01-01T00:00:00Z"]}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
-                      (into #{} (map (juxt :trie-key :as-of))))))))
+      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
+                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l00-rc-b02" :garbage #xt/instant "2002-01-01T00:00:00Z"]
+                ["l00-rc-b03" :live nil]
+                ["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]
+                ["l01-rc-b02" :live nil]
+                ["l02-rc-p0-b01" :live nil]
+                ["l02-rc-p1-b01" :live nil]
+                ["l02-rc-p2-b01" :live nil]
+                ["l02-rc-p3-b01" :live nil]]
+               (all-tries)))
 
-    (t/testing "artifically adding tries"
+      (t/is (= [["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]]
+               (garbage-tries #xt/instant "2003-01-01T00:00:00Z")))
 
-      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        (let [cat (cat/trie-catalog node)]
-          (.addTries cat "public/foo"
-                     (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
-                           ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
-                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                          (map #(apply trie/->trie-details "public/foo" %)))
-                     (.instant clock))
-          (tu/finish-block! node)
+      (delete-tries #{"l01-rc-b00" "l01-rc-b01"})
 
-          (t/is (= [["l00-rc-b00" :garbage #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l00-rc-b01" :garbage #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l00-rc-b02" :garbage #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l01-rc-b00" :garbage #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l01-rc-b01" :garbage #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l00-rc-b03" :live #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l01-rc-b02" :live #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l02-rc-p0-b01" :live #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l02-rc-p1-b01" :live #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l02-rc-p2-b01" :live #xt/instant "2024-01-01T00:00:00Z"]
-                    ["l02-rc-p3-b01" :live #xt/instant "2024-01-01T00:00:00Z"]]
-                   (->> (cat/all-tries (cat/trie-state cat "public/foo"))
-                        (sort-by (juxt :state :trie-key))
-                        (map (juxt :trie-key :state :as-of))))))))))
+      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
+                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l00-rc-b02" :garbage #xt/instant "2002-01-01T00:00:00Z"]
+                ["l00-rc-b03" :live nil]
+                ["l01-rc-b02" :live nil]
+                ["l02-rc-p0-b01" :live nil]
+                ["l02-rc-p1-b01" :live nil]
+                ["l02-rc-p2-b01" :live nil]
+                ["l02-rc-p3-b01" :live nil]]
+               (all-tries))))))
 
-(defn- all-tries [node]
-  (let [cat (cat/trie-catalog node)]
-    (->> (cat/all-tries (cat/trie-state cat "public/foo"))
-         (map (juxt :trie-key :state :as-of))
-         (sort-by (juxt :trie-key :state)))))
-
-(t/deftest test-trie-garbage-collection
-  (binding [c/*ignore-signal-block?* true]
-    (let [node-dir (util/->path "target/trie-catalog-test/test-trie-garbage-collection")
-          clock (tu/->mock-clock (tu/->instants :year))
-          opts {:node-dir node-dir, :compactor-threads 1 :instant-src clock :gc? false}]
-      (util/delete-dir node-dir)
-
-      (t/testing "without gcing"
-        (with-open [node (tu/->local-node opts)]
-          (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-          (tu/finish-block! node)
-
-          (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-          (tu/finish-block! node)
-          (c/compact-all! node #xt/duration "PT1S")
-
-          (t/is (= [["l00-rc-b00" :garbage #xt/instant "2025-01-01T00:00:00Z"]
-                    ["l00-rc-b01" :garbage #xt/instant "2027-01-01T00:00:00Z"]
-                    ["l01-rc-b00" :garbage #xt/instant "2027-01-01T00:00:00Z"]
-                    ["l01-rc-b01" :live #xt/instant "2027-01-01T00:00:00Z"]]
-                   (all-tries node)))))
-
-      (t/testing "with gcing"
-        (with-open [node (tu/->local-node opts)]
-          (let [gc (gc/garbage-collector node)]
-            (.garbageCollect gc #xt/instant "2025-01-01T00:00:00Z")
-            (t/is (= [["l00-rc-b01" :garbage #xt/instant "2027-01-01T00:00:00Z"]
-                      ["l01-rc-b00" :garbage #xt/instant "2027-01-01T00:00:00Z"]
-                      ["l01-rc-b01" :live #xt/instant "2027-01-01T00:00:00Z"]]
-                     (all-tries node)))
-
-            (.garbageCollect gc #xt/instant "2027-01-01T00:00:00Z")
-            (t/is (= [["l01-rc-b01" :live #xt/instant "2027-01-01T00:00:00Z"]]
-                     (all-tries node))))))
-
-      (t/testing "artifically adding tries"
-
-        (with-open [node (tu/->local-node opts)]
-          (let [cat (cat/trie-catalog node)
-                gc (gc/garbage-collector node)
-                live-instant (.instant clock)]
-            (.addTries cat "public/foo"
-                       (->> [["l00-rc-b02" 1] ["l00-rc-b03" 1]
-                             ["l01-rc-b02" 2]
-                             ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                            (map #(apply trie/->trie-details "public/foo" %)))
-                       live-instant)
-
-            (.garbageCollect gc live-instant)
-
-            (t/is (= (->> [["l00-rc-b00" :garbage #xt/instant "2025-01-01T00:00:00Z"]
-                           ["l00-rc-b01" :garbage #xt/instant "2027-01-01T00:00:00Z"]
-                           ["l00-rc-b02" :garbage #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l00-rc-b03" :live #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l01-rc-b00" :garbage #xt/instant "2027-01-01T00:00:00Z"]
-                           ["l01-rc-b01" :garbage #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l01-rc-b02" :live #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l02-rc-p0-b01" :live #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l02-rc-p1-b01" :live #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l02-rc-p2-b01" :live #xt/instant "2030-01-01T00:00:00Z"]
-                           ["l02-rc-p3-b01" :live #xt/instant "2030-01-01T00:00:00Z"]]
-                          (remove (comp #{:garbage} second)))
-                     (all-tries node)))))))))
 
 (t/deftest test-default-garbage-collection
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/trie-catalog-test/test-default-garbage-collection")
           clock (tu/->mock-clock (tu/->instants :hour))
           opts {:node-dir node-dir, :compactor-threads 1 :instant-src clock
-                :gc? false :blocks-to-keep 2 :garbage-lifetime (Duration/ofHours 0)}]
+                :gc? false :blocks-to-keep 2 :garbage-lifetime (Duration/ofHours 0)
+                :instant-source-for-non-tx-msgs? true}]
       (util/delete-dir node-dir)
 
       (with-open [node (tu/->local-node opts)]
-        (let [gc (gc/garbage-collector node)]
-          (doseq [i (range 5)]
+        (let [gc (gc/garbage-collector node)
+              bp (bp/<-node node)
+              cat (cat/trie-catalog node)]
+          (doseq [i (range 4)]
             (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
             (tu/finish-block! node)
             (c/compact-all! node #xt/duration "PT1S"))
 
-          (.garbageCollectFromOldestToKeep gc))
+          (.garbageCollectFromOldestToKeep gc)
 
-        ;; we keep block 02 and 03
-        ;; the 02 latest-complete-tx is cutoff (no garbage lifetime), i.e. the level 0 block 02 file is also gone
-        (t/is (= [["l00-rc-b03" :garbage #xt/instant "2020-01-01T15:00:00Z"]
-                  ["l00-rc-b04" :garbage #xt/instant "2020-01-01T19:00:00Z"]
-                  ["l01-rc-b02" :garbage #xt/instant "2020-01-01T15:00:00Z"]
-                  ["l01-rc-b03" :garbage #xt/instant "2020-01-01T19:00:00Z"]
-                  ["l01-rc-b04" :live #xt/instant "2020-01-01T19:00:00Z"]]
-                 (all-tries node)))))))
+          ;; we keep block 01 and 02
+          ;; the 01 latest-complete-tx is cutoff (no garbage lifetime), i.e. the level 1 block 01 remains as it is compacted later
+          (t/is (= ["l00-rc-b00"
+                    "l00-rc-b01"
+                    "l00-rc-b02"
+                    "l00-rc-b03"
+                    "l01-rc-b01"
+                    "l01-rc-b02"
+                    "l01-rc-b03"]
+                   (->> (cat/all-tries (cat/trie-state cat "public/foo"))
+                        (map :trie-key))))
+
+          ;; all l0 files are present
+          (t/is (= ["tables/public$foo/blocks/b02.binpb"
+                    "tables/public$foo/blocks/b03.binpb"
+                    "tables/public$foo/data/l00-rc-b00.arrow"
+                    "tables/public$foo/data/l00-rc-b01.arrow"
+                    "tables/public$foo/data/l00-rc-b02.arrow"
+                    "tables/public$foo/data/l00-rc-b03.arrow"
+                    "tables/public$foo/data/l01-rc-b01.arrow"
+                    "tables/public$foo/data/l01-rc-b02.arrow"
+                    "tables/public$foo/data/l01-rc-b03.arrow"
+                    "tables/public$foo/meta/l00-rc-b00.arrow"
+                    "tables/public$foo/meta/l00-rc-b01.arrow"
+                    "tables/public$foo/meta/l00-rc-b02.arrow"
+                    "tables/public$foo/meta/l00-rc-b03.arrow"
+                    "tables/public$foo/meta/l01-rc-b01.arrow"
+                    "tables/public$foo/meta/l01-rc-b02.arrow"
+                    "tables/public$foo/meta/l01-rc-b03.arrow"]
+
+                   (->>
+                    (.listAllObjects bp (util/->path "tables/public$foo"))
+                    (map #(str (.getKey ^ObjectStore$StoredObject %)))))))))))
