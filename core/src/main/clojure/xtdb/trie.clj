@@ -12,7 +12,7 @@
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
-  ([table-name {:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state as-of]}]
+  ([table-name {:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state garbage-as-of]}]
    (-> (TrieDetails/newBuilder)
        (.setTableName table-name)
        (.setTrieKey trie-key)
@@ -22,7 +22,7 @@
                                       :live TrieState/LIVE
                                       :nascent TrieState/NASCENT
                                       :garbage TrieState/GARBAGE)))
-       (cond-> as-of (.setAsOfSystemTime (time/instant->micros as-of)))
+       (cond-> garbage-as-of (.setGarbageAsOf (time/instant->micros garbage-as-of)))
        (.build)))
   ([table-name, trie-key, data-file-size]
    (->trie-details table-name trie-key data-file-size nil))
@@ -50,8 +50,8 @@
                      TrieState/NASCENT :nascent
                      TrieState/GARBAGE :garbage))
 
-     (.hasAsOfSystemTime trie-details)
-     (assoc :as-of (time/micros->instant (.getAsOfSystemTime trie-details))))
+     (.hasGarbageAsOf trie-details)
+     (assoc :garbage-as-of (time/micros->instant (.getGarbageAsOf trie-details))))
    (parse-trie-key (.getTrieKey trie-details))))
 
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
