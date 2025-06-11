@@ -18,7 +18,11 @@
   (status [node] [node opts]))
 
 (def http-routes
-  [["/tx" {:name :tx
+  [["/status" {:name :status
+               :summary "Status"
+               :description "Get status information from the node"}]
+
+   ["/tx" {:name :tx
            :summary "Transaction"
            :description "Submits a transaction to the cluster"}]
 

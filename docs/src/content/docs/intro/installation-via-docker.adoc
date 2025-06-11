@@ -26,13 +26,15 @@ You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server 
 docker run -it --pull=always \
   -p 5432:5432 \
   -p 8080:8080 \
+  -p 3000:3000 \
   ghcr.io/xtdb/xtdb
 
 # 5432: Postgres wire-compatible server (primary API)
 # 8080: Monitoring/healthz HTTP endpoints
+# 3000: HTTP query/tx API
 ----
 
-This command starts a Postgres wire-compatible endpoint on port 5432.
+This command starts a Postgres wire-compatible endpoint on port 5432 and an HTTP server available at http://localhost:3000
 
 By default your data will only be stored transiently using a local directory within the Docker container, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
 

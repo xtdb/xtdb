@@ -31,12 +31,12 @@ Resources:
     DependsOn: ECSALB
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: /healthz/alive
+      HealthCheckPath: /status
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       Name: ECSTargetGroup
-      Port: 8080
+      Port: 3000
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId: !Ref VpcId
