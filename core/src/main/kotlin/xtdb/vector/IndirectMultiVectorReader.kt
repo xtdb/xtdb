@@ -84,14 +84,6 @@ class IndirectMultiVectorReader(
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? =
         safeReader(idx).getObject(vectorIndirections[idx], keyFn)
 
-    override fun structKeyReader(colName: String) =
-        IndirectMultiVectorReader(
-            colName,
-            readers.map { it?.structKeyReader(colName) },
-            readerIndirection,
-            vectorIndirections
-        )
-
     override val keyNames get() = readers.filterNotNull().flatMap { it.keyNames.orEmpty() }.toSet()
 
     // TODO - the following is a fairly dumb implementation requiring order O(n) where n is the total number of
@@ -120,7 +112,7 @@ class IndirectMultiVectorReader(
         }
 
     override fun getListStartIndex(idx: Int): Int =
-        (0 until idx).map { safeReader(it).getListCount(vectorIndirections[it]) }.sum()
+        (0 until idx).sumOf { safeReader(it).getListCount(vectorIndirections[it]) }
 
     override fun getListCount(idx: Int): Int = safeReader(idx).getListCount(vectorIndirections[idx])
 
@@ -138,12 +130,12 @@ class IndirectMultiVectorReader(
         }
     }
 
-    override fun legReader(legKey: String): IVectorReader {
+    override fun vectorForOrNull(legKey: String): IVectorReader {
         return legReaders.computeIfAbsent(legKey) {
             val validReaders = readers.zip(fields).map { (reader, field) ->
                 if (reader == null) null
                 else when (field!!.fieldType.type) {
-                    is ArrowType.Union -> reader.legReader(legKey)
+                    is ArrowType.Union -> reader.vectorFor(legKey)
                     else -> {
                         if (field.fieldType.type.toLeg() == legKey) reader
                         else null

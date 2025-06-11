@@ -125,12 +125,6 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader structKeyReader(String colName) {
-        IVectorReader inner = reader.structKeyReader(colName);
-        return inner == null ? null : new IndirectVectorReader(inner, indirection);
-    }
-
-    @Override
     public Set<String> getKeyNames() {
         return reader.getKeyNames();
     }
@@ -168,12 +162,6 @@ class IndirectVectorReader implements IVectorReader {
     @Override
     public Set<String> getLegNames() {
         return reader.getLegNames();
-    }
-
-    @Override
-    public IVectorReader legReader(String legKey) {
-        IVectorReader inner = reader.legReader(legKey);
-        return inner == null ? null : new IndirectVectorReader(inner, indirection);
     }
 
     @Override

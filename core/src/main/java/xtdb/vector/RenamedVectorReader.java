@@ -10,12 +10,9 @@ import xtdb.api.query.IKeyFn;
 import xtdb.arrow.RowCopier;
 import xtdb.arrow.ValueReader;
 import xtdb.arrow.VectorPosition;
-import xtdb.arrow.VectorReader;
 import xtdb.util.Hasher;
 
 import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 
 public class RenamedVectorReader implements IVectorReader {
@@ -119,11 +116,6 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader structKeyReader(String colName) {
-        return reader.structKeyReader(colName);
-    }
-
-    @Override
     public Set<String> getKeyNames() {
         return reader.getKeyNames();
     }
@@ -156,11 +148,6 @@ public class RenamedVectorReader implements IVectorReader {
     @Override
     public String getLeg(int idx) {
         return reader.getLeg(idx);
-    }
-
-    @Override
-    public IVectorReader legReader(String legKey) {
-        return reader.legReader(legKey);
     }
 
     @Override

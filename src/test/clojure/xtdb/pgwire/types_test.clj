@@ -14,6 +14,6 @@
     (let [{:keys [write-binary read-binary]} (get pg-types/pg-types type)]
 
       (with-open [rdr (vr/vec->reader (vw/open-vec tu/*allocator* "val" [val]))
-                  l-rdr (.legReader rdr (.getLeg rdr 0))]
+                  l-rdr (.vectorFor rdr (.getLeg rdr 0))]
 
         (t/is (= val (read-binary {} (write-binary {} l-rdr 0))))))))

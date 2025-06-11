@@ -19,15 +19,12 @@ interface IVectorReader : VectorReader, AutoCloseable {
     override fun get(name: String) = vectorFor(name)
     override fun get(idx: Int) = getObject(idx)
 
-    fun structKeyReader(colName: String): IVectorReader? = unsupported("structKeyReader")
     override val keyNames: Set<String>? get() = unsupported("keyNames")
 
     override val listElements: IVectorReader get() = unsupported("listElements")
 
     override val mapKeys: IVectorReader get() = unsupported("mapKeys")
     override val mapValues: IVectorReader get() = unsupported("mapValues")
-
-    fun legReader(legKey: String): IVectorReader? = unsupported("legReader")
 
     override val legNames: Set<String>? get() = unsupported("legs")
 

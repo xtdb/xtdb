@@ -56,9 +56,9 @@
                                                            (.rowCopier out-writer))]]
 
                                              ArrowType$Union
-                                             (concat (when-let [list-rdr (.legReader vec-rdr "list")]
+                                             (concat (when-let [list-rdr (.vectorForOrNull vec-rdr "list")]
                                                        [[list-rdr (-> (.rowCopier (.getListElements list-rdr) out-writer))]])
-                                                     (when-let [set-rdr (.legReader vec-rdr "set")]
+                                                     (when-let [set-rdr (.vectorForOrNull vec-rdr "set")]
                                                        [[set-rdr (-> (.rowCopier (.getListElements set-rdr) out-writer))]]))
 
                                              nil)

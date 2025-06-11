@@ -23,7 +23,6 @@ class RelationAsStructReader(
     override fun isNull(idx: Int) = false
 
     override val keyNames get() = rel.vectors.map { it.name }.toSet()
-    override fun structKeyReader(colName: String): IVectorReader? = rel.vectorForOrNull(colName)
 
     override fun getObject(idx: Int): Any = rel[idx]
 

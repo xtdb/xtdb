@@ -394,7 +394,7 @@ class IndirectMultiVectorReaderTest {
         assertEquals(listOf(0, 1, 2), indirectRdr.getObject(0))
         assertEquals(1, indirectRdr.getObject(3))
 
-        val listRdr = indirectRdr.legReader("list")
+        val listRdr = indirectRdr.vectorFor("list")
 
         assertEquals(0, listRdr.getListStartIndex(0))
         assertEquals(3, listRdr.getListStartIndex(1))

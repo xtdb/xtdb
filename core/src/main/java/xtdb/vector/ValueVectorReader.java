@@ -31,7 +31,6 @@ import xtdb.api.query.IKeyFn;
 import xtdb.arrow.*;
 import xtdb.time.Interval;
 import xtdb.util.Hasher;
-import xtdb.vector.extensions.*;
 import xtdb.vector.extensions.IntervalMonthDayMicroVector;
 import xtdb.vector.extensions.KeywordVector;
 import xtdb.vector.extensions.SetVector;
@@ -41,7 +40,6 @@ import xtdb.vector.extensions.UriVector;
 import xtdb.vector.extensions.UuidVector;
 
 import java.math.BigDecimal;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
@@ -169,11 +167,6 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader structKeyReader(String colName) {
-        throw unsupported();
-    }
-
-    @Override
     public Set<String> getKeyNames() {
         return null;
     }
@@ -211,11 +204,6 @@ public class ValueVectorReader implements IVectorReader {
     @Override
     public Set<String> getLegNames() {
         return Set.of(Types.toLeg(vector.getField().getFieldType().getType()));
-    }
-
-    @Override
-    public IVectorReader legReader(String legKey) {
-        throw unsupported();
     }
 
     @Override
@@ -982,8 +970,8 @@ public class ValueVectorReader implements IVectorReader {
             }
 
             @Override
-            public IVectorReader structKeyReader(String colName) {
-                return rdrs.get(colName);
+            public @Nullable IVectorReader vectorForOrNull(@NotNull String name) {
+                return rdrs.get(name);
             }
 
             @Override
@@ -1002,7 +990,7 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             public ValueReader valueReader(VectorPosition pos) {
                 @SuppressWarnings("resource")
-                var readers = getKeyNames().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
+                var readers = getKeyNames().stream().collect(Collectors.toMap(k -> k, k -> vectorForOrNull(k).valueReader(pos)));
 
                 return new BaseValueReader(pos) {
                     @Override
@@ -1313,59 +1301,59 @@ public class ValueVectorReader implements IVectorReader {
         @SuppressWarnings("resource")
         @Override
         public boolean getBoolean(int idx) {
-            return legReader(getLeg(idx)).getBoolean(idx);
+            return vectorForOrNull(getLeg(idx)).getBoolean(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public byte getByte(int idx) {
-            return legReader(getLeg(idx)).getByte(idx);
+            return vectorForOrNull(getLeg(idx)).getByte(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public short getShort(int idx) {
-            return legReader(getLeg(idx)).getShort(idx);
+            return vectorForOrNull(getLeg(idx)).getShort(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public int getInt(int idx) {
-            return legReader(getLeg(idx)).getInt(idx);
+            return vectorForOrNull(getLeg(idx)).getInt(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public long getLong(int idx) {
-            return legReader(getLeg(idx)).getLong(idx);
+            return vectorForOrNull(getLeg(idx)).getLong(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public float getFloat(int idx) {
-            return legReader(getLeg(idx)).getFloat(idx);
+            return vectorForOrNull(getLeg(idx)).getFloat(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public double getDouble(int idx) {
-            return legReader(getLeg(idx)).getDouble(idx);
+            return vectorForOrNull(getLeg(idx)).getDouble(idx);
         }
 
         @SuppressWarnings("resource")
         @Override
         public ByteBuffer getBytes(int idx) {
-            return legReader(getLeg(idx)).getBytes(idx);
+            return vectorForOrNull(getLeg(idx)).getBytes(idx);
         }
 
         @SuppressWarnings("resource")
         protected Object getObject0(int idx, IKeyFn<?> keyFn) {
-            return legReader(getLeg(idx)).getObject(idx, keyFn);
+            return vectorForOrNull(getLeg(idx)).getObject(idx, keyFn);
         }
 
         @Override
         public int hashCode0(int idx, Hasher hasher) {
-            return legReader(getLeg(idx)).hashCode(idx, hasher);
+            return vectorForOrNull(getLeg(idx)).hashCode(idx, hasher);
         }
 
         private byte getTypeId(int idx) {
@@ -1377,27 +1365,9 @@ public class ValueVectorReader implements IVectorReader {
             return legs.get(getTypeId(idx));
         }
 
-        @SuppressWarnings("resource")
-        @Override
-        public IVectorReader structKeyReader(String colName) {
-            // HACK - assumes that we only have one struct leg.
-            IVectorReader structLeg = legReader("struct");
-            if (structLeg == null) return null;
-
-            IVectorReader structKeyReader = structLeg.structKeyReader(colName);
-            if (structKeyReader == null) return null;
-
-            return new IndirectVectorReader(structKeyReader, new DuvIndirection(v, (byte) legs.indexOf("struct")));
-        }
-
         @Override
         public @Nullable IVectorReader vectorForOrNull(@NotNull String name) {
-            return legReader(name);
-        }
-
-        @Override
-        public IVectorReader legReader(String legKey) {
-            return legReaders.computeIfAbsent(legKey, k -> {
+            return legReaders.computeIfAbsent(name, k -> {
                 var child = v.getChild(k);
                 if (child == null) return null;
                 return new IndirectVectorReader(ValueVectorReader.from(child), new DuvIndirection(v, ((byte) legs.indexOf(k))));
@@ -1411,7 +1381,7 @@ public class ValueVectorReader implements IVectorReader {
 
         @Override
         public ValueReader valueReader(VectorPosition pos) {
-            var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> this.legReader(l).valueReader(pos)));
+            var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> vectorForOrNull(l).valueReader(pos)));
 
             return new ValueReader() {
                 @Override
