@@ -26,6 +26,10 @@ class BlockCatalog(private val bp: BufferPool) {
         bp.listAllObjects(blocksPath).lastOrNull()?.key
             ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
 
+    fun blockFromLatest(distance: Int): Block? =
+        bp.listAllObjects(blocksPath).toList().dropLast(maxOf(0, distance-1)).lastOrNull()?.key
+            ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
+
     companion object {
         private val blocksPath = "blocks".asPath
     }

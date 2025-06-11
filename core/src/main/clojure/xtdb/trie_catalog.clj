@@ -14,6 +14,7 @@
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            xtdb.operator.scan.Metadata
+           (xtdb.trie Trie)
            (xtdb.util TemporalBounds)))
 
 ;; table-tries data structure
@@ -235,6 +236,17 @@
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
+(defn garbage-tries [{:keys [tries]} as-of]
+  (->> (mapcat (comp  :garbage val) tries)
+       (filter (fn [{other-as-of :as-of}] (<= (compare other-as-of as-of) 0)))))
+
+(defn remove-garbage [table-cat as-of]
+  (update table-cat :tries
+          (fn [trie-levels]
+            (update-vals trie-levels
+                         (fn [{:keys [garbage] :as tries}]
+                           (assoc tries :garbage (remove (fn [{other-as-of :as-of}] (<= (compare other-as-of as-of) 0)) garbage)))))))
+
 (defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
   Metadata
   (testMetadata [_]
@@ -261,7 +273,7 @@
        :row-count (.getRowCount trie-metadata)
        :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
 
-(defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
+(defrecord TrieCatalog [^BufferPool buffer-pool, ^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [this table-name added-tries as-of]
     (.compute !table-cats table-name
@@ -279,8 +291,16 @@
 
   (getTableNames [_] (set (keys !table-cats)))
 
+  (garbageCollectTries [_ table-name as-of]
+    (doseq [{:keys [trie-key]} (garbage-tries (.get !table-cats table-name) as-of)]
+      (.deleteIfExists buffer-pool (Trie/dataFilePath table-name trie-key)))
+    (.compute !table-cats table-name
+              (fn [_table-name tries]
+                (remove-garbage tries as-of))))
+
   PTrieCatalog
   (trie-state [_ table-name] (.get !table-cats table-name)))
+
 
 (defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
   (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
@@ -308,8 +328,8 @@
                                                        (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
                   (.put !table-cats table-name {:tries tries}))
 
-                (TrieCatalog. !table-cats *file-size-target*))
-              (let [cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
+                (TrieCatalog. buffer-pool !table-cats *file-size-target*))
+              (let [cat (TrieCatalog. buffer-pool (ConcurrentHashMap.) *file-size-target*)
                     now (Instant/now)]
                 (doseq [[table-name {:keys [tries]}] table->table-block]
                   (.addTries cat table-name tries now))

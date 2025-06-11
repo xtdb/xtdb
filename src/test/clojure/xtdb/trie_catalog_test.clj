@@ -1,11 +1,13 @@
 (ns xtdb.trie-catalog-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
-            [xtdb.util :as util])
-  (:import (java.time Instant)
+            [xtdb.util :as util]
+            [xtdb.garbage-collector :as gc])
+  (:import (java.time Instant Duration)
            (xtdb.operator.scan Metadata)
            (xtdb.util TemporalBounds)))
 
@@ -397,3 +399,99 @@
                    (->> (cat/all-tries (cat/trie-state cat "public/foo"))
                         (sort-by (juxt :state :trie-key))
                         (map (juxt :trie-key :state :as-of))))))))))
+
+(defn- all-tries [node]
+  (let [cat (cat/trie-catalog node)]
+    (->> (cat/all-tries (cat/trie-state cat "public/foo"))
+         (map (juxt :trie-key :state :as-of))
+         (sort-by (juxt :trie-key :state)))))
+
+(t/deftest test-trie-garbage-collection
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/trie-catalog-test/test-trie-garbage-collection")
+          clock (tu/->mock-clock (tu/->instants :year))
+          opts {:node-dir node-dir, :compactor-threads 1 :instant-src clock :gc? false}]
+      (util/delete-dir node-dir)
+
+      (t/testing "without gcing"
+        (with-open [node (tu/->local-node opts)]
+          (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
+          (tu/finish-block! node)
+
+          (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
+          (tu/finish-block! node)
+          (c/compact-all! node #xt/duration "PT1S")
+
+          (t/is (= [["l00-rc-b00" :garbage #xt/instant "2025-01-01T00:00:00Z"]
+                    ["l00-rc-b01" :garbage #xt/instant "2027-01-01T00:00:00Z"]
+                    ["l01-rc-b00" :garbage #xt/instant "2027-01-01T00:00:00Z"]
+                    ["l01-rc-b01" :live #xt/instant "2027-01-01T00:00:00Z"]]
+                   (all-tries node)))))
+
+      (t/testing "with gcing"
+        (with-open [node (tu/->local-node opts)]
+          (let [gc (gc/garbage-collector node)]
+            (.garbageCollect gc #xt/instant "2025-01-01T00:00:00Z")
+            (t/is (= [["l00-rc-b01" :garbage #xt/instant "2027-01-01T00:00:00Z"]
+                      ["l01-rc-b00" :garbage #xt/instant "2027-01-01T00:00:00Z"]
+                      ["l01-rc-b01" :live #xt/instant "2027-01-01T00:00:00Z"]]
+                     (all-tries node)))
+
+            (.garbageCollect gc #xt/instant "2027-01-01T00:00:00Z")
+            (t/is (= [["l01-rc-b01" :live #xt/instant "2027-01-01T00:00:00Z"]]
+                     (all-tries node))))))
+
+      (t/testing "artifically adding tries"
+
+        (with-open [node (tu/->local-node opts)]
+          (let [cat (cat/trie-catalog node)
+                gc (gc/garbage-collector node)
+                live-instant (.instant clock)]
+            (.addTries cat "public/foo"
+                       (->> [["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                             ["l01-rc-b02" 2]
+                             ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                            (map #(apply trie/->trie-details "public/foo" %)))
+                       live-instant)
+
+            (.garbageCollect gc live-instant)
+
+            (t/is (= (->> [["l00-rc-b00" :garbage #xt/instant "2025-01-01T00:00:00Z"]
+                           ["l00-rc-b01" :garbage #xt/instant "2027-01-01T00:00:00Z"]
+                           ["l00-rc-b02" :garbage #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l00-rc-b03" :live #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l01-rc-b00" :garbage #xt/instant "2027-01-01T00:00:00Z"]
+                           ["l01-rc-b01" :garbage #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l01-rc-b02" :live #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l02-rc-p0-b01" :live #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l02-rc-p1-b01" :live #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l02-rc-p2-b01" :live #xt/instant "2030-01-01T00:00:00Z"]
+                           ["l02-rc-p3-b01" :live #xt/instant "2030-01-01T00:00:00Z"]]
+                          (remove (comp #{:garbage} second)))
+                     (all-tries node)))))))))
+
+(t/deftest test-default-garbage-collection
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/trie-catalog-test/test-default-garbage-collection")
+          clock (tu/->mock-clock (tu/->instants :hour))
+          opts {:node-dir node-dir, :compactor-threads 1 :instant-src clock
+                :gc? false :blocks-to-keep 2 :garbage-lifetime (Duration/ofHours 0)}]
+      (util/delete-dir node-dir)
+
+      (with-open [node (tu/->local-node opts)]
+        (let [gc (gc/garbage-collector node)]
+          (doseq [i (range 5)]
+            (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
+            (tu/finish-block! node)
+            (c/compact-all! node #xt/duration "PT1S"))
+
+          (.garbageCollectFromOldestToKeep gc))
+
+        ;; we keep block 02 and 03
+        ;; the 02 latest-complete-tx is cutoff (no garbage lifetime), i.e. the level 0 block 02 file is also gone
+        (t/is (= [["l00-rc-b03" :garbage #xt/instant "2020-01-01T15:00:00Z"]
+                  ["l00-rc-b04" :garbage #xt/instant "2020-01-01T19:00:00Z"]
+                  ["l01-rc-b02" :garbage #xt/instant "2020-01-01T15:00:00Z"]
+                  ["l01-rc-b03" :garbage #xt/instant "2020-01-01T19:00:00Z"]
+                  ["l01-rc-b04" :live #xt/instant "2020-01-01T19:00:00Z"]]
+                 (all-tries node)))))))
