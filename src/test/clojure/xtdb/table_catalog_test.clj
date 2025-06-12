@@ -74,12 +74,12 @@
                      :min-system-from #xt/instant "2020-01-01T00:00:00Z",
                      :max-system-from #xt/instant "2020-01-01T00:00:00Z",
                      :row-count 1}
-                    {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
-                     :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
+                    {:min-valid-from #xt/instant "2020-01-03T00:00:00Z",
+                     :max-valid-from #xt/instant "2020-01-03T00:00:00Z",
                      :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
                      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-                     :min-system-from #xt/instant "2020-01-02T00:00:00Z",
-                     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+                     :min-system-from #xt/instant "2020-01-03T00:00:00Z",
+                     :max-system-from #xt/instant "2020-01-03T00:00:00Z",
                      :row-count 1}]
                    (map #(dissoc % :iid-bloom) trie-metas)))
 

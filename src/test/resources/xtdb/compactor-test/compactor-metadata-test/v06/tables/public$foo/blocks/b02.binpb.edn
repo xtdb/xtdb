@@ -24,8 +24,8 @@
     :max-valid-from #xt/instant "2015-01-01T00:00:00Z",
     :min-valid-to #xt/instant "2016-01-01T00:00:00Z",
     :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
-    :min-system-from #xt/instant "2020-01-02T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :min-system-from #xt/instant "2020-01-05T00:00:00Z",
+    :max-system-from #xt/instant "2020-01-05T00:00:00Z",
     :row-count 1,
     :iid-bloom [314116840 5]}}
   {:trie-key "l01-rc-b01", :data-file-size 1382, :trie-metadata nil}],
