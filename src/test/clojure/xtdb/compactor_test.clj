@@ -573,63 +573,64 @@
                      (.resolve node-dir (tables-key "public$foo")) #"l01-rc-(.+)\.arrow"))))
 
 (t/deftest compactor-trie-metadata
-  (let [node-dir (util/->path "target/compactor/compactor-metadata-test")]
-    (util/delete-dir node-dir)
+  (binding [c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/compactor/compactor-metadata-test")]
+      (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 1})]
-      (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
-        (xt/execute-tx node [[:put-docs {:into :foo
-                                         :valid-from #xt/instant "2010-01-01T00:00:00Z"
-                                         :valid-to #xt/instant "2011-01-01T00:00:00Z"}
-                              {:xt/id 1}]]
-                       {:default-tz #xt/zone "Europe/London"})
-        (tu/finish-block! node)
-        ;; to have consistent block files
-        (c/compact-all! node #xt/duration "PT5S")
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 1})]
+        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+          (xt/execute-tx node [[:put-docs {:into :foo
+                                           :valid-from #xt/instant "2010-01-01T00:00:00Z"
+                                           :valid-to #xt/instant "2011-01-01T00:00:00Z"}
+                                {:xt/id 1}]]
+                         {:default-tz #xt/zone "Europe/London"})
+          (tu/finish-block! node)
+          ;; to have consistent block files
+          (c/compact-all! node #xt/duration "PT5S")
 
-        (xt/execute-tx node [[:put-docs {:into :foo
-                                         :valid-from #xt/instant "2015-01-01T00:00:00Z"
-                                         :valid-to #xt/instant "2016-01-01T00:00:00Z"}
-                              {:xt/id 2}]]
-                       {:default-tz #xt/zone "Europe/London"})
-        (tu/finish-block! node )
+          (xt/execute-tx node [[:put-docs {:into :foo
+                                           :valid-from #xt/instant "2015-01-01T00:00:00Z"
+                                           :valid-to #xt/instant "2016-01-01T00:00:00Z"}
+                                {:xt/id 2}]]
+                         {:default-tz #xt/zone "Europe/London"})
+          (tu/finish-block! node )
 
-        (c/compact-all! node #xt/duration "PT5S")
-        ;; to artifically create a new table block
-        (tu/finish-block! node)
+          (c/compact-all! node #xt/duration "PT5S")
+          ;; to artifically create a new table block
+          (tu/finish-block! node)
 
-        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/compactor-test/compactor-metadata-test")))
-                        (.resolve node-dir "objects"))
+          (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/compactor-test/compactor-metadata-test")))
+                          (.resolve node-dir "objects"))
 
-        (let [tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
-                         TableBlock/parseFrom
-                         table-cat/<-table-block
-                         :tries
-                         (into #{} (map table-test/trie-details->edn)))]
-          (t/is (= #{"l00-rc-b00" "l01-r20110103-b00" "l01-rc-b00" "l00-rc-b01" "l01-r20160104-b01" "l01-rc-b01"}
-                   (into #{} (map :trie-key) tries)))
+          (let [tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
+                           TableBlock/parseFrom
+                           table-cat/<-table-block
+                           :tries
+                           (into #{} (map table-test/trie-details->edn)))]
+            (t/is (= #{"l00-rc-b00" "l01-r20110103-b00" "l01-rc-b00" "l00-rc-b01" "l01-r20160104-b01" "l01-rc-b01"}
+                     (into #{} (map :trie-key) tries)))
 
-          (t/is (= {"l01-rc-b00" nil,
-                    "l01-r20110103-b00" {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
-                                         :max-valid-from #xt/instant "2010-01-01T00:00:00Z",
-                                         :min-valid-to #xt/instant "2011-01-01T00:00:00Z",
-                                         :max-valid-to #xt/instant "2011-01-01T00:00:00Z",
-                                         :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-                                         :max-system-from #xt/instant "2020-01-01T00:00:00Z",
-                                         :row-count 1},
-                    "l01-rc-b01" nil,
-                    "l01-r20160104-b01" {:min-valid-from #xt/instant "2015-01-01T00:00:00Z",
-                                         :max-valid-from #xt/instant "2015-01-01T00:00:00Z",
-                                         :min-valid-to #xt/instant "2016-01-01T00:00:00Z",
-                                         :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
-                                         :min-system-from #xt/instant "2020-01-02T00:00:00Z",
-                                         :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-                                         :row-count 1}}
-                   (->> tries
-                        (filter #(str/starts-with? (:trie-key %) "l01"))
-                        (into {} (map (juxt :trie-key
-                                            (fn [{:keys [trie-metadata]}]
-                                              (dissoc trie-metadata :iid-bloom)))))))))))))
+            (t/is (= {"l01-rc-b00" nil,
+                      "l01-r20110103-b00" {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
+                                           :max-valid-from #xt/instant "2010-01-01T00:00:00Z",
+                                           :min-valid-to #xt/instant "2011-01-01T00:00:00Z",
+                                           :max-valid-to #xt/instant "2011-01-01T00:00:00Z",
+                                           :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+                                           :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+                                           :row-count 1},
+                      "l01-rc-b01" nil,
+                      "l01-r20160104-b01" {:min-valid-from #xt/instant "2015-01-01T00:00:00Z",
+                                           :max-valid-from #xt/instant "2015-01-01T00:00:00Z",
+                                           :min-valid-to #xt/instant "2016-01-01T00:00:00Z",
+                                           :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
+                                           :min-system-from #xt/instant "2020-01-05T00:00:00Z",
+                                           :max-system-from #xt/instant "2020-01-05T00:00:00Z",
+                                           :row-count 1}}
+                     (->> tries
+                          (filter #(str/starts-with? (:trie-key %) "l01"))
+                          (into {} (map (juxt :trie-key
+                                              (fn [{:keys [trie-metadata]}]
+                                                (dissoc trie-metadata :iid-bloom))))))))))))))
 
 (t/deftest different-recency-partitioning
   (binding [c/*recency-partition* RecencyPartition/YEAR]

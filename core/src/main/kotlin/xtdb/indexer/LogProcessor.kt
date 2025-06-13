@@ -166,7 +166,9 @@ class LogProcessor(
 
                     is Message.TriesAdded -> {
                         if (msg.storageVersion == Storage.VERSION)
-                            msg.tries.groupBy { it.tableName }.forEach(trieCatalog::addTries)
+                            msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+                                trieCatalog.addTries(tableName, tries, record.logTimestamp)
+                            }
                         null
                     }
                 }

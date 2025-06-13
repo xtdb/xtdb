@@ -373,7 +373,7 @@
                             (xt/submit-tx node tx-ops))
                           nil
                           (partition-all 100 tx-ops))
-              last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
+              last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-22"))]
 
           (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))

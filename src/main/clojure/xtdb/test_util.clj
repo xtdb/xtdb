@@ -265,17 +265,21 @@
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
                                            rows-per-block log-limit page-limit instant-src
-                                           compactor-threads healthz-port]
+                                           compactor-threads healthz-port gc? blocks-to-keep garbage-lifetime]
                                     :or {buffers-dir "objects" healthz-port 8080}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
-    (xtn/start-node {:healthz {:port healthz-port}
-                     :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
-                     :storage [:local {:path (.resolve node-dir buffers-dir)}]
-                     :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
-                                   (into {} (filter val)))
-                     :compactor (->> {:threads compactor-threads}
-                                     (into {} (filter val)))})))
+    (xtn/start-node (cond-> {:healthz {:port healthz-port}
+                             :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src}]
+                             :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                             :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
+                                           (into {} (filter val)))
+                             :compactor (->> {:threads compactor-threads}
+                                             (into {} (filter val)))}
+                      (not (nil? gc?)) (assoc :garbage-collector
+                                              (cond-> {:enabled? gc?}
+                                                blocks-to-keep (assoc :blocks-to-keep blocks-to-keep)
+                                                garbage-lifetime (assoc :garbage-lifetime garbage-lifetime)))))))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]
