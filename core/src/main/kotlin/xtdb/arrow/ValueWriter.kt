@@ -14,6 +14,4 @@ interface ValueWriter {
     fun writeDouble(v: Double): Unit = unsupported("writeDouble")
     fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
     fun writeObject(obj: Any?)
-
-    fun legWriter(leg: String): ValueWriter
 }

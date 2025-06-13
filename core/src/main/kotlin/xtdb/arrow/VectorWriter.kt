@@ -45,8 +45,6 @@ interface VectorWriter : VectorReader, ValueWriter, AutoCloseable {
     override val mapValues: VectorWriter get() = unsupported("mapValues")
     fun getMapValues(fieldType: FieldType): VectorWriter = unsupported("mapValueWriter")
 
-    override fun legWriter(leg: String) = vectorFor(leg)
-
     fun rowCopier0(src: VectorReader): RowCopier
 
     fun clear()

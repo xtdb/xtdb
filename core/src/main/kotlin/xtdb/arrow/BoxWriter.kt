@@ -3,7 +3,7 @@ package xtdb.arrow
 import java.nio.ByteBuffer
 
 internal abstract class BoxWriter : ValueWriter {
-    abstract fun box(): ValueWriter
+    abstract fun box(): ValueBox
 
     override fun writeNull() {
         box().writeNull()
@@ -45,7 +45,7 @@ internal abstract class BoxWriter : ValueWriter {
         box().writeObject(obj)
     }
 
-    override fun legWriter(leg: String): ValueWriter {
+    fun legWriter(leg: String): ValueWriter {
         return box().legWriter(leg)
     }
 }

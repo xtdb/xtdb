@@ -126,8 +126,8 @@ class DenseUnionVectorTest {
                 IntVector(allocator, "i32", false),
             )
         ).use { duv ->
-            val intLeg = duv.legWriter("i32")
-            val nullLeg = duv.legWriter("null")
+            val intLeg = duv.vectorFor("i32")
+            val nullLeg = duv.vectorFor("null")
             intLeg.writeInt(12)
             nullLeg.writeNull()
             intLeg.writeInt(34)
@@ -161,8 +161,8 @@ class DenseUnionVectorTest {
             val obj1 = mapOf("a" to 1, "b" to 2)
             val obj2 = mapOf("a" to 3, "b" to 4)
 
-            val structLeg = duv.legWriter("struct")
-            val nullLeg = duv.legWriter("null")
+            val structLeg = duv.vectorFor("struct")
+            val nullLeg = duv.vectorFor("null")
             structLeg.writeObject(obj1)
             nullLeg.writeNull()
             structLeg.writeObject(obj2)
@@ -197,8 +197,8 @@ class DenseUnionVectorTest {
             val obj1 = listOf(1, 2)
             val obj2 = emptyList<Int>()
 
-            val structLeg = duv.legWriter("list")
-            val nullLeg = duv.legWriter("null")
+            val structLeg = duv.vectorFor("list")
+            val nullLeg = duv.vectorFor("null")
             structLeg.writeObject(obj1)
             nullLeg.writeNull()
             structLeg.writeObject(obj2)

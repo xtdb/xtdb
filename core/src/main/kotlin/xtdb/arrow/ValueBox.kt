@@ -89,14 +89,13 @@ class ValueBox : ValueWriter, ValueReader {
         this.obj = obj
     }
 
-    override fun legWriter(leg: String): ValueWriter {
-        return object : BoxWriter() {
-            override fun box(): ValueWriter {
+    fun legWriter(leg: String): ValueWriter =
+        object : BoxWriter() {
+            override fun box(): ValueBox {
                 this@ValueBox.leg = leg
                 return this@ValueBox
             }
         }
-    }
 
     companion object {
         private val NULL_LEG = "null".intern()
