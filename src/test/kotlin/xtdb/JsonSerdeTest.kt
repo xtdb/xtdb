@@ -107,6 +107,11 @@ class JsonSerdeTest {
             LocalDateTime.parse(ldt)
                 .assertRoundTrip("""{"@type":"xt:timestamp","@value":"$ldt"}""")
         }
+
+        "13:31:55".let { lt ->
+            LocalTime.parse(lt)
+                .assertRoundTrip("""{"@type":"xt:time","@value":"$lt"}""")
+        }
     }
 
     @Test
