@@ -16,6 +16,12 @@
 (def xtdb-cli-yaml
   (io/resource "xtdb/cli-test.yaml"))
 
+(def xtdb-cli-yaml-multi-dot
+  (io/resource "xtdb/cli-test.multi-dot.yaml"))
+
+(def xtdb-cli-edn-multi-dot
+  (io/resource "xtdb/cli-test.multi-dot.edn"))
+
 (defn with-file-override [files f]
   (with-redefs [io/file (some-fn files io/file)]
     (f)))
@@ -103,6 +109,24 @@
 
     (t/testing "node opts passed to start-node passes through yaml file and starts node"
       (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))]
+        (let [index ^LiveIndex (get-in node [:system :xtdb.indexer/live-index])]
+          (t/is (= 65 (.log-limit index))
+                "using provided config"))
+        (xt/submit-tx node [[:put-docs :docs {:xt/id :foo}]])
+        (t/is (= [{:e :foo}] (xt/q node '(from :docs [{:xt/id e}]))))))))
+
+(t/deftest test-multi-dot-yaml
+  (letfn [(->node-opts [cli-args] (::cli/node-opts (cli/parse-args cli-args)))]
+    (t/testing "YAML with multiple dots in the filename"
+      (t/is (= (io/file xtdb-cli-yaml-multi-dot)
+               (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml-multi-dot))]))))
+    
+    (t/testing "EDN with multiple dots in the filename"
+      (t/is (= {:xtdb.cli-test/foo {:bar {}}}
+               (->node-opts ["-f" (str (io/as-file xtdb-cli-edn-multi-dot))]))))
+    
+    (t/testing "YAML with multiple dots in the filename starts node"
+      (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml-multi-dot))]))]
         (let [index ^LiveIndex (get-in node [:system :xtdb.indexer/live-index])]
           (t/is (= 65 (.log-limit index))
                 "using provided config"))

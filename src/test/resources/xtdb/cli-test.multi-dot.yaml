@@ -1,0 +1,7 @@
+log: !InMemory
+indexer:
+  logLimit: 65
+  flushDuration: PT4H
+storage: !InMemory
+server:
+  port: 0
