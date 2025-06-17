@@ -184,6 +184,14 @@
     (mapv symbol (if (map? table)
                    (keys table)
                    (keys (first table))))
+            
+    [:list explicit-column-names _]
+    (vec explicit-column-names)
+    
+    [:list list]
+    (mapv symbol (if (map? list)
+                   (keys list)
+                   (keys (first list))))
 
     [:scan _scan-opts columns]
     (mapv ->projected-column columns)
