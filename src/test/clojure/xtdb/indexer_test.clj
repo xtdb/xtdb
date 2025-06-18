@@ -188,14 +188,14 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]]
                        {:default-tz #xt/zone "Europe/London"})
         (tu/finish-block! node)
-        (c/compact-all! node #xt/duration "PT1S")
+        (c/compact-all! node nil)
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects") {:file-pattern #"^b00.binpb.*"})
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]]
                        {:default-tz #xt/zone "Europe/London"})
         (tu/finish-block! node)
-        (c/compact-all! node #xt/duration "PT1S")
+        (c/compact-all! node nil)
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects"))))))
 

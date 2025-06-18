@@ -5,6 +5,7 @@ import clojure.lang.IPersistentMap
 import clojure.lang.PersistentArrayMap
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.asKeyword
+import java.nio.ByteBuffer
 
 internal data class InvalidWriteObjectException(val fieldType: FieldType, val obj: Any?) :
     IllegalArgumentException("invalid writeObject"), IExceptionInfo {
@@ -15,11 +16,22 @@ internal data class InvalidWriteObjectException(val fieldType: FieldType, val ob
 internal data class InvalidCopySourceException(val src: FieldType, val dest: FieldType) :
     IllegalArgumentException("illegal copy src vector")
 
-interface VectorWriter : VectorReader, ValueWriter, AutoCloseable {
+interface VectorWriter : VectorReader, AutoCloseable {
 
     override val nullable: Boolean
 
     fun writeUndefined()
+    fun writeNull()
+
+    fun writeBoolean(v: Boolean): Unit = unsupported("writeBoolean")
+    fun writeByte(v: Byte): Unit = unsupported("writeByte")
+    fun writeShort(v: Short): Unit = unsupported("writeShort")
+    fun writeInt(v: Int): Unit = unsupported("writeInt")
+    fun writeLong(v: Long): Unit = unsupported("writeLong")
+    fun writeFloat(v: Float): Unit = unsupported("writeFloat")
+    fun writeDouble(v: Double): Unit = unsupported("writeDouble")
+    fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
+    fun writeObject(obj: Any?)
 
     fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)
     fun writeValue0(v: ValueReader)

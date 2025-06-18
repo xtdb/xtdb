@@ -16,7 +16,7 @@ import xtdb.util.Hasher
 import xtdb.vector.extensions.SetType
 import xtdb.vector.extensions.SetVector
 
-interface IVectorWriter : ValueWriter, VectorWriter, AutoCloseable {
+interface IVectorWriter : VectorWriter, AutoCloseable {
     val vector: FieldVector
 
     override var valueCount: Int

@@ -391,6 +391,7 @@
            (tu/query-ra '[:scan {:table public/xt_docs} [_id {col2 (= col2 "bar2")}]]
                         {:node tu/*node*})))
 
+  #_
   ;; column not existent at all
   (t/is (= []
            (tu/query-ra

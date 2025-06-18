@@ -447,25 +447,21 @@
     [:union inner-types]
     (let [box-sym (gensym 'box)
 
-          types (->> inner-types
+          legs (->> inner-types
                      (into {} (map (fn [val-type]
                                      (let [leg (types/col-type->leg val-type)]
-                                       (MapEntry/create val-type {:leg leg
-                                                                  :sym (symbol (str box-sym "--" leg))}))))))]
+                                       (MapEntry/create val-type leg))))))]
       (-> emitted-expr
-          (update :batch-bindings (fnil into []) (into [[box-sym `(ValueBox.)]]
-                                                       (map (fn [{:keys [leg sym]}]
-                                                              [sym `(.legWriter ~box-sym ~leg)]))
-                                                       (vals types)))
+          (update :batch-bindings (fnil conj []) [box-sym `(ValueBox.)])
           (assoc :continue (fn [f]
                              `(do
                                 ~(continue (fn [return-type code]
-                                             (write-value-code return-type (:sym (get types return-type)) code)))
+                                             (write-value-code return-type box-sym (get legs return-type) code)))
 
                                 (case (.getLeg ~box-sym)
                                   ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
                                   :wont-ever-be-this (throw (IllegalStateException.))
-                                  ~@(->> (for [[ret-type {:keys [leg]}] types]
+                                  ~@(->> (for [[ret-type leg] legs]
                                            [leg (f ret-type (read-value-code ret-type box-sym))])
                                          (apply concat))))))))
 
@@ -1492,7 +1488,7 @@
                  `(do
                     ~@(for [{:keys [val-box], {:keys [continue]} :emitted-expr} emitted-vals]
                         (continue (fn [val-type code]
-                                    (write-value-code val-type `(.legWriter ~val-box ~(types/col-type->leg val-type)) code))))
+                                    (write-value-code val-type val-box (types/col-type->leg val-type) code))))
 
                     ~(f return-type map-sym)))}))
 
@@ -1639,7 +1635,7 @@
                                                                 [idx (continue (fn [return-type code]
                                                                                  (let [leg (types/col-type->leg return-type)]
                                                                                    `(do
-                                                                                      ~(write-value-code return-type `(.legWriter ~el-box ~leg) code)
+                                                                                      ~(write-value-code return-type el-box leg code)
                                                                                       ~el-box))))]))
                                                  cat))))))))}))
 
