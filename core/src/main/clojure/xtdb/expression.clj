@@ -1438,7 +1438,7 @@
                                :sinh 'Math/sinh, :cosh 'Math/cosh, :tanh 'Math/tanh
                                :asin 'Math/asin, :acos 'Math/acos, :atan 'Math/atan
                                :sqrt 'Math/sqrt, :ln 'Math/log, :log10 'Math/log10, :exp 'Math/exp
-                               :floor 'Math/floor, :ceil 'Math/ceil}]
+                               :floor 'Math/floor, :ceil 'Math/ceil :ceiling 'Math/ceil}]
   (defmethod codegen-call [math-op :num] [_]
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))

@@ -119,16 +119,13 @@ identifierChain : identifier ( '.' identifier )* ;
 identifier
     : (REGULAR_IDENTIFIER
         | 'START' | 'END'
-        | 'AGE'
         | 'COMMITTED' | 'UNCOMMITTED'
         | 'TIMEZONE'
         | 'VERSION'
         | 'SYSTEM_TIME' | 'VALID_TIME'
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
         | 'SETTING'
-        | 'CARDINALITY'
         | 'ROLE'
-        | 'STR' | 'LOCAL_NAME' | 'NAMESPACE'
         | 'USER' | 'PASSWORD'
         | 'VARBINARY' | 'BYTEA'
         | 'URI'
@@ -286,23 +283,7 @@ exprPrimary
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
     | 'EXTRACT' '(' extractField 'FROM' extractSource ')' # ExtractFunction
     | ('CHAR_LENGTH' | 'CHARACTER_LENGTH') '(' expr ('USING' charLengthUnits)? ')' # CharacterLengthFunction
-    | 'OCTET_LENGTH' '(' expr ')' # OctetLengthFunction
-    | 'LENGTH' '(' expr ')' # LengthFunction
-    | 'CARDINALITY' '(' expr ')' # CardinalityFunction
-    | 'ARRAY_UPPER' '(' expr ',' expr ')' # ArrayUpperFunction
-    | 'ABS' '(' expr ')' # AbsFunction
-    | 'MOD' '(' expr ',' expr ')' # ModFunction
-    | trigonometricFunctionName '(' expr ')' # TrigonometricFunction
-    | 'LOG' '(' generalLogarithmBase ',' generalLogarithmArgument ')' # LogFunction
-    | 'LOG10' '(' expr ')' # Log10Function
-    | 'LN' '(' expr ')' # LnFunction
-    | 'EXP' '(' expr ')' # ExpFunction
-    | 'POWER' '(' expr ',' expr ')' # PowerFunction
-    | 'SQRT' '(' expr ')' # SqrtFunction
-    | 'FLOOR' '(' expr ')' # FloorFunction
-    | ( 'CEIL' | 'CEILING' ) '(' expr ')' # CeilingFunction
-    | 'LEAST' '(' expr (',' expr)* ')' # LeastFunction
-    | 'GREATEST' '(' expr (',' expr)* ')' # GreatestFunction
+    | fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
 
     // string value functions
     | 'SUBSTRING' '('
@@ -311,12 +292,7 @@ exprPrimary
          | ',' startPosition (',' stringLength)? )
       ')' # CharacterSubstringFunction
 
-    | 'UPPER' '(' expr ')' # UpperFunction
-    | 'LOWER' '(' expr ')' # LowerFunction
     | 'TRIM' '(' trimSpecification? trimCharacter? 'FROM'? trimSource ')' # TrimFunction
-    | 'LOCAL_NAME' '(' expr ')' # LocalNameFunction
-    | 'NAMESPACE' '(' expr ')' # NamespaceFunction
-    | 'STR' '(' expr (',' expr)* ')' # StrFunction
 
     | 'URI_SCHEME' '(' expr ')' # UriSchemeFunction
     | 'URI_USER_INFO' '(' expr ')' # UriUserInfoFunction
@@ -356,11 +332,6 @@ exprPrimary
     | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
     | 'OVERLAPS' '(' expr ( ',' expr )+ ')' # OverlapsFunction
     | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
-    | 'UPPER_INF' '(' expr ')' # UpperInfFunction
-    | 'LOWER_INF' '(' expr ')' # LowerInfFunction
-
-    // interval value functions
-    | 'AGE' '(' expr ',' expr ')' # AgeFunction
 
     | 'TRIM_ARRAY' '(' expr ',' expr ')' # TrimArrayFunction
     ;
@@ -516,15 +487,6 @@ arrayValueConstructor
     : 'ARRAY'? '[' (expr (',' expr)*)? ']' # ArrayValueConstructorByEnumeration
     | 'ARRAY' subquery # ArrayValueConstructorByQuery
     ;
-
-/// SQL:2016 §6.30 Trigonometric functions
-
-trigonometricFunctionName : 'SIN' | 'COS' | 'TAN' | 'SINH' | 'COSH' | 'TANH' | 'ASIN' | 'ACOS' | 'ATAN' ;
-
-// general_logarithm_function
-
-generalLogarithmBase : expr ;
-generalLogarithmArgument : expr ;
 
 //// §7 Query expressions
 

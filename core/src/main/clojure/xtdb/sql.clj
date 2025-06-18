@@ -18,7 +18,7 @@
             [xtdb.xtql.plan :as xtql.plan])
   (:import clojure.lang.MapEntry
            (java.net URI)
-           (java.time Duration LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime)
+           (java.time Duration LocalDate LocalTime OffsetTime ZoneOffset)
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
@@ -1083,6 +1083,55 @@
 
 (declare plan-sort-specification-list)
 
+(defmulti plan-fn
+  #_{:clj-kondo/ignore [:unused-binding]}
+  (fn [env f planned-args]
+    f)
+  :default ::default)
+
+(defrecord UnknownFunction [f]
+  PlanError
+  (error-string [_] (format "Unknown function: %s" f)))
+
+(defmethod plan-fn ::default [env f planned-args]
+  (add-err! env (->UnknownFunction f))
+  (list* f planned-args))
+
+(defrecord ArityMismatch [f min-arity max-arity actual-arity]
+  PlanError
+  (error-string [_] (format "Function %s arity mismatch: expected %d-%d, got %d" f min-arity max-arity actual-arity)))
+
+(defmacro def-sql-fns [fs min-arity max-arity]
+  `(do
+     ~@(for [f fs]
+         `(defmethod plan-fn '~f [env# f# planned-args#]
+            (let [arity# (count planned-args#)]
+              (when (or (< arity# ~min-arity) (> arity# ~max-arity))
+                (add-err! env# (->ArityMismatch '~f ~min-arity ~max-arity arity#))))
+
+            (list* '~f planned-args#)))))
+
+;; mathy
+(def-sql-fns [octet_length length cardinality] 1 1)
+(def-sql-fns [array_upper] 2 2)
+(def-sql-fns [abs] 1 1)
+(def-sql-fns [mod] 2 2)
+(def-sql-fns [log] 2 2)
+(def-sql-fns [log10 ln exp sqrt] 1 1)
+(def-sql-fns [power] 2 2)
+(def-sql-fns [floor ceil ceiling] 1 1)
+(def-sql-fns [least greatest] 1 Long/MAX_VALUE)
+
+(def-sql-fns [sin cos tan sinh cosh tanh asin acos atan] 1 1)
+
+;; periods
+(def-sql-fns [lower_inf lower upper upper_inf] 1 1)
+(def-sql-fns [age] 2 2)
+
+;; stringy
+(def-sql-fns [str] 1 Long/MAX_VALUE)
+(def-sql-fns [namespace local_name] 1 1)
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -1241,9 +1290,10 @@
           (-> (.exprPrimary ctx 0) (.accept this))
           (-> (.exprPrimary ctx 1) (.accept this))))
 
-  (visitStrFunction [this ctx]
-    (xt/template (str ~@(->> (.expr ctx)
-                             (mapv (partial accept-visitor this))))))
+  (visitFunctionCall [this ctx]
+    (plan-fn env
+             (identifier-sym (.fn ctx))
+             (mapv (partial accept-visitor this) (.expr ctx))))
 
   (visitRegexpReplaceFunction [this ctx]
     (xt/template
@@ -1286,78 +1336,6 @@
               "CHARACTERS" 'character-length
               "OCTETS" 'octet-length)
             nve)))
-
-  (visitOctetLengthFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'octet-length nve)))
-
-  (visitLengthFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.getChild 0) (.accept this))]
-      (list 'length nve)))
-
-  (visitCardinalityFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'cardinality nve)))
-
-  (visitArrayUpperFunction [this ctx]
-    (xt/template (array-upper ~(-> (.expr ctx 0) (.accept this))
-                              ~(-> (.expr ctx 1) (.accept this)))))
-
-  (visitAbsFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'abs nve)))
-
-  (visitModFunction [this ctx]
-    (let [nve1 (-> (.expr ctx 0) (.accept this))
-          nve2 (-> (.expr ctx 1) (.accept this))]
-      (list 'mod nve1 nve2)))
-
-  (visitTrigonometricFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))
-          fn-name (-> (.trigonometricFunctionName ctx) (.getText) (str/lower-case))]
-      (list (symbol fn-name) nve)))
-
-  (visitLogFunction [this ctx]
-    (let [nve1 (-> (.generalLogarithmBase ctx) (.expr) (.accept this))
-          nve2 (-> (.generalLogarithmArgument ctx) (.expr) (.accept this))]
-      (list 'log nve1 nve2)))
-
-  (visitLog10Function [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'log10 nve)))
-
-  (visitLnFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'ln nve)))
-
-  (visitExpFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'exp nve)))
-
-  (visitPowerFunction [this ctx]
-    (let [nve1 (-> (.expr ctx 0) (.accept this))
-          nve2 (-> (.expr ctx 1) (.accept this))]
-      (list 'power nve1 nve2)))
-
-  (visitSqrtFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'sqrt nve)))
-
-  (visitFloorFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'floor nve)))
-
-  (visitCeilingFunction [this ctx]
-    (let [nve (-> (.expr ctx) (.accept this))]
-      (list 'ceil nve)))
-
-  (visitLeastFunction [this ctx]
-    (let [nves (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
-      (list* 'least nves)))
-
-  (visitGreatestFunction [this ctx]
-    (let [nves (mapv #(.accept ^ParserRuleContext % this) (.expr ctx))]
-      (list* 'greatest nves)))
 
   (visitOrExpr [this ctx]
     (list 'or
@@ -1608,11 +1586,6 @@
                              (.accept this)
                              vector)))))
 
-  (visitAgeFunction [this ctx]
-    (let [ve1 (-> (.expr ctx 0) (.accept this))
-          ve2 (-> (.expr ctx 1) (.accept this))]
-      (list 'age ve1 ve2)))
-
   (visitGenerateSeriesFunction [this ctx]
     (.accept (.generateSeries ctx) this))
 
@@ -1649,15 +1622,6 @@
       (if sl
         (list 'substring cve sp sl)
         (list 'substring cve sp))))
-
-  (visitLowerFunction [this ctx] (list 'lower (-> (.expr ctx) (.accept this))))
-  (visitLowerInfFunction [this ctx] (list 'lower_inf (-> (.expr ctx) (.accept this))))
-
-  (visitUpperFunction [this ctx] (list 'upper (-> (.expr ctx) (.accept this))))
-  (visitUpperInfFunction [this ctx] (list 'upper_inf (-> (.expr ctx) (.accept this))))
-
-  (visitLocalNameFunction [this ctx] (list 'local_name (-> (.expr ctx) (.accept this))))
-  (visitNamespaceFunction [this ctx] (list 'namespace (-> (.expr ctx) (.accept this))))
 
   (visitTrimFunction [this ctx]
     (let [trim-fn (case (some-> (.trimSpecification ctx) (.getText) (str/upper-case))
@@ -3034,10 +2998,10 @@
                    (.accept (->ExprPlanVisitor env scope)))]
 
       (if-let [errs (not-empty @!errors)]
-        (throw (err/illegal-arg :xtdb/sql-error
-                                {::err/message (str "Errors planning SQL statement:\n  - "
-                                                    (str/join "\n  - " (map #(error-string %) errs)))
-                                 :errors errs}))
+        (throw (err/incorrect :xtdb/sql-error
+                              (str "Errors planning SQL statement:\n  - "
+                                   (str/join "\n  - " (map #(error-string %) errs)))
+                              {:errors errs}))
         (do
           (log-warnings !warnings)
           plan))))

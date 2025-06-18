@@ -2,7 +2,6 @@
   (:require [clojure.set :as set]
             [clojure.tools.logging :as log]
             [xtdb.pgwire :as-alias pgw]
-            [xtdb.pgwire.types :as pg-types]
             [xtdb.util :as util])
   (:import [clojure.lang MapEntry]
            [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream EOFException InputStream OutputStream]

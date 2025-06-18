@@ -147,7 +147,7 @@
   (t/is (= '(octet-length f/a) (plan-expr-with-foo "CHAR_LENGTH(foo.a USING OCTETS)")) "CHAR_LENGTH alias works"))
 
 (t/deftest test-octet-length-expr
-  (t/is (= '(octet-length f/a) (plan-expr-with-foo "OCTET_LENGTH(foo.a)"))))
+  (t/is (= '(octet_length f/a) (plan-expr-with-foo "OCTET_LENGTH(foo.a)"))))
 
 (t/deftest test-position-expr
   (t/is (= '(position f/a f/b) (plan-expr-with-foo "POSITION(foo.a IN foo.b)")))
