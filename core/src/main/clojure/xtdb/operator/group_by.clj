@@ -11,7 +11,6 @@
             [xtdb.vector.writer :as vw])
   (:import (java.io Closeable)
            (java.util ArrayList LinkedList List Spliterator)
-           (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector Float8Vector ValueVector)
@@ -512,9 +511,8 @@
             row-copier (.rowCopier (vw/vec-wtr->rdr acc-col) el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
           (.forEach (.build isb)
-                    (reify IntConsumer
-                      (accept [_ idx]
-                        (.copyRow row-copier idx))))
+                    (fn [^long idx]
+                      (.copyRow row-copier idx)))
           (.endList list-writer))
 
         (let [value-count (.size group-idxmaps)]
@@ -581,11 +579,10 @@
        (set! (.done? this) true)
 
        (.forEachRemaining in-cursor
-                          (reify Consumer
-                            (accept [_ in-rel]
-                              (let [group-mapping (.groupMapping group-mapper in-rel)]
-                                (doseq [^IAggregateSpec agg-spec aggregate-specs]
-                                  (.aggregate agg-spec in-rel group-mapping))))))
+                          (fn [in-rel]
+                            (let [group-mapping (.groupMapping group-mapper in-rel)]
+                              (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                (.aggregate agg-spec in-rel group-mapping)))))
 
        (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
          (let [out-rel (vr/rel-reader (concat (.finish group-mapper) agg-cols))]

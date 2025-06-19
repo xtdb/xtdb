@@ -21,32 +21,31 @@
       (try
         (loop []
           (let [!passed-on? (volatile! false)
-                advanced? (.tryAdvance cursor (reify Consumer
-                                                (accept [_ read-rel]
-                                                  (let [^RelationReader read-rel read-rel
-                                                        row-count (.getRowCount read-rel)
-                                                        seen-rows (.seen-rows this)]
-                                                    (cond
-                                                      ;; haven't seen many rows yet, send this one straight through
-                                                      (< seen-rows pass-through)
-                                                      (do
-                                                        (set! (.seen-rows this) (+ seen-rows row-count))
-                                                        (.accept c read-rel)
-                                                        (vreset! !passed-on? true))
+                advanced? (.tryAdvance cursor
+                                       (fn [^RelationReader read-rel]
+                                         (let [row-count (.getRowCount read-rel)
+                                               seen-rows (.seen-rows this)]
+                                           (cond
+                                             ;; haven't seen many rows yet, send this one straight through
+                                             (< seen-rows pass-through)
+                                             (do
+                                               (set! (.seen-rows this) (+ seen-rows row-count))
+                                               (.accept c read-rel)
+                                               (vreset! !passed-on? true))
 
-                                                      ;; this page is big enough, and we don't have rows waiting
-                                                      ;; send it straight through, no copy.
-                                                      (and (>= row-count ideal-min-page-size)
-                                                           (nil? @!rel-writer))
-                                                      (do
-                                                        (.accept c read-rel)
-                                                        (vreset! !passed-on? true))
+                                             ;; this page is big enough, and we don't have rows waiting
+                                             ;; send it straight through, no copy.
+                                             (and (>= row-count ideal-min-page-size)
+                                                  (nil? @!rel-writer))
+                                             (do
+                                               (.accept c read-rel)
+                                               (vreset! !passed-on? true))
 
-                                                      ;; otherwise, add it to the pending rows.
-                                                      :else
-                                                      (let [rel-writer (vswap! !rel-writer #(or % (vw/->rel-writer allocator)))]
-                                                        (vw/append-rel rel-writer read-rel)
-                                                        (vswap! !rows-appended + row-count)))))))
+                                             ;; otherwise, add it to the pending rows.
+                                             :else
+                                             (let [rel-writer (vswap! !rel-writer #(or % (vw/->rel-writer allocator)))]
+                                               (vw/append-rel rel-writer read-rel)
+                                               (vswap! !rows-appended + row-count))))))
                 rows-appended @!rows-appended]
 
             (cond

@@ -25,7 +25,6 @@
            (java.nio ByteBuffer)
            (java.time Instant InstantSource)
            (java.time.temporal ChronoUnit)
-           (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
@@ -358,11 +357,9 @@
         (letfn [(throw-assert-failed []
                   (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
           (or (.tryAdvance res
-                           (reify Consumer
-                             (accept [_ in-rel]
-                               (let [^RelationReader in-rel in-rel]
-                                 (when-not (pos? (.getRowCount in-rel))
-                                   (throw-assert-failed))))))
+                           (fn [^RelationReader in-rel]
+                             (when-not (pos? (.getRowCount in-rel))
+                               (throw-assert-failed))))
 
               (throw-assert-failed)))
 
@@ -376,9 +373,8 @@
                                              (assoc :args args, :close-args? false))))]
 
         (.forEachRemaining res
-                           (reify Consumer
-                             (accept [_ in-rel]
-                               (.indexOp rel-idxer in-rel query-opts))))))))
+                           (fn [in-rel]
+                             (.indexOp rel-idxer in-rel query-opts)))))))
 
 (defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)

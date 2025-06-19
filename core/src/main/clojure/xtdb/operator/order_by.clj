@@ -13,7 +13,6 @@
            java.nio.file.Path
            (java.util HashMap List PriorityQueue)
            (java.util Comparator)
-           (java.util.function Consumer)
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -76,9 +75,8 @@
     (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
                         (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
                                     (.tryAdvance in-cursor
-                                                 (reify Consumer
-                                                   (accept [_ src-rel]
-                                                     (vw/append-rel rel-writer src-rel))))))
+                                                 (fn [src-rel]
+                                                   (vw/append-rel rel-writer src-rel)))))
                         (when (pos? (.getRowCount rel-writer))
                           (let [read-rel (vw/rel-wtr->rdr rel-writer)
                                 out-filename (->file tmp-dir 0 file-idx)]
@@ -227,9 +225,8 @@
                                                               (vw/->writer (.createVector field allocator))))]
             (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
                         (.tryAdvance in-cursor
-                                     (reify Consumer
-                                       (accept [_ src-rel]
-                                         (vw/append-rel rel-writer src-rel))))))
+                                     (fn [src-rel]
+                                       (vw/append-rel rel-writer src-rel)))))
             (let [pos (.getRowCount rel-writer)
                   read-rel (vw/rel-wtr->rdr rel-writer)]
               (if (<= pos ^int *block-size*)

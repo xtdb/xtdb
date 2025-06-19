@@ -85,12 +85,11 @@
 
                 (let [out-wtr (vw/root->writer vsr)]
                   (.forEachRemaining cursor
-                                     (reify Consumer
-                                       (accept [_ in-rel]
-                                         (.clear out-wtr)
-                                         (vw/append-rel out-wtr in-rel)
-                                         (.syncRowCount out-wtr)
-                                         (.putNext listener)))))
+                                     (fn [in-rel]
+                                       (.clear out-wtr)
+                                       (vw/append-rel out-wtr in-rel)
+                                       (.syncRowCount out-wtr)
+                                       (.putNext listener))))
 
                 (.completed listener))
               (catch Throwable t

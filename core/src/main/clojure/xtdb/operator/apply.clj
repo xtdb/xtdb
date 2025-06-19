@@ -80,10 +80,9 @@
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (reify ICursor
                                    (tryAdvance [_ c]
-                                     (.tryAdvance dep-cursor (reify Consumer
-                                                               (accept [_ in-rel]
-                                                                 (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
-                                                                   (.accept c (vr/rel-reader [match-vec])))))))
+                                     (.tryAdvance dep-cursor (fn [in-rel]
+                                                               (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
+                                                                 (.accept c (vr/rel-reader [match-vec]))))))
 
                                    (close [_] (.close dep-cursor))))))
 

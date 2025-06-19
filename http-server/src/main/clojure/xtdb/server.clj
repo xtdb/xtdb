@@ -3,7 +3,6 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [jsonista.core :as json]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
             [reitit.coercion :as r.coercion]
@@ -32,7 +31,6 @@
            [java.nio.charset StandardCharsets]
            (java.time Duration ZoneId)
            (java.util Base64 Base64$Decoder List Map)
-           [java.util.function Consumer]
            [java.util.stream Stream]
            org.eclipse.jetty.server.Server
            (xtdb JsonSerde)
@@ -153,9 +151,8 @@
             (let [writer (transit/writer out :json opts)]
               (try
                 (.forEach res
-                          (reify Consumer
-                            (accept [_ el]
-                              (transit/write writer el))))
+                          (fn [el]
+                            (transit/write writer el)))
                 (catch Anomaly e
                   (transit/write writer e))
                 (catch Throwable t
@@ -177,10 +174,9 @@
           (with-open [^Stream res res]
             (try
               (.forEach res
-                        (reify Consumer
-                          (accept [_ el]
-                            (JsonSerde/encode el out)
-                            (.write out ^byte ascii-newline))))
+                        (fn [el]
+                          (JsonSerde/encode el out)
+                          (.write out ^byte ascii-newline)))
               (catch Throwable t
                 (JsonSerde/encode t out)
                 (.write out ^byte ascii-newline))

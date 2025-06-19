@@ -74,19 +74,15 @@
     (let [advanced? (boolean-array 1 false)]
       (loop []
         (if (or (.tryAdvance left-cursor
-                             (reify Consumer
-                               (accept [_ in-rel]
-                                 (let [^RelationReader in-rel in-rel]
-                                   (when (pos? (.getRowCount in-rel))
-                                     (aset advanced? 0 true)
-                                     (.accept c in-rel))))))
+                             (fn [^RelationReader in-rel]
+                               (when (pos? (.getRowCount in-rel))
+                                 (aset advanced? 0 true)
+                                 (.accept c in-rel))))
                 (.tryAdvance right-cursor
-                             (reify Consumer
-                               (accept [_ in-rel]
-                                 (let [^RelationReader in-rel in-rel]
-                                   (when (pos? (.getRowCount in-rel))
-                                     (aset advanced? 0 true)
-                                     (.accept c in-rel)))))))
+                             (fn [^RelationReader in-rel]
+                               (when (pos? (.getRowCount in-rel))
+                                 (aset advanced? 0 true)
+                                 (.accept c in-rel)))))
           (if (aget advanced? 0)
             true
             (recur))
@@ -109,34 +105,30 @@
   ICursor
   (tryAdvance [_ c]
     (.forEachRemaining right-cursor
-                       (reify Consumer
-                         (accept [_ in-rel]
-                           (let [^RelationReader in-rel in-rel
-                                 builder (.buildFromRelation rel-map in-rel)]
-                             (dotimes [idx (.getRowCount in-rel)]
-                               (.add builder idx))))))
+                       (fn [^RelationReader in-rel]
+                         (let [builder (.buildFromRelation rel-map in-rel)]
+                           (dotimes [idx (.getRowCount in-rel)]
+                             (.add builder idx)))))
 
     (boolean
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
                    (.tryAdvance left-cursor
-                                (reify Consumer
-                                  (accept [_ in-rel]
-                                    (let [^RelationReader in-rel in-rel
-                                          row-count (.getRowCount in-rel)
-                                          prober (.probeFromRelation rel-map in-rel)]
+                                (fn [^RelationReader in-rel]
+                                  (let [row-count (.getRowCount in-rel)
+                                        prober (.probeFromRelation rel-map in-rel)]
 
-                                      (when (pos? row-count)
-                                        (let [idxs (IntStream/builder)]
-                                          (dotimes [idx row-count]
-                                            (when (cond-> (not= -1 (.indexOf prober idx true))
-                                                    difference? not)
-                                              (.add idxs idx)))
+                                    (when (pos? row-count)
+                                      (let [idxs (IntStream/builder)]
+                                        (dotimes [idx row-count]
+                                          (when (cond-> (not= -1 (.indexOf prober idx true))
+                                                  difference? not)
+                                            (.add idxs idx)))
 
-                                          (let [idxs (.toArray (.build idxs))]
-                                            (when-not (empty? idxs)
-                                              (aset advanced? 0 true)
-                                              (.accept c (.select in-rel idxs))))))))))))
+                                        (let [idxs (.toArray (.build idxs))]
+                                          (when-not (empty? idxs)
+                                            (aset advanced? 0 true)
+                                            (.accept c (.select in-rel idxs)))))))))))
        (aget advanced? 0))))
 
   (close [_]
@@ -174,21 +166,19 @@
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))
                   (.tryAdvance in-cursor
-                               (reify Consumer
-                                 (accept [_ in-rel]
-                                   (let [^RelationReader in-rel in-rel
-                                         row-count (.getRowCount in-rel)]
-                                     (when (pos? row-count)
-                                       (let [builder (.buildFromRelation rel-map in-rel)
-                                             idxs (IntStream/builder)]
-                                         (dotimes [idx row-count]
-                                           (when (neg? (.addIfNotPresent builder idx))
-                                             (.add idxs idx)))
+                               (fn [^RelationReader in-rel]
+                                 (let [row-count (.getRowCount in-rel)]
+                                   (when (pos? row-count)
+                                     (let [builder (.buildFromRelation rel-map in-rel)
+                                           idxs (IntStream/builder)]
+                                       (dotimes [idx row-count]
+                                         (when (neg? (.addIfNotPresent builder idx))
+                                           (.add idxs idx)))
 
-                                         (let [idxs (.toArray (.build idxs))]
-                                           (when-not (empty? idxs)
-                                             (aset advanced? 0 true)
-                                             (.accept c (.select in-rel idxs))))))))))))
+                                       (let [idxs (.toArray (.build idxs))]
+                                         (when-not (empty? idxs)
+                                           (aset advanced? 0 true)
+                                           (.accept c (.select in-rel idxs)))))))))))
       (aget advanced? 0)))
 
   (close [_]
@@ -245,23 +235,21 @@
       false
 
       (let [advanced? (boolean-array 1)
-            inner-c (reify Consumer
-                      (accept [_ in-rel]
-                        (let [^RelationReader in-rel in-rel]
-                          (when (pos? (.getRowCount in-rel))
-                            (let [rel-builder (.buildFromRelation rel-map in-rel)
-                                  new-idxs (IntStream/builder)]
-                              (dotimes [idx (.getRowCount in-rel)]
-                                (let [map-idx (.addIfNotPresent rel-builder idx)]
-                                  (when (neg? map-idx)
-                                    (.add new-idxs (emap/inserted-idx map-idx)))))
+            inner-c (fn [^RelationReader in-rel]
+                      (when (pos? (.getRowCount in-rel))
+                        (let [rel-builder (.buildFromRelation rel-map in-rel)
+                              new-idxs (IntStream/builder)]
+                          (dotimes [idx (.getRowCount in-rel)]
+                            (let [map-idx (.addIfNotPresent rel-builder idx)]
+                              (when (neg? map-idx)
+                                (.add new-idxs (emap/inserted-idx map-idx)))))
 
-                              (let [new-idxs (.toArray (.build new-idxs))]
-                                (when-not (empty? new-idxs)
-                                  (.accept c (-> (.getBuiltRelation rel-map) (.select new-idxs)))
-                                  (set! (.continue? this) true)
-                                  (set! (.new-idxs this) new-idxs)
-                                  (aset advanced? 0 true))))))))]
+                          (let [new-idxs (.toArray (.build new-idxs))]
+                            (when-not (empty? new-idxs)
+                              (.accept c (-> (.getBuiltRelation rel-map) (.select new-idxs)))
+                              (set! (.continue? this) true)
+                              (set! (.new-idxs this) new-idxs)
+                              (aset advanced? 0 true))))))]
 
         (.tryAdvance base-cursor inner-c)
 
