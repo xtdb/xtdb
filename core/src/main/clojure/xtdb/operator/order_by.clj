@@ -17,11 +17,11 @@
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowReader)
+           (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader RowCopier)
+           (xtdb.arrow Relation Relation$Loader Relation$UnloadMode RowCopier)
            xtdb.ICursor
-           (xtdb.vector IVectorReader RelationReader RelationWriter)))
+           (xtdb.vector RelationReader RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -44,15 +44,11 @@
   (io/file tmp-dir (format "temp-sort-%d-%d.arrow" batch-idx file-idx)))
 
 (defn- write-rel [^BufferAllocator allocator, ^RelationReader rdr, ^OutputStream os]
-  (util/with-close-on-catch [new-vecs (vec (for [^IVectorReader col rdr]
-                                             (let [new-vec (.createVector (-> (.getField col)
-                                                                              (types/field-with-name (.getName col)))
-                                                                          allocator)]
-                                               (.copyTo col new-vec)
-                                               new-vec)))]
-    (with-open [root (VectorSchemaRoot. ^List new-vecs)]
-      (doto (ArrowFileWriter. root nil (Channels/newChannel os))
-        (.start) (.writeBatch) (.end)))))
+  (util/with-open [ch (Channels/newChannel os)
+                   rel (.openAsRelation rdr allocator)
+                   unl (.startUnload rel ch Relation$UnloadMode/FILE)]
+    (.writePage unl)
+    (.end unl)))
 
 (defn sorted-idxs ^ints [^xtdb.arrow.RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.getRowCount read-rel))

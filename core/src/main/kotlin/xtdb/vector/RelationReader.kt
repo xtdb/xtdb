@@ -41,7 +41,8 @@ class RelationReader private constructor(
                     vr.copyTo(outVec)
                     fromArrow(outVec)
                 }
-            })
+            },
+            rowCount)
 
     override fun toString(): String = "(RelationReader {rowCount=$rowCount, cols=$vecsMap})"
 
