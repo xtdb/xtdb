@@ -2,7 +2,6 @@ package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.util.closeAll
 import java.util.function.Function
@@ -15,7 +14,6 @@ class RelationReader private constructor(
     override operator fun get(idx: Int, keyFn: IKeyFn<*>): Map<*, Any?> =
         vecsMap.values.associate { keyFn.denormalize(it.name) to it[idx] }
 
-    override val schema get() = Schema(vectors.map { it.field })
     override val vectors get() = vecsMap.values
 
     override fun vectorForOrNull(name: String) = vecsMap[name]

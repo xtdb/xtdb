@@ -11,7 +11,7 @@ import xtdb.util.safeMap
 import java.util.*
 
 interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
-    val schema: Schema
+    val schema: Schema get() = Schema(vectors.map { it.field })
     val rowCount: Int
 
     val vectors: Collection<VectorReader>

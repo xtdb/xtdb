@@ -6,11 +6,10 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.util LinkedList)
-           java.util.function.Consumer
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           xtdb.ICursor
            xtdb.expression.map.IRelationMap
+           xtdb.ICursor
            (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :distinct [_]

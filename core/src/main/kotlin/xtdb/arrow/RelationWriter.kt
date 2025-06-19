@@ -14,7 +14,15 @@ interface RelationWriter : RelationReader {
 
     fun endRow(): Int
 
-    fun rowCopier(rel: RelationReader): RowCopier
+    fun rowCopier(rel: RelationReader): RowCopier {
+        val copiers = rel.vectors.map { it.rowCopier(vectorForOrNull(it.name) ?: error("missing ${it.name} vector")) }
+
+        return RowCopier { srcIdx ->
+            copiers.forEach { it.copyRow(srcIdx) }
+            endRow()
+        }
+    }
+
 
     fun append(rel: RelationReader) {
         val copier = rowCopier(rel)
