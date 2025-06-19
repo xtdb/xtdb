@@ -14,7 +14,7 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     val schema: Schema
     val rowCount: Int
 
-    val vectors: Iterable<VectorReader>
+    val vectors: Collection<VectorReader>
 
     fun vectorForOrNull(name: String): VectorReader?
     fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
@@ -74,6 +74,13 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
         @JvmStatic
         fun from(cols: Iterable<VectorReader>, rowCount: Int): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
+
+        @JvmStatic
+        fun concatCols(rel1: RelationReader, rel2: RelationReader): RelationReader {
+            assert(rel1.rowCount == rel2.rowCount) { "Cannot concatenate relations with different row counts" }
+
+            return from(rel1.vectors + rel2.vectors, rel1.rowCount)
+        }
 
         @Suppress("unused")
         @JvmField

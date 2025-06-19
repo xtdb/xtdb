@@ -6,7 +6,7 @@ import xtdb.util.normalForm
 
 interface RelationWriter : RelationReader {
 
-    override val vectors: Iterable<VectorWriter>
+    override val vectors: Collection<VectorWriter>
     override fun vectorForOrNull(name: String): VectorWriter?
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
     fun vectorFor(name: String, fieldType: FieldType): VectorWriter = unsupported("vectorFor/2")

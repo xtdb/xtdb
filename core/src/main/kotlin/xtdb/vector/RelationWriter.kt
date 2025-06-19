@@ -16,7 +16,7 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
     override fun iterator() = writers.iterator()
 
     override var rowCount = 0
-    override val vectors: Iterable<IVectorWriter> get() = writers.values
+    override val vectors: Collection<IVectorWriter> get() = writers.values
 
     override fun endRow(): Int {
         val pos = rowCount++
