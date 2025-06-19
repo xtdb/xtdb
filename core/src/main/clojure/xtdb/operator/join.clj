@@ -544,6 +544,50 @@
           (.setNull mark-col idx)
           (.set mark-col idx (case match-res 1 1, -1 0)))))))
 
+(deftype MarkJoinCursor [^BufferAllocator allocator ^ICursor build-cursor,
+                         ^:unsynchronized-mutable ^ICursor probe-cursor
+                         ^IFn ->probe-cursor
+                         ^IRelationMap rel-map
+                         ^RoaringBitmap matched-build-idxs
+                         mark-col-name
+                         pushdown-blooms
+                         join-type]
+  ICursor
+  (tryAdvance [this c]
+    (build-phase build-cursor rel-map pushdown-blooms)
+
+    (boolean
+     (let [advanced? (boolean-array 1)]
+       (binding [scan/*column->pushdown-bloom* (conj scan/*column->pushdown-bloom*
+                                                     (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms))]
+         (when-not probe-cursor
+           (util/with-close-on-catch [probe-cursor (->probe-cursor)]
+             (set! (.probe-cursor this) probe-cursor)))
+
+         (while (and (not (aget advanced? 0))
+                     (.tryAdvance ^ICursor (.probe-cursor this)
+                                  (reify Consumer
+                                    (accept [_ probe-rel]
+                                      (let [^RelationReader probe-rel probe-rel
+                                            row-count (.getRowCount probe-rel)]
+                                        (when (pos? row-count)
+                                          (aset advanced? 0 true)
+
+                                          (with-open [probe-rel (.copy probe-rel allocator)
+                                                      mark-col (doto (BitVector. (name mark-col-name) allocator)
+                                                                 (.allocateNew row-count)
+                                                                 (.setValueCount row-count))]
+                                            (mark-join-probe-phase rel-map probe-rel mark-col)
+                                            (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
+                                              (.accept c (vr/rel-reader out-cols row-count))))))))))))
+       (aget advanced? 0))))
+
+  (close [_]
+    (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
+    (util/try-close rel-map)
+    (util/try-close build-cursor)
+    (util/try-close probe-cursor)))
+
 (defmethod lp/emit-expr :mark-join [{:keys [mark-spec] :as join-expr} {:keys [param-fields] :as args}]
   (let [[mark-col-name mark-condition] (first mark-spec)]
     (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
@@ -553,51 +597,17 @@
          :->cursor
          (fn [{:keys [^BufferAllocator allocator args]} ->probe-cursor ->build-cursor]
            (util/with-close-on-catch [build-cursor (->build-cursor)]
-             (let [!probe-cursor (volatile! nil)
-                   rel-map (emap/->relation-map allocator {:build-fields right-fields
-                                                           :build-key-col-names right-key-col-names
-                                                           :probe-fields left-fields
-                                                           :probe-key-col-names left-key-col-names
-                                                           :store-full-build-rel? true
-                                                           :theta-expr theta-expr
-                                                           :param-fields param-fields
-                                                           :args args})
-                   pushdown-blooms (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))]
-
-               (reify ICursor
-                 (tryAdvance [_ c]
-                   (build-phase build-cursor rel-map pushdown-blooms)
-
-                   (boolean
-                    (let [advanced? (boolean-array 1)]
-                      (binding [scan/*column->pushdown-bloom* (conj scan/*column->pushdown-bloom*
-                                                                    (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms))]
-                        (when-not @!probe-cursor
-                          (util/with-close-on-catch [probe-cursor (->probe-cursor)]
-                            (vreset! !probe-cursor probe-cursor)))
-                        (while (and (not (aget advanced? 0))
-                                    (.tryAdvance ^ICursor @!probe-cursor
-                                                 (reify Consumer
-                                                   (accept [_ probe-rel]
-                                                     (let [^RelationReader probe-rel probe-rel
-                                                           row-count (.getRowCount probe-rel)]
-                                                       (when (pos? row-count)
-                                                         (aset advanced? 0 true)
-
-                                                         (with-open [probe-rel (.copy probe-rel allocator)
-                                                                     mark-col (doto (BitVector. (name mark-col-name) allocator)
-                                                                                (.allocateNew row-count)
-                                                                                (.setValueCount row-count))]
-                                                           (mark-join-probe-phase rel-map probe-rel mark-col)
-                                                           (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
-                                                             (.accept c (vr/rel-reader out-cols row-count))))))))))))
-                      (aget advanced? 0))))
-
-                 (close [_]
-                   (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
-                   (util/try-close rel-map)
-                   (util/try-close build-cursor)
-                   (util/try-close @!probe-cursor))))))}))))
+             (let [pushdown-blooms (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))]
+               (MarkJoinCursor. allocator build-cursor nil ->probe-cursor
+                                (emap/->relation-map allocator {:build-fields right-fields
+                                                                :build-key-col-names right-key-col-names
+                                                                :probe-fields left-fields
+                                                                :probe-key-col-names left-key-col-names
+                                                                :store-full-build-rel? true
+                                                                :theta-expr theta-expr
+                                                                :param-fields param-fields
+                                                                :args args})
+                                (RoaringBitmap.) mark-col-name pushdown-blooms ::mark-join))))}))))
 
 (defmethod lp/emit-expr :single-join [join-expr {:keys [param-fields] :as args}]
   (emit-join-expr-and-children join-expr args
