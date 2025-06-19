@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
 import xtdb.util.HLL
 import xtdb.util.add
@@ -10,7 +11,7 @@ class HllCalculator {
 
     private val hlls = mutableMapOf<ColumnName, HLL>()
 
-    fun update(opRdr: IVectorReader, startPos: Int, endPos: Int) {
+    fun update(opRdr: VectorReader, startPos: Int, endPos: Int) {
         val putRdr = opRdr.vectorFor("put")
         val columns = putRdr.keyNames.orEmpty()
         val keyRdrs = columns.map { it to putRdr.vectorFor(it) }
