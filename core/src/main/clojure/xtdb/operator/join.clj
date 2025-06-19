@@ -22,10 +22,10 @@
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
+           (xtdb.arrow RelationReader)
            (xtdb.bloom BloomUtils)
            (xtdb.expression.map IRelationMap)
-           (xtdb.operator ProjectionSpec)
-           (xtdb.vector RelationReader)))
+           (xtdb.operator ProjectionSpec)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -95,21 +95,21 @@
       (update :left #(lp/emit-expr % args))
       (update :right #(lp/emit-expr % args))) )
 
-(defn- cross-product ^xtdb.vector.RelationReader [^RelationReader left-rel, ^RelationReader right-rel]
+(defn- cross-product ^xtdb.arrow.RelationReader [^RelationReader left-rel, ^RelationReader right-rel]
   (let [left-row-count (.getRowCount left-rel)
         right-row-count (.getRowCount right-rel)
         row-count (* left-row-count right-row-count)]
-    (RelationReader/concatCols (.select left-rel
-                                        (let [idxs (int-array row-count)]
-                                          (dotimes [idx row-count]
-                                            (aset idxs idx ^long (quot idx right-row-count)))
-                                          idxs))
+    (xtdb.vector.RelationReader/concatCols (.select left-rel
+                                                    (let [idxs (int-array row-count)]
+                                                      (dotimes [idx row-count]
+                                                        (aset idxs idx ^long (quot idx right-row-count)))
+                                                      idxs))
 
-                               (.select right-rel
-                                        (let [idxs (int-array row-count)]
-                                          (dotimes [idx row-count]
-                                            (aset idxs idx ^long (rem idx right-row-count)))
-                                          idxs)))))
+                                           (.select right-rel
+                                                    (let [idxs (int-array row-count)]
+                                                      (dotimes [idx row-count]
+                                                        (aset idxs idx ^long (rem idx right-row-count)))
+                                                      idxs)))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
@@ -176,7 +176,7 @@
                                  (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
-(defmulti ^xtdb.vector.RelationReader probe-phase
+(defmulti ^xtdb.arrow.RelationReader probe-phase
   (fn [join-type probe-rel rel-map matched-build-idxs]
     join-type))
 

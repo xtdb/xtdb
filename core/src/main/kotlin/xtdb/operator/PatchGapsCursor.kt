@@ -4,7 +4,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.ICursor
 import xtdb.arrow.RowCopier
 import xtdb.vector.IRelationWriter
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 

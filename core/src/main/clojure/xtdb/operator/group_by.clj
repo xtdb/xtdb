@@ -19,8 +19,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
            (xtdb.arrow IntVector RelationReader VectorReader VectorWriter)
-           (xtdb.expression.map IRelationMap IRelationMapBuilder)
-           (xtdb.vector IVectorWriter)))
+           (xtdb.expression.map IRelationMap IRelationMapBuilder)))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
@@ -42,7 +41,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
-  (^xtdb.arrow.VectorReader groupMapping [^xtdb.vector.RelationReader inRelation])
+  (^xtdb.arrow.VectorReader groupMapping [^xtdb.arrow.RelationReader inRelation])
   (^Iterable #_<IVectorReader> finish []))
 
 (deftype NullGroupMapper [^VectorWriter group-mapping]
@@ -483,7 +482,7 @@
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 from-name to-name to-type
-                                ^IVectorWriter acc-col
+                                ^VectorWriter acc-col
                                 ^:unsynchronized-mutable ^ListVector out-vec
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps

@@ -5,7 +5,6 @@ import xtdb.trie.ColumnName
 import xtdb.util.HLL
 import xtdb.util.add
 import xtdb.util.createHLL
-import xtdb.vector.IVectorReader
 
 class HllCalculator {
 

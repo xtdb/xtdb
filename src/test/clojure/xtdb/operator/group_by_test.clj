@@ -119,7 +119,8 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [group-mapping (vr/vec->reader (tu/open-vec (types/->field "gm" #xt.arrow/type :i32 false) (map int [0 0 0])))
+  (with-open [group-mapping (doto (IntVector. tu/*allocator* "gm" false)
+                              (.writeAll (map int [0 0 0])))
               v0 (tu/open-vec "v" [1 2 3])
               v1 (tu/open-vec "v" [1 2.0 3])]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]

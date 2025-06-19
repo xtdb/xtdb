@@ -1,10 +1,8 @@
 package xtdb.vector
 
-import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
 
 class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
     private val writers: MutableMap<String, IVectorWriter> =

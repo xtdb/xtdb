@@ -10,8 +10,7 @@
   (:import (org.apache.arrow.vector.types.pojo Field)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression)
-           (xtdb.vector RelationReader)))
+           (xtdb.arrow ListExpression RelationReader)))
 
 (defmethod lp/ra-expr :list [_]
   (s/cat :op #{:list}

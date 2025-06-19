@@ -2,7 +2,7 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ICursor
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 
 class SelectCursor(
@@ -10,7 +10,7 @@ class SelectCursor(
     private val inCursor: ICursor<RelationReader>,
     private val selector: SelectionSpec,
     private val schema: Map<String, Any>,
-    private val args: xtdb.arrow.RelationReader
+    private val args: RelationReader
 ) : ICursor<RelationReader> {
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         var advanced = false
