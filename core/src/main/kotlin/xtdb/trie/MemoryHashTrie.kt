@@ -2,6 +2,7 @@ package xtdb.trie
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.util.ArrowBufPointer
+import xtdb.arrow.VectorReader
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.HashTrie.Companion.bucketFor
 import xtdb.vector.IVectorReader
@@ -10,7 +11,7 @@ private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
-class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
 
@@ -18,7 +19,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) 
     }
 
     @Suppress("unused")
-    class Builder(private val iidReader: IVectorReader) {
+    class Builder(private val iidReader: VectorReader) {
         private var logLimit = LOG_LIMIT
         private var pageLimit = PAGE_LIMIT
         private var rootPath = ByteArray(0)
@@ -32,7 +33,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) 
     operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader)
 
     @Suppress("unused")
-    fun withIidReader(iidReader: IVectorReader) = MemoryHashTrie(rootNode, iidReader)
+    fun withIidReader(iidReader: VectorReader) = MemoryHashTrie(rootNode, iidReader)
 
     fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
 
@@ -182,11 +183,11 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: IVectorReader) 
 
     companion object {
         @JvmStatic
-        fun builder(iidReader: IVectorReader) = Builder(iidReader)
+        fun builder(iidReader: VectorReader) = Builder(iidReader)
 
         @JvmStatic
         @Suppress("unused")
-        fun emptyTrie(iidReader: IVectorReader) = builder(iidReader).build()
+        fun emptyTrie(iidReader: VectorReader) = builder(iidReader).build()
 
         private fun conjPath(path: ByteArray, idx: Byte): ByteArray {
             val currentPathLength = path.size

@@ -35,7 +35,7 @@
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.vector IVectorReader RelationAsStructReader RelationReader SingletonListReader)))
+           (xtdb.vector RelationAsStructReader RelationReader SingletonListReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -95,7 +95,7 @@
                              :col-type (types/field->col-type (.getField rdr))}))))
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx,
-                                                   ^IVectorReader tx-ops-rdr, ^Instant system-time
+                                                   ^VectorReader tx-ops-rdr, ^Instant system-time
                                                    {:keys [indexer tx-key]}]
   (let [put-leg (.vectorFor tx-ops-rdr "put-docs")
         iids-rdr (.vectorFor put-leg "iids")
@@ -103,9 +103,9 @@
         docs-rdr (.vectorFor put-leg "documents")
 
         ;; HACK: can remove this once we're sure a few more people have migrated their logs
-        ^IVectorReader valid-from-rdr (or (.vectorForOrNull put-leg "_valid_from")
-                                          (when (.vectorForOrNull put-leg "xt$valid_from")
-                                            (throw (err/fault ::legacy-log "Legacy log format - see https://github.com/xtdb/xtdb/pull/3675 for more details"))))
+        ^VectorReader valid-from-rdr (or (.vectorForOrNull put-leg "_valid_from")
+                                         (when (.vectorForOrNull put-leg "xt$valid_from")
+                                           (throw (err/fault ::legacy-log "Legacy log format - see https://github.com/xtdb/xtdb/pull/3675 for more details"))))
 
         valid-to-rdr (.vectorFor put-leg "_valid_to")
         system-time-µs (time/instant->micros system-time)
@@ -147,8 +147,8 @@
       (indexOp [_ tx-op-idx]
         (let [table-name (.getLeg docs-rdr tx-op-idx)
 
-              {:keys [^IVectorReader docs-rdr, ^IVectorReader id-rdr, ^LiveTable$Tx live-table-tx, ^RowCopier doc-copier
-                      ^IVectorReader row-valid-from-rdr, ^IVectorReader row-valid-to-rdr]}
+              {:keys [^VectorReader docs-rdr, ^VectorReader id-rdr, ^LiveTable$Tx live-table-tx, ^RowCopier doc-copier
+                      ^VectorReader row-valid-from-rdr, ^VectorReader row-valid-to-rdr]}
               (get tables table-name)
 
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
@@ -189,7 +189,7 @@
 
         nil))))
 
-(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^IVectorReader tx-ops-rdr, ^Instant current-time
+(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, ^Instant current-time
                                                       {:keys [indexer tx-key]}]
   (let [delete-leg (.vectorFor tx-ops-rdr "delete-docs")
         table-rdr (.vectorFor delete-leg "table")
@@ -227,7 +227,7 @@
 
         nil))))
 
-(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^IVectorReader tx-ops-rdr
+(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr
                                                      {:keys [indexer tx-key]}]
   (let [erase-leg (.vectorFor tx-ops-rdr "erase-docs")
         table-rdr (.vectorFor erase-leg "table")
@@ -258,7 +258,7 @@
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.getRowCount in-rel)
               ^RelationReader content-rel (vr/rel-reader (->> in-rel
-                                                              (remove (comp types/temporal-column? #(.getName ^IVectorReader %))))
+                                                              (remove (comp types/temporal-column? #(.getName ^VectorReader %))))
                                                          (.getRowCount in-rel))
               table (str table)
 
@@ -278,7 +278,7 @@
               (when-not id-col
                 (throw (err/incorrect :xtdb.indexer/missing-xt-id-column
                                       "Missing ID column"
-                                      {:column-names (vec (for [^IVectorReader col in-rel] (.getName col)))})))
+                                      {:column-names (vec (for [^VectorReader col in-rel] (.getName col)))})))
 
               (dotimes [idx row-count]
                 (err/wrap-anomaly {:table-name table, :tx-key tx-key, :row-idx idx}
@@ -379,7 +379,7 @@
                              (accept [_ in-rel]
                                (.indexOp rel-idxer in-rel query-opts))))))))
 
-(defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^IVectorReader args-rdr, ^long tx-op-idx]
+(defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
     (let [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject args-rdr tx-op-idx)))] ; could try to use getBytes
       (ArrowStreamReader. is allocator))))
@@ -413,7 +413,7 @@
                  (.getLong to-rdr idx)
                  #(.copyRow doc-copier idx))))))
 
-(defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^IVectorReader tx-ops-rdr,
+(defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
                              ^IQuerySource q-src, wm-src,
                              {:keys [snapshot-time] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
@@ -499,7 +499,7 @@
                                 {:param-count param-count, :arg-count arg-count}))
 
           (f (vr/rel-reader (->> args
-                                 (map-indexed (fn [idx ^IVectorReader col]
+                                 (map-indexed (fn [idx ^VectorReader col]
                                                 (.withName col (str "?_" idx))))))))))))
 
 (def ^:private ^:const ^String user-table "pg_catalog/pg_user")
@@ -527,7 +527,7 @@
                (.endStruct doc-writer)))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
-                                              ^IVectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
+                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
                                               {:keys [tx-key] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
