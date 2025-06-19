@@ -77,8 +77,8 @@
         (concat (persistent! res) coll))
       (concat (persistent! res) coll))))
 
-(defn- stale-block-idx? [{:keys [live+nascent] :as _tries} ^long block-idx]
-  (when-let [{^long other-block-idx :block-idx} (first live+nascent)]
+(defn- stale-block-idx? [tries ^long block-idx]
+  (when-let [{^long other-block-idx :block-idx} (first tries)]
     (>= other-block-idx block-idx)))
 
 (defn stale-msg?
@@ -88,46 +88,33 @@
 
   (stale-block-idx? (get table-tries [level recency part]) block-idx))
 
-(defn- filter-garbage [tries]
-  ((juxt filter remove) #(= (:state %) :garbage) tries))
-
-(defn- supersede-partial-tries [{:keys [live+nascent garbage] :as tries} {:keys [^long block-idx]} {:keys [^long file-size-target]}]
-  (let [[new-garbage live+nascent] (->> live+nascent
-                                        (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size, other-state :state, :as other-trie}]
-                                               (cond-> other-trie
-                                                 (and (= other-state :live)
-                                                      (< other-size file-size-target)
-                                                      (<= other-block-idx block-idx))
-                                                 (-> (assoc :state :garbage)
-                                                     (dissoc :trie-metadata)))))
-                                        filter-garbage)]
-    (-> tries
-        (assoc :live+nascent (doall live+nascent))
-        (assoc :garbage (doall (concat new-garbage garbage))))))
-
+(defn- supersede-partial-tries [tries {:keys [^long block-idx]} {:keys [^long file-size-target]}]
+  (->> tries
+       (map-while (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size, other-state :state, :as other-trie}]
+                    (when-not (= other-state :garbage)
+                      (cond-> other-trie
+                        (and (= other-state :live)
+                             (< other-size file-size-target)
+                             (<= other-block-idx block-idx))
+                        (-> (assoc :state :garbage)
+                            (dissoc :trie-metadata))))))))
 
 (defn- conj-trie [tries trie state]
-  (let [trie (assoc trie :state state)
-        {:keys [live+nascent garbage] :as tries} (or tries {:live+nascent (), :garbage ()})]
-    (case state
-      (:live :nascent) (assoc tries :live+nascent (conj live+nascent trie))
-      :garbage (assoc tries :garbage (conj garbage trie)))))
+  (conj (or tries '()) (assoc trie :state state)))
 
 (defn- insert-levelled-trie [tries trie trie-cat]
   (-> tries
       (supersede-partial-tries trie trie-cat)
       (conj-trie trie :live)))
 
-(defn- supersede-by-block-idx [{:keys [live+nascent garbage] :as tries}, ^long block-idx {}]
-  (let [[new-garbage live+nascent] (->> live+nascent
-                                        (map (fn [{^long other-block-idx :block-idx, :as trie}]
-                                               (cond-> trie
-                                                 (<= other-block-idx block-idx) (-> (assoc :state :garbage)
-                                                                                    (dissoc :trie-metadata)))))
-                                        filter-garbage)]
-    (-> tries
-        (assoc :live+nascent (doall live+nascent))
-        (assoc :garbage (doall (concat new-garbage garbage))))))
+(defn- supersede-by-block-idx [tries, ^long block-idx {:keys [^long file-size-target]}]
+  (->> tries
+       (map-while (fn [{^long other-size :data-file-size, other-state :state, ^long other-block-idx :block-idx, :as trie}]
+                    (when-not (and (= other-state :garbage)
+                                   (>= other-size file-size-target))
+                      (cond-> trie
+                        (<= other-block-idx block-idx) (-> (assoc :state :garbage)
+                                                           (dissoc :trie-metadata))))))))
 
 (defn- sibling-tries [table-tries, {:keys [^long level, recency, part]}]
   (let [pop-part (pop part)]
@@ -136,19 +123,18 @@
 
 (defn- completed-part-group? [table-tries {:keys [^long block-idx] :as trie}]
   (->> (sibling-tries table-tries trie)
-       (every? (fn [{:keys [live+nascent] :as _ln}]
-                 (when-let [{^long ln-block-idx :block-idx, ln-state :state} (first live+nascent)]
+       (every? (fn [ln]
+                 (when-let [{^long ln-block-idx :block-idx, ln-state :state} (first ln)]
                    (or (> ln-block-idx block-idx)
                        (= :nascent ln-state)))))))
 
 (defn- mark-block-idx-live [tries ^long block-idx]
-  (update tries :live+nascent
-          #(doall (map (fn [{trie-state :state, trie-block-idx :block-idx, :as trie}]
-                         (cond-> trie
-                           (and (= trie-state :nascent)
-                                (= trie-block-idx block-idx))
-                           (assoc :state :live)))
-                       %))))
+  (->> tries
+       (map-while (fn [{trie-state :state, trie-block-idx :block-idx, :as trie}]
+                    (cond-> trie
+                      (and (= trie-state :nascent)
+                           (= trie-block-idx block-idx))
+                      (assoc :state :live))))))
 
 (defn- mark-part-group-live [table-tries {:keys [block-idx level recency part]}]
   (->> (let [pop-part (pop part)]
@@ -169,7 +155,7 @@
         ;; L1H files are nascent until we see the corresponding L1C file
         (-> table-cat
             (update-in [:tries [1 recency part]] conj-trie trie
-                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part] :live+nascent])]
+                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part]])]
                          (if (and l1c (>= l1c-block-idx block-idx))
                            :live :nascent)))
             (update-in [:l1h-recencies block-idx] (fnil conj #{}) recency))
@@ -224,11 +210,11 @@
 
 (defn current-tries [{:keys [tries]}]
   (->> tries
-       (into [] (comp (mapcat (comp :live+nascent val))
+       (into [] (comp (mapcat val)
                       (filter #(= (:state %) :live))))))
 
 (defn all-tries [{:keys [tries]}]
-  (->> (into [] (mapcat (comp (fn [{:keys [live+nascent garbage]}] (concat live+nascent garbage))  val)) tries)
+  (->> (into [] (mapcat val) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
