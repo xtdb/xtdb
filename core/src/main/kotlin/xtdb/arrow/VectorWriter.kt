@@ -62,4 +62,9 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun clear()
 
     fun writeAll(vals: Iterable<Any?>) = apply { vals.forEach { writeObject(it) } }
+
+    fun append(r: VectorReader) {
+        val copier = r.rowCopier(this)
+        repeat(r.valueCount) { idx -> copier.copyRow(idx) }
+    }
 }

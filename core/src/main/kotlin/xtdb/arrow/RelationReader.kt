@@ -46,7 +46,9 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             ) as Map<*, *>
         }
 
-    class FromCols(private val cols: SequencedMap<String, VectorReader>, override val rowCount: Int) : RelationReader {
+    private class FromCols(
+        private val cols: SequencedMap<String, VectorReader>, override val rowCount: Int
+    ) : RelationReader {
         override val schema get() = Schema(cols.values.map { it.field })
 
         override fun vectorForOrNull(name: String) = cols[name]

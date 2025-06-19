@@ -10,15 +10,16 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap)
-           (com.carrotsearch.hppc LongLongMap LongLongHashMap)
+           (com.carrotsearch.hppc LongLongHashMap LongLongMap)
            (java.io Closeable)
            (java.util LinkedList List Spliterator)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector)
-           (xtdb ICursor)
            (org.apache.arrow.vector.types.pojo Field)
+           (xtdb ICursor)
+           xtdb.arrow.IntVector
            (xtdb.operator.group_by IGroupMapper)
-           (xtdb.vector RelationWriter IVectorWriter)))
+           (xtdb.vector RelationWriter)))
 
 (s/def ::window-name symbol?)
 
@@ -58,7 +59,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpec
-  (^xtdb.vector.IVectorReader aggregate [^org.apache.arrow.vector.IntVector groupMapping
+  (^xtdb.vector.IVectorReader aggregate [^xtdb.arrow.VectorReader groupMapping
                                          ^ints sortMapping
                                          ^xtdb.vector.RelationReader in-rel]))
 
@@ -89,7 +90,7 @@
                   row-count (.getValueCount group-mapping)]
               (.setValueCount out-vec (+ offset row-count))
               (dotimes [idx row-count]
-                (.set out-vec (+ offset idx) (.putOrAdd group-to-cnt (.get group-mapping (aget sortMapping idx)) 1 1)))
+                (.set out-vec (+ offset idx) (.putOrAdd group-to-cnt (.getInt group-mapping (aget sortMapping idx)) 1 1)))
               (vr/vec->reader out-vec)))
 
           Closeable
@@ -112,20 +113,17 @@
          ;; TODO we likely want to do some retaining here instead of copying
          (util/with-open [rel-wtr (RelationWriter. allocator (for [^Field field static-fields]
                                                                (vw/->writer (.createVector field allocator))))
-                          ^IVectorWriter grouping-wtr (-> (types/->field (str window-groups) #xt.arrow/type :i32 false)
-                                                          (.createVector allocator)
-                                                          vw/->writer)]
+                          group-mapping (IntVector. allocator (str window-groups) false)]
 
            (.forEachRemaining in-cursor (fn [in-rel]
                                           (vw/append-rel rel-wtr in-rel)
-                                          (with-open [group-mapping (.groupMapping group-mapper in-rel)]
-                                            (vw/append-vec grouping-wtr (vr/vec->reader group-mapping)))))
+                                          (.append group-mapping (.groupMapping group-mapper in-rel))))
 
            (let [rel-rdr (vw/rel-wtr->rdr rel-wtr)
-                 sort-mapping (order-by/sorted-idxs (vr/rel-reader (conj (seq rel-rdr) (vw/vec-wtr->rdr grouping-wtr)))
+                 sort-mapping (order-by/sorted-idxs (xtdb.arrow.RelationReader/from (conj (seq rel-rdr) group-mapping) (.getValueCount group-mapping))
                                                     (into [[window-groups]] order-specs))]
              (util/with-open [window-cols (->> window-specs
-                                               (mapv #(.aggregate ^IWindowFnSpec % (.getVector grouping-wtr) sort-mapping rel-rdr)))]
+                                               (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping rel-rdr)))]
                (let [out-rel (vr/rel-reader (concat (.select rel-rdr sort-mapping) window-cols))]
                  (if (pos? (.getRowCount out-rel))
                    (do

@@ -54,7 +54,7 @@
       (doto (ArrowFileWriter. root nil (Channels/newChannel os))
         (.start) (.writeBatch) (.end)))))
 
-(defn sorted-idxs ^ints [^RelationReader read-rel, order-specs]
+(defn sorted-idxs ^ints [^xtdb.arrow.RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.getRowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]

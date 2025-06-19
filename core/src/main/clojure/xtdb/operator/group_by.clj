@@ -14,11 +14,11 @@
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector Float8Vector IntVector ValueVector)
+           (org.apache.arrow.vector BigIntVector Float8Vector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
-           (org.apache.arrow.vector.types.pojo FieldType Field)
+           (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
-           (xtdb.arrow RelationReader VectorReader)
+           (xtdb.arrow IntVector RelationReader VectorReader VectorWriter)
            (xtdb.expression.map IRelationMap IRelationMapBuilder)
            (xtdb.vector IVectorWriter)))
 
@@ -42,17 +42,16 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
-  (^org.apache.arrow.vector.IntVector groupMapping [^xtdb.vector.RelationReader inRelation])
+  (^xtdb.arrow.VectorReader groupMapping [^xtdb.vector.RelationReader inRelation])
   (^Iterable #_<IVectorReader> finish []))
 
-(deftype NullGroupMapper [^IntVector group-mapping]
+(deftype NullGroupMapper [^VectorWriter group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
     (.clear group-mapping)
     (let [row-count (.getRowCount in-rel)]
-      (.setValueCount group-mapping row-count)
-      (dotimes [idx row-count]
-        (.set group-mapping idx 0))
+      (dotimes [_ row-count]
+        (.writeInt group-mapping 0))
       group-mapping))
 
   (finish [_] [])
@@ -63,17 +62,14 @@
 
 (deftype GroupMapper [^List group-col-names
                       ^IRelationMap rel-map
-                      ^IntVector group-mapping]
+                      ^VectorWriter group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
-    (let [row-count (.getRowCount in-rel)]
-      (.allocateNew group-mapping row-count)
-
-      (let [builder (.buildFromRelation rel-map in-rel)]
-        (dotimes [idx row-count]
-          (.set group-mapping idx (emap/inserted-idx (.addIfNotPresent builder idx)))))
-
-      (.setValueCount group-mapping row-count)
+    (.clear group-mapping)
+    (let [row-count (.getRowCount in-rel)
+          builder (.buildFromRelation rel-map in-rel)]
+      (dotimes [idx row-count]
+        (.writeInt group-mapping (emap/inserted-idx (.addIfNotPresent builder idx))))
 
       group-mapping))
 
@@ -82,12 +78,11 @@
 
   Closeable
   (close [_]
-    (.close group-mapping)
-    (util/try-close rel-map)))
+    (util/close group-mapping)
+    (util/close rel-map)))
 
 (defn ->group-mapper [^BufferAllocator allocator, group-fields]
-  (let [gm-vec (.createVector #xt.arrow/field ["group-mapping" #xt.arrow/field-type [#xt.arrow/type :i32 false]]
-                              allocator)]
+  (let [gm-vec (IntVector. allocator "group-mapping" false)]
     (if-let [group-col-names (not-empty (set (keys group-fields)))]
       (GroupMapper. group-col-names
                     (emap/->relation-map allocator {:build-fields group-fields
@@ -99,7 +94,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpec
   (^void aggregate [^xtdb.vector.RelationReader inRelation,
-                    ^org.apache.arrow.vector.IntVector groupMapping])
+                    ^xtdb.arrow.VectorReader groupMapping])
   (^xtdb.vector.IVectorReader finish []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -123,7 +118,7 @@
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
             (dotimes [idx (.getRowCount in-rel)]
-              (let [group-idx (.get group-mapping idx)]
+              (let [group-idx (.getInt group-mapping idx)]
                 (when (<= (.getValueCount out-vec) group-idx)
                   (.setValueCount out-vec (inc group-idx))
                   (.set out-vec group-idx 0))
@@ -151,7 +146,7 @@
           (aggregate [_ in-rel group-mapping]
             (let [in-col (.vectorForOrNull in-rel (str from-name))]
               (dotimes [idx (.getRowCount in-rel)]
-                (let [group-idx (.get group-mapping idx)]
+                (let [group-idx (.getInt group-mapping idx)]
                   (when (<= (.getValueCount out-vec) group-idx)
                     (.setValueCount out-vec (inc group-idx))
                     (.set out-vec group-idx 0))
@@ -197,7 +192,7 @@
           {:return-type return-type
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag ValueVector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
-                               ~(-> group-mapping-sym (expr/with-tag IntVector))]
+                               ~(-> group-mapping-sym (expr/with-tag VectorReader))]
                             (let [~acc-col-sym (vr/vec->reader ~acc-sym)
                                   ~acc-writer-sym (vw/->writer ~acc-sym)
                                   ~@(expr/batch-bindings emitted-expr)]
@@ -344,9 +339,9 @@
 
             Closeable
             (close [_]
-              (util/try-close sumx-agg)
-              (util/try-close sumx2-agg)
-              (util/try-close countx-agg))))))))
+              (util/close sumx-agg)
+              (util/close sumx2-agg)
+              (util/close countx-agg))))))))
 
 (defmethod ->aggregate-factory :var_pop [agg-opts] (->variance-agg-factory :var-pop agg-opts))
 (defmethod ->aggregate-factory :var_samp [agg-opts] (->variance-agg-factory :var-samp agg-opts))
@@ -373,8 +368,8 @@
 
             Closeable
             (close [_]
-              (util/try-close res-vec)
-              (util/try-close variance-agg))))))))
+              (util/close res-vec)
+              (util/close variance-agg))))))))
 
 (defmethod ->aggregate-factory :stddev_pop [agg-opts]
   (->stddev-agg-factory :var-pop agg-opts))
@@ -437,7 +432,7 @@
                   builders (ArrayList. (.size rel-maps))
                   distinct-idxs (IntStream/builder)]
               (dotimes [idx (.getValueCount in-vec)]
-                (let [group-idx (.get group-mapping idx)]
+                (let [group-idx (.getInt group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
                     (.add rel-maps (emap/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
                                                             :build-key-col-names [from-name]})))
@@ -453,21 +448,17 @@
                       (when (neg? (.addIfNotPresent builder idx))
                         (.add distinct-idxs idx))))))
               (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                (with-open [distinct-gm (-> (.getField group-mapping)
-                                            (.createVector al))]
-                  (-> (vr/vec->reader group-mapping)
-                      (.select distinct-idxs)
-                      (.copyTo distinct-gm))
-                  (.aggregate agg-spec
-                              (vr/rel-reader [(.select in-vec distinct-idxs)])
-                              distinct-gm)))))
+                (.aggregate agg-spec
+                            (vr/rel-reader [(.select in-vec distinct-idxs)])
+                            (-> group-mapping
+                                (.select distinct-idxs))))))
 
           (finish [_] (.finish agg-spec))
 
           Closeable
           (close [_]
-            (util/try-close agg-spec)
-            (run! util/try-close rel-maps)))))))
+            (util/close agg-spec)
+            (util/close rel-maps)))))))
 
 (defmethod ->aggregate-factory :count_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :count))
@@ -504,7 +495,7 @@
       (vw/append-vec acc-col in-vec)
 
       (dotimes [idx row-count]
-        (let [group-idx (.get group-mapping idx)]
+        (let [group-idx (.getInt group-mapping idx)]
           (while (<= (.size group-idxmaps) group-idx)
             (.add group-idxmaps (IntStream/builder)))
           (.add ^IntStream$Builder (.get group-idxmaps group-idx)
@@ -540,8 +531,8 @@
 
   Closeable
   (close [_]
-    (util/try-close acc-col)
-    (util/try-close out-vec)))
+    (util/close acc-col)
+    (util/close out-vec)))
 
 (defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row?]}]
   (let [to-type [:list from-type]]
@@ -590,32 +581,28 @@
      (when-not done?
        (set! (.done? this) true)
 
-       (try
-         (.forEachRemaining in-cursor
-                            (reify Consumer
-                              (accept [_ in-rel]
-                                (with-open [group-mapping (.groupMapping group-mapper in-rel)]
-                                  (doseq [^IAggregateSpec agg-spec aggregate-specs]
-                                    (.aggregate agg-spec in-rel group-mapping))))))
+       (.forEachRemaining in-cursor
+                          (reify Consumer
+                            (accept [_ in-rel]
+                              (let [group-mapping (.groupMapping group-mapper in-rel)]
+                                (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                  (.aggregate agg-spec in-rel group-mapping))))))
 
-         (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
-           (let [out-rel (vr/rel-reader (concat (.finish group-mapper) agg-cols))]
-             (if (pos? (.getRowCount out-rel))
-               (do
-                 (.accept c out-rel)
-                 true)
-               false)))
-         (finally
-           (util/try-close group-mapper)
-           (run! util/try-close aggregate-specs))))))
+       (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
+         (let [out-rel (vr/rel-reader (concat (.finish group-mapper) agg-cols))]
+           (if (pos? (.getRowCount out-rel))
+             (do
+               (.accept c out-rel)
+               true)
+             false))))))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE))
 
   (close [_]
-    (run! util/try-close aggregate-specs)
-    (util/try-close in-cursor)
-    (util/try-close group-mapper)))
+    (util/close aggregate-specs)
+    (util/close in-cursor)
+    (util/close group-mapper)))
 
 (defmethod lp/emit-expr :group-by [{:keys [columns relation]} args]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
@@ -643,16 +630,11 @@
                                                   #(.getField ^IAggregateSpecFactory %))))))
 
            :->cursor (fn [{:keys [allocator]} in-cursor]
-                       (let [agg-specs (LinkedList.)]
-                         (try
-                           (doseq [^IAggregateSpecFactory factory agg-factories]
-                             (.add agg-specs (.build factory allocator)))
+                       (util/with-close-on-catch [agg-specs (LinkedList.)]
+                         (doseq [^IAggregateSpecFactory factory agg-factories]
+                           (.add agg-specs (.build factory allocator)))
 
-                           (GroupByCursor. allocator in-cursor
-                                           (->group-mapper allocator (select-keys fields group-cols))
-                                           (vec agg-specs)
-                                           false)
-
-                           (catch Exception e
-                             (run! util/try-close agg-specs)
-                             (throw e)))))})))))
+                         (GroupByCursor. allocator in-cursor
+                                         (->group-mapper allocator (select-keys fields group-cols))
+                                         (vec agg-specs)
+                                         false)))})))))
