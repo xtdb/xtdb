@@ -63,7 +63,7 @@ sealed class Vector : VectorReader, VectorWriter {
         if (isNull(idx)) ArrowBufPointer.NULL_HASH_CODE else hashCode0(idx, hasher)
 
     abstract override fun openSlice(al: BufferAllocator): Vector
-    override fun openMaterialisedSlice(al: BufferAllocator) = openSlice(al)
+    override fun openDirectSlice(al: BufferAllocator) = openSlice(al)
 
     internal abstract fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)

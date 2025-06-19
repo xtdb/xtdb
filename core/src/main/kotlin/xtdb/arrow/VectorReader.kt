@@ -92,7 +92,7 @@ interface VectorReader : ILookup, AutoCloseable {
 
     fun openSlice(al: BufferAllocator): VectorReader
 
-    fun openMaterialisedSlice(al: BufferAllocator): Vector =
+    fun openDirectSlice(al: BufferAllocator): Vector =
         Vector.fromField(al, field).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))

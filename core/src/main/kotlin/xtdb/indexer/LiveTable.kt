@@ -184,7 +184,7 @@ constructor(
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
 
-        return liveRelation.openMaterialisedSlice(al).use { dataRel ->
+        return liveRelation.openDirectSlice(al).use { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 liveRelation.fields, trieKey, dataFileSize, rowCount,

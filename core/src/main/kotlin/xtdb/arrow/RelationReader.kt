@@ -28,9 +28,9 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             .safeMap { it.openSlice(al) }
             .closeAllOnCatch { slicedVecs -> from(slicedVecs, rowCount) }
 
-    fun openMaterialisedSlice(al: BufferAllocator) =
+    fun openDirectSlice(al: BufferAllocator) =
         vectors
-            .safeMap { it.openMaterialisedSlice(al) }
+            .safeMap { it.openDirectSlice(al) }
             .closeAllOnCatch { vectors -> Relation(vectors, rowCount) }
 
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
@@ -62,20 +62,8 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     private class FromCols(
         private val cols: SequencedMap<String, VectorReader>, override val rowCount: Int
     ) : RelationReader {
-        override val schema get() = Schema(cols.values.map { it.field })
-
         override fun vectorForOrNull(name: String) = cols[name]
         override val vectors get() = cols.values
-
-        override fun select(idxs: IntArray): RelationReader =
-            FromCols(cols.entries.associateTo(linkedMapOf()) { it.key to it.value.select(idxs) }, idxs.size)
-
-        override fun openSlice(al: BufferAllocator): RelationReader =
-            cols.values
-                .safeMap { it.openSlice(al) }
-                .closeAllOnCatch { cols ->
-                    FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
-                }
     }
 
     companion object {

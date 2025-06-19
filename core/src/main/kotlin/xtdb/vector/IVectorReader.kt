@@ -34,7 +34,7 @@ interface IVectorReader : VectorReader, AutoCloseable {
     override fun openSlice(al: BufferAllocator): IVectorReader =
         field.createVector(al).closeOnCatch { v -> copyTo(v).withName(name) }
 
-    override fun openMaterialisedSlice(al: BufferAllocator) =
+    override fun openDirectSlice(al: BufferAllocator) =
         field.createVector(al).use { vec ->
             copyTo(vec)
             Vector.fromArrow(vec)

@@ -30,8 +30,8 @@
                     [{:xt/id "foo", :v 2}
                      {:xt/id "bar", :v 2}])
 
-      (with-open [live-rel0 (.openMaterialisedSlice (.getLiveRelation lt0) tu/*allocator*)
-                  live-rel1 (.openMaterialisedSlice (.getLiveRelation lt1) tu/*allocator*)]
+      (with-open [live-rel0 (.openDirectSlice (.getLiveRelation lt0) tu/*allocator*)
+                  live-rel1 (.openDirectSlice (.getLiveRelation lt1) tu/*allocator*)]
 
         (let [segments [(-> (trie/->Segment (.compactLogs (.getLiveTrie lt0)))
                             (assoc :data-rel (DataRel/live live-rel0)))

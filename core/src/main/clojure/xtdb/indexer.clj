@@ -53,15 +53,15 @@
                   (ByteBuffer/wrap (.getBytes crash-edn))))
 
     (when live-table-tx
-      (with-open [live-rel (.openMaterialisedSlice (doto (.getLiveRelation live-table-tx)
-                                                     (.syncRowCount))
-                                                   allocator)
+      (with-open [live-rel (.openDirectSlice (doto (.getLiveRelation live-table-tx)
+                                               (.syncRowCount))
+                                             allocator)
                   wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table.arrow") live-rel)]
         (.writePage wtr)
         (.end wtr)))
 
     (when query-rel
-      (with-open [query-rel (.openMaterialisedSlice query-rel allocator)
+      (with-open [query-rel (.openDirectSlice query-rel allocator)
                   wtr (.openArrowWriter buffer-pool (.resolve crash-dir "query-rel.arrow") query-rel)]
         (.writePage wtr)
         (.end wtr)))

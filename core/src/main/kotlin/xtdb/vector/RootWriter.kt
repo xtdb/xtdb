@@ -32,7 +32,7 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
         writers.values.forEach { it.syncValueCount() }
     }
 
-    override fun openMaterialisedSlice(al: BufferAllocator) = Relation.fromRoot(root)
+    override fun openDirectSlice(al: BufferAllocator) = Relation.fromRoot(root)
 
     override fun close() {
         writers.values.forEach { it.close() }

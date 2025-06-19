@@ -3,7 +3,6 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.arrow.Relation
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.RowCopier
 import xtdb.arrow.unsupported
@@ -49,7 +48,7 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
     }
 
     override fun openSlice(al: BufferAllocator) = toReader().openSlice(al)
-    override fun openMaterialisedSlice(al: BufferAllocator) = toReader().openMaterialisedSlice(al)
+    override fun openDirectSlice(al: BufferAllocator) = toReader().openDirectSlice(al)
 
     fun toReader() =
         RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, rowCount)
