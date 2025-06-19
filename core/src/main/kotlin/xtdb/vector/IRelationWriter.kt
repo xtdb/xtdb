@@ -48,9 +48,8 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
         rowCount += rel.rowCount
     }
 
-    fun openAsRelation(): Relation
-
-    override fun openSlice(al: BufferAllocator) = unsupported("IRelationWriter/openSlice")
+    override fun openSlice(al: BufferAllocator) = toReader().openSlice(al)
+    override fun openMaterialisedSlice(al: BufferAllocator) = toReader().openMaterialisedSlice(al)
 
     fun toReader() =
         RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, rowCount)

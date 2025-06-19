@@ -23,7 +23,15 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     operator fun get(idx: Int, keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD): Map<*, Any?> =
         vectors.associate { keyFn.denormalize(it.name) to it.getObject(idx, keyFn) }
 
-    fun openSlice(al: BufferAllocator): RelationReader
+    fun openSlice(al: BufferAllocator): RelationReader =
+        vectors
+            .safeMap { it.openSlice(al) }
+            .closeAllOnCatch { slicedVecs -> from(slicedVecs, rowCount) }
+
+    fun openMaterialisedSlice(al: BufferAllocator) =
+        vectors
+            .safeMap { it.openMaterialisedSlice(al) }
+            .closeAllOnCatch { vectors -> Relation(vectors, rowCount) }
 
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)

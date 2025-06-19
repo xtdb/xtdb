@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
 
 class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader {

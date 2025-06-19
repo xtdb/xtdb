@@ -45,7 +45,7 @@
 
 (defn- write-rel [^BufferAllocator allocator, ^RelationReader rdr, ^OutputStream os]
   (util/with-open [ch (Channels/newChannel os)
-                   rel (.openAsRelation rdr allocator)
+                   rel (.openMaterialisedSlice rdr allocator)
                    unl (.startUnload rel ch Relation$UnloadMode/FILE)]
     (.writePage unl)
     (.end unl)))

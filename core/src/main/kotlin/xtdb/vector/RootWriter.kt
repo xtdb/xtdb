@@ -1,5 +1,6 @@
 package xtdb.vector
 
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
@@ -31,7 +32,7 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
         writers.values.forEach { it.syncValueCount() }
     }
 
-    override fun openAsRelation() = Relation.fromRoot(root)
+    override fun openMaterialisedSlice(al: BufferAllocator) = Relation.fromRoot(root)
 
     override fun close() {
         writers.values.forEach { it.close() }

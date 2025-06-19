@@ -10,6 +10,7 @@ import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
 
 interface VectorReader : ILookup, AutoCloseable {
@@ -90,6 +91,9 @@ interface VectorReader : ILookup, AutoCloseable {
     }
 
     fun openSlice(al: BufferAllocator): VectorReader
+
+    fun openMaterialisedSlice(al: BufferAllocator): Vector =
+        Vector.fromField(al, field).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))

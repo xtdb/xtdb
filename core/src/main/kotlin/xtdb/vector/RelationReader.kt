@@ -4,8 +4,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.Relation
-import xtdb.arrow.Vector.Companion.fromArrow
 import xtdb.util.closeAll
 import java.util.function.Function
 import xtdb.arrow.RelationReader as NewRelationReader
@@ -33,17 +31,6 @@ class RelationReader private constructor(
     override fun select(startIdx: Int, len: Int): RelationReader = from({ vr -> vr.select(startIdx, len) }, len)
 
     override fun openSlice(al: BufferAllocator) = from({ vr -> vr.openSlice(al) }, rowCount)
-
-    fun openAsRelation(allocator: BufferAllocator?): Relation =
-        Relation(
-            vecsMap.values.map { vr ->
-                vr.field.createVector(allocator).use { outVec ->
-                    vr.copyTo(outVec)
-                    fromArrow(outVec)
-                }
-            },
-            rowCount
-        )
 
     override fun toString(): String = "(RelationReader {rowCount=$rowCount, cols=$vecsMap})"
 

@@ -64,7 +64,7 @@ class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: In
             }
         }
 
-    override fun openSlice(al: BufferAllocator): Relation =
+    override fun openMaterialisedSlice(al: BufferAllocator): Relation =
         vectors
             .safeMap { it.openSlice(al) }
             .closeAllOnCatch { slicedVecs -> Relation(slicedVecs, rowCount) }

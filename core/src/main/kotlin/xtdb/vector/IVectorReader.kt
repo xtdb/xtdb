@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.RowCopier
+import xtdb.arrow.Vector
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.VectorReader
@@ -32,6 +33,12 @@ interface IVectorReader : VectorReader, AutoCloseable {
 
     override fun openSlice(al: BufferAllocator): IVectorReader =
         field.createVector(al).closeOnCatch { v -> copyTo(v).withName(name) }
+
+    override fun openMaterialisedSlice(al: BufferAllocator) =
+        field.createVector(al).use { vec ->
+            copyTo(vec)
+            Vector.fromArrow(vec)
+        }
 
     fun copyTo(vector: ValueVector): IVectorReader
 

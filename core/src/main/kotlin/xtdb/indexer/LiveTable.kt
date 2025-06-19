@@ -21,7 +21,7 @@ import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 class LiveTable
 @JvmOverloads
 constructor(
-    al: BufferAllocator, bp: BufferPool,
+    private val al: BufferAllocator, bp: BufferPool,
     private val tableName: TableName,
     private val rowCounter: RowCounter,
     liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) }
@@ -184,7 +184,7 @@ constructor(
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
 
-        return liveRelation.openAsRelation().use { dataRel ->
+        return liveRelation.openMaterialisedSlice(al).use { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 liveRelation.fields, trieKey, dataFileSize, rowCount,
