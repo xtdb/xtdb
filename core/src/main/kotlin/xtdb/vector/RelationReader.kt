@@ -32,7 +32,7 @@ class RelationReader private constructor(
 
     override fun select(startIdx: Int, len: Int): RelationReader = from({ vr -> vr.select(startIdx, len) }, len)
 
-    fun copy(allocator: BufferAllocator): RelationReader = from({ vr -> vr.copy(allocator) }, rowCount)
+    override fun openSlice(al: BufferAllocator) = from({ vr -> vr.openSlice(al) }, rowCount)
 
     fun openAsRelation(allocator: BufferAllocator?): Relation =
         Relation(
@@ -42,7 +42,8 @@ class RelationReader private constructor(
                     fromArrow(outVec)
                 }
             },
-            rowCount)
+            rowCount
+        )
 
     override fun toString(): String = "(RelationReader {rowCount=$rowCount, cols=$vecsMap})"
 

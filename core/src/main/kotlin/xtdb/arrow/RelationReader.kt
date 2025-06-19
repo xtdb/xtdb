@@ -1,10 +1,13 @@
 package xtdb.arrow
 
 import clojure.lang.*
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.util.closeAll
+import xtdb.util.closeAllOnCatch
+import xtdb.util.safeMap
 import java.util.*
 
 interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
@@ -19,6 +22,8 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
 
     operator fun get(idx: Int, keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD): Map<*, Any?> =
         vectors.associate { keyFn.denormalize(it.name) to it.getObject(idx, keyFn) }
+
+    fun openSlice(al: BufferAllocator): RelationReader
 
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
@@ -56,6 +61,13 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
 
         override fun select(idxs: IntArray): RelationReader =
             FromCols(cols.entries.associateTo(linkedMapOf()) { it.key to it.value.select(idxs) }, idxs.size)
+
+        override fun openSlice(al: BufferAllocator): RelationReader =
+            cols.values
+                .safeMap { it.openSlice(al) }
+                .closeAllOnCatch { cols ->
+                    FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
+                }
     }
 
     companion object {

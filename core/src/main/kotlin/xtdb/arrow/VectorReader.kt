@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import clojure.lang.ILookup
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -87,6 +88,8 @@ interface VectorReader : ILookup, AutoCloseable {
         override fun readBytes() = getBytes(pos.position)
         override fun readObject() = getObject(pos.position)
     }
+
+    fun openSlice(al: BufferAllocator): VectorReader
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))

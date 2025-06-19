@@ -100,6 +100,8 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
     override fun vectorFor(name: String): IVectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
     override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter = unsupported("vectorFor")
 
+    override fun openSlice(al: BufferAllocator): VectorReader = unsupported("IVectorWriter/openSlice")
+
     // New VectorWriters are also VectorReaders; old ones weren't, so we throw unsupported
     override fun hashCode(idx: Int, hasher: Hasher) = unsupported("IVectorWriter/hashCode")
     override fun isNull(idx: Int): Boolean = unsupported("IVectorWriter/isNull")

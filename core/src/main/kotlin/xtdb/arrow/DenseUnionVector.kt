@@ -90,6 +90,8 @@ class DenseUnionVector(
         override val mapKeys get() = inner.mapKeys
         override val mapValues get() = inner.mapValues
 
+        override fun openSlice(al: BufferAllocator): VectorReader = TODO("Not yet implemented")
+
         override val metadataFlavours get() = inner.metadataFlavours
 
         private fun writeValueThen(): VectorWriter {

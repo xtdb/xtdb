@@ -603,9 +603,9 @@
 (def replace-queries
   {; dbeaver, #4528 - remove if/when we support duplicate projections
    "SELECT n.oid,n.*,d.description FROM pg_catalog.pg_namespace n LEFT OUTER JOIN pg_catalog.pg_description d ON d.objoid=n.oid AND d.objsubid=0 AND d.classoid='pg_namespace'::regclass ORDER BY nspname"
-   "SELECT n.oid,n.nspname,n.nspowner,n.nspacl,d.description FROM pg_catalog.pg_namespace n LEFT OUTER JOIN pg_catalog.pg_description d ON d.objoid=n.oid AND d.objsubid=0 AND d.classoid='pg_namespace'::regclass ORDER BY nspname"
+   "SELECT n.oid,n.nspname,n.nspowner,n.nspacl,d.description FROM pg_catalog.pg_namespace n LEFT OUTER JOIN pg_catalog.pg_description d ON d.objoid=n.oid AND d.objsubid=0 AND d.classoid='pg_namespace'::regclass ORDER BY nspname"})
 
-   })
+
 
 (def ^:private canned-responses
   "Some pre-baked responses to common queries issued as setup by Postgres drivers, e.g SQLAlchemy"
@@ -957,7 +957,7 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction watermark-tx-id]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
         after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)
@@ -1020,7 +1020,7 @@
 
                      (.forEachRemaining args-cursor
                                         (fn [^RelationReader args-rel]
-                                          (aset !args 0 (.copy args-rel allocator))))
+                                          (aset !args 0 (.openSlice args-rel allocator))))
 
                      (let [^RelationReader args-rel (aget !args 0)]
                        (case (:statement-type inner)

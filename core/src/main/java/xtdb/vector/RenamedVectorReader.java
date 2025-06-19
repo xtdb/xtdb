@@ -156,8 +156,8 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader copy(BufferAllocator allocator) {
-        return new RenamedVectorReader(reader.copy(allocator), colName);
+    public IVectorReader openSlice(BufferAllocator allocator) {
+        return new RenamedVectorReader(reader.openSlice(allocator), colName);
     }
 
     @Override

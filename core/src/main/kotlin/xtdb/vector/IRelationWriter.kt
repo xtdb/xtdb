@@ -1,5 +1,6 @@
 package xtdb.vector
 
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
@@ -48,6 +49,8 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
     }
 
     fun openAsRelation(): Relation
+
+    override fun openSlice(al: BufferAllocator) = unsupported("IRelationWriter/openSlice")
 
     fun toReader() =
         RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, rowCount)

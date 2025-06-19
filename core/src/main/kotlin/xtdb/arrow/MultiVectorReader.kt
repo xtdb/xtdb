@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import clojure.lang.IFn
 import clojure.lang.RT
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -9,7 +10,9 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toLeg
 import xtdb.util.Hasher
+import xtdb.util.closeAllOnCatch
 import xtdb.util.requiringResolve
+import xtdb.util.safeMap
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
@@ -75,8 +78,6 @@ class MultiVectorReader(
     override fun vectorForOrNull(name: String) =
         MultiVectorReader(readers.map { it?.vectorForOrNull(name) }, readerIndirection, vectorIndirections)
 
-//    override fun structKeys() = readers.filterNotNull().flatMap { it.structKeys() }.toSet()
-
     override val listElements: VectorReader
         get() = MultiVectorReader(
             readers.map { it?.listElements }, readerIndirection, vectorIndirections
@@ -130,31 +131,6 @@ class MultiVectorReader(
         }
     }
 
-//    override fun legs(): List<String> {
-//        return fields.flatMapIndexed { index: Int, field: Field? ->
-//            if (field != null) {
-//                when (val type = field.fieldType.type) {
-//                    is ArrowType.Union -> readers[index]!!.legs()
-//                    else -> listOf(type.toLeg())
-//                }
-//            } else {
-//                emptyList()
-//            }
-//        }.toSet().toList()
-//    }
-
-//    override fun copyTo(vector: ValueVector): IVectorReader {
-//        val writer = writerFor(vector)
-//        val copier = rowCopier(writer)
-//
-//        for (i in 0 until valueCount()) {
-//            copier.copyRow(i)
-//        }
-//
-//        writer.syncValueCount()
-//        return ValueVectorReader.from(vector)
-//    }
-
     override fun rowCopier(dest: VectorWriter): RowCopier {
         // TODO promote
 //        readers.map { it?.also { writer.promoteChildren(it.field) }}
@@ -166,7 +142,6 @@ class MultiVectorReader(
         object : VectorPosition {
             override var position: Int
                 get() = vectorIndirections[pos.position]
-
                 @Suppress("UNUSED_PARAMETER")
                 set(value) = error("set indirectVectorPosition")
         }
@@ -193,6 +168,11 @@ class MultiVectorReader(
             override fun readObject(): Any? = valueReader().readObject()
         }
     }
+
+    override fun openSlice(al: BufferAllocator): VectorReader =
+        readers
+            .safeMap { it?.openSlice(al) }
+            .closeAllOnCatch { MultiVectorReader(it, readerIndirection, vectorIndirections) }
 
     override fun toString() = VectorReader.toString(this)
 

@@ -3,9 +3,11 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.*
+import xtdb.arrow.RowCopier
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
+import xtdb.arrow.VectorReader
+import xtdb.arrow.unsupported
 import xtdb.util.closeOnCatch
 
 interface IVectorReader : VectorReader, AutoCloseable {
@@ -28,8 +30,9 @@ interface IVectorReader : VectorReader, AutoCloseable {
 
     override val legNames: Set<String>? get() = unsupported("legs")
 
+    override fun openSlice(al: BufferAllocator): IVectorReader =
+        field.createVector(al).closeOnCatch { v -> copyTo(v).withName(name) }
 
-    fun copy(allocator: BufferAllocator): IVectorReader = field.createVector(allocator).closeOnCatch { v -> copyTo(v).withName(name) }
     fun copyTo(vector: ValueVector): IVectorReader
 
     override fun select(idxs: IntArray): IVectorReader = IndirectVectorReader(this, selection(idxs))

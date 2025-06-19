@@ -14,7 +14,7 @@
             [xtdb.vector.reader :as vr])
   (:import [clojure.lang IFn]
            (java.util ArrayList Iterator List)
-           (java.util.function Consumer IntConsumer)
+           (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
@@ -120,9 +120,8 @@
   ICursor
   (tryAdvance [this c]
     (.forEachRemaining left-cursor
-                       (reify Consumer
-                         (accept [_ left-rel]
-                           (.add left-rels (.copy ^RelationReader left-rel allocator)))))
+                       (fn [^RelationReader left-rel]
+                         (.add left-rels (.openSlice left-rel allocator))))
 
     (boolean
       (when-let [right-rel (or (when (and left-rel-iterator (.hasNext left-rel-iterator))
@@ -132,10 +131,9 @@
                                    (.close right-rel)
                                    (set! (.right-rel this) nil))
                                  (when (.tryAdvance right-cursor
-                                                    (reify Consumer
-                                                      (accept [_ right-rel]
-                                                        (set! (.right-rel this) (.copy ^RelationReader right-rel allocator))
-                                                        (set! (.left-rel-iterator this) (.iterator left-rels)))))
+                                                    (fn [^RelationReader right-rel]
+                                                      (set! (.right-rel this) (.openSlice right-rel allocator))
+                                                      (set! (.left-rel-iterator this) (.iterator left-rels))))
                                    (.right-rel this))))]
 
         (when-let [left-rel (when (.hasNext left-rel-iterator)
@@ -163,20 +161,19 @@
 
 (defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms]
   (.forEachRemaining build-cursor
-                     (reify Consumer
-                       (accept [_ build-rel]
-                         (let [^RelationReader build-rel build-rel rel-map-builder (.buildFromRelation rel-map build-rel)
-                               build-key-col-names (vec (.buildKeyColumnNames rel-map))]
-                           (dotimes [build-idx (.getRowCount build-rel)]
-                             (.add rel-map-builder build-idx))
+                     (fn [^RelationReader build-rel]
+                       (let [rel-map-builder (.buildFromRelation rel-map build-rel)
+                             build-key-col-names (vec (.buildKeyColumnNames rel-map))]
+                         (dotimes [build-idx (.getRowCount build-rel)]
+                           (.add rel-map-builder build-idx))
 
-                           (when pushdown-blooms
-                             (dotimes [col-idx (count build-key-col-names)]
-                               (let [build-col-name (nth build-key-col-names col-idx)
-                                     build-col (.vectorForOrNull build-rel (str build-col-name))
-                                     ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
-                                 (dotimes [build-idx (.getRowCount build-rel)]
-                                   (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx)))))))))))
+                         (when pushdown-blooms
+                           (dotimes [col-idx (count build-key-col-names)]
+                             (let [build-col-name (nth build-key-col-names col-idx)
+                                   build-col (.vectorForOrNull build-rel (str build-col-name))
+                                   ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
+                               (dotimes [build-idx (.getRowCount build-rel)]
+                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.vector.RelationReader probe-phase
@@ -343,14 +340,13 @@
 
              (while (and (not (aget advanced? 0))
                          (.tryAdvance ^ICursor (.probe-cursor this)
-                                      (reify Consumer
-                                        (accept [_ probe-rel]
-                                          (when (pos? (.getRowCount ^RelationReader probe-rel))
-                                            (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
-                                                                    (.copy allocator))]
-                                              (when (pos? (.getRowCount out-rel))
-                                                (aset advanced? 0 true)
-                                                (.accept c out-rel))))))))))
+                                      (fn [^RelationReader probe-rel]
+                                        (when (pos? (.getRowCount probe-rel))
+                                          (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
+                                                                  (.openSlice allocator))]
+                                            (when (pos? (.getRowCount out-rel))
+                                              (aset advanced? 0 true)
+                                              (.accept c out-rel)))))))))
            (aget advanced? 0))
 
          (when (= ::full-outer-join join-type)
@@ -566,19 +562,17 @@
 
          (while (and (not (aget advanced? 0))
                      (.tryAdvance ^ICursor (.probe-cursor this)
-                                  (reify Consumer
-                                    (accept [_ probe-rel]
-                                      (let [^RelationReader probe-rel probe-rel
-                                            row-count (.getRowCount probe-rel)]
-                                        (when (pos? row-count)
-                                          (aset advanced? 0 true)
+                                  (fn [^RelationReader probe-rel]
+                                    (let [row-count (.getRowCount probe-rel)]
+                                      (when (pos? row-count)
+                                        (aset advanced? 0 true)
 
-                                          (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
-                                                                 (.allocateNew row-count)
-                                                                 (.setValueCount row-count))]
-                                            (mark-join-probe-phase rel-map probe-rel mark-col)
-                                            (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
-                                              (.accept c (vr/rel-reader out-cols row-count))))))))))))
+                                        (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
+                                                               (.allocateNew row-count)
+                                                               (.setValueCount row-count))]
+                                          (mark-join-probe-phase rel-map probe-rel mark-col)
+                                          (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
+                                            (.accept c (vr/rel-reader out-cols row-count)))))))))))
        (aget advanced? 0))))
 
   (close [_]

@@ -20,6 +20,8 @@ import xtdb.arrow.Vector.Companion.fromField
 import xtdb.trie.FileSize
 import xtdb.types.NamelessField
 import xtdb.util.closeAll
+import xtdb.util.closeAllOnCatch
+import xtdb.util.safeMap
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.*
@@ -61,6 +63,11 @@ class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: In
                 repeat(rowCount - vec.valueCount) { vec.writeNull() }
             }
         }
+
+    override fun openSlice(al: BufferAllocator): Relation =
+        vectors
+            .safeMap { it.openSlice(al) }
+            .closeAllOnCatch { slicedVecs -> Relation(slicedVecs, rowCount) }
 
     override fun rowCopier(rel: RelationReader): RowCopier {
         val copiers = rel.vectors.map { it.rowCopier(vecs[it.name] ?: error("missing ${it.name} vector")) }
