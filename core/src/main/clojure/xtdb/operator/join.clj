@@ -573,8 +573,7 @@
                                         (when (pos? row-count)
                                           (aset advanced? 0 true)
 
-                                          (with-open [probe-rel (.copy probe-rel allocator)
-                                                      mark-col (doto (BitVector. (name mark-col-name) allocator)
+                                          (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
                                                                  (.allocateNew row-count)
                                                                  (.setValueCount row-count))]
                                             (mark-join-probe-phase rel-map probe-rel mark-col)
