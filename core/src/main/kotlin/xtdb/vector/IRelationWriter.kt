@@ -47,6 +47,10 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
         rowCount += rel.rowCount
     }
 
+    override fun append(rel: xtdb.arrow.RelationReader) {
+        if (rel is RelationReader) append(rel) else super.append(rel)
+    }
+
     override fun openSlice(al: BufferAllocator) = toReader().openSlice(al)
     override fun openDirectSlice(al: BufferAllocator) = toReader().openDirectSlice(al)
 

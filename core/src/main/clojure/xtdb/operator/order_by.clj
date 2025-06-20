@@ -225,8 +225,8 @@
                                                               (vw/->writer (.createVector field allocator))))]
             (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
                         (.tryAdvance in-cursor
-                                     (fn [src-rel]
-                                       (vw/append-rel rel-writer src-rel)))))
+                                     (fn [^RelationReader src-rel]
+                                       (.append rel-writer src-rel)))))
             (let [pos (.getRowCount rel-writer)
                   read-rel (vw/rel-wtr->rdr rel-writer)]
               (if (<= pos ^int *block-size*)

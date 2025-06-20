@@ -11,7 +11,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
-           xtdb.arrow.Vector
+           (xtdb.arrow Vector VectorReader VectorWriter)
            xtdb.error.Anomaly
            xtdb.time.Interval
            xtdb.Types
@@ -212,15 +212,5 @@
 (defn rel-wtr->rdr ^xtdb.vector.RelationReader [^xtdb.vector.IRelationWriter w]
   (vr/rel-reader (map vec-wtr->rdr w) (.getRowCount w)))
 
-(defn append-vec [^IVectorWriter vec-writer, ^IVectorReader in-col]
-  (let [row-copier (.rowCopier in-col vec-writer)]
-    (dotimes [src-idx (.getValueCount in-col)]
-      (.copyRow row-copier src-idx))))
-
-(defn append-rel [^IRelationWriter dest-rel, ^RelationReader src-rel]
-  (doseq [^IVectorReader src-col src-rel]
-    (-> (or (.vectorForOrNull dest-rel (.getName src-col))
-            (.vectorFor dest-rel (.getName src-col) (.getFieldType src-col)))
-        (append-vec src-col)))
-
-  (.setRowCount dest-rel (+ (.getRowCount dest-rel) (.getRowCount src-rel))))
+(defn append-rel [^RelationWriter dest-rel, ^xtdb.arrow.RelationReader src-rel]
+  (.append dest-rel src-rel))

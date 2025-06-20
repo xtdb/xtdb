@@ -490,7 +490,7 @@
   (aggregate [this in-rel group-mapping]
     (let [in-vec (.vectorForOrNull in-rel (str from-name))
           row-count (.getValueCount in-vec)]
-      (vw/append-vec acc-col in-vec)
+      (.append acc-col in-vec)
 
       (dotimes [idx row-count]
         (let [group-idx (.getInt group-mapping idx)]

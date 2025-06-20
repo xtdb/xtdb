@@ -23,7 +23,6 @@ interface RelationWriter : RelationReader {
         }
     }
 
-
     fun append(rel: RelationReader) {
         val copier = rowCopier(rel)
         repeat(rel.rowCount) { copier.copyRow(it) }
