@@ -76,6 +76,21 @@ sealed class Vector : VectorReader, VectorWriter {
         return this
     }
 
+    override fun rowCopier(dest: VectorWriter): RowCopier {
+        if (dest is DenseUnionVector) return dest.rowCopierTo(this)
+
+        check(dest is Vector)
+
+        val copier = dest.rowCopier0(this)
+        if (!nullable) return copier
+
+        return RowCopier { idx ->
+            if (isNull(idx)) dest.valueCount.also { dest.writeNull() } else copier.copyRow(idx)
+        }
+    }
+
+    internal abstract fun rowCopier0(src: VectorReader): RowCopier
+
     override fun toList() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)

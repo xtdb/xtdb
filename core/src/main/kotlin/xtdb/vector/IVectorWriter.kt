@@ -58,6 +58,8 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
         }
     }
 
+    override fun rowCopier(dest: VectorWriter) = unsupported("rowCopier(VectorWriter)")
+
     fun rowCopier(src: ValueVector): RowCopier
 
     fun rowCopier(src: RelationReader): RowCopier {
@@ -72,9 +74,6 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
             pos
         }
     }
-
-    override fun rowCopier0(src: VectorReader): RowCopier =
-        if (src is IVectorReader) src.rowCopier(this) else unsupported("IVectorWriter/rowCopier0")
 
     override fun writeUndefined() = TODO("writeUndefined on IVectorWriter...? could probably do this")
 

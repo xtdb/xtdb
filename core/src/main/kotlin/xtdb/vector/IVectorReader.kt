@@ -8,6 +8,7 @@ import xtdb.arrow.Vector
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorWriter
 import xtdb.arrow.unsupported
 import xtdb.util.closeOnCatch
 
@@ -45,6 +46,4 @@ interface IVectorReader : VectorReader, AutoCloseable {
     override fun select(idxs: IntArray): IVectorReader = IndirectVectorReader(this, selection(idxs))
 
     override fun select(startIdx: Int, len: Int): IVectorReader = IndirectVectorReader(this, slice(startIdx, len))
-
-    fun rowCopier(writer: IVectorWriter): RowCopier
 }

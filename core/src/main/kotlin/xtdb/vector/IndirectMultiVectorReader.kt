@@ -12,6 +12,8 @@ import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorIndirection
 import xtdb.arrow.VectorPosition
+import xtdb.arrow.VectorWriter
+import xtdb.arrow.unsupported
 import xtdb.toLeg
 import xtdb.util.Hasher
 import xtdb.util.requiringResolve
@@ -186,10 +188,12 @@ class IndirectMultiVectorReader(
         return ValueVectorReader.from(vector)
     }
 
-    override fun rowCopier(writer: IVectorWriter): RowCopier {
-        readers.map { it?.also { writer.promoteChildren(it.field) } }
+    override fun rowCopier(dest: VectorWriter): RowCopier {
+        if (dest !is IVectorWriter) unsupported("IndirectMultiVectorReader.rowCopier(VectorWriter)")
+
+        readers.map { it?.also { dest.promoteChildren(it.field) } }
         val rowCopiers =
-            readers.map { it?.rowCopier(writer) ?: ValueVectorReader(NullVector(it?.name)).rowCopier(writer) }
+            readers.map { it?.rowCopier(dest) ?: ValueVectorReader(NullVector(it?.name)).rowCopier(dest) }
         return RowCopier { sourceIdx -> rowCopiers[readerIndirection[sourceIdx]].copyRow(vectorIndirections[sourceIdx]) }
     }
 

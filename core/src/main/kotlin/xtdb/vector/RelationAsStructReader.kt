@@ -8,6 +8,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorPosition
+import xtdb.arrow.VectorWriter
 import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
@@ -30,8 +31,8 @@ class RelationAsStructReader(
 
     override fun copyTo(vector: ValueVector) = TODO("Not yet implemented")
 
-    override fun rowCopier(writer: IVectorWriter): RowCopier {
-        val copiers = rel.vectors.map { it.rowCopier(writer) }
+    override fun rowCopier(dest: VectorWriter): RowCopier {
+        val copiers = rel.vectors.map { it.rowCopier(dest) }
         return RowCopier { idx -> copiers.forEach { it.copyRow(idx) }; idx }
     }
 

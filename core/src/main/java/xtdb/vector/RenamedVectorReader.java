@@ -10,6 +10,7 @@ import xtdb.api.query.IKeyFn;
 import xtdb.arrow.RowCopier;
 import xtdb.arrow.ValueReader;
 import xtdb.arrow.VectorPosition;
+import xtdb.arrow.VectorWriter;
 import xtdb.util.Hasher;
 
 import java.nio.ByteBuffer;
@@ -176,7 +177,7 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public RowCopier rowCopier(IVectorWriter writer) {
+    public RowCopier rowCopier(VectorWriter writer) {
         return reader.rowCopier(writer);
     }
 

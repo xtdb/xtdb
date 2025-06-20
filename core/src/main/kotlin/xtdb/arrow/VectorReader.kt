@@ -103,14 +103,7 @@ interface VectorReader : ILookup, AutoCloseable {
 
     val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")
 
-    fun rowCopier(dest: VectorWriter) =
-        if (dest is DenseUnionVector) dest.rowCopier0(this)
-        else {
-            val copier = dest.rowCopier0(this)
-            RowCopier { srcIdx ->
-                if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
-            }
-        }
+    fun rowCopier(dest: VectorWriter): RowCopier
 
     companion object {
         fun toString(reader: VectorReader): String = reader.run {

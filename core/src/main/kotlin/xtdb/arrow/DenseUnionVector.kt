@@ -136,7 +136,7 @@ class DenseUnionVector(
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
-        override fun rowCopier0(src: VectorReader): RowCopier {
+        fun rowCopierTo(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
             return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }
         }
@@ -195,7 +195,7 @@ class DenseUnionVector(
         return null
     }
 
-    override fun vectorFor(name: String, fieldType: FieldType): VectorWriter {
+    private fun legVectorFor(name: String, fieldType: FieldType): LegVector {
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
@@ -211,6 +211,8 @@ class DenseUnionVector(
         val legVec = fromField(allocator, Field(name, fieldType, emptyList())).also { legVectors.add(it) }
         return LegVector(typeId, legVec)
     }
+
+    override fun vectorFor(name: String, fieldType: FieldType): VectorWriter = legVectorFor(name, fieldType)
 
     private fun legWriter(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
 
@@ -242,57 +244,48 @@ class DenseUnionVector(
 
     override fun hashCode0(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
+    internal fun rowCopierTo(src: VectorReader): RowCopier =
+        legVectorFor(src.fieldType.type.toLeg(), src.fieldType).rowCopierTo(src)
+
     override fun rowCopier0(src: VectorReader): RowCopier =
-        when (src) {
-            is DenseUnionVector -> error("should have been handled by rowCopier")
-
-            is NullVector -> {
-                // we try to find a nullable child vector
-
-                src.rowCopier(
-                    legVectors.asSequence()
-                        .mapIndexedNotNull { idx, vector ->
-                            vector.takeIf { it.nullable }?.let { LegVector(idx.toByte(), it) }
-                        }
-                        .firstOrNull()
-                        ?: vectorFor("null", src.fieldType))
-            }
-
-            else -> {
-                vectorFor(src.fieldType.type.toLeg(), src.fieldType).rowCopier0(src)
-            }
-        }
-
-    override fun rowCopier(dest: VectorWriter) =
         when {
-            dest is DenseUnionVector -> {
-                val copierMapping = legVectors.map { childVec ->
-                    childVec.rowCopier(dest.vectorFor(childVec.name, childVec.fieldType))
+            src is DenseUnionVector -> {
+                val copierMapping = src.legVectors.map { childVec ->
+                    legVectorFor(childVec.name, childVec.fieldType).rowCopierTo(childVec)
                 }
 
                 RowCopier { srcIdx ->
-                    val typeId = getTypeId(srcIdx)
+                    val typeId = src.getTypeId(srcIdx).toInt()
 
                     if (typeId < 0)
                         valueCount.also { writeUndefined() }
                     else
-                        copierMapping[typeId.toInt().also { check(it >= 0) }].copyRow(getOffset(srcIdx))
+                        copierMapping[typeId].copyRow(src.getOffset(srcIdx))
                 }
             }
 
+            else -> this@DenseUnionVector.rowCopierTo(src)
+        }
+
+    override fun rowCopier(dest: VectorWriter) =
+        when {
+            dest is DenseUnionVector -> dest.rowCopier0(this)
+
             legVectors.size == 2 -> {
-                require(legVectors.filter { it.type == NULL_TYPE }.size == 1)
+                check(legVectors.filter { it.type == NULL_TYPE }.size == 1)
+
                 val copier = legVectors
                     .mapIndexed { i, v -> Pair(i, v) }
                     .first { it.second.type != NULL_TYPE }
                     .let { (i, v) -> LegVector(i.toByte(), v).rowCopier(dest) }
+
                 RowCopier { srcIdx ->
-                    if (isNull(srcIdx)) valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+                    if (isNull(srcIdx)) dest.valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
                 }
             }
 
             else -> {
-                require(legVectors.size == 1)
+                check(legVectors.size == 1)
                 LegVector(0, legVectors.first()).rowCopier(dest)
             }
         }

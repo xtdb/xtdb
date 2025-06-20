@@ -57,8 +57,6 @@ interface VectorWriter : VectorReader, AutoCloseable {
     override val mapValues: VectorWriter get() = unsupported("mapValues")
     fun getMapValues(fieldType: FieldType): VectorWriter = unsupported("mapValueWriter")
 
-    fun rowCopier0(src: VectorReader): RowCopier
-
     fun clear()
 
     fun writeAll(vals: Iterable<Any?>) = apply { vals.forEach { writeObject(it) } }

@@ -213,8 +213,8 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public RowCopier rowCopier(IVectorWriter writer) {
-        return writer.rowCopier(vector);
+    public RowCopier rowCopier(VectorWriter writer) {
+        return ((IVectorWriter) writer).rowCopier(vector);
     }
 
     class BaseValueReader implements ValueReader {

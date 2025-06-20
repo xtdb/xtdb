@@ -179,7 +179,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public RowCopier rowCopier(IVectorWriter writer) {
+    public RowCopier rowCopier(VectorWriter writer) {
         var inner = reader.rowCopier(writer);
         return sourceIdx -> inner.copyRow(indirection.getIndex(sourceIdx));
     }
