@@ -371,147 +371,6 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- equi-spec [idx condition left-fields right-fields param-fields]
-  (let [[left-expr right-expr] (first condition)]
-    (letfn [(equi-projection [side form fields]
-              (if (symbol? form)
-                {:key-col-name form}
-
-                (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
-                      input-types {:col-types (update-vals fields types/field->col-type)
-                                   :param-types (update-vals param-fields types/field->col-type)}]
-                  {:key-col-name col-name
-                   :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
-                                                                  input-types)})))]
-
-      {:left (equi-projection :left left-expr left-fields)
-       :right (equi-projection :right right-expr right-fields)})))
-
-(defn- projection-specs->fields [projection-specs]
-  (->> projection-specs
-       (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
-                           #(.getField ^ProjectionSpec %))))))
-
-(defn- emit-join-expr {:style/indent 2}
-  [{:keys [condition left right]}
-   {:keys [param-fields]}
-   {:keys [build-side with-nil-row? cursor-constructor merge-fields-fn]}]
-
-  (let [{left-fields :fields, ->left-cursor :->cursor} left
-        {right-fields :fields, ->right-cursor :->cursor} right
-        {equis :equi-condition, thetas :pred-expr} (group-by first condition)
-
-        theta-expr (when-let [theta-exprs (seq (map second thetas))]
-                     (list* 'and theta-exprs))
-
-        equi-specs (->> (map last equis)
-                        (map-indexed (fn [idx condition]
-                                       (equi-spec idx condition left-fields right-fields param-fields)))
-                        vec)
-
-        left-projections (vec (concat
-                               (for [[_col-name ^Field field] left-fields]
-                                 (project/->identity-projection-spec field))
-                               (keep (comp :projection :left) equi-specs)))
-
-        right-projections (vec (concat
-                                (for [[_col-name ^Field field] right-fields]
-                                  (project/->identity-projection-spec field))
-                                (keep (comp :projection :right) equi-specs)))
-
-        left-fields-proj (projection-specs->fields left-projections)
-        right-fields-proj (projection-specs->fields right-projections)
-        left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
-        right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
-
-        ->left-project-cursor (fn [opts] (project/->project-cursor opts (->left-cursor opts) left-projections))
-        ->right-project-cursor (fn [opts] (project/->project-cursor opts (->right-cursor opts) right-projections))
-
-        [build-fields build-key-col-names ->build-cursor probe-fields probe-key-col-names ->probe-cursor]
-        (case build-side
-          :left [left-fields-proj left-key-col-names ->left-project-cursor right-fields-proj right-key-col-names ->right-project-cursor]
-          :right [right-fields-proj right-key-col-names ->right-project-cursor left-fields-proj left-key-col-names ->left-project-cursor])
-
-        merged-fields (merge-fields-fn left-fields-proj right-fields-proj)
-        output-projections (->> (set/difference (set (keys merged-fields))
-                                                (into #{} (comp (mapcat (juxt :left :right))
-                                                                (filter :projection)
-                                                                (map :key-col-name))
-                                                      equi-specs))
-                                (mapv #(project/->identity-projection-spec (get merged-fields %))))]
-
-    {:fields (projection-specs->fields output-projections)
-     :->cursor (fn [{:keys [allocator args] :as opts}]
-                 (project/->project-cursor opts
-                                           (util/with-close-on-catch [build-cursor (->build-cursor opts)]
-                                             (cursor-constructor
-                                              {:allocator allocator
-                                               :build-cursor build-cursor
-                                               :->probe-cursor (partial ->probe-cursor opts)
-                                               :rel-map (emap/->relation-map allocator {:build-fields build-fields
-                                                                                        :build-key-col-names build-key-col-names
-                                                                                        :probe-fields probe-fields
-                                                                                        :probe-key-col-names probe-key-col-names
-                                                                                        :store-full-build-rel? true
-                                                                                        :with-nil-row? with-nil-row?
-                                                                                        :theta-expr theta-expr
-                                                                                        :param-fields param-fields
-                                                                                        :args args})
-                                               :probe-key-col-names probe-key-col-names}))
-                                           output-projections))}))
-
-
-(defn- ->pushdown-blooms [key-col-names]
-  (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
-
-(defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
-  (emit-join-expr (emit-join-children join-expr args) args join-impl))
-
-(defn emit-inner-join-expr [join-expr args]
-  (emit-join-expr join-expr args
-                  {:build-side :left
-                   :with-nil-row? false
-                   :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields right-fields))
-                   :cursor-constructor (fn [{:keys [allocator build-cursor ->probe-cursor rel-map probe-key-col-names]}]
-                                         (let [pushdown-blooms (->pushdown-blooms probe-key-col-names)]
-                                           (JoinCursor. allocator build-cursor nil ->probe-cursor rel-map nil pushdown-blooms ::inner-join)))}))
-
-(defmethod lp/emit-expr :join [join-expr args]
-  (emit-inner-join-expr (emit-join-children join-expr args) args))
-
-(defmethod lp/emit-expr :left-outer-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :with-nil-row? true
-                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
-                                :cursor-constructor (fn [{:keys [allocator build-cursor ->probe-cursor rel-map]}]
-                                                      (JoinCursor. allocator build-cursor nil ->probe-cursor rel-map nil nil ::left-outer-join))}))
-
-(defmethod lp/emit-expr :full-outer-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :left
-                                :with-nil-row? true
-                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
-                                :cursor-constructor (fn [{:keys [allocator build-cursor ->probe-cursor rel-map]}]
-                                                      (JoinCursor. allocator build-cursor nil ->probe-cursor rel-map (RoaringBitmap.) nil ::full-outer-join))}))
-
-(defmethod lp/emit-expr :semi-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :with-nil-row? false
-                                :merge-fields-fn (fn [left-fields _right-fields] left-fields)
-                                :cursor-constructor (fn [{:keys [allocator build-cursor ->probe-cursor rel-map probe-key-col-names]}]
-                                                      (let [pushdown-blooms (->pushdown-blooms probe-key-col-names)]
-                                                        (JoinCursor. allocator build-cursor nil ->probe-cursor rel-map nil pushdown-blooms ::semi-join)))}))
-
-(defmethod lp/emit-expr :anti-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :with-nil-row? false
-                                :merge-fields-fn (fn [left-fields _right-fields] left-fields)
-                                :cursor-constructor (fn [{:keys [allocator build-cursor ->probe-cursor rel-map]}]
-                                                      (JoinCursor. allocator build-cursor nil ->probe-cursor rel-map nil nil ::anti-semi-join))}))
-
 (defn- mark-join-probe-phase [^IRelationMap rel-map, ^RelationReader probe-rel, ^BitVector mark-col]
   (let [rel-prober (.probeFromRelation rel-map probe-rel)]
     (dotimes [idx (.getRowCount probe-rel)]
@@ -561,25 +420,159 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
+(defn- equi-spec [idx condition left-fields right-fields param-fields]
+  (let [[left-expr right-expr] (first condition)]
+    (letfn [(equi-projection [side form fields]
+              (if (symbol? form)
+                {:key-col-name form}
+
+                (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
+                      input-types {:col-types (update-vals fields types/field->col-type)
+                                   :param-types (update-vals param-fields types/field->col-type)}]
+                  {:key-col-name col-name
+                   :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
+                                                                  input-types)})))]
+
+      {:left (equi-projection :left left-expr left-fields)
+       :right (equi-projection :right right-expr right-fields)})))
+
+(defn- projection-specs->fields [projection-specs]
+  (->> projection-specs
+       (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
+                           #(.getField ^ProjectionSpec %))))))
+
+(defn- ->pushdown-blooms [key-col-names]
+  (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
+
+(defn- emit-join-expr {:style/indent 2}
+  [{:keys [condition left right]}
+   {:keys [param-fields]}
+   {:keys [build-side merge-fields-fn join-type
+           with-nil-row? pushdown-blooms? matched-build-idxs? mark-col-name]}]
+  (let [{left-fields :fields, ->left-cursor :->cursor} left
+        {right-fields :fields, ->right-cursor :->cursor} right
+        {equis :equi-condition, thetas :pred-expr} (group-by first condition)
+
+        theta-expr (when-let [theta-exprs (seq (map second thetas))]
+                     (list* 'and theta-exprs))
+
+        equi-specs (->> (map last equis)
+                        (map-indexed (fn [idx condition]
+                                       (equi-spec idx condition left-fields right-fields param-fields)))
+                        vec)
+
+        left-projections (vec (concat
+                               (for [[_col-name ^Field field] left-fields]
+                                 (project/->identity-projection-spec field))
+                               (keep (comp :projection :left) equi-specs)))
+
+        right-projections (vec (concat
+                                (for [[_col-name ^Field field] right-fields]
+                                  (project/->identity-projection-spec field))
+                                (keep (comp :projection :right) equi-specs)))
+
+        left-fields-proj (projection-specs->fields left-projections)
+        right-fields-proj (projection-specs->fields right-projections)
+        left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
+        right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
+
+        ->left-project-cursor (fn [opts] (project/->project-cursor opts (->left-cursor opts) left-projections))
+        ->right-project-cursor (fn [opts] (project/->project-cursor opts (->right-cursor opts) right-projections))
+
+        [build-fields build-key-col-names ->build-cursor 
+         probe-fields probe-key-col-names ->probe-cursor]
+        (case build-side
+          :left [left-fields-proj left-key-col-names ->left-project-cursor 
+                 right-fields-proj right-key-col-names ->right-project-cursor]
+          :right [right-fields-proj right-key-col-names ->right-project-cursor 
+                  left-fields-proj left-key-col-names ->left-project-cursor])
+
+        merged-fields (merge-fields-fn left-fields-proj right-fields-proj)
+        output-projections (->> (set/difference (set (keys merged-fields))
+                                                (into #{} (comp (mapcat (juxt :left :right))
+                                                                (filter :projection)
+                                                                (map :key-col-name))
+                                                      equi-specs))
+                                (mapv #(project/->identity-projection-spec (get merged-fields %))))
+
+        pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
+        matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))]
+
+    {:fields (projection-specs->fields output-projections)
+     :->cursor (fn [{:keys [allocator args] :as opts}]
+                 (let [relation-map (emap/->relation-map allocator {:build-fields build-fields
+                                                                    :build-key-col-names build-key-col-names
+                                                                    :probe-fields probe-fields
+                                                                    :probe-key-col-names probe-key-col-names
+                                                                    :store-full-build-rel? true
+                                                                    :with-nil-row? with-nil-row?
+                                                                    :theta-expr theta-expr
+                                                                    :param-fields param-fields
+                                                                    :args args})]
+                   (project/->project-cursor opts
+                                             (util/with-close-on-catch [build-cursor (->build-cursor opts)]
+                                               (if (= join-type ::mark-join)
+                                                 (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
+                                                 (JoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type)))
+                                             output-projections)))}))
+
+(defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
+  (emit-join-expr (emit-join-children join-expr args) args join-impl))
+
+(defn emit-inner-join-expr [join-expr args]
+  (emit-join-expr join-expr args
+                  {:build-side :left
+                   :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields right-fields)) 
+                   :join-type ::inner-join
+                   :pushdown-blooms? true}))
+
+(defmethod lp/emit-expr :join [join-expr args]
+  (emit-inner-join-expr (emit-join-children join-expr args) args))
+
+(defmethod lp/emit-expr :left-outer-join [join-expr args]
+  (emit-join-expr-and-children join-expr args
+                               {:build-side :right 
+                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                                :join-type ::left-outer-join
+                                :with-nil-row? true}))
+
+(defmethod lp/emit-expr :full-outer-join [join-expr args]
+  (emit-join-expr-and-children join-expr args
+                               {:build-side :left 
+                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
+                                :join-type ::full-outer-join
+                                :with-nil-row? true
+                                :matched-build-idxs? true}))
+
+(defmethod lp/emit-expr :semi-join [join-expr args]
+  (emit-join-expr-and-children join-expr args
+                               {:build-side :right 
+                                :merge-fields-fn (fn [left-fields _] left-fields)
+                                :join-type ::semi-join
+                                :pushdown-blooms? true}))
+
+(defmethod lp/emit-expr :anti-join [join-expr args]
+  (emit-join-expr-and-children join-expr args
+                               {:build-side :right 
+                                :merge-fields-fn (fn [left-fields _] left-fields)
+                                :join-type ::anti-semi-join}))
+
 (defmethod lp/emit-expr :mark-join [{:keys [mark-spec] :as join-expr} args]
   (let [[mark-col-name mark-condition] (first mark-spec)]
     (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
-                                 {:build-side :right
-                                  :with-nil-row? false
-                                  :merge-fields-fn (fn [left-fields _right-fields] (assoc left-fields mark-col-name (types/col-type->field mark-col-name [:union #{:null :bool}])))
-                                  :cursor-constructor
-                                  (fn [{:keys [allocator build-cursor ->probe-cursor rel-map probe-key-col-names]}]
-                                    (let [pushdown-blooms (->pushdown-blooms probe-key-col-names)]
-                                      (MarkJoinCursor. allocator build-cursor nil ->probe-cursor rel-map (RoaringBitmap.) mark-col-name pushdown-blooms ::mark-join)))})))
+                                 {:build-side :right 
+                                  :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/col-type->field mark-col-name [:union #{:null :bool}])))
+                                  :mark-col-name mark-col-name
+                                  :join-type ::mark-join
+                                  :matched-build-idxs? true
+                                  :pushdown-blooms? true})))
 
 (defmethod lp/emit-expr :single-join [join-expr args]
   (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :with-nil-row? true
+                               {:build-side :right 
                                 :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
-                                :cursor-constructor
-                                (fn [{:keys [allocator build-cursor ->probe-cursor rel-map]}]
-                                  (JoinCursor. allocator build-cursor nil ->probe-cursor rel-map nil nil ::single-join))}))
+                                :join-type ::single-join
+                                :with-nil-row? true}))
 
 
 (defn columns [relation]
