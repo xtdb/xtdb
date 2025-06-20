@@ -56,9 +56,9 @@
   (^java.util.Map probeFields [])
   (^java.util.List probeKeyColumnNames [])
 
-  (^xtdb.expression.map.IRelationMapBuilder buildFromRelation [^xtdb.vector.RelationReader inRelation])
-  (^xtdb.expression.map.IRelationMapProber probeFromRelation [^xtdb.vector.RelationReader inRelation])
-  (^xtdb.vector.RelationReader getBuiltRelation []))
+  (^xtdb.expression.map.IRelationMapBuilder buildFromRelation [^xtdb.arrow.RelationReader inRelation])
+  (^xtdb.expression.map.IRelationMapProber probeFromRelation [^xtdb.arrow.RelationReader inRelation])
+  (^xtdb.arrow.RelationReader getBuiltRelation []))
 
 (defn- andIBO
   ([]
@@ -160,7 +160,7 @@
 
 (defn ->nil-rel
   "Returns a single row relation where all columns are nil. (Useful for outer joins)."
-  ^xtdb.vector.RelationReader [col-names]
+  ^xtdb.arrow.RelationReader [col-names]
   (vr/rel-reader (for [col-name col-names]
                    (vr/vec->reader (doto (NullVector. (str col-name))
                                      (.setValueCount 1))))))
@@ -205,11 +205,11 @@
               (probeKeyColumnNames [_] probe-key-col-names)
 
               (buildFromRelation [_ in-rel]
-                (let [in-rel (if store-full-build-rel?
-                               in-rel
-                               (->> (set build-key-col-names)
-                                    (mapv #(.vectorForOrNull in-rel (str %)))
-                                    vr/rel-reader))
+                (let [^RelationReader in-rel (if store-full-build-rel?
+                                               in-rel
+                                               (->> (set build-key-col-names)
+                                                    (mapv #(.vectorForOrNull in-rel (str %)))
+                                                    vr/rel-reader))
 
                       in-key-cols (mapv #(.vectorForOrNull in-rel (str %))
                                         build-key-col-names)

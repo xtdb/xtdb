@@ -7,8 +7,8 @@
             [xtdb.vector.writer :as vw])
   (:import org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.operator.PatchGapsCursor
-           [xtdb.vector RelationReader]))
+           [xtdb.arrow RelationReader]
+           xtdb.operator.PatchGapsCursor))
 
 (s/def ::instantable
   (s/or :literal ::time/datetime-value

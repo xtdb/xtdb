@@ -2,6 +2,7 @@ package xtdb.vector
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.RelationReader
 
 @Suppress("unused")
 class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {

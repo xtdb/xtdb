@@ -1,10 +1,9 @@
 (ns xtdb.coalesce
   (:require [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator
+  (:import org.apache.arrow.memory.BufferAllocator
            xtdb.ICursor
-           (xtdb.vector RelationReader)))
+           (xtdb.arrow RelationReader)))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full page to return rows.
 ;; Then, we coalesce small pages together into pages of at least 100, to share the per-page costs.

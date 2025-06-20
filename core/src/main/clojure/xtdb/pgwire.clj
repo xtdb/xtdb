@@ -40,10 +40,10 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
+           xtdb.arrow.RelationReader
            (xtdb.error Anomaly Incorrect Interrupted)
            xtdb.IResultCursor
-           (xtdb.query PreparedQuery)
-           [xtdb.vector RelationReader]))
+           (xtdb.query PreparedQuery)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html

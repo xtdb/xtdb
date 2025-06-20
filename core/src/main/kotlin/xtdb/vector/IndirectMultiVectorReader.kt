@@ -12,6 +12,7 @@ import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorIndirection
 import xtdb.arrow.VectorPosition
+import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorWriter
 import xtdb.arrow.unsupported
 import xtdb.toLeg
@@ -22,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class IndirectMultiVectorReader(
     override val name: String,
-    private val readers: List<IVectorReader?>,
+    private val readers: List<VectorReader?>,
     private val readerIndirection: VectorIndirection,
     private val vectorIndirections: VectorIndirection,
 ) : IVectorReader {
@@ -45,7 +46,7 @@ class IndirectMultiVectorReader(
         throw UnsupportedOperationException("IndirectMultiVectoReader")
     }
 
-    private fun safeReader(idx: Int): IVectorReader {
+    private fun safeReader(idx: Int): VectorReader {
         return readers[readerIndirection[idx]] ?: throw unsupported()
     }
 
@@ -132,21 +133,21 @@ class IndirectMultiVectorReader(
         }
     }
 
-    override fun vectorForOrNull(legKey: String): IVectorReader {
-        return legReaders.computeIfAbsent(legKey) {
+    override fun vectorForOrNull(name: String): IVectorReader {
+        return legReaders.computeIfAbsent(name) {
             val validReaders = readers.zip(fields).map { (reader, field) ->
                 if (reader == null) null
                 else when (field!!.fieldType.type) {
-                    is ArrowType.Union -> reader.vectorFor(legKey)
+                    is ArrowType.Union -> reader.vectorFor(name)
                     else -> {
-                        if (field.fieldType.type.toLeg() == legKey) reader
+                        if (field.fieldType.type.toLeg() == name) reader
                         else null
                     }
                 }
             }
 
             IndirectMultiVectorReader(
-                legKey,
+                name,
                 validReaders,
                 object : VectorIndirection {
                     override fun valueCount(): Int {

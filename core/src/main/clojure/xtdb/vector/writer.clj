@@ -11,12 +11,12 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field FieldType)
-           (xtdb.arrow Vector VectorReader VectorWriter)
+           (xtdb.arrow RelationReader Vector)
            xtdb.error.Anomaly
            xtdb.time.Interval
            xtdb.Types
            (xtdb.types ClojureForm ZonedDateTimeRange)
-           (xtdb.vector FieldVectorWriters IRelationWriter IVectorReader IVectorWriter RelationReader RelationWriter RootWriter)))
+           (xtdb.vector FieldVectorWriters RelationWriter RootWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -180,7 +180,7 @@
   (util/with-close-on-catch [res (.createVector field allocator)]
     (doto res (write-vec! vs))))
 
-(defn open-rel ^xtdb.vector.RelationReader [vecs]
+(defn open-rel ^xtdb.arrow.RelationReader [vecs]
   (vr/rel-reader (map vr/vec->reader vecs)))
 
 (defn- param-sym [v]
@@ -202,15 +202,15 @@
           (.add arg-vecs vec)
           (.writeObject vec v)))
 
-      (xtdb.arrow.RelationReader/from arg-vecs (count args-map)))))
+      (RelationReader/from arg-vecs (count args-map)))))
 
-(def empty-args xtdb.arrow.RelationReader/DUAL)
+(def empty-args RelationReader/DUAL)
 
 (defn vec-wtr->rdr ^xtdb.vector.IVectorReader [^xtdb.vector.IVectorWriter w]
   (vr/vec->reader (.getVector (doto w (.syncValueCount)))))
 
-(defn rel-wtr->rdr ^xtdb.vector.RelationReader [^xtdb.vector.IRelationWriter w]
+(defn rel-wtr->rdr ^xtdb.arrow.RelationReader [^xtdb.vector.IRelationWriter w]
   (vr/rel-reader (map vec-wtr->rdr w) (.getRowCount w)))
 
-(defn append-rel [^RelationWriter dest-rel, ^xtdb.arrow.RelationReader src-rel]
+(defn append-rel [^RelationWriter dest-rel, ^RelationReader src-rel]
   (.append dest-rel src-rel))

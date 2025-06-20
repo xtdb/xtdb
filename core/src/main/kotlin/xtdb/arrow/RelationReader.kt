@@ -2,12 +2,14 @@ package xtdb.arrow
 
 import clojure.lang.*
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
 import xtdb.util.safeMap
+import xtdb.vector.ValueVectorReader
 import java.util.*
 
 interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
@@ -72,7 +74,16 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
 
         @JvmStatic
+        fun from(root: VectorSchemaRoot): RelationReader =
+            from(
+                root.fieldVectors.map { v -> ValueVectorReader.from(v) },
+                root.rowCount
+            )
+
+        @JvmStatic
         fun concatCols(rel1: RelationReader, rel2: RelationReader): RelationReader {
+            if (rel1.vectors.isEmpty()) return rel2
+            if (rel2.vectors.isEmpty()) return rel1
             assert(rel1.rowCount == rel2.rowCount) { "Cannot concatenate relations with different row counts" }
 
             return from(rel1.vectors + rel2.vectors, rel1.rowCount)

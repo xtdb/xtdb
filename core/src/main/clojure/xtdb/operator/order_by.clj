@@ -18,9 +18,9 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader Relation$UnloadMode RowCopier)
+           (xtdb.arrow Relation Relation$Loader Relation$UnloadMode RelationReader RowCopier)
            xtdb.ICursor
-           (xtdb.vector RelationReader RelationWriter)))
+           (xtdb.vector RelationWriter)))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -49,7 +49,7 @@
     (.writePage unl)
     (.end unl)))
 
-(defn sorted-idxs ^ints [^xtdb.arrow.RelationReader read-rel, order-specs]
+(defn sorted-idxs ^ints [^RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.getRowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]

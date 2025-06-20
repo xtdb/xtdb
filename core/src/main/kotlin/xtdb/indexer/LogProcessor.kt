@@ -20,7 +20,7 @@ import xtdb.util.TxIdUtil.txIdToEpoch
 import xtdb.util.TxIdUtil.txIdToOffset
 import xtdb.util.error
 import xtdb.util.logger
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant

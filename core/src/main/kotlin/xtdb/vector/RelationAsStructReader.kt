@@ -5,9 +5,11 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.RelationReader
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.arrow.VectorPosition
+import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorWriter
 import xtdb.util.Hasher
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
@@ -19,7 +21,7 @@ class RelationAsStructReader(
     override val valueCount get() = rel.rowCount
 
     override val field get() =
-        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.vectors.map(IVectorReader::field))
+        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.vectors.map(VectorReader::field))
 
     override fun isNull(idx: Int) = false
 

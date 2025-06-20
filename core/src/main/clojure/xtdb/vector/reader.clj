@@ -4,17 +4,19 @@
   (:import java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
-           xtdb.arrow.VectorReader
-           (xtdb.vector IVectorReader RelationReader ValueVectorReadersKt)))
+           (xtdb.arrow RelationReader VectorReader)
+           (xtdb.vector IVectorReader ValueVectorReadersKt)))
 
 (defn vec->reader ^IVectorReader [^ValueVector v]
   (ValueVectorReadersKt/from v))
 
 (defn rel-reader
-  (^xtdb.vector.RelationReader [^List cols] (RelationReader/from cols))
-  (^xtdb.vector.RelationReader [cols ^long row-count] (RelationReader/from cols row-count)))
+  (^xtdb.arrow.RelationReader [^List cols] (RelationReader/from cols (or (some-> ^VectorReader (first cols)
+                                                                                 .getValueCount)
+                                                                         0)))
+  (^xtdb.arrow.RelationReader [cols ^long row-count] (RelationReader/from cols row-count)))
 
-(defn <-root ^xtdb.vector.RelationReader [^VectorSchemaRoot root]
+(defn <-root ^xtdb.arrow.RelationReader [^VectorSchemaRoot root]
   (rel-reader (map vec->reader (.getFieldVectors root))
               (.getRowCount root)))
 
@@ -23,12 +25,12 @@
                          (.createVector allocator))
                  (.setValueCount row-count))))
 
-(defn- available-col-names [^RelationReader rel]
+(defn- available-col-names [^xtdb.arrow.RelationReader rel]
   (into #{} (map #(.getName ^VectorReader %)) (.getVectors rel)))
 
 ;; we don't allocate anything here, but we need it because BaseValueVector
 ;; (a distant supertype of NullVector) thinks it needs one.
-(defn with-absent-cols ^xtdb.vector.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
+(defn with-absent-cols ^xtdb.arrow.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
   (let [row-count (.getRowCount rel)
         available-col-names (available-col-names rel)]
     (rel-reader (concat rel

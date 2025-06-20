@@ -17,7 +17,7 @@
            (org.apache.arrow.vector BigIntVector)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
-           xtdb.arrow.IntVector
+           (xtdb.arrow IntVector RelationReader)
            (xtdb.operator.group_by IGroupMapper)
            (xtdb.vector RelationWriter)))
 
@@ -61,7 +61,7 @@
 (definterface IWindowFnSpec
   (^xtdb.vector.IVectorReader aggregate [^xtdb.arrow.VectorReader groupMapping
                                          ^ints sortMapping
-                                         ^xtdb.vector.RelationReader in-rel]))
+                                         ^xtdb.arrow.RelationReader in-rel]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpecFactory
@@ -120,7 +120,7 @@
                                           (.append group-mapping (.groupMapping group-mapper in-rel))))
 
            (let [rel-rdr (vw/rel-wtr->rdr rel-wtr)
-                 sort-mapping (order-by/sorted-idxs (xtdb.arrow.RelationReader/from (conj (seq rel-rdr) group-mapping) (.getValueCount group-mapping))
+                 sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq rel-rdr) group-mapping) (.getValueCount group-mapping))
                                                     (into [[window-groups]] order-specs))]
              (util/with-open [window-cols (->> window-specs
                                                (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping rel-rdr)))]

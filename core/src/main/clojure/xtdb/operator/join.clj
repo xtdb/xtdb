@@ -99,17 +99,17 @@
   (let [left-row-count (.getRowCount left-rel)
         right-row-count (.getRowCount right-rel)
         row-count (* left-row-count right-row-count)]
-    (xtdb.vector.RelationReader/concatCols (.select left-rel
-                                                    (let [idxs (int-array row-count)]
-                                                      (dotimes [idx row-count]
-                                                        (aset idxs idx ^long (quot idx right-row-count)))
-                                                      idxs))
+    (RelationReader/concatCols (.select left-rel
+                                        (let [idxs (int-array row-count)]
+                                          (dotimes [idx row-count]
+                                            (aset idxs idx ^long (quot idx right-row-count)))
+                                          idxs))
 
-                                           (.select right-rel
-                                                    (let [idxs (int-array row-count)]
-                                                      (dotimes [idx row-count]
-                                                        (aset idxs idx ^long (rem idx right-row-count)))
-                                                      idxs)))))
+                               (.select right-rel
+                                        (let [idxs (int-array row-count)]
+                                          (dotimes [idx row-count]
+                                            (aset idxs idx ^long (rem idx right-row-count)))
+                                          idxs)))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor

@@ -11,6 +11,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.*
+import xtdb.arrow.RelationReader
 import xtdb.toLeg
 import xtdb.util.Hasher
 import xtdb.vector.extensions.SetType

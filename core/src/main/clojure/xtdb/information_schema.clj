@@ -18,12 +18,11 @@
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation VectorReader VectorWriter)
+           (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
-           xtdb.types.Fields
-           (xtdb.vector RelationReader)))
+           xtdb.types.Fields))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))

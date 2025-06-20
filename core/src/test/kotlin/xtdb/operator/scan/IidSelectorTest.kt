@@ -6,11 +6,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.arrow.Relation
 import xtdb.arrow.VectorWriter
-import xtdb.types.Fields
 import xtdb.types.Fields.IID
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import xtdb.vector.RelationWriter
 import java.nio.ByteBuffer
 import kotlin.uuid.ExperimentalUuidApi
@@ -51,7 +49,7 @@ class IidSelectorTest {
                     rel.endRow()
                 }
 
-                iidSel.select(al, rel, emptyMap(), RelationReader.from(emptyList()))
+                iidSel.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
             }
 
         assertArrayEquals(IntArray(0), testUuids(), "empty")

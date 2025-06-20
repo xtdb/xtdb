@@ -3,9 +3,9 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.RelationReader
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.RowCopier
-import xtdb.arrow.unsupported
 
 interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
     /**
@@ -29,8 +29,8 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
      */
     fun syncRowCount() = this.forEach { it.value.syncValueCount() }
 
-    fun rowCopier(inRel: RelationReader): RowCopier {
-        val copiers = inRel.vectors.map {
+    override fun rowCopier(rel: RelationReader): RowCopier {
+        val copiers = rel.vectors.map {
             it.rowCopier(vectorFor(it.name, UNION_FIELD_TYPE))
         }
 
@@ -40,15 +40,9 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
         }
     }
 
-    override fun rowCopier(rel: xtdb.arrow.RelationReader) = unsupported("IRelationWriter/rowCopier")
-
-    fun append(rel: RelationReader) {
+    override fun append(rel: RelationReader) {
         rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }
         rowCount += rel.rowCount
-    }
-
-    override fun append(rel: xtdb.arrow.RelationReader) {
-        if (rel is RelationReader) append(rel) else super.append(rel)
     }
 
     override fun openSlice(al: BufferAllocator) = toReader().openSlice(al)

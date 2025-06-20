@@ -35,14 +35,13 @@
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation VectorReader)
+           (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie MetadataFileWriter Trie)
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)
-           (xtdb.vector RelationReader)))
+           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -159,7 +158,7 @@
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
    (vw/open-vec *allocator* col-name-or-field vs)))
 
-(defn open-rel ^xtdb.vector.RelationReader [vecs]
+(defn open-rel ^xtdb.arrow.RelationReader [vecs]
   (vw/open-rel vecs))
 
 (defn open-args ^xtdb.arrow.RelationReader [args]

@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.ICursor
 import xtdb.arrow.VectorReader
 import xtdb.util.useAll
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 
 class ProjectCursor(
@@ -12,7 +12,7 @@ class ProjectCursor(
     private val inCursor: ICursor<RelationReader>,
     private val specs: List<ProjectionSpec>,
     private val schema: Map<String, Any>,
-    private val args: xtdb.arrow.RelationReader,
+    private val args: RelationReader,
 ) : ICursor<RelationReader> {
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean = inCursor.tryAdvance { inRel ->
         mutableListOf<VectorReader>().useAll { closeCols ->

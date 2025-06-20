@@ -3,7 +3,7 @@ package xtdb.operator.apply
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ICursor
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import xtdb.vector.RelationWriter
 import java.util.function.Consumer
 

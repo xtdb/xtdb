@@ -2,12 +2,14 @@ package xtdb.vector
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.vector.NullVector
+import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
 
 class MultiVectorRelationFactory(leafRels: List<RelationReader>, colNames: List<ColumnName>) {
 
-    private val readers: Map<ColumnName, List<IVectorReader>>
+    private val readers: Map<ColumnName, List<VectorReader>>
 
     init {
         val putReaders = leafRels.map { it["op"].vectorForOrNull("put") }
@@ -36,6 +38,13 @@ class MultiVectorRelationFactory(leafRels: List<RelationReader>, colNames: List<
         val readerSelection = selection(readerIndirection.toArray())
         val idxSelection = selection(idxIndirection.toArray())
 
-        return RelationReader.from(readers.map { IndirectMultiVectorReader(it.key, it.value, readerSelection, idxSelection) })
+        return RelationReader.from(
+            readers.map {
+                IndirectMultiVectorReader(
+                    it.key, it.value, readerSelection, idxSelection
+                )
+            },
+            idxSelection.valueCount()
+        )
     }
 }

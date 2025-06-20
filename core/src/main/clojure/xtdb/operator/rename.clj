@@ -8,9 +8,8 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
            (org.apache.arrow.vector.types.pojo Field)
-           xtdb.arrow.VectorReader
-           xtdb.ICursor
-           (xtdb.vector RelationReader)))
+           (xtdb.arrow RelationReader VectorReader)
+           xtdb.ICursor))
 
 (defmethod lp/ra-expr :rename [_]
   (s/cat :op #{:ρ :rho :rename}

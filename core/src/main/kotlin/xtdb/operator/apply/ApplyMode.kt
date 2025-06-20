@@ -8,7 +8,7 @@ import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
 import xtdb.types.Fields.BOOL
 import xtdb.vector.IRelationWriter
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import xtdb.vector.ValueVectorReader
 
 sealed interface ApplyMode {

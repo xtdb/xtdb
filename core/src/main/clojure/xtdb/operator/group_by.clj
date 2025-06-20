@@ -91,7 +91,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpec
-  (^void aggregate [^xtdb.vector.RelationReader inRelation,
+  (^void aggregate [^xtdb.arrow.RelationReader inRelation,
                     ^xtdb.arrow.VectorReader groupMapping])
   (^xtdb.vector.IVectorReader finish []))
 

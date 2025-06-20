@@ -10,7 +10,7 @@ import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 import xtdb.vector.MultiVectorRelationFactory
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 import xtdb.vector.RelationWriter
 import java.util.*
 import java.util.Comparator.comparing
@@ -24,7 +24,7 @@ class ScanCursor(
 
     private val mergeTasks: Iterator<MergeTask>,
 
-    private val schema: Map<String, Any>, private val args: xtdb.arrow.RelationReader,
+    private val schema: Map<String, Any>, private val args: RelationReader,
 ) : ICursor<RelationReader> {
 
     class MergeTask(val pages: List<MergePlanPage>, val path: ByteArray)

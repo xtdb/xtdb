@@ -8,9 +8,9 @@
   (:import (java.util LinkedList)
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
+           (xtdb.arrow RelationReader)
            xtdb.expression.map.IRelationMap
-           xtdb.ICursor
-           (xtdb.vector RelationReader)))
+           xtdb.ICursor))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}

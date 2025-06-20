@@ -3,7 +3,7 @@ package xtdb.query
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.IResultCursor
 import xtdb.trie.ColumnName
-import xtdb.vector.RelationReader
+import xtdb.arrow.RelationReader
 
 interface PreparedQuery {
     val paramCount: Int

@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
+import xtdb.arrow.RelationReader
 import xtdb.log.proto.TrieMetadata
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
@@ -157,7 +158,7 @@ constructor(
                 outCols.add(w.vector.openSlice().asReader)
             }
 
-            RelationReader.from(outCols)
+            RelationReader.from(outCols, rowCount)
         }
 
     private fun openWatermark(trie: MemoryHashTrie): Watermark {

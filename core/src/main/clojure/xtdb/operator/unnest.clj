@@ -11,8 +11,7 @@
            (org.apache.arrow.vector IntVector)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field FieldType)
            (xtdb ICursor)
-           (xtdb.arrow RowCopier VectorReader VectorWriter)
-           (xtdb.vector RelationReader)
+           (xtdb.arrow RelationReader RowCopier VectorReader VectorWriter)
            xtdb.vector.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)

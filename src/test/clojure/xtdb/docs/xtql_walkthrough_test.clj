@@ -344,7 +344,7 @@
                      "ivan"])))))
 
 (deftest DML-Delete-bitemporal-sql
-  (xt/submit-tx tu/*node* promotions)
+  (xt/execute-tx tu/*node* promotions)
 
   (t/is (= #{{:promotion-type "christmas"}
              {:promotion-type "general"}}
@@ -367,11 +367,11 @@
                                              :for-valid-time (from #inst "2023-12-26")})))))))
 
 (deftest DML-Delete-everything-sql
-  (xt/submit-tx tu/*node* comments)
+  (xt/execute-tx tu/*node* comments)
 
   (t/is (not (empty? (xt/q tu/*node* '(from :comments [])))))
 
-  (xt/submit-tx tu/*node*
+  (xt/execute-tx tu/*node*
     [[:sql (sql-example "DML-Delete-everything-sql")]])
 
   (t/is (empty? (xt/q tu/*node* '(from :comments []))))
