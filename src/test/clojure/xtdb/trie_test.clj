@@ -301,18 +301,3 @@
           (t/is (= [2 3] (query-bounds->pages (tu/->temporal-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
                 "2020, but only 3 can bound page 2 in 2020"))))))
 
-(deftest test-data-file-writing
-  (let [page-idx->documents
-        {0 [[:put {:xt/id #uuid "00000000-0000-0000-0000-000000000000"
-                   :foo "bar"}]
-            [:put {:xt/id #uuid "00100000-0000-0000-0000-000000000000"
-                   :foo "bar"}]]
-         1 [[:put {:xt/id #uuid "01000000-0000-0000-0000-000000000000"
-                   :foo "bar"}]]}]
-    (util/with-tmp-dirs #{tmp-dir}
-      (let [data-file-path (.resolve tmp-dir "data-file.arrow")]
-
-        (tu/write-arrow-data-file tu/*allocator* page-idx->documents data-file-path)
-
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/trie-test/data-file-writing")))
-                       tmp-dir)))))

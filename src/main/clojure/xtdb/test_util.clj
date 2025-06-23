@@ -352,51 +352,6 @@
 
     meta-rel))
 
-(defn write-arrow-data-file ^org.apache.arrow.vector.VectorSchemaRoot
-  [^BufferAllocator al, page-idx->documents, ^Path data-file-path]
-  (letfn [(normalize-doc [doc]
-            (-> (dissoc doc :xt/system-from :xt/valid-from :xt/valid-to)
-                (update-keys util/kw->normal-form-kw)))]
-    (let [data-schema (-> page-idx->documents
-                          (->> vals (apply concat) (filter #(= :put (first %)))
-                               (map (comp types/col-type->field vw/value->col-type normalize-doc second))
-                               (apply types/merge-fields))
-                          (types/field-with-name "put"))]
-      (util/with-open [data-vsr (VectorSchemaRoot/create (Trie/dataRelSchema data-schema) al)
-                       data-wtr (vw/root->writer data-vsr)
-                       os (FileOutputStream. (.toFile data-file-path))
-                       write-ch (Channels/newChannel os)
-                       aw (ArrowFileWriter. data-vsr nil write-ch)]
-        (.start aw)
-        (let [!last-iid (atom nil)
-              iid-wtr (.vectorFor data-wtr "_iid")
-              system-from-wtr (.vectorFor data-wtr "_system_from")
-              valid-from-wtr (.vectorFor data-wtr "_valid_from")
-              valid-to-wtr (.vectorFor data-wtr "_valid_to")
-              op-wtr (.vectorFor data-wtr "op")
-              put-wtr (.vectorFor op-wtr "put")
-              max-page-id (-> (keys page-idx->documents) sort last)]
-          (doseq [i (range (inc max-page-id))]
-            (doseq [[op doc] (get page-idx->documents i)]
-              (case op
-                :put (let [iid-bytes (util/->iid (:xt/id doc))]
-                       (when (and @!last-iid (> (util/compare-nio-buffers-unsigned @!last-iid iid-bytes) 0))
-                         (log/error "IID's not in required order!" (:xt/id doc)))
-                       (.writeObject iid-wtr iid-bytes)
-                       (.writeLong system-from-wtr (or (:xt/system-from doc) 0))
-                       (.writeLong valid-from-wtr (or (:xt/valid-from doc) 0))
-                       (.writeLong valid-to-wtr (or (:xt/valid-to doc) Long/MAX_VALUE))
-                       (.writeObject put-wtr (normalize-doc doc))
-                       (.endRow data-wtr)
-                       (reset! !last-iid iid-bytes))
-                (:delete :erase) (throw (UnsupportedOperationException.))))
-            (.syncRowCount data-wtr)
-            (.writeBatch aw)
-            (.clear data-wtr)
-            (.clear data-vsr))
-          (.end aw)))
-      data-file-path)))
-
 (defn open-live-table ^xtdb.indexer.LiveTable [table-name]
   (LiveTable. *allocator* BufferPool/UNUSED table-name (RowCounter. 0)))
 
