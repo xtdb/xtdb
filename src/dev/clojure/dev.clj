@@ -96,17 +96,11 @@
       (time (tu/query-ra @!q node)))))
 
 
-(defn data->struct-vec [^BaseAllocator alloc data]
-  (util/with-close-on-catch [^StructVector struct-vec (Vector/fromField alloc (types/col-type->field "my-struct" [:struct {}]))]
-    (doseq [row data]
-      (.writeObject struct-vec row))
-    struct-vec))
-
-(defn write-arrow-file [^Path path data]
+(defn write-arrow-file [^Path path, ^List data]
   (with-open [al (RootAllocator.)
               ch (util/->file-channel path #{:write :create})
-              ^StructVector struct-vec (data->struct-vec al data)]
-    (let [rel (Relation/open al ^List (into [] (.getVectors struct-vec)) (.getValueCount struct-vec))]
+              struct-vec (Vector/fromList al (types/col-type->field "my-struct" [:struct {}]) data)]
+    (let [rel (Relation. al ^List (into [] (.getVectors struct-vec)) (.getValueCount struct-vec))]
       (with-open [unloader (.startUnload rel ch)]
         (.writePage unloader)
         (.end unloader)))))

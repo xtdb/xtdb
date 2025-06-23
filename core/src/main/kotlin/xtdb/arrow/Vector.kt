@@ -21,6 +21,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toFieldType
 import xtdb.trie.ColumnName
+import xtdb.types.Fields
 import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId
@@ -218,8 +219,8 @@ sealed class Vector : VectorReader, VectorWriter {
                 .apply { loadFromArrow(vec) }
 
         @JvmStatic
-        fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>): Vector {
-            var vec: Vector = NullVector(name)
+        fun fromList(al: BufferAllocator, field: Field, values: List<*>): Vector {
+            var vec = fromField(al, field)
             try {
                 for (value in values) {
                     try {
@@ -235,5 +236,9 @@ sealed class Vector : VectorReader, VectorWriter {
                 throw t
             }
         }
+
+        @JvmStatic
+        fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
+            fromList(al, Fields.NULL.toArrowField(name), values)
     }
 }

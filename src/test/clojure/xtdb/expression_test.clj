@@ -383,8 +383,7 @@
                           (project1 '(- a -9223372036854775807) {:a 9223372036854775807}))))
 
 (defn- project-mono-value [f-sym val col-type]
-  (with-open [rel (vr/rel-reader [(doto (Vector/fromField tu/*allocator* (types/col-type->field "s" col-type))
-                                    (.writeObject val))])]
+  (with-open [rel (vr/rel-reader [(tu/open-vec (types/col-type->field "s" col-type) [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -1527,12 +1526,12 @@
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
-            (doto (Vector/fromField tu/*allocator* (types/->field col-name (ArrowType$Timestamp. time-unit "UTC") false))
-              (.writeLong value)))
+            (tu/open-vec (types/->field col-name (ArrowType$Timestamp. time-unit "UTC") false)
+                         [value]))
 
           (->dur-vec [col-name ^TimeUnit time-unit, ^long value]
-            (doto (Vector/fromField tu/*allocator* (types/->field col-name (ArrowType$Duration. time-unit) false))
-              (.writeLong value)))
+            (tu/open-vec (types/->field col-name (ArrowType$Duration. time-unit) false)
+                         [value]))
 
           (test-projection [f-sym ->x-vec ->y-vec]
             (with-open [^Vector x-vec (->x-vec)
@@ -1888,10 +1887,9 @@
                                           (+ (. x b) (nth (. x c) 1))]})))))
 
 (t/deftest absent-handling-2944
-  (with-open [rel (vr/rel-reader [(doto (Vector/fromField tu/*allocator*
-                                                          (types/col-type->field "x" [:struct '{maybe-float [:union #{:f64 :null}]
-                                                                                                maybe-str [:union #{:utf8 :null}]}]))
-                                    (.writeObject {}))])]
+  (with-open [rel (vr/rel-reader [(tu/open-vec (types/col-type->field "x" [:struct '{maybe-float [:union #{:f64 :null}]
+                                                                                     maybe-str [:union #{:utf8 :null}]}])
+                                               [{}])])]
 
     (t/is (= {:res [nil], :res-type [:union #{:f64 :null}]}
              (run-projection rel '(+ 42.0 (. x maybe-float)))))

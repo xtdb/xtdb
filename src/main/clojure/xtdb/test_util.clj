@@ -23,7 +23,7 @@
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util LinkedList)
+           (java.util LinkedList List)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -151,8 +151,11 @@
   (then-await-tx node)
   (li/finish-block! node))
 
-(defn open-vec ^xtdb.arrow.Vector [col-name rows]
-  (Vector/fromList *allocator* col-name rows))
+(defn open-vec ^xtdb.arrow.Vector [col-name-or-field ^List rows]
+  (cond
+    (string? col-name-or-field) (Vector/fromList *allocator* ^String col-name-or-field rows)
+    (instance? Field col-name-or-field) (Vector/fromList *allocator* ^Field col-name-or-field rows)
+    :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field}))))
 
 (defn open-rel ^xtdb.arrow.RelationReader [rows-or-cols]
   (cond
@@ -399,4 +402,3 @@
    (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
      {:res (xt/q node query opts)
       :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.getColumnFields prepared-q []))})))
-

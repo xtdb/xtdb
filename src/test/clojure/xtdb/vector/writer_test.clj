@@ -393,6 +393,5 @@
                                                 #xt.arrow/field ["type" #xt.arrow/field-type [#xt.arrow/type :keyword false]]]]
         vs [{:data {:type :foo}}
             {:type :bar}]]
-    (with-open [al (RootAllocator.)
-                vec (vw/open-vec al field vs)]
-      (t/is (= vs (tu/vec->vals (vr/vec->reader vec)))))))
+    (with-open [vec (tu/open-vec field vs)]
+      (t/is (= vs (tu/vec->vals vec))))))
