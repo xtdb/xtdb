@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import clojure.lang.Keyword
 import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.ArrowBuf
@@ -18,9 +19,12 @@ import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation.UnloadMode.FILE
 import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
+import xtdb.toFieldType
 import xtdb.trie.FileSize
 import xtdb.types.NamelessField
 import xtdb.util.closeAll
+import xtdb.util.closeOnCatch
+import xtdb.util.normalForm
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.*
@@ -47,7 +51,7 @@ class Relation(
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
     override operator fun get(name: String) = vectorFor(name)
 
-    override fun vectorFor(name: String, fieldType: FieldType): VectorWriter =
+    override fun vectorFor(name: String, fieldType: FieldType): Vector =
         vecs.compute(name) { _, v ->
             v?.maybePromote(al, fieldType)
                 ?: fromField(al, Field(name, fieldType, null))
@@ -360,8 +364,13 @@ class Relation(
         fun open(al: BufferAllocator, fields: List<Field>) =
             Relation(al, fields.map { fromField(al, it) }, 0)
 
+        @JvmStatic
         fun open(al: BufferAllocator, fields: SequencedMap<String, NamelessField>) =
             open(al, fields.map { (name, field) -> field.toArrowField(name) })
+
+        @JvmStatic
+        fun openFromRows(al: BufferAllocator, rows: List<Map<*, *>>): Relation =
+            Relation(al).closeOnCatch { rel -> rel.also { for (row in rows) it.writeRow(row) } }
     }
 
     /**

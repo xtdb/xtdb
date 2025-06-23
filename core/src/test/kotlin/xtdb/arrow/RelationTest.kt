@@ -239,4 +239,27 @@ class RelationTest {
             )
         }
     }
+
+    @Test
+    fun testWriteRows() {
+        val rows = listOf(
+            mapOf("foo" to 32),
+            mapOf("foo" to 64, "bar" to "hello"),
+            mapOf("bar" to listOf("a", "promotion"))
+        )
+        Relation.openFromRows(allocator, rows).use { rel ->
+            assertEquals(
+                Schema(
+                    "foo" to Fields.I32.nullable,
+                    "bar" to Fields.Union(
+                        "utf8" to Fields.UTF8.nullable,
+                        "list" to Fields.List(Fields.UTF8, "_")
+                    )
+                ),
+                rel.schema
+            )
+
+            assertEquals(rows, rel.toMaps(SNAKE_CASE_STRING))
+        }
+    }
 }

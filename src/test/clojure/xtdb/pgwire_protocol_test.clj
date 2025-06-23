@@ -18,7 +18,7 @@
     (binding [*port* (:port server)]
       (f))))
 
-(t/use-fixtures :each tu/with-mock-clock tu/with-node with-port)
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node with-port)
 
 (defn bytes->str [^bytes arr]
   (String. arr StandardCharsets/UTF_8))
@@ -69,6 +69,7 @@
                                                 :->node {"xtdb" (-> tu/*node*
                                                                     (assoc :authn (authn/->UserTableAuthn authn-rules
                                                                                                           (util/component tu/*node* :xtdb.query/query-source))))}}
+                                       :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)

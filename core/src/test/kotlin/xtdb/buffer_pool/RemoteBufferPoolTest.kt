@@ -18,6 +18,7 @@ import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
 import xtdb.arrow.I32
 import xtdb.arrow.Relation
+import xtdb.types.Fields
 import java.nio.file.Files.createTempDirectory
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
@@ -53,8 +54,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
     @Test
     fun arrowIpcTest() {
         val path = Path.of("aw")
-        val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
-        Relation.open(allocator, schema).use { relation ->
+        Relation.open(allocator, linkedMapOf("a" to Fields.I32)).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
