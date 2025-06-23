@@ -19,6 +19,8 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.toFieldType
+import xtdb.trie.ColumnName
 import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId
@@ -214,5 +216,24 @@ sealed class Vector : VectorReader, VectorWriter {
         fun fromArrow(vec: ValueVector): Vector =
             (if (vec is ArrowNullVector) NullVector(vec.name) else fromField(vec.allocator, vec.field))
                 .apply { loadFromArrow(vec) }
+
+        @JvmStatic
+        fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>): Vector {
+            var vec: Vector = NullVector(name)
+            try {
+                for (value in values) {
+                    try {
+                        vec.writeObject(value)
+                    } catch (_: InvalidWriteObjectException) {
+                        vec = vec.maybePromote(al, value.toFieldType())
+                        vec.writeObject(value)
+                    }
+                }
+                return vec
+            } catch (t: Throwable) {
+                vec.close()
+                throw t
+            }
+        }
     }
 }

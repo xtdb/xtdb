@@ -5,7 +5,8 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw])
   (:import [xtdb.arrow IntVector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -121,16 +122,16 @@
 (t/deftest test-promoting-sum
   (with-open [group-mapping (doto (IntVector. tu/*allocator* "gm" false)
                               (.writeAll (map int [0 0 0])))
-              v0 (tu/open-vec "v" [1 2 3])
-              v1 (tu/open-vec "v" [1 2.0 3])]
+              v0 (tu/open-rel {:v [1 2 3]})
+              v1 (tu/open-rel {:v [1 2.0 3]})]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
       (t/is (= [:union #{:null :f64}] (types/field->col-type (.getField sum-factory))))
       (try
 
-        (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v0)]) group-mapping)
-        (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v1)]) group-mapping)
+        (.aggregate sum-spec v0 group-mapping)
+        (.aggregate sum-spec v1 group-mapping)
         (t/is (= [12.0] (.toList (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
@@ -323,22 +324,22 @@
   (with-open [gm0 (doto (IntVector. tu/*allocator* "gm0" false)
                     (.writeAll (map int [0 1 0])))
 
-              k0 (tu/open-vec "k" [1 2 3])
+              k0 (vr/vec->reader (vw/open-vec tu/*allocator* "k" [1 2 3]))
 
               gm1 (doto (IntVector. tu/*allocator* "gm1" false)
                     (.writeAll (map int [1 2 0])))
-              k1 (tu/open-vec "k" [4 5 6])]
+
+              k1 (vr/vec->reader (vw/open-vec tu/*allocator* "k" [4 5 6]))]
+
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
-                                                     :to-name 'vs, :zero-row? true})
-          agg-spec (.build agg-factory tu/*allocator*)]
-      (try
+                                                     :to-name 'vs, :zero-row? true})]
+      (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
         (t/is (= [:list :i64] (types/field->col-type (.getField agg-factory))))
 
-        (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k0)]) gm0)
-        (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k1)]) gm1)
-        (t/is (= [[1 3 6] [2 4] [5]] (.toList (.finish agg-spec))))
-        (finally
-          (util/try-close agg-spec))))))
+        (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
+        (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
+
+        (t/is (= [[1 3 6] [2 4] [5]] (.toList (.finish agg-spec))))))))
 
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
   (t/is (= [{}]

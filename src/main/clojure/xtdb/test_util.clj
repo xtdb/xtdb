@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
+            [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
@@ -31,7 +32,7 @@
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation RelationReader VectorReader)
+           (xtdb.arrow Relation RelationReader Vector VectorReader)
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
@@ -150,12 +151,18 @@
   (then-await-tx node)
   (li/finish-block! node))
 
-(defn open-vec
-  (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
-   (vw/open-vec *allocator* col-name-or-field vs)))
+(defn open-vec ^xtdb.arrow.Vector [col-name rows]
+  (Vector/fromList *allocator* col-name rows))
 
-(defn open-rel ^xtdb.arrow.RelationReader [vecs]
-  (vw/open-rel vecs))
+(defn open-rel ^xtdb.arrow.RelationReader [rows-or-cols]
+  (cond
+    (and (map? rows-or-cols) (every? sequential? (vals rows-or-cols)))
+    (Relation/openFromCols *allocator* rows-or-cols)
+
+    (and (sequential? rows-or-cols) (every? map? rows-or-cols))
+    (Relation/openFromRows *allocator* rows-or-cols)
+
+    :else (throw (err/incorrect ::invalid-rel {:rows-or-cols rows-or-cols}))))
 
 (defn open-args ^xtdb.arrow.RelationReader [args]
   (vw/open-args *allocator* args))

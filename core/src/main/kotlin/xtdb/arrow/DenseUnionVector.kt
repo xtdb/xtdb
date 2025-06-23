@@ -95,6 +95,12 @@ class DenseUnionVector(
 
         override val metadataFlavours get() = inner.metadataFlavours
 
+        override fun valueReader(pos: VectorPosition) = inner.valueReader(object : VectorPosition {
+            override var position: Int
+                get() = getOffset(pos.position)
+                set(_) { throw UnsupportedOperationException("setPosition not supported on LegVector")}
+        })
+
         private fun writeValueThen(): VectorWriter {
             if (!nested) {
                 typeBuffer.writeByte(typeId)

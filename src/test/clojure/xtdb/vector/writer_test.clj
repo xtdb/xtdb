@@ -1,6 +1,5 @@
 (ns xtdb.vector.writer-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr]
@@ -352,7 +351,7 @@
   (let [x [{:a [5], :b 1}
            {:a [12.0], :b 5, :c 1}
            {:b 1.5}]]
-    (with-open [rel (tu/open-rel [(tu/open-vec "x" x)])]
+    (with-open [rel (tu/open-rel {:x x})]
       (t/is (= x (mapv :x (.toMaps rel))))))
 
   (let [x [{:a 42}
@@ -360,7 +359,7 @@
            {:b 10, :c [8 1.5]}
            {:a 15, :b 25}
            10.0]]
-    (with-open [rel (tu/open-rel [(tu/open-vec "x" x)])]
+    (with-open [rel (tu/open-rel {:x x})]
       (t/is (= x (mapv :x (.toMaps rel)))))))
 
 (deftest writes-map-vector

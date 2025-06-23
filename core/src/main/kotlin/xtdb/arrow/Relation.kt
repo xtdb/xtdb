@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import clojure.lang.Keyword
+import clojure.lang.Symbol
 import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.ArrowBuf
@@ -23,8 +24,10 @@ import xtdb.toFieldType
 import xtdb.trie.FileSize
 import xtdb.types.NamelessField
 import xtdb.util.closeAll
+import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
+import xtdb.util.safeMap
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.*
@@ -371,6 +374,19 @@ class Relation(
         @JvmStatic
         fun openFromRows(al: BufferAllocator, rows: List<Map<*, *>>): Relation =
             Relation(al).closeOnCatch { rel -> rel.also { for (row in rows) it.writeRow(row) } }
+
+        @JvmStatic
+        fun openFromCols(al: BufferAllocator, cols: Map<*, List<*>>): Relation =
+            cols.entries.safeMap { col ->
+                val normalKey = when (val k = col.key) {
+                    is String -> k
+                    is Symbol -> normalForm(k).toString()
+                    is Keyword -> normalForm(k.sym).toString()
+                    else -> throw IllegalArgumentException("Column name must be a string, keyword or symbol")
+                }
+
+                Vector.fromList(al,normalKey, col.value)
+            }.closeAllOnCatch { Relation(al, it, it.firstOrNull()?.valueCount ?: 0) }
     }
 
     /**

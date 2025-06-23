@@ -180,9 +180,6 @@
   (util/with-close-on-catch [res (.createVector field allocator)]
     (doto res (write-vec! vs))))
 
-(defn open-rel ^xtdb.arrow.RelationReader [vecs]
-  (vr/rel-reader (map vr/vec->reader vecs)))
-
 (defn open-args ^xtdb.arrow.RelationReader [allocator args]
   (let [args-map (->> args
                       (into {} (map-indexed (fn [idx v]

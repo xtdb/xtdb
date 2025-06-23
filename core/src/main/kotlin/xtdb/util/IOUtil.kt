@@ -54,7 +54,7 @@ inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.useAll(block: (L) -> R): R
         closeAll()
     }
 
-inline fun <C : AutoCloseable?, L : Iterable<C>, R : AutoCloseable?> L.safeMap(block: (C) -> R): List<R> =
+inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMap(block: (C) -> R): List<R> =
     mutableListOf<R>().closeAllOnCatch { els ->
         for (el in this) {
             els.add(block(el))
