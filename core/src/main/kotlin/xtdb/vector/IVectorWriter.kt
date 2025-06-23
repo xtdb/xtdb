@@ -107,11 +107,6 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
     override fun isNull(idx: Int): Boolean = unsupported("IVectorWriter/isNull")
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? = unsupported("IVectorWriter/getObject")
 
-    fun append(v: IVectorReader) {
-        val copier = v.rowCopier(this)
-        repeat(v.valueCount) { copier.copyRow(it) }
-    }
-
     override fun clear() {
         vector.clear()
         valueCount = 0
@@ -189,7 +184,7 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
     }
 }
 
-internal val IVectorWriter.asReader: IVectorReader
+internal val IVectorWriter.asReader: VectorReader
     get() {
         syncValueCount()
         return ValueVectorReader.from(vector)

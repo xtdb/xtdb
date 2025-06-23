@@ -29,7 +29,7 @@ class IndirectMultiVectorReader(
 ) : IVectorReader {
 
     private val fields: List<Field?> = readers.map { it?.field }
-    private val legReaders = ConcurrentHashMap<String, IVectorReader>()
+    private val legReaders = ConcurrentHashMap<String, VectorReader>()
     private val vectorField by lazy(LazyThreadSafetyMode.PUBLICATION) {
         MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field
     }
@@ -94,7 +94,7 @@ class IndirectMultiVectorReader(
     private fun range(start: Int, len: Int): IntArray = IntArray(len) { it + start }
     private fun repeat(len: Int, item: Int): IntArray = IntArray(len) { item }
 
-    override val listElements: IVectorReader
+    override val listElements: VectorReader
         get() {
             val listElementReaders = readers.map { it?.listElements }
             var readerIndirectionArray = intArrayOf()
@@ -119,10 +119,10 @@ class IndirectMultiVectorReader(
 
     override fun getListCount(idx: Int): Int = safeReader(idx).getListCount(vectorIndirections[idx])
 
-    override val mapKeys: IVectorReader
+    override val mapKeys: VectorReader
         get() = IndirectMultiVectorReader("key", readers.map { it?.mapKeys }, readerIndirection, vectorIndirections)
 
-    override val mapValues: IVectorReader
+    override val mapValues: VectorReader
         get() = IndirectMultiVectorReader("value", readers.map { it?.mapValues }, readerIndirection, vectorIndirections)
 
     override fun getLeg(idx: Int): String? {
@@ -133,7 +133,7 @@ class IndirectMultiVectorReader(
         }
     }
 
-    override fun vectorForOrNull(name: String): IVectorReader {
+    override fun vectorForOrNull(name: String): VectorReader {
         return legReaders.computeIfAbsent(name) {
             val validReaders = readers.zip(fields).map { (reader, field) ->
                 if (reader == null) null
@@ -177,7 +177,7 @@ class IndirectMultiVectorReader(
                 }
             }.toSet()
 
-    override fun copyTo(vector: ValueVector): IVectorReader {
+    override fun copyTo(vector: ValueVector): VectorReader {
         val writer = writerFor(vector)
         val copier = rowCopier(writer)
 

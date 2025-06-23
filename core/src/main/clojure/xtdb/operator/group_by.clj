@@ -41,7 +41,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
   (^xtdb.arrow.VectorReader groupMapping [^xtdb.arrow.RelationReader inRelation])
-  (^Iterable #_<IVectorReader> finish []))
+  (^Iterable #_<VectorReader> finish []))
 
 (deftype NullGroupMapper [^VectorWriter group-mapping]
   IGroupMapper
@@ -93,7 +93,7 @@
 (definterface IAggregateSpec
   (^void aggregate [^xtdb.arrow.RelationReader inRelation,
                     ^xtdb.arrow.VectorReader groupMapping])
-  (^xtdb.vector.IVectorReader finish []))
+  (^xtdb.arrow.VectorReader finish []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpecFactory

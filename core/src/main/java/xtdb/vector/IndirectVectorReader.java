@@ -18,10 +18,10 @@ import static xtdb.arrow.VectorIndirection.selection;
 
 class IndirectVectorReader implements IVectorReader {
 
-    private final IVectorReader reader;
+    private final VectorReader reader;
     private final VectorIndirection indirection;
 
-    IndirectVectorReader(IVectorReader reader, VectorIndirection indirection) {
+    IndirectVectorReader(VectorReader reader, VectorIndirection indirection) {
         if (reader instanceof IndirectVectorReader ivr) {
             this.reader = ivr.reader;
             var idxs = IntStream.range(0, indirection.valueCount())
@@ -119,7 +119,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public @Nullable IVectorReader vectorForOrNull(@NotNull String name) {
+    public @Nullable VectorReader vectorForOrNull(@NotNull String name) {
         var inner = reader.vectorForOrNull(name);
         return inner == null ? null : new IndirectVectorReader(inner, indirection);
     }
@@ -130,7 +130,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader getListElements() {
+    public VectorReader getListElements() {
         return reader.getListElements();
     }
 
@@ -145,12 +145,12 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader getMapKeys() {
+    public VectorReader getMapKeys() {
         return reader.getMapKeys();
     }
 
     @Override
-    public IVectorReader getMapValues() {
+    public VectorReader getMapValues() {
         return reader.getMapValues();
     }
 
@@ -165,7 +165,7 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader copyTo(ValueVector vector) {
+    public VectorReader copyTo(ValueVector vector) {
         IVectorWriter writer = FieldVectorWriters.writerFor(vector);
         var copier = rowCopier(writer);
 
@@ -185,13 +185,13 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader select(int[] idxs) {
+    public VectorReader select(int[] idxs) {
         var sel = selection(Arrays.stream(idxs).map(indirection::getIndex).toArray());
         return new IndirectVectorReader(reader, sel);
     }
 
     @Override
-    public IVectorReader select(int startIdx, int len) {
+    public VectorReader select(int startIdx, int len) {
         return select(IntStream.range(startIdx, startIdx + len).toArray());
     }
 

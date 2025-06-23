@@ -2,23 +2,22 @@
   (:require [clojure.string :as str]
             [clojure.test :as t]
             [clojure.test.check :as tc]
-            [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
+            [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.util :as util])
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (java.math BigDecimal)
            (java.net URI)
            (java.nio ByteBuffer)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field FieldType)
-           xtdb.arrow.VectorIndirection
-           (xtdb.vector IVectorReader IndirectMultiVectorReader)
-           (xtdb.types ClojureForm)))
+           (xtdb.arrow VectorIndirection VectorReader)
+           (xtdb.types ClojureForm)
+           (xtdb.vector IndirectMultiVectorReader)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -160,9 +159,9 @@
   (gen/let [n (gen/choose 1 10)
             vecs (gen/vector (generate-vector al) n)]
     (let [rdrs (map vr/vec->reader vecs)
-          rdr-indirects (->> (map-indexed #(repeat (.getValueCount ^IVectorReader %2) %1) rdrs)
+          rdr-indirects (->> (map-indexed #(repeat (.getValueCount ^VectorReader %2) %1) rdrs)
                              (apply concat))
-          vec-indirects (mapcat #(range (.getValueCount ^IVectorReader %)) rdrs)
+          vec-indirects (mapcat #(range (.getValueCount ^VectorReader %)) rdrs)
           [rdr-indirects vec-indirects] (same-shuffle rdr-indirects vec-indirects)]
       (IndirectMultiVectorReader. "foo" rdrs
                                   (VectorIndirection/selection (int-array rdr-indirects))
@@ -170,7 +169,7 @@
 
 #_
 (defspec ^:integration read-multi-vec 20
-  (prop/for-all [^IVectorReader multi-rdr (multi-vec-reader tu/*allocator*)]
+  (prop/for-all [^VectorReader multi-rdr (multi-vec-reader tu/*allocator*)]
     (let [res (= (.getValueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
       (.close multi-rdr)
       res)))
@@ -180,7 +179,7 @@
                        (vr/vec->reader v))]
                   [1 (multi-vec-reader al)]]))
 
-(defn- copy-all ^IVectorReader [^IVectorReader rdr ^BufferAllocator al]
+(defn- copy-all ^VectorReader [^VectorReader rdr ^BufferAllocator al]
   (let [v (.createVector (.getField rdr) al)
         wrt (vw/->writer v)
         copier (.rowCopier rdr wrt)]
@@ -190,7 +189,7 @@
 
 #_
 (defspec ^:integration row-copiers 50
-  (prop/for-all [^IVectorReader rdr (gen-rdr tu/*allocator*)]
+  (prop/for-all [^VectorReader rdr (gen-rdr tu/*allocator*)]
     (with-open [copied-rdr (copy-all rdr tu/*allocator*)]
       (let [res (= (tu/vec->vals rdr) (tu/vec->vals copied-rdr))]
         (.close rdr)
@@ -220,7 +219,7 @@
 
 
   (defn- read-multi-vec-prop [^BufferAllocator al]
-    (prop/for-all [^IVectorReader multi-rdr (multi-vec-reader al)]
+    (prop/for-all [^VectorReader multi-rdr (multi-vec-reader al)]
       (let [res (= (.getValueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
         (.close multi-rdr)
         res)))
@@ -229,7 +228,7 @@
     (tc/quick-check 10 (read-multi-vec-prop al)))
 
   (defn- row-copiers-prop  [^BufferAllocator al]
-    (prop/for-all [^IVectorReader rdr (gen-rdr al)]
+    (prop/for-all [^VectorReader rdr (gen-rdr al)]
       (with-open [copied-rdr (copy-all rdr al)]
         (let [res (= (tu/vec->vals rdr) (tu/vec->vals copied-rdr))]
           (.close rdr)

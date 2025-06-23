@@ -5,7 +5,6 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.VectorReader
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.HashTrie.Companion.bucketFor
-import xtdb.vector.IVectorReader
 
 private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024

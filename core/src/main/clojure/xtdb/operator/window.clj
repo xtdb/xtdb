@@ -59,9 +59,9 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpec
-  (^xtdb.vector.IVectorReader aggregate [^xtdb.arrow.VectorReader groupMapping
-                                         ^ints sortMapping
-                                         ^xtdb.arrow.RelationReader in-rel]))
+  (^xtdb.arrow.VectorReader aggregate [^xtdb.arrow.VectorReader groupMapping
+                                       ^ints sortMapping
+                                       ^xtdb.arrow.RelationReader in-rel]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpecFactory

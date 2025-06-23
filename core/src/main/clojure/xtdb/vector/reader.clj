@@ -5,9 +5,9 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            (xtdb.arrow RelationReader VectorReader)
-           (xtdb.vector IVectorReader ValueVectorReadersKt)))
+           (xtdb.vector ValueVectorReadersKt)))
 
-(defn vec->reader ^IVectorReader [^ValueVector v]
+(defn vec->reader ^VectorReader [^ValueVector v]
   (ValueVectorReadersKt/from v))
 
 (defn rel-reader

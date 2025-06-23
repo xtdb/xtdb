@@ -5,6 +5,7 @@ import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
 import xtdb.types.Fields
 import xtdb.types.withName
@@ -25,13 +26,12 @@ interface ProjectionSpec {
         inRel: RelationReader,
         schema: Map<String, Any>,
         args: RelationReader
-    ): IVectorReader
+    ): VectorReader
 
     class Identity(override val field: Field) : ProjectionSpec {
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
-        ): IVectorReader =
-            inRel[field.name] as IVectorReader
+        ): VectorReader = inRel[field.name]
     }
 
     class RowNumber(colName: ColumnName) : ProjectionSpec {
@@ -75,6 +75,6 @@ interface ProjectionSpec {
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
         ) =
-            inRel.vectorFor(fromName).withName(field.name) as IVectorReader
+            inRel.vectorFor(fromName).withName(field.name)
     }
 }

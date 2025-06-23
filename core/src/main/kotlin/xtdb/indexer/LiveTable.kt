@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorReader
 import xtdb.log.proto.TrieMetadata
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
@@ -30,7 +31,7 @@ constructor(
 
     @FunctionalInterface
     fun interface LiveTrieFactory {
-        operator fun invoke(iidWtr: IVectorReader): MemoryHashTrie
+        operator fun invoke(iidWtr: VectorReader): MemoryHashTrie
     }
 
     val liveRelation: IRelationWriter = Trie.openLogDataWriter(al)
@@ -152,7 +153,7 @@ constructor(
             .associateBy { it.name }
 
     private fun IRelationWriter.openWatermarkLiveRel(): RelationReader =
-        mutableListOf<IVectorReader>().closeAllOnCatch { outCols ->
+        mutableListOf<VectorReader>().closeAllOnCatch { outCols ->
             for ((_, w) in this) {
                 w.syncValueCount()
                 outCols.add(w.vector.openSlice().asReader)

@@ -206,7 +206,7 @@
 
 (def empty-args RelationReader/DUAL)
 
-(defn vec-wtr->rdr ^xtdb.vector.IVectorReader [^xtdb.vector.IVectorWriter w]
+(defn vec-wtr->rdr ^xtdb.arrow.VectorReader [^xtdb.vector.IVectorWriter w]
   (vr/vec->reader (.getVector (doto w (.syncValueCount)))))
 
 (defn rel-wtr->rdr ^xtdb.arrow.RelationReader [^xtdb.vector.IRelationWriter w]
