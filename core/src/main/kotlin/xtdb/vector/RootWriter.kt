@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.Relation
+import xtdb.arrow.RelationReader
 
 class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
     private val writers: MutableMap<String, IVectorWriter> =
@@ -32,9 +33,14 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
         writers.values.forEach { it.syncValueCount() }
     }
 
-    override fun openDirectSlice(al: BufferAllocator) = Relation.fromRoot(root)
+    override fun openDirectSlice(al: BufferAllocator): Relation {
+        syncRowCount()
+        return Relation.fromRoot(root)
+    }
 
     override fun close() {
         writers.values.forEach { it.close() }
     }
+
+    override val asReader get() = RelationReader.from(vectors.map { it.asReader }, rowCount)
 }

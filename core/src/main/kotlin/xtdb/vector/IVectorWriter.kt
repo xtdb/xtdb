@@ -37,6 +37,12 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
         vector.valueCount = this.valueCount
     }
 
+    override val asReader: VectorReader
+        get() {
+            syncValueCount()
+            return ValueVectorReader.from(vector)
+        }
+
     // This is essentially the promoteChildren for monomorphic vectors except NullVector
     fun promoteChildren(field: Field) {
         when {
@@ -183,9 +189,3 @@ internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): F
         }
     }
 }
-
-internal val IVectorWriter.asReader: VectorReader
-    get() {
-        syncValueCount()
-        return ValueVectorReader.from(vector)
-    }

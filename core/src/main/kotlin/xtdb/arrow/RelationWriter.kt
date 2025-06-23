@@ -49,4 +49,6 @@ interface RelationWriter : RelationReader {
     fun writeRows(vararg rows: Map<*, *>) {
         rows.forEach(::writeRow)
     }
+
+    val asReader: RelationReader get() = this
 }
