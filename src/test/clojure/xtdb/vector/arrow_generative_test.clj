@@ -194,14 +194,6 @@
       (let [res (= (tu/vec->vals rdr) (tu/vec->vals copied-rdr))]
         (.close rdr)
         res))))
-#_
-(defspec ^:integration transfer-pair 100
-  (prop/for-all [{:keys [field vs]} (field+data-gen 100)]
-    (with-open [al (RootAllocator.)
-                vec (vw/open-vec al field vs)
-                copied-vec (util/slice-vec vec)]
-      (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec))))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; interactive versions
@@ -235,13 +227,4 @@
           res))))
 
   (with-open [al (RootAllocator.)]
-    (tc/quick-check 10 (row-copiers-prop al)))
-
-  (def transfer-pair-prop
-    (prop/for-all [{:keys [field vs]} (field+data-gen 100)]
-      (with-open [al (RootAllocator.)
-                  vec (vw/open-vec al field vs)
-                  copied-vec (util/slice-vec vec)]
-        (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec))))))
-
-  (tc/quick-check 100 transfer-pair-prop))
+    (tc/quick-check 10 (row-copiers-prop al))))

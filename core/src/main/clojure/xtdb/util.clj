@@ -352,31 +352,6 @@
 
 ;;; Arrow
 
-(defn slice-vec
-  (^org.apache.arrow.vector.ValueVector [^ValueVector v] (slice-vec v 0))
-  (^org.apache.arrow.vector.ValueVector [^ValueVector v, ^long start-idx] (slice-vec v start-idx (.getValueCount v)))
-
-  (^org.apache.arrow.vector.ValueVector [^ValueVector v, ^long start-idx, ^long len]
-   (cond
-     ;; see #3088
-     (and (instance? ListVector v) (= 0 start-idx len))
-     (ListVector/empty (.getName v) (.getAllocator v))
-
-     (and (instance? UnionVector v) (= 0 start-idx len))
-     (doto (UnionVector/empty (.getName v) (.getAllocator v))
-       (.initializeChildrenFromFields (.getChildren (.getField v))))
-
-     ;; doesn't preserve nullability otherwise
-     (instance? BaseFixedWidthVector v)
-     (-> (.getTransferPair v (.getField v) (.getAllocator v))
-         (doto (.splitAndTransfer start-idx len))
-         (.getTo))
-
-     :else
-     (-> (.getTransferPair v (.getAllocator v))
-         (doto (.splitAndTransfer start-idx len))
-         (.getTo)))))
-
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
 

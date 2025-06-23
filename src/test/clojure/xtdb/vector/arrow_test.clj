@@ -2,10 +2,8 @@
   "Mainly for tests of previously existing bugs in arrow."
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]))
+            [xtdb.test-util :as tu])
+  (:import (xtdb.arrow Vector)))
 
 (t/use-fixtures :each tu/with-node tu/with-allocator)
 
@@ -33,35 +31,37 @@
              (xt/q tu/*node* '(from :table1 [*]))))))
 
 (deftest test-extension-vector-slicing
-  (with-open [vec (vw/open-vec tu/*allocator* #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :keyword false]] [:A])
-              copied-vec (util/slice-vec vec)]
+  (with-open [vec (tu/open-vec "0" [:A])
+              copied-vec (.openSlice vec tu/*allocator*)]
     (t/is (= #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :keyword false]]
              (.getField copied-vec)))
-    (t/is (= :A (.getObject (vr/vec->reader copied-vec) 0)))))
+    (t/is (= :A (.getObject copied-vec 0)))))
 
 (deftest empty-list-with-nested-lists-slicing-3377
   (t/testing "empty list of lists"
-    (with-open [vec (vw/open-vec tu/*allocator*
-                                 #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
-                                 [[]])
-                copied-vec (util/slice-vec vec)]
-      (t/is (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec))))))
+    (with-open [vec (doto (Vector/fromField tu/*allocator*
+                                            #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                             #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                                              #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]])
+                      (.writeObject []))
+                copied-vec (.openSlice vec tu/*allocator*)]
+      (t/is (= (.toList vec) (.toList copied-vec)))))
 
   (t/testing "empty set of lists"
-    (with-open [vec (vw/open-vec tu/*allocator*
-                                 #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :set false]
-                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
-                                 [#{}])
-                copied-vec (util/slice-vec vec)]
-      (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec)))))
+    (with-open [vec (doto (Vector/fromField tu/*allocator*
+                                            #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :set false]
+                                                             #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                                              #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]])
+                      (.writeObject #{}))
+                copied-vec (.openSlice vec tu/*allocator*)]
+      (= (.toList vec) (.toList copied-vec))))
+
   (t/testing "empty list of sets"
-    (with-open [vec (vw/open-vec tu/*allocator*
-                                 #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :set false]
-                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
-                                 [[] [#{}]])
-                copied-vec (util/slice-vec vec)]
-      (= (tu/vec->vals (vr/vec->reader vec)) (tu/vec->vals (vr/vec->reader copied-vec))))))
+    (with-open [vec (doto (Vector/fromField tu/*allocator*
+                                            #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
+                                                             #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :set false]
+                                                                              #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]])
+                      (.writeObject [])
+                      (.writeObject [#{}]))
+                copied-vec (.openSlice vec tu/*allocator*)]
+      (= (.toList vec) (.toList copied-vec)))))

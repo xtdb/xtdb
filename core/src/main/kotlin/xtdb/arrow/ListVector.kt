@@ -16,19 +16,26 @@ import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 
 internal val LIST: ArrowType.List = ArrowType.List.INSTANCE
 
-class ListVector(
+class ListVector private constructor(
     private val allocator: BufferAllocator,
     override var name: String, override var nullable: Boolean,
     private var elVector: Vector,
+    private val validityBuffer: ExtensibleBuffer,
+    private val offsetBuffer: ExtensibleBuffer,
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
+
+    constructor(
+        allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector,
+    ) : this(
+        allocator, name, nullable, elVector,
+        ExtensibleBuffer(allocator), ExtensibleBuffer(allocator)
+    )
 
     override val type: ArrowType = LIST
 
     override val vectors: Iterable<Vector> get() = listOf(elVector)
 
-    private val validityBuffer = ExtensibleBuffer(allocator)
-    private val offsetBuffer = ExtensibleBuffer(allocator)
 
     private var lastOffset: Int = 0
 
@@ -152,7 +159,13 @@ class ListVector(
         valueCount = vec.valueCount
     }
 
-    override fun openSlice(al: BufferAllocator) = ListVector(al, name, nullable, elVector.openSlice(al), valueCount)
+    override fun openSlice(al: BufferAllocator) =
+        ListVector(
+            al, name, nullable, elVector.openSlice(al),
+            validityBuffer.openSlice(al),
+            offsetBuffer.openSlice(al),
+            valueCount
+        )
 
     override fun valueReader(pos: VectorPosition): ValueReader {
         val elPos = VectorPosition.build()
