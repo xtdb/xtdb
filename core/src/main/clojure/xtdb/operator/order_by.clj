@@ -119,11 +119,11 @@
                                        (catch Exception t
                                          (throw (ex-info "unable to read file" {:file-name file-name} t)))))
                                    filenames)
-                     rels (mapv #(Relation. allocator (.getSchema ^Relation$Loader %)) loaders)]
+                     rels (mapv #(Relation/open allocator (.getSchema ^Relation$Loader %)) loaders)]
 
       (let [copiers (object-array k)
             positions (int-array k)]
-        (with-open [out-rel (Relation. allocator fields)
+        (with-open [out-rel (Relation/open allocator fields)
                     out-unl (.startUnload out-rel (Channels/newChannel (io/output-stream out-file)))]
           (dotimes [i k]
             (aset copiers i (.rowCopier out-rel ^Relation (nth rels i))))

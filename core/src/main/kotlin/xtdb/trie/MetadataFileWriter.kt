@@ -49,7 +49,7 @@ class MetadataFileWriter(
     private val opReader = dataRel["op"]
     private val putReader = opReader.vectorForOrNull("put")
 
-    private val metaRel = Relation(al, metaRelSchema)
+    private val metaRel = Relation.open(al, metaRelSchema)
 
     private val nodeWtr = metaRel["nodes"]
     private val nullBranchWtr = nodeWtr["nil"]

@@ -61,9 +61,9 @@
       (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/l00-rc-b00.arrow"))
             leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-rc-b00.arrow"))]
         (util/with-open [trie-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap trie-ba)))
-                         trie-rel (Relation. allocator (.getSchema trie-loader))
+                         trie-rel (Relation/open allocator (.getSchema trie-loader))
                          leaf-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)))
-                         leaf-rel (Relation. allocator (.getSchema leaf-loader))]
+                         leaf-rel (Relation/open allocator (.getSchema leaf-loader))]
           (let [iid-vec (.vectorFor leaf-rel "_iid")]
             (.loadPage trie-loader 0 trie-rel)
             (t/is (= iid-bytes

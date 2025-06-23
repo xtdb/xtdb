@@ -35,7 +35,7 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
 
     override fun openDirectSlice(al: BufferAllocator): Relation {
         syncRowCount()
-        return Relation.fromRoot(root)
+        return Relation.fromRoot(al, root)
     }
 
     override fun close() {

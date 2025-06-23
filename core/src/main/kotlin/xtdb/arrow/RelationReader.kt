@@ -33,7 +33,7 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     fun openDirectSlice(al: BufferAllocator) =
         vectors
             .safeMap { it.openDirectSlice(al) }
-            .closeAllOnCatch { vectors -> Relation(vectors, rowCount) }
+            .closeAllOnCatch { vectors -> Relation(al, vectors, rowCount) }
 
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)

@@ -11,10 +11,11 @@
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            (java.util HashMap HashSet List Set)
+           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression Relation RelationReader RelationWriter VectorPosition VectorWriter)
+           (xtdb.arrow ListExpression Relation RelationReader RelationWriter VectorWriter)
            (xtdb.vector IRelationWriter)))
 
 (defmethod lp/ra-expr :table [_]
@@ -169,7 +170,7 @@
                    (restrict-cols table-expr))]
 
     {:fields fields
-     :->out-rel (fn [{:keys [allocator ^RelationReader args]}]
+     :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
                   (let [vec-rdr (.vectorForOrNull args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
                                    (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.vectorFor "list"))
@@ -177,7 +178,8 @@
                         el-struct-rdr (cond-> el-rdr
                                         (instance? ArrowType$Union (.getType (.getField el-rdr))) (.vectorFor "struct"))]
 
-                    (vr/<-root (.openAsRoot (Relation. ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)
+                    (vr/<-root (.openAsRoot (Relation. allocator
+                                                       ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)
                                                                         :when (contains? fields (symbol k))]
                                                                     (.vectorFor el-struct-rdr k)))
                                                        (.getValueCount el-rdr))

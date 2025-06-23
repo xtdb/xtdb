@@ -70,7 +70,7 @@ class MapVectorTest {
 
         val buf = ByteArrayOutputStream()
 
-        Relation(listOf(map)).use { rel ->
+        Relation(allocator, listOf(map), 0).use { rel ->
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
                 map.writeObject(m1)
                 rel.endRow()
@@ -90,8 +90,8 @@ class MapVectorTest {
         }
 
         Relation.loader(allocator, buf.toByteArray().asChannel).use { loader ->
-            Relation(allocator, loader.schema).use { rel ->
-                val mapVec = rel["map"]!!
+            Relation.open(allocator, loader.schema).use { rel ->
+                val mapVec = rel["map"]
 
                 assertEquals(2, loader.pageCount)
 

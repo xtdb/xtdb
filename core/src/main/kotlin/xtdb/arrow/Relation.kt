@@ -11,6 +11,7 @@ import org.apache.arrow.vector.ipc.SeekableReadChannel
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.*
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
@@ -30,30 +31,28 @@ import java.util.*
 
 private val MAGIC = "ARROW1".toByteArray()
 
-class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: Int = 0) : RelationWriter {
+class Relation(
+    private val al: BufferAllocator, val vecs: SequencedMap<String, Vector>, override var rowCount: Int
+) : RelationWriter {
 
     override val schema get() = Schema(vecs.sequencedValues().map { it.field })
     override val vectors get() = vecs.values
 
-    @JvmOverloads
-    constructor(vectors: List<Vector>, rowCount: Int = 0)
-            : this(vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
+    constructor(al: BufferAllocator) : this(al, linkedMapOf<String, Vector>(), 0)
 
-    @JvmOverloads
-    constructor(allocator: BufferAllocator, schema: Schema, rowCount: Int = 0)
-            : this(allocator, schema.fields, rowCount)
-
-    @JvmOverloads
-    constructor(allocator: BufferAllocator, fields: List<Field>, rowCount: Int = 0)
-            : this(fields.map { fromField(allocator, it) }, rowCount)
-
-    @JvmOverloads
-    constructor(allocator: BufferAllocator, fields: SequencedMap<String, NamelessField>, rowCount: Int = 0)
-            : this(allocator, fields.map { (name, field) -> field.toArrowField(name) }, rowCount)
+    constructor(al: BufferAllocator, vectors: List<Vector>, rowCount: Int)
+            : this(al, vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
 
     override fun vectorForOrNull(name: String) = vecs[name]
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
     override operator fun get(name: String) = vectorFor(name)
+
+    override fun vectorFor(name: String, fieldType: FieldType): VectorWriter =
+        vecs.compute(name) { _, v ->
+            v?.maybePromote(al, fieldType)
+                ?: fromField(al, Field(name, fieldType, null))
+                    .also { vec -> repeat(rowCount) { vec.writeNull() } }
+        }!!
 
     override fun endRow() =
         (++rowCount).also { rowCount ->
@@ -217,7 +216,7 @@ class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: In
 
         private var lastPageIndex = -1
 
-        fun loadPage(idx: Int, al: BufferAllocator) = Relation(al, schema).also { loadPage(idx, it) }
+        fun loadPage(idx: Int, al: BufferAllocator) = open(al, schema).also { loadPage(idx, it) }
 
         fun loadPage(idx: Int, rel: Relation) {
             pages[idx].load(rel)
@@ -343,15 +342,26 @@ class Relation(val vecs: SequencedMap<String, Vector>, override var rowCount: In
         }
 
         @JvmStatic
-        fun fromRoot(vsr: VectorSchemaRoot) = Relation(vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
+        fun fromRoot(al: BufferAllocator, vsr: VectorSchemaRoot) =
+            Relation(al, vsr.fieldVectors.map(Vector::fromArrow), vsr.rowCount)
 
         @JvmStatic
         fun fromRecordBatch(allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch): Relation {
-            val rel = Relation(allocator, schema)
+            val rel = open(allocator, schema)
             // this load retains the buffers
             rel.load(recordBatch)
             return rel
         }
+
+        @JvmStatic
+        fun open(al: BufferAllocator, schema: Schema) = open(al, schema.fields)
+
+        @JvmStatic
+        fun open(al: BufferAllocator, fields: List<Field>) =
+            Relation(al, fields.map { fromField(al, it) }, 0)
+
+        fun open(al: BufferAllocator, fields: SequencedMap<String, NamelessField>) =
+            open(al, fields.map { (name, field) -> field.toArrowField(name) })
     }
 
     /**

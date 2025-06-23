@@ -106,7 +106,7 @@
   (with-open [al (RootAllocator.)
               ch (util/->file-channel path #{:write :create})
               ^StructVector struct-vec (data->struct-vec al data)]
-    (let [rel (Relation. ^List (into [] (.getVectors struct-vec)) (.getValueCount struct-vec))]
+    (let [rel (Relation/open al ^List (into [] (.getVectors struct-vec)) (.getValueCount struct-vec))]
       (with-open [unloader (.startUnload rel ch)]
         (.writePage unloader)
         (.end unloader)))))

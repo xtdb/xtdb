@@ -11,7 +11,7 @@ class DataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
     private val tableName: TableName, private val trieKey: TrieKey, dataSchema: Schema,
 ) : AutoCloseable {
-    val dataRel: Relation = Relation(al, dataSchema)
+    val dataRel: Relation = Relation.open(al, dataSchema)
 
     private val dataFileWriter: ArrowWriter =
         runCatching { bp.openArrowWriter(tableName.dataFilePath(trieKey), dataRel) }

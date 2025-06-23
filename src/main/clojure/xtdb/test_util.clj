@@ -314,7 +314,7 @@
      (.build builder))))
 
 (defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
-  (util/with-close-on-catch [meta-rel (Relation. al MetadataFileWriter/metaRelSchema)]
+  (util/with-close-on-catch [meta-rel (Relation/open al MetadataFileWriter/metaRelSchema)]
     (let [nodes-wtr (.vectorFor meta-rel "nodes")
           nil-wtr (.vectorFor nodes-wtr "nil")
           iid-branch-wtr (.vectorFor nodes-wtr "branch-iid")

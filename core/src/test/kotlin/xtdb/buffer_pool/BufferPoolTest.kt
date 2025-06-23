@@ -41,7 +41,7 @@ abstract class BufferPoolTest {
         RootAllocator().use { al ->
             IntVector(al, "foo", false).use { fooVec ->
                 fooVec.apply { writeInt(10); writeInt(42); writeInt(15) }
-                val relation = Relation(listOf(fooVec), fooVec.valueCount)
+                val relation = Relation(al, listOf(fooVec), fooVec.valueCount)
                 bp.openArrowWriter("foo".asPath, relation).use { writer ->
                     writer.writePage()
                     assertEquals(534, writer.end())

@@ -70,7 +70,7 @@ class AdbcTest {
                 val root = rdr.vectorSchemaRoot
                 assertTrue(rdr.loadNextBatch())
 
-                Relation.fromRoot(root).use { rel ->
+                Relation.fromRoot(al,root).use { rel ->
                     assertEquals(
                         listOf(
                             mapOf(

@@ -8,7 +8,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
+import xtdb.asKeyword
 import xtdb.types.Fields
+import xtdb.types.Schema
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -32,7 +34,7 @@ class RelationTest {
 
         IntVector(allocator, "i32", false).use { i32 ->
             Utf8Vector(allocator, "utf8", true).use { utf8 ->
-                val rel = Relation(listOf(i32, utf8))
+                val rel = Relation(allocator, listOf(i32, utf8), 0)
 
                 rel.startUnload(Channels.newChannel(buf))
                     .use { unloader ->
@@ -60,9 +62,9 @@ class RelationTest {
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             assertEquals(2, loader.pageCount)
 
-            Relation(allocator, loader.schema).use { rel ->
-                val i32 = rel["i32"]!!
-                val utf8 = rel["utf8"]!!
+            Relation.open(allocator, loader.schema).use { rel ->
+                val i32 = rel["i32"]
+                val utf8 = rel["utf8"]
 
                 loader.loadPage(0, rel)
 
@@ -100,7 +102,7 @@ class RelationTest {
         val list2 = listOf(1, 0, -1, null)
 
         ListVector(allocator, "list", false, elVector).use { listVec ->
-            val rel = Relation(listOf(listVec))
+            val rel = Relation(allocator, listOf(listVec), 0)
 
             rel.startUnload(Channels.newChannel(buf))
                 .use { unloader ->
@@ -124,8 +126,8 @@ class RelationTest {
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             assertEquals(2, loader.pageCount)
 
-            Relation(allocator, loader.schema).use { rel ->
-                val listVec = rel["list"]!!
+            Relation.open(allocator, loader.schema).use { rel ->
+                val listVec = rel["list"]
 
                 loader.loadPage(0, rel)
 
@@ -172,7 +174,7 @@ class RelationTest {
 
         val buf = ByteArrayOutputStream()
 
-        Relation(listOf(duv), duv.valueCount).use { rel ->
+        Relation(allocator, listOf(duv), duv.valueCount).use { rel ->
             rel.startUnload(Channels.newChannel(buf)).use { unloader ->
                 unloader.writePage()
                 unloader.end()
@@ -181,7 +183,7 @@ class RelationTest {
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             loader.loadPage(0, allocator).use { rel ->
-                assertEquals(duvValues, rel["duv"]!!.toList())
+                assertEquals(duvValues, rel["duv"].toList())
             }
         }
     }
@@ -191,13 +193,13 @@ class RelationTest {
         val row1 = mapOf("i32" to 4)
         val row2 = mapOf("i32" to 8)
 
-        val bytes = Relation(allocator, linkedMapOf("i32" to Fields.I32)).use { rel ->
+        val bytes = Relation.open(allocator, linkedMapOf("i32" to Fields.I32)).use { rel ->
             rel.writeRows(row1, row2)
             rel.asArrowStream
         }
 
         val rows = Relation.StreamLoader(allocator, bytes.asChannel).use { loader ->
-            Relation(allocator, loader.schema).use { rel ->
+            Relation.open(allocator, loader.schema).use { rel ->
                 assertTrue(loader.loadNextPage(rel))
 
                 rel.toMaps(SNAKE_CASE_STRING)
@@ -208,5 +210,33 @@ class RelationTest {
         }
 
         assertEquals(listOf(row1, row2), rows)
+    }
+
+    @Test
+    fun testPromotion() {
+        Relation(allocator).use { rel ->
+            val intVec = rel.vectorFor("foo", Fields.I32.fieldType)
+            intVec.writeInt(32)
+            rel.endRow()
+
+            assertEquals(listOf(mapOf("foo".asKeyword to 32)), rel.toMaps())
+
+            val strVec = rel.vectorFor("bar", Fields.UTF8.fieldType)
+            strVec.writeObject("hello")
+            rel.endRow()
+
+            assertEquals(
+                Schema("foo" to Fields.I32.nullable, "bar" to Fields.UTF8.nullable),
+                rel.schema
+            )
+
+            assertEquals(
+                listOf(
+                    mapOf("foo".asKeyword to 32),
+                    mapOf("bar".asKeyword to "hello")
+                ),
+                rel.toMaps()
+            )
+        }
     }
 }

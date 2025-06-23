@@ -183,7 +183,7 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
       (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/VERSION tu/*allocator* (SimpleMeterRegistry.))
-                  rel (Relation. tu/*allocator* schema)
+                  rel (Relation/open tu/*allocator* schema)
                   _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
         (t/is (= [] (.listAllObjects bp)))))))
 

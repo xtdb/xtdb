@@ -89,7 +89,7 @@ class TrieWriter(
 
             MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, calculateBlooms, true)
                 .use { metaFileWriter ->
-                    Relation(al, loader.schema).use { inRel ->
+                    Relation.open(al, loader.schema).use { inRel ->
                         val iidReader = inRel["_iid"]
 
                         fun Selection.soloIid(): Boolean =

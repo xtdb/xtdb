@@ -93,7 +93,7 @@ internal interface OutWriter : AutoCloseable {
             private val outPath: Path = createTempFile(tempDir, "merged-segments", ".arrow"),
             val recency: LocalDate?
         ) : OutWriter {
-            private val outRel = Relation(al, schema)
+            private val outRel = Relation.open(al, schema)
 
             private val unloader = runCatching { outRel.startUnload(outPath.openWritableChannel()) }
                 .onFailure { outRel.close() }

@@ -54,7 +54,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
     fun arrowIpcTest() {
         val path = Path.of("aw")
         val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
-        Relation(allocator, schema).use { relation ->
+        Relation.open(allocator, schema).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
@@ -76,9 +76,9 @@ class RemoteBufferPoolTest : BufferPoolTest() {
         val rootPath = remoteBufferPool.diskCache.rootPath
         val tmpDir = rootPath.resolve(".tmp")
         val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
-        Relation(allocator, schema).use { relation ->
+        Relation.open(allocator, schema).use { relation ->
             remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
-                val v = relation["a"]!!
+                val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
                 writer.writePage()
                 writer.end()
@@ -88,12 +88,12 @@ class RemoteBufferPoolTest : BufferPoolTest() {
         assertEquals(0, tmpDir.listDirectoryEntries().size)
 
         val exception = assertThrows(Exception::class.java) {
-            Relation(allocator, schema).use { relation ->
+            Relation.open(allocator, schema).use { relation ->
                 remoteBufferPool.openArrowWriter(Path.of("aw2"), relation).use { writer ->
                     // tmp file present
                     assertEquals(1, tmpDir.listDirectoryEntries().size)
 
-                    val v = relation["a"]!!
+                    val v = relation["a"]
                     for (i in 0 until 10) v.writeInt(i)
                     writer.writePage()
                     writer.end()

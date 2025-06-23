@@ -461,9 +461,8 @@
                                                 (.getAllColumnFields)))
                             (update-keys symbol)
                             (merge meta-table-schemas))]
-        (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation. ^BufferAllocator allocator
-                                                                                (Schema. (vec (vals derived-table-schema)))
-                                                                                0)]
+        (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
+                                                                                    (Schema. (vec (vals derived-table-schema))))]
 
                                               (.writeRows out-rel (->> (case table
                                                                          information_schema/tables (tables schema-info)

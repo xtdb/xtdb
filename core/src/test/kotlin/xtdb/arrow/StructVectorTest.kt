@@ -124,7 +124,7 @@ class StructVectorTest {
         )
 
         StructVector(allocator, "struct", false, children).use { structVec ->
-            val rel = Relation(listOf(structVec))
+            val rel = Relation(allocator, listOf(structVec), 0)
 
             rel.startUnload(Channels.newChannel(buf))
                 .use { unloader ->
@@ -146,7 +146,7 @@ class StructVectorTest {
         }
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
-            Relation(allocator, loader.schema).use { rel ->
+            Relation.open(allocator, loader.schema).use { rel ->
                 val structVec = rel["struct"]
 
                 assertEquals(2, loader.pageCount)
