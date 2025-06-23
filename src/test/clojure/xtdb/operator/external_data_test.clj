@@ -2,12 +2,11 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.VectorSchemaRoot))
+           xtdb.arrow.Relation))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -39,7 +38,7 @@
   (io/resource "xtdb/operator/arrow-cursor-test.arrow"))
 
 (t/deftest test-arrow-cursor
-  (let [expected {:col-types '{_id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
+  (let [expected {:col-types '{_id :utf8, a_long :i64, a_double :f64, an_inst [:timestamp-tz :micro "UTC"]}
                   :res example-data}]
     (t/is (= expected (tu/query-ra [:arrow arrow-file-url]
                                    {:preserve-pages? true, :with-col-types? true})))
@@ -47,18 +46,22 @@
                                    {:preserve-pages? true, :with-col-types? true})))))
 
 (comment
-  (let  [arrow-path (-> (io/resource "xtdb/operator/arrow-cursor-test.arrows")
-                        .toURI
-                        util/->path)]
+  (let [arrow-path (-> (io/resource "xtdb/operator/arrow-cursor-test.arrow")
+                       .toURI
+                       util/->path)]
     (with-open [al (RootAllocator.)
-                root (VectorSchemaRoot/create (Schema. [(types/col-type->field "_id" :utf8)
-                                                        (types/col-type->field "a-long" :i64)
-                                                        (types/col-type->field "a-double" :f64)
-                                                        (types/col-type->field "an-inst" [:timestamp-tz :micro "UTC"])])
-                                              al)]
-      (doto (util/build-arrow-ipc-byte-buffer root :file
-              (fn [write-page!]
-                (doseq [page example-data]
-                  (tu/populate-root root page)
-                  (write-page!))))
-        (util/write-buffer-to-path arrow-path)))))
+                rel (Relation/open al
+                                   (Schema. [(types/col-type->field "_id" :utf8)
+                                             (types/col-type->field "a_long" :i64)
+                                             (types/col-type->field "a_double" :f64)
+                                             (types/col-type->field "an_inst" [:timestamp-tz :micro "UTC"])]))
+                ch (util/->file-channel arrow-path util/write-truncate-open-opts)
+                unl (.startUnload rel ch xtdb.arrow.Relation$UnloadMode/FILE)]
+      (doseq [page example-data]
+        (doseq [row page]
+          (.writeRow rel row))
+
+        (.writePage unl)
+        (.clear rel))
+
+      (.end unl))))

@@ -1,7 +1,6 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [clojure.tools.logging :as log]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.indexer :as idx]
@@ -18,19 +17,16 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang ExceptionInfo)
-           (java.io FileOutputStream)
            java.net.ServerSocket
-           (java.nio.channels Channels)
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
            (java.util LinkedList)
-           (java.util.function Consumer IntConsumer)
+           (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
@@ -39,7 +35,7 @@
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.trie MetadataFileWriter Trie)
+           (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
 
