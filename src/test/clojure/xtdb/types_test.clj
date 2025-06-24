@@ -256,7 +256,7 @@
                                  (types/col-type->field [:list :i64]))))
 
     (t/is (= (types/->field-default-name #xt.arrow/type :list false
-                                         [(types/col-type->field "i64" [:union #{:null :i64}])])
+                                         [(types/col-type->field "$data$" [:union #{:null :i64}])])
              #_(types/col-type->field [:list [:union #{:null :i64}]])
              (types/merge-fields (types/col-type->field [:list :null])
                                  (types/col-type->field [:list :i64])))))

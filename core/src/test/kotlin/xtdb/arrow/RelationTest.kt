@@ -253,7 +253,7 @@ class RelationTest {
                     "foo" to Fields.I32.nullable,
                     "bar" to Fields.Union(
                         "utf8" to Fields.UTF8.nullable,
-                        "list" to Fields.List(Fields.UTF8, "_")
+                        "list" to Fields.List(Fields.UTF8, "\$data$")
                     )
                 ),
                 rel.schema

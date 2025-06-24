@@ -21,7 +21,8 @@ import java.util.*
 
 internal val STRUCT = ArrowType.Struct.INSTANCE
 
-class StructVector(
+class StructVector
+@JvmOverloads constructor(
     private val allocator: BufferAllocator,
     override var name: String, override var nullable: Boolean,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),

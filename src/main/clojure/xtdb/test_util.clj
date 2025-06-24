@@ -157,15 +157,18 @@
     (instance? Field col-name-or-field) (Vector/fromList *allocator* ^Field col-name-or-field rows)
     :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field}))))
 
-(defn open-rel ^xtdb.arrow.RelationReader [rows-or-cols]
-  (cond
-    (and (map? rows-or-cols) (every? sequential? (vals rows-or-cols)))
-    (Relation/openFromCols *allocator* rows-or-cols)
+(defn open-rel
+  (^xtdb.arrow.Relation [] (vw/open-rel *allocator*))
 
-    (and (sequential? rows-or-cols) (every? map? rows-or-cols))
-    (Relation/openFromRows *allocator* rows-or-cols)
+  (^xtdb.arrow.RelationReader [rows-or-cols]
+   (cond
+     (and (map? rows-or-cols) (every? sequential? (vals rows-or-cols)))
+     (Relation/openFromCols *allocator* rows-or-cols)
 
-    :else (throw (err/incorrect ::invalid-rel {:rows-or-cols rows-or-cols}))))
+     (and (sequential? rows-or-cols) (every? map? rows-or-cols))
+     (Relation/openFromRows *allocator* rows-or-cols)
+
+     :else (throw (err/incorrect ::invalid-rel {:rows-or-cols rows-or-cols})))))
 
 (defn open-args ^xtdb.arrow.RelationReader [args]
   (vw/open-args *allocator* args))

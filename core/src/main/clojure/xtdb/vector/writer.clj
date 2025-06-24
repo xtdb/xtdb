@@ -191,6 +191,9 @@
 
 (def empty-args RelationReader/DUAL)
 
+(defn open-rel ^xtdb.arrow.Relation [^BufferAllocator al]
+  (Relation. al))
+
 (defn vec-wtr->rdr ^xtdb.arrow.VectorReader [^xtdb.arrow.VectorWriter w]
   (.getAsReader w))
 

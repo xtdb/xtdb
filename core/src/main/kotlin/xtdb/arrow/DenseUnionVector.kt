@@ -19,11 +19,22 @@ import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
 internal val UNION_TYPE = ArrowType.Union(Dense, null)
 
-class DenseUnionVector(
+class DenseUnionVector private constructor(
     private val allocator: BufferAllocator,
-    override var name: String, legVectors: List<Vector>,
+    override var name: String, legVectors: List<Vector> = emptyList(),
+    private val typeBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
+    private val offsetBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
     override var valueCount: Int = 0
 ) : Vector() {
+
+    @JvmOverloads
+    constructor(
+        al: BufferAllocator, name: String, legVectors: List<Vector> = emptyList(), valueCount: Int = 0
+    ) : this(
+        al, name, legVectors,
+        ExtensibleBuffer(al), ExtensibleBuffer(al),
+        valueCount
+    )
 
     override var nullable: Boolean
         get() = false
@@ -39,16 +50,16 @@ class DenseUnionVector(
                 fromField(al, Field(vector.name, target, emptyList()))
                     .also { newVec -> repeat(vector.valueCount) { newVec.writeNull() } }
             else
-                DenseUnionVector(al, vector.name, listOf(vector), 0)
+                DenseUnionVector(al, vector.name, listOf(vector), vector.valueCount)
                     .apply {
                         vector.name = vector.fieldType.type.toLeg()
 
-                        valueCount = vector.valueCount
                         repeat(vector.valueCount) { idx ->
                             typeBuffer.writeByte(0)
                             offsetBuffer.writeInt(idx)
                         }
                     }
+                    .also { it.vectorFor(target) }
     }
 
     private val legVectors = legVectors.toMutableList()
@@ -91,14 +102,16 @@ class DenseUnionVector(
         override val mapKeys get() = inner.mapKeys
         override val mapValues get() = inner.mapValues
 
-        override fun openSlice(al: BufferAllocator): VectorReader = TODO("Not yet implemented")
+        override fun openSlice(al: BufferAllocator) = unsupported("LegVector/openSlice")
 
         override val metadataFlavours get() = inner.metadataFlavours
 
         override fun valueReader(pos: VectorPosition) = inner.valueReader(object : VectorPosition {
             override var position: Int
                 get() = getOffset(pos.position)
-                set(_) { throw UnsupportedOperationException("setPosition not supported on LegVector")}
+                set(_) {
+                    throw UnsupportedOperationException("setPosition not supported on LegVector")
+                }
         })
 
         private fun writeValueThen(): VectorWriter {
@@ -153,11 +166,9 @@ class DenseUnionVector(
         override fun toList() = inner.toList()
     }
 
-    private val typeBuffer = ExtensibleBuffer(allocator)
     private fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
     internal fun typeIds() = (0 until valueCount).map { typeBuffer.getByte(it) }
 
-    private val offsetBuffer = ExtensibleBuffer(allocator)
     private fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
     internal fun offsets() = (0 until valueCount).map { offsetBuffer.getInt(it) }
 
@@ -219,6 +230,7 @@ class DenseUnionVector(
     }
 
     override fun vectorFor(name: String, fieldType: FieldType): VectorWriter = legVectorFor(name, fieldType)
+    fun vectorFor(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
 
     private fun legWriter(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
 
@@ -327,9 +339,15 @@ class DenseUnionVector(
     }
 
     override fun openSlice(al: BufferAllocator) =
-        DenseUnionVector(al, name, legVectors.map { it.openSlice(al) }, valueCount)
+        DenseUnionVector(
+            al, name, legVectors.map { it.openSlice(al) },
+            typeBuffer.openSlice(al), offsetBuffer.openSlice(al),
+            valueCount
+        )
 
-    override fun maybePromote(al: BufferAllocator, target: FieldType) = this.also { it.legWriter(target) }
+    override fun maybePromote(al: BufferAllocator, target: FieldType) = this.also {
+        if (target.type != type) it.legWriter(target)
+    }
 
     override fun clear() {
         typeBuffer.clear()

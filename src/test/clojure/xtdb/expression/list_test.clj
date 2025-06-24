@@ -1,10 +1,9 @@
 (ns xtdb.expression.list-test
   (:require [clojure.test :as t]
-            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.list :as list-expr]
-            [xtdb.types :as types]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (org.apache.arrow.vector.types.pojo Field)
@@ -24,7 +23,7 @@
                           (let [out-vec-writer (vw/->writer out-vec)]
                             (.writeTo res out-vec-writer 0 (.getSize res))
                             (vec (.toList (vw/vec-wtr->rdr out-vec-writer))))))}))]
-    (t/is (= {:field (types/col-type->field "i64" :i64)
+    (t/is (= {:field (types/col-type->field "$data$" :i64)
               :size 10
               :value [1 2 3 4 5 6 7 8 9 10]}
              (run-test '(generate_series 1 11 1) {}))

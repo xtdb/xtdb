@@ -17,7 +17,7 @@ import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 internal val LIST: ArrowType.List = ArrowType.List.INSTANCE
 
 class ListVector private constructor(
-    private val allocator: BufferAllocator,
+    private val al: BufferAllocator,
     override var name: String, override var nullable: Boolean,
     private var elVector: Vector,
     private val validityBuffer: ExtensibleBuffer,
@@ -25,8 +25,9 @@ class ListVector private constructor(
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
 
+    @JvmOverloads
     constructor(
-        allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector,
+        allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector = NullVector("\$data$"),
     ) : this(
         allocator, name, nullable, elVector,
         ExtensibleBuffer(allocator), ExtensibleBuffer(allocator)
@@ -72,7 +73,7 @@ class ListVector private constructor(
                 try {
                     elVector.writeObject(el)
                 } catch (e: InvalidWriteObjectException) {
-                    elVector = elVector.maybePromote(allocator, e.obj.toFieldType())
+                    elVector = elVector.maybePromote(al, e.obj.toFieldType())
                     elVector.writeObject(el)
                 }
             }
@@ -84,7 +85,7 @@ class ListVector private constructor(
                 try {
                     elVector.writeValue(el)
                 } catch (e: InvalidWriteObjectException) {
-                    elVector = DenseUnionVector.promote(allocator, elVector, e.obj.toFieldType())
+                    elVector = DenseUnionVector.promote(al, elVector, e.obj.toFieldType())
                     elVector.writeValue(el)
                 }
             }
@@ -101,9 +102,9 @@ class ListVector private constructor(
             elVector.field.fieldType == fieldType -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                fromField(allocator, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
+                fromField(al, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
 
-            else -> TODO("promote elVector")
+            else -> elVector.maybePromote(al, fieldType).also { elVector = it }
         }
 
     override fun endList() = writeNotNull(elVector.valueCount - lastOffset)

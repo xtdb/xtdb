@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -9,6 +10,9 @@ import xtdb.vector.extensions.SetType
 class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFlavour.Set {
 
     override val type = SetType
+
+    override val listElements get() = inner.listElements
+    override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn).toSet()
 

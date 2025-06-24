@@ -54,13 +54,13 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun endStruct(): Unit = unsupported("endStruct")
 
     override val listElements: VectorWriter get() = unsupported("listElements")
-    fun getListElements(fieldType: FieldType): VectorWriter = unsupported("elementWriter")
+    fun getListElements(fieldType: FieldType): VectorWriter = unsupported("getListElements")
     fun endList(): Unit = unsupported("endList")
 
     override val mapKeys: VectorWriter get() = unsupported("mapKeys")
     fun getMapKeys(fieldType: FieldType): VectorWriter = unsupported("mapKeys")
     override val mapValues: VectorWriter get() = unsupported("mapValues")
-    fun getMapValues(fieldType: FieldType): VectorWriter = unsupported("mapValueWriter")
+    fun getMapValues(fieldType: FieldType): VectorWriter = unsupported("getMapValues")
 
     fun clear()
 

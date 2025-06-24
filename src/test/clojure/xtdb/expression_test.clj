@@ -1526,12 +1526,12 @@
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
-            (tu/open-vec (types/->field col-name (ArrowType$Timestamp. time-unit "UTC") false)
-                         [value]))
+            (doto (tu/open-vec (types/->field col-name (ArrowType$Timestamp. time-unit "UTC") false) [])
+              (.writeLong value)))
 
           (->dur-vec [col-name ^TimeUnit time-unit, ^long value]
-            (tu/open-vec (types/->field col-name (ArrowType$Duration. time-unit) false)
-                         [value]))
+            (doto (tu/open-vec (types/->field col-name (ArrowType$Duration. time-unit) false) [])
+              (.writeLong value)))
 
           (test-projection [f-sym ->x-vec ->y-vec]
             (with-open [^Vector x-vec (->x-vec)

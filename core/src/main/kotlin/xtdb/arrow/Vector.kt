@@ -19,7 +19,9 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.toArrowType
 import xtdb.toFieldType
+import xtdb.toLeg
 import xtdb.trie.ColumnName
 import xtdb.types.Fields
 import xtdb.util.Hasher
@@ -116,7 +118,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: ArrowType.List) =
                     ListVector(
                         al, name, isNullable,
-                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_")
+                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$")
                     )
 
                 override fun visit(type: LargeList) = TODO("Not yet implemented")
@@ -124,7 +126,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: FixedSizeList) =
                     FixedSizeListVector(
                         al, name, isNullable, type.listSize,
-                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_"))
+                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$"))
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
                 override fun visit(type: LargeListView) = TODO("Not yet implemented")
@@ -199,14 +201,14 @@ sealed class Vector : VectorReader, VectorWriter {
                     TsTzRangeType -> TsTzRangeVector(
                         FixedSizeListVector(
                             al, name, isNullable, 2,
-                            field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_"))
+                            field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$"))
                     )
 
                     SetType ->
                         SetVector(
                             ListVector(
                                 al, name, isNullable,
-                                field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("_")))
+                                field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$")))
 
                     else -> error("unknown extension: $type")
                 }

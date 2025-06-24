@@ -377,9 +377,12 @@
 
           (kv->field [[arrow-type {:keys [nullable?] :as type-opts}]]
             (condp instance? arrow-type
-              ArrowType$List (->field-default-name arrow-type nullable? [(map->field (:el type-opts))])
-              SetType (->field-default-name arrow-type nullable? [(map->field (:el type-opts))])
-              ArrowType$FixedSizeList (->field-default-name arrow-type nullable? [(map->field (:el type-opts))])
+              ArrowType$List (->field-default-name arrow-type nullable? [(-> (map->field (:el type-opts))
+                                                                             (field-with-name "$data$"))])
+              SetType (->field-default-name arrow-type nullable? [(-> (map->field (:el type-opts))
+                                                                      (field-with-name "$data$"))])
+              ArrowType$FixedSizeList (->field-default-name arrow-type nullable? [(-> (map->field (:el type-opts))
+                                                                                      (field-with-name "$data$"))])
               ArrowType$Struct (->field-default-name arrow-type nullable?
                                                      (map (fn [[name opts]]
                                                             (let [^Field field (map->field opts)]
@@ -535,7 +538,7 @@
 
 (defmethod col-type->field* :list [col-name nullable? [_ inner-col-type]]
   (->field col-name ArrowType$List/INSTANCE nullable?
-           (col-type->field inner-col-type)))
+           (col-type->field "$data$" inner-col-type)))
 
 (defmethod arrow-type->col-type ArrowType$List [_ data-field]
   [:list (field->col-type data-field)])
@@ -549,7 +552,7 @@
 
 (defmethod col-type->field* :set [col-name nullable? [_ inner-col-type]]
   (->field col-name SetType/INSTANCE nullable?
-           (col-type->field inner-col-type)))
+           (col-type->field "$data$" inner-col-type)))
 
 (defmethod arrow-type->col-type SetType [_ data-field]
   [:set (field->col-type data-field)])
