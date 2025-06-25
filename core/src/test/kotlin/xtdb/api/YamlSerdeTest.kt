@@ -22,6 +22,7 @@ import xtdb.aws.S3.Companion.s3
 import xtdb.azure.AzureMonitorMetrics
 import xtdb.azure.BlobStorage.Companion.azureBlobStorage
 import xtdb.gcp.CloudStorage.Companion.googleCloudStorage
+import java.net.InetAddress
 import java.nio.file.Paths
 
 class YamlSerdeTest {
@@ -79,7 +80,10 @@ class YamlSerdeTest {
             connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000;" 
         """.trimIndent()
 
-        assertEquals("InstrumentationKey=00000000-0000-0000-0000-000000000000;", nodeConfig(azureInput).findModule<AzureMonitorMetrics>()?.connectionString)
+        assertEquals(
+            "InstrumentationKey=00000000-0000-0000-0000-000000000000;",
+            nodeConfig(azureInput).findModule<AzureMonitorMetrics>()?.connectionString
+        )
     }
 
     @Test
@@ -184,7 +188,7 @@ class YamlSerdeTest {
             RemoteStorageFactory(
                 objectStore = googleCloudStorage(
                     projectId = "xtdb-project",
-                    bucket ="xtdb-bucket",
+                    bucket = "xtdb-bucket",
                 ).prefix(Paths.get("xtdb-object-store")),
                 localDiskCache = Paths.get("test-path")
             ),
@@ -339,6 +343,39 @@ class YamlSerdeTest {
                 )
             ),
             nodeConfig(input).authn
+        )
+    }
+
+    @Test
+    fun testHost() {
+        assertEquals(
+            ServerConfig().host(InetAddress.getByName("localhost")),
+            nodeConfig(
+                """
+                    server: 
+                      host: localhost
+                """.trimIndent()
+            ).server
+        )
+
+        assertEquals(
+            ServerConfig().host(InetAddress.getByName("127.0.0.1")),
+            nodeConfig(
+                """
+                    server: 
+                      host: 127.0.0.1
+                """.trimIndent()
+            ).server
+        )
+
+        assertEquals(
+            ServerConfig().host(InetAddress.getByName("::")),
+            nodeConfig(
+                """
+                    server: 
+                      host: '::'
+                """.trimIndent()
+            ).server
         )
     }
 }

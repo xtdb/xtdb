@@ -1,4 +1,5 @@
 server:
+  host: '*'
   port: 5432
 
 log: !Local
@@ -8,8 +9,10 @@ storage: !Local
   path: "/var/lib/xtdb/buffers"
 
 healthz:
+  host: '*'
   port: 8080
 
 modules: 
 - !HttpServer
+  host: '*'
   port: 3000

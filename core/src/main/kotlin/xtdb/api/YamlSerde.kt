@@ -12,10 +12,11 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.Log
 import xtdb.api.log.LocalLog.Factory
+import xtdb.api.log.Log
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
+import java.net.InetAddress
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.*
@@ -26,10 +27,11 @@ internal object EnvironmentVariableProvider {
     fun getEnvVariable(name: String): String? = System.getenv(name)
 }
 
-internal fun envFromTaggedNode(taggedNode: YamlTaggedNode ): String {
+internal fun envFromTaggedNode(taggedNode: YamlTaggedNode): String {
     if (taggedNode.tag == "!Env") {
         val value = taggedNode.innerNode.yamlScalar.content
-        return EnvironmentVariableProvider.getEnvVariable(value) ?: throw IllegalArgumentException("Environment variable '$value' not found")
+        return EnvironmentVariableProvider.getEnvVariable(value)
+            ?: throw IllegalArgumentException("Environment variable '$value' not found")
     }
     return taggedNode.innerNode.yamlScalar.content
 }
@@ -51,7 +53,7 @@ internal fun handleEnvTag(input: YamlInput): String {
 object PathWithEnvVarSerde : KSerializer<Path> {
     override val descriptor = PrimitiveSerialDescriptor("PathWithEnvVars", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: Path) { 
+    override fun serialize(encoder: Encoder, value: Path) {
         throw UnsupportedOperationException("YAML serialization of config is not supported.")
     }
 
@@ -71,6 +73,7 @@ object StringWithEnvVarSerde : KSerializer<String> {
     override fun serialize(encoder: Encoder, value: String) {
         throw UnsupportedOperationException("YAML serialization of config is not supported.")
     }
+
     override fun deserialize(decoder: Decoder): String {
         val yamlInput: YamlInput = decoder as YamlInput
         return handleEnvTag(yamlInput)
@@ -78,7 +81,10 @@ object StringWithEnvVarSerde : KSerializer<String> {
 }
 
 object StringMapWithEnvVarsSerde : KSerializer<Map<String, String>> {
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class, kotlinx.serialization.InternalSerializationApi::class)
+    @OptIn(
+        kotlinx.serialization.ExperimentalSerializationApi::class,
+        kotlinx.serialization.InternalSerializationApi::class
+    )
     override val descriptor: SerialDescriptor = buildSerialDescriptor("StringMapWithEnvVarsSerde", StructureKind.MAP)
 
     override fun serialize(encoder: Encoder, value: Map<String, String>) {
@@ -109,6 +115,7 @@ object BooleanWithEnvVarSerde : KSerializer<Boolean> {
     override fun serialize(encoder: Encoder, value: Boolean) {
         throw UnsupportedOperationException("YAML serialization of config is not supported.")
     }
+
     override fun deserialize(decoder: Decoder): Boolean {
         val yamlInput: YamlInput = decoder as YamlInput
         return handleEnvTag(yamlInput).toBoolean()
@@ -121,9 +128,22 @@ object IntWithEnvVarSerde : KSerializer<Int> {
     override fun serialize(encoder: Encoder, value: Int) {
         throw UnsupportedOperationException("YAML serialization of config is not supported.")
     }
+
     override fun deserialize(decoder: Decoder): Int {
         val yamlInput: YamlInput = decoder as YamlInput
         return handleEnvTag(yamlInput).toInt()
+    }
+}
+
+object InetAddressSerde : KSerializer<InetAddress?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("InetAddress", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: InetAddress?) =
+        throw UnsupportedOperationException("serialization not supported for InetAddress")
+
+    override fun deserialize(decoder: Decoder): InetAddress? {
+        val host = decoder.decodeString()
+        return if (host == "*") null else InetAddress.getByName(host)
     }
 }
 

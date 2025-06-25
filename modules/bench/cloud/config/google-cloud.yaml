@@ -1,4 +1,5 @@
 healthz:
+  host: '*'
   port: 8080
 
 log: !Local
@@ -11,3 +12,6 @@ storage: !Remote
     prefix: "xtdb-object-store"
   localDiskCache: /var/lib/xtdb/buffers/
   maxDiskCachePercentage: 75
+
+server:
+  host: '*'

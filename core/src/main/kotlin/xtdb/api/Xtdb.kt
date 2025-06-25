@@ -61,10 +61,6 @@ interface Xtdb : DataSource, AutoCloseable {
 
         fun healthz(healthz: HealthzConfig) = apply { this.healthz = healthz }
 
-        @JvmSynthetic
-        fun healthz(configure: HealthzConfig.() -> Unit) =
-            healthz(HealthzConfig().also(configure))
-
         fun garbageCollector(garbageCollector: GarbageCollectorConfig) =
             apply { this.garbageCollector = garbageCollector }
 

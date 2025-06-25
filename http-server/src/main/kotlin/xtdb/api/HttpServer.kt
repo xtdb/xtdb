@@ -1,13 +1,13 @@
-@file:UseSerializers(IntWithEnvVarSerde::class)
+@file:UseSerializers(IntWithEnvVarSerde::class, InetAddressSerde::class)
 
 package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import xtdb.api.IntWithEnvVarSerde
 import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
+import java.net.InetAddress
 
 /**
  * Used to set configuration options for an optional HTTP Server module.
@@ -29,10 +29,12 @@ object HttpServer {
     @Serializable
     @SerialName("!HttpServer")
     data class Factory(
-        var port: Int = 3000,
+        var host: InetAddress? = InetAddress.getLoopbackAddress(),
+        var port: Int = 0,
     ) : XtdbModule.Factory {
         override val moduleKey = "xtdb.http-server"
 
+        fun host(host: InetAddress?) = apply { this.host = host }
         fun port(port: Int) = apply { this.port = port }
 
         override fun openModule(xtdb: Xtdb) =

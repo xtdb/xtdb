@@ -16,10 +16,10 @@
   (:import [java.nio.file Path]
            java.time.Duration
            [java.util List]
-           [org.apache.arrow.memory BaseAllocator RootAllocator]
+           [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           (xtdb.arrow Relation StructVector Vector)
+           (xtdb.arrow Relation Vector)
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)))

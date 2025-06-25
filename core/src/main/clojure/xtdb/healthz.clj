@@ -11,14 +11,15 @@
             [xtdb.util :as util])
   (:import (io.micrometer.prometheusmetrics PrometheusMeterRegistry)
            [java.lang AutoCloseable]
+           [java.net InetAddress]
            org.eclipse.jetty.server.Server
            (xtdb.api Xtdb$Config)
+           xtdb.api.log.Log
+           xtdb.api.log.Log$Message$FlushBlock
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
            xtdb.BufferPoolKt
-           (xtdb.indexer LiveIndex LogProcessor)
-           xtdb.api.log.Log
-           xtdb.api.log.Log$Message$FlushBlock))
+           (xtdb.indexer LiveIndex LogProcessor)))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
   (.getIngestionError log-processor))
@@ -93,11 +94,18 @@
                      {:executor r.sieppari/executor
                       :interceptors [[with-opts opts]]}))
 
-(defmethod xtn/apply-config! :xtdb/healthz [^Xtdb$Config config _ {:keys [^long port]}]
-  (.healthz config (HealthzConfig. port)))
+(defmethod xtn/apply-config! :xtdb/healthz [^Xtdb$Config config _ healthz-config]
+  (.healthz config
+            (let [host (:host healthz-config ::absent)
+                  port (:port healthz-config ::absent)]
+              (cond-> (HealthzConfig.)
+                (not= ::absent host) (.host (when (and host (not= host "*"))
+                                              (InetAddress/getByName host)))
+                (not= ::absent port) (.port port)))))
 
 (defmethod ig/prep-key :xtdb/healthz [_ ^HealthzConfig config]
-  {:port (.getPort config)
+  {:host (.getHost config)
+   :port (.getPort config)
    :meter-registry (ig/ref :xtdb.metrics/registry)
    :log (ig/ref :xtdb/log)
    :log-processor (ig/ref :xtdb.log/processor)
@@ -105,7 +113,7 @@
    :live-index (ig/ref :xtdb.indexer/live-index)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool live-index]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool live-index]}]
   (let [^Server server (-> (handler {:meter-registry meter-registry
                                      :log log
                                      :log-processor log-processor
@@ -113,9 +121,9 @@
                                      :live-index live-index
                                      :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
                                      :node node})
-                           (j/run-jetty {:port port, :async? true, :join? false}))]
+                           (j/run-jetty {:host (some-> host (.getHostAddress)), :port port, :async? true, :join? false}))]
 
-    (log/info "Healthz server started on port:" port)
+    (log/info "Healthz server started at" (str (.getURI server)))
 
     (reify AutoCloseable
       (close [_]

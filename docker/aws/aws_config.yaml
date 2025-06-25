@@ -1,4 +1,5 @@
 server:
+  host: '*'
   port: 5432
 
 log: !Kafka
@@ -12,8 +13,10 @@ storage: !Remote
   localDiskCache: /var/lib/xtdb/buffers
 
 healthz:
+  host: '*'
   port: 8080
 
 modules:
 - !HttpServer
+  host: '*'
   port: 3000

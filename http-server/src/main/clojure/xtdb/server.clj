@@ -28,6 +28,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (java.io InputStream OutputStream)
+           [java.net InetAddress]
            [java.nio.charset StandardCharsets]
            (java.time Duration ZoneId)
            (java.util Base64 Base64$Decoder List Map)
@@ -399,9 +400,11 @@
 (defn open-server [node ^HttpServer$Factory module]
   (let [port (.getPort module)
         ^Server server (j/run-jetty (handler node)
-                                    (merge {:port port, :h2c? true, :h2? true}
+                                    (merge {:host (some-> (.getHost module) (.getHostAddress))
+                                            :port port,
+                                            :h2c? true, :h2? true}
                                            {:async? true, :join? false}))]
-    (log/info "HTTP server started on port:" port)
+    (log/info "HTTP server started at" (str (.getURI server)))
     (reify
       HttpServer
       (-http-port [_] (.getPort (.getURI server)))
@@ -410,8 +413,10 @@
         (.stop server)
         (log/info "HTTP server stopped.")))))
 
-(defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [port]}]
+(defmethod xtn/apply-config! :xtdb/server [^Xtdb$Config config, _ {:keys [host port]}]
   (.module config (cond-> (HttpServer$Factory.)
+                    (some? host) (.host (when (not= host "*")
+                                          (InetAddress/getByName host)))
                     (some? port) (.port port))))
 
 (defn http-port [^Xtdb node]

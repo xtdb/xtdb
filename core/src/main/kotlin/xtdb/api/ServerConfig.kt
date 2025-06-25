@@ -1,13 +1,15 @@
-@file:UseSerializers(IntWithEnvVarSerde::class)
+@file:UseSerializers(IntWithEnvVarSerde::class, InetAddressSerde::class)
 
 package xtdb.api
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import java.net.InetAddress
 import java.nio.file.Path
 
 @Serializable
 data class ServerConfig(
+    var host: InetAddress? = InetAddress.getLoopbackAddress(),
     var port: Int = 0,
     var readOnlyPort: Int = -1,
     var numThreads: Int = 42,
@@ -19,6 +21,8 @@ data class ServerConfig(
         @Serializable(with = PathWithEnvVarSerde::class) val keyStore: Path,
         @Serializable(with = StringWithEnvVarSerde::class) val keyStorePassword: String
     )
+
+    fun host(host: InetAddress?) = apply { this.host = host }
 
     /**
      * Port on which to start a read-write Postgres wire-compatible server.

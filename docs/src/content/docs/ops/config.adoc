@@ -49,6 +49,12 @@ XTDB nodes accept other optional configuration, as follows:
 [source,yaml]
 ----
 server:
+  # Host on which to start a read-write Postgres wire-compatible server.
+  #
+  # Default is "localhost", which means the server will only accept connections on the loopback interface.
+  # Set to '*' to accept connections on all interfaces.
+  host: localhost
+
   # Port on which to start a read-write Postgres wire-compatible server.
   #
   # Default is 0, to have the server choose an available port.

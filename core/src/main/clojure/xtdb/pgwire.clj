@@ -25,10 +25,10 @@
   (:import io.micrometer.core.instrument.Counter
            [java.io Closeable DataInputStream EOFException IOException PushbackInputStream]
            [java.lang Thread$State]
-           [java.net ServerSocket Socket SocketException]
+           [java.net InetAddress ServerSocket Socket SocketException]
            [java.nio ByteBuffer]
            [java.nio.channels FileChannel]
-           [java.nio.file Files Path]
+           [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
            [java.util Map]
@@ -1575,18 +1575,21 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator port num-threads drain-wait ssl-ctx metrics-registry read-only?]
-                  :or {port 0
+  (^Server [node {:keys [allocator bind-addr port num-threads drain-wait ssl-ctx metrics-registry read-only?]
+                  :or {bind-addr (InetAddress/getLoopbackAddress)
+                       port 0
                        num-threads 42
                        drain-wait 5000}}]
-   (util/with-close-on-catch [accept-socket (ServerSocket. port)]
-     (let [port (.getLocalPort accept-socket)
+   (util/with-close-on-catch [accept-socket (ServerSocket. port 0 bind-addr)]
+     (let [host (.getInetAddress accept-socket)
+           port (.getLocalPort accept-socket)
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
            !tmp-nodes (when-not node
                         (ConcurrentHashMap.))
            server (map->Server {:allocator allocator
+                                :host host
                                 :port port
                                 :read-only? read-only?
                                 :accept-socket accept-socket
@@ -1635,11 +1638,14 @@
 
 (defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [port read-only-port num-threads ssl] :as server}]
   (if server
-    (cond-> (.getServer config)
-      (some? port) (.port port)
-      (some? read-only-port) (.readOnlyPort read-only-port)
-      (some? num-threads) (.numThreads num-threads)
-      (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl)))
+    (let [host (:host server ::absent)]
+      (cond-> (.getServer config)
+        (not= host ::absent) (.host (when (and host (not= "*" host))
+                                      host))
+        (some? port) (.port port)
+        (some? read-only-port) (.readOnlyPort read-only-port)
+        (some? num-threads) (.numThreads num-threads)
+        (some? ssl) (.ssl (util/->path (:keystore ssl)) (:keystore-password ssl))))
 
     (.setServer config nil)))
 
@@ -1654,7 +1660,8 @@
       (.init (.getKeyManagers kmf) nil nil))))
 
 (defn- <-config [^ServerConfig config]
-  {:port (.getPort config)
+  {:bind-addr (.getHost config)
+   :port (.getPort config)
    :ro-port (.getReadOnlyPort config)
    :num-threads (.getNumThreads config)
    :ssl-ctx (when-let [ssl (.getSsl config)]
@@ -1670,12 +1677,13 @@
   (let [opts (dissoc opts :port :ro-port)]
     (letfn [(start-server [port read-only?]
               (when-not (neg? port)
-                (let [{:keys [port] :as srv} (serve node (-> opts
-                                                             (assoc :port port
-                                                                    :read-only? read-only?
-                                                                    :allocator (util/->child-allocator allocator "pgwire"))))]
-                  (log/infof "Server%sstarted on port: %d"
+                (let [{:keys [^InetAddress host port] :as srv} (serve node (-> opts
+                                                                               (assoc :port port
+                                                                                      :read-only? read-only?
+                                                                                      :allocator (util/->child-allocator allocator "pgwire"))))]
+                  (log/infof "Server%sstarted at postgres://%s:%d"
                              (if read-only? " (read-only) " " ")
+                             (.getHostAddress host)
                              port)
                   srv)))]
       {:read-write (start-server port false)
@@ -1692,3 +1700,4 @@
                                                   {:allocator (RootAllocator.)}))]
      (log/info "Playground started on port:" port)
      srv)))
+
