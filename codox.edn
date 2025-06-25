@@ -5,7 +5,7 @@
  :namespaces '[xtdb.api xtdb.node]
 
  :name "XTDB"
- :version "2.0.0-SNAPSHOT"
+ :version "2.x-SNAPSHOT"
  :description "XTDB is a document-oriented, dynamic, bitemporal database queryable with XTQL and SQL."
  :license {:name "MPL Licence"
            :url "https://opensource.org/license/mpl-2-0/"}}

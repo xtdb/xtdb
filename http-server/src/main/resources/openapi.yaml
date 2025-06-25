@@ -1,7 +1,7 @@
 openapi: 3.0.1
 info:
   title: XTDB
-  version: 2.0.0-SNAPSHOT
+  version: 2.x-SNAPSHOT
 servers:
   - url: /
 components:

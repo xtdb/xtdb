@@ -30,17 +30,17 @@ jobs:
       - name: Package & Push Azure Helm Chart
         run: |
           helm package azure/helm --app-version $APP_VERSION \
-          ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
+          ${{ env.APP_VERSION == 'edge' && '--version 2.x-SNAPSHOT' || '' }}
           helm push helm-xtdb-azure-*.tgz oci://ghcr.io/xtdb/
 
       - name: Package & Push Google Cloud Helm Chart
         run: |
           helm package google-cloud/helm --app-version $APP_VERSION \
-          ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
+          ${{ env.APP_VERSION == 'edge' && '--version 2.x-SNAPSHOT' || '' }}
           helm push helm-xtdb-google-cloud-*.tgz oci://ghcr.io/xtdb/
 
       - name: Package & Push AWS Helm Chart
         run: |
           helm package aws/helm --app-version $APP_VERSION \
-          ${{ env.APP_VERSION == 'edge' && '--version 2.0.0-SNAPSHOT' || '' }}
+          ${{ env.APP_VERSION == 'edge' && '--version 2.x-SNAPSHOT' || '' }}
           helm push helm-xtdb-aws-*.tgz oci://ghcr.io/xtdb/

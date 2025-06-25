@@ -23,10 +23,10 @@ To build the XTDB release artifacts locally and deploy them to Sonatype, run:
 
 Build and deploy release jars
 
-. `java -version` -> java-11-openjdk
+. `java -version` -> java-21-openjdk
 . `git clean -dXf`
-. `export XTDB_VERSION=1.23.0` (`set -x XTDB_VERSION=1.23.0` for the fish people)
-. `./gradlew publish`
+. `export XTDB_VERSION=2.0.0` (`set -x XTDB_VERSION=2.0.0` for the fish people)
+. `./gradlew clean publish`
 
 Release the artifacts to central
 
@@ -55,17 +55,17 @@ NOTE: TODO: document deploying documentation site.
 
 == Publicise:
 
-* Discourse
+* Discord
 * Clojurians' Slack
-* Zulip
-* Twitter, if appropriate
+* LinkedIn
+* BlueSky, if appropriate
 
 [#releasing-snapshots]
 == Building locally and releasing JAR snapshots:
 
 .  (none of the above sections are required)
-.  `java -version` → java-11-openjdk
+.  `java -version` → java-21-openjdk
 .  `git clean -dXf`
-.  `./gradlew publish`
+.  `./gradlew clean publish`
 .  (nothing to be done in Sonatype!)
 .  Confirm snapshot is live at https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/labs/xtdb-core/dev-SNAPSHOT/

@@ -1,97 +1,97 @@
 [versions]
-antlr="4.13.2"
-arrow="18.3.0"
-arrow-adbc="0.18.0"
-clojure="1.12.0"
-exposed="0.61.0"
+antlr = "4.13.2"
+arrow = "18.3.0"
+arrow-adbc = "0.18.0"
+clojure = "1.12.0"
+exposed = "0.61.0"
 kotlin-coroutines = "1.10.2"
 junit = "5.13.0"
 junit-launcher = "1.12.2"
-netty="4.2.0.Final"
+netty = "4.2.0.Final"
 protobuf = "4.31.1"
 protobuf-plugin = "0.9.5"
-reitit="0.9.1"
-muuntaja="0.6.11"
-testcontainers="1.21.1"
-micrometer="1.15.1"
-transit="1.0.329"
+reitit = "0.9.1"
+muuntaja = "0.6.11"
+testcontainers = "1.21.1"
+micrometer = "1.15.1"
+transit = "1.0.329"
 
-slf4j="2.0.17"
-logback="1.5.18"
+slf4j = "2.0.17"
+logback = "1.5.18"
 
 [libraries]
-arrow-algorithm={ group="org.apache.arrow", name="arrow-algorithm", version.ref="arrow" }
-arrow-memory-netty={ group="org.apache.arrow", name="arrow-memory-netty", version.ref="arrow" }
-arrow-compression={ group="org.apache.arrow", name="arrow-compression", version.ref="arrow" }
-arrow-vector={ group="org.apache.arrow", name="arrow-vector", version.ref="arrow" }
-arrow-adbc={ group="org.apache.arrow.adbc", name="adbc-core", version.ref="arrow-adbc" }
-arrow-adbc-fsql={ group="org.apache.arrow.adbc", name="adbc-driver-flight-sql", version.ref="arrow-adbc" }
-netty-common={ group="io.netty", name="netty-common", version.ref="netty" }
+arrow-algorithm = { group = "org.apache.arrow", name = "arrow-algorithm", version.ref = "arrow" }
+arrow-memory-netty = { group = "org.apache.arrow", name = "arrow-memory-netty", version.ref = "arrow" }
+arrow-compression = { group = "org.apache.arrow", name = "arrow-compression", version.ref = "arrow" }
+arrow-vector = { group = "org.apache.arrow", name = "arrow-vector", version.ref = "arrow" }
+arrow-adbc = { group = "org.apache.arrow.adbc", name = "adbc-core", version.ref = "arrow-adbc" }
+arrow-adbc-fsql = { group = "org.apache.arrow.adbc", name = "adbc-driver-flight-sql", version.ref = "arrow-adbc" }
+netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
 
-roaring-bitmap={ group="org.roaringbitmap", name="RoaringBitmap", version="1.3.0" }
-hppc={ group="com.carrotsearch", name="hppc", version="0.10.0" }
-caffeine={ group="com.github.ben-manes.caffeine", name="caffeine", version="3.1.8" }
-commons-codec={ group="commons-codec", name="commons-codec", version="1.18.0" }
+roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.3.0" }
+hppc = { group = "com.carrotsearch", name = "hppc", version = "0.10.0" }
+caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.1.8" }
+commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.18.0" }
 
-antlr={ group="org.antlr", name="antlr4", version.ref="antlr" }
-antlr-runtime={ group="org.antlr", name="antlr4-runtime", version.ref="antlr" }
+antlr = { group = "org.antlr", name = "antlr4", version.ref = "antlr" }
+antlr-runtime = { group = "org.antlr", name = "antlr4-runtime", version.ref = "antlr" }
 
-clojure={ group="org.clojure", name="clojure", version.ref="clojure" }
-clojure-test-check={ group="org.clojure", name="test.check", version="1.1.1" }
-clojure-tools-logging={ group="org.clojure", name="tools.logging", version="1.3.0" }
-clojure-spec={ group="org.clojure", name="spec.alpha", version="0.5.238" }
-clojure-data-json={ group="org.clojure", name="data.json", version="2.5.1" }
-clojure-data-csv={ group="org.clojure", name="data.csv", version="1.1.0" }
-clojure-tools-cli={ group="org.clojure", name="tools.cli", version="1.1.230" }
-clj-yaml={ group="clj-commons", name="clj-yaml", version="1.0.29" }
-transit-clj={ group="com.cognitect", name="transit-clj", version.ref="transit" }
-transit-java={ group="com.cognitect", name="transit-java", version.ref="transit" }
-next-jdbc={ group="com.github.seancorfield", name="next.jdbc", version="1.3.1048" }
-honeysql={ group="com.github.seancorfield", name="honeysql", version="2.7.1295" }
-integrant={ group="integrant", name="integrant", version="0.13.1" }
-buddy-hashers={ group="buddy", name="buddy-hashers", version="2.0.167" }
+clojure = { group = "org.clojure", name = "clojure", version.ref = "clojure" }
+clojure-test-check = { group = "org.clojure", name = "test.check", version = "1.1.1" }
+clojure-tools-logging = { group = "org.clojure", name = "tools.logging", version = "1.3.0" }
+clojure-spec = { group = "org.clojure", name = "spec.alpha", version = "0.5.238" }
+clojure-data-json = { group = "org.clojure", name = "data.json", version = "2.5.1" }
+clojure-data-csv = { group = "org.clojure", name = "data.csv", version = "1.1.0" }
+clojure-tools-cli = { group = "org.clojure", name = "tools.cli", version = "1.1.230" }
+clj-yaml = { group = "clj-commons", name = "clj-yaml", version = "1.0.29" }
+transit-clj = { group = "com.cognitect", name = "transit-clj", version.ref = "transit" }
+transit-java = { group = "com.cognitect", name = "transit-java", version.ref = "transit" }
+next-jdbc = { group = "com.github.seancorfield", name = "next.jdbc", version = "1.3.1048" }
+honeysql = { group = "com.github.seancorfield", name = "honeysql", version = "2.7.1295" }
+integrant = { group = "integrant", name = "integrant", version = "0.13.1" }
+buddy-hashers = { group = "buddy", name = "buddy-hashers", version = "2.0.167" }
 
-junit-jupiter-api={ group="org.junit.jupiter", name="junit-jupiter-api", version.ref="junit" }
-junit-jupiter-engine={ group="org.junit.jupiter", name="junit-jupiter-engine", version.ref="junit" }
-junit-platform-launcher ={ group="org.junit.platform", name="junit-platform-launcher", version.ref="junit-launcher" }
+junit-jupiter-api = { group = "org.junit.jupiter", name = "junit-jupiter-api", version.ref = "junit" }
+junit-jupiter-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-launcher" }
 
-pgjdbc={ group="org.postgresql", name="postgresql", version="42.7.5" }
+pgjdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.5" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 exposed-java-time = { module = "org.jetbrains.exposed:exposed-java-time", version.ref = "exposed" }
 
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlin-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
-kotlinx-serialization-json={ group="org.jetbrains.kotlinx", name="kotlinx-serialization-json", version="1.8.1" }
-mockk={ group="io.mockk", name="mockk", version="1.14.4" }
-kaml={ group="com.charleskorn.kaml", name="kaml", version="0.56.0" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.8.1" }
+mockk = { group = "io.mockk", name = "mockk", version = "1.14.4" }
+kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.56.0" }
 
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
 
-jsonista={ group="metosin", name="jsonista", version="0.3.13" }
-muuntaja={ group="metosin", name="muuntaja", version.ref="muuntaja" }
-reitit-core={ group="metosin", name="reitit-core", version.ref="reitit" }
-reitit-interceptors={ group="metosin", name="reitit-interceptors", version.ref="reitit" }
-reitit-ring={ group="metosin", name="reitit-ring", version.ref="reitit" }
-reitit-http={ group="metosin", name="reitit-http", version.ref="reitit" }
-reitit-sieppari={ group="metosin", name="reitit-sieppari", version.ref="reitit" }
-reitit-swagger={ group="metosin", name="reitit-swagger", version.ref="reitit" }
-reitit-spec={ group="metosin", name="reitit-spec", version.ref="reitit" }
+jsonista = { group = "metosin", name = "jsonista", version = "0.3.13" }
+muuntaja = { group = "metosin", name = "muuntaja", version.ref = "muuntaja" }
+reitit-core = { group = "metosin", name = "reitit-core", version.ref = "reitit" }
+reitit-interceptors = { group = "metosin", name = "reitit-interceptors", version.ref = "reitit" }
+reitit-ring = { group = "metosin", name = "reitit-ring", version.ref = "reitit" }
+reitit-http = { group = "metosin", name = "reitit-http", version.ref = "reitit" }
+reitit-sieppari = { group = "metosin", name = "reitit-sieppari", version.ref = "reitit" }
+reitit-swagger = { group = "metosin", name = "reitit-swagger", version.ref = "reitit" }
+reitit-spec = { group = "metosin", name = "reitit-spec", version.ref = "reitit" }
 
-hato= { group="hato", name="hato", version="1.0.0" }
+hato = { group = "hato", name = "hato", version = "1.0.0" }
 
-ring-core={ group="ring", name="ring-core", version="1.14.1" }
-ring-jetty9-adapter={ group="info.sunng", name="ring-jetty9-adapter", version="0.22.7" }
-jetty-alpn-server={ group="org.eclipse.jetty", name="jetty-alpn-server", version="10.0.15" }
+ring-core = { group = "ring", name = "ring-core", version = "1.14.1" }
+ring-jetty9-adapter = { group = "info.sunng", name = "ring-jetty9-adapter", version = "0.22.7" }
+jetty-alpn-server = { group = "org.eclipse.jetty", name = "jetty-alpn-server", version = "10.0.15" }
 
-testcontainers={ group="org.testcontainers", name="testcontainers", version.ref="testcontainers" }
-testcontainers-kafka={ group="org.testcontainers", name="kafka", version.ref="testcontainers" }
-testcontainers-minio={ group="org.testcontainers", name="minio", version.ref="testcontainers" }
+testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
+testcontainers-kafka = { group = "org.testcontainers", name = "kafka", version.ref = "testcontainers" }
+testcontainers-minio = { group = "org.testcontainers", name = "minio", version.ref = "testcontainers" }
 
-micrometer-core={ group="io.micrometer", name="micrometer-core", version.ref="micrometer" }
-micrometer-registry-prometheus={ group="io.micrometer", name="micrometer-registry-prometheus", version.ref="micrometer" }
-micrometer-registry-cloudwatch2={ group="io.micrometer", name="micrometer-registry-cloudwatch2", version.ref="micrometer" }
-micrometer-registry-azuremonitor={ group="io.micrometer", name="micrometer-registry-azure-monitor", version.ref="micrometer" }
+micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
+micrometer-registry-prometheus = { group = "io.micrometer", name = "micrometer-registry-prometheus", version.ref = "micrometer" }
+micrometer-registry-cloudwatch2 = { group = "io.micrometer", name = "micrometer-registry-cloudwatch2", version.ref = "micrometer" }
+micrometer-registry-azuremonitor = { group = "io.micrometer", name = "micrometer-registry-azure-monitor", version.ref = "micrometer" }
 
 
 # logging in XTDB:
@@ -103,9 +103,9 @@ micrometer-registry-azuremonitor={ group="io.micrometer", name="micrometer-regis
 # Clojure -> SLF4J
 # java.lang.System.Logger -> SLF4J
 # SLF4J -> Logback
-slf4j-api={ group="org.slf4j", name="slf4j-api", version.ref="slf4j" } # use this when you refer to an SLF4J class
-slf4j-jpl={ group="org.slf4j", name="slf4j-jdk-platform-logging", version.ref="slf4j" } # use this in applications
-logback-classic={ group="ch.qos.logback", name="logback-classic", version.ref="logback" } # use this in applications
+slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" } # use this when you refer to an SLF4J class
+slf4j-jpl = { group = "org.slf4j", name = "slf4j-jdk-platform-logging", version.ref = "slf4j" } # use this in applications
+logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" } # use this in applications
 
 [plugins]
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }

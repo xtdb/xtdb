@@ -62,7 +62,7 @@ allprojects {
     // labs sub-projects set this explicitly - this runs afterwards
     group = if (proj.hasProperty("labs")) "com.xtdb.labs" else "com.xtdb"
 
-    version = System.getenv("XTDB_VERSION") ?: "2.0.0-SNAPSHOT"
+    version = System.getenv("XTDB_VERSION") ?: "2.x-SNAPSHOT"
 
     repositories {
         mavenCentral()
@@ -489,7 +489,7 @@ createBench("tsbs-iot", mapOf("file" to "--file"))
 
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
-    moduleVersion.set("2.0.0-SNAPSHOT")
+    moduleVersion.set("2.x-SNAPSHOT")
 
     inputs.file("dokka/logo-styles.css")
     inputs.file("dokka/logo-icon.svg")
