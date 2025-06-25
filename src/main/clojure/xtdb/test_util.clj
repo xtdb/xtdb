@@ -151,11 +151,15 @@
   (then-await-tx node)
   (li/finish-block! node))
 
-(defn open-vec ^xtdb.arrow.Vector [col-name-or-field ^List rows]
-  (cond
-    (string? col-name-or-field) (Vector/fromList *allocator* ^String col-name-or-field rows)
-    (instance? Field col-name-or-field) (Vector/fromList *allocator* ^Field col-name-or-field rows)
-    :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field}))))
+(defn open-vec
+  (^xtdb.arrow.Vector [^Field field]
+   (Vector/fromField *allocator* field))
+
+  (^xtdb.arrow.Vector [col-name-or-field ^List rows]
+   (cond
+     (string? col-name-or-field) (Vector/fromList *allocator* ^String col-name-or-field rows)
+     (instance? Field col-name-or-field) (Vector/fromList *allocator* ^Field col-name-or-field rows)
+     :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field})))))
 
 (defn open-rel
   (^xtdb.arrow.Relation [] (vw/open-rel *allocator*))
