@@ -500,20 +500,20 @@
 
     {:fields (projection-specs->fields output-projections)
      :->cursor (fn [{:keys [allocator args] :as opts}]
-                 (let [relation-map (emap/->relation-map allocator {:build-fields build-fields
-                                                                    :build-key-col-names build-key-col-names
-                                                                    :probe-fields probe-fields
-                                                                    :probe-key-col-names probe-key-col-names
-                                                                    :store-full-build-rel? true
-                                                                    :with-nil-row? with-nil-row?
-                                                                    :theta-expr theta-expr
-                                                                    :param-fields param-fields
-                                                                    :args args})]
+                 (util/with-close-on-catch [build-cursor (->build-cursor opts)
+                                            relation-map (emap/->relation-map allocator {:build-fields build-fields
+                                                                                         :build-key-col-names build-key-col-names
+                                                                                         :probe-fields probe-fields
+                                                                                         :probe-key-col-names probe-key-col-names
+                                                                                         :store-full-build-rel? true
+                                                                                         :with-nil-row? with-nil-row?
+                                                                                         :theta-expr theta-expr
+                                                                                         :param-fields param-fields
+                                                                                         :args args})]
                    (project/->project-cursor opts
-                                             (util/with-close-on-catch [build-cursor (->build-cursor opts)]
-                                               (if (= join-type ::mark-join)
-                                                 (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                 (JoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type)))
+                                             (if (= join-type ::mark-join)
+                                               (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
+                                               (JoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type))
                                              output-projections)))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
