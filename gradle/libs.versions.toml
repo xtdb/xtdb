@@ -109,3 +109,4 @@ logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.
 
 [plugins]
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
+jreleaser = { id = "org.jreleaser", version = "1.18.0" }

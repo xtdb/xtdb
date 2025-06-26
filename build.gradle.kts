@@ -1,6 +1,10 @@
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
 import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.base.DokkaBaseConfiguration
+import org.jreleaser.gradle.plugin.dsl.deploy.maven.MavenDeployer
+import org.jreleaser.gradle.plugin.tasks.JReleaserDeployTask
+import org.jreleaser.model.Active
+import org.jreleaser.model.api.deploy.maven.MavenCentralMavenDeployer
 import java.time.Year
 
 evaluationDependsOnChildren()
@@ -18,6 +22,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
+    alias(libs.plugins.jreleaser)
 }
 
 val defaultJvmArgs = listOf(
@@ -56,10 +61,12 @@ layout.buildDirectory.set(
     }
 )
 
+val rootProj = project
+
 allprojects {
     val proj = this
 
-    // labs sub-projects set this explicitly - this runs afterwards
+    // labs subprojects set this explicitly - this runs afterwards
     group = if (proj.hasProperty("labs")) "com.xtdb.labs" else "com.xtdb"
 
     version = System.getenv("XTDB_VERSION") ?: "2.x-SNAPSHOT"
@@ -197,6 +204,8 @@ allprojects {
             }
         }
 
+        // apply 'maven-publish' in the sub-module to bring in all of this shared config.
+        // apparently the Done Thing™ is now to create your own plugin - no doubt we'll migrate at some point.
         if (plugins.hasPlugin("maven-publish")) {
             extensions.configure(PublishingExtension::class) {
                 publications.named("maven", MavenPublication::class) {
@@ -208,19 +217,19 @@ allprojects {
                         }
 
                     pom {
-                        url.set("https://xtdb.com")
+                        url = "https://xtdb.com"
 
                         licenses {
                             license {
-                                name.set("The MPL License")
-                                url.set("https://opensource.org/license/mpl-2-0/")
+                                name = "The MPL License"
+                                url = "https://opensource.org/license/mpl-2-0/"
                             }
                         }
                         developers {
                             developer {
-                                id.set("juxt")
-                                name.set("JUXT")
-                                email.set("hello@xtdb.com")
+                                id = "juxt"
+                                name = "JUXT"
+                                email = "hello@xtdb.com"
                             }
                         }
                         scm {
@@ -241,25 +250,91 @@ allprojects {
                     }
                 }
 
+                // we 'publish' these to a local, on-disk Maven repo, so that JReleaser has
+                // something to upload
                 repositories {
                     maven {
-                        name = "ossrh"
-                        val releasesRepoUrl = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2"
-                        val snapshotsRepoUrl = "https://s01.oss.sonatype.org/content/repositories/snapshots"
-                        url = uri(if (!version.toString().endsWith("-SNAPSHOT")) releasesRepoUrl else snapshotsRepoUrl)
-
-                        credentials {
-                            username = project.properties["ossrhUsername"] as? String
-                            password = project.properties["ossrhPassword"] as? String
-                        }
+                        name = "jreleaserStaging"
+                        url = uri(layout.buildDirectory.dir("jreleaser/maven-staging"))
                     }
                 }
 
+                // we clean out the local Maven staging repo before we do the local publication
+                tasks.register<Delete>("cleanJreleaserStagingRepository") {
+                    delete(layout.buildDirectory.dir("jreleaser/maven-staging"))
+                }
+
+                tasks.named("publishMavenPublicationToJreleaserStagingRepository") {
+                    dependsOn("cleanJreleaserStagingRepository")
+                }
+
+                // signing is done through the `gpg` command on your machine.
                 extensions.configure(SigningExtension::class) {
                     useGpgCmd()
                     sign(publications["maven"])
                 }
             }
+        }
+    }
+}
+
+val jreleaserDeployTask = tasks.getByName<JReleaserDeployTask>("jreleaserDeploy")
+
+jreleaser {
+    strict = true
+
+    deploy.active = Active.ALWAYS
+    deploy.maven {
+        fun MavenDeployer.setup() {
+            // set these up in your `~/.gradle/gradle.properties`
+            username = properties["centralUsername"] as? String
+            password = properties["centralPassword"] as? String
+
+            rootProj.allprojects {
+                val proj = this
+
+                // we use the on-disk Maven repos created by the maven-publish plugin.
+                // we combine them all into one bundle to upload to Central
+                if (proj.plugins.hasPlugin("maven-publish")) {
+                    jreleaserDeployTask.dependsOn(
+                        proj.tasks
+                            .getByName("publishMavenPublicationToJreleaserStagingRepository")
+                    )
+
+                    stagingRepositories.add(
+                        proj.layout.buildDirectory
+                            .dir("jreleaser/maven-staging")
+                            .get().toString()
+                    )
+                }
+            }
+
+            sign = false // already done in maven-publish
+        }
+
+        // release side is through the new Maven Central 'Publisher' API
+        // https://jreleaser.org/guide/latest/reference/deploy/maven/maven-central.html
+        mavenCentral.create("release") {
+            active = Active.RELEASE_PRERELEASE
+            url = "https://central.sonatype.com/api/v1/publisher"
+
+            setup()
+
+            // this only uploads the artifacts. we could get it to publish them as well,
+            // but I quite like having a final 'big red button' step.
+            // https://central.sonatype.com/publishing
+            stage = MavenCentralMavenDeployer.Stage.UPLOAD
+        }
+
+        // main Publisher API doesn't support snapshots, so we use a more standard 'nexus2' repository.
+        // https://jreleaser.org/guide/latest/reference/deploy/maven/nexus2.html
+        nexus2.create("snapshots") {
+            active = Active.SNAPSHOT
+            url = "https://central.sonatype.com/repository/maven-snapshots/"
+            snapshotUrl = "https://central.sonatype.com/repository/maven-snapshots/"
+            snapshotSupported = true
+
+            setup()
         }
     }
 }
