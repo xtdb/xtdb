@@ -1,64 +1,79 @@
-= Releasing core2
+= Releasing XTDB
 
 We could automate more of this than we do, but here's a checklist in the meantime.
 
-You can kick off a couple of these in parallel, but note the various 'await' items.
+You can kick off a couple of these in parallel.
 
-Version number is `Major.Minor.Patch`, e.g. `1.23.0`.
+You should already have seen a successful CI run-through of the commit you'd like to release.
+
+Version number is `Major.Minor.Patch`, e.g. `2.10.4`.
 We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[BreakVer].
 
 == Git tag:
 
 . find/replace `<previous-version>` -> `<next-version>`, commit
 . `git tag --annotate --sign <next-version>` (magit `t -a -s t`), add release notes to tag.
-. `git push origin master <next-version>`
+. `git push origin main <next-version>`
 
-== CircleCI
+== Github Action
 
-. Await https://app.circleci.com/pipelines/github/xtdb/core2[CircleCI build]
+This one tags and publishes the Docker images: https://github.com/xtdb/xtdb/actions/workflows/tag.yml
 
-== Jars
+== JARs
 
-To build the XTDB release artifacts locally and deploy them to Sonatype, run:
+To build the XTDB release artifacts locally and deploy them to Maven Central, run:
 
-Build and deploy release jars
+Build and deploy release jars:
 
 . `java -version` -> java-11-openjdk
 . `git clean -dXf`
-. `export XTDB_VERSION=1.23.0` (`set -x XTDB_VERSION=1.23.0` for the fish people)
-. `./gradlew publish`
+. `export XTDB_VERSION=2.0.0` (`set -x XTDB_VERSION=2.0.0` for the fish people)
+. `./gradlew clean jreleaserDeploy`
 
-Release the artifacts to central
+Release the artifacts to central:
 
-. Head over to https://s01.oss.sonatype.org, 'Log in', 'Staging Repositories'
-. 'Close' the repo (performs validations)
-. 'Release' the repo
+. Head over to https://central.sonatype.com/publishing
+. Quick smoke-check of all of the packages are as you'd expect (api, core, 3x clouds; all at the correct version).
+. Publish
 . Check https://repo1.maven.org/maven2/com/xtdb to see when the artifacts have been mirrored across Maven Central.
 
-It may be sensible to update `dev-SNAPSHOT` in response to the release, unless it is already ahead.
+It may be sensible to update `2.x-SNAPSHOT` in response to the release, unless it is already ahead.
 
-. `unset XTDB_VERSION` and deploy the new release as link:#releasing-snapshots[dev-SNAPSHOT]
+. `unset XTDB_VERSION` and deploy the new release as link:#releasing-snapshots[2.x-SNAPSHOT]
+
+[NOTE]
+====
+We use https://jreleaser.org/[JReleaser] to deploy the JARs to Maven.
+
+. First, the `maven-publish` Gradle plugin builds a staging area for the artifacts under `<module>/build/jreleaser/maven-staging` in each sub-module.
+  This is configured in the root `build.gradle.kts` for each sub-module that applies the `maven-publish` plugin.
+. Then, one `jreleaser` config in the root `build.gradle.kts` combines them all together and uploads them to Maven Central.
+====
 
 == Docs:
 
-NOTE: TODO: document deploying documentation site.
+The documentation site (https://docs.xtdb.com) is deployed through this repo too.
+
+Push a commit to the `origin/docs-live` branch, then AWS Amplify will release it based on a GitHub hook.
 
 == Github release:
 
 . Create a new milestone and ensure that all issues in the "Awaiting Release" column are updated
-. Locate tag on https://github.com/xtdb/core2/releases[releases page], click 'Edit tag'
+. Locate tag on https://github.com/xtdb/xtdb/releases[releases page], click 'Edit tag'
 . Copy release notes into release description
 . Await artifacts, upload artifacts to release
 . Await JARs deploying, and ensure 'docs' section is complete - people get notified at this point.
 . 'Publish release'
 . 'Archive all cards' for the "Awaiting Release" column
 
+NOTE: we could do a fair bit of this through JReleaser too, but for now I prefer the fine-grained control over the release process.
+
 == Publicise:
 
-* Discourse
-* Clojurians' Slack
-* Zulip
-* Twitter, if appropriate
+* Discord
+* Clojurians' Slack - #announcements for a major, additionally #releases for a minor if it's 'interesting', additionally #xtdb for a patch.
+* LinkedIn
+* BlueSky, if appropriate
 
 [#releasing-snapshots]
 == Building locally and releasing JAR snapshots:
@@ -66,6 +81,6 @@ NOTE: TODO: document deploying documentation site.
 .  (none of the above sections are required)
 .  `java -version` → java-11-openjdk
 .  `git clean -dXf`
-.  `./gradlew publish`
+.  `./gradlew clean jreleaserDeploy`
 .  (nothing to be done in Sonatype!)
-.  Confirm snapshot is live at https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/labs/xtdb-core/dev-SNAPSHOT/
+.  Confirm snapshot is live at https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/com/xtdb/

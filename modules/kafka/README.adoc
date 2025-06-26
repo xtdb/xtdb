@@ -1,6 +1,3 @@
-= core2 Kafka
+= XTDB Kafka
 
-== Testing
-
-- (once) `docker-compose up -d`
-- (from core2 root) `lein with-profile +kafka test :kafka`
+See https://docs.xtdb.com/ops/config/log/kafka.html

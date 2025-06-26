@@ -13,6 +13,9 @@ dependencies {
     implementation(gradleApi())
     implementation("com.gradleup.shadow:shadow-gradle-plugin:8.3.5")
     implementation("org.apache.ant:ant:1.10.15") // eugh. _all_ of Ant for the DataReaderTransformer?
+
+    // this one because jreleaser depends on Jackson 2.15+
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.18.2")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
