@@ -1575,12 +1575,12 @@
   :num-threads (bounds the number of client connections, default 42)
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator bind-addr port num-threads drain-wait ssl-ctx metrics-registry read-only?]
-                  :or {bind-addr (InetAddress/getLoopbackAddress)
+  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry read-only?]
+                  :or {host (InetAddress/getLoopbackAddress)
                        port 0
                        num-threads 42
                        drain-wait 5000}}]
-   (util/with-close-on-catch [accept-socket (ServerSocket. port 0 bind-addr)]
+   (util/with-close-on-catch [accept-socket (ServerSocket. port 0 host)]
      (let [host (.getInetAddress accept-socket)
            port (.getLocalPort accept-socket)
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
@@ -1660,7 +1660,7 @@
       (.init (.getKeyManagers kmf) nil nil))))
 
 (defn- <-config [^ServerConfig config]
-  {:bind-addr (.getHost config)
+  {:host (.getHost config)
    :port (.getPort config)
    :ro-port (.getReadOnlyPort config)
    :num-threads (.getNumThreads config)
@@ -1673,12 +1673,13 @@
          :metrics-registry (ig/ref :xtdb.metrics/registry)}
         (<-config config)))
 
-(defmethod ig/init-key ::server [_ {:keys [node allocator port ro-port] :as opts}]
+(defmethod ig/init-key ::server [_ {:keys [host node allocator port ro-port] :as opts}]
   (let [opts (dissoc opts :port :ro-port)]
     (letfn [(start-server [port read-only?]
               (when-not (neg? port)
                 (let [{:keys [^InetAddress host port] :as srv} (serve node (-> opts
-                                                                               (assoc :port port
+                                                                               (assoc :host host
+                                                                                      :port port
                                                                                       :read-only? read-only?
                                                                                       :allocator (util/->child-allocator allocator "pgwire"))))]
                   (log/infof "Server%sstarted at postgres://%s:%d"
@@ -1696,8 +1697,9 @@
   (^xtdb.pgwire.Server [] (open-playground nil))
 
   (^xtdb.pgwire.Server [opts]
-   (let [{:keys [port] :as srv} (serve nil (merge opts
-                                                  {:allocator (RootAllocator.)}))]
-     (log/info "Playground started on port:" port)
+   (let [{:keys [^InetAddress host, port] :as srv} (serve nil (merge opts
+                                                                     {:host nil
+                                                                      :allocator (RootAllocator.)}))]
+     (log/infof "Playground started at postgres://%s:%d" (.getHostAddress host) port)
      srv)))
 
