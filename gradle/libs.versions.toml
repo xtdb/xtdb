@@ -64,7 +64,7 @@ kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core",
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.8.1" }
 mockk = { group = "io.mockk", name = "mockk", version = "1.14.4" }
-kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.56.0" }
+kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.82.0" }
 
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
 
