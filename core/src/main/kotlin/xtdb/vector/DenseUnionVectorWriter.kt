@@ -7,7 +7,6 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.NULL_TYPE
-import xtdb.arrow.RelationReader
 import xtdb.arrow.RowCopier
 import xtdb.arrow.ValueReader
 import xtdb.toArrowType
@@ -110,14 +109,6 @@ class DenseUnionVectorWriter(
             }
         }
 
-        override fun rowCopier(src: RelationReader): RowCopier {
-            val innerCopier = inner.rowCopier(src)
-
-            return RowCopier { srcIdx ->
-                writeValue()
-                innerCopier.copyRow(srcIdx)
-            }
-        }
     }
 
     private fun upsertChildField(childField: Field) {

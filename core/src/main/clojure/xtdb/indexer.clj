@@ -122,10 +122,12 @@
                                                                 {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
                                                                  :table-name table-name
                                                                  :forbidden-cols forbidden-cols})))
-                                      (let [^RelationReader table-rel-rdr (vr/rel-reader (for [^String sk ks,
-                                                                                               :when (not (contains? #{"_valid_from" "_valid_to"} sk))]
-                                                                                           (.vectorFor doc-rdr sk))
-                                                                                         (.getValueCount doc-rdr))
+                                      (let [table-doc-rdr (RelationAsStructReader.
+                                                           "docs"
+                                                           (vr/rel-reader (for [^String sk ks,
+                                                                                :when (not (contains? #{"_valid_from" "_valid_to"} sk))]
+                                                                            (.vectorFor doc-rdr sk))
+                                                                          (.getValueCount doc-rdr)))
                                             live-table-tx (.liveTable live-idx-tx table-name)]
                                         (MapEntry/create table-name
                                                          {:id-rdr (.vectorFor doc-rdr "_id")
@@ -139,8 +141,8 @@
 
                                                           :docs-rdr table-docs-rdr
 
-                                                          :doc-copier (-> (.getDocWriter live-table-tx)
-                                                                          (.rowCopier table-rel-rdr))})))))))]
+                                                          :doc-copier (.rowCopier table-doc-rdr
+                                                                                  (.getDocWriter live-table-tx))})))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -256,9 +258,9 @@
     (reify RelationIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.getRowCount in-rel)
-              ^RelationReader content-rel (vr/rel-reader (->> in-rel
-                                                              (remove (comp types/temporal-column? #(.getName ^VectorReader %))))
-                                                         (.getRowCount in-rel))
+              content-rel (vr/rel-reader (->> in-rel
+                                              (remove (comp types/temporal-column? #(.getName ^VectorReader %))))
+                                         (.getRowCount in-rel))
               table (str table)
 
               _ (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
@@ -272,8 +274,8 @@
           (with-crash-log indexer "error upserting rows"
               {:table-name table, :tx-key tx-key}
               {:live-table-tx live-table-tx, :query-rel in-rel}
-            (let [live-idx-table-copier (-> (.getDocWriter live-table-tx)
-                                            (.rowCopier content-rel))]
+            (let [live-idx-table-copier (.rowCopier (RelationAsStructReader. "content" content-rel)
+                                                    (.getDocWriter live-table-tx))]
               (when-not id-col
                 (throw (err/incorrect :xtdb.indexer/missing-xt-id-column
                                       "Missing ID column"

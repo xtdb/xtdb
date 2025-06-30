@@ -11,7 +11,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.*
-import xtdb.arrow.RelationReader
 import xtdb.toLeg
 import xtdb.util.Hasher
 import xtdb.vector.extensions.SetType
@@ -70,19 +69,6 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
     override fun rowCopier(dest: VectorWriter) = unsupported("rowCopier(VectorWriter)")
 
     fun rowCopier(src: ValueVector): RowCopier
-
-    fun rowCopier(src: RelationReader): RowCopier {
-        val copiers = src.vectors.map {
-            it.rowCopier(vectorForOrNull(it.name) ?: vectorFor(it.name, it.fieldType))
-        }
-
-        return RowCopier { srcIdx ->
-            val pos = valueCount
-            copiers.forEach { it.copyRow(srcIdx) }
-            endStruct()
-            pos
-        }
-    }
 
     override fun writeUndefined() = TODO("writeUndefined on IVectorWriter...? could probably do this")
 

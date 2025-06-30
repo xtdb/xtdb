@@ -9,11 +9,7 @@ import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.InvalidCopySourceException
-import xtdb.arrow.InvalidWriteObjectException
-import xtdb.arrow.RelationReader
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ValueReader
+import xtdb.arrow.*
 import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.util.normalForm
@@ -185,15 +181,4 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
 
-    override fun rowCopier(src: RelationReader): RowCopier {
-        val innerCopiers =
-            src.vectors.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> child.rowCopier(w) } }
-
-        return RowCopier { srcIdx ->
-            valueCount.also {
-                innerCopiers.forEach { it.copyRow(srcIdx) }
-                endStruct()
-            }
-        }
-    }
 }
