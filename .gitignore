@@ -18,6 +18,8 @@ buildRepl
 .lsp/.cache/
 /_manifest
 .DS_Store
+.claude
+.kotlin
 
 /.calva/
 
