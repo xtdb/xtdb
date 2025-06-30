@@ -2,15 +2,15 @@ package xtdb.operator
 
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.ICursor
-import xtdb.arrow.RowCopier
-import xtdb.vector.IRelationWriter
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
+import xtdb.arrow.RowCopier
 import java.util.function.Consumer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
 class PatchGapsCursor(
     private val inner: ICursor<RelationReader>,
-    private val out: IRelationWriter,
+    private val out: RelationWriter,
     private val validFrom: Long,
     private val validTo: Long,
 ) : ICursor<RelationReader> {
@@ -72,7 +72,7 @@ class PatchGapsCursor(
             }
         }
 
-        c.accept(out.toReader())
+        c.accept(out.asReader)
     }
 
     override fun close() {
