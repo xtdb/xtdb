@@ -1,27 +1,22 @@
-package xtdb.vector
+package xtdb.arrow
 
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.RelationReader
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ValueReader
-import xtdb.arrow.VectorPosition
-import xtdb.arrow.VectorReader
-import xtdb.arrow.VectorWriter
+import xtdb.types.Fields
 import xtdb.util.Hasher
-import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
+import xtdb.util.closeOnCatch
 
 class RelationAsStructReader(
     override val name: String,
     private val rel: RelationReader
-) : IVectorReader {
-    override val valueCount get() = rel.rowCount
+) : VectorReader {
+    override val nullable = false
+    override val fieldType = Fields.Struct().fieldType
+    override val field: Field get() = Fields.Struct(rel.vectors.map { it.field }).toArrowField(name)
 
-    override val field get() =
-        Field(name, FieldType.notNullable(STRUCT_TYPE), rel.vectors.map(VectorReader::field))
+    override val valueCount get() = rel.rowCount
 
     override fun isNull(idx: Int) = false
 
@@ -30,8 +25,6 @@ class RelationAsStructReader(
     override fun getObject(idx: Int): Any = rel[idx]
 
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any = rel[idx, keyFn]
-
-    override fun copyTo(vector: ValueVector) = TODO("Not yet implemented")
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val copiers = rel.vectors.map { it.rowCopier(dest) }
@@ -46,6 +39,10 @@ class RelationAsStructReader(
             override fun readObject() = rdrs
         }
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        rel.openSlice(al)
+            .closeOnCatch { slicedRel -> RelationAsStructReader(name, slicedRel) }
 
     override fun hashCode(idx: Int, hasher: Hasher): Int =
         rel.vectors.fold(0) { hash, col -> ByteFunctionHelpers.combineHash(hash, col.hashCode(idx, hasher)) }

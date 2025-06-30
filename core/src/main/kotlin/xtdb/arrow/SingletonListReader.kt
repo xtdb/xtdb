@@ -1,21 +1,19 @@
-package xtdb.vector
+package xtdb.arrow
 
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.vector.ValueVector
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.ListValueReader
-import xtdb.arrow.RowCopier
-import xtdb.arrow.ValueReader
-import xtdb.arrow.VectorPosition
-import xtdb.arrow.VectorWriter
 import xtdb.util.Hasher
-import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
+import xtdb.util.closeOnCatch
 
-class SingletonListReader(override val name: String, private val elReader: IVectorReader) : IVectorReader {
+class SingletonListReader(override val name: String, private val elReader: VectorReader) : VectorReader {
+    override val nullable = false
+    override val fieldType: FieldType = FieldType.notNullable(ArrowType.List.INSTANCE)
     override val valueCount get() = 1
-    override val field get() = Field(name, FieldType.notNullable(LIST_TYPE), listOf(elReader.field))
+    override val field get() = Field(name, FieldType.notNullable(ArrowType.List.INSTANCE), listOf(elReader.field))
 
     override fun isNull(idx: Int) = false
 
@@ -25,8 +23,6 @@ class SingletonListReader(override val name: String, private val elReader: IVect
     override val listElements get() = elReader
     override fun getListStartIndex(idx: Int) = 0
     override fun getListCount(idx: Int) = elReader.valueCount
-
-    override fun copyTo(vector: ValueVector) = TODO("Not yet implemented")
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val elCopier = elReader.rowCopier(dest.getListElements(elReader.field.fieldType))
@@ -68,6 +64,9 @@ class SingletonListReader(override val name: String, private val elReader: IVect
             }
         }
     }
+
+    override fun openSlice(al: BufferAllocator) =
+        elReader.openSlice(al).closeOnCatch { slicedEl -> SingletonListReader(name, slicedEl) }
 
     override fun close() = elReader.close()
 }

@@ -29,12 +29,11 @@
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           (xtdb.arrow RelationReader RowCopier VectorReader)
+           (xtdb.arrow RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            xtdb.BufferPool
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
-           (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.vector RelationAsStructReader SingletonListReader)))
+           (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
