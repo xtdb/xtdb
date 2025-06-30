@@ -13,9 +13,10 @@ import xtdb.trie.*
 import xtdb.types.Fields
 import xtdb.util.HLL
 import xtdb.util.RowCounter
-import xtdb.util.closeAllOnCatch
-import xtdb.util.openSlice
-import xtdb.vector.*
+import xtdb.util.closeOnCatch
+import xtdb.vector.IRelationWriter
+import xtdb.vector.IVectorWriter
+import xtdb.vector.asReader
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
@@ -152,21 +153,17 @@ constructor(
             .children
             .associateBy { it.name }
 
-    private fun IRelationWriter.openWatermarkLiveRel(): RelationReader =
-        mutableListOf<VectorReader>().closeAllOnCatch { outCols ->
-            for ((_, w) in this) {
-                w.syncValueCount()
-                outCols.add(w.vector.openSlice().asReader)
-            }
-
-            RelationReader.from(outCols, rowCount)
-        }
-
     private fun openWatermark(trie: MemoryHashTrie): Watermark {
-        val wmLiveRel = liveRelation.openWatermarkLiveRel()
-        val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
+        // this can be openSlice once liveRel is a new-style relation
+        liveRelation.openDirectSlice(al).use { wmLiveRel ->
+            wmLiveRel.openAsRoot(al).closeOnCatch { root ->
+                val relReader = RelationReader.from(root)
 
-        return Watermark(liveRelation.fields, wmLiveRel, wmLiveTrie)
+                val wmLiveTrie = trie.withIidReader(relReader["_iid"])
+
+                return Watermark(liveRelation.fields, relReader, wmLiveTrie)
+            }
+        }
     }
 
     fun openWatermark() = openWatermark(liveTrie)

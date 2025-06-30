@@ -98,6 +98,8 @@ abstract class VariableWidthVector : Vector() {
         validityBuffer.loadBuffer(vec.validityBuffer)
         offsetBuffer.loadBuffer(vec.offsetBuffer)
         dataBuffer.loadBuffer(vec.dataBuffer)
+
+        valueCount = vec.valueCount
     }
 
     override fun clear() {

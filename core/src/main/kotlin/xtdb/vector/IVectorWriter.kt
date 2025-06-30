@@ -43,6 +43,8 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
             return ValueVectorReader.from(vector)
         }
 
+    override fun openDirectSlice(al: BufferAllocator) = asReader.openDirectSlice(al)
+
     // This is essentially the promoteChildren for monomorphic vectors except NullVector
     fun promoteChildren(field: Field) {
         when {
@@ -106,7 +108,7 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
     override fun vectorFor(name: String): IVectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
     override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter = unsupported("vectorFor")
 
-    override fun openSlice(al: BufferAllocator): VectorReader = unsupported("IVectorWriter/openSlice")
+    override fun openSlice(al: BufferAllocator) = asReader.openSlice(al)
 
     // New VectorWriters are also VectorReaders; old ones weren't, so we throw unsupported
     override fun hashCode(idx: Int, hasher: Hasher) = unsupported("IVectorWriter/hashCode")
