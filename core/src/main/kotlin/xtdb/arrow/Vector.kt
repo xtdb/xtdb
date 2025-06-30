@@ -82,7 +82,7 @@ sealed class Vector : VectorReader, VectorWriter {
     }
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
-        if (dest is DenseUnionVector) return dest.rowCopierTo(this)
+        if (dest is DenseUnionVector.LegVector) return dest.rowCopierFrom(this)
 
         check(dest is Vector)
 

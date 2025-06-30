@@ -66,7 +66,7 @@ class DenseUnionVector private constructor(
 
     override val vectors: Iterable<Vector> get() = legVectors
 
-    private inner class LegVector(
+    internal inner class LegVector(
         private val typeId: Byte, private val inner: VectorWriter, private val nested: Boolean = false
     ) : VectorReader, VectorWriter {
 
@@ -155,7 +155,7 @@ class DenseUnionVector private constructor(
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
-        fun rowCopierTo(src: VectorReader): RowCopier {
+        fun rowCopierFrom(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
             return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }
         }
@@ -262,14 +262,11 @@ class DenseUnionVector private constructor(
 
     override fun hashCode0(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
-    internal fun rowCopierTo(src: VectorReader): RowCopier =
-        legVectorFor(src.fieldType.type.toLeg(), src.fieldType).rowCopierTo(src)
-
     override fun rowCopier0(src: VectorReader): RowCopier =
         when {
             src is DenseUnionVector -> {
                 val copierMapping = src.legVectors.map { childVec ->
-                    legVectorFor(childVec.name, childVec.fieldType).rowCopierTo(childVec)
+                    childVec.rowCopier(legVectorFor(childVec.name, childVec.fieldType))
                 }
 
                 RowCopier { srcIdx ->
@@ -282,16 +279,14 @@ class DenseUnionVector private constructor(
                 }
             }
 
-            else -> this@DenseUnionVector.rowCopierTo(src)
+            else -> src.rowCopier(legVectorFor(src.fieldType.type.toLeg(), src.fieldType))
         }
 
     override fun rowCopier(dest: VectorWriter) =
         when {
-            dest is DenseUnionVector -> dest.rowCopier0(this)
+            legVectors.size == 1 -> LegVector(0, legVectors.first()).rowCopier(dest)
 
-            legVectors.size == 2 -> {
-                check(legVectors.filter { it.type == NULL_TYPE }.size == 1)
-
+            legVectors.size == 2 && legVectors.filter { it.type == NULL_TYPE }.size == 1 -> {
                 val copier = legVectors
                     .mapIndexed { i, v -> Pair(i, v) }
                     .first { it.second.type != NULL_TYPE }
@@ -302,10 +297,7 @@ class DenseUnionVector private constructor(
                 }
             }
 
-            else -> {
-                check(legVectors.size == 1)
-                LegVector(0, legVectors.first()).rowCopier(dest)
-            }
+            else -> super.rowCopier(dest)
         }
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
