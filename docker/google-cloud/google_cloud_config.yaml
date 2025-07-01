@@ -11,7 +11,9 @@ storage: !Remote
     projectId: !Env XTDB_GCP_PROJECT_ID
     bucket: !Env XTDB_GCP_BUCKET
     prefix: "xtdb-object-store"
-  localDiskCache: !Env XTDB_GCP_LOCAL_DISK_CACHE_PATH
+
+diskCache:
+  path: !Env XTDB_GCP_LOCAL_DISK_CACHE_PATH
 
 healthz:
   host: '*'

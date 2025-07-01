@@ -3,8 +3,6 @@ package xtdb.buffer_pool
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
@@ -15,7 +13,6 @@ import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore
-import xtdb.api.storage.Storage.RemoteStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.openArrowBufView
@@ -26,39 +23,28 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
 import xtdb.multipart.SupportsMultipart
+import xtdb.multipart.SupportsMultipart.Companion.uploadMultipartBuffers
 import xtdb.trie.FileSize
 import xtdb.util.*
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
-import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
-import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.fileSize
 
-class RemoteBufferPool(
-    factory: RemoteStorageFactory,
+internal class RemoteBufferPool(
     allocator: BufferAllocator,
     val objectStore: ObjectStore,
+    val memoryCache: MemoryCache,
+    val diskCache: DiskCache,
     meterRegistry: MeterRegistry? = null,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
 
     private val arrowFooterCache = arrowFooterCache()
-
-    private val memoryCache =
-        MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
-            .apply { meterRegistry?.registerMemoryCache("memory-cache") }
-
-    val diskCache =
-        DiskCache(
-            factory.localDiskCache.also { it.createDirectories() },
-            factory.maxDiskCacheBytes
-                ?: (factory.localDiskCache.totalSpace * (factory.maxDiskCachePercentage / 100.0)).toLong()
-        ).apply { meterRegistry?.registerDiskCache("disk-cache") }
 
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
@@ -69,39 +55,6 @@ class RemoteBufferPool(
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
-        private const val MAX_CONCURRENT_PART_UPLOADS = 4
-
-        private val LOGGER = RemoteBufferPool::class.logger
-
-        private val Path.totalSpace
-            get() = Files.getFileStore(this).totalSpace
-
-        private val multipartUploadDispatcher =
-            IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
-
-        @JvmStatic
-        fun <P> SupportsMultipart<P>.uploadMultipartBuffers(key: Path, nioBuffers: List<ByteBuffer>) = runBlocking {
-            val upload = startMultipart(key).await()
-
-            try {
-                val waitingParts = nioBuffers.mapIndexed { idx, it ->
-                    async(multipartUploadDispatcher) {
-                        upload.uploadPart(idx, it).await()
-                    }
-                }
-
-                upload.complete(waitingParts.awaitAll()).await()
-            } catch (e: Throwable) {
-                try {
-                    LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
-                    upload.abort().get()
-                } catch (abortError: Throwable) {
-                    LOGGER.warn(abortError, "Throwable caught when aborting uploadMultipartBuffers")
-                    e.addSuppressed(abortError)
-                }
-                throw e
-            }
-        }
 
         private fun ArrowBuf.cuts(): List<Long> {
             val cuts = mutableListOf<Long>()
@@ -251,7 +204,6 @@ class RemoteBufferPool(
     }
 
     override fun close() {
-        memoryCache.close()
         objectStore.close()
         allocator.close()
     }

@@ -265,6 +265,8 @@
          :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb/log (.getLog opts)
          :xtdb/buffer-pool (.getStorage opts)
+         :xtdb.cache/memory (.getMemoryCache opts)
+         :xtdb.cache/disk (.getDiskCache opts)
          :xtdb.indexer/live-index indexer-cfg
          :xtdb/garbage-collector (.getGarbageCollector opts)
          :xtdb/modules (.getModules opts)}

@@ -307,7 +307,10 @@ storage: !Remote
     # (Can be set as an !Env value)
     # userManagedIdentityClientId: user-managed-identity-client-id
 
-  localDiskCache: /var/cache/xtdb/object-store
+# -- required
+# A local disk path where XTDB can cache files from the remote storage
+diskCache:
+  path: /var/cache/xtdb/object-store
 ----
 
 '''

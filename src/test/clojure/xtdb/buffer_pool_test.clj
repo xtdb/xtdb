@@ -1,61 +1,65 @@
 (ns xtdb.buffer-pool-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [integrant.core :as ig]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.buffer-pool :as bp])
+            [xtdb.util :as util])
   (:import (io.micrometer.core.instrument Counter)
            (io.micrometer.core.instrument.simple SimpleMeterRegistry)
-           (io.micrometer.core.instrument.composite CompositeMeterRegistry)
            (java.io File)
            (java.nio ByteBuffer)
            [java.nio.charset StandardCharsets]
-           (java.nio.file Files Path)
-           (java.nio.file.attribute FileAttribute)
+           (java.nio.file Path)
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb.api.storage ObjectStore ObjectStore$Factory Storage)
+           (xtdb BufferPool BufferPoolKt)
+           (xtdb.api.storage ObjectStore ObjectStore$Factory Storage Storage$Factory)
            (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
            (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
-           (xtdb BufferPool BufferPoolKt)
-           xtdb.cache.DiskCache))
+           (xtdb.cache DiskCache MemoryCache)))
 
-(defonce tmp-dirs (atom []))
+(t/use-fixtures :each tu/with-allocator)
 
-(defn create-tmp-dir [] (peek (swap! tmp-dirs conj (Files/createTempDirectory "bp-test" (make-array FileAttribute 0)))))
+(def ^:dynamic *mem-cache* nil)
+(def ^:dynamic ^java.nio.file.Path *disk-cache-dir* nil)
+(def ^:dynamic *disk-cache* nil)
 
-(defn each-fixture [f]
-  (try
-    (f)
-    (finally
-      (run! util/delete-dir @tmp-dirs)
-      (reset! tmp-dirs []))))
+(defmacro with-caches [opts & body]
+  `(util/with-tmp-dir* "xtdb-cache"
+     (fn [^Path dir#]
+       (let [{mem-bytes# :mem-bytes, disk-bytes# :disk-bytes} ~opts]
+         (with-open [mem-cache# (-> (MemoryCache/factory)
+                                    (cond-> mem-bytes# (.maxSizeBytes mem-bytes#))
+                                    (.open tu/*allocator* nil))]
+           (binding [*mem-cache* mem-cache#
+                     *disk-cache-dir* dir#
+                     *disk-cache* (-> (DiskCache/factory dir#)
+                                      (cond-> disk-bytes# (.maxSizeBytes disk-bytes#))
+                                      (.build nil))]
+             ~@body))))))
 
-(defn once-fixture [f] (tu/with-allocator f))
-
-(t/use-fixtures :each #'each-fixture)
-(t/use-fixtures :once #'once-fixture)
+(defn- open-storage ^xtdb.BufferPool [^Storage$Factory factory]
+  (.open factory tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))
 
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
-                      (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:storage [:remote {:object-store [:in-memory {}]
-                                                                                                      :local-disk-cache path}]
-                                                                                   :compactor {:threads 0}}))]
-                                                        (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
+    (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:storage [:remote {:object-store [:in-memory {}]}]
+                                                                 :disk-cache {:path path}
+                                                                 :compactor {:threads 0}}))]
+      (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
 
-                                                        (t/is (= [{:xt/id :foo}]
-                                                                 (xt/q node '(from :foo [xt/id]))))
+      (t/is (= [{:xt/id :foo}]
+               (xt/q node '(from :foo [xt/id]))))
 
-                                                        (tu/finish-block! node)
+      (tu/finish-block! node)
 
-                                                        (let [^RemoteBufferPool buffer-pool (val (first (ig/find-derived (:system node) :xtdb/buffer-pool)))
-                                                              object-store (.getObjectStore buffer-pool)]
-                                                          (t/is (seq (.listAllObjects object-store)))))))
+      (let [^RemoteBufferPool buffer-pool (bp/<-node node)
+            object-store (.getObjectStore buffer-pool)]
+        (t/is (seq (.listAllObjects object-store)))))))
 
 (defn utf8-buf [s] (ByteBuffer/wrap (.getBytes (str s) "utf-8")))
 
@@ -91,19 +95,17 @@
     (openObjectStore [_ _storage-root]
       (SimulatedObjectStore.))))
 
-(defn remote-test-buffer-pool ^xtdb.BufferPool []
-  (-> (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
-      (.open tu/*allocator* (SimpleMeterRegistry.) Storage/VERSION)))
-
 (defn get-remote-calls [^RemoteBufferPool test-bp]
   (.getCalls ^SimulatedObjectStore (.getObjectStore test-bp)))
 
 (t/deftest below-min-size-put-test
-  (with-open [bp (remote-test-buffer-pool)]
-    (t/testing "if <= min part size, putObject is used"
-      (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
-      (t/is (= [StoreOperation/PUT] (get-remote-calls bp)))
-      (test-get-object bp (util/->path "min-part-put") (utf8-buf "12")))))
+  (with-caches {}
+    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
+                       (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
+      (t/testing "if <= min part size, putObject is used"
+        (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
+        (t/is (= [StoreOperation/PUT] (get-remote-calls bp)))
+        (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
 
 (defn file-info [^Path dir]
   (let [files (filter #(.isFile ^File %) (file-seq (.toFile dir)))]
@@ -115,28 +117,26 @@
   (.getByteArray bp k))
 
 (t/deftest local-disk-cache-max-size
-  (util/with-tmp-dirs #{local-disk-cache}
-    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory) local-disk-cache)
-                       (.maxDiskCacheBytes 10)
-                       (.maxCacheBytes 12)
-                       (.open tu/*allocator* (SimpleMeterRegistry.) Storage/VERSION))]
+  (with-caches {:mem-bytes 12, :disk-bytes 10}
+    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
+                       (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
-        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
+        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info *disk-cache-dir*))))
 
       (t/testing "going above max size - all entries still present in memory cache (which isn't above limit) - should return all elements"
         (insert-utf8-to-local-cache bp (util/->path "c") 4)
-        (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info local-disk-cache))))
+        (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info *disk-cache-dir*))))
 
       (t/testing "entries unpinned (cleared from memory cache by new entries) - should evict entries since above size limit"
         (insert-utf8-to-local-cache bp (util/->path "d") 4)
         (Thread/sleep 100)
-        (t/is (= 3 (:file-count (file-info local-disk-cache))))
+        (t/is (= 3 (:file-count (file-info *disk-cache-dir*))))
 
         (insert-utf8-to-local-cache bp (util/->path "e") 4)
         (Thread/sleep 100)
-        (t/is (= 3 (:file-count (file-info local-disk-cache))))))))
+        (t/is (= 3 (:file-count (file-info *disk-cache-dir*))))))))
 
 (defn no-op-object-store-factory []
   (reify ObjectStore$Factory
@@ -153,42 +153,37 @@
   (let [obj-store-factory (simulated-obj-store-factory)
         path-a (util/->path "a")
         path-b (util/->path "b")]
-    (util/with-tmp-dirs #{local-disk-cache}
+    (with-caches {:mem-bytes 64, :disk-bytes 64}
       ;; Writing files to buffer pool & local-disk-cache
-      (with-open [bp (-> (Storage/remoteStorage obj-store-factory local-disk-cache)
-                         (.maxDiskCacheBytes 64)
-                         (.maxCacheBytes 64)
-                         (.open tu/*allocator* (SimpleMeterRegistry.) Storage/VERSION))]
+      (with-open [bp (-> (Storage/remoteStorage obj-store-factory)
+                         (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
-        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info local-disk-cache))))
+        (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info *disk-cache-dir*))))
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
       ;; passing a no-op object store to ensure objects are not loaded from object store and instead only the cache is under test.
-      (with-open [bp (-> (Storage/remoteStorage (no-op-object-store-factory) local-disk-cache)
-                         (.maxDiskCacheBytes 64)
-                         (.maxCacheBytes 64)
-                         (.open tu/*allocator* (SimpleMeterRegistry.) Storage/VERSION))]
+      (with-open [bp (-> (Storage/remoteStorage (no-op-object-store-factory))
+                         (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))
 
 (t/deftest local-buffer-pool
   (tu/with-tmp-dirs #{tmp-dir}
-    (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/VERSION tu/*allocator* (SimpleMeterRegistry.))]
-      (t/testing "empty buffer pool"
-        (t/is (= [] (.listAllObjects bp)))
-        (t/is (= [] (.listAllObjects bp (.toPath (io/file "foo")))))))))
+    (with-caches {}
+      (with-open [bp (open-storage (Storage/localStorage tmp-dir))]
+        (t/testing "empty buffer pool"
+          (t/is (= [] (.listAllObjects bp)))
+          (t/is (= [] (.listAllObjects bp (.toPath (io/file "foo"))))))))))
 
 (t/deftest dont-list-temporary-objects-3544
   (tu/with-tmp-dirs #{tmp-dir}
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
-      (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/VERSION tu/*allocator* (SimpleMeterRegistry.))
-                  rel (Relation/open tu/*allocator* schema)
-                  _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
-        (t/is (= [] (.listAllObjects bp)))))))
-
-(defn fetch-buffer-pool-from-node [node]
-  (util/component node :xtdb/buffer-pool))
+      (with-caches {}
+        (with-open [bp (open-storage (Storage/localStorage tmp-dir))
+                    rel (Relation/open tu/*allocator* schema)
+                    _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
+          (t/is (= [] (.listAllObjects bp))))))))
 
 (defn put-edn [^BufferPool buffer-pool ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
@@ -228,13 +223,15 @@
              (vec (.listAllObjects buffer-pool (util/->path "bar/baz")))))))
 
 (t/deftest test-memory-list-objs
-  (with-open [bp (MemoryBufferPool. tu/*allocator* (SimpleMeterRegistry.))]
-    (test-list-objects bp)))
+  (with-caches {}
+    (with-open [bp (open-storage (Storage/inMemoryStorage))]
+      (test-list-objects bp))))
 
 (t/deftest test-local-list-objs
   (tu/with-tmp-dirs #{tmp-dir}
-    (with-open [bp (LocalBufferPool. (Storage/localStorage tmp-dir) Storage/VERSION tu/*allocator* (SimpleMeterRegistry.))]
-      (test-list-objects bp))))
+    (with-caches {}
+      (with-open [bp (open-storage (Storage/localStorage tmp-dir))]
+        (test-list-objects bp)))))
 
 (t/deftest test-latest-available-block
   (tu/with-tmp-dirs #{tmp-dir}
@@ -274,29 +271,30 @@
 
 (t/deftest network-counter-test
   (let [registry (SimpleMeterRegistry.)]
-    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory) (create-tmp-dir))
-                       (.open tu/*allocator* registry Storage/VERSION))]
-      (let [k1 (util/->path "a")
-            k2 (util/->path "b")
-            ^ByteBuffer v1 (utf8-buf "aaa")
-            ^ByteBuffer v2 (utf8-buf "bbb")]
-        (t/testing "read side"
-          (.putObject bp k1 v1)
+    (with-caches {}
+      (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
+                         (.open tu/*allocator* *mem-cache* *disk-cache* registry Storage/VERSION))]
+        (let [k1 (util/->path "a")
+              k2 (util/->path "b")
+              ^ByteBuffer v1 (utf8-buf "aaa")
+              ^ByteBuffer v2 (utf8-buf "bbb")]
+          (t/testing "read side"
+            (.putObject bp k1 v1)
 
-          (t/is (= 0.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
+            (t/is (= 0.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
 
-          (t/is (java.util.Arrays/equals (byte-buffer->byte-array v1) (.getByteArray bp k1)))
+            (t/is (java.util.Arrays/equals (byte-buffer->byte-array v1) (.getByteArray bp k1)))
 
-          (t/is (= (double (.capacity v1)) (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
+            (t/is (= (double (.capacity v1)) (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
 
-          (t/is (java.util.Arrays/equals (byte-buffer->byte-array v1) (.getByteArray bp k1)))
+            (t/is (java.util.Arrays/equals (byte-buffer->byte-array v1) (.getByteArray bp k1)))
 
-          (t/is (= (double (.capacity v1)) (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))) "counter should have not gone up"))
+            (t/is (= (double (.capacity v1)) (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))) "counter should have not gone up"))
 
-        (t/testing "write side"
+          (t/testing "write side"
 
-          (t/is (= 3.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write")))))
+            (t/is (= 3.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write")))))
 
-          (.putObject bp k2 v2)
+            (.putObject bp k2 v2)
 
-          (t/is (= 6.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write"))))))))))
+            (t/is (= 6.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write")))))))))))

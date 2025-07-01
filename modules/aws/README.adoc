@@ -63,8 +63,10 @@ We can swap out the implementation of the object store with one based on S3. To 
 
 [source,clojure]
 ----
-{:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store"}]
-                    :local-disk-cache "local-disk-cache"}]}
+{:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store"}]}]
+
+ ;; required for remote storage
+ :disk-cache {:path "local-disk-cache"}}
 ----
 
 === Parameters
@@ -102,6 +104,7 @@ By default, we get credentials through the usual AWS credentials provider.
 [source,clojure]
 ----
 {:storage [:remote {:object-store [:s3 {:bucket "xtdb-object-store",
-                                        :configurator (fn [_] (reify S3Configurator...))}]
-                    :local-disk-cache "local-disk-cache"}]}
+                                        :configurator (fn [_] (reify S3Configurator...))}]}]
+ ;; required for remote storage
+ :disk-cache {:path "local-disk-cache"}}
 ----

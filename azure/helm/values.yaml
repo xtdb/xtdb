@@ -69,7 +69,9 @@ xtdbConfig:
         container: !Env AZURE_STORAGE_CONTAINER
         prefix: "xtdb-object-store"
         userManagedIdentityClientId: !Env AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
-      localDiskCache: /var/lib/xtdb/buffers/disk-cache
+
+    diskCache:
+      path: /var/lib/xtdb/buffers/disk-cache
 
     healthz:
       host: '*'

@@ -50,7 +50,6 @@ import kotlin.time.Duration.Companion.seconds
  *       objectStore = s3(bucket = "xtdb-bucket") {
  *           prefix = Path.of("my/custom/prefix")
  *       },
- *       localDiskCache = Paths.get("test-path")
  *    ),
  *    ...
  * }

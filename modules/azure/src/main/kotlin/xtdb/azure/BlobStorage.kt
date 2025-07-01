@@ -61,7 +61,6 @@ import kotlin.time.Duration.Companion.seconds
  *          userManagedIdentityClientId = "user-managed-identity-client-id"
  *          storageAccountEndpoint = "https://xtdb-storage-account.privatelink.blob.core.windows.net"
  *       },
- *       localDiskCache = Paths.get("test-path")
  *    ),
  *    ...
  * }

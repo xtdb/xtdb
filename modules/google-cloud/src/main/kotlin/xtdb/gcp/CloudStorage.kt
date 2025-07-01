@@ -40,13 +40,9 @@ import kotlin.time.Duration.Companion.seconds
  * ```kotlin
  * Xtdb.openNode {
  *    remoteStorage(
- *       objectStore = googleCloudStorage(
- *          projectId = "xtdb-project",
- *          bucket ="xtdb-bucket"
- *       ) {
+ *       objectStore = googleCloudStorage(projectId = "xtdb-project", bucket ="xtdb-bucket") {
  *          prefix = Path.of("my/custom/prefix")
  *       },
- *       localDiskCache = Paths.get("test-path")
  *    ),
  *    ...
  * }

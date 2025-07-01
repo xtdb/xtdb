@@ -8,11 +8,12 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
+import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
 import xtdb.cache.PinningCache.IEntry
-import java.nio.ByteBuffer
+import xtdb.util.maxDirectMemory
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
@@ -36,13 +37,24 @@ private val Path.isMetaFile: Boolean
  * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
  *   - we allocate a buffer in here for every _usage_, and don't take shared memory into account.
  */
-class MemoryCache @JvmOverloads constructor(
-    private val allocator: BufferAllocator,
-
-    @Suppress("MemberVisibilityCanBePrivate")
-    val maxSizeBytes: Long,
+class MemoryCache @JvmOverloads internal constructor(
+    private val al: BufferAllocator,
+    maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
+
+    /**
+     * @property maxSizeRatio max size of the cache, as a proportion of the maximum direct memory of the JVM
+     */
+    @Serializable
+    class Factory(var maxSizeBytes: Long? = null, var maxSizeRatio: Double = 0.5) {
+        fun maxSizeBytes(maxSizeBytes: Long?) = apply { this.maxSizeBytes = maxSizeBytes }
+        fun maxSizeRatio(maxSizeRatio: Double) = apply { this.maxSizeRatio = maxSizeRatio }
+
+        fun open(al: BufferAllocator, meterRegistry: MeterRegistry? = null) =
+            MemoryCache(al, maxSizeBytes ?: (maxDirectMemory * maxSizeRatio).toLong())
+                .also { meterRegistry?.registerMemoryCache(it) }
+    }
 
     internal val pinningCache = PinningCache<PathSlice, Entry>(maxSizeBytes)
 
@@ -71,27 +83,9 @@ class MemoryCache @JvmOverloads constructor(
 
     val stats: Stats get() = statsCache[Unit]
 
-    fun MeterRegistry.registerMemoryCache(meterName: String) {
-        pinningCache.registerMetrics(meterName, this)
-
-        fun registerGauge(name: String, baseUnit: String? = null, f: SectionStats.() -> Double) {
-            Gauge.builder("$meterName.metaFiles.$name", this@MemoryCache) { it.stats.metaStats.f() }
-                .baseUnit(baseUnit).tag("type", "meta").register(this)
-
-            Gauge.builder("$meterName.dataFiles.$name", this@MemoryCache) { it.stats.dataStats.f() }
-                .baseUnit(baseUnit).tag("type", "data").register(this)
-        }
-
-        registerGauge("sliceCount") { sliceCount.toDouble() }
-        registerGauge("weightBytes", "bytes") { weightBytes.toDouble() }
-        registerGauge("pinned") { pinned.toDouble() }
-        registerGauge("unpinned") { unpinned.toDouble() }
-    }
-
     interface PathLoader {
         fun load(path: Path): ByteBuf
         fun load(pathSlice: PathSlice): ByteBuf
-        fun tryFree(bbuf: ByteBuffer) {}
 
         companion object {
             operator fun invoke() = object : PathLoader {
@@ -161,11 +155,9 @@ class MemoryCache @JvmOverloads constructor(
 
         // create a new ArrowBuf for each request.
         // when the ref-count drops to zero, we release a ref-count in the cache.
-        return allocator.wrapForeignAllocation(
+        return al.wrapForeignAllocation(
             object : ForeignAllocation(nettyBuf.capacity().toLong(), nettyBuf.memoryAddress()) {
-                override fun release0() {
-                    pinningCache.releaseEntry(k)
-                }
+                override fun release0() = pinningCache.releaseEntry(k)
             })
     }
 
@@ -173,5 +165,27 @@ class MemoryCache @JvmOverloads constructor(
 
     override fun close() {
         pinningCache.close()
+    }
+
+    companion object {
+        @JvmStatic
+        fun factory() = Factory()
+
+        internal fun MeterRegistry.registerMemoryCache(cache: MemoryCache) {
+            cache.pinningCache.registerMetrics("memory-cache", this)
+
+            fun registerGauge(name: String, baseUnit: String? = null, f: SectionStats.() -> Double) {
+                Gauge.builder("memory-cache.metaFiles.$name", cache) { it.stats.metaStats.f() }
+                    .baseUnit(baseUnit).tag("type", "meta").register(this)
+
+                Gauge.builder("memory-cache.dataFiles.$name", cache) { it.stats.dataStats.f() }
+                    .baseUnit(baseUnit).tag("type", "data").register(this)
+            }
+
+            registerGauge("sliceCount") { sliceCount.toDouble() }
+            registerGauge("weightBytes", "bytes") { weightBytes.toDouble() }
+            registerGauge("pinned") { pinned.toDouble() }
+            registerGauge("unpinned") { unpinned.toDouble() }
+        }
     }
 }

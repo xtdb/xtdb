@@ -8,4 +8,5 @@ indexer:
   flushDuration: PT4H
 storage: !Local
   path: /tmp/test-storage
-  maxCacheEntries: 1025
+memoryCache:
+  maxSizeBytes: 1025

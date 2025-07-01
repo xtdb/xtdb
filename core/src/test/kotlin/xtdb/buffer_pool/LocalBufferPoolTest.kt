@@ -5,29 +5,31 @@ import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import xtdb.BufferPool
-import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.localStorage
-import xtdb.api.storage.Storage.storageRoot
+import xtdb.cache.MemoryCache
 import java.nio.file.Files.createTempDirectory
 
 class LocalBufferPoolTest : BufferPoolTest() {
-    override fun bufferPool(): BufferPool = localBufferPool
-
     private lateinit var allocator: BufferAllocator
-    private lateinit var localBufferPool: LocalBufferPool
+    private lateinit var memoryCache: MemoryCache
+    private lateinit var localBufferPool: BufferPool
+
+    override fun bufferPool(): BufferPool = localBufferPool
 
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
+        memoryCache = MemoryCache.Factory().open(allocator)
 
-        localBufferPool = LocalBufferPool(
-            localStorage(createTempDirectory("local-buffer-pool-test")), Storage.VERSION, allocator
-        )
+        localBufferPool =
+            localStorage(createTempDirectory("local-buffer-pool-test"))
+                .open(allocator, memoryCache, null)
     }
 
     @AfterEach
     fun tearDown() {
         localBufferPool.close()
+        memoryCache.close()
         allocator.close()
     }
 }

@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -15,7 +16,6 @@
            (java.time Duration)
            (xtdb.api.storage ObjectStore Storage)
            (xtdb.azure BlobStorage)
-           (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
 
 (def storage-account "xtdbteststorageaccount")
@@ -76,8 +76,8 @@
    {:storage [:remote
               {:object-store [:azure {:storage-account storage-account
                                       :container container
-                                      :prefix (util/->path (str "xtdb.azure-test." prefix))}]
-               :local-disk-cache local-disk-cache}]
+                                      :prefix (util/->path (str "xtdb.azure-test." prefix))}]}]
+    :disk-cache {:path local-disk-cache}
     :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]
     :compactor {:threads 0}}))
@@ -85,14 +85,14 @@
 (t/deftest ^:azure list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (let [buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+      (let [buffer-pool (bp/<-node node)]
         (bp-test/test-list-objects buffer-pool)))))
 
 (t/deftest ^:azure list-test-with-prior-objects
   (util/with-tmp-dirs #{local-disk-cache}
     (let [prefix (random-uuid)]
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        (let [buffer-pool (bp/<-node node)]
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -100,7 +100,7 @@
                    (vec (.listAllObjects buffer-pool))))))
       
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        (let [buffer-pool (bp/<-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
                      (vec (.listAllObjects buffer-pool)))))
@@ -116,8 +116,8 @@
     (let [prefix (random-uuid)]
       (util/with-open [node-1 (start-kafka-node local-disk-cache prefix)
                        node-2 (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool-1 (bp-test/fetch-buffer-pool-from-node node-1)
-              ^RemoteBufferPool buffer-pool-2 (bp-test/fetch-buffer-pool-from-node node-2)]
+        (let [buffer-pool-1 (bp/<-node node-1)
+              buffer-pool-2 (bp/<-node node-2)]
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -166,7 +166,7 @@
 (t/deftest ^:azure node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+      (let [buffer-pool (bp/<-node node)]
         (t/is (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
                                    [:put-docs :bar {:xt/id "bar2"}]
                                    [:put-docs :bar {:xt/id "bar3"}]]))
@@ -191,7 +191,7 @@
       (t/is (nil? (tu/finish-block! node)))
 
       ;; Ensure some files written to buffer-pool 
-      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+      (let [buffer-pool (bp/<-node node)]
         (t/is (seq (.listAllObjects buffer-pool)))))))
 
 (t/deftest ^:azure multipart-uploads-with-more-parts-work-correctly
@@ -260,7 +260,7 @@
                          (fn []
                            (try
                              ;; Start the multipart upload
-                             (RemoteBufferPool/uploadMultipartBuffers os (util/->path "multipart-interrupted") parts)
+                             (SupportsMultipart/uploadMultipartBuffers os (util/->path "multipart-interrupted") parts)
                              (catch InterruptedException _
                                (log/warn "Upload was interrupted")))))]
       ;; Start the upload thread

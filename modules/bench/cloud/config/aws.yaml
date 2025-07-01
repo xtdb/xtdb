@@ -9,5 +9,6 @@ storage: !Remote
   objectStore: !S3
     bucket: !Env XTDB_S3_BUCKET
     prefix: "xtdb-object-store"
-  localDiskCache: /var/lib/xtdb/buffers
-  maxDiskCachePercentage: 75
+
+diskCache:
+  path: /var/lib/xtdb/buffers

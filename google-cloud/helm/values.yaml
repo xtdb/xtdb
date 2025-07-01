@@ -68,7 +68,9 @@ xtdbConfig:
         projectId: !Env GCP_PROJECT_ID
         bucket: !Env GCP_BUCKET
         prefix: xtdb-object-store
-      localDiskCache: /var/lib/xtdb/buffers/disk-cache
+
+    diskCache:
+      path: /var/lib/xtdb/buffers/disk-cache
 
     healthz:
       host: '*'

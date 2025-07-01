@@ -1,6 +1,7 @@
 (ns xtdb.aws.s3-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
@@ -35,22 +36,22 @@
   (xtn/start-node
    {:storage [:remote
               {:object-store [:s3 {:bucket bucket
-                                   :prefix (util/->path (str "xtdb.s3-test." prefix))}]
-               :local-disk-cache local-disk-cache}]
+                                   :prefix (util/->path (str "xtdb.s3-test." prefix))}]}]
+    :disk-cache {:path local-disk-cache}
     :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
                   :bootstrap-servers "localhost:9092"}]}))
 
 (t/deftest ^:s3 list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (let [buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+      (let [buffer-pool (bp/<-node node)]
         (bp-test/test-list-objects buffer-pool)))))
 
 (t/deftest ^:s3 list-test-with-prior-objects
   (util/with-tmp-dirs #{local-disk-cache}
     (let [prefix (random-uuid)]
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -58,7 +59,7 @@
                    (vec (.listAllObjects buffer-pool))))))
 
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+        (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
           (t/testing "prior objects will still be there, should be available on a list request"
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
                      (vec (.listAllObjects buffer-pool)))))
@@ -74,8 +75,8 @@
     (let [prefix (random-uuid)]
       (util/with-open [node-1 (start-kafka-node local-disk-cache prefix)
                        node-2 (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool-1 (bp-test/fetch-buffer-pool-from-node node-1)
-              ^RemoteBufferPool buffer-pool-2 (bp-test/fetch-buffer-pool-from-node node-2)]
+        (let [^RemoteBufferPool buffer-pool-1 (bp/<-node node-1)
+              ^RemoteBufferPool buffer-pool-2 (bp/<-node node-2)]
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -121,7 +122,7 @@
 (t/deftest ^:s3 node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+      (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
         ;; Submit some documents to the node
         (t/is (= true
                  (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
@@ -150,5 +151,5 @@
       (t/is (nil? (tu/finish-block! node)))
 
       ;; Ensure some files written to buffer-pool 
-      (let [^RemoteBufferPool buffer-pool (bp-test/fetch-buffer-pool-from-node node)]
+      (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
         (t/is (seq (.listAllObjects buffer-pool)))))))

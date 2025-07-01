@@ -95,8 +95,7 @@ Main article: link:/config/storage#local-disk[local-disk storage]
 
             ;; -- optional
 
-            ;; :max-cache-bytes 1024
-            ;; :max-cache-entries 536870912
+            ;; :max-cache-bytes 536870912
            }]}
 ----
 
@@ -111,17 +110,36 @@ Main article: link:/config/storage#remote[remote storage]
                     
                     ;; Each object store implementation has its own configuration - 
                     ;; see below for some examples.
-                    :object-store [:object-store-implementation {}]
+                    :object-store [:object-store-implementation {}]}]
 
-                    ;; accepts `String`, `File` or `Path`
-                    :local-disk-cache "/tmp/local-disk-cache"
+ ;; -- required for remote storage
+ ;; Local directory to store the working-set cache in.
+ :disk-cache {;; -- required
 
-                    ;; -- optional
-                    ;; :max-cache-entries 1024
-                    ;; :max-cache-bytes 536870912
-                    ;; :max-disk-cache-percentage 75
-                    ;; :max-disk-cache-bytes 107374182400
-                    }]}
+              ;; accepts `String`, `File` or `Path`
+              :path "/tmp/local-disk-cache"
+
+              ;; -- optional
+              ;; The maximum proportion of space to use on the filesystem for the diskCache directory
+              ;; (overridden by maxSizeBytes, if set).
+              :max-size-ratio 0.75
+
+              ;; The upper limit of bytes that can be stored within the diskCache directory (unset by default).
+              :max-size-bytes 107374182400}
+
+ ;; -- optional - in-memory cache created with default config if not supplied
+ ;; configuration for XTDB's in-memory cache
+ ;; if not provided, an in-memory cache will still be created, with the default size
+ :memory-cache {;; -- optional
+
+                ;; The maximum proportion of the JVM's direct-memory space to use for the in-memory cache
+                ;; (overridden by `:max-size-bytes`, if set).
+                :max-size-ratio 0.5
+
+                ;; unset by default
+                :max-size-bytes 536870912}
+
+}
 ----
 
 [#s3]

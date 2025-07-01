@@ -69,8 +69,8 @@
                                                       :poll-duration "PT2S"
                                                       :properties-map {}
                                                       :properties-file nil}]
-                                        :storage [:remote {:object-store [:in-memory {}]
-                                                           :local-disk-cache path}]})]
+                                        :storage [:remote {:object-store [:in-memory {}]}]
+                                        :disk-cache {:path path}})]
         (t/testing "Send a transaction"
           (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))
 

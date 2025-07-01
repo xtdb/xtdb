@@ -10,6 +10,7 @@ import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.api.storage.Storage.storageRoot
@@ -31,20 +32,14 @@ import java.nio.file.StandardOpenOption.*
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 
-class LocalBufferPool(
-    factory: LocalStorageFactory,
-    storageVersion: StorageVersion,
+internal class LocalBufferPool(
     allocator: BufferAllocator,
-    meterRegistry: MeterRegistry? = null
+    private val memoryCache: MemoryCache,
+    meterRegistry: MeterRegistry? = null,
+    private val diskStore: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
-
-    private val memoryCache =
-        MemoryCache(allocator, factory.maxCacheBytes ?: (maxDirectMemory / 2))
-            .apply { meterRegistry?.registerMemoryCache("memory-cache") }
-
-    private val diskStore = factory.path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
 
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
@@ -175,7 +170,6 @@ class LocalBufferPool(
     }
 
     override fun close() {
-        memoryCache.close()
         allocator.close()
     }
 }

@@ -36,8 +36,8 @@ To do so, we can add the `:azure` object store and it's configuration map, withi
 
 ```clojure
 {:storage [:remote {:object-store [:azure {:storage-account "xtdbstorageaccount"
-                                           :container "xtdb-object-store"}]
-                    :local-disk-cache "local-disk-cache"}]}
+                                           :container "xtdb-object-store"}]}]
+ :disk-cache {:path "local-disk-cache"}}
 ```
 
 Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary infrastructure.

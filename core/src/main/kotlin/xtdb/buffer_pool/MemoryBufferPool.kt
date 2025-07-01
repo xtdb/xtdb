@@ -23,7 +23,7 @@ import java.nio.channels.Channels.newChannel
 import java.nio.file.Path
 import java.util.*
 
-class MemoryBufferPool(
+internal class MemoryBufferPool(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry? = null
 ) : BufferPool, IEvictBufferTest {

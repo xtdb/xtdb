@@ -1,7 +1,6 @@
 package xtdb.buffer_pool
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
@@ -10,6 +9,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.io.TempDir
 import xtdb.BufferPool
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.SimulatedObjectStore
@@ -18,15 +19,18 @@ import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
 import xtdb.arrow.I32
 import xtdb.arrow.Relation
+import xtdb.cache.DiskCache
+import xtdb.cache.MemoryCache
+import xtdb.test.AllocatorResolver
 import xtdb.types.Fields
-import java.nio.file.Files.createTempDirectory
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 
+@ExtendWith(AllocatorResolver::class)
 class RemoteBufferPoolTest : BufferPoolTest() {
     override fun bufferPool(): BufferPool = remoteBufferPool
 
-    private lateinit var allocator: BufferAllocator
+    private lateinit var memoryCache: MemoryCache
     private lateinit var remoteBufferPool: RemoteBufferPool
 
     object SimulatedObjectStoreFactory : ObjectStore.Factory {
@@ -34,11 +38,11 @@ class RemoteBufferPoolTest : BufferPoolTest() {
     }
 
     @BeforeEach
-    fun setUp() {
-        allocator = RootAllocator()
-
+    fun setUp(@TempDir localDiskCachePath: Path, al: BufferAllocator) {
+        memoryCache = MemoryCache.Factory().open(al)
         remoteBufferPool =
-            remoteStorage(SimulatedObjectStoreFactory, createTempDirectory("remote-buffer-pool-test")).open(allocator)
+            remoteStorage(SimulatedObjectStoreFactory)
+                .open(al, memoryCache, DiskCache.Factory(localDiskCachePath).build()) as RemoteBufferPool
 
         // Mocking small value for MIN_MULTIPART_PART_SIZE
         RemoteBufferPool.minMultipartPartSize = 320
@@ -47,14 +51,14 @@ class RemoteBufferPoolTest : BufferPoolTest() {
     @AfterEach
     fun tearDown() {
         remoteBufferPool.close()
-        allocator.close()
+        memoryCache.close()
     }
 
 
     @Test
-    fun arrowIpcTest() {
+    fun arrowIpcTest(al: BufferAllocator) {
         val path = Path.of("aw")
-        Relation.open(allocator, linkedMapOf("a" to Fields.I32)).use { relation ->
+        Relation.open(al, linkedMapOf("a" to Fields.I32)).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
@@ -66,17 +70,17 @@ class RemoteBufferPoolTest : BufferPoolTest() {
 
         remoteBufferPool.getRecordBatch(path, 0).use { rb ->
             val footer = remoteBufferPool.getFooter(path)
-            val rel = Relation.fromRecordBatch(allocator, footer.schema, rb)
+            val rel = Relation.fromRecordBatch(al, footer.schema, rb)
             rel.close()
         }
     }
 
     @Test
-    fun bufferPoolClearsUpArrowWriterTempFiles() {
+    fun bufferPoolClearsUpArrowWriterTempFiles(al: BufferAllocator) {
         val rootPath = remoteBufferPool.diskCache.rootPath
         val tmpDir = rootPath.resolve(".tmp")
         val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
-        Relation.open(allocator, schema).use { relation ->
+        Relation.open(al, schema).use { relation ->
             remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
@@ -88,7 +92,7 @@ class RemoteBufferPoolTest : BufferPoolTest() {
         assertEquals(0, tmpDir.listDirectoryEntries().size)
 
         val exception = assertThrows(Exception::class.java) {
-            Relation.open(allocator, schema).use { relation ->
+            Relation.open(al, schema).use { relation ->
                 remoteBufferPool.openArrowWriter(Path.of("aw2"), relation).use { writer ->
                     // tmp file present
                     assertEquals(1, tmpDir.listDirectoryEntries().size)

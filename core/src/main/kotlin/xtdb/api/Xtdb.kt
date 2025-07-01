@@ -13,6 +13,8 @@ import xtdb.api.metrics.HealthzConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.inMemoryStorage
+import xtdb.cache.DiskCache
+import xtdb.cache.MemoryCache
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
@@ -37,6 +39,8 @@ interface Xtdb : DataSource, AutoCloseable {
         var server: ServerConfig? = ServerConfig(),
         var log: Log.Factory = inMemoryLog,
         var storage: Storage.Factory = inMemoryStorage(),
+        val memoryCache: MemoryCache.Factory = MemoryCache.Factory(),
+        var diskCache: DiskCache.Factory? = null,
         var healthz: HealthzConfig? = null,
         var defaultTz: ZoneId = ZoneOffset.UTC,
         val indexer: IndexerConfig = IndexerConfig(),
@@ -49,6 +53,8 @@ interface Xtdb : DataSource, AutoCloseable {
 
         fun log(log: Log.Factory) = apply { this.log = log }
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }
+
+        fun diskCache(diskCache: DiskCache.Factory?) = apply { this.diskCache = diskCache }
 
         @JvmSynthetic
         fun server(configure: ServerConfig.() -> Unit) = apply { (server ?: ServerConfig()).configure() }

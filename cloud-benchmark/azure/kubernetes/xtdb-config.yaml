@@ -44,8 +44,10 @@ data:
         container: !Env XTDB_AZURE_STORAGE_CONTAINER
         prefix: "xtdb-object-store"
         userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
-      localDiskCache: /var/lib/xtdb/buffers/
-      maxDiskCachePercentage: 75
+
+    diskCache:
+      path: /var/lib/xtdb/buffers/
+      maxSizeRatio: 0.75
 
     modules:
       - !AzureMonitor

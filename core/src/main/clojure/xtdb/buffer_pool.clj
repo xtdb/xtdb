@@ -8,10 +8,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path max-cache-bytes max-cache-entries]}]
-  (.storage config (cond-> (Storage/localStorage (util/->path path))
-                     max-cache-bytes (.maxCacheBytes max-cache-bytes)
-                     max-cache-entries (.maxCacheEntries max-cache-entries))))
+(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path]}]
+  (.storage config (Storage/localStorage (util/->path path))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -31,14 +29,9 @@
 (defmethod ->object-store-factory :google-cloud [_ opts] (->object-store-factory :xtdb.gcp/object-store opts))
 (defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
 
-(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store local-disk-cache max-cache-bytes max-cache-entries max-disk-cache-bytes max-disk-cache-percentage]}]
-  (.storage config (cond-> (Storage/remoteStorage (let [[tag opts] object-store]
-                                                    (->object-store-factory tag opts))
-                                                  (util/->path local-disk-cache))
-                     max-cache-bytes (.maxCacheBytes max-cache-bytes)
-                     max-cache-entries (.maxCacheEntries max-cache-entries)
-                     max-disk-cache-bytes (.maxDiskCacheBytes max-disk-cache-bytes)
-                     max-disk-cache-percentage (.maxDiskCachePercentage max-disk-cache-percentage))))
+(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store]}]
+  (.storage config (Storage/remoteStorage (let [[tag opts] object-store]
+                                            (->object-store-factory tag opts)))))
 
 (defmethod xtn/apply-config! ::storage [config _ [tag opts]]
   (xtn/apply-config! config
@@ -51,10 +44,12 @@
 (defmethod ig/prep-key :xtdb/buffer-pool [_ factory]
   {:allocator (ig/ref :xtdb/allocator)
    :factory factory
-   :metrics-registry (ig/ref :xtdb.metrics/registry)})
+   :metrics-registry (ig/ref :xtdb.metrics/registry)
+   :memory-cache (ig/ref :xtdb.cache/memory)
+   :disk-cache (ig/ref :xtdb.cache/disk)})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator ^Storage$Factory factory, metrics-registry]}]
-  (.open factory allocator metrics-registry Storage/VERSION))
+(defmethod ig/init-key :xtdb/buffer-pool [_ {:keys [allocator metrics-registry memory-cache disk-cache ^Storage$Factory factory]}]
+  (.open factory allocator memory-cache disk-cache metrics-registry Storage/VERSION))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))

@@ -43,8 +43,8 @@ We can swap out the implementation of the object store with one based on Google 
 To do so, we add a `:google-cloud` section within the Integrant config for our node, alongside any config:
 ```clojure
 {:storage [:remote {:object-store [:google-cloud {:project-id "your-project-id"
-                                                  :bucket "your-storage-bucket"}]
-                    :local-disk-cache local-disk-cache}]}
+                                                  :bucket "your-storage-bucket"}]}]
+ :disk-cache {:path "local-disk-cache"}}
 ```
 
 Below follows the various parameters used by the module, and some notes around the provided <<deployment-manager, Google Cloud Deployment Manager configuration template>> which sets up all of the necessary infrastructure.

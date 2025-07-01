@@ -35,13 +35,15 @@ storage: !Local
   # (Can be set as an !Env value)
   path: /var/lib/xtdb/storage
 
-  # -- optional
+## -- optional
+# configuration for XTDB's in-memory cache
+# if not provided, an in-memory cache will still be created, with the default size
+memoryCache:
+  # The maximum proportion of the JVM's direct-memory space to use for the in-memory cache (overridden by maxSizeBytes, if set).
+  # maxSizeRatio: 0.5
 
-  # The maximum number of entries to store in the in-memory cache.
-  # maxCacheEntries: 1024
-
-  # The maximum number of bytes to store in the in-memory cache.
-  # maxCacheBytes: 536870912
+  # The maximum number of bytes to store in the in-memory cache (unset by default).
+  # maxSizeBytes: 536870912
 ----
 
 [#remote]
@@ -64,24 +66,32 @@ storage: !Remote
   # Each of these is configured separately - see below for more information.
   objectStore: <ObjectStoreImplementation>
 
-  # Local directory to store the working-set cache in.
+
+## -- required
+# Local directory to store the working-set cache in.
+diskCache:
+  ## -- required
   # (Can be set as an !Env value)
-  localDiskCache: /var/lib/xtdb/remote-cache
+  path: /var/lib/xtdb/remote-cache
 
   ## -- optional
+  # The maximum proportion of space to use on the filesystem for the diskCache directory (overridden by maxSizeBytes, if set).
+  # maxSizeRatio: 0.75
 
-  # The maximum number of entries to store in the in-memory cache.
-  # maxCacheEntries: 1024
+  # The upper limit of bytes that can be stored within the diskCache directory (unset by default).
+  # maxSizeBytes: 107374182400
 
-  # The maximum number of bytes to store in the in-memory cache.
-  # maxCacheBytes: 536870912
+## -- optional
+# configuration for XTDB's in-memory cache
+# if not provided, an in-memory cache will still be created, with the default size
+memoryCache:
+  # The maximum proportion of the JVM's direct-memory space to use for the in-memory cache (overridden by maxSizeBytes, if set).
+  # maxSizeRatio: 0.5
 
-  # The max percentage of space to use on the filesystem for the localDiskCache directory (overriden by maxDiskCacheBytes, if set).
-  # maxDiskCachePercentage: 75
-
-  # The upper limit of bytes that can be stored within the localDiskCache directory (unset by default).
-  # maxDiskCacheBytes: 107374182400
+  # The maximum number of bytes to store in the in-memory cache (unset by default).
+  # maxSizeBytes: 536870912
 ----
+
 Each Object Store implementation is configured separately - see the individual cloud platform documentation for more information:
 
 * link:../aws#storage[AWS]
