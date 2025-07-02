@@ -120,8 +120,10 @@
           (doseq [doc docs
                   :let [eid (val (or (->> doc
                                           (some (fn [e]
-                                                  (when (.equals "_id" (util/->normal-form-str (key e)))
-                                                    e))))
+                                                  (let [k (key e)]
+                                                    (when (.equals "_id" (cond-> k
+                                                                           (keyword? k) util/->normal-form-str))
+                                                      e)))))
                                      (throw (err/illegal-arg :missing-id {:doc doc}))))]]
             (.writeBytes iid-writer (util/->iid eid)))
           (.endList iids-writer))
