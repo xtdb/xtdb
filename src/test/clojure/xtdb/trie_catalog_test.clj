@@ -189,6 +189,12 @@
                        ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20]))
         "Superseded L1 files should not get returned"))
 
+
+(t/deftest test-l0-addition-idempotent-4545
+  ;; L0 TriesAdded message arrives after the L1 compaction
+  (t/is (= #{"l01-rc-b00"}
+           (curr-tries ["l00-rc-b00" 10] ["l01-rc-b00" 10] ["l00-rc-b00" 00]))))
+
 (t/deftest test-selects-l2-tries
   (t/is (= #{"l01-rc-b00"}
            (curr-tries ["l01-rc-b00" 2]
