@@ -291,7 +291,7 @@
        :row-count (.getRowCount trie-metadata)
        :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
 
-(defrecord TrieCatalog [^BufferPool buffer-pool, ^Map !table-cats, ^long file-size-target]
+(defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [this table-name added-tries as-of]
     (.compute !table-cats table-name
@@ -331,32 +331,32 @@
 (defn new-trie-details? [^TrieDetails trie-details]
   (not (nil? (.getTrieState trie-details))))
 
-(def ^:dynamic *force-old-trie-details* false)
+(defn trie-catalog-init [table->table-block]
+  (if (some-> table->table-block first val :tries first new-trie-details?)
+    (let [!table-cats (ConcurrentHashMap.)]
+      (doseq [[table-name {:keys [tries]}] table->table-block
+              :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
+                                        (let [{:keys [level recency part state] :as trie} (trie/<-trie-details added-trie)]
+                                          (update table-cat [level recency part] conj-trie trie state)))
+                                      {}
+                                      tries)
+                              (update-vals (fn [tries]
+                                             (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
+        (.put !table-cats table-name {:tries tries}))
+
+      (TrieCatalog. !table-cats *file-size-target*))
+    ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
+    (let [cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
+          now (Instant/now)]
+      (doseq [[table-name {:keys [tries]}] table->table-block]
+        (.addTries cat table-name tries now))
+      cat)))
 
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
   (log/debug "starting trie catalog...")
   (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)
-        cat (if (and (some-> table->table-block first val :tries first new-trie-details?) (not *force-old-trie-details*))
-              (let [!table-cats (ConcurrentHashMap.)]
-                (doseq [[table-name {:keys [tries]}] table->table-block
-                        :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
-                                                  (let [{:keys [level recency part state] :as trie} (trie/<-trie-details added-trie)]
-                                                    (update table-cat [level recency part] conj-trie trie state)))
-                                                {}
-                                                tries)
-                                        (update-vals (fn [tries]
-                                                       (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
-                  (.put !table-cats table-name {:tries tries}))
-
-                (TrieCatalog. buffer-pool !table-cats *file-size-target*))
-              (let [cat (TrieCatalog. buffer-pool (ConcurrentHashMap.) *file-size-target*)
-                    now (Instant/now)]
-                (doseq [[table-name {:keys [tries]}] table->table-block]
-                  (.addTries cat table-name tries now))
-                cat))]
-
+        cat (trie-catalog-init table->table-block)]
     (log/debug "trie catalog started")
-
     cat))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
