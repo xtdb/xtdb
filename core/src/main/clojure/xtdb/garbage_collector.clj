@@ -9,7 +9,7 @@
                                                       {:keys [enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
   (.garbageCollector config
                      (cond-> (GarbageCollectorConfig.)
-                       (not (nil? enabled?)) (.enabled enabled?)
+                       (some? enabled?) (.enabled enabled?)
                        blocks-to-keep (.blocksToKeep blocks-to-keep)
                        garbage-lifetime (.garbageLifetime garbage-lifetime)
                        approx-run-interval (.approxRunInterval approx-run-interval))))
