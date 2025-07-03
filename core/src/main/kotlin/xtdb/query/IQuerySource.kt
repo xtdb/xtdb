@@ -2,7 +2,6 @@ package xtdb.query
 
 import xtdb.indexer.Watermark
 
-
 interface IQuerySource {
     fun prepareRaQuery(raQuery: Any, opts: Any?): PreparedQuery
     fun prepareRaQuery(raQuery: Any, wmSrc: Watermark.Source, opts: Any?): PreparedQuery

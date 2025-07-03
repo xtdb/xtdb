@@ -45,7 +45,6 @@
 
 (definterface IScanEmitter
   (close [])
-  (scanFields [^xtdb.indexer.Watermark wm, scan-cols])
   (emitScan [scan-expr scan-fields param-fields]))
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
@@ -170,27 +169,26 @@
           :trie-catalog (ig/ref :xtdb/trie-catalog)
           :info-schema (ig/ref :xtdb/information-schema)}))
 
+(defn scan-fields [table-catalog ^Watermark wm scan-cols]
+  (letfn [(->field [[table col-name]]
+            (let [table (str table)
+                  col-name (str col-name)]
+              ;; TODO move to fields here
+              (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
+                      (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
+                      (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
+                      (types/merge-fields (table-cat/column-field table-catalog table col-name)
+                                          (some-> (.getLiveIndex wm)
+                                                  (.liveTable table)
+                                                  (.columnField col-name))))
+                  (types/field-with-name col-name))))]
+    (->> scan-cols
+         (into {} (map (juxt identity ->field))))))
+
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^PageMetadata$Factory metadata-mgr, ^BufferPool buffer-pool,
                                                  info-schema ^TrieCatalog trie-catalog, table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
-      (close [_] (->> table->template-rel+trie vals (map first) util/close))
-      (scanFields [_ wm scan-cols]
-        (letfn [(->field [[table col-name]]
-                  (let [table (str table)
-                        col-name (str col-name)]
-                    ;; TODO move to fields here
-                    (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                            (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
-                            (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
-                            (types/merge-fields (table-cat/column-field table-catalog table col-name)
-                                                (some-> (.getLiveIndex wm)
-                                                        (.liveTable table)
-                                                        (.columnField col-name))))
-                        (types/field-with-name col-name))))]
-          (->> scan-cols
-               (into {} (map (juxt identity ->field))))))
-
       (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
         (let [col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
@@ -289,7 +287,10 @@
                                             col-names col-preds
                                             temporal-bounds
                                             (.iterator ^Iterable merge-tasks)
-                                            schema args))))))})))))
+                                            schema args))))))}))
+
+      (close [_]
+        (->> table->template-rel+trie vals (map first) util/close)))))
 
 (defmethod ig/halt-key! ::scan-emitter [_ ^IScanEmitter scan-emmiter]
   (.close scan-emmiter))
