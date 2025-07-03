@@ -284,8 +284,8 @@
         "L4H covered idx 0 but not 1"))
 
 (t/deftest reconstructs-state-on-startup
-  (doseq [val [true false]]
-    (binding [cat/*force-old-trie-details* val]
+  (doseq [force-old-trie-details [true false]]
+    (binding [cat/*force-old-trie-details* force-old-trie-details]
       (let [node-dir (util/->path "target/trie-catalog-test/reconstructs-state")]
         (util/delete-dir node-dir)
 
