@@ -2,8 +2,11 @@ package xtdb.garbage_collector
 
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
+import xtdb.BufferPool
 import xtdb.catalog.BlockCatalog
 import xtdb.time.microsAsInstant
+import xtdb.trie.Trie.dataFilePath
+import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieCatalog
 import java.io.Closeable
 import java.time.Duration
@@ -20,6 +23,7 @@ class GarbageCollector(
     private val trieCatalog: TrieCatalog,
     private val garbageLifetime: Duration,
     private val approxRunInterval: Duration,
+    private val bufferPool: BufferPool
 ) : Closeable {
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -34,7 +38,12 @@ class GarbageCollector(
                 LOGGER.debug("Starting trie garbage collection")
                 val tableNames = blockCatalog.allTableNames.take(100)
                 for (tableName in tableNames) {
-                    trieCatalog.garbageCollectTries(tableName, garbageAsOf)
+                    val garbageTries = trieCatalog.garbageTries(tableName, garbageAsOf)
+                    for (garbageTrie in garbageTries) {
+                        bufferPool.deleteIfExists(tableName.metaFilePath(garbageTrie))
+                        bufferPool.deleteIfExists(tableName.dataFilePath(garbageTrie))
+                    }
+                    trieCatalog.deleteTries(tableName, garbageTries)
                 }
                 LOGGER.debug("Trie garbage collection completed")
             }

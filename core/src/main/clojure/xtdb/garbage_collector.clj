@@ -20,12 +20,14 @@
    :enabled? (.getEnabled config)
    :blocks-to-keep (.getBlocksToKeep config)
    :garbage-lifetime (.getGarbageLifetime config)
-   :approx-run-interval (.getApproxRunInterval config)})
+   :approx-run-interval (.getApproxRunInterval config)
+   :buffer-pool (ig/ref :xtdb/buffer-pool)})
 
 (defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [block-catalog trie-catalog enabled? blocks-to-keep
-                                                          garbage-lifetime approx-run-interval]}]
+                                                          garbage-lifetime approx-run-interval
+                                                          buffer-pool]}]
 
-  (cond-> (GarbageCollector. block-catalog blocks-to-keep trie-catalog garbage-lifetime approx-run-interval)
+  (cond-> (GarbageCollector. block-catalog blocks-to-keep trie-catalog garbage-lifetime approx-run-interval buffer-pool)
     enabled? (.start)))
 
 (defmethod ig/halt-key! :xtdb/garbage-collector [_ ^GarbageCollector gc]

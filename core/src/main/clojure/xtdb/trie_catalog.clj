@@ -253,12 +253,17 @@
   (->> (mapcat (comp  :garbage val) tries)
        (filter (garbage-fn as-of))))
 
-(defn remove-garbage [table-cat as-of]
-  (update table-cat :tries
-          (fn [trie-levels]
-            (update-vals trie-levels
-                         (fn [{:keys [garbage] :as tries}]
-                           (assoc tries :garbage (remove (garbage-fn as-of) garbage)))))))
+(defn remove-garbage [table-cat garbage-trie-keys]
+  (let [garbage-by-path (-> (->> (map trie/parse-trie-key garbage-trie-keys)
+                                 (group-by (juxt :level :recency :part)))
+                            (update-vals #(map :trie-key %)))]
+
+    (update table-cat :tries
+            (fn [trie-levels]
+              (reduce (fn [trie-levels [path garbage-trie-keys]]
+                        (update-in trie-levels [path :garbage] #(remove (comp (set garbage-trie-keys) :trie-key) %)))
+                      trie-levels
+                      garbage-by-path)))))
 
 (defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
   Metadata
@@ -304,13 +309,14 @@
 
   (getTableNames [_] (set (keys !table-cats)))
 
-  (garbageCollectTries [_ table-name as-of]
-    (doseq [{:keys [trie-key]} (garbage-tries (.get !table-cats table-name) as-of)]
-      (.deleteIfExists buffer-pool (Trie/dataFilePath table-name trie-key))
-      (.deleteIfExists buffer-pool (Trie/metaFilePath table-name trie-key)))
+  (garbageTries [_ table-name as-of]
+    (->> (garbage-tries (.get !table-cats table-name) as-of)
+         (into #{} (map :trie-key))))
+
+  (deleteTries [_ table-name garbage-trie-keys]
     (.compute !table-cats table-name
               (fn [_table-name tries]
-                (remove-garbage tries as-of))))
+                (remove-garbage tries garbage-trie-keys))))
 
   PTrieCatalog
   (trie-state [_ table-name] (.get !table-cats table-name)))

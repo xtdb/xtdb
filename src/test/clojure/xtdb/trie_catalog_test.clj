@@ -374,7 +374,9 @@
             (garbage-tries [as-of]
               (->> (cat/garbage-tries (cat/trie-state cat "public/foo") as-of)
                    (sort-by (juxt :trie-key :state))
-                   (map (juxt :trie-key :state :garbage-as-of))))]
+                   (map (juxt :trie-key :state :garbage-as-of))))
+            (delete-tries [garbage-trie-keys]
+              (.deleteTries cat "public/foo" garbage-trie-keys))]
 
       (add-tries [["l00-rc-b00" 1] ["l01-rc-b00" 1]]
                  #xt/instant "2000-01-01T00:00:00Z")
@@ -407,7 +409,20 @@
 
       (t/is (= [["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
                 ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]]
-               (garbage-tries #xt/instant "2003-01-01T00:00:00Z"))))))
+               (garbage-tries #xt/instant "2003-01-01T00:00:00Z")))
+
+      (delete-tries #{"l01-rc-b00" "l01-rc-b01"})
+
+      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
+                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+                ["l00-rc-b02" :garbage #xt/instant "2002-01-01T00:00:00Z"]
+                ["l00-rc-b03" :live nil]
+                ["l01-rc-b02" :live nil]
+                ["l02-rc-p0-b01" :live nil]
+                ["l02-rc-p1-b01" :live nil]
+                ["l02-rc-p2-b01" :live nil]
+                ["l02-rc-p3-b01" :live nil]]
+               (all-tries))))))
 
 
 (t/deftest test-default-garbage-collection
