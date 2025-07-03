@@ -15,7 +15,6 @@ private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
 
 class GarbageCollector(
-    private val enabled : Boolean,
     private val blockCatalog: BlockCatalog,
     private val blocksToKeep: Int,
     private val trieCatalog: TrieCatalog,
@@ -54,16 +53,14 @@ class GarbageCollector(
         garbageCollect(gcCutOff)
     }
 
-    init {
+    fun start() {
         LOGGER.info("Starting GarbageCollector with approxRunInterval: $approxRunInterval, blocksToKeep: $blocksToKeep")
-        if (enabled) {
-            scope.launch {
-                delay(Random.nextLong(approxRunInterval.toMillis()))
-                while (isActive) {
-                    garbageCollectFromOldestToKeep()
-                    LOGGER.debug("Next GC run scheduled in ${approxRunInterval.toMillis()}ms")
-                    delay(approxRunInterval.toMillis())
-                }
+        scope.launch {
+            delay(Random.nextLong(approxRunInterval.toMillis()))
+            while (isActive) {
+                garbageCollectFromOldestToKeep()
+                LOGGER.debug("Next GC run scheduled in ${approxRunInterval.toMillis()}ms")
+                delay(approxRunInterval.toMillis())
             }
         }
     }

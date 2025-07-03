@@ -25,7 +25,8 @@
 (defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [block-catalog trie-catalog enabled? blocks-to-keep
                                                           garbage-lifetime approx-run-interval]}]
 
-  (GarbageCollector. enabled? block-catalog blocks-to-keep trie-catalog garbage-lifetime approx-run-interval))
+  (cond-> (GarbageCollector. block-catalog blocks-to-keep trie-catalog garbage-lifetime approx-run-interval)
+    enabled? (.start)))
 
 (defmethod ig/halt-key! :xtdb/garbage-collector [_ ^GarbageCollector gc]
   (when gc
