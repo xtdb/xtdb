@@ -36,8 +36,8 @@ message TrieMetadata {
 }
 
 enum TrieState {
-    LIVE = 0;
-    NASCENT = 1;
+    NASCENT = 0;
+    LIVE = 1;
     GARBAGE = 2;
 }
 
