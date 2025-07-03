@@ -461,6 +461,5 @@
                     "tables/public$foo/meta/l01-rc-b03.arrow"]
 
                    (->>
-                    (.listAllObjects bp)
-                    (map #(str (.getKey ^ObjectStore$StoredObject %)) )
-                    (filter #(str/starts-with? % "tables/public$foo"))))))))))
+                    (.listAllObjects bp (util/->path "tables/public$foo"))
+                    (map #(str (.getKey ^ObjectStore$StoredObject %)))))))))))
