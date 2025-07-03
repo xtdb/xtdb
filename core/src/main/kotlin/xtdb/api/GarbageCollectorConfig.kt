@@ -9,7 +9,7 @@ import java.time.Duration
 data class GarbageCollectorConfig(
     var enabled: Boolean = true,
     var blocksToKeep: Int = 10,
-    var garbageLifetime: Duration = Duration.ofHours(6),
+    var garbageLifetime: Duration = Duration.ofHours(24),
     var approxRunInterval: Duration = Duration.ofMinutes(10),
 ) {
     fun enabled(enabled: Boolean) = apply { this.enabled = enabled }
