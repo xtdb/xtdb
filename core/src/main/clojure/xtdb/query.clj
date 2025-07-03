@@ -236,15 +236,6 @@
 
     (reify
       IQuerySource
-      (prepareRaQuery [this query query-opts]
-        (.prepareRaQuery this query live-idx query-opts))
-
-      (prepareRaQuery [_ query wm-src query-opts]
-        (let [prepared-query (prepare-ra query (assoc deps :allocator allocator, :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
-          (when (seq (.getWarnings prepared-query))
-            (.increment query-warning-counter))
-          prepared-query))
-
       (planQuery [this query query-opts]
         (.planQuery this query live-idx query-opts))
 
@@ -272,8 +263,17 @@
                                :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
                     (if (or (:explain? query-opts) (:explain? (meta plan)))
                       (with-meta [:table [{:plan (with-out-str (pp/pprint plan))}]]
-                                 (-> (meta plan) (select-keys [:param-count :warnings])))
+                        (-> (meta plan) (select-keys [:param-count :warnings])))
                       plan))))))
+
+      (prepareRaQuery [this query query-opts]
+        (.prepareRaQuery this query live-idx query-opts))
+
+      (prepareRaQuery [_ query wm-src query-opts]
+        (let [prepared-query (prepare-ra query (assoc deps :allocator allocator, :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
+          (when (seq (.getWarnings prepared-query))
+            (.increment query-warning-counter))
+          prepared-query))
 
       AutoCloseable
       (close [_]
