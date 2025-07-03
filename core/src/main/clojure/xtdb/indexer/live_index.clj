@@ -5,21 +5,20 @@
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
             [xtdb.metrics :as metrics]
-            [xtdb.serde :as serde]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
-           (java.time Duration)
+           (java.time Duration Instant)
            (java.util HashMap List Map)
            (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api IndexerConfig TransactionKey)
-           (xtdb.api.log Log Log$Message$TriesAdded)
+           (xtdb.api.log Log Log$Message$TriesAdded Log$MessageMetadata)
            xtdb.api.storage.Storage
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
@@ -173,12 +172,11 @@
                                                           (catch Exception _
                                                             (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                    (util/rethrowing-cause))]
-            (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
-                                (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
+            (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
+                                (trie/->trie-details table-name trie-key data-file-size trie-metadata state))]
+              (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries))
               (doseq [^TrieDetails added-trie added-tries]
-                (.addTries trie-cat (.getTableName added-trie) [added-trie]))
-              (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
-
+                (.addTries trie-cat (.getTableName added-trie) [added-trie] (.getSystemTime latest-completed-tx))))
             (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
                   table->all-tries (->> all-tables
                                         (map (fn [table-name]

@@ -6,7 +6,7 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           [java.time LocalDate ZoneOffset]
+           [java.time LocalDate ZoneOffset Instant]
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
@@ -14,6 +14,7 @@
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            xtdb.operator.scan.Metadata
+           (xtdb.trie Trie)
            (xtdb.util TemporalBounds)))
 
 ;; table-tries data structure
@@ -94,14 +95,18 @@
 (defn- filter-garbage [tries]
   ((juxt filter remove) #(= (:state %) :garbage) tries))
 
-(defn- supersede-partial-tries [{:keys [live+nascent garbage] :as tries} {:keys [^long block-idx]} {:keys [^long file-size-target]}]
+(defn- supersede-partial-tries [{:keys [live+nascent garbage] :as tries}
+                                {:keys [^long block-idx] :as _trie}
+                                {:keys [^long file-size-target]}
+                                as-of]
   (let [[new-garbage live+nascent] (->> live+nascent
                                         (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size, other-state :state, :as other-trie}]
                                                (cond-> other-trie
                                                  (and (= other-state :live)
                                                       (< other-size file-size-target)
                                                       (<= other-block-idx block-idx))
-                                                 (-> (assoc :state :garbage)
+                                                 (-> (assoc :state :garbage
+                                                            :garbage-as-of as-of)
                                                      (dissoc :trie-metadata)))))
                                         filter-garbage)]
     (-> tries
@@ -116,16 +121,17 @@
       (:live :nascent) (assoc tries :live+nascent (conj live+nascent trie))
       :garbage (assoc tries :garbage (conj garbage trie)))))
 
-(defn- insert-levelled-trie [tries trie trie-cat]
+(defn- insert-levelled-trie [tries trie trie-cat as-of]
   (-> tries
-      (supersede-partial-tries trie trie-cat)
+      (supersede-partial-tries trie trie-cat as-of)
       (conj-trie trie :live)))
 
-(defn- supersede-by-block-idx [{:keys [live+nascent garbage] :as tries}, ^long block-idx {}]
+(defn- supersede-by-block-idx [{:keys [live+nascent garbage] :as tries}, ^long block-idx as-of]
   (let [[new-garbage live+nascent] (->> live+nascent
                                         (map (fn [{^long other-block-idx :block-idx, :as trie}]
                                                (cond-> trie
-                                                 (<= other-block-idx block-idx) (-> (assoc :state :garbage)
+                                                 (<= other-block-idx block-idx) (-> (assoc :state :garbage
+                                                                                           :garbage-as-of as-of)
                                                                                     (dissoc :trie-metadata)))))
                                         filter-garbage)]
     (-> tries
@@ -163,7 +169,7 @@
                      (update shard-key mark-block-idx-live block-idx)))
                table-tries)))
 
-(defn- insert-trie [table-cat {:keys [^long level, recency, part, ^long block-idx] :as trie} trie-cat]
+(defn- insert-trie [table-cat {:keys [^long level, recency, part, ^long block-idx] :as trie} trie-cat as-of]
   (case (long level)
     0 (-> table-cat
           (update-in [:tries [0 recency part]] conj-trie trie :live))
@@ -191,10 +197,10 @@
                                                     (get-in table-cat [:l1h-recencies block-idx])))
 
                           ;; L1C files are levelled, so this supersedes any previous partial files
-                          (update [1 nil []] insert-levelled-trie trie trie-cat)
+                          (update [1 nil []] insert-levelled-trie trie trie-cat as-of)
 
                           ;; and supersede L0 files
-                          (update [0 nil []] supersede-by-block-idx block-idx trie-cat))))
+                          (update [0 nil []] supersede-by-block-idx block-idx as-of))))
 
             (update :l1h-recencies dissoc block-idx)))
 
@@ -205,10 +211,10 @@
                   (fn [tries]
                     (-> tries
                         ;; L2H files are levelled, so this supersedes any previous partial files
-                        (update [2 recency part] insert-levelled-trie trie trie-cat)
+                        (update [2 recency part] insert-levelled-trie trie trie-cat as-of)
 
                         ;; we supersede any L1H files that we've incorporated into this L2H
-                        (update [1 recency []] supersede-by-block-idx block-idx trie-cat)))))
+                        (update [1 recency []] supersede-by-block-idx block-idx as-of)))))
 
       (-> table-cat
           (update-in [:tries [level recency part]] conj-trie trie :nascent)
@@ -218,12 +224,15 @@
                     (cond-> table-tries
                       (completed-part-group? table-tries trie)
                       (-> (mark-part-group-live trie)
-                          (update [(dec level) recency (when (seq part) (pop part))] supersede-by-block-idx block-idx trie-cat)))))))))
+                          (update [(dec level) recency (when (seq part) (pop part))] supersede-by-block-idx block-idx as-of)))))))))
 
-(defn apply-trie-notification [trie-cat table-cat trie]
-  (let [trie (-> trie (update :part vec))]
-    (cond-> table-cat
-      (not (stale-msg? table-cat trie)) (insert-trie trie trie-cat))))
+(defn apply-trie-notification
+  ([trie-cat table-cat trie]
+   (apply-trie-notification trie-cat table-cat trie nil))
+  ([trie-cat table-cat trie as-of]
+   (let [trie (-> trie (update :part vec))]
+     (cond-> table-cat
+       (not (stale-msg? table-cat trie)) (insert-trie trie trie-cat as-of)))))
 
 (defn current-tries [{:keys [tries]}]
   (->> tries
@@ -234,6 +243,27 @@
   (->> (into [] (mapcat (comp (fn [{:keys [live+nascent garbage]}] (concat live+nascent garbage)) val)) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
+
+(defn garbage-fn [as-of]
+  (fn [{:keys [level garbage-as-of]}]
+    (when (not= level 0)
+      (<= (compare garbage-as-of as-of) 0))))
+
+(defn garbage-tries [{:keys [tries]} as-of]
+  (->> (mapcat (comp  :garbage val) tries)
+       (filter (garbage-fn as-of))))
+
+(defn remove-garbage [table-cat garbage-trie-keys]
+  (let [garbage-by-path (-> (->> (map trie/parse-trie-key garbage-trie-keys)
+                                 (group-by (juxt :level :recency :part)))
+                            (update-vals #(map :trie-key %)))]
+
+    (update table-cat :tries
+            (fn [trie-levels]
+              (reduce (fn [trie-levels [path garbage-trie-keys]]
+                        (update-in trie-levels [path :garbage] #(remove (comp (set garbage-trie-keys) :trie-key) %)))
+                      trie-levels
+                      garbage-by-path)))))
 
 (defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
   Metadata
@@ -263,7 +293,7 @@
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
-  (addTries [this table-name added-tries]
+  (addTries [this table-name added-tries as-of]
     (.compute !table-cats table-name
               (fn [_table-name tries]
                 (reduce (fn [table-cat ^TrieDetails added-trie]
@@ -271,15 +301,26 @@
                             (apply-trie-notification this table-cat
                                                      (-> parsed-key
                                                          (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                :trie-metadata (.getTrieMetadata added-trie))))
+                                                                :trie-metadata (.getTrieMetadata added-trie)))
+                                                     as-of)
                             table-cat))
                         (or tries {})
                         added-tries))))
 
   (getTableNames [_] (set (keys !table-cats)))
 
+  (garbageTries [_ table-name as-of]
+    (->> (garbage-tries (.get !table-cats table-name) as-of)
+         (into #{} (map :trie-key))))
+
+  (deleteTries [_ table-name garbage-trie-keys]
+    (.compute !table-cats table-name
+              (fn [_table-name tries]
+                (remove-garbage tries garbage-trie-keys))))
+
   PTrieCatalog
   (trie-state [_ table-name] (.get !table-cats table-name)))
+
 
 (defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
   (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
@@ -287,15 +328,35 @@
          :table-cat (ig/ref :xtdb/table-catalog)}
         opts))
 
+(defn new-trie-details? [^TrieDetails trie-details]
+  (not (nil? (.getTrieState trie-details))))
+
+(defn trie-catalog-init [table->table-block]
+  (if (some-> table->table-block first val :tries first new-trie-details?)
+    (let [!table-cats (ConcurrentHashMap.)]
+      (doseq [[table-name {:keys [tries]}] table->table-block
+              :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
+                                        (let [{:keys [level recency part state] :as trie} (trie/<-trie-details added-trie)]
+                                          (update table-cat [level recency part] conj-trie trie state)))
+                                      {}
+                                      tries)
+                              (update-vals (fn [tries]
+                                             (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
+        (.put !table-cats table-name {:tries tries}))
+
+      (TrieCatalog. !table-cats *file-size-target*))
+    ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
+    (let [cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
+          now (Instant/now)]
+      (doseq [[table-name {:keys [tries]}] table->table-block]
+        (.addTries cat table-name tries now))
+      cat)))
+
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
   (log/debug "starting trie catalog...")
   (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)
-        cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)]
-    (doseq [[table-name {:keys [tries]}] table->table-block]
-      (.addTries cat table-name tries))
-
+        cat (trie-catalog-init table->table-block)]
     (log/debug "trie catalog started")
-
     cat))
 
 (defn trie-catalog ^xtdb.trie.TrieCatalog [node]
