@@ -9,7 +9,6 @@
             xtdb.expression.temporal
             xtdb.expression.uri
             [xtdb.logical-plan :as lp]
-            [xtdb.metadata :as meta]
             [xtdb.metrics :as metrics]
             xtdb.operator.apply
             xtdb.operator.arrow
@@ -133,7 +132,7 @@
   (^xtdb.query.PreparedQuery [query
                               {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator,
                                       ^RefCounter ref-ctr ^Watermark$Source wm-src] :as deps}
-                              {:keys [default-tz table-info]}]
+                              {:keys [default-tz]}]
 
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
@@ -220,7 +219,6 @@
          {:plan-cache-size 1000
           :allocator (ig/ref :xtdb/allocator)
           :scan-emitter (ig/ref ::scan/scan-emitter)
-          :metadata-mgr (ig/ref ::meta/metadata-manager)
           :live-idx (ig/ref :xtdb.indexer/live-index)
           :metrics-registry (ig/ref :xtdb.metrics/registry)}))
 
@@ -231,7 +229,7 @@
   (let [plan-cache (->caffeine-cache plan-cache-size)
         ref-ctr (RefCounter.)
         deps (-> deps (assoc :ref-ctr ref-ctr))
-        query-warning-counter ^Counter (metrics/add-counter metrics-registry "query.warning")
+        ^Counter query-warning-counter (metrics/add-counter metrics-registry "query.warning")
         allocator (util/->child-allocator allocator "query-source")]
 
     (metrics/add-allocator-gauge metrics-registry "query_source.allocator.allocated_memory" allocator)
