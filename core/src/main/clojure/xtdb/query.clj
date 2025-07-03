@@ -203,7 +203,7 @@
                                   :snapshot-time expr/*snapshot-time*
                                   :current-time current-time
                                   :args (or args vw/empty-args)
-                                  :schema (scan/tables-with-cols wm-src)})
+                                  :schema (some-> wm .getSchema)})
                        (wrap-cursor (->result-fields ordered-outer-projection fields)
                                     current-time expr/*snapshot-time* default-tz
                                     allocator wm ref-ctr (when close-args? args)))))
