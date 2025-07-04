@@ -56,7 +56,11 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol PTrieCatalog
-  (trie-state [trie-cat table-name]))
+  (trie-state [trie-cat table-name])
+
+  (reset->l0! [trie-cat]
+    "DANGER: resets the trie-catalog back to L0,
+     use if compaction has gone awry, and you want to completely recompact."))
 
 (def ^:const branch-factor 4)
 
@@ -146,22 +150,22 @@
                      (update shard-key mark-block-idx-live block-idx)))
                table-tries)))
 
-(defn- insert-trie [table-cat {:keys [^long level, recency, part, ^long block-idx] :as trie} trie-cat]
+(defn- insert-trie [table-trie-cat {:keys [^long level, recency, part, ^long block-idx] :as trie} trie-cat]
   (case (long level)
-    0 (-> table-cat
+    0 (-> table-trie-cat
           (update-in [:tries [0 recency part]] conj-trie trie :live))
 
     1 (if recency
         ;; L1H files are nascent until we see the corresponding L1C file
-        (-> table-cat
+        (-> table-trie-cat
             (update-in [:tries [1 recency part]] conj-trie trie
-                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part]])]
+                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-trie-cat [:tries [1 nil part]])]
                          (if (and l1c (>= l1c-block-idx block-idx))
                            :live :nascent)))
             (update-in [:l1h-recencies block-idx] (fnil conj #{}) recency))
 
         ;; L1C
-        (-> table-cat
+        (-> table-trie-cat
 
             (update :tries
                     (fn [table-tries]
@@ -171,7 +175,7 @@
                           (as-> table-tries (reduce (fn [acc recency]
                                                       (-> acc (update [1 recency []] mark-block-idx-live block-idx)))
                                                     table-tries
-                                                    (get-in table-cat [:l1h-recencies block-idx])))
+                                                    (get-in table-trie-cat [:l1h-recencies block-idx])))
 
                           ;; L1C files are levelled, so this supersedes any previous partial files
                           (update [1 nil []] insert-levelled-trie trie trie-cat)
@@ -183,7 +187,7 @@
 
     (if (and (= level 2) recency)
       ;; L2H
-      (-> table-cat
+      (-> table-trie-cat
           (update :tries
                   (fn [tries]
                     (-> tries
@@ -193,7 +197,7 @@
                         ;; we supersede any L1H files that we've incorporated into this L2H
                         (update [1 recency []] supersede-by-block-idx block-idx trie-cat)))))
 
-      (-> table-cat
+      (-> table-trie-cat
           (update-in [:tries [level recency part]] conj-trie trie :nascent)
 
           (update :tries
@@ -203,10 +207,10 @@
                       (-> (mark-part-group-live trie)
                           (update [(dec level) recency (when (seq part) (pop part))] supersede-by-block-idx block-idx trie-cat)))))))))
 
-(defn apply-trie-notification [trie-cat table-cat trie]
+(defn apply-trie-notification [trie-cat table-trie-cat trie]
   (let [trie (-> trie (update :part vec))]
-    (cond-> table-cat
-      (not (stale-msg? table-cat trie)) (insert-trie trie trie-cat))))
+    (cond-> table-trie-cat
+      (not (stale-msg? table-trie-cat trie)) (insert-trie trie trie-cat))))
 
 (defn current-tries [{:keys [tries]}]
   (->> tries
@@ -244,25 +248,42 @@
        :row-count (.getRowCount trie-metadata)
        :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
 
-(defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
+(defn compacted-trie-keys [{:keys [tries]}]
+  (for [tries (vals (dissoc tries [0 nil []]))
+        {:keys [trie-key]} tries]
+    trie-key))
+
+(defn reset->l0 [{:keys [tries]}]
+  {:tries {[0 nil []] (->> (get tries [0 nil []])
+                           (map (fn [l0-trie]
+                                  (assoc l0-trie :state :live))))}
+   :l1h-recencies {}})
+
+(defrecord TrieCatalog [^Map !table-trie-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [this table-name added-tries]
-    (.compute !table-cats table-name
-              (fn [_table-name tries]
-                (reduce (fn [table-cat ^TrieDetails added-trie]
+    (.compute !table-trie-cats table-name
+              (fn [_table-name table-trie-cat]
+                (reduce (fn [table-trie-cat ^TrieDetails added-trie]
                           (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                            (apply-trie-notification this table-cat
+                            (apply-trie-notification this table-trie-cat
                                                      (-> parsed-key
                                                          (assoc :data-file-size (.getDataFileSize added-trie)
                                                                 :trie-metadata (.getTrieMetadata added-trie))))
-                            table-cat))
-                        (or tries {})
+                            table-trie-cat))
+                        (or table-trie-cat {})
                         added-tries))))
 
-  (getTableNames [_] (set (keys !table-cats)))
+  (getTableNames [_] (set (keys !table-trie-cats)))
 
   PTrieCatalog
-  (trie-state [_ table-name] (.get !table-cats table-name)))
+  (trie-state [_ table-name] (.get !table-trie-cats table-name))
+
+  (reset->l0! [this]
+    (doseq [table-name (.getTableNames this)]
+      (.compute !table-trie-cats table-name
+                (fn [_table-name table-trie-cat]
+                  (reset->l0 table-trie-cat))))))
 
 (defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
   (into {:buffer-pool (ig/ref :xtdb/buffer-pool)

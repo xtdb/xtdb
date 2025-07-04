@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [xtdb.compactor.reset :as cr]
             [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.migration :as mig]
@@ -33,6 +34,13 @@
    [nil "--migrate-from VERSION" "Migrates the database from the given version to the latest schema version"
     :id :migrate-from-version 
     :parse-fn parse-long]
+
+   [nil "--reset-compactor" "Resets the compactor state, deleting all compacted files"
+    :id :reset-compactor?]
+
+   [nil "--reset-compactor-dry-run"
+    "Lists files that would be deleted by the `--reset-compactor` option, without actually deleting them"
+    :id :reset-compactor-dry-run?]
 
    [nil "--playground" "Starts an XTDB playground on the default port"
     :id :playground-port
@@ -80,7 +88,10 @@
                                                                             (some-> (io/resource "xtdb.edn") (io/file))))
                                                                  edn-file->config-opts)]
                                      (or yaml-file edn-file-config {}))
-                       ::compactor-only? (boolean compactor-only?)})))))
+                       ::compactor-only? (boolean compactor-only?)
+
+                       ::reset-compactor-dry-run? (boolean (:reset-compactor-dry-run? options))
+                       ::reset-compactor? (boolean (:reset-compactor? options))})))))
 
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
@@ -106,7 +117,7 @@
   (logging/set-from-env! (System/getenv))
 
   (try
-    (let [{::keys [errors help compactor-only? migrate-from-version playground-port node-opts force?]} (parse-args args)]
+    (let [{::keys [errors help compactor-only? reset-compactor-dry-run? reset-compactor? migrate-from-version playground-port node-opts force?]} (parse-args args)]
       (cond
         errors (binding [*out* *err*]
                  (doseq [error errors]
@@ -116,6 +127,14 @@
         help (do
                (println help)
                (System/exit 0))
+
+        reset-compactor-dry-run? (do
+                                   (cr/reset-compactor! node-opts {:dry-run? true})
+                                   (System/exit 0))
+
+        reset-compactor? (do
+                           (cr/reset-compactor! node-opts {:dry-run? false})
+                           (System/exit 0))
 
         migrate-from-version (System/exit (mig/migrate-from migrate-from-version node-opts {:force? force?}))
 
