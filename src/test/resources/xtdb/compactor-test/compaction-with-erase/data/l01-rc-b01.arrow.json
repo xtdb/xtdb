@@ -51,7 +51,7 @@
         },
         "children" : [{
           "name" : "_id",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "UuidType"
           },

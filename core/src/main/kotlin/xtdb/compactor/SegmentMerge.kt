@@ -3,13 +3,12 @@ package xtdb.compactor
 import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
-import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
-import xtdb.compactor.RecencyPartition.*
+import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.trie.*
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
@@ -26,11 +25,6 @@ import kotlin.io.path.deleteExisting
 import kotlin.math.min
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
-private fun logDataRelSchema(dataSchemas: Collection<Schema>) =
-    mergeFields(dataSchemas.map { it.findField("op").children.first() })
-        .withName("put")
-        .let { dataRelSchema(it) }
-
 private fun ByteArray.toPathPredicate() =
     Predicate<ByteArray> { pagePath ->
         val len = min(size, pagePath.size)
@@ -43,15 +37,19 @@ private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): Re
 /**
  * A function to do bitemporal resolution for events with the same system-time (same transaction). See #4303
  */
-fun resolveSameSystemTimeEvents(al: BufferAllocator, dataReader: RelationReader, path: ByteArray = byteArrayOf()) : Relation {
+fun resolveSameSystemTimeEvents(
+    al: BufferAllocator,
+    dataReader: RelationReader,
+    path: ByteArray = byteArrayOf()
+): Relation {
     val isValidPtr = ArrowBufPointer()
     val startIidPtr = ArrowBufPointer()
     val curIidPtr = ArrowBufPointer()
-    var curSystemFrom : Long
+    var curSystemFrom: Long
 
     val relWriter = Relation.open(al, dataReader.schema)
     val iidVec = dataReader["_iid"].rowCopier(relWriter["_iid"])
-    val sysFromVec= dataReader["_system_from"].rowCopier(relWriter["_system_from"])
+    val sysFromVec = dataReader["_system_from"].rowCopier(relWriter["_system_from"])
     val validFromVec = relWriter["_valid_from"]
     val validToVec = relWriter["_valid_to"]
     val opCopier = dataReader["op"].rowCopier(relWriter["op"])
@@ -65,7 +63,11 @@ fun resolveSameSystemTimeEvents(al: BufferAllocator, dataReader: RelationReader,
         evPtr.getIidPointer(startIidPtr)
         curSystemFrom = evPtr.systemFrom
 
-        while(evPtr.isValid(isValidPtr, path) && evPtr.systemFrom == curSystemFrom && startIidPtr == evPtr.getIidPointer(curIidPtr)) {
+        while (evPtr.isValid(
+                isValidPtr,
+                path
+            ) && evPtr.systemFrom == curSystemFrom && startIidPtr == evPtr.getIidPointer(curIidPtr)
+        ) {
 
             when (val polygon = polygonCalculator.calculate(evPtr)) {
                 // here we are only taking care of an erase that happens within the same transaction
@@ -80,6 +82,7 @@ fun resolveSameSystemTimeEvents(al: BufferAllocator, dataReader: RelationReader,
                     }
                     seenErase = true
                 }
+
                 else -> {
                     repeat(polygon.validTimeRangeCount) { i ->
                         if (polygon.getSystemTo(i) > curSystemFrom) {
@@ -196,9 +199,17 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         recencyPartitioning: RecencyPartitioning,
         recencyPartition: RecencyPartition? = WEEK
     ): Results {
-        val schema = logDataRelSchema(segments.map { it.dataRel!!.schema })
+        val mergedPutField = mergeFields(
+            segments.mapNotNull { seg ->
+                seg.dataRel!!.schema
+                    .findField("op")
+                    .children
+                    .find { it.name == "put" && it.children.isNotEmpty() }
+            })
 
-        val outWriter = when(recencyPartitioning) {
+        val schema = dataRelSchema(mergedPutField.withName("put"))
+
+        val outWriter = when (recencyPartitioning) {
             RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)
             is RecencyPartitioning.Preserve -> outWriters.OutRel(schema, recency = recencyPartitioning.recency)
         }
