@@ -41,20 +41,23 @@ interface IVectorWriter : ValueWriter, VectorWriter, AutoCloseable {
         when {
             (field.type == ArrowType.Null.INSTANCE) -> {
                 if (!this.field.isNullable)
-                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+                    throw FieldMismatch(field.fieldType, this.field.fieldType)
             }
+
             field.type is ArrowType.Union -> {
-                val nullable = field.children.fold(false) { acc, field -> acc || field.type == ArrowType.Null.INSTANCE || field.isNullable }
+                val nullable =
+                    field.children.fold(false) { acc, field -> acc || field.type == ArrowType.Null.INSTANCE || field.isNullable }
                 if (nullable && !this.field.isNullable)
-                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+                    throw FieldMismatch(field.fieldType, this.field.fieldType)
 
                 val nonNullFields = field.children.filter { it.type != ArrowType.Null.INSTANCE }
-                if ( nonNullFields.size > 1 || (nonNullFields.size == 1 && this.field.type != nonNullFields.first().type))
-                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+                if (nonNullFields.size > 1 || (nonNullFields.size == 1 && this.field.type != nonNullFields.first().type))
+                    throw FieldMismatch(field.fieldType, this.field.fieldType)
             }
+
             else ->
                 if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
-                    throw FieldMismatch(this.field.fieldType, field.fieldType)
+                    throw FieldMismatch(field.fieldType, this.field.fieldType)
         }
     }
 
@@ -126,13 +129,18 @@ internal val UNION_FIELD_TYPE = FieldType.notNullable(ArrowType.Union(UnionMode.
 internal fun IVectorWriter.populateWithAbsents(pos: Int) =
     repeat(pos - valueCount) { writeObject(null) }
 
-internal data class FieldMismatch(val expected: FieldType, val given: FieldType) :
-    IllegalArgumentException("Field type mismatch")
+internal data class FieldMismatch(val src: FieldType, val dest: FieldType) :
+    IllegalStateException(buildString {
+        append("Field type mismatch: ")
+        append("${src.type} ${if (src.isNullable) "nullable" else "not null"}")
+        append(" -> ")
+        append("${dest.type} ${if (dest.isNullable) "nullable" else "not null"}")
+    })
 
-internal fun IVectorWriter.checkFieldType(given: FieldType) {
-    val expected = field.fieldType
-    if (expected.type != given.type || (given.isNullable && !expected.isNullable))
-        throw FieldMismatch(expected, given)
+internal fun IVectorWriter.checkFieldType(src: FieldType) {
+    val dest = field.fieldType
+    if (dest.type != src.type || (src.isNullable && !dest.isNullable))
+        throw FieldMismatch(src, dest)
 }
 
 internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): FieldVector {

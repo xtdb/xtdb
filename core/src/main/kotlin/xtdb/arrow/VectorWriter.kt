@@ -7,13 +7,18 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.asKeyword
 
 internal data class InvalidWriteObjectException(val fieldType: FieldType, val obj: Any?) :
-    IllegalArgumentException("invalid writeObject"), IExceptionInfo {
+    IllegalStateException("invalid writeObject"), IExceptionInfo {
     override fun getData(): IPersistentMap =
         PersistentArrayMap.create(mapOf("field-type".asKeyword to fieldType, "obj".asKeyword to obj))
 }
 
 internal data class InvalidCopySourceException(val src: FieldType, val dest: FieldType) :
-    IllegalArgumentException("illegal copy src vector")
+    IllegalStateException(buildString {
+        append("illegal copy src vector: ")
+        append("${src.type} ${if (src.isNullable) "nullable" else "not null"}")
+        append(" -> ")
+        append("${dest.type} ${if (dest.isNullable) "nullable" else "not null"}")
+    })
 
 interface VectorWriter : VectorReader, ValueWriter, AutoCloseable {
 

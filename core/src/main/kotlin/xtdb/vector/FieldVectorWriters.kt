@@ -102,7 +102,7 @@ class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vec
     override fun promoteChildren(field: Field) {
         if (field.type == ArrowType.Null.INSTANCE) return
         if (field.type is ArrowType.Union && field.children.size == 1 && field.children[0].type == ArrowType.Null.INSTANCE) return
-        throw FieldMismatch(this.field.fieldType, field.fieldType)
+        throw FieldMismatch(field.fieldType, this.field.fieldType)
     }
 }
 
@@ -535,8 +535,8 @@ internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) 
 
     override fun promoteChildren(field: Field) {
         if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(
-            this.field.fieldType,
-            field.fieldType
+            field.fieldType,
+            this.field.fieldType
         )
         inner.promoteChildren(Field(field.name, inner.field.fieldType, field.children))
     }

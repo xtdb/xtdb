@@ -189,7 +189,7 @@ class DenseUnionVectorWriter(
         }
 
         if (fieldType.type != w.field.type) {
-            throw FieldMismatch(w.field.fieldType, fieldType)
+            throw FieldMismatch(fieldType, w.field.fieldType)
         }
 
         return w
