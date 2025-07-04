@@ -7,17 +7,20 @@ import xtdb.trie.ColumnName
 
 class MultiVectorRelationFactory(leafRels: List<RelationReader>, colNames: List<ColumnName>) {
 
-    private val readers: Map<ColumnName, List<IVectorReader>>
+    private val readers: Map<ColumnName, List<IVectorReader?>>
 
     init {
-        val putReaders = leafRels.map { it["op"].vectorForOrNull("put") }
+        val putReaders = leafRels.map {
+            it["op"].vectorForOrNull("put")?.takeIf { putVec -> putVec.vectorForOrNull("_id") != null }
+        }
 
         readers = colNames.associateWith { colName ->
             if (colName == "_iid") {
                 leafRels.map { it["_iid"] }
             } else {
-                putReaders.filterNotNull().map { putReader ->
-                    putReader.vectorForOrNull(colName)?.withName(colName)
+                putReaders.map { putReader ->
+                    if (putReader == null) null
+                    else putReader.vectorForOrNull(colName)?.withName(colName)
                         ?: ValueVectorReader.from(NullVector(colName, putReader.valueCount))
                 }
             }

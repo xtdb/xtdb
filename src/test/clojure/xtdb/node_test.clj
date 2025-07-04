@@ -1109,3 +1109,22 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))))
 
+(t/deftest test-erase-followed-by-join-4577
+  (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, name) VALUES (1, 'foo'), (2, 'bar')"])
+  (xt/execute-tx tu/*node* ["INSERT INTO bar (_id, name, foo_id) VALUES (1, 'baz', 1), (2, 'qux', 1), (3, 'qux', 2)"])
+  (tu/finish-block! tu/*node*)
+
+  (xt/execute-tx tu/*node* ["ERASE FROM foo WHERE _id = 2"])
+  (t/is (= [{:bar-name "baz", :name "foo", :xt/id 1}]
+           (xt/q tu/*node* "SELECT f._id, f.name, b.name AS bar_name
+                            FROM foo f
+                            JOIN bar b ON f._id = b._id")))
+
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node* nil)
+
+  ;; threw Field type mismatch
+  (t/is (= [{:bar-name "baz", :name "foo", :xt/id 1}]
+           (xt/q tu/*node* "SELECT f._id, f.name, b.name AS bar_name
+                               FROM foo f
+                               JOIN bar b ON f._id = b._id"))))
