@@ -145,7 +145,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
             field.type == NULL_TYPE && this.field.isNullable -> return
 
             field.type != this.field.type || field.isNullable && !this.field.isNullable ->
-                throw FieldMismatch(this.field.fieldType, field.fieldType)
+                throw FieldMismatch(field.fieldType, this.field.fieldType)
 
             else -> for (child in field.children) {
                 var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)

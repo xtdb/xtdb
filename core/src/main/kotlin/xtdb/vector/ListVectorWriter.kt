@@ -93,7 +93,7 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
             field.type == NULL_TYPE && this.field.isNullable -> return
 
             field.type != this.field.type || field.isNullable && !this.field.isNullable ->
-                throw FieldMismatch(this.field.fieldType, field.fieldType)
+                throw FieldMismatch(field.fieldType, this.field.fieldType)
 
             else -> {
                 val child = field.children.single()

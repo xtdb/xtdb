@@ -87,7 +87,7 @@ internal class FixedSizeListVectorWriter(
 
     override fun promoteChildren(field: Field) {
         if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
-            throw FieldMismatch(this.field.fieldType, field.fieldType)
+            throw FieldMismatch(field.fieldType, this.field.fieldType)
         val child = field.children.single()
         if (
             (child.type != elWriter.field.type
