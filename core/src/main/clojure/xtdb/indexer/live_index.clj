@@ -244,3 +244,5 @@
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
 
+(defn <-node ^xtdb.indexer.LiveIndex [node]
+  (util/component node :xtdb.indexer/live-index))
