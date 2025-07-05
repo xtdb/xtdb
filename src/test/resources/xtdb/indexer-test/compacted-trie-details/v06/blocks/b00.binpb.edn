@@ -1,4 +1,5 @@
 {:block-idx 0,
  :latest-completed-tx
  {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
+ :latest-processed-msg-id 0,
  :table-names #{"xt/txs" "public/foo"}}

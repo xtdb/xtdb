@@ -21,4 +21,5 @@
 (defn <-Block [^Block block]
   {:block-idx (.getBlockIndex block)
    :latest-completed-tx (<-TxKey (.getLatestCompletedTx block))
+   :latest-processed-msg-id (.getLatestProcessedMsgId block)
    :table-names (set (.getTableNamesList block))})

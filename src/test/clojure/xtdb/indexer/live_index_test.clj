@@ -4,8 +4,10 @@
             [xtdb.api :as xt]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.log :as xt-log]
             xtdb.node.impl
             [xtdb.object-store :as os]
+            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -119,7 +121,7 @@
                              {:default-tz #xt/zone "Europe/London"})
               (catch Exception _)))
 
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
           (t/is (= [(os/->StoredObject "tables/public$foo/data/l00-rc-b00.arrow" 2558)]
                    (.listAllObjects bp (util/->path "tables/public$foo/data"))))
@@ -196,6 +198,6 @@
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 36)
-                    (os/->StoredObject (util/->path "blocks/b01.binpb") 37)]
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 38)
+                    (os/->StoredObject (util/->path "blocks/b01.binpb") 40)]
                    (.listAllObjects bp (util/->path "blocks")))))))))

@@ -49,11 +49,17 @@ class LogProcessor(
 
     private val epoch = log.epoch
 
+    @Volatile
     override var latestProcessedMsgId: MessageId =
-        liveIndex.latestCompletedTx?.txId?.let {
+        blockCatalog.latestProcessedMsgId?.let {
+            // used if the epoch is incremented so that we seek to the start of the new log
             if (msgIdToEpoch(it) == epoch) it else offsetToMsgId(epoch, 0) - 1
         } ?: -1
         private set
+
+    private val latestProcessedOffset = blockCatalog.latestProcessedMsgId?.let {
+        if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
+    } ?: -1
 
     override val latestSubmittedMsgId: MessageId
         get() = offsetToMsgId(epoch, log.latestSubmittedOffset)
@@ -114,9 +120,6 @@ class LogProcessor(
 
     private val flusher = Flusher(flushTimeout, blockCatalog)
 
-    private val latestProcessedOffset = liveIndex.latestCompletedTx?.txId?.let {
-        if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
-    } ?: -1
     private val subscription = log.subscribe(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
@@ -218,7 +221,7 @@ class LogProcessor(
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
         val tableNames = liveIndex.finishBlock(blockIdx)
-        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, tableNames)
+        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tableNames)
         liveIndex.nextBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }

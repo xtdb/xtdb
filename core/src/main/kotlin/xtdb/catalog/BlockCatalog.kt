@@ -3,6 +3,7 @@ package xtdb.catalog
 import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
+import xtdb.api.log.MessageId
 import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
@@ -30,7 +31,12 @@ class BlockCatalog(private val bp: BufferPool) {
         private val blocksPath = "blocks".asPath
     }
 
-    fun finishBlock(blockIndex: BlockIndex, latestCompletedTx: TransactionKey?, tableNames: Collection<TableName>) {
+    fun finishBlock(
+        blockIndex: BlockIndex,
+        latestCompletedTx: TransactionKey?,
+        latestProcessedMsgId: MessageId,
+        tableNames: Collection<TableName>
+    ) {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
             "Cannot finish block $blockIndex when current block is $currentBlockIndex"
@@ -44,6 +50,7 @@ class BlockCatalog(private val bp: BufferPool) {
                     systemTime = tx.systemTime.asMicros
                 }
             }
+            this.latestProcessedMsgId = latestProcessedMsgId
             this.tableNames.addAll(tableNames)
         }
 
@@ -59,6 +66,10 @@ class BlockCatalog(private val bp: BufferPool) {
             ?.takeIf { it.hasLatestCompletedTx() }
             ?.latestCompletedTx
             ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
+
+    val latestProcessedMsgId: MessageId?
+        get() = latestBlock?.let { block -> block.latestProcessedMsgId.takeIf { block.hasLatestProcessedMsgId() } }
+            ?: latestCompletedTx?.txId
 
     val allTableNames: List<TableName> get() = latestBlock?.tableNamesList.orEmpty()
 
