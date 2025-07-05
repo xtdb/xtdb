@@ -7,6 +7,7 @@
             [xtdb.trie-catalog :as cat])
   (:import (xtdb.api Xtdb$Config)
            xtdb.BufferPool
+           xtdb.catalog.BlockCatalog
            xtdb.indexer.LiveIndex
            (xtdb.trie Trie TrieCatalog)))
 
@@ -31,6 +32,7 @@
                    ig/prep ig/init)
 
         ^BufferPool bp (:xtdb/buffer-pool system)
+        ^BlockCatalog block-cat (:xtdb/block-catalog system)
         ^TrieCatalog trie-cat (:xtdb/trie-catalog system)
         ^LiveIndex live-idx (:xtdb.indexer/live-index system)
         compacted-file-keys (vec (for [table-name (.getTableNames trie-cat)
@@ -59,7 +61,7 @@
         (log/info "Resetting compaction...")
 
         (cat/reset->l0! trie-cat)
-        (.finishBlock live-idx)
+        (.finishBlock live-idx (inc (or (.getCurrentBlockIndex block-cat) -1)))
         (log/info "Reset complete. Deleting compacted files...")
 
         (doseq [file-key compacted-file-keys]

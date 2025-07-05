@@ -70,7 +70,6 @@
   xtdb.indexer.LiveIndex
   (getLatestCompletedTx [_] latest-completed-tx)
   (getLatestCompletedBlockTx [_] latest-completed-block-tx)
-  (getLatestBlockIndex [_] (.getBlockIdx row-counter))
 
   (liveTable [_ table-name] (.get tables table-name))
 
@@ -107,7 +106,7 @@
                 (.unlock wm-lock wm-lock-stamp))))
 
           (when (>= (.getBlockRowCount row-counter) rows-per-block)
-            (.finishBlock this-idx)))
+            (.finishBlock this-idx (inc (or (.getCurrentBlockIndex block-cat) -1)))))
 
         (abort [_]
           (doseq [^LiveTable$Tx live-table-tx (.values table-txs)]
@@ -116,7 +115,7 @@
           (set! (.-latest-completed-tx this-idx) tx-key)
 
           (when (>= (.getBlockRowCount row-counter) rows-per-block)
-            (.finishBlock this-idx)))
+            (.finishBlock this-idx (inc (or (.getCurrentBlockIndex block-cat) -1)))))
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
@@ -144,84 +143,83 @@
         (finally
           (.unlock wm-lock wm-read-stamp)))))
 
-  (finishBlock [this]
-    (let [block-idx (.getBlockIdx row-counter)]
+  (finishBlock [this block-idx]
+    (log/debugf "finishing block '%s'..." (util/->lex-hex-string block-idx))
 
-      (log/debugf "finishing block '%s'..." (util/->lex-hex-string block-idx))
+    (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
+      (let [tasks (vec (for [[table-name ^LiveTable table] tables]
+                         (.fork scope (fn []
+                                        (try
+                                          (when-let [finished-block (.finishBlock table block-idx)]
+                                            [table-name {:fields (.getFields finished-block)
+                                                         :trie-key (.getTrieKey finished-block)
+                                                         :row-count (.getRowCount finished-block)
+                                                         :data-file-size (.getDataFileSize finished-block)
+                                                         :trie-metadata (.getTrieMetadata finished-block)
+                                                         :hlls (.getHllDeltas finished-block)}])
+                                          (catch InterruptedException e
+                                            (throw e))
+                                          (catch Exception e
+                                            (log/warn e "Error finishing block for table" table)
+                                            (throw e)))))))]
+        (.join scope)
 
-      (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
-        (let [tasks (vec (for [[table-name ^LiveTable table] tables]
-                           (.fork scope (fn []
-                                          (try
-                                            (when-let [finished-block (.finishBlock table block-idx)]
-                                              [table-name {:fields (.getFields finished-block)
-                                                           :trie-key (.getTrieKey finished-block)
-                                                           :row-count (.getRowCount finished-block)
-                                                           :data-file-size (.getDataFileSize finished-block)
-                                                           :trie-metadata (.getTrieMetadata finished-block)
-                                                           :hlls (.getHllDeltas finished-block)}])
-                                            (catch InterruptedException e
-                                              (throw e))
-                                            (catch Exception e
-                                              (log/warn e "Error finishing block for table" table)
-                                              (throw e)))))))]
-          (.join scope)
+        (let [table-metadata (-> tasks
+                                 (->> (into {} (keep #(try
+                                                        (.get ^StructuredTaskScope$Subtask %)
+                                                        (catch Exception _
+                                                          (throw (.exception ^StructuredTaskScope$Subtask %)))))))
+                                 (util/rethrowing-cause))]
+          (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
+                              (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
+            (doseq [^TrieDetails added-trie added-tries]
+              (.addTries trie-cat (.getTableName added-trie) [added-trie]))
+            (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
 
-          (let [table-metadata (-> tasks
-                                   (->> (into {} (keep #(try
-                                                          (.get ^StructuredTaskScope$Subtask %)
-                                                          (catch Exception _
-                                                            (throw (.exception ^StructuredTaskScope$Subtask %)))))))
-                                   (util/rethrowing-cause))]
-            (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
-                                (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
-              (doseq [^TrieDetails added-trie added-tries]
-                (.addTries trie-cat (.getTableName added-trie) [added-trie]))
-              (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
+          (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
+                table->all-tries (->> all-tables
+                                      (map (fn [table-name]
+                                             (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
+                                                                              trie-cat/all-tries))))
+                                      (into {}))
+                table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata
+                                                           table->all-tries)]
+            (assert latest-completed-tx)
+            (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))
 
-            (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
-                  table->all-tries (->> all-tables
-                                        (map (fn [table-name]
-                                               (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
-                                                                                trie-cat/all-tries))))
-                                        (into {}))
-                  table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata
-                                                             table->all-tries)]
-              (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))
+    (.nextBlock row-counter)
 
-      (.nextBlock row-counter)
+    (set! (.-latest_completed_block_tx this) latest-completed-tx)
 
-      (set! (.-latest_completed_block_tx this) latest-completed-tx)
+    (let [wm-lock-stamp (.writeLock wm-lock)]
+      (try
+        (let [^Watermark shared-wm (.shared-wm this)]
+          (.close shared-wm))
 
-      (let [wm-lock-stamp (.writeLock wm-lock)]
-        (try
-          (let [^Watermark shared-wm (.shared-wm this)]
-            (.close shared-wm))
+        (util/close tables)
+        (.clear tables)
+        (set! (.shared-wm this)
+              (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
+                (Watermark.
+                 latest-completed-tx
+                 live-index-wm
+                 (->schema live-index-wm table-cat))))
+        (finally
+          (.unlock wm-lock wm-lock-stamp))))
 
-          (util/close tables)
-          (.clear tables)
-          (set! (.shared-wm this)
-                (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
-                  (Watermark.
-                   latest-completed-tx
-                   live-index-wm
-                   (->schema live-index-wm table-cat))))
-          (finally
-            (.unlock wm-lock wm-lock-stamp))))
+    (c/signal-block! compactor)
+    (log/debugf "finished block 'b%s'." (util/->lex-hex-string block-idx))
 
-      (c/signal-block! compactor)
-      (log/debugf "finished block 'b%s'." (util/->lex-hex-string block-idx))
-
-      (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
-        #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-        (defonce -log-skip-txs-once
-          (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable.")))))
+    (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
+      #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+      (defonce -log-skip-txs-once
+        (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable."))))
 
   (forceFlush [this msg _msg-id _msg-timestamp]
     (let [expected-last-block-tx-id (.getExpectedBlockTxId msg)
           latest-block-tx-id (some-> latest-completed-block-tx (.getTxId))]
       (when (= (or latest-block-tx-id -1) expected-last-block-tx-id)
-        (.finishBlock this))))
+        (.finishBlock this (inc (or (.getCurrentBlockIndex block-cat) -1))))))
 
   AutoCloseable
   (close [_]
@@ -257,7 +255,7 @@
                      (StampedLock.)
                      (RefCounter.)
 
-                     (RowCounter. (or (some-> block-idx inc) 0)) (.getRowsPerBlock config)
+                     (RowCounter.) (.getRowsPerBlock config)
 
                      (.getLogLimit config) (.getPageLimit config)
                      (.getSkipTxs config))))))

@@ -56,7 +56,7 @@
                                   (mapv #(vec (.getObject iid-vec %)) (.getData leaf))))))))))
 
     (t/testing "finish block"
-      (.finishBlock live-index)
+      (tu/finish-block! tu/*node*)
 
       (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/l00-rc-b00.arrow"))
             leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-rc-b00.arrow"))]

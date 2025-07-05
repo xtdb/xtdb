@@ -203,7 +203,7 @@ class LogProcessor(
     }
 
     fun finishBlock() {
-        liveIndex.finishBlock()
+        liveIndex.finishBlock((blockCatalog.currentBlockIndex ?: -1) + 1)
     }
 
     @JvmOverloads

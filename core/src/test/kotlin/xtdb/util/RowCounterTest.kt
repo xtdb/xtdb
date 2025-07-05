@@ -6,9 +6,8 @@ import org.junit.jupiter.api.Test
 internal class RowCounterTest {
     @Test
     fun testRowCounter() {
-        val rc = RowCounter(24)
+        val rc = RowCounter()
 
-        assertEquals(24, rc.blockIdx)
         assertEquals(0, rc.blockRowCount)
 
         rc.addRows(15)
