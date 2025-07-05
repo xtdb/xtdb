@@ -97,7 +97,7 @@
 
           (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
 
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
           (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
 
@@ -170,7 +170,7 @@
         (-> (xt/submit-tx node tx-ops)
             (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
                        (.resolve node-dir "objects"))
@@ -187,14 +187,14 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]]
                        {:default-tz #xt/zone "Europe/London"})
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects") {:file-pattern #"^b00.binpb.*"})
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]]
                        {:default-tz #xt/zone "Europe/London"})
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
         (cpb/check-pbuf expected-path (.resolve node-dir "objects"))))))
@@ -221,7 +221,7 @@
         (-> (xt/submit-tx node tx1 {:default-tz #xt/zone "Europe/London"})
             (tu/then-await-tx node (Duration/ofMillis 200)))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
                        (.resolve node-dir "objects"))
@@ -271,7 +271,7 @@
       (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :uuid uuid}]])
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (xt/q node '(from :xt_docs [{:xt/id id} uuid]))))))
@@ -312,7 +312,7 @@
                    :xt/valid-to #xt/zdt "2020-04-01T00:00Z[UTC]"}]
                  (xt/q node "SELECT *, _valid_from, _valid_to FROM xt_docs FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
                        (.resolve node-dir "objects"))
@@ -377,7 +377,7 @@
 
           (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
           (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
 
@@ -494,7 +494,7 @@
 
         (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 0, :v "foo"}]])
 
-        (tu/finish-block! node1)
+        (tu/flush-block! node1)
 
         (t/is (= :utf8
                  (types/field->col-type (cat/column-field tc1 "public/xt_docs" "v"))))
@@ -504,7 +504,7 @@
                                        [:put-docs :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
-          (tu/finish-block! node1)
+          (tu/flush-block! node1)
 
           (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
                    (types/field->col-type (cat/column-field tc1 "public/xt_docs" "v"))))
@@ -559,7 +559,7 @@
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
                    (xtp/latest-completed-tx node)))
 
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                          (.resolve node-dir "objects"))

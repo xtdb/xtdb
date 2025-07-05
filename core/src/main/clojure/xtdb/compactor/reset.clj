@@ -25,6 +25,7 @@
       (log/info "Node caught up - resetting compaction...")
 
       (let [bp (bp/<-node node)
+            log-proc (xt-log/node->log-proc node)
             block-cat (block-cat/<-node node)
             trie-cat (trie-cat/trie-catalog node)
             live-idx (li/<-node node)
@@ -54,9 +55,7 @@
             (log/info "Resetting compaction...")
 
             (trie-cat/reset->l0! trie-cat)
-            (let [block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))
-                  table-names (.finishBlock live-idx block-idx)]
-              (.finishBlock block-cat block-idx (.getLatestCompletedTx live-idx) table-names))
+            (.finishBlock log-proc)
             (log/info "Reset complete. Deleting compacted files...")
 
             (doseq [file-key compacted-file-keys]

@@ -21,5 +21,6 @@ message TxKey {
 message Block {
   int64 block_index = 1;
   TxKey latest_completed_tx = 2;
+  int64 latest_processed_msg_id = 4;
   repeated string table_names = 3;
 }

@@ -152,8 +152,10 @@
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
 (defn finish-block! [node]
-  (then-await-tx node)
   (xt-log/finish-block! node))
+
+(defn flush-block! [node]
+  (xt-log/flush-block! node))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]

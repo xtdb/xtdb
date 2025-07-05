@@ -309,7 +309,7 @@
         (t/is (= [{:row-count 100}] (xt/q node "SELECT COUNT(*) row_count FROM prices")))
         (t/is (= [{:row-count 100}] (xt/q node "SELECT COUNT(*) row_count FROM prices FOR ALL VALID_TIME")))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
         (t/is (= [{:row-count 100}] (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME")))
@@ -328,7 +328,7 @@
         (t/is (= [{:row-count 100}] (xt/q node "SELECT COUNT(*) row_count FROM prices")))
         (t/is (= [{:row-count 200}] (xt/q node "SELECT COUNT(*) row_count FROM prices FOR ALL VALID_TIME")))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
         (t/is (= [{:row-count 200}] (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME")))
@@ -517,11 +517,11 @@
 
 (t/deftest test-compaction-promotion-bug-3673
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT0.5S")
 
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2, :foo 24} {:xt/id 3, :foo 28.1} {:xt/id 4}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT0.5S")
 
   (t/is (= #{12.0 nil 24 28.1}
@@ -530,7 +530,7 @@
 
   (util/with-open [node (xtn/start-node tu/*node-opts*)]
     (xt/submit-tx node [[:put-docs :foo {:xt/id 1} {:foo "foo", :xt/id 0} {:foo 3, :xt/id 2}]])
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT0.5S")
 
     (t/is (= #{"foo" nil 3}
@@ -548,11 +548,11 @@
                                      #uuid "80000000-0000-0000-0000-000000000000"]]
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id id-before} {:xt/id id} {:xt/id id-after}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (xt/execute-tx node [["ERASE FROM foo WHERE _id = ?" id]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (t/is (= [{:xt/id id-before} {:xt/id id-after}]
@@ -563,7 +563,7 @@
         (t/testing "an id where there is no previous data shouldn't show up in the compacted files"
           (xt/execute-tx node [["ERASE FROM foo WHERE _id = ?" #uuid "20000000-0000-0000-0000-000000000000"]]))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT0.5S")
 
         (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after}]
@@ -583,7 +583,7 @@
                                          :valid-to #xt/instant "2011-01-01T00:00:00Z"}
                               {:xt/id 1}]]
                        {:default-tz #xt/zone "Europe/London"})
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         ;; to have consistent block files
         (c/compact-all! node #xt/duration "PT5S")
 
@@ -592,11 +592,11 @@
                                          :valid-to #xt/instant "2016-01-01T00:00:00Z"}
                               {:xt/id 2}]]
                        {:default-tz #xt/zone "Europe/London"})
-        (tu/finish-block! node )
+        (tu/flush-block! node )
 
         (c/compact-all! node #xt/duration "PT5S")
         ;; to artifically create a new table block
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/compactor-test/compactor-metadata-test")))
                         (.resolve node-dir "objects"))
@@ -638,7 +638,7 @@
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 1}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 2}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 3}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
         (t/is (= #{"l01-r20210101-b00" "l01-r20220101-b00" "l01-rc-b00"}
@@ -648,7 +648,7 @@
 
 (t/deftest dont-lose-erases-during-compaction
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :xt/valid-to #inst "2050"} {:xt/id 2 :xt/valid-to #inst "2050"}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   ;; TODO move this check to pgwire rather than in the main query engine?
@@ -656,7 +656,7 @@
 
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo")))
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))
@@ -664,7 +664,7 @@
 (t/deftest null-duv-issue-4231
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]] )
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2 :l []}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* nil)
 
   (t/is (= [{:xt/id 2, :l []} {:xt/id 1, :l [{:foo 1}]}]
@@ -687,7 +687,7 @@
                                   vt2 (assoc :xt/valid-to vt2))]])
 
           (let [res-before-compaction (xt/q node q)]
-            (tu/finish-block! node)
+            (tu/flush-block! node)
             (c/compact-all! node nil)
 
             (t/is (= (set res-before-compaction) (set (xt/q node q))))))))))
