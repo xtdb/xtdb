@@ -78,7 +78,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
             }
         }
 
-        private fun FileChannel.readMessage(): Record {
+        private fun FileChannel.readMessage(): Record? {
             val pos = position()
             val headerBuf = ByteBuffer.allocateDirect(1 + INT_BYTES + LONG_BYTES)
                 .also { read(it); it.flip() }
@@ -86,13 +86,12 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
             check(headerBuf.get() == RECORD_SEPARATOR) { "log file corrupted at $pos - expected record separator" }
             val size = headerBuf.getInt()
 
-            return Record(
-                pos,
-                fromMicros(headerBuf.getLong()),
+            val message =
                 Message.parse(ByteBuffer.allocate(size).also { read(it); it.flip() })
-            ).also {
-                position(pos + messageSizeBytes(size))
-            }
+                    ?: return null
+
+            return Record(pos, fromMicros(headerBuf.getLong()), message)
+                .also { position(pos + messageSizeBytes(size)) }
         }
     }
 
@@ -180,9 +179,9 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
                         }
                     }
                 }
-            } catch (e: ClosedByInterruptException) {
+            } catch (_: ClosedByInterruptException) {
                 cancel()
-            } catch (e: InterruptedException) {
+            } catch (_: InterruptedException) {
                 cancel()
             }
         }
@@ -220,7 +219,7 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
                                 }
 
                                 while (ch.position() <= targetOffset) {
-                                    subscriber.processRecords(listOf(ch.readMessage()))
+                                    subscriber.processRecords(listOfNotNull(ch.readMessage()))
                                 }
                             }
                         }

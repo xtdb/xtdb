@@ -75,18 +75,19 @@ class LogProcessor(
             flushedTxId = -1
         )
 
-        fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId, latestCompletedTxId: MessageId): Message? =
+        fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId, latestCompletedTxId: MessageId): Boolean =
             when {
-                lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> null
+                lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> false
+
                 currentBlockTxId != previousBlockTxId -> {
                     lastFlushCheck = now
                     previousBlockTxId = currentBlockTxId
-                    null
+                    false
                 }
 
                 else -> {
                     lastFlushCheck = now
-                    Message.FlushBlock(currentBlockTxId)
+                    true
                 }
             }
 
@@ -119,8 +120,9 @@ class LogProcessor(
     private val subscription = log.subscribe(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
-        flusher.checkBlockTimeout(blockCatalog, liveIndex)?.let { flushMsg ->
-            val offset = log.appendMessage(flushMsg).await().logOffset
+        if (flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
+            val flushMessage = Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
+            val offset = log.appendMessage(flushMessage).await().logOffset
             flusher.flushedTxId = offsetToMsgId(epoch, offset)
         }
 
@@ -169,7 +171,8 @@ class LogProcessor(
                     }
 
                     is Message.FlushBlock -> {
-                        if (msg.expectedBlockTxId == (blockCatalog.latestCompletedTx?.txId ?: -1L))
+                        val expectedBlockIdx = msg.expectedBlockIdx
+                        if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
                             finishBlock()
 
                         null
@@ -215,7 +218,7 @@ class LogProcessor(
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
         val tableNames = liveIndex.finishBlock(blockIdx)
-        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx!!, tableNames)
+        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, tableNames)
         liveIndex.nextBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }

@@ -12,7 +12,7 @@ message LogMessage {
 }
 
 message FlushBlock {
-    int64 expected_block_tx_id = 1;
+    int64 expected_block_idx = 2;
 }
 
 message TriesAdded {

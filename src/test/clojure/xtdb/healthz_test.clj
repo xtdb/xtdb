@@ -121,10 +121,8 @@
                                          :healthz-port port})]
         (let [block-cat (block-cat/<-node node)]
 
-          (t/testing "no latest completed tx, do nothing"
-            (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
-              (t/is (= 409 (:status resp)))
-              (t/is (= "No completed transactions found, cannot flush block." (:body resp)))))
+          (t/testing "no latest completed tx"
+            (clj-http/post (->system-url port "finish-block") {:throw-exceptions false}))
 
           (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 

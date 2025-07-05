@@ -7,6 +7,7 @@ import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
+import xtdb.trie.BlockIndex
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
@@ -41,7 +42,7 @@ interface Log : AutoCloseable {
             fun parse(buffer: ByteBuffer) =
                 when (buffer.get(0)) {
                     TX_HEADER -> Tx(buffer.duplicate())
-                    LEGACY_FLUSH_BLOCK_HEADER -> FlushBlock(buffer.getLong(1))
+                    LEGACY_FLUSH_BLOCK_HEADER -> null
                     PROTOBUF_HEADER -> ProtobufMessage.parse(buffer.duplicate().position(1))
 
                     else -> throw IllegalArgumentException("Unknown message type: ${buffer.get()}")
@@ -65,13 +66,18 @@ interface Log : AutoCloseable {
                 }
 
             companion object {
-                fun parse(buffer: ByteBuffer): ProtobufMessage =
+                fun parse(buffer: ByteBuffer): ProtobufMessage? =
                     LogMessage.parseFrom(buffer.duplicate().position(1))
-                        .let {
-                            when (val msgCase = it.messageCase) {
-                                MessageCase.FLUSH_BLOCK -> FlushBlock(it.flushBlock.expectedBlockTxId)
+                        .let { msg ->
+                            when (val msgCase = msg.messageCase) {
+                                MessageCase.FLUSH_BLOCK ->
+                                    msg.flushBlock
+                                        .takeIf { it.hasExpectedBlockIdx() }
+                                        ?.expectedBlockIdx
+                                        ?.let { FlushBlock(it) }
+
                                 MessageCase.TRIES_ADDED ->
-                                    TriesAdded(it.triesAdded.storageVersion, it.triesAdded.triesList)
+                                    TriesAdded(msg.triesAdded.storageVersion, msg.triesAdded.triesList)
 
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
@@ -79,9 +85,9 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class FlushBlock(val expectedBlockTxId: MessageId) : ProtobufMessage() {
+        data class FlushBlock(val expectedBlockIdx: BlockIndex?) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
-                flushBlock = flushBlock { expectedBlockTxId = this@FlushBlock.expectedBlockTxId }
+                flushBlock = flushBlock { this@FlushBlock.expectedBlockIdx?.let { expectedBlockIdx = it } }
             }
         }
 
