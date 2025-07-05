@@ -153,7 +153,7 @@
 
 (defn finish-block! [node]
   (then-await-tx node)
-  (li/finish-block! node))
+  (xt-log/finish-block! node))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
@@ -399,7 +399,7 @@
       data-file-path)))
 
 (defn open-live-table ^xtdb.indexer.LiveTable [table-name]
-  (LiveTable. *allocator* BufferPool/UNUSED table-name (RowCounter. 0)))
+  (LiveTable. *allocator* BufferPool/UNUSED table-name (RowCounter.)))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)

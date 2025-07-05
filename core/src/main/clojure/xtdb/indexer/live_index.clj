@@ -56,7 +56,6 @@
                     ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
 
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
-                    ^:volatile-mutable ^TransactionKey latest-completed-block-tx
                     ^Map tables,
 
                     ^:volatile-mutable ^Watermark shared-wm
@@ -69,8 +68,6 @@
                     ^List skip-txs]
   xtdb.indexer.LiveIndex
   (getLatestCompletedTx [_] latest-completed-tx)
-  (getLatestCompletedBlockTx [_] latest-completed-block-tx)
-  (getLatestBlockIndex [_] (.getBlockIdx row-counter))
 
   (liveTable [_ table-name] (.get tables table-name))
 
@@ -104,19 +101,13 @@
                 (some-> old-wm .close))
 
               (finally
-                (.unlock wm-lock wm-lock-stamp))))
-
-          (when (>= (.getBlockRowCount row-counter) rows-per-block)
-            (.finishBlock this-idx)))
+                (.unlock wm-lock wm-lock-stamp)))))
 
         (abort [_]
           (doseq [^LiveTable$Tx live-table-tx (.values table-txs)]
             (.abort live-table-tx))
 
-          (set! (.-latest-completed-tx this-idx) tx-key)
-
-          (when (>= (.getBlockRowCount row-counter) rows-per-block)
-            (.finishBlock this-idx)))
+          (set! (.-latest-completed-tx this-idx) tx-key))
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
@@ -144,84 +135,73 @@
         (finally
           (.unlock wm-lock wm-read-stamp)))))
 
-  (finishBlock [this]
-    (let [block-idx (.getBlockIdx row-counter)]
+  (isFull [_]
+    (>= (.getBlockRowCount row-counter) rows-per-block))
 
-      (log/debugf "finishing block '%s'..." (util/->lex-hex-string block-idx))
+  (finishBlock [_ block-idx]
+    (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
+      (let [tasks (vec (for [[table-name ^LiveTable table] tables]
+                         (.fork scope (fn []
+                                        (try
+                                          (when-let [finished-block (.finishBlock table block-idx)]
+                                            [table-name {:fields (.getFields finished-block)
+                                                         :trie-key (.getTrieKey finished-block)
+                                                         :row-count (.getRowCount finished-block)
+                                                         :data-file-size (.getDataFileSize finished-block)
+                                                         :trie-metadata (.getTrieMetadata finished-block)
+                                                         :hlls (.getHllDeltas finished-block)}])
+                                          (catch InterruptedException e
+                                            (throw e))
+                                          (catch Exception e
+                                            (log/warn e "Error finishing block for table" table)
+                                            (throw e)))))))]
+        (.join scope)
 
-      (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
-        (let [tasks (vec (for [[table-name ^LiveTable table] tables]
-                           (.fork scope (fn []
-                                          (try
-                                            (when-let [finished-block (.finishBlock table block-idx)]
-                                              [table-name {:fields (.getFields finished-block)
-                                                           :trie-key (.getTrieKey finished-block)
-                                                           :row-count (.getRowCount finished-block)
-                                                           :data-file-size (.getDataFileSize finished-block)
-                                                           :trie-metadata (.getTrieMetadata finished-block)
-                                                           :hlls (.getHllDeltas finished-block)}])
-                                            (catch InterruptedException e
-                                              (throw e))
-                                            (catch Exception e
-                                              (log/warn e "Error finishing block for table" table)
-                                              (throw e)))))))]
-          (.join scope)
+        (let [table-metadata (-> tasks
+                                 (->> (into {} (keep #(try
+                                                        (.get ^StructuredTaskScope$Subtask %)
+                                                        (catch Exception _
+                                                          (throw (.exception ^StructuredTaskScope$Subtask %)))))))
+                                 (util/rethrowing-cause))]
+          (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
+                              (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
+            (doseq [^TrieDetails added-trie added-tries]
+              (.addTries trie-cat (.getTableName added-trie) [added-trie]))
+            (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
 
-          (let [table-metadata (-> tasks
-                                   (->> (into {} (keep #(try
-                                                          (.get ^StructuredTaskScope$Subtask %)
-                                                          (catch Exception _
-                                                            (throw (.exception ^StructuredTaskScope$Subtask %)))))))
-                                   (util/rethrowing-cause))]
-            (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata]}] table-metadata]
-                                (trie/->trie-details table-name trie-key data-file-size trie-metadata))]
-              (doseq [^TrieDetails added-trie added-tries]
-                (.addTries trie-cat (.getTableName added-trie) [added-trie]))
-              (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries)))
+          (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
+                table->all-tries (->> all-tables
+                                      (map (fn [table-name]
+                                             (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
+                                                                              trie-cat/all-tries))))
+                                      (into {}))]
+            (table-cat/finish-block! table-cat block-idx table-metadata table->all-tries))))))
 
-            (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
-                  table->all-tries (->> all-tables
-                                        (map (fn [table-name]
-                                               (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
-                                                                                trie-cat/all-tries))))
-                                        (into {}))
-                  table-block-paths (table-cat/finish-block! table-cat block-idx table-metadata
-                                                             table->all-tries)]
-              (.finishBlock block-cat block-idx latest-completed-tx table-block-paths)))))
+  (nextBlock [this]
+    (.nextBlock row-counter)
 
-      (.nextBlock row-counter)
+    (let [wm-lock-stamp (.writeLock wm-lock)]
+      (try
+        (let [^Watermark shared-wm (.shared-wm this)]
+          (.close shared-wm))
 
-      (set! (.-latest_completed_block_tx this) latest-completed-tx)
+        (util/close tables)
+        (.clear tables)
+        (set! (.shared-wm this)
+              (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
+                (Watermark.
+                 latest-completed-tx
+                 live-index-wm
+                 (->schema live-index-wm table-cat))))
+        (finally
+          (.unlock wm-lock wm-lock-stamp))))
 
-      (let [wm-lock-stamp (.writeLock wm-lock)]
-        (try
-          (let [^Watermark shared-wm (.shared-wm this)]
-            (.close shared-wm))
+    (c/signal-block! compactor)
 
-          (util/close tables)
-          (.clear tables)
-          (set! (.shared-wm this)
-                (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
-                  (Watermark.
-                   latest-completed-tx
-                   live-index-wm
-                   (->schema live-index-wm table-cat))))
-          (finally
-            (.unlock wm-lock wm-lock-stamp))))
-
-      (c/signal-block! compactor)
-      (log/debugf "finished block 'b%s'." (util/->lex-hex-string block-idx))
-
-      (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
-        #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-        (defonce -log-skip-txs-once
-          (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable.")))))
-
-  (forceFlush [this msg _msg-id _msg-timestamp]
-    (let [expected-last-block-tx-id (.getExpectedBlockTxId msg)
-          latest-block-tx-id (some-> latest-completed-block-tx (.getTxId))]
-      (when (= (or latest-block-tx-id -1) expected-last-block-tx-id)
-        (.finishBlock this))))
+    (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
+      #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+      (defonce -log-skip-txs-once
+        (log/info "All XTDB_SKIP_TXS have been skipped and block has been finished - it is safe to remove the XTDB_SKIP_TXS environment variable."))))
 
   AutoCloseable
   (close [_]
@@ -243,21 +223,20 @@
    :config config})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat compactor ^IndexerConfig config metrics-registry]}]
-  (let [block-idx (.getCurrentBlockIndex block-cat)
-        latest-completed-tx (.getLatestCompletedTx block-cat)]
+  (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
         (->LiveIndex allocator buffer-pool log compactor
                      block-cat table-cat trie-cat
-                     latest-completed-tx latest-completed-tx
+                     latest-completed-tx
                      tables
 
                      (Watermark. latest-completed-tx (open-live-idx-wm tables) (->schema nil table-cat))
                      (StampedLock.)
                      (RefCounter.)
 
-                     (RowCounter. (or (some-> block-idx inc) 0)) (.getRowsPerBlock config)
+                     (RowCounter.) (.getRowsPerBlock config)
 
                      (.getLogLimit config) (.getPageLimit config)
                      (.getSkipTxs config))))))
@@ -265,5 +244,3 @@
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
 
-(defn finish-block! [node]
-  (.finishBlock ^xtdb.indexer.LiveIndex (util/component node :xtdb.indexer/live-index)))

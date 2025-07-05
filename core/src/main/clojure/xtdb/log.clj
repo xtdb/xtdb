@@ -26,7 +26,7 @@
            xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
-           (xtdb.util TxIdUtil)))
+           (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -266,8 +266,8 @@
 (defn validate-offsets [^Log log ^TransactionKey latest-completed-tx]
   (when latest-completed-tx
     (let [latest-completed-tx-id (.getTxId latest-completed-tx)
-          latest-completed-offset (TxIdUtil/txIdToOffset latest-completed-tx-id)
-          latest-completed-epoch (TxIdUtil/txIdToEpoch latest-completed-tx-id)
+          latest-completed-offset (MsgIdUtil/msgIdToOffset latest-completed-tx-id)
+          latest-completed-epoch (MsgIdUtil/msgIdToEpoch latest-completed-tx-id)
           epoch (.getEpoch log)
           latest-submitted-offset (.getLatestSubmittedOffset log)]
       (if (= latest-completed-epoch epoch)
@@ -299,21 +299,22 @@
                                                                                                   (-> (select-keys opts [:authn])
                                                                                                       (assoc :default-tz (:default-tz opts default-tz)
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
-        (TxIdUtil/offsetToTxId (.getEpoch log) (.getLogOffset message-meta))))))
+        (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
 (defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
   {:allocator (ig/ref :xtdb/allocator)
    :indexer (ig/ref :xtdb/indexer)
    :live-idx (ig/ref :xtdb.indexer/live-index)
    :log (ig/ref :xtdb/log)
+   :block-catalog (ig/ref :xtdb/block-catalog)
    :trie-catalog (ig/ref :xtdb/trie-catalog)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :block-flush-duration (.getFlushDuration (.getIndexer opts))
    :skip-txs (.getSkipTxs (.getIndexer opts))})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx trie-catalog metrics-registry block-flush-duration skip-txs] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx block-catalog trie-catalog metrics-registry block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer live-idx log trie-catalog metrics-registry block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator indexer live-idx log block-catalog trie-catalog metrics-registry block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
@@ -334,3 +335,6 @@
    (-> @(cond-> (.awaitAsync log-processor tx-id)
           timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
        (util/rethrowing-cause))))
+
+(defn finish-block! [node]
+  (.finishBlock ^LogProcessor (util/component node :xtdb.log/processor)))

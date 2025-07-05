@@ -18,15 +18,16 @@
            xtdb.BufferPoolKt
            (xtdb.indexer LiveIndex LogProcessor)
            xtdb.api.log.Log
-           xtdb.api.log.Log$Message$FlushBlock))
+           xtdb.api.log.Log$Message$FlushBlock
+           xtdb.catalog.BlockCatalog))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
   (.getIngestionError log-processor))
 
-(defn- ->block-lag [{:keys [buffer-pool ^LiveIndex live-index]}]
+(defn- ->block-lag [{:keys [buffer-pool ^BlockCatalog block-catalog]}]
   ;; we could add a gauge for this too
   (max 0 (- (BufferPoolKt/getLatestAvailableBlockIndex buffer-pool)
-            (.getLatestBlockIndex live-index))))
+            (or (.getCurrentBlockIndex block-catalog) -1))))
 
 (def router
   (http/router [["/metrics" {:name :metrics
@@ -64,10 +65,10 @@
                                    :get (fn [_] {:status 200, :body "Ready."})}]
 
                 ["/system/finish-block" {:name :finish-block
-                                         :post (fn [{:keys [^Log log ^LiveIndex live-index]}]
+                                         :post (fn [{:keys [^Log log ^LiveIndex live-index, ^BlockCatalog block-catalog]}]
                                                  (try
                                                    (let [latest-completed-tx (.getLatestCompletedTx live-index)
-                                                         latest-completed-block-tx (:tx-id (.getLatestCompletedBlockTx live-index))
+                                                         latest-completed-block-tx (:tx-id (.getLatestCompletedTx block-catalog))
                                                          flush-msg (Log$Message$FlushBlock. (or latest-completed-block-tx -1))]
                                                      (if latest-completed-tx
                                                        (let [msg-id @(.appendMessage log flush-msg)]
@@ -103,14 +104,16 @@
    :log-processor (ig/ref :xtdb.log/processor)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :live-index (ig/ref :xtdb.indexer/live-index)
+   :block-catalog (ig/ref :xtdb/block-catalog)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool live-index]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool live-index block-catalog]}]
   (let [^Server server (-> (handler {:meter-registry meter-registry
                                      :log log
                                      :log-processor log-processor
                                      :buffer-pool buffer-pool
                                      :live-index live-index
+                                     :block-catalog block-catalog
                                      :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
                                      :node node})
                            (j/run-jetty {:port port, :async? true, :join? false}))]

@@ -13,11 +13,14 @@ import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
+import xtdb.catalog.BlockCatalog
 import xtdb.error.Interrupted
 import xtdb.trie.TrieCatalog
-import xtdb.util.TxIdUtil.offsetToTxId
-import xtdb.util.TxIdUtil.txIdToEpoch
-import xtdb.util.TxIdUtil.txIdToOffset
+import xtdb.util.MsgIdUtil.msgIdToEpoch
+import xtdb.util.MsgIdUtil.msgIdToOffset
+import xtdb.util.MsgIdUtil.offsetToMsgId
+import xtdb.util.StringUtil.asLexHex
+import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import xtdb.vector.RelationReader
@@ -33,6 +36,7 @@ class LogProcessor(
     private val indexer: IIndexer,
     private val liveIndex: LiveIndex,
     private val log: Log,
+    private val blockCatalog: BlockCatalog,
     private val trieCatalog: TrieCatalog,
     meterRegistry: MeterRegistry,
     flushTimeout: Duration,
@@ -47,12 +51,12 @@ class LogProcessor(
 
     override var latestProcessedMsgId: MessageId =
         liveIndex.latestCompletedTx?.txId?.let {
-            if (txIdToEpoch(it) == epoch) it else offsetToTxId(epoch, 0) - 1
+            if (msgIdToEpoch(it) == epoch) it else offsetToMsgId(epoch, 0) - 1
         } ?: -1
         private set
 
     override val latestSubmittedMsgId: MessageId
-        get() = offsetToTxId(epoch, log.latestSubmittedOffset)
+        get() = offsetToMsgId(epoch, log.latestSubmittedOffset)
 
     private val watchers = Watchers(latestProcessedMsgId)
     private val LOGGER = LoggerFactory.getLogger(LogProcessor::class.java)
@@ -65,9 +69,9 @@ class LogProcessor(
         var previousBlockTxId: MessageId,
         var flushedTxId: MessageId
     ) {
-        constructor(flushTimeout: Duration, liveIndex: LiveIndex) : this(
+        constructor(flushTimeout: Duration, blockCatalog: BlockCatalog) : this(
             flushTimeout, Instant.now(),
-            previousBlockTxId = liveIndex.latestCompletedBlockTx?.txId ?: -1,
+            previousBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1,
             flushedTxId = -1
         )
 
@@ -86,10 +90,10 @@ class LogProcessor(
                 }
             }
 
-        fun checkBlockTimeout(liveIndex: LiveIndex) =
+        fun checkBlockTimeout(blockCatalog: BlockCatalog, liveIndex: LiveIndex) =
             checkBlockTimeout(
                 Instant.now(),
-                currentBlockTxId = liveIndex.latestCompletedBlockTx?.txId ?: -1,
+                currentBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1,
                 latestCompletedTxId = liveIndex.latestCompletedTx?.txId ?: -1
             )
     }
@@ -107,26 +111,26 @@ class LogProcessor(
         allocator.close()
     }
 
-    private val flusher = Flusher(flushTimeout, liveIndex)
+    private val flusher = Flusher(flushTimeout, blockCatalog)
 
     private val latestProcessedOffset = liveIndex.latestCompletedTx?.txId?.let {
-        if (txIdToEpoch(it) == epoch) txIdToOffset(it) else -1
+        if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
     } ?: -1
     private val subscription = log.subscribe(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
-        flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
+        flusher.checkBlockTimeout(blockCatalog, liveIndex)?.let { flushMsg ->
             val offset = log.appendMessage(flushMsg).await().logOffset
-            flusher.flushedTxId = offsetToTxId(epoch, offset)
+            flusher.flushedTxId = offsetToMsgId(epoch, offset)
         }
 
         records.forEach { record ->
-            val msgId = offsetToTxId(epoch, record.logOffset)
+            val msgId = offsetToMsgId(epoch, record.logOffset)
 
             try {
                 val res = when (val msg = record.message) {
                     is Message.Tx -> {
-                        if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
+                        val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
                             LOGGER.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
                             // use abort flow in indexTx
                             indexer.indexTx(
@@ -157,10 +161,17 @@ class LogProcessor(
                                 }
                             }
                         }
+
+                        if (liveIndex.isFull())
+                            finishBlock()
+
+                        result
                     }
 
                     is Message.FlushBlock -> {
-                        liveIndex.forceFlush(msg, msgId, record.logTimestamp)
+                        if (msg.expectedBlockTxId == (blockCatalog.latestCompletedTx?.txId ?: -1L))
+                            finishBlock()
+
                         null
                     }
 
@@ -198,6 +209,15 @@ class LogProcessor(
                 throw CancellationException(e)
             }
         }
+    }
+
+    fun finishBlock() {
+        val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
+        LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
+        val tableNames = liveIndex.finishBlock(blockIdx)
+        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx!!, tableNames)
+        liveIndex.nextBlock()
+        LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }
 
     @JvmOverloads

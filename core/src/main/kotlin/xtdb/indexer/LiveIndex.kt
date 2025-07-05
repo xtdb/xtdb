@@ -2,9 +2,8 @@ package xtdb.indexer
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
-import xtdb.api.log.Log.Message
-import xtdb.api.log.MessageId
-import java.time.Instant
+import xtdb.trie.BlockIndex
+import xtdb.trie.TableName
 
 interface LiveIndex : Watermark.Source, AutoCloseable {
 
@@ -23,8 +22,6 @@ interface LiveIndex : Watermark.Source, AutoCloseable {
     }
 
     val latestCompletedTx: TransactionKey?
-    val latestCompletedBlockTx: TransactionKey?
-    val latestBlockIndex: Long
 
     fun liveTable(name: String): LiveTable
     val liveTables: Iterable<String>
@@ -36,7 +33,7 @@ interface LiveIndex : Watermark.Source, AutoCloseable {
 
     fun startTx(txKey: TransactionKey): Tx
 
-    fun finishBlock()
-
-    fun forceFlush(msg: Message.FlushBlock, msgId: MessageId, msgTimestamp: Instant)
+    fun isFull(): Boolean
+    fun finishBlock(blockIdx: BlockIndex) : Collection<TableName>
+    fun nextBlock()
 }

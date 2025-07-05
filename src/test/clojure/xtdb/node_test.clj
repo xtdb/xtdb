@@ -1145,6 +1145,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                            {:dry-run? false})
 
       (with-open [node (tu/->local-node {:node-dir tmp-root})]
+        (tu/then-await-tx node)
         (t/is (= [{:xt/id 1, :name "foo", :bar-name "baz"}]
                  (xt/q node "SELECT f._id, f.name, b.name AS bar_name
                        FROM foo f

@@ -2,11 +2,11 @@
   (:require [clj-http.client :as clj-http]
             [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.block-catalog :as block-cat]
             [xtdb.healthz :as healthz]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
-  (:import xtdb.indexer.LiveIndex))
+            [xtdb.util :as util]))
 
 (defn ->healthz-url [port endpoint]
   (format "http://localhost:%s/healthz/%s" port endpoint))
@@ -108,7 +108,7 @@
 
           (with-redefs [healthz/->block-lag (fn [_] 5)]
             (t/is (= [200 {"X-XTDB-Block-Lag" "5", "X-XTDB-Block-Lag-Healthy" "true"}]
-                   (alive-resp))))
+                     (alive-resp))))
 
           (with-redefs [healthz/->block-lag (fn [_] 6)]
             (t/is (= [503 {"X-XTDB-Block-Lag" "6", "X-XTDB-Block-Lag-Healthy" "false"}]
@@ -119,7 +119,7 @@
     (let [port (tu/free-port)]
       (with-open [node (tu/->local-node {:node-dir local-path
                                          :healthz-port port})]
-        (let [^LiveIndex live-index (tu/component node :xtdb.indexer/live-index)]
+        (let [block-cat (block-cat/<-node node)]
 
           (t/testing "no latest completed tx, do nothing"
             (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
@@ -128,11 +128,11 @@
 
           (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-          (t/is (= nil (:tx-id (.getLatestCompletedBlockTx live-index))))
+          (t/is (= nil (:tx-id (.getLatestCompletedTx block-cat))))
 
           (let [first-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                                        [:put-docs :bar {:xt/id "bar2"}]
-                                                        [:put-docs :bar {:xt/id "bar3"}]]))]
+                                                                [:put-docs :bar {:xt/id "bar2"}]
+                                                                [:put-docs :bar {:xt/id "bar3"}]]))]
 
             (t/testing "successful block flush"
               (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
@@ -141,11 +141,11 @@
 
             (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-            (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedBlockTx live-index)))))
+            (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat)))))
 
           (let [second-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar7"}]
-                                                        [:put-docs :bar {:xt/id "bar8"}]
-                                                        [:put-docs :bar {:xt/id "bar9"}]]))]
+                                                                 [:put-docs :bar {:xt/id "bar8"}]
+                                                                 [:put-docs :bar {:xt/id "bar9"}]]))]
 
             (t/testing "second successful block flush"
               (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
@@ -154,4 +154,4 @@
 
             (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-            (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedBlockTx live-index))))))))))
+            (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat))))))))))
