@@ -82,7 +82,7 @@ class KafkaLogTest {
 
         allMsgs[1].message.let {
             check(it is Message.FlushBlock)
-            assertEquals(12, it.expectedBlockTxId)
+            assertEquals(12, it.expectedBlockIdx)
         }
 
         allMsgs[2].message.let {

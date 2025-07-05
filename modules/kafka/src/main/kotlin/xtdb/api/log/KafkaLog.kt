@@ -15,7 +15,6 @@ import kotlinx.serialization.UseSerializers
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.producer.Callback
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -82,7 +81,7 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
         } catch (e: ExecutionException) {
             try {
                 throw e.cause ?: e
-            } catch (e: UnknownTopicOrPartitionException) {
+            } catch (_: UnknownTopicOrPartitionException) {
                 null
             } catch (e: Throwable) {
                 throw e
@@ -123,7 +122,7 @@ class KafkaLog internal constructor(
     private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
         kafkaConfigMap.openConsumer().use { c ->
             val tp = TopicPartition(topic, 0)
-            (c.endOffsets(listOf(tp))[tp] ?: 0).toLong() - 1
+            (c.endOffsets(listOf(tp))[tp] ?: 0) - 1
         }
 
     private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
@@ -134,11 +133,15 @@ class KafkaLog internal constructor(
             CompletableDeferred<MessageMetadata>()
                 .also { res ->
                     producer.send(
-                        ProducerRecord(topic, null, Unit, message.encode()),
-                        Callback { recordMetadata, e ->
-                            if (e == null) res.complete(MessageMetadata(recordMetadata.offset(), Instant.ofEpochMilli(recordMetadata.timestamp()))) else res.completeExceptionally(e)
-                        }
-                    )
+                        ProducerRecord(topic, null, Unit, message.encode())
+                    ) { recordMetadata, e ->
+                        if (e == null) res.complete(
+                            MessageMetadata(
+                                recordMetadata.offset(),
+                                Instant.ofEpochMilli(recordMetadata.timestamp())
+                            )
+                        ) else res.completeExceptionally(e)
+                    }
                 }
                 .await()
                 .also { messageMetadata -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(messageMetadata.logOffset) } }
@@ -156,17 +159,20 @@ class KafkaLog internal constructor(
                     while (true) {
                         val records = try {
                             c.poll(pollDuration).records(topic)
-                        } catch (e: InterruptException) {
+                        } catch (_: InterruptException) {
                             throw InterruptedException()
                         }
 
                         subscriber.processRecords(
-                            records.map { record ->
-                                Record(
-                                    record.offset(),
-                                    Instant.ofEpochMilli(record.timestamp()),
-                                    Message.parse(ByteBuffer.wrap(record.value()))
-                                )
+                            records.mapNotNull { record ->
+                                Message.parse(ByteBuffer.wrap(record.value()))
+                                    ?.let { msg ->
+                                        Record(
+                                            record.offset(),
+                                            Instant.ofEpochMilli(record.timestamp()),
+                                            msg
+                                        )
+                                    }
                             }
                         )
                     }

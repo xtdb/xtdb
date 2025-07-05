@@ -30,7 +30,7 @@ class BlockCatalog(private val bp: BufferPool) {
         private val blocksPath = "blocks".asPath
     }
 
-    fun finishBlock(blockIndex: BlockIndex, latestCompletedTx: TransactionKey, tableNames: Collection<TableName>) {
+    fun finishBlock(blockIndex: BlockIndex, latestCompletedTx: TransactionKey?, tableNames: Collection<TableName>) {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
             "Cannot finish block $blockIndex when current block is $currentBlockIndex"
@@ -38,9 +38,11 @@ class BlockCatalog(private val bp: BufferPool) {
 
         val newBlock = block {
             this.blockIndex = blockIndex
-            this.latestCompletedTx = txKey {
-                txId = latestCompletedTx.txId
-                systemTime = latestCompletedTx.systemTime.asMicros
+            latestCompletedTx?.also { tx ->
+                this.latestCompletedTx = txKey {
+                    txId = tx.txId
+                    systemTime = tx.systemTime.asMicros
+                }
             }
             this.tableNames.addAll(tableNames)
         }
@@ -53,7 +55,9 @@ class BlockCatalog(private val bp: BufferPool) {
     val currentBlockIndex get() = latestBlock?.blockIndex
 
     val latestCompletedTx: TransactionKey?
-        get() = latestBlock?.latestCompletedTx
+        get() = latestBlock
+            ?.takeIf { it.hasLatestCompletedTx() }
+            ?.latestCompletedTx
             ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
 
     val allTableNames: List<TableName> get() = latestBlock?.tableNamesList.orEmpty()

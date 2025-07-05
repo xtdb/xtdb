@@ -1,12 +1,12 @@
 package xtdb.indexer
 
-import xtdb.api.log.Log
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class LogProcessorTest {
 
@@ -23,7 +23,7 @@ class LogProcessorTest {
     @Test
     fun `test checkBlockTimeout`() {
         flusher(prevBlockTxId = -1, flushedTxId = -1).run {
-            assertNull(
+            assertFalse(
                 checkBlockTimeout(inst(2), currentBlockTxId = -1, latestCompletedTxId = 0),
                 "checked recently, don't check again"
             )
@@ -33,8 +33,7 @@ class LogProcessorTest {
 
 
         flusher(prevBlockTxId = 10, flushedTxId = 32).run {
-            assertEquals(
-                Log.Message.FlushBlock(10),
+            assertTrue(
                 checkBlockTimeout(inst(4), currentBlockTxId = 10, latestCompletedTxId = 40),
                 "we've not flushed recently, we have new txs, submit msg"
             )
@@ -43,7 +42,7 @@ class LogProcessorTest {
         }
 
         flusher(prevBlockTxId = 10, flushedTxId = 32).run {
-            assertNull(
+            assertFalse(
                 checkBlockTimeout(inst(4), currentBlockTxId = 10, latestCompletedTxId = 32),
                 "we've not flushed recently, no new txs, don't submit msg"
             )

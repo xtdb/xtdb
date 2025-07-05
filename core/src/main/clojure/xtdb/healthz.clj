@@ -14,15 +14,12 @@
            [java.net InetAddress]
            org.eclipse.jetty.server.Server
            (xtdb.api Xtdb$Config)
-           xtdb.api.log.Log
-           xtdb.api.log.Log$Message$FlushBlock
+           (xtdb.api.log Log Log$Message$FlushBlock)
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
            xtdb.BufferPoolKt
-           (xtdb.indexer LiveIndex LogProcessor)
-           xtdb.api.log.Log
-           xtdb.api.log.Log$Message$FlushBlock
-           xtdb.catalog.BlockCatalog))
+           xtdb.catalog.BlockCatalog
+           (xtdb.indexer LogProcessor)))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
   (.getIngestionError log-processor))
@@ -68,16 +65,12 @@
                                    :get (fn [_] {:status 200, :body "Ready."})}]
 
                 ["/system/finish-block" {:name :finish-block
-                                         :post (fn [{:keys [^Log log ^LiveIndex live-index, ^BlockCatalog block-catalog]}]
+                                         :post (fn [{:keys [^Log log ^BlockCatalog block-catalog]}]
                                                  (try
-                                                   (let [latest-completed-tx (.getLatestCompletedTx live-index)
-                                                         latest-completed-block-tx (:tx-id (.getLatestCompletedTx block-catalog))
-                                                         flush-msg (Log$Message$FlushBlock. (or latest-completed-block-tx -1))]
-                                                     (if latest-completed-tx
-                                                       (let [msg-id @(.appendMessage log flush-msg)]
-                                                         {:status 200, :body "Block flush message sent successfully."
-                                                          :headers {"X-XTDB-Message-Id" (str msg-id)}})
-                                                       {:status 409 :body "No completed transactions found, cannot flush block."}))
+                                                   (let [flush-msg (Log$Message$FlushBlock. (or (.getCurrentBlockIndex block-catalog) -1))
+                                                         msg-id @(.appendMessage log flush-msg)]
+                                                     {:status 200, :body "Block flush message sent successfully."
+                                                      :headers {"X-XTDB-Message-Id" (str msg-id)}})
                                                    (catch Exception e
                                                      {:status 500, :body (str "Error sending flush block message: " (.getMessage e))})))}]]
 
@@ -113,16 +106,14 @@
    :log (ig/ref :xtdb/log)
    :log-processor (ig/ref :xtdb.log/processor)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
-   :live-index (ig/ref :xtdb.indexer/live-index)
    :block-catalog (ig/ref :xtdb/block-catalog)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool live-index block-catalog]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool block-catalog]}]
   (let [^Server server (-> (handler {:meter-registry meter-registry
                                      :log log
                                      :log-processor log-processor
                                      :buffer-pool buffer-pool
-                                     :live-index live-index
                                      :block-catalog block-catalog
                                      :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
                                      :node node})
