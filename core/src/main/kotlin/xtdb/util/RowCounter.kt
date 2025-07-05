@@ -1,11 +1,10 @@
 package xtdb.util
 
-class RowCounter(var blockIdx: Long) {
+class RowCounter {
     var blockRowCount: Long = 0
         private set
 
     fun nextBlock() {
-        blockIdx += 1
         blockRowCount = 0
     }
 

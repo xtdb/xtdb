@@ -42,7 +42,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp "foo" (RowCounter. 0) (partial trie/->live-trie 2 4))]
+                         live-table (LiveTable. allocator bp "foo" (RowCounter.) (partial trie/->live-trie 2 4))]
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
@@ -77,7 +77,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp "foo" (RowCounter. 0))]
+                         live-table (LiveTable. allocator bp "foo" (RowCounter.))]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
 
@@ -120,7 +120,7 @@
 
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
-        rc (RowCounter. 0)]
+        rc (RowCounter.)]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
                 ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
@@ -162,10 +162,10 @@
         (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log Compactor/NOOP
                                                                block-cat table-catalog trie-catalog
 
-                                                               nil nil (HashMap.)
+                                                               nil (HashMap.)
                                                                nil (StampedLock.)
                                                                (RefCounter.)
-                                                               (RowCounter. 0) 102400
+                                                               (RowCounter.) 102400
                                                                64 1024
                                                                [])]
           (let [tx-key (serde/->TxKey 0 (.toInstant #inst "2000"))
@@ -184,7 +184,7 @@
               (let [live-index-wm (.getLiveIndex wm)
                     live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 
-                (.finishBlock live-index)
+                (.finishBlock live-index 0)
 
                 (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table-name))]
 
