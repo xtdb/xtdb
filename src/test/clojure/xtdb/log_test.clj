@@ -14,7 +14,7 @@
   (:import [java.time Instant]
            [xtdb.api.tx TxOp]
            [xtdb.api.log Log]
-           [xtdb.util TxIdUtil]))
+           [xtdb.util MsgIdUtil]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -118,7 +118,7 @@
               (getLatestSubmittedOffset [_] latest-submitted-offset)))
 
           (->latest-completed-tx [epoch offset]
-            (serde/->TxKey (TxIdUtil/offsetToTxId epoch offset) (Instant/now)))]
+            (serde/->TxKey (MsgIdUtil/offsetToMsgId epoch offset) (Instant/now)))]
 
     (t/testing "no error when latestSubmittedOffset >= latestCompletedOffset and same epoch"
       (t/is (nil? (log/validate-offsets (->simulated-log 0 5) (->latest-completed-tx 0 5))))

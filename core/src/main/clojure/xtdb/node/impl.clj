@@ -32,7 +32,7 @@
            xtdb.error.Anomaly
            (xtdb.indexer IIndexer LiveIndex LogProcessor)
            (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.util TxIdUtil)))
+           (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

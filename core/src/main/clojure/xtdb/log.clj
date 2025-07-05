@@ -26,7 +26,7 @@
            xtdb.catalog.BlockCatalog
            xtdb.indexer.LogProcessor
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
-           (xtdb.util TxIdUtil)))
+           (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -266,8 +266,8 @@
 (defn validate-offsets [^Log log ^TransactionKey latest-completed-tx]
   (when latest-completed-tx
     (let [latest-completed-tx-id (.getTxId latest-completed-tx)
-          latest-completed-offset (TxIdUtil/txIdToOffset latest-completed-tx-id)
-          latest-completed-epoch (TxIdUtil/txIdToEpoch latest-completed-tx-id)
+          latest-completed-offset (MsgIdUtil/msgIdToOffset latest-completed-tx-id)
+          latest-completed-epoch (MsgIdUtil/msgIdToEpoch latest-completed-tx-id)
           epoch (.getEpoch log)
           latest-submitted-offset (.getLatestSubmittedOffset log)]
       (if (= latest-completed-epoch epoch)
@@ -299,7 +299,7 @@
                                                                                                   (-> (select-keys opts [:authn])
                                                                                                       (assoc :default-tz (:default-tz opts default-tz)
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
-        (TxIdUtil/offsetToTxId (.getEpoch log) (.getLogOffset message-meta))))))
+        (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
 (defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
   {:allocator (ig/ref :xtdb/allocator)

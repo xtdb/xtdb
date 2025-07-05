@@ -15,9 +15,9 @@ import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
 import xtdb.error.Interrupted
 import xtdb.trie.TrieCatalog
-import xtdb.util.TxIdUtil.offsetToTxId
-import xtdb.util.TxIdUtil.txIdToEpoch
-import xtdb.util.TxIdUtil.txIdToOffset
+import xtdb.util.MsgIdUtil.offsetToMsgId
+import xtdb.util.MsgIdUtil.msgIdToEpoch
+import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.error
 import xtdb.util.logger
 import xtdb.vector.RelationReader
@@ -47,12 +47,12 @@ class LogProcessor(
 
     override var latestProcessedMsgId: MessageId =
         liveIndex.latestCompletedTx?.txId?.let {
-            if (txIdToEpoch(it) == epoch) it else offsetToTxId(epoch, 0) - 1
+            if (msgIdToEpoch(it) == epoch) it else offsetToMsgId(epoch, 0) - 1
         } ?: -1
         private set
 
     override val latestSubmittedMsgId: MessageId
-        get() = offsetToTxId(epoch, log.latestSubmittedOffset)
+        get() = offsetToMsgId(epoch, log.latestSubmittedOffset)
 
     private val watchers = Watchers(latestProcessedMsgId)
     private val LOGGER = LoggerFactory.getLogger(LogProcessor::class.java)
@@ -110,18 +110,18 @@ class LogProcessor(
     private val flusher = Flusher(flushTimeout, liveIndex)
 
     private val latestProcessedOffset = liveIndex.latestCompletedTx?.txId?.let {
-        if (txIdToEpoch(it) == epoch) txIdToOffset(it) else -1
+        if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
     } ?: -1
     private val subscription = log.subscribe(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         flusher.checkBlockTimeout(liveIndex)?.let { flushMsg ->
             val offset = log.appendMessage(flushMsg).await().logOffset
-            flusher.flushedTxId = offsetToTxId(epoch, offset)
+            flusher.flushedTxId = offsetToMsgId(epoch, offset)
         }
 
         records.forEach { record ->
-            val msgId = offsetToTxId(epoch, record.logOffset)
+            val msgId = offsetToMsgId(epoch, record.logOffset)
 
             try {
                 val res = when (val msg = record.message) {
