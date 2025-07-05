@@ -306,14 +306,15 @@
    :indexer (ig/ref :xtdb/indexer)
    :live-idx (ig/ref :xtdb.indexer/live-index)
    :log (ig/ref :xtdb/log)
+   :block-catalog (ig/ref :xtdb/block-catalog)
    :trie-catalog (ig/ref :xtdb/trie-catalog)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :block-flush-duration (.getFlushDuration (.getIndexer opts))
    :skip-txs (.getSkipTxs (.getIndexer opts))})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx trie-catalog metrics-registry block-flush-duration skip-txs] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx block-catalog trie-catalog metrics-registry block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer live-idx log trie-catalog metrics-registry block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator indexer live-idx log block-catalog trie-catalog metrics-registry block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
@@ -334,3 +335,6 @@
    (-> @(cond-> (.awaitAsync log-processor tx-id)
           timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
        (util/rethrowing-cause))))
+
+(defn finish-block! [node]
+  (.finishBlock ^LogProcessor (util/component node :xtdb.log/processor)))

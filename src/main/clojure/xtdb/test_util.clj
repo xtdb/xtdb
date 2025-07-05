@@ -153,7 +153,7 @@
 
 (defn finish-block! [node]
   (then-await-tx node)
-  (li/finish-block! node))
+  (xt-log/finish-block! node))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]

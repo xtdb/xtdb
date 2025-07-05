@@ -13,6 +13,7 @@ import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.arrow.asChannel
+import xtdb.catalog.BlockCatalog
 import xtdb.error.Interrupted
 import xtdb.trie.TrieCatalog
 import xtdb.util.MsgIdUtil.offsetToMsgId
@@ -33,6 +34,7 @@ class LogProcessor(
     private val indexer: IIndexer,
     private val liveIndex: LiveIndex,
     private val log: Log,
+    private val blockCatalog: BlockCatalog,
     private val trieCatalog: TrieCatalog,
     meterRegistry: MeterRegistry,
     flushTimeout: Duration,
@@ -198,6 +200,10 @@ class LogProcessor(
                 throw CancellationException(e)
             }
         }
+    }
+
+    fun finishBlock() {
+        liveIndex.finishBlock()
     }
 
     @JvmOverloads
