@@ -1,6 +1,8 @@
 (ns ^:kafka xtdb.kafka-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
+            [xtdb.datasets.tpch :as tpch]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -253,3 +255,43 @@
 
           (t/testing "can finish the block"
             (t/is (nil? (tu/finish-block! node))))))))
+
+(t/deftest ^:integration can-rebuild-from-kafka-log
+  (let [topic (str "xtdb.kafka-rebuild-test" (random-uuid))]
+    (util/with-tmp-dirs #{local-disk-path-1 local-disk-path-2}
+      (with-open [node (xtn/start-node {:log [:kafka {:topic topic
+                                                      :bootstrap-servers *bootstrap-servers*
+                                                      :create-topic? true
+                                                      :poll-duration "PT2S"}]
+                                        :storage [:local {:path local-disk-path-1}]})]
+        ;; Submit TPCH docs
+        (tpch/submit-docs! node 0.1)
+        ;; Await txes
+        (tu/then-await-tx node)
+        ;; Finish the block
+        (t/is (nil? (tu/finish-block! node)))
+        ;; Compact all files
+        (c/compact-all! node #xt/duration "PT1S"))
+
+      ;; Same topic, new storage path, compactor off - should be able to replay
+      (with-open [node (xtn/start-node {:log [:kafka {:topic topic
+                                                      :bootstrap-servers *bootstrap-servers*
+                                                      :create-topic? true
+                                                      :poll-duration "PT2S"}]
+                                        :storage [:local {:path local-disk-path-2}]
+                                        :compactor {:threads 0}})]
+        ;; Await txes
+        (tu/then-await-tx node)
+
+        ;; Query tables
+        (t/is (= 150000 (count (xt/q node "SELECT * FROM orders"))))
+        (t/is (= 1000 (count (xt/q node "SELECT * FROM supplier"))))
+        (t/is (= 20000 (count (xt/q node "SELECT * FROM part")))))
+
+      ;; Same topic, on the new storage path, compactor on - should be able to compact!
+      (with-open [node (xtn/start-node {:log [:kafka {:topic topic
+                                                      :bootstrap-servers *bootstrap-servers*
+                                                      :create-topic? true
+                                                      :poll-duration "PT2S"}]
+                                        :storage [:local {:path local-disk-path-2}]})]
+        (c/compact-all! node #xt/duration "PT10S")))))

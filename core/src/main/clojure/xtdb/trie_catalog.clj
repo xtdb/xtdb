@@ -259,20 +259,29 @@
                                   (assoc l0-trie :state :live))))}
    :l1h-recencies {}})
 
-(defrecord TrieCatalog [^Map !table-trie-cats, ^long file-size-target]
+(defn trie-exists? [^BufferPool buffer-pool table-name ^TrieDetails trie]
+  (let [exists? (.exists buffer-pool (trie/->trie-table-meta-path table-name trie))]
+    (when-not exists?
+      (log/warnf "trie %s does not exist in table %s - skipping adding to trie catalog" (.getTrieKey trie) table-name))
+    exists?))
+
+(defrecord TrieCatalog [^Map !table-trie-cats, ^long file-size-target ^BufferPool buffer-pool]
   xtdb.trie.TrieCatalog
   (addTries [this table-name added-tries]
-    (.compute !table-trie-cats table-name
-              (fn [_table-name table-trie-cat]
-                (reduce (fn [table-trie-cat ^TrieDetails added-trie]
-                          (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                            (apply-trie-notification this table-trie-cat
-                                                     (-> parsed-key
-                                                         (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                :trie-metadata (.getTrieMetadata added-trie))))
-                            table-trie-cat))
-                        (or table-trie-cat {})
-                        added-tries))))
+    (let [valid-tries (filter (fn [^TrieDetails added-trie]
+                                (trie-exists? buffer-pool table-name added-trie))
+                              added-tries)]
+      (.compute !table-trie-cats table-name
+                (fn [_table-name table-trie-cat]
+                  (reduce (fn [table-trie-cat ^TrieDetails added-trie]
+                            (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
+                              (apply-trie-notification this table-trie-cat
+                                                       (-> parsed-key
+                                                           (assoc :data-file-size (.getDataFileSize added-trie)
+                                                                  :trie-metadata (.getTrieMetadata added-trie))))
+                              table-trie-cat))
+                          (or table-trie-cat {})
+                          valid-tries)))))
 
   (getTableNames [_] (set (keys !table-trie-cats)))
 
@@ -294,7 +303,7 @@
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
   (log/debug "starting trie catalog...")
   (let [[_ table->table-block] (table-cat/load-tables-to-metadata buffer-pool block-cat)
-        cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)]
+        cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target* buffer-pool)]
     (doseq [[table-name {:keys [tries]}] table->table-block]
       (.addTries cat table-name tries))
 
