@@ -35,6 +35,14 @@ interface BufferPool : AutoCloseable {
      */
     fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch
 
+    fun exists(key: Path): Boolean = 
+        try {
+            getFooter(key)
+            true
+        } catch (e: Exception) {
+            false
+        }
+
     fun putObject(key: Path, buffer: ByteBuffer)
 
     /**
@@ -56,6 +64,7 @@ interface BufferPool : AutoCloseable {
     fun deleteIfExists(key: Path)
 
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
+
 
     companion object {
         @JvmField

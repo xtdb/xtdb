@@ -88,42 +88,44 @@
           (t/is (<= 0.99 (HyperLogLog/estimate (get hlls1 "_id")) 1.01))
           (t/is (<= 1.99 (HyperLogLog/estimate (get hlls2 "_id")) 2.01)))
 
-        (t/testing "artifically adding tries (simulating another node finishing and compacting these)"
-          (.addTries trie-catalog "public/foo"
-                     (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
-                           ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
-                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                          (map #(apply trie/->trie-details "public/foo" %))))
+        (with-redefs [trie-cat/trie-exists? (constantly true)]
+          (t/testing "artifically adding tries (simulating another node finishing and compacting these)"
+            (.addTries trie-catalog "public/foo"
+                       (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                             ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
+                             ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
+                            (map #(apply trie/->trie-details "public/foo" %))))
 
-          (tu/finish-block! node)
+            (tu/finish-block! node)
 
-          (t/is (= ["l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"
-                    "l01-rc-b00" "l01-rc-b01" "l01-rc-b02"
-                    "l02-rc-p0-b01" "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"]
-                   (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
-                        TableBlock/parseFrom
-                        table-cat/<-table-block
-                        :tries
-                        (mapv (comp :trie-key trie-details->edn))))))))))
+            (t/is (= ["l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"
+                      "l01-rc-b00" "l01-rc-b01" "l01-rc-b02"
+                      "l02-rc-p0-b01" "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"]
+                     (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
+                          TableBlock/parseFrom
+                          table-cat/<-table-block
+                          :tries
+                          (mapv (comp :trie-key trie-details->edn)))))))))))
 
 
 (t/deftest trie-file-order-in-table-block-files
   (let [node-dir (util/->path "target/table-catalog-test/trie-file-order")]
     (util/delete-dir node-dir)
 
-    (t/testing "artifically adding tries"
-      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        ;; need some dummy tx for latest-completed-txt
-        (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (let [cat (trie-cat/trie-catalog node)]
-          (.addTries cat "public/foo"
-                     (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
-                           ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
-                           ["l01-r20200102-b01" 5] ["l01-rc-b01" 2]
-                           ["l01-r20200101-b02" 5] ["l01-r20200102-b02" 5] ["l01-rc-b02" 2]
-                           ["l02-rc-p0-b01" 4] ["l02-rc-p2-b01" 4]]
-                          (map #(apply trie/->trie-details "public/foo" %))))
-          (tu/finish-block! node))))
+    (with-redefs [trie-cat/trie-exists? (constantly true)]
+      (t/testing "artifically adding tries"
+        (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+          ;; need some dummy tx for latest-completed-txt
+          (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
+          (let [cat (trie-cat/trie-catalog node)]
+            (.addTries cat "public/foo"
+                       (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
+                             ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
+                             ["l01-r20200102-b01" 5] ["l01-rc-b01" 2]
+                             ["l01-r20200101-b02" 5] ["l01-r20200102-b02" 5] ["l01-rc-b02" 2]
+                             ["l02-rc-p0-b01" 4] ["l02-rc-p2-b01" 4]]
+                            (map #(apply trie/->trie-details "public/foo" %))))
+            (tu/finish-block! node)))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
