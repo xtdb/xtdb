@@ -120,6 +120,7 @@
                    (restrict-cols table-expr))]
 
     {:fields fields
+     :row-count row-count
      :->out-rel (fn [{:keys [allocator] :as opts}]
                   (let [row-count (count rows)]
                     (when (pos? row-count)
@@ -185,12 +186,13 @@
                                                        (.getValueCount el-rdr))
                                             allocator))))}))
 
-(defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
-  (let [{:keys [fields ->out-rel]} (zmatch table
-                                     [:rows rows] (emit-rows-table rows table-expr opts)
-                                     [:column col] (emit-col-table col table-expr opts)
-                                     [:param param] (emit-arg-table param table-expr opts))]
+(defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts] 
+  (let [{:keys [fields ->out-rel row-count]} (zmatch table
+                                                     [:rows rows] (emit-rows-table rows table-expr opts)
+                                                     [:column col] (emit-col-table col table-expr opts)
+                                                     [:param param] (emit-arg-table param table-expr opts))]
 
     {:fields fields
+     :stats (when row-count {:row-count row-count})
      :->cursor (fn [opts]
                  (TableCursor. (->out-rel opts)))}))
