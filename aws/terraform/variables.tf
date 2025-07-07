@@ -61,7 +61,7 @@ variable "eks_cluster_version" {
 variable "eks_public_access" {
   description = "Whether the EKS cluster endpoint should be publicly accessible."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "eks_enable_creator_admin_permissions" {
