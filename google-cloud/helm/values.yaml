@@ -107,7 +107,7 @@ livenessProbe:
   failureThreshold: 3
 
 xtdbService:
-  type: LoadBalancer
+  type: ClusterIP
   server:
     # Port of the Postgres Wire Server on the nodes
     targetPort: 5432

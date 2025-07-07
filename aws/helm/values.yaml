@@ -103,11 +103,7 @@ livenessProbe:
   failureThreshold: 3
 
 xtdbService:
-  type: LoadBalancer
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: external
-    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
-    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  type: ClusterIP
   server:
     # Port of the Postgres Wire Server on the nodes
     targetPort: 5432
