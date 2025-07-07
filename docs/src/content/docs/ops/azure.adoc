@@ -30,6 +30,8 @@ These can be fetched from the XTDB repository using the following command:
 terraform init -from-module github.com/xtdb/xtdb.git//azure/terraform
 ```
 
+We don't enable public access to the kubernetes cluster by default in our templates to conform with security best practises so a bastion server or VPN is required to communicate with it.
+
 === Resources
 
 By default, running the templates will deploy the following infrastructure:
@@ -62,6 +64,8 @@ For setting up a production-ready XTDB cluster on Azure, we provide a **Helm** c
 === Pre-requisites
 
 To enable XTDB nodes to access an Azure storage account securely, a Kubernetes Service Account (KSA) must be set up and linked to a User Assigned Managed Identity using link:https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation[**Workload Identity Federation**^].
+
+You'll need to have set up a bastion server or VPN to communicate with the kubernetes cluster.
 
 ==== Setting Up the Kubernetes Service Account:
 
