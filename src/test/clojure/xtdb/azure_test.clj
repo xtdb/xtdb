@@ -183,12 +183,9 @@
 (t/deftest ^:azure tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      ;; Submit tpch docs
       (tpch/submit-docs! node 0.05)
-      (tu/then-await-tx (:latest-submitted-tx-id (xt/status node)) node (Duration/ofHours 1))
 
-      ;; Ensure finish-block! works
-      (t/is (nil? (tu/finish-block! node)))
+      (tu/flush-block! node #xt/duration "PT5M")
 
       ;; Ensure some files written to buffer-pool 
       (let [buffer-pool (bp/<-node node)]

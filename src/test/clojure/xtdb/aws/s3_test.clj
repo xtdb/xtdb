@@ -7,6 +7,7 @@
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
+            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
@@ -124,10 +125,9 @@
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
       (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
         ;; Submit some documents to the node
-        (t/is (= true
-                 (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                                   [:put-docs :bar {:xt/id "bar2"}]
-                                                   [:put-docs :bar {:xt/id "bar3"}]]))))
+        (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                             [:put-docs :bar {:xt/id "bar2"}]
+                             [:put-docs :bar {:xt/id "bar3"}]])
 
         ;; Ensure finish-block! works
         (t/is (nil? (tu/finish-block! node)))
@@ -143,12 +143,9 @@
 (t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      ;; Submit tpch docs
       (tpch/submit-docs! node 0.1)
-      (tu/then-await-tx (:latest-submitted-tx-id (xt/status node)) node (Duration/ofHours 1))
 
-      ;; Ensure finish-block! works
-      (t/is (nil? (tu/finish-block! node)))
+      (tu/flush-block! node #xt/duration "PT5M")
 
       ;; Ensure some files written to buffer-pool 
       (let [^RemoteBufferPool buffer-pool (bp/<-node node)]

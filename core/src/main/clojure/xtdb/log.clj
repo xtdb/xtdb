@@ -345,7 +345,9 @@
 (defn finish-block! [node]
   (.finishBlock ^LogProcessor (util/component node :xtdb.log/processor)))
 
-(defn flush-block! [node]
-  (let [log (node->log node)
-        ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
-    (await-tx node (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) #xt/duration "PT5S")))
+(defn flush-block!
+  ([node] (flush-block! node #xt/duration "PT5S"))
+  ([node timeout]
+   (let [log (node->log node)
+         ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
+     (await-tx node (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
