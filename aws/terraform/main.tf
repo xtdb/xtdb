@@ -68,11 +68,13 @@ module "xtdb_vpc" {
   cidr                 = var.vpc_cidr
   azs                  = var.vpc_availability_zones
   public_subnets       = var.vpc_public_subnets
+  private_subnets      = var.vpc_private_subnets
 
   enable_dns_support   = true
   enable_dns_hostnames = true
   map_public_ip_on_launch = false
-  enable_nat_gateway   = false
+  enable_nat_gateway   = true
+  single_nat_gateway  = true
   enable_vpn_gateway   = false
 
   public_subnet_tags = {
@@ -100,7 +102,7 @@ module "xtdb_eks" {
   create_cloudwatch_log_group              = var.eks_create_cloudwatch_log_group
 
   vpc_id     = module.xtdb_vpc.vpc_id
-  subnet_ids = module.xtdb_vpc.public_subnets
+  subnet_ids = module.xtdb_vpc.private_subnets
 
   # Optional
   cluster_compute_config = {
