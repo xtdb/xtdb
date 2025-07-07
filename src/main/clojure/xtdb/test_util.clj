@@ -150,8 +150,9 @@
 (defn finish-block! [node]
   (xt-log/finish-block! node))
 
-(defn flush-block! [node]
-  (xt-log/flush-block! node))
+(defn flush-block!
+  ([node] (xt-log/flush-block! node))
+  ([node timeout] (xt-log/flush-block! node timeout)))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
