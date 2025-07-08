@@ -183,6 +183,130 @@ module "xtdb_eks" {
   }
 }
 
+# Create security group for bastion host
+resource "aws_security_group" "bastion" {
+  name_prefix = "xtdb-bastion-"
+  vpc_id      = module.xtdb_vpc.vpc_id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Consider restricting to your IP
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name      = "xtdb-bastion"
+    terraform = "true"
+    managed_by = "XTDB Terraform"
+  }
+}
+
+# Create IAM role for bastion host
+data "aws_iam_policy_document" "bastion_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "bastion" {
+  name_prefix        = "xtdb-bastion-"
+  assume_role_policy = data.aws_iam_policy_document.bastion_assume_role.json
+
+  tags = {
+    terraform  = "true"
+    managed_by = "XTDB Terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "bastion_eks_access" {
+  name = "eks-access"
+  role = aws_iam_role.bastion.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeCluster",
+          "eks:ListClusters",
+          "eks:AccessKubernetesApi",
+          "eks:ListNodegroups",
+          "eks:DescribeNodegroup",
+          "eks:ListUpdates",
+          "eks:ListFargateProfiles"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "bastion" {
+  name_prefix = "xtdb-bastion-"
+  role        = aws_iam_role.bastion.name
+}
+
+# Create bastion host
+data "aws_ami" "amazon_linux_2" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+}
+
+resource "aws_instance" "bastion" {
+  ami                         = data.aws_ami.amazon_linux_2.id
+  instance_type               = "t3.micro"
+  subnet_id                   = module.xtdb_vpc.public_subnets[0]
+  vpc_security_group_ids      = [aws_security_group.bastion.id]
+  associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.bastion.name
+  key_name                    = var.bastion_key_name
+
+  user_data = <<-EOF
+              #!/bin/bash
+              yum update -y
+              yum install -y git jq
+              
+              # Install kubectl
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+              
+              # Install AWS CLI
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              yum install -y unzip
+              unzip awscliv2.zip
+              ./aws/install
+              
+              # Install Helm
+              curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+              chmod 700 get_helm.sh
+              ./get_helm.sh
+              EOF
+
+  tags = {
+    Name      = "xtdb-bastion"
+    terraform = "true"
+    managed_by = "XTDB Terraform"
+  }
+}
+
 # Required for using EBS CSI driver + volumes
 module "irsa_ebs_csi" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"

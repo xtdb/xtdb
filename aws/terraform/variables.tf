@@ -106,3 +106,9 @@ variable "application_node_pool_desired_count" {
   type        = number
   default     = 3
 }
+
+# Bastion Host
+variable "bastion_key_name" {
+  description = "The name of the SSH key pair to use for the bastion host. Must exist in AWS."
+  type        = string
+}
