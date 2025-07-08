@@ -2191,9 +2191,11 @@
       PlanRelation
       (plan-rel [this]
         (letfn [(wrap-ob [plan order-by-ctx]
-                  (let [col-syms (available-cols this)]
-                    (-> plan
-                        (wrap-isolated-ob col-syms (plan-order-by order-by-ctx env nil col-syms)))))]
+                  (let [projected-cols (->> (find-cols this nil)
+                                            (into [] (map-indexed ->projected-col-expr)))]
+                    (wrap-integrated-ob plan projected-cols
+                                        (plan-order-by order-by-ctx env this
+                                                       (mapv :col-sym projected-cols)))))]
 
           (-> (plan-rel scope)
               (apply-sqs !subqs)

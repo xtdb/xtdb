@@ -3036,3 +3036,31 @@ FROM dates"))))
            (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME AS OF (NOW - INTERVAL 'PT1M')"
                  {:current-time #inst "2120"}))
         "Interval outside period"))
+
+(t/deftest order-by-without-select-bug-4560
+  (xt/execute-tx tu/*node* [[:put-docs :docs
+                             {:xt/id 1, :col 1, :d #xt/zdt "2024-01-01Z"}
+                             {:xt/id 2, :col 2, :d #xt/zdt "2024-01-03Z"}
+                             {:xt/id 3, :col 1, :d #xt/zdt "2024-01-02Z"}]])
+
+  (t/is (= [{:xt/id 3, :col 1, :d #xt/zdt "2024-01-02T00:00Z"}
+            {:xt/id 1, :col 1, :d #xt/zdt "2024-01-01T00:00Z"}]
+           (xt/q tu/*node*
+                 "FROM docs
+                  WHERE col = 1
+                  ORDER BY d DESC")))
+
+  (t/is (= [{:xt/id 2, :col 2, :d #xt/zdt "2024-01-03T00:00Z"}
+            {:xt/id 3, :col 1, :d #xt/zdt "2024-01-02T00:00Z"}
+            {:xt/id 1, :col 1, :d #xt/zdt "2024-01-01T00:00Z"}]
+           (xt/q tu/*node*
+                 "FROM docs
+                  ORDER BY d DESC")))
+
+  (t/is (= [{:xt/id 3, :col 1, :d #xt/zdt "2024-01-02T00:00Z"}
+            {:xt/id 1, :col 1, :d #xt/zdt "2024-01-01T00:00Z"}]
+           (xt/q tu/*node*
+                 "FROM docs
+                  WHERE col = 1
+                  SELECT *
+                  ORDER BY d DESC"))))
