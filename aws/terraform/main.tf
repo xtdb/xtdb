@@ -97,9 +97,43 @@ module "xtdb_eks" {
   cluster_name    = var.eks_cluster_name
   cluster_version = var.eks_cluster_version
 
+  cluster_endpoint_private_access          = true
   cluster_endpoint_public_access           = var.eks_public_access
   enable_cluster_creator_admin_permissions = var.eks_enable_creator_admin_permissions
   create_cloudwatch_log_group              = var.eks_create_cloudwatch_log_group
+
+  cluster_security_group_additional_rules = {
+    ingress_bastion = {
+      description              = "Bastion access to EKS API"
+      protocol                 = "tcp"
+      from_port                = 443
+      to_port                  = 443
+      type                     = "ingress"
+      source_security_group_id = aws_security_group.bastion.id
+    }
+  }
+
+  # Cluster authentication configuration
+  authentication_mode = "API"
+  enable_irsa        = true
+
+  access_entries = {
+    # Grant cluster admin access to the bastion
+    bastion = {
+      principal_arn     = aws_iam_role.bastion.arn
+      type             = "STANDARD"
+      kubernetes_groups = ["system:masters"]
+      kubernetes_username = "bastion-admin"
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
 
   vpc_id     = module.xtdb_vpc.vpc_id
   subnet_ids = module.xtdb_vpc.private_subnets
