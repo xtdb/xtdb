@@ -476,7 +476,7 @@
       (if ordinality-col
         [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
                     (with-meta (meta ordinality-col)))
-                '(row-number)}]
+                '(local-row-number)}]
          plan]
         plan))))
 
@@ -504,7 +504,7 @@
       (if ordinality-col
         [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
                     (with-meta (meta ordinality-col)))
-                '(row-number)}]
+                '(local-row-number)}]
          plan]
         plan))))
 

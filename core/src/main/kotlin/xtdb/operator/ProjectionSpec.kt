@@ -12,7 +12,6 @@ import xtdb.types.withName
 import xtdb.util.closeOnCatch
 import xtdb.vector.IVectorReader
 import xtdb.vector.ValueVectorReader
-import xtdb.vector.asReader
 import xtdb.vector.writerFor
 
 interface ProjectionSpec {
@@ -43,6 +42,21 @@ interface ProjectionSpec {
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
         ) =
             BigIntVector(field, allocator).closeOnCatch { rowNumVec ->
+                val wtr = writerFor(rowNumVec)
+                repeat(inRel.rowCount) { wtr.writeLong(rowNum++) }
+                wtr.asReader
+            }
+    }
+
+    // only returns the row number within the batch - see #4131
+    class LocalRowNumber(colName: ColumnName) : ProjectionSpec {
+        override val field = Fields.I64.toArrowField(colName)
+
+        override fun project(
+            allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
+        ): VectorReader =
+            BigIntVector(field, allocator).closeOnCatch { rowNumVec ->
+                var rowNum = 1L
                 val wtr = writerFor(rowNumVec)
                 repeat(inRel.rowCount) { wtr.writeLong(rowNum++) }
                 wtr.asReader

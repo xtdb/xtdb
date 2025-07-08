@@ -175,8 +175,7 @@
      WHERE i1 = i2
      SELECT i1, i2, x1, x2"))))
 
-
-  #_ ; FIXME, ordinalities kept growing
+  ;; kept counting
   (t/is (= #{{:i1 1, :i2 1, :x1 100, :x2 101}
              {:i1 2, :i2 2, :x1 200, :x2 201}
              {:i1 3, :i2 3, :x1 300, :x2 301}

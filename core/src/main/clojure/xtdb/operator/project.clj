@@ -5,7 +5,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types])
   (:import (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
+           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
 
 (s/def ::append-columns? boolean?)
 
@@ -14,6 +14,7 @@
          :opts (s/? (s/keys :req-un [::append-columns?]))
          :projections (s/coll-of (s/or :column ::lp/column
                                        :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :local-row-number-column (s/map-of ::lp/column #{'(local-row-number)}, :conform-keys true, :count 1)
                                        :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
                                        ;; don't do this for args, because they aren't real cols
                                        ;; the EE handles these through `:extend`
@@ -27,6 +28,7 @@
 (defmethod lp/ra-expr :map [_]
   (s/cat :op #{:ⲭ :chi :map}
          :projections (s/coll-of (s/or :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :local-row-number-column (s/map-of ::lp/column #{'(local-row-number)}, :conform-keys true, :count 1)
                                        :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
                                        :extend ::lp/column-expression)
                                  :min-count 1)
@@ -54,6 +56,9 @@
 
                                            :row-number-column (let [[col-name _form] (first arg)]
                                                                 (ProjectionSpec$RowNumber. (str col-name)))
+
+                                           :local-row-number-column (let [[col-name _form] (first arg)]
+                                                                      (ProjectionSpec$LocalRowNumber. (str col-name)))
 
                                            :star (let [[col-name _star] (first arg)]
                                                    (ProjectionSpec$Star. (apply types/->field (str col-name) #xt.arrow/type :struct false (vals inner-fields))))

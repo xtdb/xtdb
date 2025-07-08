@@ -1026,7 +1026,7 @@
     (when (and (map? col-spec)
                (= 1 (count projection))
                (map? (first projection))
-               (= '(row-number) (val (ffirst projection))))
+               (= '(local-row-number) (val (ffirst projection))))
       (let [[unnest-col unnest-expr] (first col-spec)
             unnest-expr (w/postwalk-replace (set/map-invert cols) unnest-expr)]
         [:unnest {unnest-col 'unnest} {:ordinality-column (key (ffirst projection))}
