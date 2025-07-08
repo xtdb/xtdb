@@ -1054,3 +1054,18 @@
               '[:mega-join [{id 4}]
                 [[::tu/pages [[{:id 4, :foo 0}]]]
                  [::tu/pages [[{:bar 5}]]]]]))))
+
+(t/deftest test-row-table-mega-join-order
+  (t/testing "row table mega-join order"
+    (let [plan '[:mega-join
+                 [{bar biff} {foo baz} {foo bar}]
+                 [[:table [{:baz 1} {:baz 2} {:baz 2}]]
+                  [:table [{:biff 1} {:biff 2} {:biff 3} {:biff 4}]]
+                  [:table [{:foo 1}]]
+                  [:table [{:bar 1} {:bar 2}]]]]]
+      (t/is (= '[[2 [[:equi-condition {foo bar}]]
+                  3 [[:equi-condition {foo baz}]]
+                  0 [[:equi-condition {bar biff}]]
+                  1]]
+               (:join-order (lp/emit-expr (s/conform ::lp/logical-plan plan) {})))))))
+

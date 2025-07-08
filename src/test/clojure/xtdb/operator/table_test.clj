@@ -1,5 +1,7 @@
 (ns xtdb.operator.table-test
-  (:require [clojure.test :as t]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :as t]
+            [xtdb.logical-plan :as lp]
             [xtdb.test-util :as tu]
             [xtdb.time :as time])
   (:import java.time.Duration))
@@ -178,3 +180,21 @@
   (t/is (= [{:a 4.2} {:b "1", :c 2, :a 0} {:b 2, :a 1}]
            (tu/query-ra '[:table [{:a 4.2} ?record {:a 1, :b 2}]]
                         {:args {:record {:a 0, :b "1", :c 2}}}))))
+
+(t/deftest test-table-stats
+  (t/testing "row table stats - should return stats/row-count"
+    (t/is (= {:row-count 4}
+             (:stats
+              (lp/emit-expr (s/conform ::lp/logical-plan
+                                       '[:table [{:foo 1 :bar "woo"}
+                                                 {:foo 2 :bar "yay"}
+                                                 {:foo 3 :bar "yipee"}
+                                                 {:foo 4 :bar "huzzah"}]])
+                            {})))))
+
+  ;; Other types of table do NOT currently return stats
+  (t/testing "col table stats"
+    (t/is (nil? (:stats (lp/emit-expr (s/conform ::lp/logical-plan
+                                                 '[:table {foo [1 2 3 4]}])
+                                      {}))))))
+
