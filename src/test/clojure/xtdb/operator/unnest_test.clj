@@ -107,7 +107,7 @@
                           [:group-by [ordinal {s (sum b*)}]
                            [:unnest {b* b} {:ordinality-column ordinal}
                             [:table ?x]]]]
-             {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
+                        {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
         "group by ordinality"))
 
 (t/deftest test-vector-not-found-4343
@@ -149,3 +149,49 @@
               {x1 xs}
               [:scan {:table public/r1} [xs]]]
             {:node tu/*node*}))))
+
+(t/deftest unnest-ordinality-join-issue-4131
+  (xt/submit-tx tu/*node*
+                [[:put-docs :r1 {:xt/id 0, :xs [10 20 30]} {:xt/id 1, :xs [100 200 300]}]
+                 [:put-docs :r2 {:xt/id 0, :xs [11 21 31]} {:xt/id 1, :xs [101 201 301]}]])
+
+  ;; Correct
+  (t/is (= #{{:i1 1, :i2 1, :x1 100, :x2 101}
+             {:i1 2, :i2 2, :x1 200, :x2 201}
+             {:i1 3, :i2 3, :x1 300, :x2 301}
+             {:i1 1, :i2 1, :x1 100, :x2 11}
+             {:i1 2, :i2 2, :x1 200, :x2 21}
+             {:i1 3, :i2 3, :x1 300, :x2 31}
+             {:i1 1, :i2 1, :x1 10, :x2 101}
+             {:i1 2, :i2 2, :x1 20, :x2 201}
+             {:i1 3, :i2 3, :x1 30, :x2 301}
+             {:i1 1, :i2 1, :x1 10, :x2 11}
+             {:i1 2, :i2 2, :x1 20, :x2 21}
+             {:i1 3, :i2 3, :x1 30, :x2 31}}
+           (set (xt/q tu/*node* "
+     FROM r1, r2
+     , UNNEST(r1.xs) WITH ORDINALITY AS u1(x1, i1)
+     , UNNEST(r2.xs) WITH ORDINALITY AS u2(x2, i2)
+     WHERE i1 = i2
+     SELECT i1, i2, x1, x2"))))
+
+
+  #_ ; FIXME, ordinalities kept growing
+  (t/is (= #{{:i1 1, :i2 1, :x1 100, :x2 101}
+             {:i1 2, :i2 2, :x1 200, :x2 201}
+             {:i1 3, :i2 3, :x1 300, :x2 301}
+             {:i1 1, :i2 1, :x1 100, :x2 11}
+             {:i1 2, :i2 2, :x1 200, :x2 21}
+             {:i1 3, :i2 3, :x1 300, :x2 31}
+             {:i1 1, :i2 1, :x1 10, :x2 101}
+             {:i1 2, :i2 2, :x1 20, :x2 201}
+             {:i1 3, :i2 3, :x1 30, :x2 301}
+             {:i1 1, :i2 1, :x1 10, :x2 11}
+             {:i1 2, :i2 2, :x1 20, :x2 21}
+             {:i1 3, :i2 3, :x1 30, :x2 31}}
+           (set (xt/q tu/*node* "
+     FROM r1, r2
+     , UNNEST(r1.xs) WITH ORDINALITY AS u1(x1, i1)
+     JOIN UNNEST(r2.xs) WITH ORDINALITY AS u2(x2, i2)
+       ON i1 = i2
+     SELECT i1, i2, x1, x2")))))
