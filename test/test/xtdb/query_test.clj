@@ -3796,6 +3796,62 @@
                   :vars-in-join-order
                   (filter #{'e 'v}))))))
 
+(t/deftest can-override-join-order
+  (fix/submit+await-tx (->> (for [x (range 1000)]
+                              [[::xt/put {:xt/id (str "thing-" x), :type :thing, :v x}]
+                               [::xt/put {:xt/id (str "other-thing-" x), :type :other-thing, :v x}]])
+                            (apply concat)))
+
+  (let [db (xt/db *api*)]
+    (t/is (= '[$v $type e v]
+             (->> (q/query-plan-for db
+                                    '{:find [e]
+                                      :in [$type $v]
+                                      :where [[e :type $type]
+                                              [e :v v]
+                                              [(> v $v)]]}
+                                    [:thing 590])
+                  :vars-in-join-order)))
+
+    (t/is (= '[$v $type v e]
+             (->> (q/query-plan-for db
+                                    '{:find [e]
+                                      :in [$type $v]
+                                      :where [[e :type $type]
+                                              [e :v v]
+                                              [(> v $v)]]
+                                      :override-join-order [$v $type v e]}
+                                    [:thing 590])
+                  :vars-in-join-order)))
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Override join order not compatible with query"
+                            (->> (q/query-plan-for db
+                                                   '{:find [e]
+                                                     :in [$type $v]
+                                                     :where [[e :type $type]
+                                                             [e :v v]
+                                                             [(> v $v)]]
+                                                     :override-join-order [$v $type v]}
+                                                   [:thing 590])
+                                 :vars-in-join-order)))
+
+    (t/is (xt/q db '{:find [e]
+                     :in [$type $v]
+                     :where [[e :type $type]
+                             [e :v v]
+                             [(> v $v)]]}
+                :thing 590)
+
+          (xt/q db
+                '{:find [e]
+                  :in [$type $v]
+                  :where [[e :type $type]
+                          [e :v v]
+                          [(> v $v)]]
+                  :override-join-order [$v $type v e]}
+                :thing 590))))
+
 (t/deftest test-binds-against-false-arg-885
   (fix/submit+await-tx [[::xt/put {:xt/id :foo, :name "foo", :flag? false}]
                         [::xt/put {:xt/id :bar, :name "bar", :flag? true}]
