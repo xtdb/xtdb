@@ -199,13 +199,34 @@
         (is (= "hello, world" (str (.getObject rs 1))))
         (is (= false (.next rs)))))))
 
+(t/deftest prepared-stmt-sees-new-cols-4570
+  (with-open [conn (jdbc-conn {"prepareThreshold" 1})]
+    (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1}"])
+
+    (t/is (= [{:_id 1, :_column_2 nil}]
+             (jdbc/execute! conn ["SELECT _id, my_col FROM docs"])))
+
+    (with-open [stmt (.prepareStatement conn "FROM docs SELECT my_col ORDER BY _id")
+                star-stmt (.prepareStatement conn "FROM docs ORDER BY _id")]
+      (with-open [rs (.executeQuery stmt)
+                  rs-star (.executeQuery star-stmt)]
+        (t/is (= [{:_column_1 nil}] (resultset-seq rs)))
+        (t/is (= [{:_id 1}] (resultset-seq rs-star))))
+
+      (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 2, my_col: 'foo'}"])
+
+      (with-open [rs (.executeQuery stmt)
+                  rs-star (.executeQuery star-stmt)]
+        (t/is (= [{:my_col nil} {:my_col "foo"}] (resultset-seq rs)))
+        (t/is (= [{:_id 1, :my_col nil} {:_id 2, :my_col "foo"}] (resultset-seq rs-star)))))))
+
 (deftest parameterized-query-test
   (with-open [conn (jdbc-conn)
               stmt (doto (.prepareStatement conn "SELECT a.a FROM (VALUES (?)) a (a)")
                      (.setObject 1 "hello, world"))
               rs (.executeQuery stmt)]
-    (is (= true (.next rs)))
-    (is (= false (.next rs)))))
+
+    (t/is (= [{:a "hello, world"}] (resultset-seq rs)))))
 
 (def json-representation-examples
   "A map of entries describing sql value domains

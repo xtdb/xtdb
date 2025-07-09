@@ -24,8 +24,7 @@
 
 (t/deftest test-find-gt-ivan
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
-    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])
-        (tu/then-await-tx node))
+    (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
@@ -33,9 +32,8 @@
     (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan, :ordinal 0}]
                         [:put-docs :xt_docs {:name "Ivan", :xt/id :iva, :ordinal 1}]])
 
-    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms, :ordinal 2}]
-                            [:put-docs :xt_docs {:name "Jon", :xt/id :jon, :ordinal 3}]])
-        (tu/then-await-tx node))
+    (xt/execute-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms, :ordinal 2}]
+                         [:put-docs :xt_docs {:name "Jon", :xt/id :jon, :ordinal 3}]])
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")

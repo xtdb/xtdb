@@ -238,20 +238,21 @@
   ([query] (query-ra query {}))
   ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
-   (let [{:keys [live-idx]} node
-         allocator (:allocator node *allocator*)
+   (let [allocator (:allocator node *allocator*)
          query-opts (-> query-opts
                         (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
                                          (doto (-> :after-tx-id (then-await-tx node))))))
 
-         ^PreparedQuery pq (if node
-                             (let [^IQuerySource q-src (util/component node ::q/query-source)]
-                               (.prepareQuery q-src query live-idx query-opts))
-                             (q/prepare-ra query {:allocator allocator
+         ^IQuerySource q-src (if node
+                               (util/component node ::q/query-source)
+                               (q/->query-source {:allocator allocator
                                                   :ref-ctr (RefCounter.)
                                                   :wm-src (reify Watermark$Source
                                                             (openWatermark [_]
-                                                              (Watermark. nil nil {})))}))]
+                                                              (Watermark. nil nil {})))}))
+
+         ^PreparedQuery pq (.prepareQuery q-src query query-opts)]
+
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)
                                                  vw/empty-args)
