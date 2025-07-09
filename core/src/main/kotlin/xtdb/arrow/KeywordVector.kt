@@ -18,13 +18,7 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), Metadata
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
-    override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher) + HASH_CODE
-
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = KeywordVector(inner.openSlice(al))
-
-    companion object {
-        private const val HASH_CODE = 0x7a7a7a7a
-    }
 }

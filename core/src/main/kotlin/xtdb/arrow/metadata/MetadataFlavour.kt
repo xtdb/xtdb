@@ -2,6 +2,7 @@ package xtdb.arrow.metadata
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.VectorReader
+import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 sealed interface MetadataFlavour {
@@ -23,6 +24,7 @@ sealed interface MetadataFlavour {
 
     interface Bytes : MetadataFlavour {
         fun getBytes(idx: Int): ByteBuffer
+        fun hashCode(idx: Int, hasher: Hasher): Int
     }
 
     interface List : MetadataFlavour {
