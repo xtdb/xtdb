@@ -29,8 +29,6 @@ These can be fetched from the XTDB repository using the following command:
 terraform init -from-module github.com/xtdb/xtdb.git//google-cloud/terraform
 ```
 
-We don't enable public access to the kubernetes cluster by default in our templates to conform with security best practises so a bastion server or VPN is required to communicate with it.
-
 === Required APIs
 
 To deploy the required infrastructure, we need to ensure the following APIs are enabled on the Google Cloud project:
@@ -83,8 +81,6 @@ For setting up a production-ready XTDB cluster on Google Cloud, we provide a **H
 === Pre-requisites
 
 To enable XTDB nodes to access a Google Cloud Storage bucket securely, a Kubernetes Service Account (KSA) must be set up and linked to a Google Cloud IAM service account using link:https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#using_from_your_code[**Workload Identity Federation**^].
-
-You'll need to have set up a bastion server or VPN to communicate with the kubernetes cluster.
 
 ==== Setting Up the Kubernetes Service Account:
 

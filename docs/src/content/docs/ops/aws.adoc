@@ -29,8 +29,6 @@ These can be fetched from the XTDB repository using the following command:
 terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
 ```
 
-We don't enable public access to the kubernetes cluster by default in our templates to conform with security best practises so a bastion server or VPN is required to communicate with it.
-
 === Resources
 
 By default, running the templates will deploy the following infrastructure:
@@ -98,8 +96,6 @@ For setting up a production-ready XTDB cluster on AWS, we provide a **Helm** cha
 === Pre-requisites
 
 To allow the XTDB nodes to access AWS resources, a Kubernetes Service Account (KSA) must be setup and linked with an IAM role that has any necessary permissions, using link:https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html[**IAM Roles for Service Accounts (IRSA)**^].
-
-You'll need to have set up a bastion server or VPN to communicate with the kubernetes cluster.
 
 ==== Setting Up the Kubernetes Service Account:
 

@@ -45,12 +45,6 @@ variable "vpc_public_subnets" {
   default     = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 }
 
-variable "vpc_private_subnets" {
-  description = "List of private subnet CIDR blocks."
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-}
-
 # EKS Cluster
 variable "eks_cluster_name" {
   description = "The name of the EKS cluster."
@@ -67,7 +61,7 @@ variable "eks_cluster_version" {
 variable "eks_public_access" {
   description = "Whether the EKS cluster endpoint should be publicly accessible."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "eks_enable_creator_admin_permissions" {
@@ -105,10 +99,4 @@ variable "application_node_pool_desired_count" {
   description = "Desired number of nodes in the application node pool."
   type        = number
   default     = 3
-}
-
-# Bastion Host
-variable "bastion_key_name" {
-  description = "The name of the SSH key pair to use for the bastion host. Must exist in AWS."
-  type        = string
 }

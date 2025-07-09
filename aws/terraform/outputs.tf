@@ -21,18 +21,3 @@ output "oidc_provider_arn" {
 output "aws_region" {
   value = var.aws_region
 }
-
-output "bastion_public_ip" {
-  description = "Public IP address of the bastion host"
-  value       = aws_instance.bastion.public_ip
-}
-
-output "bastion_public_dns" {
-  description = "Public DNS name of the bastion host"
-  value       = aws_instance.bastion.public_dns
-}
-
-output "bastion_role_arn" {
-  description = "ARN of the bastion IAM role"
-  value       = aws_iam_role.bastion.arn
-}

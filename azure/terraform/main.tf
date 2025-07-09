@@ -48,7 +48,10 @@ module "xtdb_storage" {
   enable_telemetry = false
 
   # Public network access for storage account
-  public_network_access_enabled = false
+  public_network_access_enabled = true
+  network_rules = {
+    default_action = "Allow"
+  }
 }
 
 # Sets up an AKS cluster to be used by XTDB
