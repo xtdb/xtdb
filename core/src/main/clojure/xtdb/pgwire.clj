@@ -728,27 +728,19 @@
                                           {:statement-type :set-time-zone
                                            :tz (sql/plan-expr (.zone ctx) env)})
 
-                                        (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
-
                                         (visitInsertStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :insert, :query (subsql ctx)})
 
-                                        (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
-
-                                        (visitPatchStmt [_ ctx]
+                                        (visitPatchStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :patch, :query (subsql ctx)})
 
-                                        (visitUpdateStatementSearched [_ ctx]
+                                        (visitUpdateStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :update, :query (subsql ctx)})
 
-                                        (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
-
-                                        (visitDeleteStatementSearched [_ ctx]
+                                        (visitDeleteStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :delete, :query (subsql ctx)})
 
-                                        (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
-
-                                        (visitEraseStatementSearched [_ ctx]
+                                        (visitEraseStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :erase, :query (subsql ctx)})
 
                                         (visitAssertStatement [_ ctx]
@@ -772,17 +764,15 @@
                                         (visitAlterUserStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
 
-                                        (visitPrepareStmt [this ctx] (-> (.prepareStatement ctx) (.accept this)))
-
                                         (visitPrepareStatement [this ctx]
                                           (let [inner-ctx (.directlyExecutableStatement ctx)]
                                             {:statement-type :prepare
                                              :statement-name (str (sql/identifier-sym (.statementName ctx)))
                                              :inner (.accept inner-ctx this)}))
 
-                                        (visitExecuteStmt [_ ctx]
+                                        (visitExecuteStatement [_ ctx]
                                           {:statement-type :execute,
-                                           :statement-name (str (sql/identifier-sym (.statementName (.executeStatement ctx)))),
+                                           :statement-name (str (sql/identifier-sym (.statementName ctx))),
                                            :query (subsql ctx)
                                            :parsed-query ctx})
 

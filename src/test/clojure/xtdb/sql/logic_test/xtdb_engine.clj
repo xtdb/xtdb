@@ -81,8 +81,6 @@
 
 (defrecord InsertOpsVisitor [node statement]
   SqlVisitor
-  (visitInsertStmt [this ctx] (.accept (.insertStatement ctx) this))
-
   (visitInsertStatement [this ctx]
     (-> (.insertColumnsAndSource ctx)
         (.accept (assoc this :insert-table (keyword (sql/identifier-sym (.tableName ctx)))))))
@@ -122,8 +120,6 @@
       (throw (err/illegal-arg :xtdb.sql/parse-error
                               {::err/message (str ctx)
                                :statement statement}))))
-
-  (visitInsertStmt [this ctx] (.accept (.insertStatement ctx) this))
 
   (visitInsertStatement [_ ctx]
     (let [ops (.accept ctx (->InsertOpsVisitor node statement))]

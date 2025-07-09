@@ -2739,8 +2739,6 @@
   (visitSettingSnapshotTime [_ ctx]
     [:snapshot-time (.accept (.snapshotTime ctx) (->ExprPlanVisitor env scope))])
 
-  (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
-
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
                                                  (.accept (->QueryPlanVisitor env scope)))]
@@ -2752,8 +2750,6 @@
 
       (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
                     insert-plan)))
-
-  (visitPatchStmt [this ctx] (-> (.patchStatement ctx) (.accept this)))
 
   (visitPatchStatement [this ctx]
     (let [table-name (-> (identifier-sym (.tableName ctx))
@@ -2778,9 +2774,7 @@
                       plan]
                      '[_iid doc]))))
 
-  (visitUpdateStmt [this ctx] (-> (.updateStatementSearched ctx) (.accept this)))
-
-  (visitUpdateStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
+  (visitUpdateStatement [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
@@ -2841,9 +2835,7 @@
                                     [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
                                  (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
 
-  (visitDeleteStmt [this ctx] (-> (.deleteStatementSearched ctx) (.accept this)))
-
-  (visitDeleteStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
+  (visitDeleteStatement [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
@@ -2882,9 +2874,7 @@
                                     [:project aliased-cols plan])]
                                  internal-cols))))
 
-  (visitEraseStmt [this ctx] (-> (.eraseStatementSearched ctx) (.accept this)))
-
-  (visitEraseStatementSearched [{{:keys [!id-count table-info]} :env} ctx]
+  (visitEraseStatement [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols '[_iid]
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
@@ -2954,10 +2944,7 @@
                                       (map-indexed (fn [idx expr]
                                                      (MapEntry/create (symbol (str "?_" idx)) expr))))))]
       (->QueryExpr [:table [(into {} arg-row)]]
-                   (vec (keys arg-row)))))
-
-  (visitExecuteStmt [this ctx]
-    (.accept (.executeStatement ctx) this)))
+                   (vec (keys arg-row))))))
 
 (defn xform-table-info [table-info]
   (into {}
@@ -3116,16 +3103,6 @@
 
 (defrecord SqlToStaticOpsVisitor [env scope arg-rows]
   SqlVisitor
-  (visitInsertStmt [this ctx] (-> (.insertStatement ctx) (.accept this)))
-  (visitUpdateStmt [_ _])
-  (visitDeleteStmt [_ _])
-  (visitEraseStmt [_ _])
-  (visitAssertStatement [_ _])
-  (visitQueryExpr [_ _])
-  (visitShowVariableStatement [_ _])
-  (visitCreateUserStatement [_ _])
-  (visitAlterUserStatement [_ _])
-
   (visitInsertStatement [this ctx]
     (let [table (-> (identifier-sym (.tableName ctx)) (util/with-default-schema))]
       (when-let [rows (-> (.insertColumnsAndSource ctx) (.accept this))]
@@ -3173,8 +3150,18 @@
                              (.accept (->TableRowsVisitor env scope out-col-syms)))]
       rows))
 
+  (visitUpdateStatement [_ _])
+
   ;; TODO these can be made static ops too
-  (visitPatchStmt [_ _ctx]))
+  (visitPatchStatement [_ _ctx])
+  (visitDeleteStatement [_ _])
+  (visitEraseStatement [_ _])
+
+  (visitAssertStatement [_ _])
+  (visitQueryExpr [_ _])
+  (visitShowVariableStatement [_ _])
+  (visitCreateUserStatement [_ _])
+  (visitAlterUserStatement [_ _]))
 
 (defn sql->static-ops
   ([sql arg-rows] (sql->static-ops sql arg-rows {}))

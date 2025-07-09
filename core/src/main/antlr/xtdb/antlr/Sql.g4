@@ -15,14 +15,28 @@ multiSqlStatement : directlyExecutableStatement ( ';' directlyExecutableStatemen
 
 directlyExecutableStatement
     : EXPLAIN? settingQueryVariables? queryExpression #QueryExpr
-    | insertStatement #InsertStmt
-    | updateStatementSearched #UpdateStmt
-    | deleteStatementSearched #DeleteStmt
-    | patchStatement #PatchStmt
-    | eraseStatementSearched #EraseStmt
+
+    | 'INSERT' 'INTO' tableName insertColumnsAndSource returningStatement? #InsertStatement
+
+    | 'UPDATE' tableName dmlStatementValidTimeExtents? ( 'AS'? correlationName )?
+      'SET' setClauseList ( 'WHERE' searchCondition )?
+      returningStatement?
+      #UpdateStatement
+      
+    | 'DELETE' 'FROM' tableName dmlStatementValidTimeExtents? ( 'AS'? correlationName )?
+      ( 'WHERE' searchCondition )?
+      returningStatement?
+      #DeleteStatement
+
+    | PATCH INTO tableName patchStatementValidTimeExtents? patchSource #PatchStatement
+
+    | 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('WHERE' searchCondition)? #EraseStatement
+
     | ASSERT condition=expr (',' message=characterString)? #AssertStatement
-    | prepareStatement #PrepareStmt
-    | executeStatement #ExecuteStmt
+
+    | PREPARE statementName=identifier AS directlyExecutableStatement #PrepareStatement
+    | EXECUTE statementName=identifier executeArgs #ExecuteStatement
+
     | COPY tableName FROM STDIN opts=copyOpts # CopyInStmt
     | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
     | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
@@ -41,10 +55,6 @@ directlyExecutableStatement
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
     ;
-
-prepareStatement : PREPARE statementName=identifier AS directlyExecutableStatement ;
-
-executeStatement : EXECUTE statementName=identifier executeArgs ;
 
 executeArgs : ('(' expr (',' expr)* ')')? ;
 
@@ -778,23 +788,10 @@ returningStatement : 'RETURNING' selectList # DmlReturningStatement;
 
 /// §14.9 <delete statement: searched>
 
-deleteStatementSearched
-    : 'DELETE' 'FROM' tableName
-      dmlStatementValidTimeExtents?
-      ( 'AS'? correlationName )?
-      ( 'WHERE' searchCondition )?
-      returningStatement?
-    ;
-
 dmlStatementValidTimeExtents
   : 'FOR' ('PORTION' 'OF')? 'VALID_TIME' 'FROM' from=staticExpr ('TO' to=staticExpr)? # DmlStatementValidTimePortion
   | 'FOR' ('ALL' 'VALID_TIME' | 'VALID_TIME' 'ALL') # DmlStatementValidTimeAll
   ;
-
-patchStatement
-  : PATCH INTO tableName
-    patchStatementValidTimeExtents?
-    patchSource;
 
 // could become dmlStatementValidTimeExtents
 patchStatementValidTimeExtents
@@ -806,11 +803,8 @@ patchSource
 //  | ( '(' columnNameList ')' )? tableValueConstructor # PatchValues
   ;
 
-eraseStatementSearched : 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('WHERE' searchCondition)? ;
-
 /// §14.11 <insert statement>
 
-insertStatement : 'INSERT' 'INTO' tableName insertColumnsAndSource returningStatement?;
 insertColumnsAndSource
     : ( '(' columnNameList ')' )? tableValueConstructor # InsertValues
     | ( '(' columnNameList ')' )? recordsValueConstructor # InsertRecords
@@ -818,15 +812,6 @@ insertColumnsAndSource
     ;
 
 /// §14.14 <update statement: searched>
-
-updateStatementSearched
-    : 'UPDATE' tableName
-      dmlStatementValidTimeExtents?
-      ( 'AS'? correlationName )?
-      'SET' setClauseList
-      ( 'WHERE' searchCondition )?
-      returningStatement?
-    ;
 
 /// §14.15 <set clause list>
 
