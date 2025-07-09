@@ -232,43 +232,40 @@
 
     (reify
       IQuerySource
-      (planQuery [this query query-opts]
-        (.planQuery this query live-idx query-opts))
+      (prepareQuery [this query query-opts]
+        (.prepareQuery this query live-idx query-opts))
 
-      (planQuery [_ query wm-src query-opts]
+      (prepareQuery [_ query wm-src query-opts]
         (let [table-info (scan/tables-with-cols wm-src)
-              plan-query-opts
-              (-> query-opts
-                  (select-keys [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan? :arg-fields])
-                  (update :decorrelate? #(if (nil? %) true false))
-                  (assoc :table-info table-info))]
+              plan-query-opts (-> query-opts
+                                  (select-keys [:decorrelate? :explain? :instrument-rules? :project-anonymous-columns? :validate-plan? :arg-fields])
+                                  (update :decorrelate? #(if (nil? %) true false))
+                                  (assoc :table-info table-info))
 
-          ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,
-          ;;Move all defaulting to this level if/when everyone goes via planQuery
-          (.get ^Cache plan-cache (assoc plan-query-opts :query query)
-                (fn [_cache-key]
-                  (let [plan (cond
-                               (or (string? query) (instance? Sql$DirectlyExecutableStatementContext query))
-                               (sql/plan query plan-query-opts)
+              ;;TODO defaults to true in rewrite plan so needs defaulting pre-cache,
+              ;;Move all defaulting to this level if/when everyone goes via planQuery
+              plan (.get ^Cache plan-cache (assoc plan-query-opts :query query)
+                         (fn [_cache-key]
+                           (let [plan (cond
+                                        (vector? query) query
+                                        (or (string? query) (instance? Sql$DirectlyExecutableStatementContext query))
+                                        (sql/plan query plan-query-opts)
 
-                               (seq? query) (-> (xtql/parse-query query)
-                                                (xtql.plan/compile-query plan-query-opts))
+                                        (seq? query) (-> (xtql/parse-query query)
+                                                         (xtql.plan/compile-query plan-query-opts))
 
-                               (instance? Query query) (xtql.plan/compile-query query plan-query-opts)
+                                        (instance? Query query) (xtql.plan/compile-query query plan-query-opts)
 
-                               :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
-                    (if (or (:explain? query-opts) (:explain? (meta plan)))
-                      (with-meta [:table [{:plan (with-out-str (pp/pprint plan))}]]
-                        (-> (meta plan) (select-keys [:param-count :warnings])))
-                      plan))))))
+                                        :else (throw (err/illegal-arg :unknown-query-type {:query query, :type (type query)})))]
+                             (if (or (:explain? query-opts) (:explain? (meta plan)))
+                               (with-meta [:table [{:plan (with-out-str (pp/pprint plan))}]]
+                                 (-> (meta plan) (select-keys [:param-count :warnings])))
+                               plan))))
+              prepared-query (prepare-ra plan (assoc deps :allocator allocator, :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
 
-      (prepareRaQuery [this query query-opts]
-        (.prepareRaQuery this query live-idx query-opts))
-
-      (prepareRaQuery [_ query wm-src query-opts]
-        (let [prepared-query (prepare-ra query (assoc deps :allocator allocator, :wm-src wm-src) (assoc query-opts :table-info (scan/tables-with-cols wm-src)))]
           (when (seq (.getWarnings prepared-query))
             (.increment query-warning-counter))
+
           prepared-query))
 
       AutoCloseable

@@ -10,13 +10,12 @@
 
 (defn verify-pw [^IQuerySource q-src user password]
   (when password
-    (let [plan (.planQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?" {})]
-      (with-open [res (-> (.prepareRaQuery q-src plan {})
-                          (.openQuery {:args [user]}))]
+    (with-open [res (-> (.prepareQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?" {})
+                        (.openQuery {:args [user]}))]
 
-        (when-let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
-          (when (:valid (hashers/verify password encrypted))
-            user))))))
+      (when-let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
+        (when (:valid (hashers/verify password encrypted))
+          user)))))
 
 (defn- method-for [rules {:keys [remote-addr user]}]
   (some (fn [{rule-user :user, rule-address :address, :keys [method]}]

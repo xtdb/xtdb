@@ -679,29 +679,6 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                         (partition-all 16))]
           (xt/submit-tx node tx))))))
 
-(deftest test-plan-query-cache
-  (let [query-src ^IQuerySource (tu/component :xtdb.query/query-source)
-        pq1 (.planQuery query-src "SELECT 1" {})
-        pq2 (.planQuery query-src "SELECT 1" {:explain? true})
-        pq3 (.planQuery query-src "SELECT 1" {})]
-
-    ;;could add explicit test for all query options that are relevant to planning
-
-    (t/is (identical? pq1 pq3)
-          "duplicate query with matching options is returned from cache")
-
-    (t/is (not (identical? pq1 pq2))
-          "different relevant query options returns new query")
-
-     (let [tx-id (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo 2}]])]
-
-       (tu/then-await-tx tx-id tu/*node*)
-
-       (let [pq4 (.planQuery query-src "SELECT 1" {:after-tx-id tx-id})]
-
-         (t/is (not (identical? pq1 pq4))
-               "changing table-info causes previous cache-hits to miss")))))
-
 (deftest test-prepared-statements
   (-> (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
                                [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])

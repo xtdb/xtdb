@@ -164,8 +164,7 @@
 
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (let [plan (.planQuery q-src ast query-opts)]
-        (.prepareRaQuery q-src plan query-opts))))
+      (.prepareQuery q-src ast query-opts)))
 
   (prepare-xtql [this query query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
@@ -176,14 +175,13 @@
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (let [plan (.planQuery q-src ast query-opts)]
-        (.prepareRaQuery q-src plan query-opts))))
+      (.prepareQuery q-src ast query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareRaQuery q-src plan query-opts)))
+      (.prepareQuery q-src plan query-opts)))
 
   Closeable
   (close [_]

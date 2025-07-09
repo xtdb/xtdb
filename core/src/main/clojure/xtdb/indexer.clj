@@ -370,8 +370,7 @@
                                                 (.withName col (str "?_" idx))))))))))))
 
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, tx-opts, {:keys [stmt message]}]
-  (let [plan (.planQuery q-src stmt wm-src tx-opts)
-        ^PreparedQuery pq (.prepareRaQuery q-src plan wm-src tx-opts)]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt wm-src tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
                                              (assoc :args args, :close-args? false)))]
@@ -385,11 +384,10 @@
 
                   (throw-assert-failed)))))
 
-        (wrap-sql-args (:param-count (meta plan))))))
+        (wrap-sql-args (.getParamCount pq)))))
 
 (defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
-  (let [plan (.planQuery q-src stmt wm-src tx-opts)
-        ^PreparedQuery pq (.prepareRaQuery q-src plan wm-src tx-opts)]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt wm-src tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
                                                  (assoc :args args, :close-args? false))))]
@@ -397,7 +395,7 @@
                                (fn [in-rel]
                                  (.indexOp rel-idxer in-rel query-opts)))))
 
-        (wrap-sql-args (:param-count (meta plan))))))
+        (wrap-sql-args (.getParamCount pq)))))
 
 (defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
@@ -472,15 +470,15 @@
                                                 "Invalid valid times"
                                                 {:valid-from valid-from, :valid-to valid-to})))
 
-                        (let [pq (.prepareRaQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols wm-src))}
-                                                                            {:table (symbol table-name)
-                                                                             :valid-from valid-from
-                                                                             :valid-to valid-to
-                                                                             :patch-rel (sql/->QueryExpr '[:table [_iid doc]
-                                                                                                           ?patch_docs]
-                                                                                                         '[_iid doc])})
-                                                            (lp/rewrite-plan))
-                                                  wm-src tx-opts)
+                        (let [pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols wm-src))}
+                                                                          {:table (symbol table-name)
+                                                                           :valid-from valid-from
+                                                                           :valid-to valid-to
+                                                                           :patch-rel (sql/->QueryExpr '[:table [_iid doc]
+                                                                                                         ?patch_docs]
+                                                                                                       '[_iid doc])})
+                                                          (lp/rewrite-plan))
+                                                wm-src tx-opts)
                               args (vr/rel-reader [(SingletonListReader.
                                                     "?patch_docs"
                                                     (RelationAsStructReader.

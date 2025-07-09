@@ -246,7 +246,7 @@
 
          ^PreparedQuery pq (if node
                              (let [^IQuerySource q-src (util/component node ::q/query-source)]
-                               (.prepareRaQuery q-src query live-idx query-opts))
+                               (.prepareQuery q-src query live-idx query-opts))
                              (q/prepare-ra query {:allocator allocator
                                                   :ref-ctr (RefCounter.)
                                                   :wm-src (reify Watermark$Source

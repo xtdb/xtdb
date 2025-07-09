@@ -4,6 +4,7 @@
             [xtdb.indexer]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
+            [xtdb.sql.parse :as parse-sql]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -13,7 +14,7 @@
            [java.nio ByteBuffer]
            [java.util ArrayList HashMap Map]
            [java.util.concurrent ConcurrentHashMap]
-           [java.util.function BiFunction Consumer]
+           [java.util.function BiFunction]
            [org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket]
            [org.apache.arrow.flight.sql FlightSqlProducer]
            [org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery]
@@ -48,8 +49,9 @@
 
   (.onCompleted ack-stream))
 
-(def ^:private dml?
-  (comp #{:insert :delete :erase :merge} first))
+(defn- dml? [sql]
+  (contains? #{:insert :update :delete :erase :create-user :alter-user}
+             (first (parse-sql/parse-statement sql))))
 
 (defn- flight-stream->rows [^BufferAllocator allocator, ^FlightStream flight-stream]
   (let [root (.getRoot flight-stream)
@@ -145,9 +147,8 @@
       (getFlightInfoStatement [_ cmd _ctx descriptor]
         (let [sql (.toStringUtf8 (.getQueryBytes cmd))
               ticket-handle (new-id)
-              plan (.planQuery q-src sql wm-src {})
-              cursor (-> (.prepareRaQuery q-src plan wm-src {})
-                         (.openQuery {}))
+              pq (.prepareQuery q-src sql wm-src {})
+              cursor (.openQuery pq {})
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)
@@ -194,18 +195,17 @@
       (createPreparedStatement [_ req _ctx listener]
         (let [ps-id (new-id)
               sql (.toStringUtf8 (.getQueryBytes req))
-              plan (.planQuery q-src sql wm-src {})
-              {:keys [param-count]} (meta plan)
+              pq (.prepareQuery q-src sql wm-src {})
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
-                   (not (dml? plan)) (assoc :prepd-query (.prepareRaQuery q-src plan wm-src {})))]
+                   (not (dml? sql)) (assoc :prepd-query pq))]
           (.put stmts ps-id (HashMap. ^Map ps))
 
           (.onNext listener
                    (pack-result (-> (doto (FlightSql$ActionCreatePreparedStatementResult/newBuilder)
                                       (.setPreparedStatementHandle ps-id)
-                                      (.setParameterSchema (-> (Schema. (for [idx (range param-count)]
+                                      (.setParameterSchema (-> (Schema. (for [idx (range (.getParamCount pq))]
                                                                           (types/->field (str "$" idx) #xt.arrow/type :union false)))
                                                                (.serializeAsMessage)
                                                                (ByteString/copyFrom))))
