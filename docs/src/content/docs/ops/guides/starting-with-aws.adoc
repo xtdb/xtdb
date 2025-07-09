@@ -306,7 +306,7 @@ For more information on the available configuration options and fetching the cha
 
 NOTE: As it will take some time for the XTDB nodes to be marked as ready (as they need to pass their initial startup checks) it may take a few minutes for the XTDB cluster to be accessible.
 
-NOTE: The xtdb service is only available via ClusterIP be default so as to not expose the service publicly
+NOTE: The xtdb service is only available via ClusterIP by default so as to not expose the service publicly
 
 Once the XTDB cluster is up and running, you can access it via the ClusterIP service that was created.
 
@@ -319,7 +319,7 @@ You can do the same for the following components:
 
 * Postgres Wire Server (on port `5432`)
 * Healthz Server (on port `8080`)
-* HTTP Server (on port `3000`). 
+* HTTP Server (on port `3000`).
 
 To check the status of the XTDB cluster using the forwarded port, run:
 
