@@ -283,26 +283,29 @@ For more information on the available configuration options and fetching the cha
 
 === Accessing the XTDB Cluster
 
-Once the XTDB cluster is up and running, you can access it via the LoadBalancer service that was created.
+NOTE: As it will take some time for the XTDB nodes to be marked as ready (as they need to pass their initial startup checks) it may take a few minutes for the XTDB cluster to be accessible.
 
-To get the external IP of the LoadBalancer service, run:
+NOTE: The xtdb service is only available via ClusterIP be default so as to not expose the service publicly
+
+Once the XTDB cluster is up and running, you can access it via the ClusterIP service that was created.
+
+To port forward the service locally
 ```bash
-kubectl get svc xtdb-service --namespace xtdb-deployment
+kubectl port-forward service/xtdb-service --namespace xtdb-deployment 8080:8080
 ```
 
-This will return the external IP of the LoadBalancer service. 
-You can use this IP and access the XTDB cluster via:
+You can do the same for the following components:
 
 * Postgres Wire Server (on port `5432`)
 * Healthz Server (on port `8080`)
-* HTTP Server (on port `3000`). 
+* HTTP Server (on port `3000`).
 
-To check the status of the XTDB cluster using the HTTP server, run:
+To check the status of the XTDB cluster using the forwarded port, run:
 
 ```bash
-curl http://$ExternalIP:8080/healthz/alive
+curl http://localhost:8080/healthz/alive
 
 # alternatively `/healthz/started`, `/healthz/ready`
 ```
 
-If the above command succeeds, you now have a load-balanced XTDB cluster accessible over the internet.
+If the above command succeeds, you now have a running XTDB cluster.
