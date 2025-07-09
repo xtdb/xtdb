@@ -1,33 +1,31 @@
-[:insert
- {:table public/customer}
- [:project
-  [{_id xt.values.1/_id}
-   {c_custkey xt.values.1/c_custkey}
-   {c_name xt.values.1/c_name}
-   {c_address xt.values.1/c_address}
-   {c_nationkey xt.values.1/c_nationkey}
-   {c_phone xt.values.1/c_phone}
-   {c_acctbal xt.values.1/c_acctbal}
-   {c_mktsegment xt.values.1/c_mktsegment}
-   {c_comment xt.values.1/c_comment}]
-  [:rename
-   xt.values.1
-   [:table
-    [_id
-     c_custkey
-     c_name
-     c_address
-     c_nationkey
-     c_phone
-     c_acctbal
-     c_mktsegment
-     c_comment]
-    [{:_id ?_0,
-      :c_comment ?_8,
-      :c_mktsegment ?_7,
-      :c_name ?_2,
-      :c_phone ?_5,
-      :c_acctbal ?_6,
-      :c_address ?_3,
-      :c_custkey ?_1,
-      :c_nationkey ?_4}]]]]]
+[:project
+ [{_id xt.values.1/_id}
+  {c_custkey xt.values.1/c_custkey}
+  {c_name xt.values.1/c_name}
+  {c_address xt.values.1/c_address}
+  {c_nationkey xt.values.1/c_nationkey}
+  {c_phone xt.values.1/c_phone}
+  {c_acctbal xt.values.1/c_acctbal}
+  {c_mktsegment xt.values.1/c_mktsegment}
+  {c_comment xt.values.1/c_comment}]
+ [:rename
+  xt.values.1
+  [:table
+   [_id
+    c_custkey
+    c_name
+    c_address
+    c_nationkey
+    c_phone
+    c_acctbal
+    c_mktsegment
+    c_comment]
+   [{:_id ?_0,
+     :c_comment ?_8,
+     :c_mktsegment ?_7,
+     :c_name ?_2,
+     :c_phone ?_5,
+     :c_acctbal ?_6,
+     :c_address ?_3,
+     :c_custkey ?_1,
+     :c_nationkey ?_4}]]]]

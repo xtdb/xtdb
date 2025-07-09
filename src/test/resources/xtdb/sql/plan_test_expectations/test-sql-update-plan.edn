@@ -1,27 +1,25 @@
-[:update
- {:table public/users}
+[:project
+ [_iid
+  {_valid_from
+   (greatest
+    _valid_from
+    (cast
+     (coalesce #xt/date "2021-07-01" xtdb/start-of-time)
+     [:timestamp-tz :micro "UTC"]))}
+  {_valid_to _valid_to}
+  first_name
+  id
+  last_name]
  [:project
-  [_iid
-   {_valid_from
-    (greatest
-     _valid_from
-     (cast
-      (coalesce #xt/date "2021-07-01" xtdb/start-of-time)
-      [:timestamp-tz :micro "UTC"]))}
-   {_valid_to _valid_to}
-   first_name
-   id
-   last_name]
-  [:project
-   ({_iid u.1/_iid}
-    {_valid_from u.1/_valid_from}
-    {_valid_to u.1/_valid_to}
-    {first_name "Sue"}
-    {id u.1/id}
-    {last_name u.1/last_name})
-   [:rename
-    u.1
-    [:scan
-     {:table public/users,
-      :for-valid-time [:in #xt/date "2021-07-01" nil]}
-     [_valid_to last_name {id (= id ?_0)} _valid_from _iid]]]]]]
+  ({_iid u.1/_iid}
+   {_valid_from u.1/_valid_from}
+   {_valid_to u.1/_valid_to}
+   {first_name "Sue"}
+   {id u.1/id}
+   {last_name u.1/last_name})
+  [:rename
+   u.1
+   [:scan
+    {:table public/users,
+     :for-valid-time [:in #xt/date "2021-07-01" nil]}
+    [_valid_to last_name {id (= id ?_0)} _valid_from _iid]]]]]

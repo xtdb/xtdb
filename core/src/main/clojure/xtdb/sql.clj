@@ -81,11 +81,7 @@
                        (let [di-str (.getText ctx)]
                          (symbol (subs di-str 1 (dec (count di-str))))))))))
 
-(defprotocol OptimiseStatement
-  (optimise-stmt [stmt]))
-
-(defrecord QueryExpr [plan col-syms]
-  OptimiseStatement (optimise-stmt [this] (update this :plan lp/rewrite-plan)))
+(defrecord QueryExpr [plan col-syms])
 
 (defprotocol Scope
   (available-cols [scope])
@@ -2680,27 +2676,6 @@
             [_iid _valid_from _valid_to
              ~@known-cols]]]]]]]])))
 
-(defrecord InsertStmt [table query-plan]
-  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
-
-(defrecord PatchStmt [table query-plan]
-  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
-
-(defrecord UpdateStmt [table query-plan]
-  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
-
-(defrecord DeleteStmt [table query-plan]
-  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
-
-(defrecord EraseStmt [table query-plan]
-  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
-
-(defrecord AssertStmt [query-plan message]
-  OptimiseStatement (optimise-stmt [this] (update-in this [:query-plan :plan] lp/rewrite-plan)))
-
-(defrecord UserStmt [stmt]
-  OptimiseStatement (optimise-stmt [this] this))
-
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitQueryExpr [this ctx]
@@ -2748,20 +2723,18 @@
       (doseq [col (into #{} (filter forbidden-insert-col?) col-syms)]
         (add-err! env (->ForbiddenColumnInsert col)))
 
-      (->InsertStmt (-> (identifier-sym (.tableName ctx)) util/with-default-schema)
-                    insert-plan)))
+      insert-plan))
 
   (visitPatchStatement [this ctx]
     (let [table-name (-> (identifier-sym (.tableName ctx))
                          util/with-default-schema)
           [vf-expr vt-expr] (some-> (.patchStatementValidTimeExtents ctx)
                                     (.accept (->PatchValidTimeExtentsVisitor env scope)))]
-      (->PatchStmt table-name
-                   (->QueryExpr (plan-patch env {:table table-name
-                                                 :valid-from vf-expr
-                                                 :valid-to vt-expr
-                                                 :patch-rel (.accept (.patchSource ctx) this)})
-                                '[_iid _valid_from _valid_to doc]))))
+      (->QueryExpr (plan-patch env {:table table-name
+                                    :valid-from vf-expr
+                                    :valid-to vt-expr
+                                    :patch-rel (.accept (.patchSource ctx) this)})
+                   '[_iid _valid_from _valid_to doc])))
 
   (visitPatchRecords [_ ctx]
     (let [{:keys [plan col-syms]} (-> (.recordsValueConstructor ctx)
@@ -2822,18 +2795,17 @@
                                         set-clauses-cols
                                         (mapv :col-sym all-non-set-cols)))]
 
-      (->UpdateStmt (symbol table-name)
-                    (->QueryExpr [:project outer-projection
-                                  (as-> (plan-rel dml-scope) plan
+      (->QueryExpr [:project outer-projection
+                    (as-> (plan-rel dml-scope) plan
 
-                                    (if-let [{:keys [predicate subqs]} where-selection]
-                                      (-> plan
-                                          (apply-sqs subqs)
-                                          (wrap-predicates predicate))
-                                      plan)
+                      (if-let [{:keys [predicate subqs]} where-selection]
+                        (-> plan
+                            (apply-sqs subqs)
+                            (wrap-predicates predicate))
+                        plan)
 
-                                    [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
-                                 (vec (concat internal-cols set-clauses-cols all-non-set-cols))))))
+                      [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
+                   (vec (concat internal-cols set-clauses-cols (map :col-sym all-non-set-cols))))))
 
   (visitDeleteStatement [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
@@ -2861,18 +2833,18 @@
                                :subqs (not-empty (into {} !subqs))}))
 
           projection (into '[_iid] (or vt-projection default-vt-extents-projection))]
-      (->DeleteStmt table-name
-                    (->QueryExpr [:project projection
-                                  (as-> (plan-rel dml-scope) plan
 
-                                    (if-let [{:keys [predicate subqs]} where-selection]
-                                      (-> plan
-                                          (apply-sqs subqs)
-                                          (wrap-predicates predicate))
-                                      plan)
+      (->QueryExpr [:project projection
+                    (as-> (plan-rel dml-scope) plan
 
-                                    [:project aliased-cols plan])]
-                                 internal-cols))))
+                      (if-let [{:keys [predicate subqs]} where-selection]
+                        (-> plan
+                            (apply-sqs subqs)
+                            (wrap-predicates predicate))
+                        plan)
+
+                      [:project aliased-cols plan])]
+                   internal-cols)))
 
   (visitEraseStatement [{{:keys [!id-count table-info]} :env} ctx]
     (let [internal-cols '[_iid]
@@ -2896,30 +2868,27 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))]
 
-      (->EraseStmt (symbol table-name)
-                   (->QueryExpr [:distinct
-                                 [:project internal-cols
-                                  (as-> (plan-rel dml-scope) plan
+      (->QueryExpr [:distinct
+                    [:project internal-cols
+                     (as-> (plan-rel dml-scope) plan
 
-                                    (if-let [{:keys [predicate subqs]} where-selection]
-                                      (-> plan
-                                          (apply-sqs subqs)
-                                          (wrap-predicates predicate))
-                                      plan)
+                       (if-let [{:keys [predicate subqs]} where-selection]
+                         (-> plan
+                             (apply-sqs subqs)
+                             (wrap-predicates predicate))
+                         plan)
 
-                                    [:project aliased-cols plan])]]
-                                internal-cols))))
+                       [:project aliased-cols plan])]]
+                   internal-cols)))
 
   (visitAssertStatement [_ ctx]
     (let [!subqs (HashMap.)
           predicate (.accept (.condition ctx)
                              (map->ExprPlanVisitor {:env env, :scope nil, :!subqs !subqs}))]
-      (->AssertStmt (->QueryExpr (-> [:table [{}]]
-                                     (apply-sqs (not-empty (into {} !subqs)))
-                                     (wrap-predicates predicate))
-                                 [])
-                    (when-let [message (some-> (.message ctx) (.getText))]
-                      (subs message 1 (dec (count message)))))))
+      (->QueryExpr (-> [:table [{}]]
+                       (apply-sqs (not-empty (into {} !subqs)))
+                       (wrap-predicates predicate))
+                   [])))
 
   (visitShowVariableStatement [this ctx] (.accept (.showVariable ctx) this))
 
@@ -2930,12 +2899,6 @@
   (visitShowTimeZone [_ _]
     (->QueryExpr [:table [{:timezone '(current-timezone)}]]
                  [(->col-sym 'timezone)]))
-
-  (visitCreateUserStatement [_ ctx]
-    (->UserStmt [:create-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)]))
-
-  (visitAlterUserStatement [_ ctx]
-    (->UserStmt [:alter-user (-> (.userName ctx) (.getText)) (.accept (.password ctx) string-literal-visitor)]))
 
   (visitExecuteStatement [_ ctx]
     ;; this is only planning a SQL query for the _args_ of the execute statement
@@ -3007,57 +2970,17 @@
   ([sql] (plan-expr sql {}))
   ([sql opts] (-plan-expr sql opts)))
 
-;; eventually these data structures will be used as logical plans,
-;; we won't need an adapter
-(defprotocol AdaptPlan
-  (->logical-plan [stmt]))
+(defprotocol PlanQuery
+  (-plan-query [query opts]))
 
-(extend-protocol AdaptPlan
-  QueryExpr (->logical-plan [{:keys [plan]}] plan)
-
-  InsertStmt
-  (->logical-plan [{:keys [table query-plan]}]
-    [:insert {:table table}
-     (->logical-plan query-plan)])
-
-  PatchStmt
-  (->logical-plan [{:keys [table query-plan]}]
-    [:patch {:table table}
-     (->logical-plan query-plan)])
-
-  UpdateStmt
-  (->logical-plan [{:keys [table query-plan]}]
-    [:update {:table table}
-     (->logical-plan query-plan)])
-
-  DeleteStmt
-  (->logical-plan [{:keys [table query-plan]}]
-    [:delete {:table table}
-     (->logical-plan query-plan)])
-
-  EraseStmt
-  (->logical-plan [{:keys [table query-plan]}]
-    [:erase {:table table}
-     (->logical-plan query-plan)])
-
-  AssertStmt
-  (->logical-plan [{:keys [query-plan message]}]
-    [:assert {:message message} (->logical-plan query-plan)])
-
-  UserStmt
-  (->logical-plan [{:keys [stmt]}] stmt))
-
-(defprotocol PlanStatement
-  (-plan-statement [query opts]))
-
-(extend-protocol PlanStatement
+(extend-protocol PlanQuery
   String
-  (-plan-statement [sql opts]
+  (-plan-query [sql opts]
     (-> (antlr/parse-statement sql)
-        (-plan-statement opts)))
+        (-plan-query opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-statement [ctx {:keys [scope table-info arg-fields]}]
+  (-plan-query [ctx {:keys [scope table-info arg-fields]}]
     (let [!errors (atom [])
           !warnings (atom [])
           !param-count (atom 0)
@@ -3078,12 +3001,12 @@
                                  :errors errs}))
         (do
           (log-warnings !warnings)
-          (let [{:keys [col-syms] :as stmt} (-> stmt
-                                                #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-                                                (optimise-stmt)                ;; <<no-commit>>
-                                                #_(doto clojure.pprint/pprint) ;; <<no-commit>>
-                                                )]
-            (-> (->logical-plan stmt)
+          (let [{:keys [col-syms plan] :as stmt} (-> stmt
+                                                     #_(doto clojure.pprint/pprint) ;; <<no-commit>>
+                                                     (update :plan lp/rewrite-plan) ;; <<no-commit>>
+                                                     #_(doto clojure.pprint/pprint) ;; <<no-commit>>
+                                                     )]
+            (-> plan
                 (vary-meta (fn [m]
                              (-> (or m {})
                                  (into (select-keys stmt [:explain? :current-time :snapshot-time]))
@@ -3093,7 +3016,7 @@
 
 (defn plan
   ([sql] (plan sql nil))
-  ([sql query-opts] (-plan-statement sql query-opts)))
+  ([sql query-opts] (-plan-query sql query-opts)))
 
 (comment
   (plan "WITH foo AS (SELECT id FROM bar WHERE id = 5)
@@ -3153,7 +3076,7 @@
   (visitUpdateStatement [_ _])
 
   ;; TODO these can be made static ops too
-  (visitPatchStatement [_ _ctx])
+  (visitPatchStatement [_ _])
   (visitDeleteStatement [_ _])
   (visitEraseStatement [_ _])
 

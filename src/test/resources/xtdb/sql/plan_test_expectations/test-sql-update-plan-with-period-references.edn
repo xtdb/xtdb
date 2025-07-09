@@ -1,20 +1,18 @@
-[:update
- {:table public/foo}
- [:project
-  ({_iid foo.1/_iid}
-   {_valid_from foo.1/_valid_from}
-   {_valid_to foo.1/_valid_to}
-   {bar
-    (and
-     (<
-      (lower foo.1/_system_time)
-      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time))
-     (>
-      (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
-      (lower foo.1/_valid_time)))}
-   {baz foo.1/baz})
-  [:rename
-   foo.1
-   [:scan
-    {:table public/foo, :for-valid-time :all-time}
-    [_valid_to baz _system_time _valid_from _valid_time _iid]]]]]
+[:project
+ ({_iid foo.1/_iid}
+  {_valid_from foo.1/_valid_from}
+  {_valid_to foo.1/_valid_to}
+  {bar
+   (and
+    (<
+     (lower foo.1/_system_time)
+     (coalesce (upper foo.1/_valid_time) xtdb/end-of-time))
+    (>
+     (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
+     (lower foo.1/_valid_time)))}
+  {baz foo.1/baz})
+ [:rename
+  foo.1
+  [:scan
+   {:table public/foo, :for-valid-time :all-time}
+   [_valid_to baz _system_time _valid_from _valid_time _iid]]]]

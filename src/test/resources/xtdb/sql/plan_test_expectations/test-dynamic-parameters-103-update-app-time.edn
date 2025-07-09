@@ -1,29 +1,27 @@
-[:update
- {:table public/users}
+[:project
+ [_iid
+  {_valid_from
+   (greatest
+    _valid_from
+    (cast
+     (coalesce ?_0 xtdb/start-of-time)
+     [:timestamp-tz :micro "UTC"]))}
+  {_valid_to
+   (least
+    (coalesce _valid_to xtdb/end-of-time)
+    (coalesce
+     (cast ?_1 [:timestamp-tz :micro "UTC"])
+     xtdb/end-of-time))}
+  first_name
+  id]
  [:project
-  [_iid
-   {_valid_from
-    (greatest
-     _valid_from
-     (cast
-      (coalesce ?_0 xtdb/start-of-time)
-      [:timestamp-tz :micro "UTC"]))}
-   {_valid_to
-    (least
-     (coalesce _valid_to xtdb/end-of-time)
-     (coalesce
-      (cast ?_1 [:timestamp-tz :micro "UTC"])
-      xtdb/end-of-time))}
-   first_name
-   id]
-  [:project
-   ({_iid u.1/_iid}
-    {_valid_from u.1/_valid_from}
-    {_valid_to u.1/_valid_to}
-    {first_name ?_2}
-    {id u.1/id})
-   [:rename
-    u.1
-    [:scan
-     {:table public/users, :for-valid-time [:in ?_0 ?_1]}
-     [_valid_to {id (= id ?_3)} _valid_from _iid]]]]]]
+  ({_iid u.1/_iid}
+   {_valid_from u.1/_valid_from}
+   {_valid_to u.1/_valid_to}
+   {first_name ?_2}
+   {id u.1/id})
+  [:rename
+   u.1
+   [:scan
+    {:table public/users, :for-valid-time [:in ?_0 ?_1]}
+    [_valid_to {id (= id ?_3)} _valid_from _iid]]]]]

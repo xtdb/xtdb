@@ -15,6 +15,7 @@
             [xtdb.rewrite :as r :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
+            [xtdb.sql.parse :as parse-sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -349,33 +350,54 @@
               (-> (.liveTable live-idx-tx table)
                   (.logErase iid)))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, query, tx-opts, {:keys [message]}]
-  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
-    (fn eval-query [^RelationReader args]
-      (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                         (assoc :args args, :close-args? false)))]
+(defn- wrap-sql-args [f ^long param-count]
+  (fn [^RelationReader args]
+    (if (not args)
+      (if (zero? param-count)
+        (f nil)
+        (throw (err/incorrect :xtdb.indexer/missing-sql-args
+                              "Arguments list was expected but not provided"
+                              {:param-count param-count})))
 
-        (letfn [(throw-assert-failed []
-                  (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
-          (or (.tryAdvance res
-                           (fn [^RelationReader in-rel]
-                             (when-not (pos? (.getRowCount in-rel))
-                               (throw-assert-failed))))
+      (let [arg-count (count args)]
+        (if (not= arg-count param-count)
+          (throw (err/incorrect :xtdb.indexer/incorrect-sql-arg-count
+                                (format "Parameter error: %d provided, %d expected" arg-count param-count)
+                                {:param-count param-count, :arg-count arg-count}))
 
-              (throw-assert-failed)))
+          (f (vr/rel-reader (->> args
+                                 (map-indexed (fn [idx ^VectorReader col]
+                                                (.withName col (str "?_" idx))))))))))))
 
-        (assert (not (.tryAdvance res (fn [_])))
-                "only expecting one batch in assert")))))
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, tx-opts, {:keys [stmt message]}]
+  (let [plan (.planQuery q-src stmt wm-src tx-opts)
+        ^PreparedQuery pq (.prepareRaQuery q-src plan wm-src tx-opts)]
+    (-> (fn eval-query [^RelationReader args]
+          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                                             (assoc :args args, :close-args? false)))]
 
-(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, query, tx-opts, query-opts]
-  (let [^PreparedQuery pq (.prepareRaQuery q-src query wm-src tx-opts)]
-    (fn eval-query [^RelationReader args]
-      (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
-                                             (assoc :args args, :close-args? false))))]
+            (letfn [(throw-assert-failed []
+                      (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
+              (or (.tryAdvance res
+                               (fn [^RelationReader in-rel]
+                                 (when-not (pos? (.getRowCount in-rel))
+                                   (throw-assert-failed))))
 
-        (.forEachRemaining res
-                           (fn [in-rel]
-                             (.indexOp rel-idxer in-rel query-opts)))))))
+                  (throw-assert-failed)))))
+
+        (wrap-sql-args (:param-count (meta plan))))))
+
+(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
+  (let [plan (.planQuery q-src stmt wm-src tx-opts)
+        ^PreparedQuery pq (.prepareRaQuery q-src plan wm-src tx-opts)]
+    (-> (fn eval-query [^RelationReader args]
+          (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                                                 (assoc :args args, :close-args? false))))]
+            (.forEachRemaining res
+                               (fn [in-rel]
+                                 (.indexOp rel-idxer in-rel query-opts)))))
+
+        (wrap-sql-args (:param-count (meta plan))))))
 
 (defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
@@ -481,25 +503,6 @@
             (.indexOp ^OpIndexer (get tables (.getLeg docs-rdr tx-op-idx))
                       tx-op-idx)))))))
 
-(defn- wrap-sql-args [f ^long param-count]
-  (fn [^RelationReader args]
-    (if (not args)
-      (if (zero? param-count)
-        (f nil)
-        (throw (err/incorrect :xtdb.indexer/missing-sql-args
-                              "Arguments list was expected but not provided"
-                              {:param-count param-count})))
-
-      (let [arg-count (count args)]
-        (if (not= arg-count param-count)
-          (throw (err/incorrect :xtdb.indexer/incorrect-sql-arg-count
-                                (format "Parameter error: %d provided, %d expected" arg-count param-count)
-                                {:param-count param-count, :arg-count arg-count}))
-
-          (f (vr/rel-reader (->> args
-                                 (map-indexed (fn [idx ^VectorReader col]
-                                                (.withName col (str "?_" idx))))))))))))
-
 (def ^:private ^:const ^String user-table "pg_catalog/pg_user")
 
 (defn- update-pg-user! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, user, password]
@@ -541,46 +544,27 @@
         (let [query-str (.getObject query-rdr tx-op-idx)]
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
             (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
-              (let [compiled-query (.planQuery q-src query-str wm-src
-                                               {:arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields))})
-                    param-count (:param-count (meta compiled-query))]
+              (let [[q-tag q-args] (parse-sql/parse-statement query-str)
+                    tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
+                (case q-tag
+                  :insert (foreach-arg-row args-arrow-rdr
+                                           (query-indexer q-src wm-src upsert-idxer tx-opts q-args))
+                  :patch (foreach-arg-row args-arrow-rdr
+                                          (query-indexer q-src wm-src patch-idxer tx-opts q-args))
+                  :update (foreach-arg-row args-arrow-rdr
+                                           (query-indexer q-src wm-src upsert-idxer tx-opts q-args))
+                  :delete (foreach-arg-row args-arrow-rdr
+                                           (query-indexer q-src wm-src delete-idxer tx-opts q-args))
+                  :erase (foreach-arg-row args-arrow-rdr
+                                          (query-indexer q-src wm-src erase-idxer tx-opts q-args))
+                  :assert (foreach-arg-row args-arrow-rdr
+                                           (->assert-idxer q-src wm-src tx-opts q-args))
 
-                (zmatch (r/vector-zip compiled-query)
-                  [:insert query-opts inner-query]
-                  (foreach-arg-row args-arrow-rdr
-                                   (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                       (wrap-sql-args param-count)))
+                  :create-user (let [{:keys [username password]} q-args]
+                                 (update-pg-user! live-idx-tx tx-key username password))
 
-                  [:patch query-opts inner-query]
-                  (foreach-arg-row args-arrow-rdr
-                                   (-> (query-indexer q-src wm-src patch-idxer inner-query tx-opts query-opts)
-                                       (wrap-sql-args param-count)))
-
-                  [:update query-opts inner-query]
-                  (foreach-arg-row args-arrow-rdr
-                                   (-> (query-indexer q-src wm-src upsert-idxer inner-query tx-opts query-opts)
-                                       (wrap-sql-args param-count)))
-
-                  [:delete query-opts inner-query]
-                  (foreach-arg-row args-arrow-rdr
-                                   (-> (query-indexer q-src wm-src delete-idxer inner-query tx-opts query-opts)
-                                       (wrap-sql-args param-count)))
-
-                  [:erase query-opts inner-query]
-                  (foreach-arg-row args-arrow-rdr
-                                   (-> (query-indexer q-src wm-src erase-idxer inner-query tx-opts query-opts)
-                                       (wrap-sql-args param-count)))
-
-                  [:assert query-opts inner-query]
-                  (foreach-arg-row args-arrow-rdr
-                                   (-> (->assert-idxer q-src wm-src inner-query tx-opts query-opts)
-                                       (wrap-sql-args param-count)))
-
-                  [:create-user user password]
-                  (update-pg-user! live-idx-tx tx-key user password)
-
-                  [:alter-user user password]
-                  (update-pg-user! live-idx-tx tx-key user password)
+                  :alter-user (let [{:keys [username password]} q-args]
+                                (update-pg-user! live-idx-tx tx-key username password))
 
                   (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
                                         {:query query-str})))))))

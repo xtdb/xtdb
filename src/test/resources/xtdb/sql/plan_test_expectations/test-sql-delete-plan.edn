@@ -1,21 +1,19 @@
-[:delete
- {:table public/users}
+[:project
+ [_iid
+  {_valid_from
+   (greatest
+    _valid_from
+    (cast
+     (coalesce #xt/date "2020-05-01" xtdb/start-of-time)
+     [:timestamp-tz :micro "UTC"]))}
+  {_valid_to _valid_to}]
  [:project
-  [_iid
-   {_valid_from
-    (greatest
-     _valid_from
-     (cast
-      (coalesce #xt/date "2020-05-01" xtdb/start-of-time)
-      [:timestamp-tz :micro "UTC"]))}
-   {_valid_to _valid_to}]
-  [:project
-   [{_iid u.1/_iid}
-    {_valid_from u.1/_valid_from}
-    {_valid_to u.1/_valid_to}]
-   [:rename
-    u.1
-    [:scan
-     {:table public/users,
-      :for-valid-time [:in #xt/date "2020-05-01" nil]}
-     [_valid_to {id (= id ?_0)} _valid_from _iid]]]]]]
+  [{_iid u.1/_iid}
+   {_valid_from u.1/_valid_from}
+   {_valid_to u.1/_valid_to}]
+  [:rename
+   u.1
+   [:scan
+    {:table public/users,
+     :for-valid-time [:in #xt/date "2020-05-01" nil]}
+    [_valid_to {id (= id ?_0)} _valid_from _iid]]]]]

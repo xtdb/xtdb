@@ -511,6 +511,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (xt/submit-tx tu/*node* [[:sql "ERASE FROM foo WHERE foo._id = 1"]])
     (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL VALID_TIME")))
     (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME"))))
+
   (t/testing "zero width case"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, bar) VALUES (2, 1)"]
                              [:sql "DELETE FROM foo WHERE foo._id = 2"]])
@@ -1121,7 +1122,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             JOIN bar b ON f._id = b._id")))
 
   (tu/finish-block! tu/*node*)
-  (c/compact-all! tu/*node* nil)
+  (c/compact-all! tu/*node* #xt/duration "PT2S")
 
   ;; threw Field type mismatch
   (t/is (= [{:bar-name "baz", :name "foo", :xt/id 1}]
