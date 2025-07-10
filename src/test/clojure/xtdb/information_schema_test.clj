@@ -37,12 +37,10 @@
                                   (symbol table-schema table-name))
                                 (comp symbol :column-name)
                                 (comp read-string :data-type)))
-                 (tu/query-ra
-                  '[:select (or (= table_schema "public") (= table_schema "xt"))
-                    [:scan
-                     {:table information_schema/columns}
-                     [table_catalog table_schema table_name column_name data_type]]]
-                  {:node tu/*node*})))))
+                 (xt/q tu/*node*
+                       "SELECT table_catalog, table_schema, table_name, column_name, data_type
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public' OR table_schema = 'xt'")))))
 
 (deftest test-info-schema-tables
   (xt/submit-tx tu/*node* test-data)
@@ -59,9 +57,10 @@
               :table-schema "public",
               :table-name "baseball",
               :table-type "BASE TABLE"}}
-           (set (tu/query-ra '[:select (or (= table_schema "public") (= table_schema "xt"))
-                               [:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT table_catalog, table_schema, table_name, table_type
+                       FROM information_schema.tables
+                       WHERE table_schema = 'public' OR table_schema = 'xt'")))))
 
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
@@ -100,14 +99,12 @@
                    :attname attname,
                    :attisdropped false}))
 
-           (set (tu/query-ra '[:select (or (= attname "_id") (= attname "_valid_from")(= attname "_valid_to") (= attname "_system_from") (= attname "_system_to")
-                                           (= attname "col1") (= attname "col2")
-                                           (= attname "error") (= attname "system_time") (= attname "committed"))
-                               [:scan
-                                {:table pg_catalog/pg_attribute}
-                                [attrelid attname atttypid attlen attnum attisdropped
-                                 attnotnull atttypmod attidentity attgenerated]]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT attrelid, attname, atttypid, attlen, attnum, attisdropped,
+                              attnotnull, atttypmod, attidentity, attgenerated
+                       FROM pg_catalog.pg_attribute
+                       WHERE attname IN ('_id', '_valid_from', '_valid_to', '_system_from', '_system_to',
+                                         'col1', 'col2', 'error', 'system_time', 'committed')")))))
 
 (deftest test-pg-tables
   (xt/submit-tx tu/*node* test-data)
@@ -121,11 +118,10 @@
              {:schemaname "public",
               :tableowner "xtdb",
               :tablename "beanie"}}
-           (set (tu/query-ra '[:select (or (= schemaname "public") (= schemaname "xt"))
-                               [:scan
-                                {:table pg_catalog/pg_tables}
-                                [schemaname tablename tableowner tablespace]]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT schemaname, tablename, tableowner, tablespace
+                       FROM pg_catalog.pg_tables
+                       WHERE schemaname = 'public' OR schemaname = 'xt'")))))
 
 (deftest test-pg-class
   (xt/submit-tx tu/*node* test-data)
@@ -181,11 +177,10 @@
               :relpersistence "p",
               :relreplident "d",
               :reltoastrelid 0}}
-           (set (tu/query-ra '[:select (or (= relname "beanie") (= relname "baseball") (= relname "txs"))
-                               [:scan
-                                {:table pg_catalog/pg_class}
-                                [reltablespace reloftype relhastriggers relchecks relpersistence relhasrules relispartition relname relforcerowsecurity oid relnamespace relreplident relhasindex reltoastrelid relkind relam relrowsecurity]]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT reltablespace, reloftype, relhastriggers, relchecks, relpersistence, relhasrules, relispartition, relname, relforcerowsecurity, oid, relnamespace, relreplident, relhasindex, reltoastrelid, relkind, relam, relrowsecurity
+                       FROM pg_catalog.pg_class
+                       WHERE relname IN ('beanie', 'baseball', 'txs')")))))
 
 (deftest test-pg-type
   (xt/submit-tx tu/*node* test-data)
@@ -209,26 +204,26 @@
                    :typname typname,
                    :typnamespace 2125819141,
                    :typbasetype 0}))
-           (set (tu/query-ra '[:scan {:table pg_catalog/pg_type}
-                               [oid typname typnamespace typowner typtype typbasetype typnotnull typtypmod]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT oid, typname, typnamespace, typowner, typtype, typbasetype, typnotnull, typtypmod
+                       FROM pg_catalog.pg_type")))))
 (deftest test-pg-description
   (t/is (= []
-           (tu/query-ra '[:scan {:table pg_catalog/pg_desciption}
-                          [objoid classoid objsubid description]]
-                        {:node tu/*node*}))))
+           (xt/q tu/*node*
+                 "SELECT objoid, classoid, objsubid, description
+                  FROM pg_catalog.pg_description"))))
 
 (deftest test-pg-views
   (t/is (= []
-           (tu/query-ra '[:scan {:table pg_catalog/pg_views}
-                          [schemaname viewname viewowner]]
-                        {:node tu/*node*}))))
+           (xt/q tu/*node*
+                 "SELECT schemaname, viewname, viewowner
+                  FROM pg_catalog.pg_views"))))
 
 (deftest test-mat-views
   (t/is (= []
-           (tu/query-ra '[:scan {:table pg_catalog/pg_matviews}
-                          [schemaname matviewname matviewowner]]
-                        {:node tu/*node*}))))
+           (xt/q tu/*node*
+                 "SELECT schemaname, matviewname, matviewowner
+                  FROM pg_catalog.pg_matviews"))))
 
 (deftest test-sql-query
   (xt/submit-tx tu/*node* [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]
@@ -256,19 +251,24 @@
   (t/is (= #{{:table-name "txs", :table-schema "xt"}
              {:table-name "beanie", :table-schema "public"}
              {:table-name "baseball", :table-schema "public"}}
-           (set (tu/query-ra ' [:select (or (= table_schema "public") (= table_schema "xt"))
-                                [:scan {:table information_schema/tables} [table_name table_schema]]]
-                               {:node tu/*node*})))
+           (set (xt/q tu/*node*
+                      "SELECT table_name, table_schema
+                       FROM information_schema.tables
+                       WHERE table_schema = 'public' OR table_schema = 'xt'")))
         "Only requested cols are projected")
 
   (t/is (= #{{:table-name "baseball", :table-schema "public"}}
-           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name "baseball")}]]
-                             {:node tu/*node*})))
+           (set (xt/q tu/*node*
+                      "SELECT table_schema, table_name
+                       FROM information_schema.tables
+                       WHERE table_name = 'baseball'")))
         "col-preds work")
 
   (t/is (= #{{:table-name "beanie", :table-schema "public"}}
-           (set (tu/query-ra '[:scan {:table information_schema/tables} [table_schema {table_name (= table_name ?tn)}]]
-                             {:node tu/*node*, :args {:tn "beanie"}})))
+           (set (xt/q tu/*node*
+                      "SELECT table_schema, table_name
+                       FROM information_schema.tables
+                       WHERE table_name = 'beanie'")))
         "col-preds with params work")
 
 
@@ -278,9 +278,10 @@
   (t/is (= #{{:table-name "baseball" :table-schema "public"}
              {:table-name "beanie" :table-schema "public"}
              {:table-name "txs" :table-schema "xt"}}
-           (set (tu/query-ra '[:select (or (= table_schema "public") (= table_schema "xt"))
-                               [:scan {:table information_schema/tables} [table_name unknown_col table_schema]]]
-                             {:node tu/*node*})))
+           (set (xt/q tu/*node*
+                      "SELECT table_name, null AS unknown_col, table_schema
+                       FROM information_schema.tables
+                       WHERE table_schema = 'public' OR table_schema = 'xt'")))
         "cols that don't exist don't error/projected as nulls/absents"))
 
 (deftest test-pg-namespace
@@ -293,8 +294,9 @@
              {:nspowner 1376455703,
               :oid 1106696632,
               :nspname "public"}}
-           (set (tu/query-ra '[:scan {:table pg_catalog/pg_namespace} [oid nspname nspowner nspacl]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT oid, nspname, nspowner, nspacl
+                       FROM pg_catalog.pg_namespace")))))
 (deftest test-schemata
   (t/is (= #{{:catalog-name "xtdb",
               :schema-name "information_schema",
@@ -305,8 +307,9 @@
              {:catalog-name "xtdb",
               :schema-name "public",
               :schema-owner "xtdb"}}
-           (set (tu/query-ra '[:scan {:table information_schema/schemata} [catalog_name schema_name schema_owner]]
-                             {:node tu/*node*})))))
+           (set (xt/q tu/*node*
+                      "SELECT catalog_name, schema_name, schema_owner
+                       FROM information_schema.schemata")))))
 
 (deftest test-composite-columns
   (xt/submit-tx tu/*node* [[:put-docs :composite-docs {:xt/id 1 :set-column #{"hello world"}}]])
@@ -375,10 +378,11 @@
              :table-schema "pg_catalog",
              :table-name "pg_user",
              :table-type "BASE TABLE"}]
-           (tu/query-ra '[:select (or (and (= table_schema "information_schema") (= table_name "tables"))
-                                      (and (= table_schema "pg_catalog") (= table_name "pg_user")))
-                          [:scan {:table information_schema/tables} [table_catalog table_schema table_name table_type]]]
-                        {:node tu/*node*}))))
+           (xt/q tu/*node*
+                 "SELECT table_catalog, table_schema, table_name, table_type
+                  FROM information_schema.tables
+                  WHERE (table_schema = 'information_schema' AND table_name = 'tables')
+                     OR (table_schema = 'pg_catalog' AND table_name = 'pg_user')"))))
 
 (t/deftest trie-stats
   (xt/execute-tx tu/*node* [[:put-docs :foo
