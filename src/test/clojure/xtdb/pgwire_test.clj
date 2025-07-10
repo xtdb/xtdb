@@ -2845,3 +2845,18 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn)]
     ;; atm we just return 'xtdb' to keep pgjdbc happy
     (t/is (= "xtdb" (.getSQLKeywords (.getMetaData conn))))))
+
+(t/deftest param-in-begin-statement-blocks-4588
+  (with-open [conn (jdbc-conn)]
+    (t/is (= {:greeting "hello"}
+             (jdbc/execute-one! conn ["SELECT ? AS greeting" "hello"])))
+
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (TIMEZONE = 'Australia/Perth')"])
+    (t/is (= #xt/zone "Australia/Perth"
+             (.getZone (time/->zdt (:ts (jdbc/execute-one! conn ["SELECT CURRENT_TIMESTAMP ts"]))))))
+    (jdbc/execute! conn ["COMMIT"])
+
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (TIMEZONE = ?)" "Australia/Perth"])
+    (t/is (= #xt/zone "Australia/Perth"
+             (.getZone (time/->zdt (:ts (jdbc/execute-one! conn ["SELECT CURRENT_TIMESTAMP ts"]))))))
+    (jdbc/execute! conn ["COMMIT"])))
