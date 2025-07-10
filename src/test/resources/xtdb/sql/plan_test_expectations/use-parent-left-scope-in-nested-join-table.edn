@@ -5,8 +5,8 @@
   {r1.1/xs ?_sq_xs_2, r2.2/xs ?_sq_xs_4}
   [:mega-join
    []
-   [[:rename r1.1 [:scan {:table public/r1} [xs]]]
-    [:rename r2.2 [:scan {:table public/r2} [xs]]]]]
+   [[:rename r1.1 [:scan {:table #xt/table r1} [xs]]]
+    [:rename r2.2 [:scan {:table #xt/table r2} [xs]]]]]
   [:mega-join
    [{u1.4/i1 u2.6/i2}]
    [[:map [{u1.4/i1 (local-row-number)}] [:table {u1.4/x1 ?_sq_xs_2}]]

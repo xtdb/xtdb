@@ -2,4 +2,4 @@
  [{bar foo.1/bar}]
  [:rename
   foo.1
-  [:scan {:table public/foo, :for-valid-time [:in ?_0 ?_1]} [bar]]]]
+  [:scan {:table #xt/table foo, :for-valid-time [:in ?_0 ?_1]} [bar]]]]

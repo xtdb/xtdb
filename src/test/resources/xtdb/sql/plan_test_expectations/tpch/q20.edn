@@ -13,7 +13,7 @@
        [:rename
         s.1
         [:scan
-         {:table public/supplier}
+         {:table #xt/table supplier}
          [s_name s_address s_suppkey s_nationkey]]]
        [:project
         [{ps_suppkey ps.4/ps_suppkey}]
@@ -39,12 +39,12 @@
                [:rename
                 ps.4
                 [:scan
-                 {:table public/partsupp}
+                 {:table #xt/table partsupp}
                  [ps_partkey ps_availqty ps_suppkey]]]]
               [:rename
                l.8
                [:scan
-                {:table public/lineitem}
+                {:table #xt/table lineitem}
                 [{l_shipdate
                   (and
                    (<
@@ -61,10 +61,10 @@
            [:rename
             p.6
             [:scan
-             {:table public/part}
+             {:table #xt/table part}
              [p_partkey {p_name (like p_name "forest%")}]]]]]]]]
       [:rename
        n.2
        [:scan
-        {:table public/nation}
+        {:table #xt/table nation}
         [{n_name (= n_name "CANADA")} n_nationkey]]]]]]]]]

@@ -14,5 +14,5 @@
  [:rename
   foo.1
   [:scan
-   {:table public/foo, :for-valid-time :all-time}
+   {:table #xt/table foo, :for-valid-time :all-time}
    [_valid_to baz _system_time _valid_from _valid_time _iid]]]]

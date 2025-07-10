@@ -3,7 +3,7 @@
  [:apply
   :single-join
   {c.1/_id ?_sq__id_3}
-  [:rename c.1 [:scan {:table public/customers} [_id name]]]
+  [:rename c.1 [:scan {:table #xt/table customers} [_id name]]]
   [:group-by
    [{_sq_2 (array_agg _sq_2)}]
    [:project
@@ -13,5 +13,5 @@
      [:rename
       o.3
       [:scan
-       {:table public/orders}
+       {:table #xt/table orders}
        [{customer_id (= customer_id ?_sq__id_3)} _id value]]]]]]]]

@@ -7,12 +7,12 @@
    {y.2/biz ?_sq_biz_5, x.1/foo ?_sq_foo_4}
    [:mega-join
     []
-    [[:rename x.1 [:scan {:table public/x} [foo]]]
-     [:rename y.2 [:scan {:table public/y} [biz]]]]]
+    [[:rename x.1 [:scan {:table #xt/table x} [foo]]]
+     [:rename y.2 [:scan {:table #xt/table y} [biz]]]]]
    [:project
     [{bar z.4/bar}]
     [:rename
      z.4
      [:scan
-      {:table public/z}
+      {:table #xt/table z}
       [{baz (= baz ?_sq_biz_5)} {bar (= bar ?_sq_foo_4)}]]]]]]]

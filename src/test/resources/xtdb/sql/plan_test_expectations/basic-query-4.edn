@@ -4,7 +4,7 @@
   [{si.1/star_name m.3/name}]
   [[:rename
     si.1
-    [:scan {:table public/stars_in} [star_name movie_title]]]
+    [:scan {:table #xt/table stars_in} [star_name movie_title]]]
    [:rename
     m.3
     [:project
@@ -12,5 +12,5 @@
      [:rename
       ms.2
       [:scan
-       {:table public/movie_star}
+       {:table #xt/table movie_star}
        [{birthdate (= birthdate 1960)} name]]]]]]]]

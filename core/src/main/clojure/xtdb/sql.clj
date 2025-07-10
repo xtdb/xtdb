@@ -9,6 +9,7 @@
             [xtdb.error :as err]
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
+            [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
@@ -319,7 +320,7 @@
                             (->col-sym (str unique-table-alias) (str col)))))))
 
   PlanRelation
-  (plan-rel [{{:keys [valid-time-default sys-time-default]} :env, :as this}]
+  (plan-rel [{{:keys [valid-time-default sys-time-default]} :env}]
     (let [reqd-cols (set (.keySet !reqd-cols))
           valid-time-col? (contains? reqd-cols '_valid_time)
           sys-time-col? (contains? reqd-cols '_system_time)
@@ -330,10 +331,7 @@
           for-st (or for-system-time sys-time-default)]
 
       [:rename unique-table-alias
-       (cond-> [:scan (cond-> {:table (symbol (if schema-name
-                                                (str schema-name)
-                                                "public")
-                                              (str table-name))}
+       (cond-> [:scan (cond-> {:table (table/->ref (or schema-name 'public) table-name)}
                         for-vt (assoc :for-valid-time for-vt)
                         for-st (assoc :for-system-time for-st))
                 scan-cols]
@@ -2568,7 +2566,7 @@
   PlanRelation
   (plan-rel [_]
     [:rename unique-table-alias
-     [:scan (cond-> {:table (symbol table-name)}
+     [:scan (cond-> {:table (table/->ref (symbol table-name))}
               for-valid-time (assoc :for-valid-time for-valid-time))
       (vec (.keySet !reqd-cols))]]))
 
@@ -2629,7 +2627,7 @@
   PlanRelation
   (plan-rel [_]
     [:rename unique-table-alias
-     [:scan {:table (symbol table-name)
+     [:scan {:table (table/->ref (symbol table-name))
              :for-system-time :all-time
              :for-valid-time :all-time}
       (vec (.keySet !reqd-cols))]]))
@@ -2672,7 +2670,7 @@
          [:project [_iid _valid_from _valid_to
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
           [:order-by [[_iid] [_valid_from]]
-           [:scan {:table ~table,
+           [:scan {:table ~(table/->ref table)
                    :for-valid-time [:in ~valid-from ~valid-to]}
             [_iid _valid_from _valid_to
              ~@known-cols]]]]]]]])))

@@ -37,23 +37,23 @@
         {s.1/s_suppkey l.2/l_suppkey}]
        [[:rename
          n2.6
-         [:scan {:table public/nation} [n_name n_nationkey]]]
+         [:scan {:table #xt/table nation} [n_name n_nationkey]]]
         [:rename
          n1.5
-         [:scan {:table public/nation} [n_name n_nationkey]]]
+         [:scan {:table #xt/table nation} [n_name n_nationkey]]]
         [:rename
          c.4
-         [:scan {:table public/customer} [c_custkey c_nationkey]]]
+         [:scan {:table #xt/table customer} [c_custkey c_nationkey]]]
         [:rename
          o.3
-         [:scan {:table public/orders} [o_orderkey o_custkey]]]
+         [:scan {:table #xt/table orders} [o_orderkey o_custkey]]]
         [:rename
          s.1
-         [:scan {:table public/supplier} [s_suppkey s_nationkey]]]
+         [:scan {:table #xt/table supplier} [s_suppkey s_nationkey]]]
         [:rename
          l.2
          [:scan
-          {:table public/lineitem}
+          {:table #xt/table lineitem}
           [l_orderkey
            {l_shipdate
             (between

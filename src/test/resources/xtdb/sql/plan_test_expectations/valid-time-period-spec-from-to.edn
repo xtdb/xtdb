@@ -3,7 +3,7 @@
  [:rename
   foo.1
   [:scan
-   {:table public/foo,
+   {:table #xt/table foo,
     :for-valid-time
     [:in #xt/date "2999-01-01" #xt/zdt "3000-01-01T00:00Z"]}
    [bar]]]]

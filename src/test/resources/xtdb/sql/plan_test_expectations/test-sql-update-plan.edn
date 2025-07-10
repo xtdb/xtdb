@@ -20,6 +20,6 @@
   [:rename
    u.1
    [:scan
-    {:table public/users,
+    {:table #xt/table users,
      :for-valid-time [:in #xt/date "2021-07-01" nil]}
     [_valid_to last_name {id (= id ?_0)} _valid_from _iid]]]]]

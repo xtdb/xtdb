@@ -457,7 +457,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                                {age age}
                                {_valid_from _valid_from}
                                {_valid_to _valid_to}]
-                     [:scan {:table public/people, :for-valid-time nil, :for-system-time nil}
+                     [:scan {:table #xt/table people
+                             :for-valid-time nil, :for-system-time nil}
                       [{_id (= _id ?_0)} name age _valid_from _valid_to]]]}]
            (-> (xt/q tu/*node*
                      [(format "EXPLAIN XTQL $$ %s $$"
@@ -469,7 +470,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                                {_valid_from people.1/_valid_from}
                                {_valid_to people.1/_valid_to}]
                      [:rename people.1
-                      [:scan {:table public/people}
+                      [:scan {:table #xt/table people}
                        [_valid_from {_id (= _id ?_0)} age name _valid_to]]]]}]
            (-> (xt/q tu/*node*
                      ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"

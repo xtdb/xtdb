@@ -14,7 +14,7 @@
     _valid_to
     {_valid_time (period _valid_from _valid_to)}]
    [:scan
-    {:table public/foo,
+    {:table #xt/table foo,
      :for-system-time
      [:in #xt/date "2001-01-01" #xt/date "2002-01-01"]}
     [{_valid_from

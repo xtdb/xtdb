@@ -14,7 +14,7 @@
     [[:rename
       l.1
       [:scan
-       {:table public/lineitem}
+       {:table #xt/table lineitem}
        [{l_shipdate
          (and
           (<
@@ -26,4 +26,6 @@
         l_extendedprice
         l_discount
         l_partkey]]]
-     [:rename p.2 [:scan {:table public/part} [p_partkey p_type]]]]]]]]
+     [:rename
+      p.2
+      [:scan {:table #xt/table part} [p_partkey p_type]]]]]]]]

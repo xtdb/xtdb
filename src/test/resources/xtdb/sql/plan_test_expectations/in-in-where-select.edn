@@ -4,5 +4,7 @@
   [{_sq_2 true}]
   [:semi-join
    [{x.1/z z}]
-   [:rename x.1 [:scan {:table public/x} [y z]]]
-   [:project [{z y.3/z}] [:rename y.3 [:scan {:table public/y} [z]]]]]]]
+   [:rename x.1 [:scan {:table #xt/table x} [y z]]]
+   [:project
+    [{z y.3/z}]
+    [:rename y.3 [:scan {:table #xt/table y} [z]]]]]]]

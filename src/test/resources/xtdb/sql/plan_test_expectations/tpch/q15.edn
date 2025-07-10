@@ -21,7 +21,7 @@
       [[:rename
         s.4
         [:scan
-         {:table public/supplier}
+         {:table #xt/table supplier}
          [s_name s_address s_phone s_suppkey]]]
        [:rename
         revenue.5
@@ -34,7 +34,7 @@
            [:rename
             l.1
             [:scan
-             {:table public/lineitem}
+             {:table #xt/table lineitem}
              [{l_shipdate
                (and
                 (<
@@ -61,7 +61,7 @@
            [:rename
             l.1
             [:scan
-             {:table public/lineitem}
+             {:table #xt/table lineitem}
              [{l_shipdate
                (and
                 (<

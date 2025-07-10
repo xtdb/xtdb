@@ -41,11 +41,11 @@
     (let [block-cat (block-cat/<-node node)]
       (letfn [(test-query-ivan [expected]
                 (t/is (= expected
-                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id name {ordinal (> ordinal 1)}]]
+                         (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id name {ordinal (> ordinal 1)}]]
                                            {:node node}))))
 
                 (t/is (= expected
-                         (set (tu/query-ra '[:scan {:table public/xt_docs} [_id name {ordinal (> ordinal ?ordinal)}]]
+                         (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id name {ordinal (> ordinal ?ordinal)}]]
                                            {:node node, :args {:ordinal 1}})))))]
 
         (t/is (= 1 (.getCurrentBlockIndex block-cat)))
@@ -134,11 +134,11 @@
                   (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan {:table public/xt_docs} [{name (= name "Ivan")}]]
+               (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [{name (= name "Ivan")}]]
                                  {:node node}))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan {:table public/xt_docs} [{name (= name ?name)}]]
+               (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [{name (= name ?name)}]]
                                  {:node node, :args {:name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
@@ -147,7 +147,7 @@
         tx2 (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
         tt2 (.getSystemTime tx2)]
     (letfn [(q [& temporal-constraints]
-              (->> (tu/query-ra [:scan '{:table public/xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
+              (->> (tu/query-ra [:scan '{:table #xt/table xt_docs, :for-system-time :all-time, :for-valid-time :all-time}
                                  (into '[last_updated] temporal-constraints)]
                                 {:node tu/*node*, :args {:system-time1 tt1, :system-time2 tt2}})
                    (into #{} (map :last-updated))))]

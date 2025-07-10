@@ -24,15 +24,15 @@
         [[:rename
           l.1
           [:scan
-           {:table public/lineitem}
+           {:table #xt/table lineitem}
            [l_extendedprice l_quantity l_partkey]]]
          [:rename
           p.2
           [:scan
-           {:table public/part}
+           {:table #xt/table part}
            [{p_brand (= p_brand "Brand#23")}
             p_partkey
             {p_container (= p_container "MED BOX")}]]]]]]
       [:rename
        l.4
-       [:scan {:table public/lineitem} [l_quantity l_partkey]]]]]]]]]
+       [:scan {:table #xt/table lineitem} [l_quantity l_partkey]]]]]]]]]

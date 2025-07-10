@@ -14,7 +14,7 @@
       _system_from
       _system_to
       {_system_time (period _system_from _system_to)}]
-     [:scan {:table public/foo} [name _system_from _system_to]]]]
+     [:scan {:table #xt/table foo} [name _system_from _system_to]]]]
    [:rename
     bar.2
     [:project
@@ -22,4 +22,4 @@
       _system_from
       _system_to
       {_system_time (period _system_from _system_to)}]
-     [:scan {:table public/bar} [name _system_from _system_to]]]]]]]
+     [:scan {:table #xt/table bar} [name _system_from _system_to]]]]]]]

@@ -2,9 +2,9 @@
  [{y x.1/y} {z y.4/z}]
  [:left-outer-join
   [(= y.4/z x.1/y)]
-  [:rename x.1 [:scan {:table public/x} [y]]]
+  [:rename x.1 [:scan {:table #xt/table x} [y]]]
   [:rename
    y.4
    [:project
     [{z z.2/z}]
-    [:rename z.2 [:select true [:scan {:table public/z} [z]]]]]]]]
+    [:rename z.2 [:select true [:scan {:table #xt/table z} [z]]]]]]]]

@@ -3,7 +3,7 @@
  [:rename
   foo.1
   [:scan
-   {:table public/foo,
+   {:table #xt/table foo,
     :for-valid-time :all-time,
     :for-system-time :all-time}
    []]]]

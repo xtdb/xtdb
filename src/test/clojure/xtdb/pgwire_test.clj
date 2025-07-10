@@ -2483,7 +2483,7 @@ ORDER BY 1,2;")
   (let [sql "EXPLAIN SELECT _id FROM foo"
         expected-plan '[:project [{_id foo.1/_id}]
                         [:rename foo.1
-                         [:scan {:table public/foo}
+                         [:scan {:table #xt/table foo}
                           [_id]]]]]
     (with-open [conn (jdbc-conn)]
       (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])

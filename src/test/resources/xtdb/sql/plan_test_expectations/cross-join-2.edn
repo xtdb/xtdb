@@ -2,6 +2,6 @@
  [{c1 c.3/c1}]
  [:mega-join
   []
-  [[:rename a.1 [:scan {:table public/a} []]]
-   [:rename b.2 [:scan {:table public/b} []]]
-   [:rename c.3 [:scan {:table public/c} [c1]]]]]]
+  [[:rename a.1 [:scan {:table #xt/table a} []]]
+   [:rename b.2 [:scan {:table #xt/table b} []]]
+   [:rename c.3 [:scan {:table #xt/table c} [c1]]]]]]

@@ -523,27 +523,23 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest test-explain-plan-sql
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users (_id, foo, a, b) VALUES (1, 2, 3, 4)"]])
 
-  (t/is (= [{:plan (str/trim "
-[:project
- [{_id u.1/_id} {foo u.1/foo}]
- [:rename
-  u.1
-  [:select (= (+ a b) 12) [:scan {:table public/users} [a _id foo b]]]]]
-")}]
+  (t/is (= [{:plan '[:project [{_id u.1/_id} {foo u.1/foo}]
+                     [:rename u.1
+                      [:select (= (+ a b) 12)
+                       [:scan {:table #xt/table users}
+                        [a _id foo b]]]]]}]
            (-> (xt/q tu/*node*
                      "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12")
-               (update-in [0 :plan] str/trim))))
+               (update-in [0 :plan] read-string))))
 
-  (t/is (= [{:plan (str/trim "
-[:project
- [{_id u.1/_id} {foo u.1/foo}]
- [:rename
-  u.1
-  [:select (= (+ a b) 12) [:scan {:table public/users} [a _id foo b]]]]]
-")}]
+  (t/is (= [{:plan '[:project [{_id u.1/_id} {foo u.1/foo}]
+                     [:rename u.1
+                      [:select (= (+ a b) 12)
+                       [:scan {:table #xt/table users}
+                        [a _id foo b]]]]]}]
            (-> (xt/q tu/*node*
                      "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12")
-               (update-in [0 :plan] str/trim)))))
+               (update-in [0 :plan] read-string)))))
 
 (t/deftest test-normalising-nested-cols-2483
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])
@@ -806,7 +802,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:col 904292726}]
            (tu/query-ra
-            '[:scan {:table public/bar}
+            '[:scan {:table #xt/table bar}
               [{col (= col (cast "bar" :regclass))}]]
             {:node tu/*node*}))
         "scan pred"))
@@ -1030,8 +1026,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             [:semi-join [{_id vals/_column_1}]
                              [:rename {bar/_id _id}
                               [:join [{foo/_id bar/foo}]
-                               [:rename foo [:scan {:table public/foo} [_id]]]
-                               [:rename bar [:scan {:table public/bar} [_id foo]]]]]
+                               [:rename foo [:scan {:table #xt/table foo} [_id]]]
+                               [:rename bar [:scan {:table #xt/table bar} [_id foo]]]]]
                              [:rename vals
                               [:table [_column_1]
                                [{:_column_1 "bar1"}]]]]]
@@ -1059,8 +1055,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:xt/id :toto, :col 3}]
            (tu/query-ra
             '[:join [{col col}]
-              [:scan {:table public/xt_docs} [_id {col (= col 3)}]]
-              [:scan {:table public/xt_docs} [_id col]]]
+              [:scan {:table #xt/table xt_docs} [_id {col (= col 3)}]]
+              [:scan {:table #xt/table xt_docs} [_id col]]]
             {:node tu/*node*}))))
 
 (deftest test-decimal-support

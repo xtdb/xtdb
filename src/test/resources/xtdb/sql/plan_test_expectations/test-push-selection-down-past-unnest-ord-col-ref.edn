@@ -7,4 +7,4 @@
    {:ordinality-column uvs.3/ord}
    [:map
     [{unnest f.1/vs}]
-    [:rename f.1 [:scan {:table public/foo} [vs _id]]]]]]]
+    [:rename f.1 [:scan {:table #xt/table foo} [vs _id]]]]]]]

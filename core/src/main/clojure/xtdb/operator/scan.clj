@@ -8,6 +8,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.object-store
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -32,7 +33,7 @@
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
-(s/def ::table symbol?)
+(s/def ::table ::table/ref)
 
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
@@ -49,9 +50,10 @@
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
-    [table (case col-tag
-             :column col-arg
-             :select (key (first col-arg)))]))
+    [(table/ref->sym table)
+     (case col-tag
+       :column col-arg
+       :select (key (first col-arg)))]))
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
@@ -190,7 +192,8 @@
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
-        (let [col-names (->> columns
+        (let [table (table/ref->sym table)
+              col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
                                               (case col-type
                                                 :column arg

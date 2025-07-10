@@ -4,12 +4,12 @@
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
+            [xtdb.table :as table]
             xtdb.tx-ops
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
-           (xtdb.util NormalForm)
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Unify Unnest Where With Without)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -424,7 +424,7 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (symbol (NormalForm/normalTableName table))
+    (-> [:scan {:table (table/->ref table)
                 :for-valid-time (plan-temporal-filter for-valid-time)
                 :for-system-time (plan-temporal-filter for-system-time)}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
