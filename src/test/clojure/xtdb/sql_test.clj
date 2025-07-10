@@ -2478,7 +2478,10 @@ UNION ALL
                              (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, CURRENT_TIME - INTERVAL 'P1D', 'foo')"])))
         ex-msg (ex-message ex)]
     (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
-    (t/is (str/includes? ex-msg "Cannot INSERT _system_from column"))))
+    (t/is (str/includes? ex-msg "Cannot INSERT _system_from column")))
+
+  (t/is (anomalous? [:incorrect nil #"Cannot put documents with columns: #\{\"_system_from\"\}"]
+                    (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, _system_from: TIMESTAMP '2024-01-01T00:00:00Z'}"]))))
 
 (t/deftest can-not-write-to-reserved-tables
   (t/testing "submit side"

@@ -206,3 +206,44 @@ describe("Postgres.js handles params in BEGIN", function() {
     }
   })
 })
+
+// FIXME: test case for #4550, bug looks like it's upstream.
+// see that card for more info
+
+// describe("INSERT...RECORDS with _system_from should fail, #4550", function() {
+//   it("should throw error when using _system_from in RECORDS", async () => {
+//     const conn = await sql.reserve();
+
+//     try {
+//       const record1 = { _id: 1, v: 1 };
+//       await conn`INSERT INTO system RECORDS ${conn.typed.transit(record1)}`;
+//       const result = await conn`SELECT * FROM system`;
+//       assert.deepStrictEqual([{_id: 1, v: 1}], [...result]);
+
+//       await conn`INSERT INTO system RECORDS {_id: 2, v: 1, _system_from: DATE '2024-01-01'}`;
+//       await assert.rejects(
+//         async () => {
+//           await conn`INSERT INTO system RECORDS {_id: 2, v: 1, _system_from: DATE '2024-01-01'}`;
+//         },
+//         /Cannot put documents with columns.*_system_from/
+//       );
+
+//       assert.deepStrictEqual([{_id: 1, v: 1}], [...await conn`SELECT * FROM system`]);
+
+//       const record2 = {
+//         _id: 3,
+//         v: '1',
+//         _system_from: new Date('2024-01-01T00:00:00'),
+//       };
+
+//       await assert.rejects(
+//         async () => {
+//           await conn`INSERT INTO system RECORDS ${conn.typed.transit(record2)}`;
+//         },
+//         /Cannot put documents with columns.*_system_from/
+//       );
+//     } finally {
+//       await conn.release()
+//     }
+//   })
+// })

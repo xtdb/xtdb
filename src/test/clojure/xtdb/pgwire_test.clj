@@ -2860,3 +2860,16 @@ ORDER BY 1,2;")
     (t/is (= #xt/zone "Australia/Perth"
              (.getZone (time/->zdt (:ts (jdbc/execute-one! conn ["SELECT CURRENT_TIMESTAMP ts"]))))))
     (jdbc/execute! conn ["COMMIT"])))
+
+(t/deftest disallow-inserting-system-from-with-records-4550
+  (with-open [conn (jdbc-conn)]
+    (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
+                            (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1, _system_from: TIMESTAMP '2024-01-01T00:00:00Z'}"])))
+    
+    (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
+                            (jdbc/execute! conn ["INSERT INTO docs RECORDS ?"
+                                                 {:_id 2, :_system_from #inst "2024-01-01T00:00:00Z"}])))
+
+    (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
+                            (jdbc/execute! conn ["INSERT INTO docs RECORDS ?"
+                                                 {"_id" 2, "_system_from" #inst "2024-01-01T00:00:00Z"}])))))
