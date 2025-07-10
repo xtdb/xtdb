@@ -325,7 +325,8 @@
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
-                     join-type]
+                     join-type
+                     with-nil-row?]
   ICursor
   (tryAdvance [this c]
     (build-phase build-cursor rel-map pushdown-blooms)
@@ -349,11 +350,14 @@
                                               (.accept c out-rel)))))))))
            (aget advanced? 0))
 
-         (when (= ::full-outer-join join-type)
+         (when matched-build-idxs
            (let [build-rel (.getBuiltRelation rel-map)
                  build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
-             (.remove unmatched-build-idxs emap/nil-row-idx)
+
+             ;; remove nil row, if it is present
+             (when with-nil-row?
+               (.remove unmatched-build-idxs emap/nil-row-idx))
 
              (when-not (.isEmpty unmatched-build-idxs)
                ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
@@ -479,12 +483,12 @@
         ->left-project-cursor (fn [opts] (project/->project-cursor opts (->left-cursor opts) left-projections))
         ->right-project-cursor (fn [opts] (project/->project-cursor opts (->right-cursor opts) right-projections))
 
-        [build-fields build-key-col-names ->build-cursor 
+        [build-fields build-key-col-names ->build-cursor
          probe-fields probe-key-col-names ->probe-cursor]
         (case build-side
-          :left [left-fields-proj left-key-col-names ->left-project-cursor 
+          :left [left-fields-proj left-key-col-names ->left-project-cursor
                  right-fields-proj right-key-col-names ->right-project-cursor]
-          :right [right-fields-proj right-key-col-names ->right-project-cursor 
+          :right [right-fields-proj right-key-col-names ->right-project-cursor
                   left-fields-proj left-key-col-names ->left-project-cursor])
 
         merged-fields (merge-fields-fn left-fields-proj right-fields-proj)
@@ -512,7 +516,7 @@
                      (project/->project-cursor opts
                                                (if (= join-type ::mark-join)
                                                  (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                 (JoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type))
+                                                 (JoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type with-nil-row?))
                                                output-projections))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
@@ -521,7 +525,7 @@
 (defn emit-inner-join-expr [join-expr args]
   (emit-join-expr join-expr args
                   {:build-side :left
-                   :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields right-fields)) 
+                   :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields right-fields))
                    :join-type ::inner-join
                    :pushdown-blooms? true}))
 
@@ -530,14 +534,14 @@
 
 (defmethod lp/emit-expr :left-outer-join [join-expr args]
   (emit-join-expr-and-children join-expr args
-                               {:build-side :right 
+                               {:build-side :right
                                 :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
                                 :join-type ::left-outer-join
                                 :with-nil-row? true}))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
   (emit-join-expr-and-children join-expr args
-                               {:build-side :left 
+                               {:build-side :left
                                 :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
                                 :join-type ::full-outer-join
                                 :with-nil-row? true
@@ -545,21 +549,21 @@
 
 (defmethod lp/emit-expr :semi-join [join-expr args]
   (emit-join-expr-and-children join-expr args
-                               {:build-side :right 
+                               {:build-side :right
                                 :merge-fields-fn (fn [left-fields _] left-fields)
                                 :join-type ::semi-join
                                 :pushdown-blooms? true}))
 
 (defmethod lp/emit-expr :anti-join [join-expr args]
   (emit-join-expr-and-children join-expr args
-                               {:build-side :right 
+                               {:build-side :right
                                 :merge-fields-fn (fn [left-fields _] left-fields)
                                 :join-type ::anti-semi-join}))
 
 (defmethod lp/emit-expr :mark-join [{:keys [mark-spec] :as join-expr} args]
   (let [[mark-col-name mark-condition] (first mark-spec)]
     (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
-                                 {:build-side :right 
+                                 {:build-side :right
                                   :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/col-type->field mark-col-name [:union #{:null :bool}])))
                                   :mark-col-name mark-col-name
                                   :join-type ::mark-join
@@ -568,7 +572,7 @@
 
 (defmethod lp/emit-expr :single-join [join-expr args]
   (emit-join-expr-and-children join-expr args
-                               {:build-side :right 
+                               {:build-side :right
                                 :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
                                 :join-type ::single-join
                                 :with-nil-row? true}))
