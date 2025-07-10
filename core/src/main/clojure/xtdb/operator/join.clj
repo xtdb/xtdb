@@ -532,12 +532,24 @@
 (defmethod lp/emit-expr :join [join-expr args]
   (emit-inner-join-expr (emit-join-children join-expr args) args))
 
+(defn determine-build-side [left right default-side]
+  (let [^long left-row-count (or (:row-count (:stats left)) Long/MAX_VALUE)
+        ^long right-row-count (or (:row-count (:stats right)) Long/MAX_VALUE)]
+    (cond
+      (< left-row-count right-row-count) :left
+      (< right-row-count left-row-count) :right
+      :else default-side)))
+
 (defmethod lp/emit-expr :left-outer-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
-                                :join-type ::left-outer-join
-                                :with-nil-row? true}))
+  (let [{:keys [left right] :as emitted-join-children} (emit-join-children join-expr args)
+        build-side (determine-build-side left right :right)]
+    (emit-join-expr emitted-join-children
+                    args
+                    {:build-side build-side
+                     :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                     :join-type ::left-outer-join
+                     :with-nil-row? (when (= build-side :right) true)
+                     :matched-build-idxs? (when (= build-side :left) true)})))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
   (emit-join-expr-and-children join-expr args
