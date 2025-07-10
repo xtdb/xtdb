@@ -61,13 +61,17 @@ The following functions are available for retrieving the current time:
 `CURRENT_TIMESTAMP` | `CURRENT_TIMESTAMP(precision)`::
 returns the current wall-clock date/time as a timestamp with time-zone.
 `CURRENT_DATE` | `CURRENT_DATE(precision)`::
-returns the current UTC wall-clock date.
+returns the current UTC wall-clock date (without time-zone).
 `CURRENT_TIME` | `CURRENT_TIME(precision)`::
-returns the current UTC wall-clock time.
+returns the current UTC wall-clock time (without time-zone).
 `LOCAL_TIMESTAMP` | `LOCAL_TIMESTAMP(precision)`::
 returns the current wall-clock date/time as a local timestamp (without time-zone), as in the query's time-zone.
+`LOCAL_DATE` | `LOCAL_DATE(precision)`::
+returns the current wall-clock date (without time-zone), as in the query's time-zone.
 `LOCAL_TIME` | `LOCAL_TIME(precision)`::
 returns the current wall-clock time as a local time (without time-zone), as in the query's time-zone.
+
+`LOCALDATE`, `LOCALTIME` and `LOCALTIMESTAMP` are aliases for their respective functions above, for SQL spec compliance.
 
 == Periods
 

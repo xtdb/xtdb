@@ -1,5 +1,6 @@
 (ns xtdb.sql.temporal-test
   (:require [clojure.test :as t]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]))
@@ -332,3 +333,29 @@
   (t/is (= [{:xt/id 1, :version 2, :xt/system-from #xt/zdt "2001-01-01T00:00Z[UTC]"}
             {:xt/id 1, :version 1, :xt/system-from #xt/zdt "2000-01-01T00:00Z[UTC]", :xt/system-to #xt/zdt "2001-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT *, _system_from, _system_to FROM users FOR SYSTEM_TIME FROM NULL TO NULL" {:current-time #inst "2020"}))))
+
+(t/deftest current-date-tz-4587
+  (with-open [conn (jdbc/get-connection tu/*node*)]
+    (let [midnight-perth-in-utc "2020-01-01T16:00:00Z"
+          with-clock-time #(jdbc/execute-one! conn [(str "SETTING CLOCK_TIME = '" midnight-perth-in-utc "' " %)])]
+      (jdbc/execute! conn ["SET TIME ZONE 'UTC'"])
+      ;; In UTC I get the expected date
+      (t/is (= {:d #xt/date "2020-01-01"}
+               (with-clock-time "SELECT CURRENT_DATE AS d")))
+
+      (t/is (= {:d #xt/date "2020-01-01"}
+               (with-clock-time "SELECT LOCAL_DATE AS d")))
+
+      (jdbc/execute! conn ["SET TIME ZONE 'Australia/Perth'"])
+
+      (t/is (= {:d #xt/date "2020-01-01"}
+               (with-clock-time "SELECT CURRENT_DATE AS d"))
+            "CURRENT_DATE returns UTC")
+
+      (t/is (= {:d #xt/date "2020-01-02"}
+               (with-clock-time "SELECT LOCAL_DATE AS d"))
+            "LOCAL_DATE returns the local date in the current time zone")
+
+      (t/is (= {:d #xt/date "2020-01-02"} ; Succeeds!
+               (with-clock-time "SELECT CURRENT_TIMESTAMP::date AS d"))
+            "Casting works because CURRENT_TIMESTAMP is TZ-aware."))))

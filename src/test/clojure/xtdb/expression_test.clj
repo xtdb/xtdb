@@ -1944,7 +1944,7 @@
                   "current-timestamp")
 
             ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
-            ;; I've opted to return these as UTC to differentiate them from `local-time` and `local-timestamp` below.
+            ;; I've opted to return these as UTC to differentiate them from `local-date`, `local-time` and `local-timestamp` below.
             (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
                       :res-type [:date :day]}
                      (project-fn '(current-date)))
@@ -1954,6 +1954,11 @@
                       :res-type [:time-local :micro]}
                      (project-fn '(current-time)))
                   "current-time")
+
+            (t/is (= {:res [(.toLocalDate la-zdt-micros)]
+                      :res-type [:date :day]}
+                     (project-fn '(local-date)))
+                  "local-date")
 
             (t/is (= {:res [(.toLocalTime la-zdt-micros)]
                       :res-type [:time-local :micro]}

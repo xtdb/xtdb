@@ -1596,9 +1596,8 @@
   (current-timestamp precision))
 
 (defmethod expr/codegen-call [:current_date] [_]
-  ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
-  ;; but Arrow expects Dates to be in UTC.
-  ;; we then turn DateDays into LocalDates, which confuses things further.
+  ;; departure from the spec - this returns the current date in UTC, not the local time zone.
+  ;; Arrow doesn't support TZ-aware dates
   {:return-type [:date :day]
    :->call-code (fn [_]
                   `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
@@ -1624,6 +1623,13 @@
 (defmethod expr/codegen-call [:current_time :int] [{[{precision :literal}] :args}]
   (assert (integer? precision) "precision must be literal for now")
   (current-time precision))
+
+(defmethod expr/codegen-call [:local_date] [_]
+  {:return-type [:date :day]
+   :->call-code (fn [_]
+                  `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
+                             (.toLocalDate)
+                             (.toEpochDay))))})
 
 (defn- local-timestamp [^long precision]
   (let [precision (bound-precision precision)]

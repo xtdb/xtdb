@@ -1547,6 +1547,7 @@
     (-> '(snapshot_time)
         (vary-meta assoc :identifier 'snapshot_time)))
 
+  (visitLocalDateFunction [_ _] '(local-date))
   (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
   (visitLocalTimestampFunction [_ ctx] (fn-with-precision 'local-timestamp (.precision ctx)))
 

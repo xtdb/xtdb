@@ -336,7 +336,7 @@ exprPrimary
     | currentInstantFunction # CurrentInstantFunction0
     | 'CURRENT_SETTING' '(' expr ')' #CurrentSettingFunction
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
-    | 'LOCALTIME' ('(' precision ')')? # LocalTimeFunction
+    | LOCAL_TIME ('(' precision ')')? # LocalTimeFunction
     | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
     | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource (',' dateBinOrigin)? ')' # DateBinFunction
     | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
@@ -350,7 +350,8 @@ currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
     | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision? ')')? # CurrentTimestampFunction
     | 'SNAPSHOT_TIME' ('(' ')')? # SnapshotTimeFunction
-    | 'LOCALTIMESTAMP' ('(' precision ')')? # LocalTimestampFunction
+    | LOCAL_DATE ( '(' ')' )? # LocalDateFunction
+    | LOCAL_TIMESTAMP ('(' precision ')')? # LocalTimestampFunction
     ;
 
 booleanValue : 'TRUE' | 'FALSE' | 'UNKNOWN' ;
