@@ -190,3 +190,19 @@ describe("Postgres.js handles cached-query-must-not-change-result-type errors", 
     }
   })
 })
+
+describe("Postgres.js handles params in BEGIN", function() {
+  it("allows params in BEGIN", async () => {
+    // Needed for begin
+    await sql`SELECT 1`;
+    const conn = await sql.reserve();
+
+    try {
+      await conn`BEGIN READ ONLY WITH (TIMEZONE = ${"Australia/Perth"})`
+      assert.deepStrictEqual([{timezone: 'Australia/Perth'}], [...await conn`SHOW TIME ZONE`]);
+      await conn`COMMIT`;
+    } finally {
+      await conn.release()
+    }
+  })
+})

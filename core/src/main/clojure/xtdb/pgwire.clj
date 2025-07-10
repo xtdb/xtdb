@@ -563,7 +563,7 @@
 
       (case statement-type
         :canned-response (cmd-describe-canned-response conn canned-response)
-        (:query :dml :show-variable) (describe* describe-target)
+        (:begin :query :dml :show-variable) (describe* describe-target)
 
         :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
                    (describe* {:param-oids (:param-oids describe-target)
